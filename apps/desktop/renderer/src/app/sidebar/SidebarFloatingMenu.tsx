@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../shared/lib/zoomedPortalPosition.js';
 
 const MENU_WIDTH = 138;
@@ -42,6 +43,7 @@ export function SidebarFloatingMenu({
       }));
     };
     updatePosition();
+    const focusFrame = window.requestAnimationFrame(() => focusMenuItem(menuRef.current, 'first'));
 
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
@@ -53,6 +55,7 @@ export function SidebarFloatingMenu({
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
@@ -61,13 +64,28 @@ export function SidebarFloatingMenu({
 
   if (!open) return null;
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      onClose();
+      triggerRef.current?.focus();
+      return;
+    }
+    const intent = menuFocusIntent(event.key);
+    if (!intent) return;
+    event.preventDefault();
+    focusMenuItem(event.currentTarget, intent);
+  };
+
   return createPortal(
     <div
       className="desktop-agent-floating-menu"
       ref={menuRef}
       role="menu"
+      aria-orientation="vertical"
       style={{ left: position.left, top: position.top }}
       onClick={(event) => event.stopPropagation()}
+      onKeyDown={handleKeyDown}
     >
       {children}
     </div>,

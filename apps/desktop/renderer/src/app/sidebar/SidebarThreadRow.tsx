@@ -30,7 +30,7 @@ export function SidebarThreadRow({
   // 线程列表快照包含整个 runtime 的活动状态；在经过防抖的侧边栏快照尚未更新时，
   // 当前打开线程仍可回退使用显式属性。
   const isRunning = running || Boolean(thread.activeTurnId);
-  const rowRef = useRef<HTMLDivElement | null>(null);
+  const rowRef = useRef<HTMLButtonElement | null>(null);
   const [menuAnchorPoint, setMenuAnchorPoint] = useState<{ x: number; y: number }>();
   const openContextMenu = (x: number, y: number) => {
     setMenuAnchorPoint({ x, y });
@@ -41,17 +41,12 @@ export function SidebarThreadRow({
     event.stopPropagation();
     openContextMenu(event.clientX, event.clientY);
   };
-  const handleSelectKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleSelectKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
       event.preventDefault();
       const rect = event.currentTarget.getBoundingClientRect();
       openContextMenu(rect.left + 20, rect.top + 20);
-      return;
     }
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    onSelect(thread.id);
   };
   const handleArchiveClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -92,15 +87,18 @@ export function SidebarThreadRow({
   return (
     <div
       className={className}
-      ref={rowRef}
-      role="button"
-      tabIndex={0}
-      onClick={() => onSelect(thread.id)}
       onContextMenu={handleContextMenu}
-      onKeyDown={handleSelectKeyDown}
     >
-      {/* 将原生标题限制在文本范围内，避免与归档操作提示框重叠。 */}
-      <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
+      <button
+        className="desktop-agent-session__select"
+        ref={rowRef}
+        type="button"
+        onClick={() => onSelect(thread.id)}
+        onKeyDown={handleSelectKeyDown}
+      >
+        {/* 将原生标题限制在文本范围内，避免与归档操作提示框重叠。 */}
+        <span className="desktop-agent-session__title" title={thread.title}>{thread.title}</span>
+      </button>
       {meta}
       {menu}
     </div>

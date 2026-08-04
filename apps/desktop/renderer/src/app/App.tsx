@@ -68,6 +68,8 @@ function AppBlankSurface() {
 class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state: { error: Error | null } = { error: null };
 
+  private readonly reset = () => this.setState({ error: null });
+
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
@@ -78,17 +80,21 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 
   render() {
     if (this.state.error) {
-      return <AppErrorFallback error={this.state.error} />;
+      return <AppErrorFallback error={this.state.error} onRetry={this.reset} />;
     }
     return this.props.children;
   }
 }
 
-function AppErrorFallback({ error }: { error: Error }) {
+function AppErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }) {
   const { t } = useI18n();
   return (
     <ShellFrame status={<StatusBadge tone="danger">{t('app.error.renderer')}</StatusBadge>}>
-      <EmptyState title={t('app.error.rendererTitle')} body={error.message} />
+      <EmptyState
+        title={t('app.error.rendererTitle')}
+        body={error.message}
+        action={<Button variant="primary" onClick={onRetry}>{t('common.retry')}</Button>}
+      />
     </ShellFrame>
   );
 }

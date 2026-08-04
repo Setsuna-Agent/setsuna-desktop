@@ -5,11 +5,11 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent,
   type ReactNode,
   type Ref,
 } from 'react';
 import { usesCustomFrameLayout } from '../../shared/lib/desktopPlatform.js';
+import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 
@@ -187,6 +187,10 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
 
   useEffect(() => {
     if (!openMenu) return undefined;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const menu = rootRef.current?.querySelector<HTMLElement>(`[data-window-menu="${openMenu}"]`) ?? null;
+      focusMenuItem(menu, 'first');
+    });
     const handlePointerDown = (event: PointerEvent) => {
       if (rootRef.current?.contains(event.target as Node)) return;
       setOpenMenu(null);
@@ -197,6 +201,7 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
     window.addEventListener('pointerdown', handlePointerDown);
     window.addEventListener('keydown', handleKeyDown);
     return () => {
+      window.cancelAnimationFrame(focusFrame);
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
@@ -209,22 +214,45 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
           <button
             aria-expanded={openMenu === item.key}
             aria-haspopup="menu"
+            data-window-menu-trigger={item.key}
             className={`app-topbar__menu-item ${openMenu === item.key ? 'is-open' : ''}`}
             type="button"
-            onMouseDown={preventMouseFocus}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowDown') return;
+              event.preventDefault();
+              setOpenMenu(item.key);
+            }}
             onClick={() => setOpenMenu((current) => (current === item.key ? null : item.key))}
           >
             {item.label}
           </button>
           {openMenu === item.key ? (
-            <span className="app-topbar__menu-popover" role="menu">
+            <span
+              className="app-topbar__menu-popover"
+              data-window-menu={item.key}
+              role="menu"
+              aria-orientation="vertical"
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setOpenMenu(null);
+                  rootRef.current
+                    ?.querySelector<HTMLButtonElement>(`[data-window-menu-trigger="${item.key}"]`)
+                    ?.focus();
+                  return;
+                }
+                const intent = menuFocusIntent(event.key);
+                if (!intent) return;
+                event.preventDefault();
+                focusMenuItem(event.currentTarget, intent);
+              }}
+            >
               {menus[item.key].map((menuItem) => (
                 <button
                   disabled={menuItem.disabled}
                   key={menuItem.key}
                   role="menuitem"
                   type="button"
-                  onMouseDown={preventMouseFocus}
                   onClick={() => {
                     if (menuItem.disabled) return;
                     setOpenMenu(null);
@@ -240,10 +268,6 @@ function WindowTopbarMenu({ actions }: { actions: WindowMenuActions }) {
       ))}
     </nav>
   );
-}
-
-function preventMouseFocus(event: MouseEvent<HTMLButtonElement>) {
-  event.preventDefault();
 }
 
 function windowMenuDefinitions(actions: WindowMenuActions, t: Translate): Record<WindowMenuKey, WindowMenuItem[]> {

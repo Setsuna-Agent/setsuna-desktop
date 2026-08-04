@@ -279,36 +279,29 @@ function ProjectSection({
                   <div className="desktop-agent-project-node" key={project.id}>
                     <div
                       className="desktop-agent-project"
-                      role="button"
-                      tabIndex={0}
                       title={project.path}
-                      onClick={(event) => {
-                        if (isProjectActionTarget(event.target)) return;
-                        onSelectProject(project);
-                      }}
                       onContextMenu={(event) => {
                         if (isProjectActionTarget(event.target)) return;
                         event.preventDefault();
                         event.stopPropagation();
                         if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                       }}
-                      onKeyDown={(event) => {
-                        if (isProjectActionTarget(event.target)) return;
-                        if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                    >
+                      <button
+                        className="desktop-agent-project__select"
+                        type="button"
+                        onClick={() => onSelectProject(project)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
                           event.preventDefault();
                           if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
-                          return;
-                        }
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          onSelectProject(project);
-                        }
-                      }}
-                    >
-                      {isProjectCollapsed ? <Folder className="desktop-agent-project__icon" size={14} /> : <FolderOpen className="desktop-agent-project__icon" size={14} />}
-                      <span className="desktop-agent-project__text">
-                        <span className="desktop-agent-project__name">{project.name}</span>
-                      </span>
+                        }}
+                      >
+                        {isProjectCollapsed ? <Folder className="desktop-agent-project__icon" size={14} /> : <FolderOpen className="desktop-agent-project__icon" size={14} />}
+                        <span className="desktop-agent-project__text">
+                          <span className="desktop-agent-project__name">{project.name}</span>
+                        </span>
+                      </button>
                       <ProjectActionMenu
                         open={projectActionMenuId === project.id}
                         project={project}
@@ -366,18 +359,11 @@ function ProjectActionMenu({
   onToggleProjectActions: (projectId: string) => void;
 }) {
   const { t } = useI18n();
-  const triggerRef = useRef<HTMLSpanElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const toggleMenu = () => onToggleProjectActions(project.id);
-  const handleTriggerClick = (event: ReactMouseEvent<HTMLSpanElement>) => {
+  const handleTriggerClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     toggleMenu();
-  };
-  const handleTriggerKeyDown = (event: ReactKeyboardEvent<HTMLSpanElement>) => {
-    event.stopPropagation();
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      toggleMenu();
-    }
   };
   const stopProjectActionEvent = (
     event: ReactKeyboardEvent<HTMLSpanElement> | ReactMouseEvent<HTMLSpanElement> | ReactPointerEvent<HTMLSpanElement>,
@@ -398,18 +384,17 @@ function ProjectActionMenu({
       onContextMenu={stopProjectActionContextMenu}
       onKeyDown={stopProjectActionEvent}
     >
-      <span
+      <button
         className="desktop-agent-project__action desktop-agent-project__more"
         ref={triggerRef}
-        role="button"
-        tabIndex={0}
+        type="button"
         aria-label={t('sidebar.projectActions')}
         aria-expanded={open}
+        aria-haspopup="menu"
         onClick={handleTriggerClick}
-        onKeyDown={handleTriggerKeyDown}
       >
         <MoreHorizontal size={14} />
-      </span>
+      </button>
       <SidebarFloatingMenu open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
         <button
           type="button"

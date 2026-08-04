@@ -393,7 +393,7 @@
 }
 
 .desktop-agent-session:hover,
-.desktop-agent-session:focus-visible {
+.desktop-agent-session:focus-within {
   color: var(--desktop-agent-sidebar-active-text);
   border-color: transparent;
   background: var(--desktop-agent-sidebar-hover-bg);
@@ -411,9 +411,27 @@
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
-.desktop-agent-session:focus-visible {
+.desktop-agent-session:has(.desktop-agent-session__select:focus-visible) {
   outline: 0;
   box-shadow: var(--app-focus-ring), var(--desktop-agent-sidebar-active-shadow);
+}
+
+.desktop-agent-session__select {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.desktop-agent-session__select:focus-visible {
+  outline: 0;
 }
 
 .desktop-agent-session__title,
@@ -510,15 +528,34 @@
 }
 
 .desktop-agent-project:hover,
-.desktop-agent-project:focus-visible {
+.desktop-agent-project:focus-within {
   border-color: transparent;
   color: var(--desktop-agent-sidebar-active-text);
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
-.desktop-agent-project:focus-visible {
+.desktop-agent-project:has(.desktop-agent-project__select:focus-visible) {
   outline: 0;
   box-shadow: var(--app-focus-ring), var(--desktop-agent-sidebar-active-shadow);
+}
+
+.desktop-agent-project__select {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+}
+
+.desktop-agent-project__select:focus-visible {
+  outline: 0;
 }
 
 .desktop-agent-project__text {
