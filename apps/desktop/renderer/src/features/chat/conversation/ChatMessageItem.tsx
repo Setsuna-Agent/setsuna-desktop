@@ -907,6 +907,7 @@ function AssistantLoadingIndicator({ label, showLabel = true }: { label: string;
 function MessageFooter({ actionsDisabled = false, message, align = 'start', onDelete, onEdit, timePosition = 'before-actions' }: { actionsDisabled?: boolean; message: RuntimeMessage; align?: 'start' | 'end'; onDelete?: () => void; onEdit?: () => void; timePosition?: 'before-actions' | 'after-actions' | 'none' }) {
   const { locale, t } = useI18n();
   const [copied, setCopied] = useState(false);
+  const formattedTime = useMemo(() => formatTime(message.createdAt, locale), [locale, message.createdAt]);
   const copyMessage = async () => {
     if (!message.content) return;
     try {
@@ -918,8 +919,8 @@ function MessageFooter({ actionsDisabled = false, message, align = 'start', onDe
     }
   };
   const timeNode = (
-    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formatTime(message.createdAt, locale)}>
-      {formatTime(message.createdAt, locale)}
+    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formattedTime}>
+      {formattedTime}
     </time>
   );
   const actionNodes = (
@@ -968,8 +969,15 @@ function MessageFooterAction({ active = false, children, disabled = false, label
   );
 }
 
+const timeFormatters = new Map<AppLocale, Intl.DateTimeFormat>();
+
 function formatTime(value: string, locale: AppLocale): string {
-  return new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  let formatter = timeFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+    timeFormatters.set(locale, formatter);
+  }
+  return formatter.format(new Date(value));
 }
 
 function formatDurationMs(value: number | null, t: Translate): string {
