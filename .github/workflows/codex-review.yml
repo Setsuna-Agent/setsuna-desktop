@@ -24,7 +24,6 @@ jobs:
       CODEX_BOT: chatgpt-codex-connector[bot]
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      PR_ACTION: ${{ github.event.action }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       REPOSITORY: ${{ github.repository }}
       STATUS_CONTEXT: Codex Review Gate
@@ -33,24 +32,13 @@ jobs:
       - name: Mark review as pending
         shell: bash
         run: |
-          description="Waiting for Codex to review the latest commit"
-          if [[ "${PR_ACTION}" == "synchronize" || "${PR_ACTION}" == "edited" ]]; then
-            description="Request @codex review for the latest commit"
-          fi
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
-            -f description="${description}" >/dev/null
+            -f description="Waiting for Codex Automatic Review" >/dev/null
 
-      - name: Describe review trigger
-        shell: bash
-        run: |
-          if [[ "${PR_ACTION}" == "opened" || "${PR_ACTION}" == "reopened" || "${PR_ACTION}" == "ready_for_review" ]]; then
-            echo "Waiting for the repository's Codex Automatic Review."
-          else
-            echo "::notice title=Codex review required::If Codex does not automatically review the new head, an authorized GitHub user must comment '@codex review' on PR ${PR_NUMBER}."
-          fi
-
+      # Repository settings trigger Codex Automatic Review on every push. This
+      # trusted workflow only validates the connector result for the exact SHA.
       - name: Wait for a clean review of the current head
         id: wait_for_review
         shell: bash
