@@ -26,14 +26,7 @@ describe('RuntimeFileDiffPreview', () => {
     expect(html).toContain('chat-file-diff__line--removed');
     expect(html).toContain('chat-file-diff__line--added');
     expect(html).toContain('token keyword');
-    expect(renderedTextFromHtml(html)).toContain('省略 7 行未改动内容');
-    expect(renderedTextFromHtml(html)).toContain('Diff 内容过长，仅显示部分改动。');
+    expect(html).toContain('省略 7 行未改动内容');
+    expect(html).toContain('Diff 内容过长，仅显示部分改动。');
   });
 });
-
-function renderedTextFromHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim();
-}
