@@ -44,7 +44,7 @@ jobs:
           set -euo pipefail
           marker="<!-- codex-review-gate:${HEAD_SHA} -->"
           existing_comment_id="$({
-            gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+            gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
               --jq ".[] | select(.body | contains(\"${marker}\")) | .id"
           } | tail -n 1)"
 
@@ -67,7 +67,7 @@ jobs:
 
           while (( SECONDS < deadline )); do
             review_id="$({
-              gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+              gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
                 --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
             } | tail -n 1)"
 
@@ -75,19 +75,19 @@ jobs:
               # Review comments are submitted with the review, but give GitHub's
               # REST projection a moment to expose both resources consistently.
               sleep 3
-              findings="$({
-                gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
-                  --jq "[.[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\")] | length"
+              finding_urls="$({
+                gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
+                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .html_url"
               })"
 
-              if (( findings > 0 )); then
+              if [[ -n "${finding_urls}" ]]; then
+                findings="$(awk 'NF { count += 1 } END { print count + 0 }' <<<"${finding_urls}")"
                 gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
                   -f description="Codex reported findings on the latest commit" >/dev/null
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
-                gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
-                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | \"- \(.html_url)\""
+                sed 's/^/- /' <<<"${finding_urls}"
                 echo "Push a fix to trigger a fresh Codex review."
                 exit 1
               fi
