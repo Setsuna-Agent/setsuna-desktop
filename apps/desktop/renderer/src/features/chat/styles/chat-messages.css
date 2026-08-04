@@ -700,7 +700,7 @@
   padding: 9px 11px;
   border: 0;
   border-radius: 20px;
-  background: var(--chat-message-user-edit-bg);
+  background: var(--chat-message-user-bg);
 }
 
 .chat-user-edit textarea {
@@ -713,7 +713,7 @@
   background: transparent;
   font: inherit;
   line-height: 1.65;
-  resize: vertical;
+  resize: none;
 }
 
 .chat-user-edit textarea:disabled {
@@ -723,12 +723,8 @@
 .chat-user-edit__footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-end;
   min-height: 28px;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 20px;
 }
 
 .chat-user-edit__actions {

@@ -17,7 +17,7 @@ function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'us
   };
 }
 
-function renderUserMessage(inputKind: RuntimeMessage['inputKind']): string {
+function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = false): string {
   const message: RuntimeMessage = {
     id: `message_${inputKind}`,
     turnId: `turn_${inputKind}`,
@@ -33,8 +33,8 @@ function renderUserMessage(inputKind: RuntimeMessage['inputKind']): string {
       activeTurnId={null}
       assistantItemIdByTurnId={new Map()}
       deleteMode={false}
-      editingDraft=""
-      editingMessageId={null}
+      editingDraft={editing ? message.content : ''}
+      editingMessageId={editing ? message.id : null}
       editingSubmitting={false}
       expandedWorkHistoryItemIds={new Set()}
       item={userItem(message)}
@@ -70,5 +70,12 @@ describe('MessageItem user input kinds', () => {
     const goalHtml = renderUserMessage('goal');
 
     expect(goalHtml).not.toContain('aria-label="编辑"');
+  });
+
+  it('omits the message timestamp while editing', () => {
+    const editorHtml = renderUserMessage('message', true);
+
+    expect(editorHtml).toContain('class="chat-user-edit"');
+    expect(editorHtml).not.toContain('<time');
   });
 });
