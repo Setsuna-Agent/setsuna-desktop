@@ -24,7 +24,9 @@ jobs:
       CODEX_BOT: chatgpt-codex-connector[bot]
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
       REPOSITORY: ${{ github.repository }}
       STATUS_CONTEXT: Codex Review Gate
 
@@ -35,6 +37,7 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=pending \
             -f context="${STATUS_CONTEXT}" \
+            -f target_url="${PR_URL}" \
             -f description="Waiting for Codex Automatic Review" >/dev/null
 
       # Repository settings trigger Codex Automatic Review on every push. This
@@ -46,11 +49,30 @@ jobs:
           set -euo pipefail
           deadline=$((SECONDS + 1500))
           head_short="${HEAD_SHA:0:10}"
+          head_marker_record="$({
+            gh api --paginate "repos/${REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
+              --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .state == \"pending\" and .target_url == \"${PR_URL}\") | [.created_at, (.id | tostring)] | @tsv"
+          } | sort -k1,1 -k2,2n | head -n 1)"
+          head_selected_at="${HEAD_EVENT_AT}"
+          if [[ -n "${head_marker_record}" ]]; then
+            IFS=$'\t' read -r head_marker_at _ <<<"${head_marker_record}"
+            if [[ "${head_marker_at}" < "${head_selected_at}" ]]; then
+              head_selected_at="${head_marker_at}"
+            fi
+          fi
+
+          # The first pending status preserves the server-side cutoff across
+          # reruns for the same PR and SHA (for example, after metadata edits).
+          echo "Only accepting top-level reactions created after ${head_selected_at}."
 
           while (( SECONDS < deadline )); do
             clean_comment_record="$({
               gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
                 --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and (.body | startswith(\"Codex Review: Didn't find any major issues.\")) and (.body | contains(\"${head_short}\"))) | [.created_at, (.id | tostring)] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1)"
+            clean_reaction_record="$({
+              gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/reactions?per_page=100" \
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .content == \"+1\" and .created_at > \"${head_selected_at}\") | [.created_at, (.id | tostring)] | @tsv"
             } | sort -k1,1 -k2,2n | tail -n 1)"
             review_record="$({
               gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
@@ -58,24 +80,38 @@ jobs:
             } | sort -k1,1 -k2,2n | tail -n 1)"
 
             clean_comment_at=""
+            clean_reaction_at=""
             review_at=""
             review_id=""
             if [[ -n "${clean_comment_record}" ]]; then
               IFS=$'\t' read -r clean_comment_at _ <<<"${clean_comment_record}"
             fi
+            if [[ -n "${clean_reaction_record}" ]]; then
+              IFS=$'\t' read -r clean_reaction_at _ <<<"${clean_reaction_record}"
+            fi
             if [[ -n "${review_record}" ]]; then
               IFS=$'\t' read -r review_at review_id <<<"${review_record}"
             fi
 
-            # A SHA can be reviewed more than once. Only the newest Codex result
-            # may decide the gate; on a timestamp tie, prefer the standard review.
-            if [[ -n "${clean_comment_at}" && ( -z "${review_at}" || "${clean_comment_at}" > "${review_at}" ) ]]; then
+            clean_at="${clean_comment_at}"
+            clean_source="clean review comment"
+            if [[ -n "${clean_reaction_at}" && ( -z "${clean_at}" || "${clean_reaction_at}" > "${clean_at}" ) ]]; then
+              clean_at="${clean_reaction_at}"
+              clean_source="top-level +1 reaction"
+            fi
+
+            # Clean reviews may be SHA-stamped comments or top-level +1
+            # reactions. Reactions carry no SHA, so only accept ones created
+            # after this PR first selected HEAD_SHA. The newest Codex result
+            # wins; on a timestamp tie, prefer the standard review.
+            if [[ -n "${clean_at}" && ( -z "${review_at}" || "${clean_at}" > "${review_at}" ) ]]; then
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
+                -f target_url="${PR_URL}" \
                 -f description="Codex completed a clean review of the latest commit" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
-              echo "Codex completed a clean review for ${HEAD_SHA}."
+              echo "Codex completed a clean review for ${HEAD_SHA} via ${clean_source}."
               exit 0
             fi
 
@@ -93,6 +129,7 @@ jobs:
                 gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
+                  -f target_url="${PR_URL}" \
                   -f description="Codex reported findings on the latest commit" >/dev/null
                 echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
@@ -104,6 +141,7 @@ jobs:
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
+                -f target_url="${PR_URL}" \
                 -f description="Codex completed a clean review of the latest commit" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
@@ -117,6 +155,7 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
+            -f target_url="${PR_URL}" \
             -f description="Codex review timed out" >/dev/null
           echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
           echo "Codex did not review ${HEAD_SHA} within 25 minutes."
@@ -129,4 +168,5 @@ jobs:
           gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
             -f state=failure \
             -f context="${STATUS_CONTEXT}" \
+            -f target_url="${PR_URL}" \
             -f description="Codex review workflow failed before completion" >/dev/null
