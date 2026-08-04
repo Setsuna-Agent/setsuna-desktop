@@ -27,7 +27,7 @@ export function AppOverlays({
           threads={threads}
           onChange={navigation.setSidebarSearchValue}
           onClose={() => navigation.setSidebarSearchOpen(false)}
-          onLoadThread={(threadId) => client.getThread(threadId)}
+          onSearchThreads={client.listThreads}
           onSelect={(threadId) => {
             navigation.setSidebarSearchOpen(false);
             navigation.setSidebarSearchValue('');

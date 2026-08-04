@@ -41,6 +41,30 @@ describe('sqlite thread store', () => {
     await reopened.close();
   });
 
+  it('searches indexed message history and returns only a matching preview', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const matching = await store.createThread({ title: 'Unrelated title' });
+    await store.createThread({ title: 'Another chat' });
+    await store.appendEvent(
+      matching.id,
+      messageCreatedEvent(matching.id, 'msg_search_match', 'An older message contains the hidden needle.'),
+    );
+    await store.appendEvent(
+      matching.id,
+      messageCreatedEvent(matching.id, 'msg_latest', 'The latest preview does not contain the query.'),
+    );
+
+    await expect(store.listThreads({ search: 'hidden needle' })).resolves.toEqual([
+      expect.objectContaining({
+        id: matching.id,
+        searchMatchPreview: expect.stringContaining('hidden needle'),
+      }),
+    ]);
+    await store.close();
+  });
+
   it('releases the runtime lease and checkpoints WAL before migration shutdown completes', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

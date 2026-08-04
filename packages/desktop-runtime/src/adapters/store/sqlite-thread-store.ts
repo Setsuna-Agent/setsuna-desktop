@@ -48,6 +48,11 @@ import {
   threadHasAncestor,
   toSummary,
 } from './thread-store-state.js';
+import {
+  normalizedThreadSearch,
+  threadSearchResult,
+} from './thread-search.js';
+import { searchSqliteThreadMessagePreviews } from './sqlite-thread-search.js';
 
 const DEFAULT_CHECKPOINT_DELAY_MS = 250;
 const DEFAULT_EVENT_RETENTION_LIMIT = 4_096;
@@ -176,7 +181,10 @@ export class SqliteThreadStore implements ThreadStore {
       FROM threads
     `).all();
     const summaries = rows.map((row) => normalizeThreadSummary(summaryFromRow(row)));
-    const search = query.search?.trim().toLowerCase();
+    const search = normalizedThreadSearch(query.search);
+    const messagePreviews = search
+      ? searchSqliteThreadMessagePreviews(this.requireDatabase(), search)
+      : new Map<string, string>();
     const parentMap = new Map(summaries.map((thread) => [thread.id, thread.parentThreadId]));
     return summaries
       .filter((thread) => query.includeArchived || !thread.archived)
@@ -188,7 +196,7 @@ export class SqliteThreadStore implements ThreadStore {
         if (query.scope === 'project') return Boolean(thread.projectId);
         return true;
       })
-      .filter((thread) => !search || thread.title.toLowerCase().includes(search) || thread.lastMessagePreview.toLowerCase().includes(search))
+      .flatMap((thread) => threadSearchResult(thread, search, messagePreviews.get(thread.id)))
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   }
 
