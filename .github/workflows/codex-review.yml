@@ -1,0 +1,112 @@
+name: Codex Review
+
+on:
+  pull_request_target:
+    branches: [master]
+    types: [opened, reopened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Request and verify latest review
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CODEX_BOT: chatgpt-codex-connector[bot]
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      REPOSITORY: ${{ github.repository }}
+      STATUS_CONTEXT: Codex Review Gate
+
+    steps:
+      - name: Mark review as pending
+        shell: bash
+        run: |
+          gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending \
+            -f context="${STATUS_CONTEXT}" \
+            -f description="Waiting for Codex to review the latest commit" >/dev/null
+
+      - name: Request review for the current head
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="<!-- codex-review-gate:${HEAD_SHA} -->"
+          existing_comment_id="$({
+            gh api "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+              --jq ".[] | select(.body | contains(\"${marker}\")) | .id"
+          } | tail -n 1)"
+
+          if [[ -n "${existing_comment_id}" ]]; then
+            echo "Codex review was already requested for ${HEAD_SHA}."
+            exit 0
+          fi
+
+          body="@codex review
+
+          ${marker}"
+          gh api --method POST "repos/${REPOSITORY}/issues/${PR_NUMBER}/comments" -f body="${body}" >/dev/null
+          echo "Requested Codex review for ${HEAD_SHA}."
+
+      - name: Wait for a clean review of the current head
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1500))
+
+          while (( SECONDS < deadline )); do
+            review_id="$({
+              gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | .id"
+            } | tail -n 1)"
+
+            if [[ -n "${review_id}" ]]; then
+              # Review comments are submitted with the review, but give GitHub's
+              # REST projection a moment to expose both resources consistently.
+              sleep 3
+              findings="$({
+                gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
+                  --jq "[.[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\")] | length"
+              })"
+
+              if (( findings > 0 )); then
+                gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                  -f state=failure \
+                  -f context="${STATUS_CONTEXT}" \
+                  -f description="Codex reported findings on the latest commit" >/dev/null
+                echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
+                gh api "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
+                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\") | \"- \(.html_url)\""
+                echo "Push a fix to trigger a fresh Codex review."
+                exit 1
+              fi
+
+              gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                -f state=success \
+                -f context="${STATUS_CONTEXT}" \
+                -f description="Codex completed a clean review of the latest commit" >/dev/null
+              echo "Codex completed a clean review for ${HEAD_SHA}."
+              exit 0
+            fi
+
+            echo "Waiting for Codex to review ${HEAD_SHA}..."
+            sleep 15
+          done
+
+          gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=failure \
+            -f context="${STATUS_CONTEXT}" \
+            -f description="Codex review timed out" >/dev/null
+          echo "Codex did not review ${HEAD_SHA} within 25 minutes."
+          exit 1

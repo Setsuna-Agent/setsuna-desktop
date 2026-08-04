@@ -50,7 +50,7 @@ pnpm build
 - Electron Builder。
 - Native dependency。
 - Bundled ripgrep。
-- CI matrix。
+- PR CI 与 Codex review gate。
 - Release artifacts/manifest/checksum。
 
 [仓库脚本](../scripts/README.md) 逐个说明 `scripts/`。
@@ -65,4 +65,3 @@ git diff --check
 ```
 
 `pnpm typecheck` 会通过 `check:architecture` 验证 `Tree.md` 未过期。
-

@@ -135,26 +135,20 @@ dev 启动流程：
 
 ## CI
 
-`.github/workflows/ci.yml` 是手动触发，matrix：
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request、`master` push 和手动运行时触发。CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
 
-- `macos-latest`
-- `windows-latest`
-- `ubuntu-latest`
+1. `node scripts/configure-node-gyp-python.mjs`。
+2. `pnpm install --frozen-lockfile`。
+3. `pnpm typecheck`（包含 architecture check）。
+4. `pnpm lint`。
+5. `pnpm test`（unit + integration）。
 
-步骤：
+`master` 还要求最新提交通过 Codex review gate：
 
-1. checkout。
-2. setup pnpm `7.33.7`。
-3. setup Node `22`。
-4. setup Python `3.11`。
-5. `node scripts/configure-node-gyp-python.mjs`。
-6. `pnpm install --frozen-lockfile`。
-7. `pnpm typecheck`（包含 architecture check）。
-8. `pnpm test:release`。
-9. `pnpm build`。
-10. `pnpm release:dry-run`。
-
-重集成测试由独立 Ubuntu job 跑 `pnpm test:integration`。这样平台矩阵继续验证跨平台构建和轻量逻辑，agent/runtime 的慢异步链路不会把每个平台的构建稳定性绑在一起。
+1. `.github/workflows/codex-review.yml` 通过 `pull_request_target` 从受信任的默认分支执行，不 checkout 或运行 PR 代码。
+2. PR 打开、重新打开、转为 ready 或 push 新提交时，workflow 都会针对当前 HEAD 留言 `@codex review`。
+3. `Codex Review Gate` 只接受 `chatgpt-codex-connector[bot]` 针对当前 HEAD 的 review；旧提交的 review 不可复用。
+4. 当前 review 有 inline finding 或 25 分钟内未完成时 gate 失败；push 修复后会取消旧 run 并发起新一轮 review。
 
 ## Release Workflow
 

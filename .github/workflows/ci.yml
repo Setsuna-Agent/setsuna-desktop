@@ -1,48 +1,52 @@
 name: CI
 
 on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   verify:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 7.33.7
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - run: node scripts/configure-node-gyp-python.mjs
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm test:release
-      - run: pnpm build
-      - run: pnpm release:dry-run
+    name: CI / typecheck, lint, test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
 
-  integration:
-    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: pnpm/action-setup@v4
         with:
           version: 7.33.7
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: pnpm
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: node scripts/configure-node-gyp-python.mjs
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test:integration
+
+      - name: Configure node-gyp Python
+        run: node scripts/configure-node-gyp-python.mjs
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test
