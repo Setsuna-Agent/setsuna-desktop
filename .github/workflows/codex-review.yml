@@ -3,7 +3,7 @@ name: Codex Review
 on:
   pull_request_target:
     branches: [master]
-    types: [opened, reopened, ready_for_review, synchronize]
+    types: [opened, reopened, ready_for_review, synchronize, edited]
 
 permissions:
   contents: read
