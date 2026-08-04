@@ -14,6 +14,12 @@ import {
 import { createDesktopRuntimeClient } from './client.js';
 import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 import {
+  discardRuntimeErrorFromOtherThread,
+  runtimeErrorForThread,
+  updateScopedRuntimeError,
+  type ScopedRuntimeError,
+} from './runtimeErrorState.js';
+import {
   reportOptionalRuntimeLoadFailures,
   useRuntimeCapabilityState,
 } from './useRuntimeCapabilityState.js';
@@ -41,7 +47,15 @@ export function useRuntimeClientState({
 }: RuntimeClientStateOptions) {
   const client = useMemo(() => createDesktopRuntimeClient(), []);
   const [loadState, setLoadState] = useState<LoadState>('loading');
-  const [error, setError] = useState<string | null>(null);
+  const [runtimeError, setRuntimeError] = useState<ScopedRuntimeError | null>(null);
+  const currentThreadIdRef = useRef<string | null>(null);
+  const setError = useCallback<Dispatch<SetStateAction<string | null>>>((update) => {
+    setRuntimeError((current) => updateScopedRuntimeError(
+      current,
+      update,
+      currentThreadIdRef.current,
+    ));
+  }, []);
   const [projects, setProjects] = useState<WorkspaceProject[]>([]);
   const turnSettlementHandlerRef = useRef<(settlement: RuntimeTurnSettlement) => void>(
     () => undefined,
@@ -80,6 +94,13 @@ export function useRuntimeClientState({
     setActiveProjectId,
   });
   const currentThreadId = threadState.currentThread?.id ?? null;
+  currentThreadIdRef.current = currentThreadId;
+  const error = runtimeErrorForThread(runtimeError, currentThreadId);
+
+  useEffect(() => {
+    setRuntimeError((current) => discardRuntimeErrorFromOtherThread(current, currentThreadId));
+  }, [currentThreadId]);
+
   const {
     applyBootstrapUsage,
     refreshThreadUsage,
@@ -159,6 +180,7 @@ export function useRuntimeClientState({
     applyCapabilityBootstrapResults,
     client,
     replaceConfig,
+    setError,
   ]);
 
   useEffect(() => {

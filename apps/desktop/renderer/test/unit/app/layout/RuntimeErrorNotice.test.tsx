@@ -14,20 +14,9 @@ describe('RuntimeErrorNotice', () => {
     expect(html).toContain('aria-label="关闭运行时错误提示"');
   });
 
-  it('suppresses a duplicate error already projected into the transcript', () => {
-    const error = '模型服务返回了空响应';
-    const thread = {
-      messages: [{
-        id: 'message_error',
-        role: 'assistant' as const,
-        content: '',
-        createdAt: '2026-07-21T00:00:00.000Z',
-        status: 'error' as const,
-        error,
-      }],
-    };
-
-    expect(runtimeErrorNoticeMessage(error, thread)).toBeNull();
-    expect(runtimeErrorNoticeMessage('另一个错误', thread)).toBe('另一个错误');
+  it('surfaces an event error immediately and ignores empty messages', () => {
+    expect(runtimeErrorNoticeMessage('  模型服务返回了空响应  ')).toBe('模型服务返回了空响应');
+    expect(runtimeErrorNoticeMessage('   ')).toBeNull();
+    expect(runtimeErrorNoticeMessage(null)).toBeNull();
   });
 });

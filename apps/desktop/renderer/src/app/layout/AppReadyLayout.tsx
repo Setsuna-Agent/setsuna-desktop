@@ -59,7 +59,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
-  const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
+  const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
     if (conversationOverviewRendered) {
