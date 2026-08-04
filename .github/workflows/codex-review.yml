@@ -22,33 +22,45 @@ jobs:
     timeout-minutes: 30
     env:
       CODEX_BOT: chatgpt-codex-connector[bot]
+      CLEAN_SAFE_DESCRIPTION: Codex completed a clean review of the latest commit
+      CLEAN_SHA_ONLY_DESCRIPTION: Codex completed a SHA-bound review; reactions disabled
+      EVENT_ACTION: ${{ github.event.action }}
+      FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
+      FINDINGS_SHA_ONLY_DESCRIPTION: Codex reported findings; reactions remain disabled
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
+      PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
+      PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
+      PREVIOUS_HEAD_SHA: ${{ github.event.before }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
       PR_URL: ${{ github.event.pull_request.html_url }}
       REPOSITORY: ${{ github.repository }}
       STATUS_CONTEXT: Codex Review Gate
 
     steps:
-      - name: Mark review as pending
-        shell: bash
-        run: |
-          gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
-            -f state=pending \
-            -f context="${STATUS_CONTEXT}" \
-            -f target_url="${PR_URL}" \
-            -f description="Waiting for Codex Automatic Review" >/dev/null
-
-      # Repository settings trigger Codex Automatic Review on every push. This
-      # trusted workflow only validates the connector result for the exact SHA.
-      - name: Wait for a clean review of the current head
-        id: wait_for_review
+      - name: Establish review generation
+        id: review_generation
         shell: bash
         run: |
           set -euo pipefail
-          deadline=$((SECONDS + 1500))
-          head_short="${HEAD_SHA:0:10}"
+
+          latest_gate_status() {
+            local sha="$1"
+            {
+              gh api --paginate "repos/${REPOSITORY}/commits/${sha}/statuses?per_page=100" \
+                --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .target_url == \"${PR_URL}\") | [.created_at, (.id | tostring), .state, .description] | @tsv"
+            } | sort -k1,1 -k2,2n | tail -n 1
+          }
+
+          has_safe_lineage() {
+            local state="$1"
+            local description="$2"
+            [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
+          }
+
           head_marker_record="$({
             gh api --paginate "repos/${REPOSITORY}/commits/${HEAD_SHA}/statuses?per_page=100" \
               --jq ".[] | select(.context == \"${STATUS_CONTEXT}\" and .state == \"pending\" and .target_url == \"${PR_URL}\") | [.created_at, (.id | tostring)] | @tsv"
@@ -61,9 +73,71 @@ jobs:
             fi
           fi
 
-          # The first pending status preserves the server-side cutoff across
-          # reruns for the same PR and SHA (for example, after metadata edits).
-          echo "Only accepting top-level reactions created after ${head_selected_at}."
+          reaction_safe=false
+          if [[ "${EVENT_ACTION}" == "opened" || "${EVENT_ACTION}" == "ready_for_review" ]]; then
+            # These events start the first automatic review generation for a PR.
+            reaction_safe=true
+          elif [[ "${EVENT_ACTION}" == "synchronize" && -n "${PREVIOUS_HEAD_SHA}" ]]; then
+            previous_status_record="$(latest_gate_status "${PREVIOUS_HEAD_SHA}")"
+            if [[ -n "${previous_status_record}" ]]; then
+              IFS=$'\t' read -r _ _ previous_state previous_description <<<"${previous_status_record}"
+              # A new SHA may inherit reaction handling only after the previous
+              # generation reached a real Codex result, never from pending,
+              # timeout, infrastructure failure, or an already-ambiguous chain.
+              if [[ "${previous_state}" != "pending" ]] && has_safe_lineage "${previous_state}" "${previous_description}"; then
+                reaction_safe=true
+              fi
+            fi
+          else
+            current_status_record="$(latest_gate_status "${HEAD_SHA}")"
+            if [[ -n "${current_status_record}" ]]; then
+              IFS=$'\t' read -r _ _ current_state current_description <<<"${current_status_record}"
+              # Same-head reruns preserve the generation established earlier.
+              if has_safe_lineage "${current_state}" "${current_description}"; then
+                reaction_safe=true
+              fi
+            fi
+          fi
+
+          pending_description="${PENDING_SHA_ONLY_DESCRIPTION}"
+          if [[ "${reaction_safe}" == "true" ]]; then
+            pending_description="${PENDING_SAFE_DESCRIPTION}"
+          fi
+
+          echo "head_selected_at=${head_selected_at}" >>"${GITHUB_OUTPUT}"
+          echo "pending_description=${pending_description}" >>"${GITHUB_OUTPUT}"
+          echo "reaction_safe=${reaction_safe}" >>"${GITHUB_OUTPUT}"
+          echo "Reaction correlation safe: ${reaction_safe}."
+
+      - name: Mark review as pending
+        shell: bash
+        run: |
+          gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending \
+            -f context="${STATUS_CONTEXT}" \
+            -f target_url="${PR_URL}" \
+            -f description="${{ steps.review_generation.outputs.pending_description }}" >/dev/null
+
+      # Repository settings trigger Codex Automatic Review on every push. This
+      # trusted workflow only validates the connector result for the exact SHA.
+      - name: Wait for a clean review of the current head
+        id: wait_for_review
+        shell: bash
+        env:
+          HEAD_SELECTED_AT: ${{ steps.review_generation.outputs.head_selected_at }}
+          REACTION_SAFE: ${{ steps.review_generation.outputs.reaction_safe }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1500))
+          head_short="${HEAD_SHA:0:10}"
+          clean_status_description="${CLEAN_SHA_ONLY_DESCRIPTION}"
+          findings_status_description="${FINDINGS_SHA_ONLY_DESCRIPTION}"
+          if [[ "${REACTION_SAFE}" == "true" ]]; then
+            clean_status_description="${CLEAN_SAFE_DESCRIPTION}"
+            findings_status_description="${FINDINGS_SAFE_DESCRIPTION}"
+          fi
+
+          echo "Only accepting top-level reactions created after ${HEAD_SELECTED_AT}; correlation safe: ${REACTION_SAFE}."
 
           while (( SECONDS < deadline )); do
             clean_comment_record="$({
@@ -72,7 +146,7 @@ jobs:
             } | sort -k1,1 -k2,2n | tail -n 1)"
             clean_reaction_record="$({
               gh api --paginate "repos/${REPOSITORY}/issues/${PR_NUMBER}/reactions?per_page=100" \
-                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .content == \"+1\" and .created_at > \"${head_selected_at}\") | [.created_at, (.id | tostring)] | @tsv"
+                --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .content == \"+1\" and .created_at > \"${HEAD_SELECTED_AT}\") | [.created_at, (.id | tostring)] | @tsv"
             } | sort -k1,1 -k2,2n | tail -n 1)"
             review_record="$({
               gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/reviews?per_page=100" \
@@ -95,21 +169,21 @@ jobs:
 
             clean_at="${clean_comment_at}"
             clean_source="clean review comment"
-            if [[ -n "${clean_reaction_at}" && ( -z "${clean_at}" || "${clean_reaction_at}" > "${clean_at}" ) ]]; then
+            if [[ "${REACTION_SAFE}" == "true" && -n "${clean_reaction_at}" && ( -z "${clean_at}" || "${clean_reaction_at}" > "${clean_at}" ) ]]; then
               clean_at="${clean_reaction_at}"
               clean_source="top-level +1 reaction"
             fi
 
             # Clean reviews may be SHA-stamped comments or top-level +1
-            # reactions. Reactions carry no SHA, so only accept ones created
-            # after this PR first selected HEAD_SHA. The newest Codex result
-            # wins; on a timestamp tie, prefer the standard review.
+            # reactions. The generation chain must also prove that no prior
+            # head review can still emit an unversioned reaction. The newest
+            # Codex result wins; on a timestamp tie, prefer the standard review.
             if [[ -n "${clean_at}" && ( -z "${review_at}" || "${clean_at}" > "${review_at}" ) ]]; then
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
                 -f target_url="${PR_URL}" \
-                -f description="Codex completed a clean review of the latest commit" >/dev/null
+                -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA} via ${clean_source}."
               exit 0
@@ -130,7 +204,7 @@ jobs:
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
                   -f target_url="${PR_URL}" \
-                  -f description="Codex reported findings on the latest commit" >/dev/null
+                  -f description="${findings_status_description}" >/dev/null
                 echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
                 echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
                 sed 's/^/- /' <<<"${finding_urls}"
@@ -142,10 +216,22 @@ jobs:
                 -f state=success \
                 -f context="${STATUS_CONTEXT}" \
                 -f target_url="${PR_URL}" \
-                -f description="Codex completed a clean review of the latest commit" >/dev/null
+                -f description="${clean_status_description}" >/dev/null
               echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
               echo "Codex completed a clean review for ${HEAD_SHA}."
               exit 0
+            fi
+
+            if [[ "${REACTION_SAFE}" != "true" && -n "${clean_reaction_at}" ]]; then
+              gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                -f state=failure \
+                -f context="${STATUS_CONTEXT}" \
+                -f target_url="${PR_URL}" \
+                -f description="Codex reaction cannot be tied to the latest commit" >/dev/null
+              echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
+              echo "Codex added an unversioned +1 while an earlier review generation may still be running."
+              echo "Refusing to reuse the reaction for ${HEAD_SHA}."
+              exit 1
             fi
 
             echo "Waiting for Codex to review ${HEAD_SHA}..."
