@@ -226,6 +226,7 @@ describe('DesktopReviewPanel', () => {
       }));
 
       expect(html).toContain('desktop-review-branch-compare');
+      expect(html).toContain('desktop-review-panel__toolbar--branch');
       expect(html).toContain('main');
       expect(html).toContain('title="origin/main"');
     });
@@ -253,6 +254,7 @@ describe('DesktopReviewPanel', () => {
 
       expect(html).toContain('未暂存');
       expect(html).not.toContain('desktop-review-branch-compare');
+      expect(html).not.toContain('desktop-review-panel__toolbar--branch');
       expect(html).not.toContain('未设置');
     });
   });
