@@ -2,8 +2,6 @@
   --chat-tool-run-font-size: 13px;
   --chat-tool-run-line-height: 20px;
   --chat-tool-run-row-gap: 4px;
-  --chat-tool-run-guide-offset: 7px;
-  --chat-tool-run-content-indent: 14px;
 
   display: grid;
   gap: var(--chat-tool-run-row-gap);
@@ -64,6 +62,16 @@
 
 .chat-tool-run__summary:hover {
   color: var(--app-text-muted);
+}
+
+.chat-tool-run__chevron {
+  justify-self: start;
+  color: color-mix(in srgb, currentColor 76%, transparent);
+  transition: transform 0.16s ease;
+}
+
+details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron {
+  transform: rotate(180deg);
 }
 
 .chat-tool-run--flat .chat-tool-run__summary {
@@ -566,6 +574,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   justify-content: center;
   width: 14px;
   height: 20px;
+  flex: 0 0 14px;
   color: currentColor;
 }
 
@@ -650,16 +659,14 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   }
 }
 
-/* 引导线对齐摘要状态图标，展开内容则与摘要正文对齐。 */
 .chat-tool-run__body {
   display: grid;
   gap: var(--chat-tool-run-row-gap);
   width: auto;
   min-width: 0;
   max-width: 100%;
-  margin: 2px 0 0 var(--chat-tool-run-guide-offset);
-  padding: 2px 0 2px var(--chat-tool-run-content-indent);
-  border-left: 1px solid color-mix(in srgb, var(--app-text-muted) 24%, transparent);
+  margin: 2px 0 0;
+  padding: 0;
 }
 
 .chat-tool-run--shell > .chat-tool-run__body {
@@ -669,14 +676,10 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-tool-run__body--mixed-list .chat-tool-run__summary {
-  grid-template-columns: minmax(0, auto) auto;
+  grid-template-columns: 16px minmax(0, auto) auto;
   min-height: var(--chat-tool-run-line-height);
   font-size: var(--chat-tool-run-font-size);
   line-height: var(--chat-tool-run-line-height);
-}
-
-.chat-tool-run__body--mixed-list .chat-tool-run__icon {
-  display: none;
 }
 
 .chat-tool-run__body--mixed-list .chat-tool-run__title,
@@ -709,8 +712,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__group-title {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
   color: var(--app-text-muted);
   font-size: var(--chat-tool-run-font-size);
@@ -758,6 +761,10 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   font-family: var(--app-code-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.chat-tool-run__inspection-item .chat-tool-run__file-list-target .chat-markdown__file-icon {
+  display: none;
 }
 
 .chat-tool-run__preview {

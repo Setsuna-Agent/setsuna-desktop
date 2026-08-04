@@ -2,6 +2,7 @@ import type {
   RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -47,6 +48,7 @@ import {
   groupToolRuns,
   inspectionEntries,
   inspectionEntryFromRun,
+  inspectionEntryIcon,
   inspectionEntryKind,
   inspectionEntryLabel,
   InspectionTarget,
@@ -70,6 +72,7 @@ import {
   toolRunGroupStatus,
   toolRunGroupSummary,
   toolRunIcon,
+  toolRunKindIcon,
   ToolRunStatus,
   toolRunSummary,
   ToolRunSummaryTarget
@@ -156,6 +159,7 @@ function ToolRunDisclosure({
     <details className={className} open={open} onToggle={handleToggle}>
       <summary className="chat-tool-run__summary" onClick={handleSummaryClick}>
         {summary}
+        <ChevronDown aria-hidden="true" className="chat-tool-run__chevron" size={12} />
       </summary>
       {children}
     </details>
@@ -305,6 +309,9 @@ function toolRunGroupPanelNode(
               <div className="chat-tool-run__group-item" key={run.id}>
                 {showRunTitles ? (
                   <div className="chat-tool-run__group-title">
+                    <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+                      {toolRunIcon(run)}
+                    </span>
                     <span>{runSummary.title}</span>
                     {runSummary.target ? <code>{runSummary.target}</code> : null}
                   </div>
@@ -480,6 +487,9 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
     <ul className="chat-tool-run__inspection-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.kind}:${entry.target}`}>
+          <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+            {inspectionEntryIcon(entry.kind)}
+          </span>
           <span>{inspectionEntryLabel(entry.kind, t)}</span>
           <InspectionTarget className="chat-tool-run__file-list-target" entry={entry} />
         </li>
@@ -496,6 +506,9 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
       {entries.map((entry) => (
         <li className="chat-tool-run__inspection-item" key={`${entry.action}:${entry.path}`}>
+          <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
+            {toolRunKindIcon('fileMutation')}
+          </span>
           <span>{fileOperationActionLabel(entry.action, t)}</span>
           <WorkspaceFileLink className="chat-tool-run__file-list-target" filePath={entry.path} linkKind="workspace-tool">
             {pathBaseName(entry.path, t)}

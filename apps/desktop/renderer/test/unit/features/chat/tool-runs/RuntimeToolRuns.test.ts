@@ -24,6 +24,16 @@ describe('RuntimeToolRuns kind class names', () => {
 });
 
 describe('RuntimeToolRuns disclosure behavior', () => {
+  it('uses disclosure chevrons and per-row action icons for expanded history', () => {
+    const html = renderedHtml([
+      toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }),
+      toolRun('read_second', 'read_file', { file_path: 'src/second.ts' }),
+    ]);
+
+    expect(html).toContain('chat-tool-run__chevron');
+    expect(html.match(/chat-tool-run__detail-icon/gu)).toHaveLength(2);
+  });
+
   it('keeps ordinary tool details collapsed and opens pending user authorization', () => {
     const pendingApprovalRun: RuntimeToolRun = {
       ...toolRun('user_input_1', 'request_user_input', { message: '请选择配置方式' }, 'pending_approval'),
