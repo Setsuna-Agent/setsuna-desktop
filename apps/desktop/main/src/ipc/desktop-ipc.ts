@@ -7,6 +7,7 @@ import { normalizeNativeInterfaceLanguage } from '../i18n/native-messages.js';
 import {
   copyWorkspaceFilePath,
   createWorkspaceFilePreviewUrl,
+  openWorkspaceDirectoryInFileManager,
   openWorkspaceFileWithDefaultApp,
   revealWorkspaceFileInFolder,
 } from '../workspace/file-opening.js';
@@ -30,6 +31,7 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLangua
     'desktop:read-image-asset',
     'desktop:reveal-image-in-folder',
     'desktop:open-path',
+    'desktop:open-workspace-directory',
     'desktop:open-workspace-file',
     'desktop:copy-workspace-file-path',
     'desktop:reveal-workspace-file',
@@ -90,6 +92,11 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLangua
   ipcMain.handle('desktop:open-workspace-file', async (_event, input) => openWorkspaceFileWithDefaultApp(
     input?.workspaceRoot,
     input?.filePath,
+    (targetPath) => shell.openPath(targetPath),
+  ));
+  ipcMain.handle('desktop:open-workspace-directory', async (_event, input) => openWorkspaceDirectoryInFileManager(
+    input?.workspaceRoot,
+    input?.directoryPath,
     (targetPath) => shell.openPath(targetPath),
   ));
   ipcMain.handle('desktop:copy-workspace-file-path', async (event, input) => {

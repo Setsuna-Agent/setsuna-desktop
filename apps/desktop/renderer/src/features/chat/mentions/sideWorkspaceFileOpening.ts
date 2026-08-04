@@ -13,6 +13,13 @@ type SideWorkspaceFileOpeningOptions = {
   workspaceRoot: string;
 };
 
+type SideWorkspaceDirectoryOpeningOptions = {
+  directoryPath: string;
+  openDirectory?: SetsunaDesktopBridge['desktop']['openWorkspaceDirectory'];
+  t?: Translate;
+  workspaceRoot: string;
+};
+
 /** Open a side-chat file against that chat's root, not the main conversation's active workspace. */
 export async function openSideWorkspaceFileAtRoot({
   filePath,
@@ -31,5 +38,17 @@ export async function openSideWorkspaceFileAtRoot({
 
   if (!openWithDefaultApp) return t('chat.mention.openUnsupported');
   const result = await openWithDefaultApp(workspaceRoot, filePath);
+  return result.ok ? null : result.error;
+}
+
+/** Open a side-chat directory in the system file manager using that chat's own root. */
+export async function openSideWorkspaceDirectoryAtRoot({
+  directoryPath,
+  openDirectory,
+  t = defaultTranslate,
+  workspaceRoot,
+}: SideWorkspaceDirectoryOpeningOptions): Promise<string | null> {
+  if (!openDirectory) return t('chat.mention.openDirectoryUnsupported');
+  const result = await openDirectory(workspaceRoot, directoryPath);
   return result.ok ? null : result.error;
 }

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { openSideWorkspaceFileAtRoot } from '../../../../../src/features/chat/mentions/sideWorkspaceFileOpening.js';
+import {
+  openSideWorkspaceDirectoryAtRoot,
+  openSideWorkspaceFileAtRoot,
+} from '../../../../../src/features/chat/mentions/sideWorkspaceFileOpening.js';
 import { translate, type Translate } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 describe('openSideWorkspaceFileAtRoot', () => {
@@ -47,5 +50,29 @@ describe('openSideWorkspaceFileAtRoot', () => {
       t,
       workspaceRoot: '/temporary/thread_side',
     })).resolves.toBe('Opening workspace files is not supported in this environment.');
+  });
+});
+
+describe('openSideWorkspaceDirectoryAtRoot', () => {
+  it('opens the directory against the side chat workspace root', async () => {
+    const openDirectory = vi.fn().mockResolvedValue({ ok: true });
+
+    await expect(openSideWorkspaceDirectoryAtRoot({
+      directoryPath: 'packages/desktop/',
+      openDirectory,
+      workspaceRoot: '/temporary/thread_side',
+    })).resolves.toBeNull();
+
+    expect(openDirectory).toHaveBeenCalledWith('/temporary/thread_side', 'packages/desktop/');
+  });
+
+  it('returns localized bridge errors in English', async () => {
+    const t: Translate = (key, params) => translate('en-US', key, params);
+
+    await expect(openSideWorkspaceDirectoryAtRoot({
+      directoryPath: 'packages/desktop/',
+      t,
+      workspaceRoot: '/temporary/thread_side',
+    })).resolves.toBe('Opening workspace directories is not supported in this environment.');
   });
 });

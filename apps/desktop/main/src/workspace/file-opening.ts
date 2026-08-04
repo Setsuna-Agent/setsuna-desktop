@@ -6,23 +6,45 @@ type OpenPath = (targetPath: string) => Promise<string>;
 type RegisterPreview = (input: { mimeType: string; name: string; targetPath: string }) => string;
 type WorkspaceFilePathAction = (targetPath: string) => void | Promise<void>;
 
-type WorkspaceFileResolution =
+type WorkspacePathKind = 'directory' | 'file';
+
+type WorkspacePathResolution =
   | { ok: true; targetPath: string }
   | { ok: false; error: string };
 
-export async function openWorkspaceFileWithDefaultApp(
+export function openWorkspaceFileWithDefaultApp(
   workspaceRootValue: unknown,
   filePathValue: unknown,
   openPath: OpenPath,
 ): Promise<DesktopOpenPathResult> {
-  const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
+  return openWorkspacePathWithDefaultApp(workspaceRootValue, filePathValue, 'file', openPath);
+}
+
+export function openWorkspaceDirectoryInFileManager(
+  workspaceRootValue: unknown,
+  directoryPathValue: unknown,
+  openPath: OpenPath,
+): Promise<DesktopOpenPathResult> {
+  return openWorkspacePathWithDefaultApp(workspaceRootValue, directoryPathValue, 'directory', openPath);
+}
+
+async function openWorkspacePathWithDefaultApp(
+  workspaceRootValue: unknown,
+  targetPathValue: unknown,
+  kind: WorkspacePathKind,
+  openPath: OpenPath,
+): Promise<DesktopOpenPathResult> {
+  const resolved = await resolveWorkspacePath(workspaceRootValue, targetPathValue, kind);
   if (!resolved.ok) return resolved;
 
   try {
     const error = await openPath(resolved.targetPath);
     return error ? { ok: false, error } : { ok: true };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Failed to open workspace file.' };
+    const fallbackError = kind === 'directory'
+      ? 'Failed to open workspace directory.'
+      : 'Failed to open workspace file.';
+    return { ok: false, error: error instanceof Error ? error.message : fallbackError };
   }
 }
 
@@ -79,29 +101,39 @@ export async function createWorkspaceFilePreviewUrl(
 async function resolveWorkspaceFile(
   workspaceRootValue: unknown,
   filePathValue: unknown,
-): Promise<WorkspaceFileResolution> {
+): Promise<WorkspacePathResolution> {
+  return resolveWorkspacePath(workspaceRootValue, filePathValue, 'file');
+}
+
+async function resolveWorkspacePath(
+  workspaceRootValue: unknown,
+  targetPathValue: unknown,
+  kind: WorkspacePathKind,
+): Promise<WorkspacePathResolution> {
   const workspaceRoot = String(workspaceRootValue ?? '').trim();
-  const filePath = String(filePathValue ?? '').trim();
+  const targetPath = String(targetPathValue ?? '').trim();
+  const pathLabel = kind === 'directory' ? 'Directory' : 'File';
   if (!workspaceRoot || !path.isAbsolute(workspaceRoot)) {
     return { ok: false, error: 'Workspace root must be an absolute path.' };
   }
-  if (!filePath || path.isAbsolute(filePath)) {
-    return { ok: false, error: 'File path must be relative to the workspace.' };
+  if (!targetPath || path.isAbsolute(targetPath)) {
+    return { ok: false, error: `${pathLabel} path must be relative to the workspace.` };
   }
 
   try {
     const canonicalRoot = await realpath(workspaceRoot);
-    const canonicalTarget = await realpath(path.resolve(canonicalRoot, filePath));
+    const canonicalTarget = await realpath(path.resolve(canonicalRoot, targetPath));
     if (!isPathInside(canonicalRoot, canonicalTarget)) {
-      return { ok: false, error: 'File path must stay inside the workspace.' };
+      return { ok: false, error: `${pathLabel} path must stay inside the workspace.` };
     }
 
-    // 打开前解析符号链接，防止 Markdown 链接跳出所选工作区。
+    // 打开前解析符号链接，防止消息里的工作区引用跳出所选工作区。
     const targetStats = await stat(canonicalTarget);
-    if (!targetStats.isFile()) return { ok: false, error: 'Target is not a file.' };
+    const targetMatchesKind = kind === 'directory' ? targetStats.isDirectory() : targetStats.isFile();
+    if (!targetMatchesKind) return { ok: false, error: `Target is not a ${kind}.` };
     return { ok: true, targetPath: canonicalTarget };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Failed to resolve workspace file.' };
+    return { ok: false, error: error instanceof Error ? error.message : `Failed to resolve workspace ${kind}.` };
   }
 }
 

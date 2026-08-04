@@ -31,10 +31,10 @@ export const WorkspaceMentionLabel = memo(function WorkspaceMentionLabel({
     </>
   );
 
-  if (onOpen && type === 'file') {
+  if (onOpen) {
     return (
       <button
-        aria-label={t('chat.mention.openDefault', { path })}
+        aria-label={t(type === 'directory' ? 'chat.mention.openDirectory' : 'chat.mention.openDefault', { path })}
         className="chat-workspace-mention chat-workspace-mention--action"
         title={path}
         type="button"
