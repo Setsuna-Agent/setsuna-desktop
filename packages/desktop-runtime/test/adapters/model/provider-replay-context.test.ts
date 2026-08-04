@@ -19,4 +19,13 @@ describe('provider replay context', () => {
       providerEndpointFingerprint('https://api.example.com/v2'),
     );
   });
+
+  it('excludes embedded credentials from the persisted endpoint identity', () => {
+    expect(normalizeProviderBaseUrl('https://user:secret@api.example.com/v1')).toBe(
+      'https://api.example.com/v1',
+    );
+    expect(providerEndpointFingerprint('https://user:secret@api.example.com/v1')).toBe(
+      providerEndpointFingerprint('https://api.example.com/v1'),
+    );
+  });
 });

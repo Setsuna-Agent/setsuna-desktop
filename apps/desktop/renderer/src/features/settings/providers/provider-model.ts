@@ -358,5 +358,5 @@ function modelIdFromCode(code: string): string {
 }
 
 function uniqueLocalId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`;
+  return `${prefix}-${globalThis.crypto.randomUUID()}`;
 }

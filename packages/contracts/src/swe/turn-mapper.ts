@@ -11,7 +11,6 @@ import {
   agentMessageItemId,
   contextCompactionItem,
   contextCompactionItemId,
-  isClosingThinkTag,
   planItem,
   reasoningItem,
   reasoningItemId,
@@ -51,6 +50,7 @@ import {
   turnPlanItemId
 } from './stream-mapper.js';
 import { FILE_MUTATION_TOOL_NAMES, SHELL_TOOL_NAMES } from './tool-names.js';
+import { thinkTagMatches } from './think-tag-scanner.js';
 import type {
   SweCollabToolCallStatus,
   SweCommandExecutionSource,
@@ -625,17 +625,15 @@ export function completedPlanMessageNotifications(
 
 export function assistantContentSegments(content: string): AssistantContentSegment[] {
   const segments: AssistantContentSegment[] = [];
-  const tagRegex = /<\/?think(?:\s[^>]*)?>|&lt;\/?think(?:\s[^&]*)?&gt;/gi;
   let mode: AssistantStreamMode = 'markdown';
   let segmentStart = 0;
-  let match: RegExpExecArray | null;
 
-  while ((match = tagRegex.exec(content)) !== null) {
-    if (isClosingThinkTag(match[0])) {
+  for (const match of thinkTagMatches(content)) {
+    if (match.closing) {
       if (mode === 'think') {
         segments.push({ type: 'think', content: content.slice(segmentStart, match.index) });
         mode = 'markdown';
-        segmentStart = tagRegex.lastIndex;
+        segmentStart = match.end;
       }
       continue;
     }
@@ -643,7 +641,7 @@ export function assistantContentSegments(content: string): AssistantContentSegme
     if (mode === 'markdown') {
       segments.push({ type: 'markdown', content: content.slice(segmentStart, match.index) });
       mode = 'think';
-      segmentStart = tagRegex.lastIndex;
+      segmentStart = match.end;
     }
   }
 

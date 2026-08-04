@@ -87,10 +87,8 @@ export function normalizeProviderBaseUrl(baseUrl: string): string {
     url.pathname = url.pathname.replace(/\/+$/, '') || '/';
     url.searchParams.sort();
     const path = url.pathname === '/' ? '' : url.pathname;
-    const credentials = url.username || url.password
-      ? `${url.username}${url.password ? `:${url.password}` : ''}@`
-      : '';
-    return `${url.protocol}//${credentials}${url.host}${path}${url.search}`;
+    // Credentials belong to secret configuration, not the persisted replay identity.
+    return `${url.protocol}//${url.host}${path}${url.search}`;
   } catch {
     // Request validation reports malformed URLs later; hashing still needs a stable boundary.
     return trimmed.replace(/\/+$/, '');

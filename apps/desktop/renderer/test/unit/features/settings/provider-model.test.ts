@@ -1,6 +1,9 @@
 import type { ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { normalizeSettingsProviders } from '../../../../src/features/settings/providers/provider-model.js';
+import {
+  defaultProviderConfig,
+  normalizeSettingsProviders,
+} from '../../../../src/features/settings/providers/provider-model.js';
 
 describe('normalizeSettingsProviders', () => {
   it('preserves a provider display name that the user explicitly cleared', () => {
@@ -25,5 +28,15 @@ describe('normalizeSettingsProviders', () => {
     };
 
     expect(normalizeSettingsProviders([provider])[0]?.name).toBe('');
+  });
+
+  it('uses collision-resistant ids for new providers and models', () => {
+    const first = defaultProviderConfig();
+    const second = defaultProviderConfig();
+
+    expect(first.id).toMatch(/^provider-[0-9a-f-]{36}$/u);
+    expect(first.models[0]?.id).toMatch(/^model-[0-9a-f-]{36}$/u);
+    expect(second.id).not.toBe(first.id);
+    expect(second.models[0]?.id).not.toBe(first.models[0]?.id);
   });
 });

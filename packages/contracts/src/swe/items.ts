@@ -29,11 +29,6 @@ export function contextCompactionItemId(turnId: string): string {
   return `${turnId}:context_compaction`;
 }
 
-export function isClosingThinkTag(tag: string): boolean {
-  const normalized = tag.toLowerCase();
-  return normalized.startsWith('</') || normalized.startsWith('&lt;/');
-}
-
 export function agentMessageItemId(messageId: string, segmentIndex: number): string {
   return segmentIndex === 0 ? messageId : `${messageId}:agent:${segmentIndex}`;
 }
