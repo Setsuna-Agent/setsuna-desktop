@@ -29,6 +29,7 @@ import {
   Search,
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
+import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { Button, IconButton } from '../../shared/ui/primitives.js';
 import {
@@ -160,6 +161,10 @@ export function CapabilitiesPage({
   const [skillDetailError, setSkillDetailError] = useState<string | null>(null);
   const [skillSaving, setSkillSaving] = useState(false);
   const [skillDependencyPendingKeys, setSkillDependencyPendingKeys] = useState<Set<string>>(new Set());
+  const skillRequestIdentity = skillDetailSummary?.id
+    ?? (skillPageMode === 'create' ? 'new-skill' : 'no-selected-skill');
+  const skillDetailRequests = useIdentityRequestGuard(skillRequestIdentity);
+  const skillMutationRequests = useIdentityRequestGuard(skillRequestIdentity);
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
@@ -228,6 +233,8 @@ export function CapabilitiesPage({
   function openSkillFormCreate() {
     setCreateMenuOpen(false);
     setCapabilityFilter('skills');
+    skillDetailRequests.updateIdentity('new-skill');
+    skillMutationRequests.updateIdentity('new-skill');
     setSkillPageMode('create');
     setSkillDetailSummary(null);
     setSkillDetail(null);
@@ -282,6 +289,9 @@ export function CapabilitiesPage({
   }
 
   async function openSkillDetail(skill: RuntimeSkillSummary, mode: 'view' | 'edit' = 'view') {
+    skillDetailRequests.updateIdentity(skill.id);
+    skillMutationRequests.updateIdentity(skill.id);
+    const isCurrentRequest = skillDetailRequests.begin();
     setCapabilityFilter('skills');
     setSkillPageMode(mode);
     setSkillDetailSummary(skill);
@@ -290,22 +300,27 @@ export function CapabilitiesPage({
     setSkillDetailLoading(true);
     try {
       const detail = await onGetSkillDetail(skill.id);
+      if (!isCurrentRequest()) return;
       setSkillDetail(detail);
       setSkillDetailSummary(detail);
     } catch (unknownError) {
+      if (!isCurrentRequest()) return;
       setSkillDetailError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     } finally {
-      setSkillDetailLoading(false);
+      if (isCurrentRequest()) setSkillDetailLoading(false);
     }
   }
 
   async function updateSkillFromDetail(skill: RuntimeSkillSummary, patch: Partial<Pick<RuntimeSkillSummary, 'enabled' | 'selected'>>) {
+    const isCurrentRequest = skillMutationRequests.begin();
     const updated = await onUpdateSkill(skill, patch);
+    if (!isCurrentRequest()) return;
     setSkillDetailSummary(updated);
     setSkillDetail(updated);
   }
 
   async function saveSkill(input: RuntimeSkillInput) {
+    const isCurrentRequest = skillMutationRequests.begin();
     setSkillSaving(true);
     try {
       const saved =
@@ -314,21 +329,35 @@ export function CapabilitiesPage({
           : skillDetailSummary
             ? await onUpdateSkill(skillDetailSummary, input)
             : null;
-      if (!saved) return;
+      if (!saved || !isCurrentRequest()) return;
+      setSkillSaving(false);
+      skillDetailRequests.updateIdentity(saved.id);
+      skillMutationRequests.updateIdentity(saved.id);
       setSkillDetailSummary(saved);
       setSkillDetail(saved);
       setSkillPageMode('view');
     } finally {
-      setSkillSaving(false);
+      if (isCurrentRequest()) setSkillSaving(false);
     }
   }
 
   async function deleteSkill(skill: RuntimeSkillSummary) {
     const confirmed = window.confirm(t('capabilities.page.confirmDeleteSkill', { name: skill.name }));
     if (!confirmed) return;
+    const isCurrentRequest = skillMutationRequests.begin();
     await onDeleteSkill(skill);
+    if (!isCurrentRequest()) return;
+    closeSkillPage();
+  }
+
+  function closeSkillPage() {
+    skillDetailRequests.updateIdentity('no-selected-skill');
+    skillMutationRequests.updateIdentity('no-selected-skill');
     setSkillDetailSummary(null);
     setSkillDetail(null);
+    setSkillDetailError(null);
+    setSkillDetailLoading(false);
+    setSkillSaving(false);
     setSkillPageMode(null);
   }
 
@@ -337,10 +366,11 @@ export function CapabilitiesPage({
     key: string,
     action: () => Promise<RuntimeSkillDetail>,
   ) {
+    const isCurrentRequest = skillMutationRequests.begin();
     setSkillDependencyPendingKeys((items) => new Set(items).add(key));
     try {
       const updated = await action();
-      if (skillDetailSummary?.id === updated.id) {
+      if (isCurrentRequest() && skillDetailSummary?.id === updated.id) {
         setSkillDetailSummary(updated);
         setSkillDetail(updated);
       }
@@ -486,7 +516,7 @@ export function CapabilitiesPage({
                 setSkillPageMode('view');
                 return;
               }
-              setSkillPageMode(null);
+              closeSkillPage();
             }}
             onSave={saveSkill}
           />
@@ -504,12 +534,7 @@ export function CapabilitiesPage({
             error={skillDetailError}
             loading={skillDetailLoading}
             summary={skillDetailSummary}
-            onBack={() => {
-              setSkillDetailSummary(null);
-              setSkillDetail(null);
-              setSkillDetailError(null);
-              setSkillPageMode(null);
-            }}
+            onBack={closeSkillPage}
             onDelete={deleteSkill}
             onEdit={() => setSkillPageMode('edit')}
             onUpdateSkill={updateSkillFromDetail}
