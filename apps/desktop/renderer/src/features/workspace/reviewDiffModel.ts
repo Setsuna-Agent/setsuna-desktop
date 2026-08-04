@@ -1,4 +1,4 @@
-import { highlightedCodeLinesHtml } from './codeHighlight.js';
+import { highlightedDiffLinesHtml } from './codeHighlight.js';
 import type { DesktopDiffFile } from './model.js';
 import type {
   HighlightedReviewDiffLine,
@@ -18,24 +18,7 @@ export function highlightedReviewDiffLines(
   lines: DesktopDiffFile['lines'],
   language: string,
 ): Array<string | undefined> {
-  const highlightedLines = Array<string | undefined>(lines.length).fill(
-    undefined,
-  );
-  let segmentStart = 0;
-
-  for (let index = 0; index <= lines.length; index += 1) {
-    if (index < lines.length && lines[index]?.type !== 'gap') continue;
-    highlightReviewDiffSegment(
-      lines,
-      segmentStart,
-      index,
-      language,
-      highlightedLines,
-    );
-    segmentStart = index + 1;
-  }
-
-  return highlightedLines;
+  return highlightedDiffLinesHtml(lines, language);
 }
 
 export function reviewWholeFileChangeType(
@@ -46,48 +29,6 @@ export function reviewWholeFileChangeType(
   if (contentLines.every((line) => line.type === 'added')) return 'added';
   if (contentLines.every((line) => line.type === 'removed')) return 'removed';
   return null;
-}
-
-function highlightReviewDiffSegment(
-  lines: DesktopDiffFile['lines'],
-  start: number,
-  end: number,
-  language: string,
-  output: Array<string | undefined>,
-): void {
-  if (start >= end) return;
-  const oldSourceLines: Array<{ content: string; index: number }> = [];
-  const newSourceLines: Array<{ content: string; index: number }> = [];
-
-  // 两侧分别作为连续源码高亮，既保留多行语法上下文，也不会混合变更块的新旧版本。
-  for (let index = start; index < end; index += 1) {
-    const line = lines[index];
-    if (!line || line.type === 'gap') continue;
-    if (line.type !== 'added') {
-      oldSourceLines.push({ content: line.content, index });
-    }
-    if (line.type !== 'removed') {
-      newSourceLines.push({ content: line.content, index });
-    }
-  }
-
-  const oldHighlightedLines = highlightedCodeLinesHtml(
-    oldSourceLines.map((line) => line.content).join('\n'),
-    language,
-  );
-  oldSourceLines.forEach((line, index) => {
-    if (lines[line.index]?.type === 'removed') {
-      output[line.index] = oldHighlightedLines[index];
-    }
-  });
-
-  const newHighlightedLines = highlightedCodeLinesHtml(
-    newSourceLines.map((line) => line.content).join('\n'),
-    language,
-  );
-  newSourceLines.forEach((line, index) => {
-    output[line.index] = newHighlightedLines[index];
-  });
 }
 
 export function shouldWrapReviewDiffLine(

@@ -2,6 +2,7 @@ import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts'
 import { describe, expect, it } from 'vitest';
 import {
   collapseFileMutationRunsInSegments,
+  fileChangesFromToolRun,
   fileChangeSummaryFromRuns,
   latestFileChangeSummaryFromMessages,
 } from '../../../../../src/features/chat/tool-runs/runtimeFileChanges.js';
@@ -188,6 +189,27 @@ describe('runtime file changes', () => {
     ]);
   });
 
+  it('marks merged file history as truncated when the renderer line limit is reached', () => {
+    const summary = fileChangeSummaryFromRuns([
+      largeFileRun('call_first', 1),
+      largeFileRun('call_second', 131),
+    ]);
+
+    expect(summary?.files[0]?.truncated).toBe(true);
+    expect(summary?.files[0]?.lines).toHaveLength(240);
+  });
+
+  it('caps a single large file preview without changing its totals', () => {
+    const [change] = fileChangesFromToolRun(largeFileRun('call_large', 1, 300));
+
+    expect(change).toMatchObject({
+      additions: 300,
+      deletions: 0,
+      truncated: true,
+    });
+    expect(change?.lines).toHaveLength(240);
+  });
+
   it('recovers file changes from tool data when a legacy result preview contains truncated JSON', () => {
     const summary = fileChangeSummaryFromRuns([{
       id: 'call_legacy',
@@ -261,3 +283,25 @@ describe('runtime file changes', () => {
     });
   });
 });
+
+function largeFileRun(id: string, startingLine: number, lineCount = 130): RuntimeToolRun {
+  return {
+    id,
+    name: 'edit_file',
+    status: 'success',
+    resultPreview: JSON.stringify({
+      diff: {
+        path: 'src/large.ts',
+        action: 'Edited',
+        additions: lineCount,
+        deletions: 0,
+        truncated: false,
+        lines: Array.from({ length: lineCount }, (_, index) => ({
+          type: 'add',
+          newLine: startingLine + index,
+          content: `line ${startingLine + index}`,
+        })),
+      },
+    }),
+  };
+}
