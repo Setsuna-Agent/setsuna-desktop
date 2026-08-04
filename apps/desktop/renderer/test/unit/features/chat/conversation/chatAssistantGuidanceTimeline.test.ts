@@ -92,7 +92,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       items: [{
         type: 'pluginUses',
         id: 'assistant_plugin:plugins',
-        plugins: [{ id: 'documents', name: 'Word 文档处理' }],
+        plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理' }],
       }],
     };
     const createPlan = (active: boolean) => createAssistantGuidanceTimelinePlan({

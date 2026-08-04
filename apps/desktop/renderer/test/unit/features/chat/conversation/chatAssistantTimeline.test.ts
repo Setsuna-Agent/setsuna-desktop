@@ -15,7 +15,7 @@ describe('createAssistantRunTimeline', () => {
       status: 'streaming',
     }];
     const timeline = createAssistantRunTimeline(segments, [
-      { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+      { id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' },
     ]);
 
     expect(timeline.map((block) => block.id)).toEqual([
@@ -27,7 +27,7 @@ describe('createAssistantRunTimeline', () => {
       active: true,
       items: [{
         type: 'pluginUses',
-        plugins: [{ id: 'documents', name: 'Word 文档处理', icon: 'documents' }],
+        plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' }],
       }],
     });
   });

@@ -18,7 +18,7 @@ describe('runtimePluginUsesByTurn', () => {
     });
 
     expect(runtimePluginUsesByTurn(thread, [], []).get('turn_1')).toEqual([
-      { id: 'documents', name: 'Word 文档处理', icon: 'documents' },
+      { id: 'documents', installed: false, name: 'Word 文档处理', icon: 'documents' },
     ]);
   });
 
@@ -66,9 +66,9 @@ describe('runtimePluginUsesByTurn', () => {
     ];
 
     expect(runtimePluginUsesByTurn(thread, skills, plugins).get('turn_1')).toEqual([
-      expect.objectContaining({ id: 'documents', name: 'Word 文档处理' }),
-      expect.objectContaining({ id: 'guard-dangerous-shell', name: '危险命令防护' }),
-      expect.objectContaining({ id: 'docs-mcp', name: '文档搜索' }),
+      expect.objectContaining({ id: 'documents', installed: true, name: 'Word 文档处理' }),
+      expect.objectContaining({ id: 'guard-dangerous-shell', installed: true, name: '危险命令防护' }),
+      expect.objectContaining({ id: 'docs-mcp', installed: true, name: '文档搜索' }),
     ]);
   });
 
@@ -89,7 +89,7 @@ describe('runtimePluginUsesByTurn', () => {
     }];
 
     expect(runtimePluginUsesByTurn(thread, [], [plugin('openai-image-generation', '图片生成')]).get('turn_1'))
-      .toEqual([expect.objectContaining({ id: 'openai-image-generation', name: '图片生成' })]);
+      .toEqual([expect.objectContaining({ id: 'openai-image-generation', installed: true, name: '图片生成' })]);
   });
 
   it('attributes a running native tool from its start-time Plugin reference', () => {
@@ -110,6 +110,7 @@ describe('runtimePluginUsesByTurn', () => {
 
     expect(runtimePluginUsesByTurn(thread, [], []).get('turn_1')).toEqual([{
       id: 'openai-image-generation',
+      installed: false,
       name: '图片生成',
       icon: 'image-generation',
     }]);

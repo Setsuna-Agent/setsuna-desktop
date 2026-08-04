@@ -157,7 +157,11 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
         <div className="chat-user-message-content__text">
           <UserMessageKindBadge kind={message.inputKind} />
           {message.content || streaming
-            ? <WorkspaceMentionText content={message.content || '...'} />
+            ? (
+                <span className="chat-user-message-content__body">
+                  <WorkspaceMentionText content={message.content || '...'} />
+                </span>
+              )
             : null}
         </div>
       ) : null}

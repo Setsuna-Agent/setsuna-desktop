@@ -351,6 +351,11 @@
   gap: 6px;
 }
 
+.chat-user-message-content__body {
+  display: block;
+  min-width: 0;
+}
+
 .chat-user-message-kind {
   display: inline-flex;
   width: fit-content;

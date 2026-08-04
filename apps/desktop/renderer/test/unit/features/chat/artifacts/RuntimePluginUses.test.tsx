@@ -8,7 +8,7 @@ describe('RuntimePluginUses', () => {
     const html = renderToStaticMarkup(
       <RuntimePluginUses
         active
-        plugins={[{ id: 'documents', name: 'Word 文档处理', icon: 'documents' }]}
+        plugins={[{ id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' }]}
       />,
     );
 
@@ -19,20 +19,21 @@ describe('RuntimePluginUses', () => {
     expect(html).toContain('data-plugin-icon="documents"');
   });
 
-  it('uses completed wording for historical turns', () => {
+  it('keeps an uninstalled Plugin in history without showing a placeholder icon', () => {
     const html = renderToStaticMarkup(
-      <RuntimePluginUses active={false} plugins={[{ id: 'documents', name: 'Word 文档处理' }]} />,
+      <RuntimePluginUses active={false} plugins={[{ id: 'documents', installed: false, name: 'Word 文档处理' }]} />,
     );
 
     expect(html).toContain('已使用插件');
-    expect(html).toContain('data-plugin-icon="plugin"');
+    expect(html).toContain('Word 文档处理');
+    expect(html).not.toContain('desktop-plugin-icon');
     expect(html).not.toContain('aria-live');
   });
 
   it('announces Plugin usage in English', () => {
     const html = renderToStaticMarkup(
       <I18nProvider initialLocale="en-US">
-        <RuntimePluginUses active plugins={[{ id: 'documents', name: 'Documents' }]} />
+        <RuntimePluginUses active plugins={[{ id: 'documents', installed: true, name: 'Documents' }]} />
       </I18nProvider>,
     );
 

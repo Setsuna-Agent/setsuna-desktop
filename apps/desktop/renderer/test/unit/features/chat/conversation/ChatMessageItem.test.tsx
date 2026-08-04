@@ -17,13 +17,13 @@ function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'us
   };
 }
 
-function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = false): string {
+function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = false, content = 'Inspect the queue.'): string {
   const message: RuntimeMessage = {
     id: `message_${inputKind}`,
     turnId: `turn_${inputKind}`,
     role: 'user',
     inputKind,
-    content: 'Inspect the queue.',
+    content,
     createdAt: '2026-07-27T00:00:00.000Z',
     status: 'complete',
   };
@@ -53,7 +53,7 @@ function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = fal
   );
 }
 
-describe('MessageItem user input kinds', () => {
+describe('MessageItem user messages', () => {
   it('renders Plan and Goal with distinct semantic icons', () => {
     const planHtml = renderUserMessage('plan');
     const goalHtml = renderUserMessage('goal');
@@ -77,5 +77,12 @@ describe('MessageItem user input kinds', () => {
 
     expect(editorHtml).toContain('class="chat-user-edit"');
     expect(editorHtml).not.toContain('<time');
+  });
+
+  it('keeps workspace mentions inline with the surrounding message text', () => {
+    const html = renderUserMessage('message', false, '请看 @agent-pc/ 以及 @agent-mobile/ 现在处理');
+
+    expect(html).toContain('class="chat-user-message-content__body"');
+    expect(html).toMatch(/chat-user-message-content__body">请看 .*agent-pc\/.* 以及 .*agent-mobile\/.* 现在处理<\/span>/u);
   });
 });

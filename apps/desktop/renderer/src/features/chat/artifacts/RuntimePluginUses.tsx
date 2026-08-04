@@ -26,7 +26,7 @@ export function RuntimePluginUses({
             key={plugin.id}
             title={t('chat.plugin.title', { name: plugin.name })}
           >
-            <CapabilitiesPluginIcon name={plugin.icon} variant="inline" />
+            {plugin.installed ? <CapabilitiesPluginIcon name={plugin.icon} variant="inline" /> : null}
             <span className="chat-plugin-use__name">{plugin.name}</span>
           </span>
         ))}
