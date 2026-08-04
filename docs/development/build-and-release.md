@@ -135,7 +135,9 @@ dev 启动流程：
 
 ## CI
 
-`.github/workflows/ci.yml` 在面向 `master` 的 pull request、`master` push 和手动运行时触发。CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。`master` 的严格分支保护要求 PR 基于最新基线通过检查，因此合入后不再为同一变更重复运行通用 CI；CodeQL 的默认分支 push 扫描由 GitHub code scanning 单独负责。
+
+CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
 
 1. `node scripts/configure-node-gyp-python.mjs`。
 2. `pnpm install --frozen-lockfile`。
