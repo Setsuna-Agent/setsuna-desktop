@@ -82,7 +82,7 @@ export type DesktopDiffFile = {
   deletions: number;
   truncated: boolean;
   lines: DesktopDiffLine[];
-  /** Original unified patch when the source can provide it losslessly. */
+  /** Original unified patch for complete previews; omitted when truncated. */
   patch?: string;
 };
 

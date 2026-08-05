@@ -486,7 +486,9 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
 
   const finishCurrentFile = () => {
     if (!current) return;
-    current.patch = currentPatchLines.join('\n');
+    if (!current.truncated) {
+      current.patch = currentPatchLines.join('\n');
+    }
     files.push(current);
   };
 
@@ -508,7 +510,9 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
       continue;
     }
     if (!current) continue;
-    currentPatchLines.push(rawLine);
+    // Truncated previews are rebuilt from their bounded line list in the
+    // renderer, so retaining the remaining raw patch only duplicates data.
+    if (!current.truncated) currentPatchLines.push(rawLine);
     if (rawLine.startsWith('new file mode')) current.action = 'Created';
     if (rawLine.startsWith('deleted file mode')) current.action = 'Deleted';
     if (rawLine.startsWith('rename from ')) current.action = 'Renamed';
@@ -630,19 +634,20 @@ async function summarizeUntrackedFile(gitRoot: string, relativePath: string): Pr
   }
   const content = await readFile(absolutePath, 'utf8').catch(() => '');
   const lines = content.split(/\r?\n/);
+  const truncated = lines.length > MAX_DIFF_LINES_PER_FILE;
   return {
     path: relativePath,
     action: 'Created',
     additions: content ? lines.length : 0,
     deletions: 0,
-    truncated: lines.length > MAX_DIFF_LINES_PER_FILE,
+    truncated,
     lines: lines.slice(0, MAX_DIFF_LINES_PER_FILE).map((line, index) => ({
       type: 'added',
       lineNumber: index + 1,
       newLine: index + 1,
       content: line,
     })),
-    patch: untrackedFilePatch(relativePath, content),
+    ...(truncated ? {} : { patch: untrackedFilePatch(relativePath, content) }),
   };
 }
 
