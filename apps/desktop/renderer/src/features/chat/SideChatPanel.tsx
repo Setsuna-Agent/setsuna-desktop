@@ -159,6 +159,7 @@ export function SideChatPanel({
           contextCompacting={sideChat.contextCompacting}
           currentThread={sideChat.currentThread}
           draft={sideChat.draft}
+          focusComposerOnReveal={!hidden}
           plugins={plugins}
           skillSelectionRequest={null}
           skills={skills}

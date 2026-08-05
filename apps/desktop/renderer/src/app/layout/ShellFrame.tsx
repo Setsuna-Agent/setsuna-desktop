@@ -18,6 +18,7 @@ import {
 import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
+import { appRouteTopbarSlotId } from '../../shared/ui/AppRouteTopbarPortal.js';
 
 type WindowMenuKey = 'file' | 'edit' | 'view' | 'help';
 
@@ -82,6 +83,7 @@ export function ShellFrame({
   ]
     .filter(Boolean)
     .join(' ');
+  const routeTopbarSlot = <div className="app-topbar__route-slot" id={appRouteTopbarSlotId} />;
 
   return (
     <div ref={rootRef} className={rootClassName} style={style}>
@@ -96,10 +98,11 @@ export function ShellFrame({
           {customFrame ? <WindowTopbarMenu actions={topbarMenuActions} /> : null}
           {customFrame && status ? <div className="app-topbar__status">{status}</div> : null}
         </div>
-        {customFrame ? <div className="app-topbar__drag" aria-hidden="true" /> : null}
+        {customFrame ? <div className="app-topbar__drag">{routeTopbarSlot}</div> : null}
         {!customFrame ? (
           <>
             <div className="app-topbar__right">
+              {routeTopbarSlot}
               {toolbarTitle ? <div className="chat-toolbar-title">{toolbarTitle}</div> : viewTabs}
               {status}
               {actions}

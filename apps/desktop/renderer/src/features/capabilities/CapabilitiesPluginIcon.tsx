@@ -57,7 +57,7 @@ export function CapabilitiesPluginIcon({
   variant = 'card',
 }: {
   name?: string;
-  variant?: 'card' | 'detail' | 'editorial' | 'inline' | 'list';
+  variant?: 'card' | 'detail' | 'inline' | 'installed' | 'list';
 }) {
   const icon = name && knownPluginIcons.has(name) ? name as PluginIconName : null;
   const Glyph = icon ? pluginGlyphs[icon] : Puzzle;

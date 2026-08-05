@@ -91,6 +91,8 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 - `SidebarSearchOverlay.tsx`：本地线程查找。
 - `SidebarUserMenu.tsx` / `SidebarFloatingMenu.tsx`：入口菜单。
 
+侧栏顶部命令、项目与设置入口共享 `sidebar.css` 的前导中心和文字起点变量。macOS 下前导中心使用页面缩放倒数锁定到原生关闭按钮的视觉圆心，避免 CSS zoom 改变后图标横向漂移。
+
 线程 summary 来自 runtime list API；当前 thread 的完整消息不应复制到 sidebar state。
 
 ## Runtime client

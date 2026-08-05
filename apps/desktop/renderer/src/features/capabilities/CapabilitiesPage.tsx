@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
 import { Button, IconButton } from '../../shared/ui/primitives.js';
 import {
   CapabilitiesHookCard,
@@ -54,8 +55,6 @@ import {
   mcpDraftToInput,
   type McpDraft,
 } from './mcp/mcp-editor-model.js';
-import { pluginMatchesQuery } from './pluginDisplay.js';
-import { localizedPluginSearchAliases } from './pluginLocalization.js';
 import { useCapabilitySkillDetails } from './useCapabilitySkillDetails.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
@@ -64,6 +63,8 @@ const chatCreateSkillIds = {
   mcp: 'create-mcp-in-chat',
   skills: 'create-skill-in-chat',
 } as const;
+
+type CapabilityFilter = 'hooks' | 'mcp' | 'plugins' | 'skills';
 
 export function CapabilitiesPage({
   config,
@@ -145,7 +146,7 @@ export function CapabilitiesPage({
   const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
   const [hookSaving, setHookSaving] = useState(false);
-  const [capabilityFilter, setCapabilityFilter] = useState<'mcp' | 'skills' | 'hooks' | 'plugins'>('plugins');
+  const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>('plugins');
   const [capabilityQuery, setCapabilityQuery] = useState('');
   const [updatingHookKeys, setUpdatingHookKeys] = useState<Set<string>>(new Set());
   const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
@@ -192,18 +193,8 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
-  const visiblePlugins = plugins.filter((plugin) => pluginMatchesQuery(
-    plugin,
-    normalizedCapabilityQuery,
-    localizedPluginSearchAliases(plugin, t),
-  ));
-  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) => pluginMatchesQuery(
-    plugin,
-    normalizedCapabilityQuery,
-    localizedPluginSearchAliases(plugin, t),
-  ));
   const marketplacePluginIds = new Set(pluginMarketplace.map((plugin) => plugin.id));
-  const visibleLocalPlugins = visiblePlugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
+  const localPlugins = plugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
   const selectedMarketplacePlugin = selectedPluginId
     ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
     : undefined;
@@ -371,6 +362,12 @@ export function CapabilitiesPage({
     setPluginError(null);
   }
 
+  function selectCapabilityFilter(nextFilter: CapabilityFilter) {
+    setCapabilityFilter(nextFilter);
+    setCapabilityQuery('');
+    setCreateMenuOpen(false);
+  }
+
   if (mcpEditorOpen) {
     return (
       <main className="capabilities-page desktop-capabilities-panel">
@@ -495,6 +492,16 @@ export function CapabilitiesPage({
   const createFormIcon = createCapabilityKind === 'mcp' ? <Plug size={14} /> : <FilePlus2 size={14} />;
   const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
   const marketplaceNoticeVisible = capabilityFilter === 'plugins' && Boolean(pluginError || pluginMarketplaceErrors.length);
+  const capabilitySummary = capabilityFilter === 'plugins'
+    ? t('capabilities.market.count', { plugins: pluginMarketplace.length, installed: plugins.length })
+    : t('capabilities.summary', {
+      mcp: servers.length,
+      enabledSkills: enabledSkillCount,
+      skills: skills.length,
+      defaultSkills: selectedSkillCount,
+      executableHooks: executableHookCount,
+      hooks: hooks.length,
+    });
 
   async function updateHook(hook: RuntimeHookMetadata, action: () => Promise<void>) {
     setUpdatingHookKeys((items) => new Set([...items, hook.key]));
@@ -523,238 +530,259 @@ export function CapabilitiesPage({
   }
 
   return (
-    <main className="capabilities-page desktop-capabilities-panel">
-      <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
-        <header className="desktop-capabilities-header">
-          <div className="desktop-capabilities-title">
-            <h2>{t(capabilityFilter === 'plugins' ? 'capabilities.title.marketplace' : 'capabilities.title.capabilities')}</h2>
-          </div>
-          <div className="desktop-capabilities-actions">
-            <div className="desktop-capabilities-search">
-              <Search size={14} />
-              <input
-                value={capabilityQuery}
-                onChange={(event) => setCapabilityQuery(event.target.value)}
-                placeholder={t(capabilityFilter === 'plugins' ? 'capabilities.search.plugins' : 'capabilities.search.capabilities')}
-              />
+    <>
+      <AppRouteTopbarPortal>
+        <CapabilitiesTabs
+          activeFilter={capabilityFilter}
+          summary={capabilitySummary}
+          t={t}
+          onChange={selectCapabilityFilter}
+        />
+      </AppRouteTopbarPortal>
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
+          <header className={`desktop-capabilities-header${capabilityFilter === 'plugins' ? ' desktop-capabilities-header--market' : ''}`}>
+            <div className="desktop-capabilities-title">
+              <h2>{t(capabilityFilter === 'plugins' ? 'capabilities.title.marketplace' : 'capabilities.title.capabilities')}</h2>
+              {capabilityFilter === 'plugins' ? <span>{t('capabilities.market.subtitle')}</span> : null}
             </div>
-            <IconButton label={t('capabilities.refresh')} onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
-              <RefreshCw size={15} />
-            </IconButton>
-            {capabilityFilter === 'hooks' ? (
-              <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
-                {t('capabilities.create.action')}
-              </Button>
-            ) : capabilityFilter === 'plugins' ? null : (
-            <div className="desktop-capabilities-create">
-              <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
-                {t('capabilities.create.action')}
-              </Button>
-              {createMenuOpen ? (
-                <div className="desktop-capabilities-create-menu">
-                  <button className="desktop-capabilities-create-menu__item" type="button" onClick={() => openConversationCreate(createCapabilityKind)}>
-                    <span className="desktop-capabilities-create-menu__icon"><MessageSquare size={14} /></span>
-                    <span className="desktop-capabilities-create-menu__content">
-                      <strong>{createConversationTitle}</strong>
-                      <span>{createConversationDescription}</span>
-                    </span>
-                  </button>
-                  <button className="desktop-capabilities-create-menu__item" type="button" onClick={openFormCreate}>
-                    <span className="desktop-capabilities-create-menu__icon">{createFormIcon}</span>
-                    <span className="desktop-capabilities-create-menu__content">
-                      <strong>{createFormTitle}</strong>
-                      <span>{createFormDescription}</span>
-                    </span>
-                  </button>
+            <div className="desktop-capabilities-actions">
+              {capabilityFilter !== 'plugins' ? (
+                <div className="desktop-capabilities-search">
+                  <Search size={14} />
+                  <input
+                    value={capabilityQuery}
+                    aria-label={t('capabilities.search.capabilities')}
+                    onChange={(event) => setCapabilityQuery(event.target.value)}
+                    placeholder={t('capabilities.search.capabilities')}
+                  />
+                </div>
+              ) : null}
+              <IconButton label={t('capabilities.refresh')} onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
+                <RefreshCw size={15} />
+              </IconButton>
+              {capabilityFilter === 'hooks' ? (
+                <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
+                  {t('capabilities.create.action')}
+                </Button>
+              ) : capabilityFilter === 'plugins' ? null : (
+                <div className="desktop-capabilities-create">
+                  <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
+                    {t('capabilities.create.action')}
+                  </Button>
+                  {createMenuOpen ? (
+                    <div className="desktop-capabilities-create-menu">
+                      <button className="desktop-capabilities-create-menu__item" type="button" onClick={() => openConversationCreate(createCapabilityKind)}>
+                        <span className="desktop-capabilities-create-menu__icon"><MessageSquare size={14} /></span>
+                        <span className="desktop-capabilities-create-menu__content">
+                          <strong>{createConversationTitle}</strong>
+                          <span>{createConversationDescription}</span>
+                        </span>
+                      </button>
+                      <button className="desktop-capabilities-create-menu__item" type="button" onClick={openFormCreate}>
+                        <span className="desktop-capabilities-create-menu__icon">{createFormIcon}</span>
+                        <span className="desktop-capabilities-create-menu__content">
+                          <strong>{createFormTitle}</strong>
+                          <span>{createFormDescription}</span>
+                        </span>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </header>
+
+          {marketplaceNoticeVisible ? (
+            <div className="desktop-capabilities-market-notices">
+              {pluginError ? <div className="desktop-capabilities-errors" role="alert">{pluginError}</div> : null}
+              {pluginMarketplaceErrors.length ? (
+                <div
+                  className="desktop-capabilities-errors"
+                  role="status"
+                  title={pluginMarketplaceErrors.join('\n')}
+                >
+                  {t('capabilities.market.partialUnavailable')}
                 </div>
               ) : null}
             </div>
+          ) : null}
+
+          {capabilityFilter !== 'plugins' ? (
+            <div className="desktop-capabilities-usage-note">
+              <Info size={14} />
+              <span>
+                {t(capabilityFilter === 'mcp'
+                  ? 'capabilities.usage.mcp'
+                  : capabilityFilter === 'skills'
+                    ? 'capabilities.usage.skills'
+                    : 'capabilities.usage.hooks')}
+              </span>
+            </div>
+          ) : null}
+
+          <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ''}`}>
+            {capabilityFilter === 'mcp'
+              ? visibleServers.map((server) => (
+                <CapabilitiesMcpCard
+                  key={`mcp:${server.key}`}
+                  authPending={mcpAuthPendingKeys.has(server.key)}
+                  server={server}
+                  onDelete={() => onDeleteMcpServer(server)}
+                  onEdit={() => editMcpServer(server)}
+                  onLogin={() => void updateMcpAuth(
+                    server,
+                    () => onLoginMcpServer(server),
+                  )}
+                  onLogout={() => void updateMcpAuth(
+                    server,
+                    () => onLogoutMcpServer(server),
+                  )}
+                  onUpdate={(patch) => void onUpdateMcpServer(server, patch)}
+                />
+              ))
+              : null}
+            {capabilityFilter === 'skills'
+              ? visibleSkills.map((skill) => {
+                const dependencies = skill.mcpDependencies ?? [];
+                const authDependency = dependencies.find(
+                  (dependency) => dependency.status === 'authRequired'
+                    || dependency.status === 'error',
+                );
+                const dependencyPending = skillDependencyPendingKeys.has(
+                  `install:${skill.id}`,
+                ) || Boolean(
+                  authDependency
+                  && skillDependencyPendingKeys.has(
+                    `auth:${skill.id}:${authDependency.value}`,
+                  ),
+                );
+                return (
+                  <CapabilitiesSkillCard
+                    key={`skill:${skill.id}`}
+                    dependencyPending={dependencyPending}
+                    skill={skill}
+                    onAuthenticateDependency={(serverKey) => void skillDetails.updateDependency(
+                      skill,
+                      `auth:${skill.id}:${serverKey}`,
+                      () => onAuthenticateSkillMcpDependency(skill, serverKey),
+                    )}
+                    onEdit={() => void skillDetails.open(skill, 'edit')}
+                    onInstallDependencies={() => void skillDetails.updateDependency(
+                      skill,
+                      `install:${skill.id}`,
+                      () => onInstallSkillMcpDependencies(skill),
+                    )}
+                    onOpen={() => void skillDetails.open(skill, 'view')}
+                    onUpdate={(patch) => void onUpdateSkill(skill, patch)}
+                  />
+                );
+              })
+              : null}
+            {capabilityFilter === 'hooks'
+              ? visibleHooks.map((hook) => (
+                <CapabilitiesHookCard
+                  key={`hook:${hook.key}`}
+                  hook={hook}
+                  updating={updatingHookKeys.has(hook.key)}
+                  onDelete={() => void deleteHook(hook)}
+                  onEdit={() => openHookEdit(hook)}
+                  onSetEnabled={(enabled) => void updateHook(
+                    hook,
+                    () => onUpdateHookEnabled(hook, enabled),
+                  )}
+                  onTrust={() => void updateHook(
+                    hook,
+                    () => onTrustHook(hook),
+                  )}
+                />
+              ))
+              : null}
+            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length) ? (
+              <CapabilitiesPluginMarket
+                marketplacePlugins={pluginMarketplace}
+                localPlugins={localPlugins}
+                installingPluginIds={installingPluginIds}
+                onInstall={installOrUpdateMarketplacePlugin}
+                onOpenMarketplace={openPluginDetail}
+                onOpenLocal={openPluginDetail}
+              />
+            ) : null}
+            {((capabilityFilter === 'mcp' && visibleServers.length)
+              || (capabilityFilter === 'skills' && visibleSkills.length)
+              || (capabilityFilter === 'hooks' && visibleHooks.length)
+              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length))) ? null : (
+              capabilityFilter === 'hooks' && !normalizedCapabilityQuery ? (
+                <div className="desktop-capabilities-empty desktop-capabilities-empty--hooks">
+                  <Puzzle size={24} />
+                  <strong>{t('capabilities.hook.emptyTitle')}</strong>
+                  <span>{t('capabilities.hook.emptyDescription')}</span>
+                  <Button type="button" variant="secondary" onClick={() => selectCapabilityFilter('plugins')}>{t('capabilities.hook.openMarketplace')}</Button>
+                </div>
+              ) : (
+                <div className="desktop-capabilities-empty">
+                  {capabilityFilter === 'plugins'
+                    ? t('capabilities.market.empty')
+                    : capabilityFilter === 'hooks' ? t('capabilities.hook.noMatch') : t('capabilities.empty')}
+                </div>
+              )
             )}
           </div>
-        </header>
 
-        <div className="desktop-capabilities-tabs">
-          <button className={capabilityFilter === 'plugins' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('plugins')}>
-            {t('capabilities.tab.plugins')}
-          </button>
-          <button className={capabilityFilter === 'mcp' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('mcp')}>
-            MCP
-          </button>
-          <button className={capabilityFilter === 'skills' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('skills')}>
-            {t('capabilities.tab.skills')}
-          </button>
-          <button className={capabilityFilter === 'hooks' ? 'is-active' : ''} type="button" onClick={() => setCapabilityFilter('hooks')}>
-            Hooks
-          </button>
-          <span>
-            {capabilityFilter === 'plugins'
-              ? t('capabilities.market.count', { plugins: pluginMarketplace.length, installed: plugins.length })
-              : t('capabilities.summary', {
-                  mcp: servers.length,
-                  enabledSkills: enabledSkillCount,
-                  skills: skills.length,
-                  defaultSkills: selectedSkillCount,
-                  executableHooks: executableHookCount,
-                  hooks: hooks.length,
-                })}
-          </span>
-        </div>
-
-        {marketplaceNoticeVisible ? (
-          <div className="desktop-capabilities-market-notices">
-            {pluginError ? <div className="desktop-capabilities-errors" role="alert">{pluginError}</div> : null}
-            {pluginMarketplaceErrors.length ? (
-              <div
-                className="desktop-capabilities-errors"
-                role="status"
-                title={pluginMarketplaceErrors.join('\n')}
-              >
-                {t('capabilities.market.partialUnavailable')}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        {capabilityFilter !== 'plugins' ? (
-          <div className="desktop-capabilities-usage-note">
-            <Info size={14} />
-            <span>
-              {t(capabilityFilter === 'mcp'
-                ? 'capabilities.usage.mcp'
-                : capabilityFilter === 'skills'
-                  ? 'capabilities.usage.skills'
-                  : 'capabilities.usage.hooks')}
-            </span>
-          </div>
-        ) : null}
-
-        <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ''}`}>
-          {capabilityFilter === 'mcp'
-            ? visibleServers.map((server) => (
-              <CapabilitiesMcpCard
-                key={`mcp:${server.key}`}
-                authPending={mcpAuthPendingKeys.has(server.key)}
-                server={server}
-                onDelete={() => onDeleteMcpServer(server)}
-                onEdit={() => editMcpServer(server)}
-                onLogin={() => void updateMcpAuth(
-                  server,
-                  () => onLoginMcpServer(server),
-                )}
-                onLogout={() => void updateMcpAuth(
-                  server,
-                  () => onLogoutMcpServer(server),
-                )}
-                onUpdate={(patch) => void onUpdateMcpServer(server, patch)}
-              />
-            ))
-            : null}
-          {capabilityFilter === 'skills'
-            ? visibleSkills.map((skill) => {
-              const dependencies = skill.mcpDependencies ?? [];
-              const authDependency = dependencies.find(
-                (dependency) => dependency.status === 'authRequired'
-                  || dependency.status === 'error',
-              );
-              const dependencyPending = skillDependencyPendingKeys.has(
-                `install:${skill.id}`,
-              ) || Boolean(
-                authDependency
-                && skillDependencyPendingKeys.has(
-                  `auth:${skill.id}:${authDependency.value}`,
-                ),
-              );
-              return (
-                <CapabilitiesSkillCard
-                  key={`skill:${skill.id}`}
-                  dependencyPending={dependencyPending}
-                  skill={skill}
-                  onAuthenticateDependency={(serverKey) => void skillDetails.updateDependency(
-                    skill,
-                    `auth:${skill.id}:${serverKey}`,
-                    () => onAuthenticateSkillMcpDependency(skill, serverKey),
-                  )}
-                  onEdit={() => void skillDetails.open(skill, 'edit')}
-                  onInstallDependencies={() => void skillDetails.updateDependency(
-                    skill,
-                    `install:${skill.id}`,
-                    () => onInstallSkillMcpDependencies(skill),
-                  )}
-                  onOpen={() => void skillDetails.open(skill, 'view')}
-                  onUpdate={(patch) => void onUpdateSkill(skill, patch)}
-                />
-              );
-            })
-            : null}
-          {capabilityFilter === 'hooks'
-            ? visibleHooks.map((hook) => (
-              <CapabilitiesHookCard
-                key={`hook:${hook.key}`}
-                hook={hook}
-                updating={updatingHookKeys.has(hook.key)}
-                onDelete={() => void deleteHook(hook)}
-                onEdit={() => openHookEdit(hook)}
-                onSetEnabled={(enabled) => void updateHook(
-                  hook,
-                  () => onUpdateHookEnabled(hook, enabled),
-                )}
-                onTrust={() => void updateHook(
-                  hook,
-                  () => onTrustHook(hook),
-                )}
-              />
-            ))
-            : null}
-          {capabilityFilter === 'plugins' && (visibleMarketplacePlugins.length || visibleLocalPlugins.length) ? (
-            <CapabilitiesPluginMarket
-              marketplacePlugins={visibleMarketplacePlugins}
-              localPlugins={visibleLocalPlugins}
-              installingPluginIds={installingPluginIds}
-              searching={Boolean(normalizedCapabilityQuery)}
-              onInstall={installOrUpdateMarketplacePlugin}
-              onOpenMarketplace={openPluginDetail}
-              onOpenLocal={openPluginDetail}
-            />
+          {capabilityFilter === 'hooks' && (hookWarnings.length || hookErrors.length) ? (
+            <div className="desktop-capabilities-errors">
+              {[...hookWarnings, ...hookErrors].map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
           ) : null}
-          {((capabilityFilter === 'mcp' && visibleServers.length)
-            || (capabilityFilter === 'skills' && visibleSkills.length)
-            || (capabilityFilter === 'hooks' && visibleHooks.length)
-            || (capabilityFilter === 'plugins' && (visibleMarketplacePlugins.length || visibleLocalPlugins.length))) ? null : (
-            capabilityFilter === 'hooks' && !normalizedCapabilityQuery ? (
-              <div className="desktop-capabilities-empty desktop-capabilities-empty--hooks">
-                <Puzzle size={24} />
-                <strong>{t('capabilities.hook.emptyTitle')}</strong>
-                <span>{t('capabilities.hook.emptyDescription')}</span>
-                <Button type="button" variant="secondary" onClick={() => setCapabilityFilter('plugins')}>{t('capabilities.hook.openMarketplace')}</Button>
-              </div>
-            ) : (
-              <div className="desktop-capabilities-empty">
-                {capabilityFilter === 'plugins'
-                  ? normalizedCapabilityQuery ? t('capabilities.market.noMatch') : t('capabilities.market.empty')
-                  : capabilityFilter === 'hooks' ? t('capabilities.hook.noMatch') : t('capabilities.empty')}
-              </div>
-            )
-          )}
-        </div>
 
-        {capabilityFilter === 'hooks' && (hookWarnings.length || hookErrors.length) ? (
-          <div className="desktop-capabilities-errors">
-            {[...hookWarnings, ...hookErrors].map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-        ) : null}
+          {capabilityFilter === 'mcp' && mcpState?.errors.length ? (
+            <div className="desktop-capabilities-errors">
+              {mcpState.errors.map((item) => (
+                <span key={item}>{item}</span>
+              ))}
+            </div>
+          ) : null}
 
-        {capabilityFilter === 'mcp' && mcpState?.errors.length ? (
-          <div className="desktop-capabilities-errors">
-            {mcpState.errors.map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-        ) : null}
+        </section>
+      </main>
+    </>
+  );
+}
 
-      </section>
-    </main>
+function CapabilitiesTabs({
+  activeFilter,
+  onChange,
+  summary,
+  t,
+}: {
+  activeFilter: CapabilityFilter;
+  onChange: (filter: CapabilityFilter) => void;
+  summary: string;
+  t: Translate;
+}) {
+  const tabs: Array<{ id: CapabilityFilter; label: string }> = [
+    { id: 'plugins', label: t('capabilities.tab.plugins') },
+    { id: 'mcp', label: 'MCP' },
+    { id: 'skills', label: t('capabilities.tab.skills') },
+    { id: 'hooks', label: 'Hooks' },
+  ];
+
+  return (
+    <nav className="desktop-capabilities-tabs" aria-label={t('capabilities.title.capabilities')}>
+      {tabs.map((tab) => (
+        <button
+          className={activeFilter === tab.id ? 'is-active' : ''}
+          key={tab.id}
+          type="button"
+          onClick={() => onChange(tab.id)}
+        >
+          {tab.label}
+        </button>
+      ))}
+      <span>{summary}</span>
+    </nav>
   );
 }
 

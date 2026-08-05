@@ -2,22 +2,22 @@ import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  CapabilitiesInstalledPluginListItem,
-} from '../../../../src/features/capabilities/CapabilitiesInstalledPluginListItem.js';
+  CapabilitiesInstalledPluginShortcut,
+} from '../../../../src/features/capabilities/CapabilitiesInstalledPluginShortcut.js';
 import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
-import { CapabilitiesPluginEditorial } from '../../../../src/features/capabilities/CapabilitiesPluginEditorial.js';
 import { CapabilitiesPluginIcon } from '../../../../src/features/capabilities/CapabilitiesPluginIcon.js';
 import {
   CapabilitiesPluginFilePreview,
   markdownPreviewBody,
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
+import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('capabilities plugin components', () => {
-  it('renders an installed local plugin as a lightweight list row', () => {
+  it('renders an installed plugin as an accessible icon shortcut', () => {
     const html = renderToStaticMarkup(
-      <CapabilitiesInstalledPluginListItem
+      <CapabilitiesInstalledPluginShortcut
         plugin={{
           id: 'demo',
           name: 'Demo Plugin',
@@ -39,7 +39,9 @@ describe('capabilities plugin components', () => {
 
     expect(html).toContain('Demo Plugin');
     expect(html).toContain('已安装');
-    expect(html).toContain('查看');
+    expect(html).toContain('desktop-plugin-installed-shortcut');
+    expect(html).toContain('desktop-plugin-installed-shortcut__name');
+    expect(html).toContain('desktop-plugin-icon--installed');
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('卸载');
   });
@@ -185,10 +187,10 @@ describe('capabilities plugin components', () => {
     expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
   });
 
-  it('renders a featured plugin as editorial artwork instead of a card', () => {
+  it('renders featured plugins in the catalog list beneath installed shortcuts', () => {
     const html = renderToStaticMarkup(
-      <CapabilitiesPluginEditorial
-        plugin={{
+      <CapabilitiesPluginMarket
+        marketplacePlugins={[{
           id: 'pdf',
           name: 'PDF 文档处理',
           icon: 'pdf',
@@ -202,18 +204,22 @@ describe('capabilities plugin components', () => {
           hooks: [],
           resources: [],
           capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
-          installed: false,
+          installed: true,
           updateAvailable: false,
-        }}
-        installing={false}
+        }]}
+        localPlugins={[]}
+        installingPluginIds={new Set()}
         onInstall={async () => undefined}
-        onOpen={() => undefined}
+        onOpenLocal={() => undefined}
+        onOpenMarketplace={() => undefined}
       />,
     );
 
-    expect(html).toContain('desktop-plugin-editorial__art');
-    expect(html).toContain('获取');
-    expect(html).not.toContain('编辑推荐');
+    expect(html).toContain('desktop-plugin-market__installed');
+    expect(html).toContain('共 1 个');
+    expect(html).toContain('精选');
+    expect(html).toContain('desktop-plugin-list-item');
+    expect(html).not.toContain('desktop-plugin-editorial');
     expect(html).not.toContain('desktop-capability-card');
   });
 
