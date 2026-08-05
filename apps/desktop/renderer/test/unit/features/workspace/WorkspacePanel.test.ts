@@ -46,6 +46,20 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).not.toContain('<button class="desktop-code-line');
   });
 
+  it('identifies text previews that are incomplete after the full-file budget', () => {
+    const html = renderWorkspaceFilePreview({
+      file: {
+        ...workspaceFile({ kind: 'text' }),
+        content: 'partial content',
+        path: 'generated/large.txt',
+        truncated: true,
+      },
+    });
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('文件超过可加载上限，仅显示前 8 MB。');
+  });
+
   it('renders file preview notices in English', () => {
     const html = renderWorkspaceFilePreview({
       file: workspaceFile({ kind: 'unsupported', reason: 'binary' }),

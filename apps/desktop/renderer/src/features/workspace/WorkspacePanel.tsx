@@ -1,5 +1,6 @@
 import {
   isTemporaryWorkspaceProjectId,
+  WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceEntry,
   type WorkspaceEntrySearchItem,
   type WorkspaceEntrySearchResponse,
@@ -638,6 +639,7 @@ function CodeEditorPreview({
 }: {
   file: WorkspaceFileRead;
 }) {
+  const { t } = useI18n();
   const codeViewSurface = useWorkspaceCodeViewSurface();
   return (
     <div
@@ -657,6 +659,13 @@ function CodeEditorPreview({
           virtualized
         />
         <WorkspaceCodeViewScrollbar surface={codeViewSurface} />
+        {file.truncated ? (
+          <div className="desktop-code-editor__truncated-notice" role="status">
+            {t('workspace.files.previewTruncated', {
+              limit: `${WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES / (1024 * 1024)} MB`,
+            })}
+          </div>
+        ) : null}
       </div>
     </div>
   );

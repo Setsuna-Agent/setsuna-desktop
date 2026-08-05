@@ -146,7 +146,12 @@ export function ConversationGitControls({
           className="chat-conversation-overview-panel__meta"
           title={!reviewState && reviewError ? reviewError : undefined}
         >
-          {currentBranchLabel}
+          <span
+            className="chat-conversation-git__branch-name"
+            title={reviewState ? currentBranch : undefined}
+          >
+            {currentBranchLabel}
+          </span>
           <ChevronDown size={12} />
         </span>
       </button>

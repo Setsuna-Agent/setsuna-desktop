@@ -304,6 +304,28 @@
   overscroll-behavior: contain;
 }
 
+.desktop-code-editor__truncated-notice {
+  position: absolute;
+  z-index: 5;
+  right: 10px;
+  bottom: calc(var(--chat-scrollbar-width) + 8px);
+  max-width: calc(100% - 20px);
+  box-sizing: border-box;
+  padding: 4px 8px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-surface) 94%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, #000000 8%, transparent);
+  font-family: var(--app-font-family);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .desktop-editor__save-error {
   padding: 7px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--app-danger) 24%, var(--app-border));
