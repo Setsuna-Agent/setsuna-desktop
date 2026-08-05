@@ -31,6 +31,10 @@ import {
 } from 'react';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
+import {
+  RuntimePluginNavigationProvider,
+  type OpenRuntimePluginHandler,
+} from '../../features/chat/artifacts/RuntimePluginNavigation.js';
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
@@ -137,6 +141,7 @@ export function AppChatSurface({
   onOpenBrowser,
   onOpenConversationDebug,
   onOpenMarkdownWebLink,
+  onOpenPlugin,
   onOpenFilesPanel,
   onOpenThread,
   onOpenFileReviewPanel,
@@ -225,6 +230,7 @@ export function AppChatSurface({
   onOpenBrowser: (url?: string) => void;
   onOpenConversationDebug: () => void;
   onOpenMarkdownWebLink: (url: string) => void;
+  onOpenPlugin: OpenRuntimePluginHandler;
   onOpenFilesPanel: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReviewPanel?: (filePath?: string) => void;
@@ -290,7 +296,7 @@ export function AppChatSurface({
   const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
 
   return (
-    <>
+    <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
       <MarkdownNavigationProvider
         onOpenInAppBrowser={onOpenBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}
@@ -479,7 +485,7 @@ export function AppChatSurface({
           />
         </Suspense>
       ) : null}
-    </>
+    </RuntimePluginNavigationProvider>
   );
 }
 

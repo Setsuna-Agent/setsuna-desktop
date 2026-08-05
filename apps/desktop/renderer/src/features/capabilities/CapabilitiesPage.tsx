@@ -74,6 +74,7 @@ export function CapabilitiesPage({
   plugins,
   pluginMarketplace,
   pluginMarketplaceErrors,
+  selectedPluginId,
   onCreateHook,
   onCreateSkill,
   onDeleteSkill,
@@ -98,6 +99,7 @@ export function CapabilitiesPage({
   onInstallMarketplacePlugin,
   onUpdateMarketplacePlugin,
   onRemovePlugin,
+  onSelectedPluginIdChange,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
 }: {
@@ -109,6 +111,7 @@ export function CapabilitiesPage({
   plugins: RuntimePluginSummary[];
   pluginMarketplace: RuntimePluginMarketplaceItem[];
   pluginMarketplaceErrors: string[];
+  selectedPluginId: string | null;
   onCreateHook: (input: RuntimeHookInput) => Promise<void>;
   onCreateSkill: (input: RuntimeSkillInput) => Promise<RuntimeSkillDetail>;
   onDeleteSkill: (skill: RuntimeSkillSummary) => Promise<void>;
@@ -133,6 +136,7 @@ export function CapabilitiesPage({
   onInstallMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
+  onSelectedPluginIdChange: (pluginId: string | null) => void;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
 }) {
@@ -147,7 +151,6 @@ export function CapabilitiesPage({
   const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
   const [hookEditorOpen, setHookEditorOpen] = useState(false);
-  const [selectedPluginId, setSelectedPluginId] = useState<string | null>(null);
   const [installingPluginIds, setInstallingPluginIds] = useState<Set<string>>(new Set());
   const [removingPluginIds, setRemovingPluginIds] = useState<Set<string>>(new Set());
   const [pluginError, setPluginError] = useState<string | null>(null);
@@ -364,7 +367,7 @@ export function CapabilitiesPage({
 
   function openPluginDetail(plugin: Pick<RuntimePluginSummary, 'id'>) {
     setCapabilityFilter('plugins');
-    setSelectedPluginId(plugin.id);
+    onSelectedPluginIdChange(plugin.id);
     setPluginError(null);
   }
 
@@ -467,7 +470,7 @@ export function CapabilitiesPage({
             removing={removingPluginIds.has(selectedPluginId)}
             runtimeHooks={hooks}
             onBack={() => {
-              setSelectedPluginId(null);
+              onSelectedPluginIdChange(null);
               setPluginError(null);
             }}
             onInstall={installOrUpdateMarketplacePlugin}

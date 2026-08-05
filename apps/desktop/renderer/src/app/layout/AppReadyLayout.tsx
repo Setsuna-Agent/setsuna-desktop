@@ -59,6 +59,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewVisibility, setConversationOverviewVisibility] = useState<ConversationOverviewVisibility>('auto');
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
+  const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
@@ -69,16 +70,24 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setConversationOverviewVisibility('shown');
     setConversationOverviewShowRequest((value) => value + 1);
   }, [conversationOverviewRendered]);
+  const openCapabilities = useCallback(() => {
+    setSelectedCapabilitiesPluginId(null);
+    setActiveView('capabilities');
+  }, [setActiveView]);
+  const openCapabilitiesPlugin = useCallback((pluginId: string) => {
+    setSelectedCapabilitiesPluginId(pluginId);
+    setActiveView('capabilities');
+  }, [setActiveView]);
   const windowMenuActions = useMemo(
     () => ({
       onNewChat: () => {
         resetComposer();
         navigation.startCurrentThread();
       },
-      onOpenCapabilities: () => setActiveView('capabilities'),
+      onOpenCapabilities: openCapabilities,
       onOpenSettings: () => setActiveView('settings'),
     }),
-    [navigation, resetComposer, setActiveView],
+    [navigation, openCapabilities, resetComposer, setActiveView],
   );
 
   return (
@@ -138,7 +147,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         width={sidebarWidth}
         maxWidth={sidebarMaxWidth}
         minWidth={sidebarMinWidth}
-        onOpenCapabilities={() => setActiveView('capabilities')}
+        onOpenCapabilities={openCapabilities}
         onOpenSettings={() => setActiveView('settings')}
         onResetDraft={resetComposer}
         onResizeStep={handleSidebarResizeStep}
@@ -149,6 +158,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeProject={activeProject}
         activeWorkspace={activeWorkspace}
         activeView={activeView}
+        selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
         chatActions={chatActions}
         composerKey={composerKey}
         conversationOverviewShowRequest={conversationOverviewShowRequest}
@@ -163,6 +173,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
+        onOpenPlugin={openCapabilitiesPlugin}
+        onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
         onConversationOverviewRenderedChange={setConversationOverviewRendered}
         onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}

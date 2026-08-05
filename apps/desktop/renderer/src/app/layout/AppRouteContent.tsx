@@ -36,6 +36,7 @@ export function AppRouteContent({
   draft,
   projectWorkspace,
   runtime,
+  selectedCapabilitiesPluginId,
   setActiveView,
   setDraft,
   skillSelectionRequest,
@@ -44,6 +45,8 @@ export function AppRouteContent({
   workspacePanels,
   onSelectSkillForChat,
   onConversationOverviewRenderedChange,
+  onOpenPlugin,
+  onSelectedCapabilitiesPluginIdChange,
   onSelectThread,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
@@ -67,6 +70,7 @@ export function AppRouteContent({
   draft: string;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
+  selectedCapabilitiesPluginId: string | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
@@ -75,6 +79,8 @@ export function AppRouteContent({
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
+  onOpenPlugin: (pluginId: string) => void;
+  onSelectedCapabilitiesPluginIdChange: (pluginId: string | null) => void;
   onSelectThread: (threadId: string) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
@@ -184,6 +190,7 @@ export function AppRouteContent({
           plugins={runtime.plugins}
           pluginMarketplace={runtime.pluginMarketplace}
           pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
+          selectedPluginId={selectedCapabilitiesPluginId}
           onCreateHook={runtime.createHook}
           onCreateSkill={runtime.createSkill}
           onDeleteSkill={runtime.deleteSkill}
@@ -208,6 +215,7 @@ export function AppRouteContent({
           onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
           onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
           onRemovePlugin={runtime.removePlugin}
+          onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
           onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
           onTestImageGeneration={runtime.testImageGeneration}
         />
@@ -279,6 +287,7 @@ export function AppRouteContent({
       onOpenBrowser={(url) => workspacePanels.openBrowserPanel(url)}
       onOpenConversationDebug={() => workspacePanels.openDesktopPanel('side', 'conversation-debug')}
       onOpenMarkdownWebLink={openMarkdownWebLink}
+      onOpenPlugin={onOpenPlugin}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');
