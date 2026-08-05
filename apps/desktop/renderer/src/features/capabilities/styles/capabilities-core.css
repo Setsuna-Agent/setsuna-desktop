@@ -35,6 +35,15 @@
   overflow: auto;
 }
 
+:root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail {
+  padding-top: var(--desktop-capabilities-page-padding-inline);
+}
+
+:root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail > .desktop-capabilities-detail {
+  /* 详情组件原有的 2px 光学校正会破坏与外层页面的统一顶部基线。 */
+  padding-top: 0;
+}
+
 .desktop-capabilities-panel__inner--market {
   grid-template-rows: auto minmax(0, 1fr);
   gap: 16px;
@@ -50,6 +59,25 @@
   /* 与带右侧滚动留白的市场列表共享同一条 940px 内容基线。 */
   width: min(calc(940px + var(--desktop-capabilities-page-padding-inline)), 100%);
   margin: 0 auto;
+  padding-right: var(--desktop-capabilities-page-padding-inline);
+}
+
+.desktop-capabilities-panel__inner--page-tabs {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  padding-top: var(--desktop-capabilities-page-padding-inline);
+}
+
+.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.desktop-capabilities-panel__inner--market-notice.desktop-capabilities-panel__inner--page-tabs {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {
+  /* Windows 的页内导航横跨内容区，两端分别承载分类与数量。 */
+  width: 100%;
   padding-right: var(--desktop-capabilities-page-padding-inline);
 }
 
@@ -240,6 +268,8 @@
 }
 
 .desktop-capabilities-tabs {
+  --desktop-capabilities-tab-padding-inline: 11px;
+
   display: flex;
   align-items: center;
   gap: 6px;
@@ -252,9 +282,23 @@
   width: 100%;
 }
 
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {
+  grid-row: 1;
+}
+
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-header {
+  grid-row: 2;
+}
+
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs button:first-child:not(.is-active) {
+  /* 首项没有选中底色时，让可见文字与下方内容对齐，同时保持原点击宽度。 */
+  padding-right: calc(var(--desktop-capabilities-tab-padding-inline) + var(--desktop-capabilities-tab-padding-inline));
+  padding-left: 0;
+}
+
 .desktop-capabilities-tabs button {
   height: 28px;
-  padding: 0 11px;
+  padding: 0 var(--desktop-capabilities-tab-padding-inline);
   border: 1px solid transparent;
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
@@ -301,6 +345,10 @@
   line-height: 18px;
 }
 
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-usage-note {
+  grid-row: 3;
+}
+
 .desktop-capabilities-usage-note svg {
   color: var(--app-primary);
 }
@@ -344,12 +392,28 @@
   grid-row: 3;
 }
 
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
+  grid-row: 4;
+}
+
+.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
+  grid-row: 3;
+}
+
+.desktop-capabilities-panel__inner--market-notice.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
+  grid-row: 4;
+}
+
 .desktop-capabilities-market-notices {
   display: grid;
   grid-row: 2;
   gap: 6px;
   min-width: 0;
   padding-right: var(--desktop-capabilities-page-padding-inline);
+}
+
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-market-notices {
+  grid-row: 3;
 }
 
 .desktop-capabilities-grid--market {
@@ -537,16 +601,19 @@
     white-space: normal;
   }
 
-  .app-topbar__route-slot .desktop-capabilities-tabs {
+  .app-topbar__route-slot .desktop-capabilities-tabs,
+  .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  .app-topbar__route-slot .desktop-capabilities-tabs::-webkit-scrollbar {
+  .app-topbar__route-slot .desktop-capabilities-tabs::-webkit-scrollbar,
+  .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs::-webkit-scrollbar {
     display: none;
   }
 
-  .app-topbar__route-slot .desktop-capabilities-tabs > span {
+  .app-topbar__route-slot .desktop-capabilities-tabs > span,
+  .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs > span {
     display: none;
   }
 }

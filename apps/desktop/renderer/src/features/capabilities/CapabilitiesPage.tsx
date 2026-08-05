@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
 import { Button, IconButton } from '../../shared/ui/primitives.js';
 import {
@@ -529,18 +530,22 @@ export function CapabilitiesPage({
     }
   }
 
+  const tabsInPage = shouldRenderCapabilitiesTabsInPage(getDesktopPlatform());
+  const capabilityTabs = (
+    <CapabilitiesTabs
+      activeFilter={capabilityFilter}
+      summary={capabilitySummary}
+      t={t}
+      onChange={selectCapabilityFilter}
+    />
+  );
+
   return (
     <>
-      <AppRouteTopbarPortal>
-        <CapabilitiesTabs
-          activeFilter={capabilityFilter}
-          summary={capabilitySummary}
-          t={t}
-          onChange={selectCapabilityFilter}
-        />
-      </AppRouteTopbarPortal>
+      {tabsInPage ? null : <AppRouteTopbarPortal>{capabilityTabs}</AppRouteTopbarPortal>}
       <main className="capabilities-page desktop-capabilities-panel">
-        <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}`}>
+        <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}${tabsInPage ? ' desktop-capabilities-panel__inner--page-tabs' : ''}`}>
+          {tabsInPage ? capabilityTabs : null}
           <header className={`desktop-capabilities-header${capabilityFilter === 'plugins' ? ' desktop-capabilities-header--market' : ''}`}>
             <div className="desktop-capabilities-title">
               <h2>{t(capabilityFilter === 'plugins' ? 'capabilities.title.marketplace' : 'capabilities.title.capabilities')}</h2>
@@ -744,11 +749,14 @@ export function CapabilitiesPage({
               ))}
             </div>
           ) : null}
-
         </section>
       </main>
     </>
   );
+}
+
+export function shouldRenderCapabilitiesTabsInPage(platform: string): boolean {
+  return platform === 'win32';
 }
 
 function CapabilitiesTabs({
