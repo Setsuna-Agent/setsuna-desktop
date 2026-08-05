@@ -23,11 +23,18 @@
 .chat-file-diff__chevron {
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--app-text-muted) 76%, transparent);
-  transition: transform 0.16s ease;
+  opacity: 0;
+  transform: rotate(-90deg);
+  transition: opacity 0.14s ease, transform 0.16s ease;
+}
+
+.chat-file-diff__summary:hover .chat-file-diff__chevron,
+.chat-file-diff__summary:focus-visible .chat-file-diff__chevron {
+  opacity: 1;
 }
 
 .chat-file-diff__disclosure[open] > .chat-file-diff__summary .chat-file-diff__chevron {
-  transform: rotate(180deg);
+  transform: rotate(0);
 }
 
 .chat-file-diff__preview {

@@ -289,8 +289,29 @@
   gap: 5px;
   min-width: 0;
   max-width: 100%;
-  color: var(--app-primary);
+  color: inherit;
+  font: inherit;
   font-weight: var(--app-font-weight);
+}
+
+button.chat-plugin-use {
+  padding: 0;
+  border: 0;
+  color: var(--app-primary);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.chat-plugin-use:hover .chat-plugin-use__name {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+button.chat-plugin-use:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--desktop-agent-accent) 52%, transparent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .chat-plugin-use__name {

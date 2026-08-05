@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { RuntimePluginNavigationProvider } from '../../../../../src/features/chat/artifacts/RuntimePluginNavigation.js';
 import { RuntimePluginUses } from '../../../../../src/features/chat/artifacts/RuntimePluginUses.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
@@ -28,6 +29,34 @@ describe('RuntimePluginUses', () => {
     expect(html).toContain('Word 文档处理');
     expect(html).not.toContain('desktop-plugin-icon');
     expect(html).not.toContain('aria-live');
+  });
+
+  it('keeps an installed Plugin without icon metadata visually contiguous', () => {
+    const html = renderToStaticMarkup(
+      <RuntimePluginUses
+        active={false}
+        plugins={[{ id: 'context7-docs', installed: true, name: 'Context7 文档查询' }]}
+      />,
+    );
+
+    expect(html).toContain('已使用插件');
+    expect(html).toContain('Context7 文档查询');
+    expect(html).not.toContain('desktop-plugin-icon');
+    expect(html).not.toContain('data-plugin-icon="plugin"');
+  });
+
+  it('renders highlighted Plugin names as native buttons when navigation is available', () => {
+    const html = renderToStaticMarkup(
+      <RuntimePluginNavigationProvider onOpenPlugin={() => undefined}>
+        <RuntimePluginUses
+          active={false}
+          plugins={[{ id: 'context7-docs', installed: true, name: 'Context7 文档查询' }]}
+        />
+      </RuntimePluginNavigationProvider>,
+    );
+
+    expect(html).toContain('<button class="chat-plugin-use" type="button"');
+    expect(html).toContain('Context7 文档查询</span></button>');
   });
 
   it('announces Plugin usage in English', () => {

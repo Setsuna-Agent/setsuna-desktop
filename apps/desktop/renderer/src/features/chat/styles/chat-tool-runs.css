@@ -68,11 +68,18 @@
 .chat-tool-run__chevron {
   justify-self: start;
   color: color-mix(in srgb, currentColor 76%, transparent);
-  transition: transform 0.16s ease;
+  opacity: 0;
+  transform: rotate(-90deg);
+  transition: opacity 0.14s ease, transform 0.16s ease;
+}
+
+.chat-tool-run__summary:hover > .chat-tool-run__chevron,
+.chat-tool-run__summary:focus-visible > .chat-tool-run__chevron {
+  opacity: 1;
 }
 
 details.chat-tool-run[open] > .chat-tool-run__summary > .chat-tool-run__chevron {
-  transform: rotate(180deg);
+  transform: rotate(0);
 }
 
 .chat-tool-run--flat .chat-tool-run__summary {
