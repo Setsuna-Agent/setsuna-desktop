@@ -130,6 +130,7 @@ export function useWorkspaceFileDraft({
   const save = useCallback(async (): Promise<boolean> => {
     if (!file || !activeSession || activeSession.saving) return false;
     const savingFileKey = activeSession.fileKey;
+    const savingContent = activeSession.content;
     const saveRequest = {};
     saveRequestRef.current = saveRequest;
     setSession((current) => current?.fileKey === savingFileKey
@@ -137,7 +138,7 @@ export function useWorkspaceFileDraft({
       : current);
     try {
       const saved = await client.saveProjectFile(file.projectId, file.path, {
-        content: activeSession.content,
+        content: savingContent,
         expectedRevision: activeSession.expectedRevision,
       });
       // Navigation may have discarded this draft while the write was pending.
@@ -148,7 +149,11 @@ export function useWorkspaceFileDraft({
       }
       saveRequestRef.current = null;
       onFileSaved(saved);
-      setSession((current) => current?.fileKey === savingFileKey ? null : current);
+      setSession((current) => reconcileWorkspaceFileDraftAfterSave(current, {
+        saved,
+        savingContent,
+        savingFileKey,
+      }));
       return true;
     } catch (error) {
       if (saveRequestRef.current !== saveRequest || currentFileKeyRef.current !== savingFileKey) {
@@ -221,6 +226,32 @@ function isCompleteEditableWorkspaceFile(
 
 function workspaceFileKey(file: Pick<WorkspaceFileRead, 'path' | 'projectId'>): string {
   return `${file.projectId}:${file.path}`;
+}
+
+export function reconcileWorkspaceFileDraftAfterSave(
+  current: WorkspaceFileDraftSession | null,
+  {
+    saved,
+    savingContent,
+    savingFileKey,
+  }: {
+    saved: WorkspaceFileRead;
+    savingContent: string;
+    savingFileKey: string;
+  },
+): WorkspaceFileDraftSession | null {
+  if (!current || current.fileKey !== savingFileKey) return current;
+  if (current.content === savingContent || current.content === saved.content) return null;
+
+  // The persisted snapshot succeeded, but the editor has moved on. Keep those
+  // newer edits and rebase the next save onto the revision that just landed.
+  return {
+    ...current,
+    error: null,
+    expectedRevision: saved.revision ?? current.expectedRevision,
+    originalContent: saved.content,
+    saving: false,
+  };
 }
 
 export type WorkspaceFileDraftState = ReturnType<typeof useWorkspaceFileDraft>;
