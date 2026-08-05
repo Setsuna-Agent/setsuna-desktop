@@ -29,7 +29,7 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).not.toContain('desktop-code-line');
   });
 
-  it('renders code lines as context-menu targets instead of left-click open buttons', () => {
+  it('renders text previews through the Pierre surface instead of line buttons', () => {
     const html = renderWorkspaceFilePreview({
       file: {
         ...workspaceFile({ kind: 'text' }),
@@ -38,8 +38,11 @@ describe('WorkspaceFilePreviewContent', () => {
       },
     });
 
-    expect(html).toContain('data-workspace-file-line="1"');
-    expect(html).toContain('data-workspace-file-line="2"');
+    expect(html).toContain('desktop-code-editor__pierre');
+    expect(html).toContain('desktop-code-editor--code-view');
+    expect(html).toContain('desktop-code-editor__horizontal-scrollbar');
+    expect(html).toContain('const first = true;');
+    expect(html).toContain('const second = false;');
     expect(html).not.toContain('<button class="desktop-code-line');
   });
 

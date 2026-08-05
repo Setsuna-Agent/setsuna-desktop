@@ -1,37 +1,44 @@
 import { describe, expect, it } from 'vitest';
 import {
-  codeColorSchemeOptions,
-  codeHighlightThemeOptions,
+  codeThemeOptions,
   getCodeFontFamilyOptionsForPlatform,
   initializeCodeAppearancePreference,
 } from '../../../../src/shared/preferences/useCodeAppearancePreferences.js';
 
 describe('code appearance preferences', () => {
-  it('defaults to the recommended adaptive ChatGPT theme and system monospace font', () => {
+  it('defaults to the recommended adaptive Pierre theme and system monospace font', () => {
     withCodeAppearanceEnvironment({}, ({ dataset, styles }) => {
       initializeCodeAppearancePreference();
 
-      expect(dataset.codeHighlightTheme).toBe('chatgpt');
+      expect(dataset.codeTheme).toBe('pierre');
       expect(dataset.codeFontFamily).toBe('system');
-      expect(dataset.codeColorScheme).toBe('theme');
       expect(styles.get('--app-code-font-family')).toContain('SFMono-Regular');
     });
   });
 
-  it('restores a saved theme and code font', () => {
+  it('restores a saved theme pair and code font', () => {
     withCodeAppearanceEnvironment(
       {
         'setsuna-code-font-family': 'geistMono',
-        'setsuna-code-highlight-theme': 'oneDark',
-        'setsuna-code-color-scheme': 'vscode',
+        'setsuna-code-theme:v1': 'vscode',
       },
       ({ dataset, styles }) => {
         initializeCodeAppearancePreference();
 
-        expect(dataset.codeHighlightTheme).toBe('one');
+        expect(dataset.codeTheme).toBe('vscode');
         expect(dataset.codeFontFamily).toBe('geistMono');
-        expect(dataset.codeColorScheme).toBe('vscode');
         expect(styles.get('--app-code-font-family')).toContain('Geist Mono');
+      },
+    );
+  });
+
+  it('migrates a compatible legacy highlight theme to its light and dark pair', () => {
+    withCodeAppearanceEnvironment(
+      { 'setsuna-code-highlight-theme': 'oneDark' },
+      ({ dataset }) => {
+        initializeCodeAppearancePreference();
+
+        expect(dataset.codeTheme).toBe('one');
       },
     );
   });
@@ -46,9 +53,8 @@ describe('code appearance preferences', () => {
       ({ dataset }) => {
         initializeCodeAppearancePreference();
 
-        expect(dataset.codeHighlightTheme).toBe('chatgpt');
+        expect(dataset.codeTheme).toBe('pierre');
         expect(dataset.codeFontFamily).toBe('system');
-        expect(dataset.codeColorScheme).toBe('theme');
       },
     );
   });
@@ -63,39 +69,24 @@ describe('code appearance preferences', () => {
     expect(windowsOptions).not.toContain('sfMono');
   });
 
-  it('offers theme suites that adapt to light and dark appearance', () => {
-    const themes = codeHighlightThemeOptions.map((option) => option.value);
+  it('offers intentional light and dark theme pairs', () => {
+    const themes = codeThemeOptions.map((option) => option.value);
 
     expect(themes).toEqual([
-      'chatgpt',
-      'one',
+      'pierre',
       'github',
-      'monokai',
-      'dracula',
-      'nord',
-      'tokyoNight',
+      'one',
       'catppuccin',
       'solarized',
-    ]);
-    expect(codeHighlightThemeOptions[0]).toEqual({ label: 'ChatGPT（推荐）', value: 'chatgpt' });
-  });
-
-  it('offers independent semantic token color schemes', () => {
-    const schemes = codeColorSchemeOptions.map((option) => option.value);
-
-    expect(schemes).toEqual([
-      'theme',
-      'one',
       'vscode',
-      'github',
       'material',
-      'monokai',
-      'dracula',
-      'nord',
-      'tokyoNight',
-      'catppuccin',
-      'solarized',
     ]);
+    expect(codeThemeOptions[0]).toEqual({
+      label: 'Pierre',
+      themes: { dark: 'pierre-dark', light: 'pierre-light' },
+      value: 'pierre',
+    });
+    expect(codeThemeOptions.every((option) => option.themes.dark && option.themes.light)).toBe(true);
   });
 });
 

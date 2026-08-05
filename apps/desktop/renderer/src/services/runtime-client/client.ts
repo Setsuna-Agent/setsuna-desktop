@@ -68,6 +68,7 @@ import type {
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
+  WorkspaceFileSaveInput,
   WorkspaceProject,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
@@ -412,6 +413,18 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     readProjectFile(projectId: string, path: string) {
       return request<WorkspaceFileRead>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/read?path=${encodeURIComponent(path)}`,
+      });
+    },
+    readProjectFileForEdit(projectId: string, path: string) {
+      return request<WorkspaceFileRead>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/read?path=${encodeURIComponent(path)}&mode=edit`,
+      });
+    },
+    saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput) {
+      return request<WorkspaceFileRead>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}/write?path=${encodeURIComponent(path)}`,
+        method: 'PUT',
+        body: input,
       });
     },
     searchProject(projectId: string, query: string) {

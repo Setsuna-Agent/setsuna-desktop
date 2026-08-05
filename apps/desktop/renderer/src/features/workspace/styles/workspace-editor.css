@@ -26,6 +26,10 @@
   background: var(--app-bg);
 }
 
+.desktop-editor.has-save-error {
+  grid-template-rows: 34px auto minmax(0, 1fr);
+}
+
 .desktop-workspace-body--single .desktop-editor,
 .desktop-workspace-body--single .desktop-review-panel {
   border-right: 0;
@@ -193,6 +197,21 @@
   color: var(--app-text-subtle);
 }
 
+.desktop-editor__crumb-path i {
+  margin-left: 6px;
+  color: var(--app-warning);
+  font-size: 8px;
+  font-style: normal;
+  vertical-align: 1px;
+}
+
+.desktop-editor__crumb-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+}
+
 .desktop-editor__tree-toggle svg {
   width: 16px;
   height: 16px;
@@ -201,7 +220,7 @@
 .desktop-file-preview {
   min-width: 0;
   min-height: 0;
-  background: var(--code-highlight-background);
+  background: var(--app-bg);
 }
 
 .desktop-file-preview--image {
@@ -232,50 +251,64 @@
 }
 
 .desktop-code-editor {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
-  padding: 10px 0 16px;
-  overflow: auto;
-  background: var(--code-highlight-background);
+  overflow: hidden;
+  background: var(--app-bg);
   font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 20px;
 }
 
-.desktop-code-line {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  box-sizing: border-box;
-  width: max-content;
-  min-width: 100%;
-  padding-right: 16px;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  text-align: left;
+.desktop-code-editor__viewport {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: contain;
 }
 
-.desktop-code-line--contextual:hover {
-  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+.desktop-code-editor__horizontal-scrollbar {
+  position: absolute;
+  z-index: 4;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--chat-scrollbar-width);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  background: var(--app-bg);
+  opacity: 0;
+  pointer-events: none;
 }
 
-.desktop-code-line__number {
-  padding-right: 12px;
-  color: var(--app-text-subtle);
-  text-align: right;
-  user-select: none;
+.desktop-code-editor__horizontal-scrollbar[data-visible="true"] {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-.desktop-code-line code {
-  color: var(--app-text);
-  white-space: pre;
+.desktop-code-editor__horizontal-scrollbar-track {
+  height: 1px;
 }
 
-.desktop-code-truncated {
-  margin: 10px 16px 0 44px;
-  color: var(--app-warning);
-  font-size: 12px;
+.desktop-code-editor__pierre {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.desktop-editor__save-error {
+  padding: 7px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-danger) 24%, var(--app-border));
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
+  font-size: 11px;
+  line-height: 16px;
 }

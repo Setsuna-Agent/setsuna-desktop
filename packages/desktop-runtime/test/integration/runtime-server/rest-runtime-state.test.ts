@@ -1,8 +1,9 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
+  WORKSPACE_TEXT_FILE_MAX_BYTES,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
-import { mkdir, mkdtemp, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -19,7 +20,7 @@ describe('runtime server REST runtime state', () => {
     await harness.close();
   });
 
-  it('exposes local project status and read-only file APIs', async () => {
+  it('exposes local project status and revision-protected text-file APIs', async () => {
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-server-project-'));
       await mkdir(path.join(projectDir, 'src'), { recursive: true });
       await writeFile(path.join(projectDir, 'src', 'note.txt'), 'server-side local search target\n');
@@ -33,7 +34,14 @@ describe('runtime server REST runtime state', () => {
       const entrySearch = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/entries/search?q=src%2Fnote`);
       const rootEntries = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/entries/search?q=&parent=`);
       const file = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/read?path=src%2Fnote.txt`);
-      const search = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/search?q=target`);
+      const savedFile = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/write?path=src%2Fnote.txt`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          content: 'saved from the file editor\n',
+          expectedRevision: file.revision,
+        }),
+      });
+      const search = await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/search?q=saved`);
   
       expect(status).toMatchObject({ exists: true, readable: true });
       expect(entries.entries).toMatchObject([{ path: 'src/note.txt', type: 'file' }]);
@@ -44,7 +52,55 @@ describe('runtime server REST runtime state', () => {
       });
       expect(rootEntries.entries).toMatchObject([{ kind: 'directory', name: 'src', parent: '', path: 'src' }]);
       expect(file.content).toContain('local search target');
+      expect(file.revision).toMatch(/^[a-f0-9]{64}$/u);
+      expect(savedFile).toMatchObject({
+        content: 'saved from the file editor\n',
+        revision: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      });
+      expect(savedFile.revision).not.toBe(file.revision);
+      expect(await readFile(path.join(projectDir, 'src', 'note.txt'), 'utf8')).toBe('saved from the file editor\n');
       expect(search.results).toMatchObject([{ path: 'src/note.txt', line: 1 }]);
+
+      const largePath = path.join(projectDir, 'src', 'generated.html');
+      const largeContent = `<style>src:url(data:font/woff2;base64,${'A'.repeat(WORKSPACE_TEXT_FILE_MAX_BYTES)})</style>`;
+      await writeFile(largePath, largeContent);
+      const largePreview = await harness.runtimeFetch(
+        `/v1/projects/${encodeURIComponent(project.id)}/read?path=src%2Fgenerated.html`,
+      );
+      const largeEditable = await harness.runtimeFetch(
+        `/v1/projects/${encodeURIComponent(project.id)}/read?path=src%2Fgenerated.html&mode=edit`,
+      );
+      const editedLargeContent = largeContent.replace('<style>', '<style>/* edited */');
+      await harness.runtimeFetch(`/v1/projects/${encodeURIComponent(project.id)}/write?path=src%2Fgenerated.html`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          content: editedLargeContent,
+          expectedRevision: largeEditable.revision,
+        }),
+      });
+
+      expect(largePreview).toMatchObject({ content: largeContent, truncated: false });
+      expect(largeEditable).toMatchObject({ content: largeContent, truncated: false });
+      expect(await readFile(largePath, 'utf8')).toBe(editedLargeContent);
+
+      await writeFile(path.join(projectDir, 'src', 'note.txt'), 'external editor change\n');
+      const conflictResponse = await fetch(
+        `${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}/write?path=src%2Fnote.txt`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${harness.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            content: 'stale local edit\n',
+            expectedRevision: savedFile.revision,
+          }),
+        },
+      );
+      expect(conflictResponse.status).toBe(409);
+      await expect(conflictResponse.json()).resolves.toMatchObject({ code: 'conflict' });
+      expect(await readFile(path.join(projectDir, 'src', 'note.txt'), 'utf8')).toBe('external editor change\n');
     });
   
   it('returns an isolated temporary workspace for a global thread', async () => {

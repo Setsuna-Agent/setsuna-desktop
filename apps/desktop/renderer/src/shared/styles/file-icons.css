@@ -10,6 +10,8 @@
   width: 100%;
   height: 100%;
   fill: var(--workspace-file-icon-color);
+  transform: scale(var(--workspace-file-icon-scale, 1));
+  transform-origin: center;
 }
 
 [data-file-icon-theme='seti'][data-file-icon-color='blue'] {

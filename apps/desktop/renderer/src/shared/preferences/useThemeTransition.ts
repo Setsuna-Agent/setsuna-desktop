@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState, type KeyboardEvent, type MouseEvent }
 import { flushSync } from 'react-dom';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
-type ResolvedThemeMode = 'light' | 'dark';
+export type ResolvedThemeMode = 'light' | 'dark';
 
 const storageKey = 'setusna-theme-mode';
-const themeChangeEventName = 'setsuna-theme-change';
+export const THEME_CHANGE_EVENT_NAME = 'setsuna-theme-change';
 
 type AnimatedDocument = Document & {
   startViewTransition?: (callback: () => void) => { finished: Promise<void> };
@@ -20,10 +20,10 @@ export function useThemeTransition() {
 
   useEffect(() => {
     const handleThemeChange = () => setMode(getInitialThemeMode());
-    window.addEventListener(themeChangeEventName, handleThemeChange);
+    window.addEventListener(THEME_CHANGE_EVENT_NAME, handleThemeChange);
     window.addEventListener('storage', handleThemeChange);
     return () => {
-      window.removeEventListener(themeChangeEventName, handleThemeChange);
+      window.removeEventListener(THEME_CHANGE_EVENT_NAME, handleThemeChange);
       window.removeEventListener('storage', handleThemeChange);
     };
   }, []);
@@ -42,7 +42,7 @@ export function useThemeTransition() {
   const setThemeMode = useCallback((nextMode: ThemeMode) => {
     setMode(nextMode);
     applyThemeModePreference(nextMode);
-    window.dispatchEvent(new CustomEvent(themeChangeEventName));
+    window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT_NAME));
   }, []);
 
   const setThemeModeWithTransition = useCallback((nextMode: ThemeMode, event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>) => {
@@ -81,6 +81,32 @@ export function initializeThemePreference(): void {
   applyThemeModePreference(getInitialThemeMode());
 }
 
+/** Keep consumers synchronized even when the settings page is not mounted. */
+export function useResolvedThemeMode(): ResolvedThemeMode {
+  const [resolvedMode, setResolvedMode] = useState<ResolvedThemeMode>(() => readResolvedThemeMode());
+
+  useEffect(() => {
+    const syncFromPreference = () => {
+      applyThemeModePreference(getInitialThemeMode());
+      setResolvedMode(readResolvedThemeMode());
+    };
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const syncFromSystem = () => {
+      if (getInitialThemeMode() === 'system') syncFromPreference();
+    };
+    window.addEventListener(THEME_CHANGE_EVENT_NAME, syncFromPreference);
+    window.addEventListener('storage', syncFromPreference);
+    media.addEventListener('change', syncFromSystem);
+    return () => {
+      window.removeEventListener(THEME_CHANGE_EVENT_NAME, syncFromPreference);
+      window.removeEventListener('storage', syncFromPreference);
+      media.removeEventListener('change', syncFromSystem);
+    };
+  }, []);
+
+  return resolvedMode;
+}
+
 function getInitialThemeMode(): ThemeMode {
   const saved = window.localStorage.getItem(storageKey);
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
@@ -98,4 +124,8 @@ function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   }
   return mode;
+}
+
+function readResolvedThemeMode(): ResolvedThemeMode {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }

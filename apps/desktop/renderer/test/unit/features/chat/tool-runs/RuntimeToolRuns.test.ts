@@ -73,8 +73,9 @@ describe('RuntimeToolRuns disclosure behavior', () => {
 
     expect(html).toMatch(/<details[^>]*\bopen(?:=|\s|>)/u);
     expect(html).toContain('chat-file-diff__preview');
-    expect(html).toContain('chat-file-diff__line--removed');
-    expect(html).toContain('chat-file-diff__line--added');
+    expect(html).toContain('diff --git a/src/pending.ts b/src/pending.ts');
+    expect(html).toContain('-return &#x27;before&#x27;;');
+    expect(html).toContain('+return &#x27;after&#x27;;');
   });
 
   it('adds an independent diff disclosure for each file in a mutation group', () => {

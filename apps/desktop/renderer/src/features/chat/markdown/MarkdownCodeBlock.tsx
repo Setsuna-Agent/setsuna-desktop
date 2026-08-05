@@ -1,6 +1,6 @@
-import { CodeHighlighter } from '@ant-design/x';
 import { Check, Copy } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { CodeFileView } from '../../../shared/code/PierreCode.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
 
@@ -9,84 +9,76 @@ type MarkdownCodeBlockProps = {
   language?: string;
 };
 
-const codeHighlighterHighlightProps = {
-  codeTagProps: {
-    style: {
-      background: 'transparent',
-      margin: 0,
-    },
-  },
-  customStyle: {
-    background: 'var(--chat-code-highlighter-bg)',
-    margin: 0,
-    padding: '18px 16px',
-  },
-  useInlineStyles: false,
-};
-
-const codeHighlighterStyle = { margin: '12px 0' };
-const codeHighlighterStyles = {
-  code: {
-    background: 'var(--chat-code-highlighter-bg)',
-  },
-};
-
 const maxHighlightedCodeCharacters = 24_000;
 const maxHighlightedCodeLines = 500;
+const chatCodeSurfaceStyle = {
+  '--diffs-dark-bg': 'var(--app-surface-muted)',
+  '--diffs-font-size': '13px',
+  '--diffs-light-bg': 'var(--app-surface-muted)',
+  '--diffs-line-height': '21px',
+} as CSSProperties;
+const chatCodeUnsafeCSS = '[data-code] { padding-top: 2px; padding-bottom: 4px; }';
 
 const codeLanguageAliases: Record<string, string> = {
   cjs: 'javascript',
   cs: 'csharp',
   cts: 'typescript',
-  htm: 'markup',
-  html: 'markup',
+  htm: 'html',
   js: 'javascript',
   md: 'markdown',
-  mdx: 'markdown',
   mjs: 'javascript',
   mts: 'typescript',
   py: 'python',
   rs: 'rust',
   sh: 'bash',
   shell: 'bash',
-  svg: 'markup',
+  svg: 'xml',
   ts: 'typescript',
-  tsx: 'typescript',
-  vue: 'markup',
-  xml: 'markup',
   yml: 'yaml',
   zsh: 'bash',
 };
 
+const codeLanguageDisplayNames: Record<string, string> = {
+  bash: 'Bash',
+  csharp: 'C#',
+  css: 'CSS',
+  html: 'HTML',
+  javascript: 'JavaScript',
+  jsx: 'JSX',
+  json: 'JSON',
+  markdown: 'Markdown',
+  python: 'Python',
+  rust: 'Rust',
+  text: 'Plain Text',
+  tsx: 'TSX',
+  typescript: 'TypeScript',
+  vue: 'Vue',
+  xml: 'XML',
+  yaml: 'YAML',
+};
+
 export function MarkdownCodeBlock({ code, language = '' }: MarkdownCodeBlockProps) {
-  const copiedCode = code.replace(/\n$/, '');
+  const copiedCode = normalizeMarkdownCodeBlockContents(code);
   const normalizedLanguage = normalizeMarkdownCodeLanguage(language);
-  // lang 为空时，CodeHighlighter 会返回裸内联 <code>；因此没有语言标签的围栏代码块
-  // 必须走受控的纯代码路径，以保留换行。
   const shouldHighlight = normalizedLanguage.length > 0 && shouldSyntaxHighlightMarkdownCode(copiedCode);
-  if (!shouldHighlight) {
-    return (
-      <div className="chat-code-highlighter chat-code-highlighter--plain">
-        <CodeBlockHeader code={copiedCode} language={language} />
-        <div className="ant-codeHighlighter-code">
-          <pre><code>{copiedCode}</code></pre>
-        </div>
-      </div>
-    );
-  }
   return (
-    <CodeHighlighter
-      className="chat-code-highlighter"
-      header={<CodeBlockHeader code={copiedCode} language={language} />}
-      highlightProps={codeHighlighterHighlightProps}
-      lang={normalizedLanguage}
-      prismLightMode={false}
-      style={codeHighlighterStyle}
-      styles={codeHighlighterStyles}
-    >
-      {copiedCode}
-    </CodeHighlighter>
+    <div className={`chat-code-highlighter ${shouldHighlight ? '' : 'chat-code-highlighter--plain'}`.trim()}>
+      <CodeBlockHeader code={copiedCode} language={language} />
+      <CodeFileView
+        contents={copiedCode}
+        disableBackground
+        language={shouldHighlight ? normalizedLanguage : 'text'}
+        name={`snippet.${normalizedLanguage || 'txt'}`}
+        showLineNumbers={false}
+        style={chatCodeSurfaceStyle}
+        unsafeCSS={chatCodeUnsafeCSS}
+      />
+    </div>
   );
+}
+
+export function normalizeMarkdownCodeBlockContents(code: string): string {
+  return code.replace(/(?:\r?\n[\t ]*)+$/, '');
 }
 
 function CodeBlockHeader({ code, language }: { code: string; language: string }) {
@@ -136,7 +128,8 @@ function CodeCopyButton({ code }: { code: string }) {
 }
 
 function codeLanguageLabel(language: string): string {
-  return language.trim().toLowerCase() || 'plain text';
+  const normalized = normalizeMarkdownCodeLanguage(language);
+  return codeLanguageDisplayNames[normalized] ?? (normalized || 'Plain Text');
 }
 
 export function normalizeMarkdownCodeLanguage(language: string): string {

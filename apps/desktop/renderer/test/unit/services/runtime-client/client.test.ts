@@ -70,6 +70,23 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
+  it('uses a separate complete-content request when a file enters edit mode', async () => {
+    const request = installRuntimeBridge(() => ({}));
+    const client = createDesktopRuntimeClient();
+
+    await client.readProjectFile('project / 1', 'src/generated file.html');
+    await client.readProjectFileForEdit('project / 1', 'src/generated file.html');
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      {
+        path: '/v1/projects/project%20%2F%201/read?path=src%2Fgenerated%20file.html',
+      },
+      {
+        path: '/v1/projects/project%20%2F%201/read?path=src%2Fgenerated%20file.html&mode=edit',
+      },
+    ]);
+  });
+
   it('routes queued turn input operations through encoded thread and input paths', async () => {
     const request = installRuntimeBridge(() => ({ accepted: true }));
     const client = createDesktopRuntimeClient();

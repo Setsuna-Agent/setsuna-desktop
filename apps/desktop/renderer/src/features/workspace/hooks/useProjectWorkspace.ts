@@ -7,6 +7,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
+import { useWorkspaceFileDraft } from './useWorkspaceFileDraft.js';
 
 type ProjectWorkspaceOptions = {
   activeProjectId: string | null;
@@ -23,6 +24,13 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
   const filePreviewRequests = useLatestRequestGuard();
   const contentSearchRequests = useLatestRequestGuard();
   activeProjectIdRef.current = activeProjectId;
+  const fileDraft = useWorkspaceFileDraft({
+    client,
+    file: filePreview,
+    onFilePrepared: setFilePreview,
+    onFileSaved: setFilePreview,
+  });
+  const { confirmDiscardChanges } = fileDraft;
 
   const resetProjectWorkspaceState = useCallback(() => {
     filePreviewRequests.invalidate();
@@ -42,10 +50,16 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     async (entry: WorkspaceEntry) => {
       if (!activeProjectId) return;
       if (entry.type === 'directory') {
+        if (!confirmDiscardChanges()) return;
         filePreviewRequests.invalidate();
         setFilePreview(null);
         return;
       }
+      if (filePreview?.path === entry.path && filePreview.projectId === activeProjectId) {
+        onOpenFilePanel(filePreview.path);
+        return;
+      }
+      if (!confirmDiscardChanges()) return;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
       const file = await client.readProjectFile(projectId, entry.path);
@@ -53,12 +67,17 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
       setFilePreview(file);
       onOpenFilePanel(file.path);
     },
-    [activeProjectId, client, filePreviewRequests, onOpenFilePanel],
+    [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
   );
 
   const openProjectFile = useCallback(
     async (filePath: string) => {
       if (!activeProjectId) return;
+      if (filePreview?.path === filePath && filePreview.projectId === activeProjectId) {
+        onOpenFilePanel(filePreview.path);
+        return;
+      }
+      if (!confirmDiscardChanges()) return;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
       const file = await client.readProjectFile(projectId, filePath);
@@ -66,7 +85,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
       setFilePreview(file);
       onOpenFilePanel(file.path);
     },
-    [activeProjectId, client, filePreviewRequests, onOpenFilePanel],
+    [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
   );
 
   const searchProjectEntries = useCallback(
@@ -91,13 +110,17 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
   }, [activeProjectId, client, contentSearchRequests, searchQuery]);
 
   const updateFilePreview = useCallback((file: WorkspaceFileRead | null) => {
+    if (file?.projectId !== filePreview?.projectId || file?.path !== filePreview?.path) {
+      if (!confirmDiscardChanges()) return;
+    }
     filePreviewRequests.invalidate();
     setFilePreview(file);
-  }, [filePreviewRequests]);
+  }, [confirmDiscardChanges, filePreview?.path, filePreview?.projectId, filePreviewRequests]);
 
   return {
     // Effects clear project-bound state after commit; derive visibility now so a switch never renders the previous file.
     filePreview: visibleWorkspaceFilePreview(filePreview, activeProjectId),
+    fileDraft,
     openEntry,
     openProjectFile,
     resetProjectWorkspaceState,

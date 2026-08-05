@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { RuntimeFileDiffPreview } from '../../../../../src/features/chat/tool-runs/RuntimeFileDiffPreview.js';
 
 describe('RuntimeFileDiffPreview', () => {
-  it('renders compact highlighted diff rows and truncation feedback', () => {
+  it('renders a valid Pierre patch and truncation feedback', () => {
     const html = renderToStaticMarkup(createElement(RuntimeFileDiffPreview, {
       change: {
         path: 'src/RuntimeErrorNotice.tsx',
@@ -22,11 +22,10 @@ describe('RuntimeFileDiffPreview', () => {
     }));
 
     expect(html).toContain('aria-label="src/RuntimeErrorNotice.tsx 的文件改动"');
-    expect(html).toContain('chat-file-diff__line--context');
-    expect(html).toContain('chat-file-diff__line--removed');
-    expect(html).toContain('chat-file-diff__line--added');
-    expect(html).toContain('token keyword');
-    expect(html).toContain('省略 7 行未改动内容');
+    expect(html).toContain('diff --git a/src/RuntimeErrorNotice.tsx b/src/RuntimeErrorNotice.tsx');
+    expect(html).toContain('@@ -16,2 +16,2 @@');
+    expect(html).toContain("-  return &#x27;before&#x27;;");
+    expect(html).toContain("+  return &#x27;after&#x27;;");
     expect(html).toContain('Diff 内容过长，仅显示部分改动。');
   });
 
@@ -46,7 +45,7 @@ describe('RuntimeFileDiffPreview', () => {
       },
     }));
 
-    expect(html.match(/chat-file-diff__line--added/gu)).toHaveLength(240);
+    expect(html.match(/\+export const value/gu)).toHaveLength(240);
     expect(html).toContain('Diff 内容过长，仅显示部分改动。');
   });
 });

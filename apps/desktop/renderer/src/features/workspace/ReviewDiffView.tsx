@@ -1,15 +1,15 @@
 import { Code2, PanelRightOpen } from 'lucide-react';
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type MouseEvent,
 } from 'react';
+import { CodePatchView } from '../../shared/code/PierreCode.js';
+import { codeDiffLinesToPatch } from '../../shared/code/diffPatch.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
-import { fileLanguage } from './codeHighlight.js';
 import type {
   DesktopDiffFile,
   DesktopDiffSummary,
@@ -21,26 +21,18 @@ import {
   reviewFilePathParts,
   reviewWorkspaceFilePath,
 } from './review-paths.js';
-import {
-  estimatedSplitDiffRowHeight,
-  estimatedUnifiedDiffLineHeight,
-  highlightedReviewDiffLines,
-  reviewWholeFileChangeType,
-  splitReviewDiffRows,
-} from './reviewDiffModel.js';
-import type {
-  DesktopReviewDiffLayout,
-  HighlightedReviewDiffLine,
-  ReviewFileExpansionRequest,
-  ReviewPathContext,
-} from './review-types.js';
+import type { DesktopReviewDiffLayout, ReviewFileExpansionRequest, ReviewPathContext } from './review-types.js';
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
-import { ReviewDiffContent } from './ReviewDiffContent.js';
 import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+
+const reviewFilePathCollator = new Intl.Collator('en', {
+  numeric: true,
+  sensitivity: 'base',
+});
 
 function ReviewFilePath({ path }: { path: string }) {
   const { directory, filename } = reviewFilePathParts(path);
@@ -100,7 +92,9 @@ export function ReviewSummarySection({
   onOpenProjectFile: (filePath: string) => void;
   onRevealFile: (filePath: string) => void;
 }) {
-  const files = summary?.files ?? [];
+  const files = useMemo(() => [...(summary?.files ?? [])].sort((left, right) => (
+    reviewFilePathCollator.compare(left.path, right.path)
+  )), [summary?.files]);
   return (
     <section className="desktop-review-section">
       {files.length ? (
@@ -187,51 +181,14 @@ function ReviewFileCard({
         === normalizeReviewFocusPath(focusRequest.path),
   );
   const visibleLines = file.lines;
-  const language = fileLanguage(file.path);
-  const wholeFileChange = useMemo(
-    () => (expanded ? reviewWholeFileChangeType(visibleLines) : null),
-    [expanded, visibleLines],
-  );
-  const splitWholeFileChange = diffLayout === 'split'
-    ? wholeFileChange
-    : null;
-  const highlightedVisibleLines = useMemo<HighlightedReviewDiffLine[]>(
-    () => {
-      // 折叠文件保持低开销：大型审查不应预先高亮每个隐藏文件。
-      if (!expanded) return [];
-      const highlightedLines = highlightedReviewDiffLines(
-        visibleLines,
-        language,
-      );
-      return visibleLines.map((line, index) => ({
-        highlighted: highlightedLines[index],
-        key: `${file.path}:${line.lineNumber}:${index}`,
-        line,
-      }));
-    },
-    [expanded, file.path, language, visibleLines],
-  );
-  const splitRows = useMemo(
-    () => (
-      expanded && diffLayout === 'split'
-        ? splitReviewDiffRows(highlightedVisibleLines)
-        : []
-    ),
-    [diffLayout, expanded, highlightedVisibleLines],
-  );
-  const diffRowEstimate = useCallback(
-    (index: number) => (
-      diffLayout === 'split' && !splitWholeFileChange
-        ? estimatedSplitDiffRowHeight(splitRows[index])
-        : estimatedUnifiedDiffLineHeight(highlightedVisibleLines[index])
-    ),
-    [
-      diffLayout,
-      highlightedVisibleLines,
-      splitRows,
-      splitWholeFileChange,
-    ],
-  );
+  // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
+  const patch = useMemo(() => {
+    if (!expanded) return '';
+    // A raw patch cannot be sliced safely. Rebuild valid hunks from the retained
+    // lines so truncated previews remain parseable and syntax-highlighted.
+    if (file.truncated) return codeDiffLinesToPatch(file);
+    return file.patch ?? codeDiffLinesToPatch(file);
+  }, [expanded, file]);
 
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
@@ -245,7 +202,7 @@ function ReviewFileCard({
     setFocusHighlightVersion(focusRequest.version);
     const frame = window.requestAnimationFrame(() => {
       fileCardRef.current?.scrollIntoView({
-        block: 'center',
+        block: 'start',
         behavior: 'smooth',
       });
     });
@@ -260,17 +217,13 @@ function ReviewFileCard({
     };
   }, [focusedByRequest, focusRequest?.version]);
 
-  const openDiffLineContextMenu = (
-    event: MouseEvent,
-    line: DesktopDiffFile['lines'][number],
-    preferredLine?: number,
-  ) => {
+  const openDiffLineContextMenu = (event: MouseEvent) => {
     if (!workspaceFilePath) return;
     event.preventDefault();
     event.stopPropagation();
     setLineContextMenu({
       filePath: workspaceFilePath,
-      line: preferredLine ?? line.newLine ?? line.oldLine,
+      line: pierreLineNumberFromEvent(event),
       x: event.clientX,
       y: event.clientY,
     });
@@ -310,12 +263,14 @@ function ReviewFileCard({
             )}
             onClick={() => setExpanded((value) => !value)}
           >
-            <WorkspaceFileIcon path={file.path} type="file" />
-            <ReviewFilePath path={file.path} />
-            <ReviewChangeCounts
-              additions={file.additions}
-              deletions={file.deletions}
-            />
+            <WorkspaceFileIcon className="desktop-review-file-card__icon" path={file.path} type="file" />
+            <span className="desktop-review-file-card__file-info">
+              <ReviewFilePath path={file.path} />
+              <ReviewChangeCounts
+                additions={file.additions}
+                deletions={file.deletions}
+              />
+            </span>
           </button>
           <div className="desktop-review-file-card__meta">
             <IconButton
@@ -353,33 +308,26 @@ function ReviewFileCard({
           </div>
         </header>
         {expanded && visibleLines.length ? (
-          <ReviewDiffContent
-            className={[
-              'desktop-review-diff',
-              `desktop-review-diff--${diffLayout}`,
-              lineWrap ? 'desktop-review-diff--wrap' : '',
-              splitWholeFileChange
-                ? 'desktop-review-diff--single-sided'
-                : '',
-              splitWholeFileChange
-                ? `desktop-review-diff--single-sided-${splitWholeFileChange}`
-                : '',
-            ].filter(Boolean).join(' ')}
-            diffLayout={diffLayout}
-            highlightedLines={highlightedVisibleLines}
-            language={language}
-            lineWrap={lineWrap}
-            rowEstimate={diffRowEstimate}
-            splitRows={splitRows}
-            wholeFileChange={splitWholeFileChange}
-            onLineContextMenu={openDiffLineContextMenu}
+          <div
+            className="desktop-review-diff-shell"
+            onContextMenu={openDiffLineContextMenu}
           >
+            <CodePatchView
+              className={[
+                'desktop-review-diff',
+                `desktop-review-diff--${diffLayout}`,
+                lineWrap ? 'desktop-review-diff--wrap' : '',
+              ].filter(Boolean).join(' ')}
+              layout={diffLayout}
+              patch={patch}
+              wrap={lineWrap}
+            />
             {file.truncated ? (
               <div className="desktop-review-truncated">
                 {t('workspace.review.file.truncated')}
               </div>
             ) : null}
-          </ReviewDiffContent>
+          </div>
         ) : null}
       </article>
       <WorkspaceFileContextMenu
@@ -396,9 +344,11 @@ function ReviewFileCard({
   );
 }
 
-export {
-  highlightedReviewDiffLines,
-  reviewVirtualRange,
-  reviewWholeFileChangeType,
-  shouldWrapReviewDiffLine,
-} from './reviewDiffModel.js';
+function pierreLineNumberFromEvent(event: MouseEvent): number | undefined {
+  for (const target of event.nativeEvent.composedPath()) {
+    if (!(target instanceof HTMLElement)) continue;
+    const line = Number(target.dataset.line);
+    if (Number.isSafeInteger(line) && line > 0) return line;
+  }
+  return undefined;
+}

@@ -479,13 +479,20 @@ async function diffSummary(gitRoot: string, diffArgs: string[]): Promise<Desktop
 function parseUnifiedDiff(output: string): DesktopDiffSummary {
   const files: DesktopDiffFile[] = [];
   let current: DesktopDiffFile | null = null;
+  let currentPatchLines: string[] = [];
   let oldLine = 0;
   let newLine = 0;
   let truncated = false;
 
+  const finishCurrentFile = () => {
+    if (!current) return;
+    current.patch = currentPatchLines.join('\n');
+    files.push(current);
+  };
+
   for (const rawLine of output.split(/\r?\n/)) {
     if (rawLine.startsWith('diff --git ')) {
-      if (current) files.push(current);
+      finishCurrentFile();
       current = {
         path: parseDiffPath(rawLine),
         action: 'Modified',
@@ -494,12 +501,14 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
         truncated: false,
         lines: [],
       };
+      currentPatchLines = [rawLine];
       oldLine = 0;
       newLine = 0;
       truncated = false;
       continue;
     }
     if (!current) continue;
+    currentPatchLines.push(rawLine);
     if (rawLine.startsWith('new file mode')) current.action = 'Created';
     if (rawLine.startsWith('deleted file mode')) current.action = 'Deleted';
     if (rawLine.startsWith('rename from ')) current.action = 'Renamed';
@@ -568,7 +577,7 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
     truncated = current.truncated;
   }
 
-  if (current) files.push(current);
+  finishCurrentFile();
   return {
     files,
     additions: files.reduce((total, file) => total + file.additions, 0),
@@ -633,7 +642,24 @@ async function summarizeUntrackedFile(gitRoot: string, relativePath: string): Pr
       newLine: index + 1,
       content: line,
     })),
+    patch: untrackedFilePatch(relativePath, content),
   };
+}
+
+function untrackedFilePatch(relativePath: string, content: string): string {
+  const safePath = relativePath.replace(/[\r\n]/gu, '');
+  const normalized = content.replace(/\r\n/gu, '\n');
+  const lines = normalized
+    ? normalized.replace(/\n$/u, '').split('\n')
+    : [];
+  return [
+    `diff --git a/${safePath} b/${safePath}`,
+    'new file mode 100644',
+    '--- /dev/null',
+    `+++ b/${safePath}`,
+    `@@ -0,0 +1,${lines.length} @@`,
+    ...lines.map((line) => `+${line}`),
+  ].join('\n');
 }
 
 function mergeDiffSummaries(left: DesktopDiffSummary, right: DesktopDiffSummary): DesktopDiffSummary {

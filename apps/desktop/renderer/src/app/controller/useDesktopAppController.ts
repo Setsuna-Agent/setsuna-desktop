@@ -160,6 +160,7 @@ export function useDesktopAppController() {
   const navigation = useDesktopNavigation({
     activeProjectId,
     client,
+    confirmDiscardProjectFile: projectWorkspace.fileDraft.confirmDiscardChanges,
     currentThread,
     globalThreads,
     reloadThreads,
