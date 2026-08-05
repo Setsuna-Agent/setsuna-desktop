@@ -77,23 +77,23 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 530 total files
-├── src/ — 2 direct / 387 total files
+apps/desktop/renderer/ — 0 direct / 532 total files
+├── src/ — 2 direct / 388 total files
 │   ├── app/ — 2 direct / 32 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 280 files
+│   ├── features/ — 281 files
 │   │   ├── capabilities/ — 20 direct / 27 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
-│   │   ├── chat/ — 3 direct / 111 total files
+│   │   ├── chat/ — 3 direct / 112 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
 │   │   │   ├── composer/ — 26 direct / 26 total files
-│   │   │   ├── conversation/ — 29 direct / 29 total files
+│   │   │   ├── conversation/ — 30 direct / 30 total files
 │   │   │   ├── hooks/ — 8 direct / 8 total files
 │   │   │   ├── markdown/ — 11 direct / 11 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files
@@ -128,20 +128,20 @@ apps/desktop/renderer/ — 0 direct / 530 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 4 direct / 4 total files
-└── test/ — 143 files
-    └── unit/ — 143 files
+└── test/ — 144 files
+    └── unit/ — 144 files
         ├── app/ — 1 direct / 11 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 109 files
+        ├── features/ — 110 files
         │   ├── capabilities/ — 5 direct / 6 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 1 direct / 58 total files
+        │   ├── chat/ — 1 direct / 59 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 17 direct / 17 total files
-        │   │   ├── conversation/ — 20 direct / 20 total files
+        │   │   ├── conversation/ — 21 direct / 21 total files
         │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
         │   │   ├── mentions/ — 3 direct / 3 total files

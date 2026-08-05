@@ -142,45 +142,105 @@
   }
 }
 
-.chat-thinking-box {
+.chat-thinking-disclosure {
   width: 100%;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
-  border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-text) 2.8%, transparent);
 }
 
-.chat-thinking-box__content {
+.chat-thinking-disclosure__summary {
+  display: inline-grid;
+  grid-template-columns: minmax(0, auto) 12px;
+  align-items: center;
+  justify-content: start;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  list-style: none;
+  text-align: left;
+}
+
+.chat-thinking-disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-thinking-disclosure__summary:hover,
+.chat-thinking-disclosure__summary:focus-visible,
+.chat-thinking-disclosure[open] > .chat-thinking-disclosure__summary {
+  color: var(--app-text-muted);
+}
+
+.chat-thinking-disclosure__label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: var(--app-font-weight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thinking-disclosure__chevron {
+  color: color-mix(in srgb, currentColor 76%, transparent);
+  opacity: 0;
+  transform: rotate(-90deg);
+  transition: opacity 0.14s ease, transform 0.16s ease;
+}
+
+.chat-thinking-disclosure__summary:hover > .chat-thinking-disclosure__chevron,
+.chat-thinking-disclosure__summary:focus-visible > .chat-thinking-disclosure__chevron {
+  opacity: 1;
+}
+
+.chat-thinking-disclosure[open] > .chat-thinking-disclosure__summary > .chat-thinking-disclosure__chevron {
+  transform: rotate(0);
+}
+
+.chat-thinking-disclosure__panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 2px;
+  overflow: hidden;
+  border-radius: 7px;
+  color: #4b5563;
+  background: #eceeef;
+}
+
+:root[data-theme='dark'] .chat-thinking-disclosure__panel {
+  color: #d1d5db;
+  background: #24272b;
+}
+
+.chat-thinking-disclosure__content {
   box-sizing: border-box;
   max-height: 112px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  color: color-mix(in srgb, var(--app-text) 62%, transparent);
   font-size: 12.5px;
   line-height: 1.6;
-  scrollbar-width: none;
-  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 10px), transparent);
-  -ms-overflow-style: none;
-  mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  scrollbar-color: color-mix(in srgb, currentColor 28%, transparent) transparent;
+  scrollbar-width: thin;
 }
 
-.chat-thinking-box__content::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
-}
-
-.chat-thinking-box__content .chat-markdown {
+.chat-thinking-disclosure__content .chat-markdown {
   color: inherit;
   font-size: inherit;
   line-height: inherit;
 }
 
-.chat-thinking-box__content .chat-markdown :where(p, ul, ol, pre, blockquote) {
+.chat-thinking-disclosure__content .chat-markdown :where(p, ul, ol, pre, blockquote) {
   margin-top: 0;
   margin-bottom: 6px;
 }
