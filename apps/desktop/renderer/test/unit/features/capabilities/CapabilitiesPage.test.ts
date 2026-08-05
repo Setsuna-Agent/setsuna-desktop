@@ -1,5 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { pluginActionError } from '../../../../src/features/capabilities/CapabilitiesPage.js';
+import {
+  pluginActionError,
+  shouldRenderCapabilitiesTabsInPage,
+} from '../../../../src/features/capabilities/CapabilitiesPage.js';
+
+describe('capabilities tabs placement', () => {
+  it('moves the tabs into page content on Windows only', () => {
+    expect(shouldRenderCapabilitiesTabsInPage('win32')).toBe(true);
+    expect(shouldRenderCapabilitiesTabsInPage('darwin')).toBe(false);
+    expect(shouldRenderCapabilitiesTabsInPage('linux')).toBe(false);
+    expect(shouldRenderCapabilitiesTabsInPage('browser')).toBe(false);
+  });
+});
 
 describe('pluginActionError', () => {
   afterEach(() => {
