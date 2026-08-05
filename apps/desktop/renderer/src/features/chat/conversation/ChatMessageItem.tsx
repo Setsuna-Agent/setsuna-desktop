@@ -41,8 +41,8 @@ import {
 } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { workHistoryDisplayState } from './chatWorkHistoryState.js';
+import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
-import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 
 export function MessageItem({
   activeAssistantItemId,
@@ -687,7 +687,7 @@ function assistantWorkItemNodes(
   if (item.type === 'thinking') {
     return itemActive && item.segment.content.trim()
       ? [
-          <ActiveThinkingBox
+          <ActiveThinkingDisclosure
             key={item.segment.id}
             content={item.segment.content}
             scrollStateKey={item.segment.id}
@@ -788,19 +788,6 @@ function parseDateMs(value?: string | null): number | null {
   if (!value) return null;
   const time = Date.parse(value);
   return Number.isFinite(time) ? time : null;
-}
-
-function ActiveThinkingBox({ content, scrollStateKey }: { content: string; scrollStateKey: string }): JSX.Element {
-  const { t } = useI18n();
-  const { handlePointerDown, handleScroll, handleTouchMove, handleWheel, scrollRef } = useStreamingScrollPin(content, scrollStateKey);
-
-  return (
-    <div className="chat-thinking-box" aria-live="polite" aria-label={t('chat.thinking.active')}>
-      <div className="chat-thinking-box__content" ref={scrollRef} onPointerDownCapture={handlePointerDown} onScroll={handleScroll} onTouchMoveCapture={handleTouchMove} onWheelCapture={handleWheel}>
-        <MarkdownRenderer content={content} streaming />
-      </div>
-    </div>
-  );
 }
 
 function WorkHistoryPanel({
