@@ -99,15 +99,28 @@ export type WorkspaceFilePreview =
   | { kind: 'image'; base64: string; mimeType: WorkspaceFilePreviewImageMimeType }
   | { kind: 'unsupported'; reason: 'binary' | 'image-too-large' };
 
+/** Maximum text prefix returned by the lightweight file preview request. */
+export const WORKSPACE_TEXT_FILE_MAX_BYTES = 256 * 1024;
+
+/** Maximum complete text file loaded into and saved from the workspace editor. */
+export const WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES = 8 * 1024 * 1024;
+
 export type WorkspaceFileRead = {
   projectId: string;
   path: string;
   content: string;
   size: number;
   modifiedAt?: string;
+  /** Content hash used for optimistic concurrency when saving an editor draft. */
+  revision?: string;
   /** Optional for compatibility with runtimes that predate typed file previews. */
   preview?: WorkspaceFilePreview;
   truncated: boolean;
+};
+
+export type WorkspaceFileSaveInput = {
+  content: string;
+  expectedRevision: string;
 };
 
 export type WorkspaceFileWrite = {
@@ -115,6 +128,7 @@ export type WorkspaceFileWrite = {
   path: string;
   size: number;
   modifiedAt?: string;
+  revision?: string;
   created: boolean;
 };
 

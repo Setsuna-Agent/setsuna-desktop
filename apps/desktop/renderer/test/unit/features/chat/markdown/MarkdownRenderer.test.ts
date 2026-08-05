@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  normalizeMarkdownCodeBlockContents,
   normalizeMarkdownCodeLanguage,
   shouldSyntaxHighlightMarkdownCode,
 } from '../../../../../src/features/chat/markdown/MarkdownCodeBlock.js';
@@ -110,11 +111,19 @@ describe('MarkdownRenderer', () => {
     const html = renderMarkdown('```ts\nconst answer = 42;\n```');
 
     expect(html).toContain('chat-code-highlighter');
-    expect(html).toContain('>ts</span>');
+    expect(html).toContain('>TypeScript</span>');
     expect(html).toContain('aria-label="复制代码"');
     expect(html).toContain('const answer = 42;');
-    expect(normalizeMarkdownCodeLanguage('TSX')).toBe('typescript');
+    expect(normalizeMarkdownCodeLanguage('TSX')).toBe('tsx');
+    expect(normalizeMarkdownCodeLanguage('Vue')).toBe('vue');
     expect(normalizeMarkdownCodeLanguage('')).toBe('');
+  });
+
+  it('removes parser and authored blank lines from the end of fenced code', () => {
+    expect(normalizeMarkdownCodeBlockContents('pnpm build\n✓ tsc\n✓ vite build\n\n')).toBe(
+      'pnpm build\n✓ tsc\n✓ vite build',
+    );
+    expect(normalizeMarkdownCodeBlockContents('const value = 1;\r\n  \r\n')).toBe('const value = 1;');
   });
 
   it('localizes Markdown controls and accessibility labels in English', () => {
@@ -134,7 +143,7 @@ describe('MarkdownRenderer', () => {
     const html = renderMarkdown('```\nChatWorkspace.tsx\n├── useChatWorkspaceState.ts\n```');
 
     expect(html).toContain('chat-code-highlighter chat-code-highlighter--plain');
-    expect(html).toContain('>plain text</span>');
+    expect(html).toContain('>Plain Text</span>');
     expect(html).toContain('<pre><code>ChatWorkspace.tsx\n├── useChatWorkspaceState.ts</code></pre>');
   });
 

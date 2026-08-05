@@ -227,8 +227,23 @@
   min-width: 0;
 }
 
+.chat-conversation-git__branch-row {
+  grid-template-columns: 20px max-content minmax(0, 1fr);
+}
+
+.chat-conversation-git__branch-row .chat-conversation-overview-panel__meta {
+  width: 100%;
+}
+
 .chat-conversation-git__branch-row .chat-conversation-overview-panel__meta svg {
   flex: 0 0 auto;
+}
+
+.chat-conversation-git__branch-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-git-branch-menu,

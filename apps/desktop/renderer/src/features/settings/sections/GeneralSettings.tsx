@@ -13,7 +13,9 @@ import {
   Sun,
   Type,
 } from 'lucide-react';
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties } from 'react';
+import { CodeFileView } from '../../../shared/code/PierreCode.js';
+import { useCodeAppearance } from '../../../shared/code/CodeAppearanceProvider.js';
 import {
   accentColorOptions,
   useAccentColorPreference,
@@ -29,14 +31,11 @@ import {
   type FontWeightMode,
 } from '../../../shared/preferences/useAppearancePreferences.js';
 import {
-  codeColorSchemeOptions,
   codeFontFamilyOptions,
-  codeHighlightThemeOptions,
+  codeThemeOptions,
   getCodeFontFamilyOptionsForPlatform,
-  useCodeAppearancePreferences,
-  type CodeColorScheme,
   type CodeFontFamilyMode,
-  type CodeHighlightTheme,
+  type CodeTheme,
 } from '../../../shared/preferences/useCodeAppearancePreferences.js';
 import {
   sidebarBackgroundOptions,
@@ -86,7 +85,7 @@ export function GeneralSettings({
 }) {
   const { locale, setLocale, t } = useI18n();
   const { fontFamily, fontSize, fontWeight, setFontFamily, setFontSize, setFontWeight } = useAppearancePreferences();
-  const { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme } = useCodeAppearancePreferences();
+  const { codeFontFamily, codeTheme, setCodeFontFamily, setCodeTheme } = useCodeAppearance();
   const { sidebarBackgroundStyle, setSidebarBackgroundStyle } = useSidebarBackgroundPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const { accentColor, setAccentColor } = useAccentColorPreference();
@@ -94,8 +93,7 @@ export function GeneralSettings({
   const availableCodeFontFamilyOptions = getCodeFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
   const selectedCodeFont = availableCodeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? availableCodeFontFamilyOptions[0] ?? codeFontFamilyOptions[0];
-  const selectedCodeHighlightTheme = codeHighlightThemeOptions.find((item) => item.value === codeHighlightTheme) ?? codeHighlightThemeOptions[0];
-  const selectedCodeColorScheme = codeColorSchemeOptions.find((item) => item.value === codeColorScheme) ?? codeColorSchemeOptions[0];
+  const selectedCodeTheme = codeThemeOptions.find((item) => item.value === codeTheme) ?? codeThemeOptions[0];
   const fontFamilySelectOptions = availableFontFamilyOptions.some((item) => item.value === selectedFont.value) ? availableFontFamilyOptions : [selectedFont, ...availableFontFamilyOptions];
   const codeFontFamilySelectOptions = availableCodeFontFamilyOptions.some((item) => item.value === selectedCodeFont.value) ? availableCodeFontFamilyOptions : [selectedCodeFont, ...availableCodeFontFamilyOptions];
   const themeModeOptions: Array<SettingsChoiceOption<ThemeMode>> = [
@@ -254,34 +252,19 @@ export function GeneralSettings({
           <label className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
               <Paintbrush size={14} />
-              <span>{t('settings.general.codeHighlightTheme')}</span>
+              <span>{t('settings.general.codeTheme')}</span>
             </span>
-            <SelectField aria-label={t('settings.general.codeHighlightTheme')} className="settings-local-control" value={codeHighlightTheme} onValueChange={(nextValue) => setCodeHighlightTheme(nextValue as CodeHighlightTheme)}>
-              {codeHighlightThemeOptions.map((option) => (
+            <SelectField aria-label={t('settings.general.codeTheme')} className="settings-local-control" value={codeTheme} onValueChange={(nextValue) => setCodeTheme(nextValue as CodeTheme)}>
+              {codeThemeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.value === 'chatgpt' ? t('settings.general.codeTheme.recommended') : option.label}
-                </option>
-              ))}
-            </SelectField>
-          </label>
-          <label className="chat-user-settings__row">
-            <span className="chat-user-settings__row-label">
-              <Palette size={14} />
-              <span>{t('settings.general.codeColorScheme')}</span>
-            </span>
-            <SelectField aria-label={t('settings.general.codeColorScheme')} className="settings-local-control" value={codeColorScheme} onValueChange={(nextValue) => setCodeColorScheme(nextValue as CodeColorScheme)}>
-              {codeColorSchemeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.value === 'theme' ? t('settings.general.codeScheme.theme') : option.label}
+                  {option.value === 'pierre' ? t('settings.general.codeTheme.recommended') : option.label}
                 </option>
               ))}
             </SelectField>
           </label>
           <CodeAppearancePreview
-            colorSchemeLabel={selectedCodeColorScheme.value === 'theme' ? t('settings.general.codeScheme.theme') : selectedCodeColorScheme.label}
-            fontFamily={selectedCodeFont.css}
             fontLabel={selectedCodeFont.label}
-            themeLabel={selectedCodeHighlightTheme.value === 'chatgpt' ? t('settings.general.codeTheme.recommended') : selectedCodeHighlightTheme.label}
+            themeLabel={selectedCodeTheme.value === 'pierre' ? t('settings.general.codeTheme.recommended') : selectedCodeTheme.label}
           />
         </div>
       </div>
@@ -366,63 +349,26 @@ export function GeneralSettings({
   );
 }
 
-function CodeAppearancePreview({ colorSchemeLabel, fontFamily, fontLabel, themeLabel }: { colorSchemeLabel: string; fontFamily: string; fontLabel: string; themeLabel: string }) {
+function CodeAppearancePreview({ fontLabel, themeLabel }: { fontLabel: string; themeLabel: string }) {
   const { t } = useI18n();
+  const contents = [
+    "import { useMemo } from 'react';",
+    t('settings.general.codePreviewComment'),
+    'const total = items.reduce((sum, item) => sum + item.price, 0);',
+    'return formatCurrency(total);',
+  ].join('\n');
   return (
     <div className="chat-user-settings__code-preview" aria-label={t('settings.general.codePreview')}>
       <div className="chat-user-settings__code-preview-header">
         <span><Code2 size={12} /> TypeScript</span>
-        <span>{`${fontLabel} · ${themeLabel} · ${colorSchemeLabel}`}</span>
+        <span>{`${fontLabel} · ${themeLabel}`}</span>
       </div>
-      <code className="chat-user-settings__code-preview-body" style={{ fontFamily }}>
-        <CodePreviewLine number={1}>
-          <span className="is-keyword">import</span>
-          <span className="is-meta"> {'{'} </span>
-          <span className="is-function">useMemo</span>
-          <span className="is-meta"> {'}'} </span>
-          <span className="is-keyword">from</span>
-          <span> </span>
-          <span className="is-string">'react'</span>
-          <span className="is-meta">;</span>
-        </CodePreviewLine>
-        <CodePreviewLine number={2}>
-          <span className="is-comment">{t('settings.general.codePreviewComment')}</span>
-        </CodePreviewLine>
-        <CodePreviewLine number={3}>
-          <span className="is-keyword">const</span>
-          <span className="is-variable"> total </span>
-          <span className="is-meta">=</span>
-          <span className="is-variable"> items.</span>
-          <span className="is-function">reduce</span>
-          <span className="is-meta">((</span>
-          <span className="is-variable">sum, item</span>
-          <span className="is-meta">) =&gt;</span>
-          <span className="is-variable"> sum </span>
-          <span className="is-meta">+</span>
-          <span className="is-variable"> item.</span>
-          <span className="is-attribute">price</span>
-          <span className="is-meta">, </span>
-          <span className="is-number">0</span>
-          <span className="is-meta">);</span>
-        </CodePreviewLine>
-        <CodePreviewLine number={4}>
-          <span className="is-keyword">return</span>
-          <span> </span>
-          <span className="is-function">formatCurrency</span>
-          <span className="is-meta">(</span>
-          <span className="is-variable">total</span>
-          <span className="is-meta">);</span>
-        </CodePreviewLine>
-      </code>
+      <CodeFileView
+        className="chat-user-settings__code-preview-body"
+        contents={contents}
+        language="typescript"
+        name="settings-preview.ts"
+      />
     </div>
-  );
-}
-
-function CodePreviewLine({ children, number }: { children: ReactNode; number: number }) {
-  return (
-    <span className="chat-user-settings__code-preview-line">
-      <span aria-hidden="true">{number}</span>
-      <span>{children}</span>
-    </span>
   );
 }

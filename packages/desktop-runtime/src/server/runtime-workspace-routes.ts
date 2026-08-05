@@ -1,9 +1,16 @@
-import type { WorkspaceSearchResponse } from '@setsuna-desktop/contracts';
+import {
+  WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+  type WorkspaceFileSaveInput,
+  type WorkspaceSearchResponse,
+} from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js';
 import { WorkspaceSearchCancelledError } from '../ports/workspace-search-engine.js';
-import { archiveRuntimeWorkspaceProject } from '../runtime/use-cases/workspace-operations.js';
+import {
+  archiveRuntimeWorkspaceProject,
+  saveRuntimeWorkspaceFile,
+} from '../runtime/use-cases/workspace-operations.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { RuntimeHttpError } from './http-error.js';
 import { readBody, sendJson } from './http-utils.js';
@@ -120,6 +127,25 @@ export async function handleRuntimeWorkspaceRequest(
       await runtime.workspaceProjects.readFile(
         decodeURIComponent(projectReadMatch[1]),
         url.searchParams.get('path') ?? '',
+        // CodeView virtualizes long files, so the regular preview can use the
+        // same complete-content budget as edit mode instead of the legacy
+        // lightweight prefix.
+        { maxTextBytes: WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES },
+      ),
+    );
+    return true;
+  }
+
+  const projectWriteMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)\/write$/u);
+  if (projectWriteMatch && request.method === 'PUT') {
+    sendJson(
+      response,
+      200,
+      await saveRuntimeWorkspaceFile(
+        runtime.workspaceProjects,
+        decodeURIComponent(projectWriteMatch[1]),
+        url.searchParams.get('path') ?? '',
+        await readBody<WorkspaceFileSaveInput>(request),
       ),
     );
     return true;

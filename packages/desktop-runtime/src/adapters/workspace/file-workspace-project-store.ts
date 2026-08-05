@@ -2,6 +2,7 @@ import {
   parseTemporaryWorkspaceProjectId,
   TEMPORARY_WORKSPACE_PROJECT_ID,
   temporaryWorkspaceProjectId,
+  WORKSPACE_TEXT_FILE_MAX_BYTES,
   type AddWorkspaceProjectInput,
   type WorkspaceEntry,
   type WorkspaceEntryList,
@@ -13,7 +14,7 @@ import {
   type WorkspaceSearchResponse,
   type WorkspaceStatus,
 } from '@setsuna-desktop/contracts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   lstat,
   mkdir,
@@ -31,6 +32,7 @@ import type {
   TemporaryWorkspaceInput,
   WorkspaceFileMetadata,
   WorkspaceImageRead,
+  WorkspaceFileReadOptions,
   WorkspaceProjectSearchOptions,
   WorkspaceProjectStore,
 } from '../../ports/workspace-project-store.js';
@@ -46,7 +48,6 @@ import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 
 const MAX_LIST_ENTRIES = 200;
-const MAX_READ_BYTES = 256 * 1024;
 export const MAX_WORKSPACE_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_ENTRY_SEARCH_RESULTS = 80;
 const MAX_ENTRY_SEARCH_SCAN = 12000;
@@ -332,7 +333,11 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     };
   }
 
-  async readFile(projectId: string, relativePath: string): Promise<WorkspaceFileRead> {
+  async readFile(
+    projectId: string,
+    relativePath: string,
+    options: WorkspaceFileReadOptions = {},
+  ): Promise<WorkspaceFileRead> {
     const project = await this.requireProject(projectId);
     const target = await safeResolve(project.path, relativePath);
     const targetStat = await stat(target);
@@ -340,6 +345,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     const buffer = await readFile(target);
     const path = toProjectRelative(project.path, target);
     const modifiedAt = targetStat.mtime.toISOString();
+    const revision = workspaceFileRevision(buffer);
     const imageMimeType = detectWorkspacePreviewImageMimeType(buffer);
     if (imageMimeType) {
       if (buffer.byteLength > MAX_WORKSPACE_IMAGE_BYTES) {
@@ -349,6 +355,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
           content: '',
           size: buffer.byteLength,
           modifiedAt,
+          revision,
           preview: { kind: 'unsupported', reason: 'image-too-large' },
           truncated: false,
         };
@@ -359,6 +366,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         content: '',
         size: buffer.byteLength,
         modifiedAt,
+        revision,
         preview: { kind: 'image', base64: buffer.toString('base64'), mimeType: imageMimeType },
         truncated: false,
       };
@@ -370,17 +378,20 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
         content: '',
         size: buffer.byteLength,
         modifiedAt,
+        revision,
         preview: { kind: 'unsupported', reason: 'binary' },
         truncated: false,
       };
     }
-    const truncated = buffer.byteLength > MAX_READ_BYTES;
+    const maxTextBytes = options.maxTextBytes ?? WORKSPACE_TEXT_FILE_MAX_BYTES;
+    const truncated = buffer.byteLength > maxTextBytes;
     return {
       projectId,
       path,
-      content: buffer.subarray(0, MAX_READ_BYTES).toString('utf8'),
+      content: buffer.subarray(0, maxTextBytes).toString('utf8'),
       size: buffer.byteLength,
       modifiedAt,
+      revision,
       preview: { kind: 'text' },
       truncated,
     };
@@ -441,6 +452,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
       path: toProjectRelative(project.path, target),
       size: targetStat.size,
       modifiedAt: targetStat.mtime.toISOString(),
+      revision: workspaceFileRevision(content),
       created: !existed,
     };
   }
@@ -539,6 +551,10 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   private async writeIndex(index: ProjectIndex): Promise<void> {
     await writeJsonFile(this.indexPath, index);
   }
+}
+
+function workspaceFileRevision(content: string | Uint8Array): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 async function normalizeProjectPath(inputPath: string): Promise<string> {

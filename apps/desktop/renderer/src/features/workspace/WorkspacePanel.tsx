@@ -1,23 +1,34 @@
 import {
   isTemporaryWorkspaceProjectId,
+  WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceEntry,
   type WorkspaceEntrySearchItem,
   type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Search, Terminal } from 'lucide-react';
+import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
 import {
+  lazy,
+  Suspense,
   useEffect,
   useMemo,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { CodeFileView } from '../../shared/code/PierreCode.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EmptyState, IconButton } from '../../shared/ui/primitives.js';
-import { fileLanguage, highlightedCodeLinesHtml } from './codeHighlight.js';
+import {
+  useWorkspaceCodeViewSurface,
+  workspaceCodeViewLayout,
+  workspaceCodeViewUnsafeCSS,
+} from './editor/useWorkspaceCodeViewSurface.js';
+import { WorkspaceCodeViewScrollbar } from './editor/WorkspaceCodeViewScrollbar.js';
+import type { WorkspaceFileDraftState } from './hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopDiffSummary,
   DesktopPanelTab,
@@ -40,10 +51,15 @@ import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
 import { workspaceFileMentionEntry } from './workspaceFileMention.js';
 
 const FILE_TREE_INDENT_STEP_PX = 8;
+const LazyEditableWorkspaceFile = lazy(async () => {
+  const module = await import('./editor/EditableWorkspaceFile.js');
+  return { default: module.EditableWorkspaceFile };
+});
 
 export function WorkspacePanel({
   activePanel,
   activeProject,
+  fileDraft,
   filePreview,
   latestReviewSummary,
   reviewError,
@@ -76,6 +92,7 @@ export function WorkspacePanel({
 }: {
   activePanel: DesktopPanelTab;
   activeProject?: WorkspaceProject;
+  fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   latestReviewSummary: DesktopDiffSummary | null;
   reviewError: string | null;
@@ -296,14 +313,13 @@ export function WorkspacePanel({
       </section>
     ) : (
       <section
-        className="desktop-editor"
+        className={`desktop-editor ${fileDraft.errorMessage ? 'has-save-error' : ''}`}
         onContextMenu={filePreview ? (event) => {
           event.preventDefault();
-          const lineElement = (event.target as Element).closest<HTMLElement>('[data-workspace-file-line]');
-          const line = Number(lineElement?.dataset.workspaceFileLine);
+          const line = workspaceFileLineNumberFromEvent(event);
           setContextMenu({
             filePath: filePreview.path,
-            line: Number.isSafeInteger(line) && line > 0 ? line : undefined,
+            line,
             x: event.clientX,
             y: event.clientY,
           });
@@ -312,19 +328,66 @@ export function WorkspacePanel({
         <div className="desktop-editor__crumb">
           <span className="desktop-editor__crumb-path">
             <span>{activeProject?.name ?? t('workspace.files.noProject')}</span>
-            {filePreview ? <span>{filePreview.path}</span> : null}
+            {filePreview ? (
+              <span>
+                {filePreview.path}
+                {fileDraft.dirty ? <i aria-label={t('workspace.files.unsaved')}>●</i> : null}
+              </span>
+            ) : null}
           </span>
-          <IconButton
-            className="app-shell-icon-control desktop-editor__tree-toggle"
-            label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
-            aria-pressed={treeVisible}
-            onClick={() => setTreeVisible((current) => !current)}
-          >
-            {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
-          </IconButton>
+          <span className="desktop-editor__crumb-actions">
+            {filePreview?.preview?.kind === 'text' ? (
+              fileDraft.editing ? (
+                <>
+                  <IconButton
+                    className="app-shell-icon-control"
+                    disabled={fileDraft.saving}
+                    label={t('workspace.files.cancelEdit')}
+                    onClick={fileDraft.cancelEditing}
+                  >
+                    <X size={15} />
+                  </IconButton>
+                  <IconButton
+                    className="app-shell-icon-control"
+                    disabled={!fileDraft.dirty || fileDraft.saving}
+                    label={t(fileDraft.saving ? 'workspace.files.saving' : 'workspace.files.save')}
+                    onClick={() => void fileDraft.save()}
+                  >
+                    <Save size={15} />
+                  </IconButton>
+                </>
+              ) : (
+                <IconButton
+                  className="app-shell-icon-control"
+                  disabled={!fileDraft.canEdit || fileDraft.preparing}
+                  label={t(fileDraft.preparing
+                    ? 'workspace.files.loadingEditor'
+                    : fileDraft.canEdit
+                      ? 'workspace.files.edit'
+                      : 'workspace.files.editUnavailable')}
+                  onClick={() => void fileDraft.startEditing()}
+                >
+                  <Pencil size={14} />
+                </IconButton>
+              )
+            ) : null}
+            <IconButton
+              className="app-shell-icon-control desktop-editor__tree-toggle"
+              label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
+              aria-pressed={treeVisible}
+              onClick={() => setTreeVisible((current) => !current)}
+            >
+              {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
+            </IconButton>
+          </span>
         </div>
+        {fileDraft.errorMessage ? (
+          <div className="desktop-editor__save-error" role="alert">
+            {fileDraft.errorMessage}
+          </div>
+        ) : null}
         {filePreview ? (
-          <WorkspaceFilePreviewContent file={filePreview} />
+          <WorkspaceFilePreviewContent file={filePreview} fileDraft={fileDraft} />
         ) : (
           <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
         )}
@@ -527,8 +590,10 @@ export function WorkspaceOverviewPanel({
 
 export function WorkspaceFilePreviewContent({
   file,
+  fileDraft,
 }: {
   file: WorkspaceFileRead;
+  fileDraft?: WorkspaceFileDraftState;
 }) {
   const { t } = useI18n();
   if (file.preview?.kind === 'image') {
@@ -554,42 +619,65 @@ export function WorkspaceFilePreviewContent({
       </div>
     );
   }
-  return <CodeEditorPreview file={file} t={t} />;
+  if (fileDraft?.editing) {
+    return (
+      <Suspense fallback={<CodeEditorPreview file={file} />}>
+        <LazyEditableWorkspaceFile
+          content={fileDraft.content}
+          file={file}
+          onChange={fileDraft.updateContent}
+          onSave={fileDraft.save}
+        />
+      </Suspense>
+    );
+  }
+  return <CodeEditorPreview file={file} />;
 }
 
 function CodeEditorPreview({
   file,
-  t,
 }: {
   file: WorkspaceFileRead;
-  t: Translate;
 }) {
-  const content = useMemo(() => file.content.replace(/\r\n/g, '\n'), [file.content]);
-  const language = fileLanguage(file.path);
-  const lines = useMemo(() => content.split('\n'), [content]);
-  const highlightedLines = useMemo(() => highlightedCodeLinesHtml(content, language), [content, language]);
+  const { t } = useI18n();
+  const codeViewSurface = useWorkspaceCodeViewSurface();
   return (
-    <div className="desktop-code-editor" role="region" aria-label={file.path} data-language={language || 'text'}>
-      {lines.map((line, index) => {
-        const highlighted = highlightedLines[index];
-        return (
-          <div
-            className="desktop-code-line desktop-code-line--contextual"
-            data-workspace-file-line={index + 1}
-            key={`${file.path}:${index}`}
-          >
-            <span className="desktop-code-line__number">{index + 1}</span>
-            {highlighted !== undefined ? (
-              <code className={`language-${language}`} dangerouslySetInnerHTML={{ __html: highlighted || ' ' }} />
-            ) : (
-              <code>{line || ' '}</code>
-            )}
+    <div
+      className="desktop-code-editor desktop-code-editor--code-view"
+      role="region"
+      aria-label={file.path}
+    >
+      <div className="desktop-code-editor__viewport">
+        <CodeFileView
+          cacheKey={`${file.projectId}:${file.path}:${file.revision ?? file.modifiedAt ?? file.size}`}
+          className="desktop-code-editor__pierre"
+          codeViewLayout={workspaceCodeViewLayout}
+          containerRef={codeViewSurface.codeViewContainerRef}
+          contents={file.content}
+          name={file.path}
+          unsafeCSS={workspaceCodeViewUnsafeCSS}
+          virtualized
+        />
+        <WorkspaceCodeViewScrollbar surface={codeViewSurface} />
+        {file.truncated ? (
+          <div className="desktop-code-editor__truncated-notice" role="status">
+            {t('workspace.files.previewTruncated', {
+              limit: `${WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES / (1024 * 1024)} MB`,
+            })}
           </div>
-        );
-      })}
-      {file.truncated ? <div className="desktop-code-truncated">{t('workspace.files.previewTruncated')}</div> : null}
+        ) : null}
+      </div>
     </div>
   );
+}
+
+function workspaceFileLineNumberFromEvent(event: ReactMouseEvent<HTMLElement>): number | undefined {
+  for (const target of event.nativeEvent.composedPath()) {
+    if (!(target instanceof HTMLElement)) continue;
+    const line = Number(target.dataset.line ?? target.dataset.workspaceFileLine);
+    if (Number.isSafeInteger(line) && line > 0) return line;
+  }
+  return undefined;
 }
 
 const FILE_TREE_MIN_WIDTH = 190;

@@ -38,7 +38,9 @@ import {
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
+import { WorkspaceGitCommitProvider } from '../../features/workspace/git/WorkspaceGitCommitDialog.js';
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
+import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopPanelDropPlacement,
   DesktopPanelSlotState,
@@ -99,6 +101,7 @@ export function AppChatSurface({
   contextCompacting,
   currentThread,
   draft,
+  fileDraft,
   filePreview,
   plugins,
   skillSelectionRequest,
@@ -188,6 +191,7 @@ export function AppChatSurface({
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   plugins: RuntimePluginSummary[];
   skillSelectionRequest: ChatSkillSelectionRequest | null;
@@ -296,151 +300,105 @@ export function AppChatSurface({
   const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
 
   return (
-    <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
-      <MarkdownNavigationProvider
-        onOpenInAppBrowser={onOpenBrowser}
-        onOpenWebLink={onOpenMarkdownWebLink}
-        workspaceRoot={activeWorkspace?.path}
-        onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
-        onOpenWorkspaceFile={openChatWorkspaceFile}
-      >
-        <ChatWorkspace
-          activeTurnId={activeTurnId}
-          activeProject={activeWorkspace}
-          canClearContext={canClearContext}
-          client={runtimeClient}
-          composerKey={composerKey}
-          conversationOverviewShowRequest={conversationOverviewShowRequest}
-          conversationOverviewVisibility={conversationOverviewVisibility}
-          contextCompacting={contextCompacting}
-          config={config}
-          currentThread={currentThread}
-          draft={draft}
-          imageAttachmentRequest={imageAttachmentRequest}
-          plugins={plugins}
-          reviewError={reviewError}
-          reviewLoading={reviewLoading}
-          reviewState={reviewState}
-          skillSelectionRequest={skillSelectionRequest}
-          workspaceMentionRequest={workspaceMentionRequest}
-          skills={skills}
-          threadUsage={threadUsage}
-          threads={threads}
-          onCancelActiveTurn={onCancelActiveTurn}
-          onAccessModeChange={onAccessModeChange}
-          onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
-          onAnswerApproval={onAnswerApproval}
-          onCompactContext={onCompactContext}
-          onClearContext={onClearContext}
-          onClearThreadGoal={onClearThreadGoal}
-          onThreadMemoryModeChange={onThreadMemoryModeChange}
-          onDeleteMessages={onDeleteMessages}
-          onDiscardFileChanges={onDiscardFileChanges}
-          onDraftChange={onDraftChange}
-          onEditUserMessage={onEditUserMessage}
-          onOpenSideChat={onOpenSideChat}
-          onOpenThread={onOpenThread}
-          onOpenFileReview={onOpenFileReviewPanel}
-          onSearchProjectEntries={onSearchProjectEntries}
-          onSelectModel={onSelectModel}
-          onSend={onSend}
-          queuedTurnActions={queuedTurnActions}
-          onPlanDecision={onPlanDecision}
-          onReviewRefresh={onReviewRefresh}
-          onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-          onStartThreadReview={onStartThreadReview}
-          onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
-          onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
-          onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
-        />
-      </MarkdownNavigationProvider>
-      {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
-        <SideChatPanel
-          activeProjectId={activeProject?.id ?? null}
-          activeWorkspace={activeWorkspace}
-          client={runtimeClient}
-          config={config}
-          hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
-          key={panel.id}
-          plugins={plugins}
-          selectedWorkspaceApp={selectedWorkspaceApp}
-          skills={skills}
-          threads={threads}
-          onAccessModeChange={onAccessModeChange}
-          onError={onSideChatError}
-          onOpenWorkspaceFile={openChatWorkspaceFile}
-          onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
-          onOpenMarkdownWebLink={onOpenMarkdownWebLink}
+    <WorkspaceGitCommitProvider
+      activeProject={activeWorkspace}
+      reviewLoading={reviewLoading}
+      reviewState={reviewState}
+      onReviewRefresh={onReviewRefresh}
+    >
+      <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
+        <MarkdownNavigationProvider
           onOpenInAppBrowser={onOpenBrowser}
-          onOpenSideChat={onOpenSideChat}
-          onReloadThreads={onReloadThreads}
-          onSelectModel={onSelectModel}
-          onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-          onWorkspaceResizeStep={onWorkspaceResizeStep}
-          onWorkspaceResizeStart={onWorkspaceResizeStart}
-          workspaceMaxWidth={workspaceMaxWidth}
-          workspaceMinWidth={workspaceMinWidth}
-          workspaceWidth={workspaceWidth}
-        />
-      ))}
-      {browserPanelInstances.map((instance) => (
-        <Suspense fallback={null} key={instance.panel.id}>
-          <PersistentBrowserPanel
-            instance={instance}
-            onPanelMetadataChange={onUpdateBrowserPanel}
-            onScreenshotAttachment={requestImageAttachment}
-            onResizeStep={onWorkspaceResizeStep}
-            onResizeStart={onWorkspaceResizeStart}
-            resizeMax={workspaceMaxWidth}
-            resizeMin={workspaceMinWidth}
-            resizeValue={workspaceWidth}
+          onOpenWebLink={onOpenMarkdownWebLink}
+          workspaceRoot={activeWorkspace?.path}
+          onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
+          onOpenWorkspaceFile={openChatWorkspaceFile}
+        >
+          <ChatWorkspace
+            activeTurnId={activeTurnId}
+            activeProject={activeWorkspace}
+            canClearContext={canClearContext}
+            client={runtimeClient}
+            composerKey={composerKey}
+            conversationOverviewShowRequest={conversationOverviewShowRequest}
+            conversationOverviewVisibility={conversationOverviewVisibility}
+            contextCompacting={contextCompacting}
+            config={config}
+            currentThread={currentThread}
+            draft={draft}
+            imageAttachmentRequest={imageAttachmentRequest}
+            plugins={plugins}
+            reviewError={reviewError}
+            reviewLoading={reviewLoading}
+            reviewState={reviewState}
+            skillSelectionRequest={skillSelectionRequest}
+            workspaceMentionRequest={workspaceMentionRequest}
+            skills={skills}
+            threadUsage={threadUsage}
+            threads={threads}
+            onCancelActiveTurn={onCancelActiveTurn}
+            onAccessModeChange={onAccessModeChange}
+            onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
+            onAnswerApproval={onAnswerApproval}
+            onCompactContext={onCompactContext}
+            onClearContext={onClearContext}
+            onClearThreadGoal={onClearThreadGoal}
+            onThreadMemoryModeChange={onThreadMemoryModeChange}
+            onDeleteMessages={onDeleteMessages}
+            onDiscardFileChanges={onDiscardFileChanges}
+            onDraftChange={onDraftChange}
+            onEditUserMessage={onEditUserMessage}
+            onOpenSideChat={onOpenSideChat}
+            onOpenThread={onOpenThread}
+            onOpenFileReview={onOpenFileReviewPanel}
+            onSearchProjectEntries={onSearchProjectEntries}
+            onSelectModel={onSelectModel}
+            onSend={onSend}
+            queuedTurnActions={queuedTurnActions}
+            onPlanDecision={onPlanDecision}
+            onReviewRefresh={onReviewRefresh}
+            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+            onStartThreadReview={onStartThreadReview}
+            onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
+            onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
+            onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
           />
-        </Suspense>
-      ))}
-      {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
-        sideActivePanel.type === 'conversation-debug' ? (
-          runtimeDeveloperFeaturesEnabled(config) ? (
-            <Suspense fallback={null}>
-              <ConversationDebugPanel
-                client={runtimeClient}
-                thread={currentThread}
-                onResizeStep={onWorkspaceResizeStep}
-                onResizeStart={onWorkspaceResizeStart}
-                resizeMax={workspaceMaxWidth}
-                resizeMin={workspaceMinWidth}
-                resizeValue={workspaceWidth}
-              />
-            </Suspense>
-          ) : null
-        ) : (
-          <Suspense fallback={null}>
-            <WorkspacePanel
-              activePanel={sideActivePanel}
-              activeProject={activeWorkspace}
-              filePreview={filePreview}
-              reviewError={reviewError}
-              reviewFocusRequest={reviewFocusRequest}
-              latestReviewSummary={latestReviewSummary}
-              reviewLoading={reviewLoading}
-              reviewState={reviewState}
-              selectedWorkspaceApp={selectedWorkspaceApp}
-              workspaceApps={workspaceApps}
-              terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-              onAddFileToConversation={requestWorkspaceMention}
-              onCopyFilePath={onCopyFilePath}
-              onExternalOpenFile={onExternalOpenFile}
-              onOpenFileWithApp={onOpenFileWithApp}
-              onSearchProjectEntries={onSearchProjectEntries}
-              onOpenEntry={onOpenEntry}
-              onOpenProjectFile={onOpenProjectFile}
-              onOpenFilesPanel={onOpenFilesPanel}
-              onOpenBrowser={onOpenBrowser}
-              onOpenConversationDebug={runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined}
-              onOpenReviewPanel={onOpenFileReviewPanel}
-              onOpenSideChat={onOpenSideChat}
-              onOpenTerminalPanel={onOpenSideTerminalPanel}
-              onReviewRefresh={onReviewRefresh}
-              onRevealFile={onRevealFile}
+        </MarkdownNavigationProvider>
+        {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
+          <SideChatPanel
+            activeProjectId={activeProject?.id ?? null}
+            activeWorkspace={activeWorkspace}
+            client={runtimeClient}
+            config={config}
+            hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
+            key={panel.id}
+            plugins={plugins}
+            selectedWorkspaceApp={selectedWorkspaceApp}
+            skills={skills}
+            threads={threads}
+            onAccessModeChange={onAccessModeChange}
+            onError={onSideChatError}
+            onOpenWorkspaceFile={openChatWorkspaceFile}
+            onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
+            onOpenMarkdownWebLink={onOpenMarkdownWebLink}
+            onOpenInAppBrowser={onOpenBrowser}
+            onOpenSideChat={onOpenSideChat}
+            onReloadThreads={onReloadThreads}
+            onSelectModel={onSelectModel}
+            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+            onWorkspaceResizeStep={onWorkspaceResizeStep}
+            onWorkspaceResizeStart={onWorkspaceResizeStart}
+            workspaceMaxWidth={workspaceMaxWidth}
+            workspaceMinWidth={workspaceMinWidth}
+            workspaceWidth={workspaceWidth}
+          />
+        ))}
+        {browserPanelInstances.map((instance) => (
+          <Suspense fallback={null} key={instance.panel.id}>
+            <PersistentBrowserPanel
+              instance={instance}
+              onPanelMetadataChange={onUpdateBrowserPanel}
+              onScreenshotAttachment={requestImageAttachment}
               onResizeStep={onWorkspaceResizeStep}
               onResizeStart={onWorkspaceResizeStart}
               resizeMax={workspaceMaxWidth}
@@ -448,44 +406,98 @@ export function AppChatSurface({
               resizeValue={workspaceWidth}
             />
           </Suspense>
-        )
-      ) : null}
-      {bottomPanelVisible && bottomActivePanel ? (
-        <Suspense fallback={null}>
-          <BottomToolsPanel
-            activePanel={bottomActivePanel}
-            panels={bottomPanelSlot.panels}
-            reviewError={reviewError}
-            reviewFocusRequest={reviewFocusRequest}
-            latestReviewSummary={latestReviewSummary}
-            reviewLoading={reviewLoading}
-            reviewState={reviewState}
-            selectedWorkspaceApp={selectedWorkspaceApp}
-            workspaceApps={workspaceApps}
-            activeProject={activeWorkspace}
-            terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
-            onAddFileToConversation={requestWorkspaceFileMention}
-            onActivatePanel={onActivateBottomPanel}
-            onClosePanel={onCloseBottomPanel}
-            onCloseSlot={onCloseBottomSlot}
-            onCopyFilePath={onCopyFilePath}
-            onExternalOpenFile={onExternalOpenFile}
-            onOpenFileWithApp={onOpenFileWithApp}
-            onOpenProjectFile={onOpenProjectFile}
-            onOpenReviewPanel={onOpenBottomReviewPanel}
-            onOpenTerminalPanel={onOpenBottomTerminalPanel}
-            onReorderPanels={onReorderBottomPanels}
-            onReviewRefresh={onReviewRefresh}
-            onRevealFile={onRevealFile}
-            onResizeStep={onTerminalResizeStep}
-            onResizeStart={onTerminalResizeStart}
-            resizeMax={terminalMaxHeight}
-            resizeMin={terminalMinHeight}
-            resizeValue={terminalHeight}
-          />
-        </Suspense>
-      ) : null}
-    </RuntimePluginNavigationProvider>
+        ))}
+        {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
+          sideActivePanel.type === 'conversation-debug' ? (
+            runtimeDeveloperFeaturesEnabled(config) ? (
+              <Suspense fallback={null}>
+                <ConversationDebugPanel
+                  client={runtimeClient}
+                  thread={currentThread}
+                  onResizeStep={onWorkspaceResizeStep}
+                  onResizeStart={onWorkspaceResizeStart}
+                  resizeMax={workspaceMaxWidth}
+                  resizeMin={workspaceMinWidth}
+                  resizeValue={workspaceWidth}
+                />
+              </Suspense>
+            ) : null
+          ) : (
+            <Suspense fallback={null}>
+              <WorkspacePanel
+                activePanel={sideActivePanel}
+                activeProject={activeWorkspace}
+                fileDraft={fileDraft}
+                filePreview={filePreview}
+                reviewError={reviewError}
+                reviewFocusRequest={reviewFocusRequest}
+                latestReviewSummary={latestReviewSummary}
+                reviewLoading={reviewLoading}
+                reviewState={reviewState}
+                selectedWorkspaceApp={selectedWorkspaceApp}
+                workspaceApps={workspaceApps}
+                terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
+                onAddFileToConversation={requestWorkspaceMention}
+                onCopyFilePath={onCopyFilePath}
+                onExternalOpenFile={onExternalOpenFile}
+                onOpenFileWithApp={onOpenFileWithApp}
+                onSearchProjectEntries={onSearchProjectEntries}
+                onOpenEntry={onOpenEntry}
+                onOpenProjectFile={onOpenProjectFile}
+                onOpenFilesPanel={onOpenFilesPanel}
+                onOpenBrowser={onOpenBrowser}
+                onOpenConversationDebug={runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined}
+                onOpenReviewPanel={onOpenFileReviewPanel}
+                onOpenSideChat={onOpenSideChat}
+                onOpenTerminalPanel={onOpenSideTerminalPanel}
+                onReviewRefresh={onReviewRefresh}
+                onRevealFile={onRevealFile}
+                onResizeStep={onWorkspaceResizeStep}
+                onResizeStart={onWorkspaceResizeStart}
+                resizeMax={workspaceMaxWidth}
+                resizeMin={workspaceMinWidth}
+                resizeValue={workspaceWidth}
+              />
+            </Suspense>
+          )
+        ) : null}
+        {bottomPanelVisible && bottomActivePanel ? (
+          <Suspense fallback={null}>
+            <BottomToolsPanel
+              activePanel={bottomActivePanel}
+              panels={bottomPanelSlot.panels}
+              reviewError={reviewError}
+              reviewFocusRequest={reviewFocusRequest}
+              latestReviewSummary={latestReviewSummary}
+              reviewLoading={reviewLoading}
+              reviewState={reviewState}
+              selectedWorkspaceApp={selectedWorkspaceApp}
+              workspaceApps={workspaceApps}
+              activeProject={activeWorkspace}
+              terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
+              onAddFileToConversation={requestWorkspaceFileMention}
+              onActivatePanel={onActivateBottomPanel}
+              onClosePanel={onCloseBottomPanel}
+              onCloseSlot={onCloseBottomSlot}
+              onCopyFilePath={onCopyFilePath}
+              onExternalOpenFile={onExternalOpenFile}
+              onOpenFileWithApp={onOpenFileWithApp}
+              onOpenProjectFile={onOpenProjectFile}
+              onOpenReviewPanel={onOpenBottomReviewPanel}
+              onOpenTerminalPanel={onOpenBottomTerminalPanel}
+              onReorderPanels={onReorderBottomPanels}
+              onReviewRefresh={onReviewRefresh}
+              onRevealFile={onRevealFile}
+              onResizeStep={onTerminalResizeStep}
+              onResizeStart={onTerminalResizeStart}
+              resizeMax={terminalMaxHeight}
+              resizeMin={terminalMinHeight}
+              resizeValue={terminalHeight}
+            />
+          </Suspense>
+        ) : null}
+      </RuntimePluginNavigationProvider>
+    </WorkspaceGitCommitProvider>
   );
 }
 

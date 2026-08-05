@@ -29,7 +29,7 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).not.toContain('desktop-code-line');
   });
 
-  it('renders code lines as context-menu targets instead of left-click open buttons', () => {
+  it('renders text previews through the Pierre surface instead of line buttons', () => {
     const html = renderWorkspaceFilePreview({
       file: {
         ...workspaceFile({ kind: 'text' }),
@@ -38,9 +38,26 @@ describe('WorkspaceFilePreviewContent', () => {
       },
     });
 
-    expect(html).toContain('data-workspace-file-line="1"');
-    expect(html).toContain('data-workspace-file-line="2"');
+    expect(html).toContain('desktop-code-editor__pierre');
+    expect(html).toContain('desktop-code-editor--code-view');
+    expect(html).toContain('desktop-code-editor__horizontal-scrollbar');
+    expect(html).toContain('const first = true;');
+    expect(html).toContain('const second = false;');
     expect(html).not.toContain('<button class="desktop-code-line');
+  });
+
+  it('identifies text previews that are incomplete after the full-file budget', () => {
+    const html = renderWorkspaceFilePreview({
+      file: {
+        ...workspaceFile({ kind: 'text' }),
+        content: 'partial content',
+        path: 'generated/large.txt',
+        truncated: true,
+      },
+    });
+
+    expect(html).toContain('role="status"');
+    expect(html).toContain('文件超过可加载上限，仅显示前 8 MB。');
   });
 
   it('renders file preview notices in English', () => {

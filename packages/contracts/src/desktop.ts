@@ -82,6 +82,8 @@ export type DesktopDiffFile = {
   deletions: number;
   truncated: boolean;
   lines: DesktopDiffLine[];
+  /** Original unified patch for complete previews; omitted when truncated. */
+  patch?: string;
 };
 
 export type DesktopDiffSummary = {

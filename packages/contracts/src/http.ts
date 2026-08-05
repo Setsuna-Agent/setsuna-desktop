@@ -86,6 +86,7 @@ import type {
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
+  WorkspaceFileSaveInput,
   WorkspaceProject,
   WorkspaceProjectList,
   WorkspaceSearchResponse,
@@ -172,6 +173,8 @@ export type DesktopRuntimeClient = {
   listProjectEntries(projectId: string, path?: string): Promise<WorkspaceEntryList>;
   searchProjectEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   readProjectFile(projectId: string, path: string): Promise<WorkspaceFileRead>;
+  readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
+  saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
   getUsage(query?: RuntimeUsageQuery): Promise<RuntimeUsageResponse>;
   listMemories(query?: RuntimeMemoryQuery): Promise<RuntimeMemoryList>;

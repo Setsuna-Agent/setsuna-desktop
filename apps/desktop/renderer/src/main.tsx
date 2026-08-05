@@ -7,6 +7,7 @@ import 'katex/dist/katex.min.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
+import { CodeAppearanceProvider } from './shared/code/CodeAppearanceProvider.js';
 import { applyDesktopPlatformAttribute } from './shared/lib/desktopPlatform.js';
 import { I18nProvider, initializeLocalePreference } from './shared/i18n/I18nProvider.js';
 import { initializeAccentColorPreference } from './shared/preferences/useAccentColorPreference.js';
@@ -45,7 +46,9 @@ initializeSidebarBackgroundPreference();
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <I18nProvider>
-      <App />
+      <CodeAppearanceProvider>
+        <App />
+      </CodeAppearanceProvider>
     </I18nProvider>
   </React.StrictMode>
 );

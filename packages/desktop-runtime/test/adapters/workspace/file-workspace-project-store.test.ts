@@ -1,3 +1,7 @@
+import {
+  WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+  WORKSPACE_TEXT_FILE_MAX_BYTES,
+} from '@setsuna-desktop/contracts';
 import { access, lstat, mkdir, mkdtemp, readFile, realpath, symlink, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -45,9 +49,32 @@ describe('file workspace project store', () => {
     expect(entries.entries.map((entry) => entry.path)).toContain('README.md');
     expect(metadata).toMatchObject({ projectId: project.id, path: 'README.md', size: 21, modifiedAt: expect.any(String) });
     expect(readme.content).toContain('needle');
+    expect(readme.revision).toMatch(/^[a-f0-9]{64}$/u);
     expect(readme.preview).toEqual({ kind: 'text' });
     expect(search.results).toMatchObject([{ path: 'README.md', line: 1 }]);
-    expect(written).toMatchObject({ path: 'src/generated.txt', created: true });
+    expect(written).toMatchObject({
+      path: 'src/generated.txt',
+      revision: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      created: true,
+    });
+  });
+
+  it('keeps previews bounded while allowing a complete editor read', async () => {
+    const fixture = await createWorkspaceFixture();
+    const content = `export const generated = '${'x'.repeat(WORKSPACE_TEXT_FILE_MAX_BYTES)}';\n`;
+    await writeFile(path.join(fixture.projectDir, 'generated.ts'), content);
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+    const project = await store.addProject({ path: fixture.projectDir });
+
+    const preview = await store.readFile(project.id, 'generated.ts');
+    const editable = await store.readFile(project.id, 'generated.ts', {
+      maxTextBytes: WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
+    });
+
+    expect(preview).toMatchObject({ size: Buffer.byteLength(content), truncated: true });
+    expect(Buffer.byteLength(preview.content)).toBe(WORKSPACE_TEXT_FILE_MAX_BYTES);
+    expect(editable).toMatchObject({ content, truncated: false });
+    expect(editable.revision).toBe(preview.revision);
   });
 
   it('reads bounded workspace images by file signature', async () => {

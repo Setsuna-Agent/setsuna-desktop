@@ -240,6 +240,7 @@ export function AppRouteContent({
       contextCompacting={runtime.contextCompacting}
       currentThread={runtime.currentThread}
       draft={draft}
+      fileDraft={projectWorkspace.fileDraft}
       filePreview={projectWorkspace.filePreview}
       plugins={runtime.plugins}
       skillSelectionRequest={skillSelectionRequest}

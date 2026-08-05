@@ -38,6 +38,10 @@ export type WorkspaceProjectSearchOptions = {
   signal?: AbortSignal;
 };
 
+export type WorkspaceFileReadOptions = {
+  maxTextBytes?: number;
+};
+
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
@@ -49,7 +53,11 @@ export type WorkspaceProjectStore = {
   listEntries(projectId: string, relativePath?: string): Promise<WorkspaceEntryList>;
   searchEntries(projectId: string, query?: string, parent?: string | null): Promise<WorkspaceEntrySearchResponse>;
   inspectFile(projectId: string, relativePath: string): Promise<WorkspaceFileMetadata>;
-  readFile(projectId: string, relativePath: string): Promise<WorkspaceFileRead>;
+  readFile(
+    projectId: string,
+    relativePath: string,
+    options?: WorkspaceFileReadOptions,
+  ): Promise<WorkspaceFileRead>;
   readImage(projectId: string, relativePath: string): Promise<WorkspaceImageRead>;
   writeFile(projectId: string, relativePath: string, content: string): Promise<WorkspaceFileWrite>;
   writeBinaryFile(projectId: string, relativePath: string, content: Uint8Array): Promise<WorkspaceFileWrite>;

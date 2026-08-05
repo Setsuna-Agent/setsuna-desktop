@@ -90,45 +90,41 @@ export const codeFontFamilyOptions = [
   },
 ] as const satisfies readonly CodeFontFamilyOptionConfig[];
 
-export const codeHighlightThemeOptions = [
-  { label: 'ChatGPT（推荐）', value: 'chatgpt' },
-  { label: 'One', value: 'one' },
-  { label: 'GitHub', value: 'github' },
-  { label: 'Monokai', value: 'monokai' },
-  { label: 'Dracula', value: 'dracula' },
-  { label: 'Nord', value: 'nord' },
-  { label: 'Tokyo Night', value: 'tokyoNight' },
-  { label: 'Catppuccin', value: 'catppuccin' },
-  { label: 'Solarized', value: 'solarized' },
-] as const;
+type CodeThemeOptionConfig = {
+  label: string;
+  value: string;
+  themes: { dark: string; light: string };
+};
 
-export const codeColorSchemeOptions = [
-  { label: '跟随高亮主题（默认）', value: 'theme' },
-  { label: 'One', value: 'one' },
-  { label: 'VS Code', value: 'vscode' },
-  { label: 'GitHub', value: 'github' },
-  { label: 'Material', value: 'material' },
-  { label: 'Monokai', value: 'monokai' },
-  { label: 'Dracula', value: 'dracula' },
-  { label: 'Nord', value: 'nord' },
-  { label: 'Tokyo Night', value: 'tokyoNight' },
-  { label: 'Catppuccin', value: 'catppuccin' },
-  { label: 'Solarized', value: 'solarized' },
-] as const;
+/** Only expose theme families with intentional light and dark variants. */
+export const codeThemeOptions = [
+  { label: 'Pierre', value: 'pierre', themes: { dark: 'pierre-dark', light: 'pierre-light' } },
+  { label: 'GitHub', value: 'github', themes: { dark: 'github-dark', light: 'github-light' } },
+  { label: 'One', value: 'one', themes: { dark: 'one-dark-pro', light: 'one-light' } },
+  { label: 'Catppuccin', value: 'catppuccin', themes: { dark: 'catppuccin-mocha', light: 'catppuccin-latte' } },
+  { label: 'Solarized', value: 'solarized', themes: { dark: 'solarized-dark', light: 'solarized-light' } },
+  { label: 'VS Code', value: 'vscode', themes: { dark: 'dark-plus', light: 'light-plus' } },
+  { label: 'Material', value: 'material', themes: { dark: 'material-theme', light: 'material-theme-lighter' } },
+] as const satisfies readonly CodeThemeOptionConfig[];
 
 export type CodeFontFamilyMode = typeof codeFontFamilyOptions[number]['value'];
 export type CodeFontFamilyOption = typeof codeFontFamilyOptions[number];
-export type CodeHighlightTheme = typeof codeHighlightThemeOptions[number]['value'];
-export type CodeColorScheme = typeof codeColorSchemeOptions[number]['value'];
+export type CodeTheme = typeof codeThemeOptions[number]['value'];
+export type CodeThemeOption = typeof codeThemeOptions[number];
 
 const codeFontFamilyStorageKey = 'setsuna-code-font-family';
-const codeHighlightThemeStorageKey = 'setsuna-code-highlight-theme';
-const codeColorSchemeStorageKey = 'setsuna-code-color-scheme';
-const legacyCodeHighlightThemes: Readonly<Record<string, CodeHighlightTheme>> = {
-  chatgptLight: 'chatgpt',
+const codeThemeStorageKey = 'setsuna-code-theme:v1';
+const legacyCodeThemeStorageKey = 'setsuna-code-highlight-theme';
+const legacyCodeThemes: Readonly<Record<string, CodeTheme>> = {
+  chatgpt: 'pierre',
+  chatgptLight: 'pierre',
+  github: 'github',
+  one: 'one',
   oneLight: 'one',
   oneDark: 'one',
+  catppuccin: 'catppuccin',
   catppuccinMocha: 'catppuccin',
+  solarized: 'solarized',
   solarizedLight: 'solarized',
   solarizedDark: 'solarized',
 };
@@ -136,18 +132,16 @@ export const CODE_APPEARANCE_CHANGE_EVENT_NAME = 'setsuna-code-appearance-change
 
 export function useCodeAppearancePreferences() {
   const [codeFontFamily, setCodeFontFamilyState] = useState<CodeFontFamilyMode>(() => getInitialCodeFontFamily());
-  const [codeHighlightTheme, setCodeHighlightThemeState] = useState<CodeHighlightTheme>(() => getInitialCodeHighlightTheme());
-  const [codeColorScheme, setCodeColorSchemeState] = useState<CodeColorScheme>(() => getInitialCodeColorScheme());
+  const [codeTheme, setCodeThemeState] = useState<CodeTheme>(() => getInitialCodeTheme());
 
   useEffect(() => {
-    applyCodeAppearance(codeFontFamily, codeHighlightTheme, codeColorScheme);
-  }, [codeColorScheme, codeFontFamily, codeHighlightTheme]);
+    applyCodeAppearance(codeFontFamily, codeTheme);
+  }, [codeFontFamily, codeTheme]);
 
   useEffect(() => {
     const handleCodeAppearanceChange = () => {
       setCodeFontFamilyState(getInitialCodeFontFamily());
-      setCodeHighlightThemeState(getInitialCodeHighlightTheme());
-      setCodeColorSchemeState(getInitialCodeColorScheme());
+      setCodeThemeState(getInitialCodeTheme());
     };
     window.addEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
     window.addEventListener('storage', handleCodeAppearanceChange);
@@ -158,55 +152,59 @@ export function useCodeAppearancePreferences() {
   }, []);
 
   const setCodeFontFamily = useCallback((nextCodeFontFamily: CodeFontFamilyMode) => {
-    window.localStorage.setItem(codeFontFamilyStorageKey, nextCodeFontFamily);
+    writeStoredPreference(codeFontFamilyStorageKey, nextCodeFontFamily);
     setCodeFontFamilyState(nextCodeFontFamily);
-    applyCodeAppearance(nextCodeFontFamily, getInitialCodeHighlightTheme(), getInitialCodeColorScheme());
+    applyCodeAppearance(nextCodeFontFamily, getInitialCodeTheme());
     window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
   }, []);
 
-  const setCodeHighlightTheme = useCallback((nextCodeHighlightTheme: CodeHighlightTheme) => {
-    window.localStorage.setItem(codeHighlightThemeStorageKey, nextCodeHighlightTheme);
-    setCodeHighlightThemeState(nextCodeHighlightTheme);
-    applyCodeAppearance(getInitialCodeFontFamily(), nextCodeHighlightTheme, getInitialCodeColorScheme());
+  const setCodeTheme = useCallback((nextCodeTheme: CodeTheme) => {
+    writeStoredPreference(codeThemeStorageKey, nextCodeTheme);
+    setCodeThemeState(nextCodeTheme);
+    applyCodeAppearance(getInitialCodeFontFamily(), nextCodeTheme);
     window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
   }, []);
 
-  const setCodeColorScheme = useCallback((nextCodeColorScheme: CodeColorScheme) => {
-    window.localStorage.setItem(codeColorSchemeStorageKey, nextCodeColorScheme);
-    setCodeColorSchemeState(nextCodeColorScheme);
-    applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeHighlightTheme(), nextCodeColorScheme);
-    window.dispatchEvent(new CustomEvent(CODE_APPEARANCE_CHANGE_EVENT_NAME));
-  }, []);
-
-  return { codeColorScheme, codeFontFamily, codeHighlightTheme, setCodeColorScheme, setCodeFontFamily, setCodeHighlightTheme };
+  return { codeFontFamily, codeTheme, setCodeFontFamily, setCodeTheme };
 }
 
 export function initializeCodeAppearancePreference(): void {
-  applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeHighlightTheme(), getInitialCodeColorScheme());
+  applyCodeAppearance(getInitialCodeFontFamily(), getInitialCodeTheme());
 }
 
 function getInitialCodeFontFamily(): CodeFontFamilyMode {
-  const saved = window.localStorage.getItem(codeFontFamilyStorageKey);
+  const saved = readStoredPreference(codeFontFamilyStorageKey);
   return codeFontFamilyOptions.some((item) => item.value === saved) ? (saved as CodeFontFamilyMode) : 'system';
 }
 
-function getInitialCodeHighlightTheme(): CodeHighlightTheme {
-  const saved = window.localStorage.getItem(codeHighlightThemeStorageKey);
-  if (saved && legacyCodeHighlightThemes[saved]) return legacyCodeHighlightThemes[saved];
-  return codeHighlightThemeOptions.some((item) => item.value === saved) ? (saved as CodeHighlightTheme) : 'chatgpt';
+function getInitialCodeTheme(): CodeTheme {
+  const saved = readStoredPreference(codeThemeStorageKey);
+  if (codeThemeOptions.some((item) => item.value === saved)) return saved as CodeTheme;
+  const legacy = readStoredPreference(legacyCodeThemeStorageKey);
+  return legacy && legacyCodeThemes[legacy] ? legacyCodeThemes[legacy] : 'pierre';
 }
 
-function getInitialCodeColorScheme(): CodeColorScheme {
-  const saved = window.localStorage.getItem(codeColorSchemeStorageKey);
-  return codeColorSchemeOptions.some((item) => item.value === saved) ? (saved as CodeColorScheme) : 'theme';
-}
-
-function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeHighlightTheme: CodeHighlightTheme, codeColorScheme: CodeColorScheme): void {
+function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeTheme: CodeTheme): void {
   const font = codeFontFamilyOptions.find((item) => item.value === codeFontFamily) ?? codeFontFamilyOptions[0];
   document.documentElement.dataset.codeFontFamily = codeFontFamily;
-  document.documentElement.dataset.codeHighlightTheme = codeHighlightTheme;
-  document.documentElement.dataset.codeColorScheme = codeColorScheme;
+  document.documentElement.dataset.codeTheme = codeTheme;
   document.documentElement.style.setProperty('--app-code-font-family', font.css);
+}
+
+function readStoredPreference(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPreference(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // The in-memory preference still applies when storage is unavailable.
+  }
 }
 
 export function getCodeFontFamilyOptionsForPlatform(platform: FontPlatform = getFontPlatform()): CodeFontFamilyOption[] {

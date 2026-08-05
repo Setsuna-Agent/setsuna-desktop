@@ -163,6 +163,8 @@ a.chat-markdown__file-link:focus-visible {
 }
 
 .chat-markdown__file-icon {
+  --workspace-file-icon-scale: 1.2;
+
   display: inline-block;
   width: 1.2em;
   height: 1.2em;
@@ -305,10 +307,8 @@ a.chat-markdown__file-link:focus-visible {
   max-width: 100%;
   margin: 12px 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--code-highlight-text) 13%, var(--chat-code-highlighter-bg));
   border-radius: var(--app-radius-lg);
-  background: var(--chat-code-highlighter-bg);
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--app-text) 4%, transparent);
+  background: var(--app-surface-muted);
   box-sizing: border-box;
 }
 
@@ -317,12 +317,11 @@ a.chat-markdown__file-link:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 38px;
-  padding: 6px 8px 6px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--code-highlight-text) 11%, var(--chat-code-highlighter-bg));
-  color: var(--code-highlight-text);
-  background: color-mix(in srgb, var(--chat-code-highlighter-bg) 94%, var(--code-highlight-text));
-  font-family: var(--app-code-font-family);
+  min-height: 0;
+  padding: 7px 8px 2px;
+  color: var(--app-text-secondary);
+  background: transparent;
+  font-family: var(--app-font-family);
   font-size: 12px;
   line-height: 18px;
 }
@@ -330,42 +329,43 @@ a.chat-markdown__file-link:focus-visible {
 .chat-code-highlighter__language {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--code-highlight-text) 68%, transparent);
-  font-size: 11.5px;
-  font-weight: 550;
-  letter-spacing: 0.01em;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .chat-code-highlighter__copy {
+  display: inline-flex;
   flex: 0 0 auto;
-  min-width: 46px;
-  height: 26px;
-  padding: 0 9px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
   border: 1px solid transparent;
   border-radius: var(--app-radius-sm);
-  color: color-mix(in srgb, var(--code-highlight-text) 62%, transparent);
+  color: var(--app-text-muted);
   background: transparent;
   font-family: var(--app-font-family);
   font-size: 11px;
   font-weight: 500;
-  line-height: 24px;
+  line-height: 1;
   cursor: pointer;
   transition:
     color 140ms ease,
-    background-color 140ms ease,
-    border-color 140ms ease;
+    background-color 140ms ease;
 }
 
 .chat-code-highlighter__copy-icon {
-  display: none;
+  display: block;
 }
 
 .chat-code-highlighter__copy:hover {
-  border-color: color-mix(in srgb, var(--code-highlight-text) 10%, transparent);
-  color: var(--code-highlight-text);
-  background: color-mix(in srgb, var(--code-highlight-text) 7%, transparent);
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-text) 7%, transparent);
 }
 
 .chat-code-highlighter__copy:focus-visible {
@@ -377,99 +377,8 @@ a.chat-markdown__file-link:focus-visible {
   color: var(--app-primary);
 }
 
-.chat-code-highlighter .ant-codeHighlighter-code {
-  overflow: auto;
-  border: 0;
-  border-radius: 0;
-  background: var(--chat-code-highlighter-bg);
-}
-
-.chat-code-highlighter--plain pre {
-  padding: 18px 16px;
-  white-space: pre;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter {
-  border: 0;
-  box-shadow: none;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter__header {
-  min-height: 34px;
-  padding: 6px 8px;
-  border-bottom: 0;
-  background: var(--chat-code-highlighter-bg);
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter__copy {
-  display: inline-flex;
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  padding: 0;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter__copy-icon {
-  display: block;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter__copy-label {
+.chat-code-highlighter__copy-label {
   display: none;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .chat-code-highlighter pre {
-  padding: 6px 8px 14px !important;
-}
-
-/* 即使选择浅色语法配色，代码块界面框架也跟随应用主题。 */
-:root[data-theme='dark'] .chat-code-highlighter {
-  border: 1px solid color-mix(in srgb, var(--app-text) 12%, var(--chat-code-highlighter-bg));
-}
-
-:root[data-theme='dark'] .chat-code-highlighter__header {
-  border-bottom: 1px solid color-mix(in srgb, var(--app-text) 10%, var(--chat-code-highlighter-bg));
-  color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-text) 6%, var(--chat-code-highlighter-bg));
-}
-
-:root[data-theme='dark'] .chat-code-highlighter__language,
-:root[data-theme='dark'] .chat-code-highlighter__copy {
-  color: var(--app-text-muted);
-}
-
-:root[data-theme='dark'] .chat-code-highlighter__copy:hover {
-  border-color: var(--desktop-agent-button-hover-border);
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.chat-code-highlighter pre {
-  margin: 0 !important;
-  background: var(--chat-code-highlighter-bg) !important;
-}
-
-.chat-code-highlighter code {
-  padding: 0 !important;
-  background: var(--chat-code-highlighter-bg) !important;
-}
-
-.chat-code-highlighter pre,
-.chat-code-highlighter code,
-.chat-code-highlighter .ant-codeHighlighter-code {
-  font-family: var(--app-code-font-family) !important;
-  font-size: calc(var(--app-font-size, 14px) - 1px) !important;
-  font-weight: 400;
-  line-height: 1.55;
-  letter-spacing: 0;
-}
-
-.chat-code-highlighter pre,
-.chat-code-highlighter code {
-  min-width: 0;
-  max-width: none;
 }
 
 @media (prefers-reduced-motion: reduce) {

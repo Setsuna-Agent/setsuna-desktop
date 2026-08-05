@@ -108,6 +108,25 @@ describe('desktop review state actions', () => {
 
     expect(file?.lines.some((line) => line.type === 'gap' && line.content.includes('unmodified lines'))).toBe(true);
     expect(file?.lines.some((line) => line.content.startsWith('@@'))).toBe(false);
+    expect(file?.patch).toContain('diff --git a/tracked.txt b/tracked.txt');
+  }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
+
+  it('omits raw patches from truncated tracked and untracked previews', async () => {
+    const repo = await mkGitRepo();
+    const largeContent = `${Array.from({ length: 2_501 }, (_, index) => `line ${index + 1}`).join('\n')}\n`;
+    await writeFile(path.join(repo, 'tracked.txt'), largeContent);
+    await writeFile(path.join(repo, 'scratch.txt'), largeContent);
+
+    const state = await getDesktopReviewState(repo);
+    const tracked = state.unstagedSummary?.files.find((file) => file.path === 'tracked.txt');
+    const untracked = state.unstagedSummary?.files.find((file) => file.path === 'scratch.txt');
+
+    expect(tracked).toMatchObject({ truncated: true });
+    expect(tracked?.lines).toHaveLength(2_500);
+    expect(tracked?.patch).toBeUndefined();
+    expect(untracked).toMatchObject({ truncated: true });
+    expect(untracked?.lines).toHaveLength(2_500);
+    expect(untracked?.patch).toBeUndefined();
   }, GIT_INTEGRATION_TEST_TIMEOUT_MS);
 
   it('creates a branch and commits included unstaged changes', async () => {

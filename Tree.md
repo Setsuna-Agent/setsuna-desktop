@@ -77,15 +77,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 522 total files
-├── src/ — 2 direct / 380 total files
+apps/desktop/renderer/ — 0 direct / 530 total files
+├── src/ — 2 direct / 387 total files
 │   ├── app/ — 2 direct / 32 total files
 │   │   ├── controller/ — 5 direct / 5 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 276 files
+│   ├── features/ — 280 files
 │   │   ├── capabilities/ — 20 direct / 27 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -107,26 +107,29 @@ apps/desktop/renderer/ — 0 direct / 522 total files
 │   │   │   ├── sections/ — 7 direct / 7 total files
 │   │   │   ├── styles/ — 8 direct / 8 total files
 │   │   │   └── usage/ — 7 direct / 7 total files
-│   │   └── workspace/ — 35 direct / 74 total files
+│   │   └── workspace/ — 32 direct / 78 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files
-│   │       ├── hooks/ — 10 direct / 10 total files
+│   │       ├── editor/ — 3 direct / 3 total files
+│   │       ├── git/ — 2 direct / 2 total files
+│   │       ├── hooks/ — 11 direct / 11 total files
 │   │       ├── model/ — 1 direct / 1 total files
-│   │       └── styles/ — 7 direct / 7 total files
+│   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 10 files
 │   │   └── runtime-client/ — 10 direct / 10 total files
-│   └── shared/ — 60 files
+│   └── shared/ — 63 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
+│       ├── code/ — 4 direct / 4 total files
 │       ├── hooks/ — 3 direct / 3 total files
 │       ├── i18n/ — 11 direct / 11 total files
-│       ├── lib/ — 7 direct / 7 total files
+│       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 4 direct / 4 total files
-└── test/ — 142 files
-    └── unit/ — 142 files
+└── test/ — 143 files
+    └── unit/ — 143 files
         ├── app/ — 1 direct / 11 total files
         │   ├── controller/ — 2 direct / 2 total files
         │   ├── layout/ — 3 direct / 3 total files
@@ -147,14 +150,15 @@ apps/desktop/renderer/ — 0 direct / 522 total files
         │   ├── settings/ — 8 direct / 13 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
-        │   └── workspace/ — 15 direct / 24 total files
+        │   └── workspace/ — 14 direct / 24 total files
         │       ├── browser/ — 1 direct / 1 total files
-        │       ├── hooks/ — 7 direct / 7 total files
+        │       ├── hooks/ — 8 direct / 8 total files
         │       └── model/ — 1 direct / 1 total files
         ├── services/ — 9 files
         │   └── runtime-client/ — 9 direct / 9 total files
-        └── shared/ — 13 files
+        └── shared/ — 14 files
             ├── branding/ — 1 direct / 1 total files
+            ├── code/ — 1 direct / 1 total files
             ├── hooks/ — 2 direct / 2 total files
             ├── i18n/ — 1 direct / 1 total files
             ├── lib/ — 4 direct / 4 total files

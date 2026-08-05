@@ -1305,11 +1305,11 @@
   gap: 12px;
   min-width: 0;
   padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--code-highlight-text) 12%, var(--code-highlight-background));
+  border: 1px solid var(--app-border);
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
-  color: color-mix(in srgb, var(--code-highlight-text) 68%, transparent);
-  background: color-mix(in srgb, var(--code-highlight-background) 94%, var(--code-highlight-text));
+  color: var(--app-text-muted);
+  background: var(--app-surface-subtle);
   font-size: 10px;
   line-height: 16px;
 }
@@ -1325,71 +1325,9 @@
 }
 
 .desktop-settings-panel .chat-user-settings__code-preview-body {
-  display: grid;
+  display: block;
   min-width: 0;
-  padding: 9px 0;
-  border: 1px solid color-mix(in srgb, var(--code-highlight-text) 12%, var(--code-highlight-background));
+  border: 1px solid var(--app-border);
   border-radius: 0 0 8px 8px;
-  color: var(--code-syntax-plain);
-  background: var(--code-highlight-background);
-  font-size: 12px;
-  line-height: 20px;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-:root[data-code-highlight-theme='chatgpt'] .desktop-settings-panel .chat-user-settings__code-preview-header {
-  border: 0;
-  background: var(--code-highlight-background);
-}
-
-:root[data-code-highlight-theme='chatgpt'] .desktop-settings-panel .chat-user-settings__code-preview-body {
-  border: 0;
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview-line {
-  display: grid;
-  grid-template-columns: 34px minmax(max-content, 1fr);
-  min-width: max-content;
-  padding-right: 14px;
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview-line > span:first-child {
-  padding-right: 10px;
-  color: color-mix(in srgb, var(--code-highlight-text) 36%, transparent);
-  text-align: right;
-  user-select: none;
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-comment {
-  color: var(--code-syntax-comment);
-  font-style: italic;
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-keyword {
-  color: var(--code-syntax-keyword);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-string {
-  color: var(--code-syntax-string);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-number {
-  color: var(--code-syntax-number);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-function {
-  color: var(--code-syntax-function);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-variable {
-  color: var(--code-syntax-plain);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-attribute {
-  color: var(--code-syntax-property);
-}
-
-.desktop-settings-panel .chat-user-settings__code-preview .is-meta {
-  color: var(--code-syntax-meta);
+  overflow: hidden;
 }

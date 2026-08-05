@@ -1,3 +1,4 @@
+import { Virtualizer } from '@pierre/diffs/react';
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import {
@@ -8,6 +9,7 @@ import {
   ChevronsUpDown,
   Columns2,
   GitBranch,
+  GitCommitHorizontal,
   RefreshCw,
   Rows3,
   Search,
@@ -35,6 +37,7 @@ import type {
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
+import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
 const reviewSourceLabelKeys: Record<DesktopReviewSource, MessageKey> = {
@@ -107,6 +110,7 @@ export function DesktopReviewPanel({
   onRevealFile?: (filePath: string) => void;
 }) {
   const { t } = useI18n();
+  const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
@@ -370,6 +374,18 @@ export function DesktopReviewPanel({
                 <RefreshCw className="desktop-review-panel__refresh-icon" size={14} />
               </IconButton>
             </ActionTooltip>
+            {hasGit ? (
+              <button
+                aria-haspopup="dialog"
+                className="desktop-review-panel__commit-action"
+                disabled={!canOpenCommitDialog}
+                type="button"
+                onClick={openCommitDialog}
+              >
+                <GitCommitHorizontal size={14} />
+                <span>{t('conversation.git.commitOrPush')}</span>
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
@@ -381,7 +397,10 @@ export function DesktopReviewPanel({
           onBaseRefChange={handleBranchBaseRefChange}
         />
       ) : null}
-      <div className="desktop-review-panel__sections">
+      <Virtualizer
+        className="desktop-review-panel__sections"
+        contentClassName="desktop-review-panel__sections-content"
+      >
         <ReviewSummarySection
           emptyText={{
             title: t(reviewEmptyTextKeys[activeSource].title),
@@ -402,7 +421,7 @@ export function DesktopReviewPanel({
           onOpenProjectFile={onOpenProjectFile}
           onRevealFile={onRevealFile}
         />
-      </div>
+      </Virtualizer>
     </section>
   );
 }
@@ -729,9 +748,3 @@ function isRemoteCompareRef(ref: string): boolean {
 }
 
 export { reviewFilePathParts, reviewWorkspaceFilePath } from './review-paths.js';
-export {
-  highlightedReviewDiffLines,
-  reviewVirtualRange,
-  reviewWholeFileChangeType,
-  shouldWrapReviewDiffLine
-} from './ReviewDiffView.js';
