@@ -838,13 +838,8 @@
 }
 
 @media (max-width: 760px) {
-  .desktop-plugin-market__editorials,
   .desktop-plugin-market__list {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-plugin-editorial {
-    grid-template-rows: auto 188px auto;
   }
 
   .desktop-plugin-market__section > header {

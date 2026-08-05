@@ -69,6 +69,7 @@ export function ChatComposer({
   contextUsage,
   currentThread,
   draft,
+  focusOnReveal = false,
   imageAttachmentRequest,
   skillSelectionRequest,
   workspaceMentionRequest,
@@ -104,6 +105,7 @@ export function ChatComposer({
   contextUsage: ChatContextTokenUsage;
   currentThread: RuntimeThread | null;
   draft: string;
+  focusOnReveal?: boolean;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
@@ -266,6 +268,11 @@ export function ChatComposer({
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusOnReveal) return;
+    senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
+  }, [focusOnReveal]);
 
   useEffect(() => {
     if (!workspaceMentionRequest || consumedWorkspaceMentionRequestIdRef.current === workspaceMentionRequest.requestId) return;

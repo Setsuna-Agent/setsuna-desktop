@@ -72,8 +72,3 @@ export function localizedPluginCopy(plugin: PluginCopySource, t: Translate): Pic
   if (!keys) return { name: plugin.name, description: plugin.description };
   return { name: t(keys.name), description: t(keys.description) };
 }
-
-export function localizedPluginSearchAliases(plugin: PluginCopySource, t: Translate): string[] {
-  const copy = localizedPluginCopy(plugin, t);
-  return [copy.name, copy.description ?? ''];
-}

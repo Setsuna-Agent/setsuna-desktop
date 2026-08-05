@@ -12,7 +12,7 @@ export function SidebarUserMenu({ onOpenSettings }: { onOpenSettings: () => void
         aria-label={t('sidebar.openSettings')}
         onClick={onOpenSettings}
       >
-        <Settings size={15} />
+        <Settings className="chat-sidebar-user__icon" size={15} />
         <span className="chat-sidebar-user__name">{t('settings.title')}</span>
       </button>
     </div>

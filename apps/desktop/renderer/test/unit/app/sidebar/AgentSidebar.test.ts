@@ -54,6 +54,7 @@ describe('AgentSidebar project actions', () => {
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
     expect(html).toContain('归档项目');
     expect(html).toContain('lucide-blocks');
+    expect(html).toContain('chat-sidebar-user__icon');
     expect(html).toContain('>插件</span>');
     expect(html.match(/>新对话</g)).toHaveLength(1);
   });

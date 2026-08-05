@@ -102,6 +102,31 @@
   min-height: 0;
 }
 
+.app-topbar__route-slot:empty {
+  display: none;
+}
+
+.app-topbar__route-slot:not(:empty) {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding-top: 4px;
+  -webkit-app-region: drag;
+}
+
+.app-topbar__route-slot > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-topbar__drag .app-topbar__route-slot {
+  padding-right: var(--app-topbar-item-gap);
+  padding-left: var(--app-topbar-item-gap);
+}
+
 .app-topbar__menu,
 .app-topbar__status,
 .app-workbench__main-actions,

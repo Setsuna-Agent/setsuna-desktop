@@ -46,6 +46,8 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 
 Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页面切换时草稿与异步请求互相覆盖。
 
+侧边对话通过 `SideChatPanel -> ChatWorkspace -> ChatComposer` 传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。
+
 ## Turn actions
 
 ### `useChatTurnActions.ts`

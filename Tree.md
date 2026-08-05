@@ -77,7 +77,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 521 total files
+apps/desktop/renderer/ — 0 direct / 522 total files
 ├── src/ — 2 direct / 380 total files
 │   ├── app/ — 2 direct / 32 total files
 │   │   ├── controller/ — 5 direct / 5 total files
@@ -85,8 +85,8 @@ apps/desktop/renderer/ — 0 direct / 521 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 277 files
-│   │   ├── capabilities/ — 21 direct / 28 total files
+│   ├── features/ — 276 files
+│   │   ├── capabilities/ — 20 direct / 27 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
@@ -115,7 +115,7 @@ apps/desktop/renderer/ — 0 direct / 521 total files
 │   │       └── styles/ — 7 direct / 7 total files
 │   ├── services/ — 10 files
 │   │   └── runtime-client/ — 10 direct / 10 total files
-│   └── shared/ — 59 files
+│   └── shared/ — 60 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
@@ -124,12 +124,12 @@ apps/desktop/renderer/ — 0 direct / 521 total files
 │       ├── lib/ — 7 direct / 7 total files
 │       ├── preferences/ — 5 direct / 5 total files
 │       ├── styles/ — 7 direct / 7 total files
-│       └── ui/ — 3 direct / 3 total files
-└── test/ — 141 files
-    └── unit/ — 141 files
-        ├── app/ — 1 direct / 10 total files
+│       └── ui/ — 4 direct / 4 total files
+└── test/ — 142 files
+    └── unit/ — 142 files
+        ├── app/ — 1 direct / 11 total files
         │   ├── controller/ — 2 direct / 2 total files
-        │   ├── layout/ — 2 direct / 2 total files
+        │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── features/ — 109 files

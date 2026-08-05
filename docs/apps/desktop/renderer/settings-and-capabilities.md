@@ -95,13 +95,14 @@ Hook editor 的 draft/metadata 转换是可独立测试的纯边界；页面不�
 相关组件：
 
 - `CapabilitiesPluginMarket`
-- `CapabilitiesPluginEditorial`
 - `CapabilitiesPluginListItem`
 - `CapabilitiesPluginDetail`
 - `CapabilitiesPluginInstallButton`
-- `CapabilitiesInstalledPluginListItem`
+- `CapabilitiesInstalledPluginShortcut`
 
-默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。详情页展示声明的 Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
+默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页由已安装快捷区、精选区和按能力分类的紧凑列表组成。详情页展示声明的 Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
+
+Capabilities 的一级标签通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot，避免窗口标题栏与页面标签各占一行；Windows/Linux 的 slot 位于可拖拽标题栏轨道内，按钮区域显式保持 `no-drag`。插件市场首页不提供搜索框，其他能力分类仍保留各自的目录搜索。
 
 本地侧载不从普通 UI 暴露；不属于默认市场的已安装 Plugin 单独标识。
 

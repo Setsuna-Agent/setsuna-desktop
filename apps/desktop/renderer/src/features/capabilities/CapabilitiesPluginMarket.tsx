@@ -1,7 +1,6 @@
 import type { RuntimePluginMarketplaceItem, RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { CapabilitiesInstalledPluginListItem } from './CapabilitiesInstalledPluginListItem.js';
-import { CapabilitiesPluginEditorial } from './CapabilitiesPluginEditorial.js';
+import { CapabilitiesInstalledPluginShortcut } from './CapabilitiesInstalledPluginShortcut.js';
 import { CapabilitiesPluginListItem } from './CapabilitiesPluginListItem.js';
 import { pluginMarketplacePresentation } from './pluginDisplay.js';
 
@@ -12,7 +11,6 @@ export function CapabilitiesPluginMarket({
   onInstall,
   onOpenLocal,
   onOpenMarketplace,
-  searching,
 }: {
   installingPluginIds: Set<string>;
   localPlugins: RuntimePluginSummary[];
@@ -20,64 +18,60 @@ export function CapabilitiesPluginMarket({
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onOpenLocal: (plugin: RuntimePluginSummary) => void;
   onOpenMarketplace: (plugin: RuntimePluginMarketplaceItem) => void;
-  searching: boolean;
 }) {
   const { t } = useI18n();
-  const presentation = pluginMarketplacePresentation(marketplacePlugins, searching, t);
+  const presentation = pluginMarketplacePresentation(marketplacePlugins, t);
+  const installedMarketplacePlugins = marketplacePlugins.filter((plugin) => plugin.installed);
+  const installedCount = installedMarketplacePlugins.length + localPlugins.length;
 
   return (
     <div className="desktop-plugin-market">
-      {presentation.editorials.length ? (
-        <section className="desktop-plugin-market__editorials" aria-label={t('capabilities.market.editorial')}>
-          {presentation.editorials.map((plugin) => (
-            <CapabilitiesPluginEditorial
-              key={`editorial:${plugin.id}`}
-              plugin={plugin}
-              installing={installingPluginIds.has(plugin.id)}
-              onInstall={onInstall}
-              onOpen={onOpenMarketplace}
-            />
-          ))}
-        </section>
-      ) : null}
-
-      {presentation.sections.map((section) => (
-        <section className="desktop-plugin-market__section" key={section.id}>
+      {installedCount ? (
+        <section className="desktop-plugin-market__installed" aria-label={t('capabilities.market.installed')}>
           <header>
-            <h3>{section.title}</h3>
-            <p>{section.description}</p>
+            <h3>{t('capabilities.market.installed')}</h3>
+            <span>{t('capabilities.market.installedCount', { count: installedCount })}</span>
           </header>
-          <div className="desktop-plugin-market__list">
-            {section.plugins.map((plugin) => (
-              <CapabilitiesPluginListItem
-                key={`marketplace:${plugin.id}`}
+          <div className="desktop-plugin-market__installed-list">
+            {installedMarketplacePlugins.map((plugin) => (
+              <CapabilitiesInstalledPluginShortcut
+                key={`installed-marketplace:${plugin.id}`}
                 plugin={plugin}
-                installing={installingPluginIds.has(plugin.id)}
-                onInstall={onInstall}
-                onOpen={onOpenMarketplace}
+                onOpen={() => onOpenMarketplace(plugin)}
               />
             ))}
-          </div>
-        </section>
-      ))}
-
-      {localPlugins.length ? (
-        <section className="desktop-plugin-market__section">
-          <header>
-            <h3>{t('capabilities.market.local')}</h3>
-            <p>{t('capabilities.market.localDescription')}</p>
-          </header>
-          <div className="desktop-plugin-market__list">
             {localPlugins.map((plugin) => (
-              <CapabilitiesInstalledPluginListItem
-                key={`local:${plugin.id}`}
+              <CapabilitiesInstalledPluginShortcut
+                key={`installed-local:${plugin.id}`}
                 plugin={plugin}
-                onOpen={onOpenLocal}
+                onOpen={() => onOpenLocal(plugin)}
               />
             ))}
           </div>
         </section>
       ) : null}
+
+      <div className="desktop-plugin-market__catalog">
+        {presentation.sections.map((section) => (
+          <section className="desktop-plugin-market__section" key={section.id}>
+            <header>
+              <h3>{section.title}</h3>
+              <p>{section.description}</p>
+            </header>
+            <div className="desktop-plugin-market__list">
+              {section.plugins.map((plugin) => (
+                <CapabilitiesPluginListItem
+                  key={`marketplace:${plugin.id}`}
+                  plugin={plugin}
+                  installing={installingPluginIds.has(plugin.id)}
+                  onInstall={onInstall}
+                  onOpen={onOpenMarketplace}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
