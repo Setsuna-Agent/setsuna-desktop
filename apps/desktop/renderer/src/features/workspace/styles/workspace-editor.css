@@ -63,6 +63,11 @@
   box-sizing: border-box;
 }
 
+.desktop-workspace-overview__actions > .sd-shortcut-tooltip-target,
+.desktop-workspace-overview__actions > .sd-shortcut-tooltip-target > .desktop-workspace-overview__action {
+  width: 100%;
+}
+
 .desktop-workspace-overview__action {
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) 14px;

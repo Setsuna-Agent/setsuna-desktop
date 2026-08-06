@@ -176,6 +176,18 @@ export type DesktopRuntimeEventPayload =
     subscriptionId: string;
   };
 
+export type DesktopKeyboardShortcutInput = {
+  altGraph: boolean;
+  altKey: boolean;
+  code: string;
+  ctrlKey: boolean;
+  isComposing: boolean;
+  key: string;
+  metaKey: boolean;
+  repeat: boolean;
+  shiftKey: boolean;
+};
+
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
   browser: {
@@ -190,6 +202,9 @@ export type SetsunaDesktopBridge = {
   desktop: {
     platform: string;
     setInterfaceLanguage(locale: RuntimeInterfaceLanguage): Promise<boolean>;
+    setActiveKeyboardShortcutBindings(bindings: readonly string[]): Promise<boolean>;
+    setKeyboardShortcutRecording(recording: boolean): Promise<boolean>;
+    onKeyboardShortcutInput(callback: (input: DesktopKeyboardShortcutInput) => void): () => void;
     selectDirectory(options?: { title?: string }): Promise<string | null>;
     getUserProfile(): Promise<DesktopUserProfile>;
     copyImageToClipboard(input: DesktopImageInput): Promise<DesktopImageActionResult>;

@@ -15,6 +15,7 @@ import type {
 } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../../shared/lib/runtimeAccessMode.js';
+import { ShortcutTooltip } from '../../../shared/ui/ShortcutTooltip.js';
 import type { ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
 import { ChatApprovalPolicyMenu } from './ChatApprovalPolicyMenu.js';
 import { ChatModelPicker } from './ChatModelPicker.js';
@@ -217,15 +218,16 @@ function ChatComposerPrimaryAction({
 
   if (hasActiveTurn) {
     return (
-      <button
-        className="chat-sender-stop"
-        type="button"
-        aria-label={t('chat.composer.stop')}
-        title={t('chat.composer.stop')}
-        onClick={primaryAction.onCancelActiveTurn}
-      >
-        <Square size={11} />
-      </button>
+      <ShortcutTooltip commandId="chat.cancelTurn" label={t('chat.composer.stop')}>
+        <button
+          className="chat-sender-stop"
+          type="button"
+          aria-label={t('chat.composer.stop')}
+          onClick={primaryAction.onCancelActiveTurn}
+        >
+          <Square size={11} />
+        </button>
+      </ShortcutTooltip>
     );
   }
 

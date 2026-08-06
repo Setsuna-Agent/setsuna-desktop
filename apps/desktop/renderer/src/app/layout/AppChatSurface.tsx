@@ -101,6 +101,7 @@ export function AppChatSurface({
   contextCompacting,
   currentThread,
   draft,
+  focusComposerRequest,
   fileDraft,
   filePreview,
   plugins,
@@ -123,6 +124,7 @@ export function AppChatSurface({
   onCancelActiveTurn,
   onAccessModeChange,
   onConversationOverviewRenderedChange,
+  onFocusComposerRequestConsumed,
   onAnswerApproval,
   onCompactContext,
   onClearContext,
@@ -191,6 +193,7 @@ export function AppChatSurface({
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  focusComposerRequest: number;
   fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   plugins: RuntimePluginSummary[];
@@ -213,6 +216,7 @@ export function AppChatSurface({
   onCancelActiveTurn: () => void;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
+  onFocusComposerRequestConsumed: (requestId: number) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
@@ -326,6 +330,7 @@ export function AppChatSurface({
             config={config}
             currentThread={currentThread}
             draft={draft}
+            focusComposerRequest={focusComposerRequest}
             imageAttachmentRequest={imageAttachmentRequest}
             plugins={plugins}
             reviewError={reviewError}
@@ -339,6 +344,7 @@ export function AppChatSurface({
             onCancelActiveTurn={onCancelActiveTurn}
             onAccessModeChange={onAccessModeChange}
             onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
+            onFocusComposerRequestConsumed={onFocusComposerRequestConsumed}
             onAnswerApproval={onAnswerApproval}
             onCompactContext={onCompactContext}
             onClearContext={onClearContext}

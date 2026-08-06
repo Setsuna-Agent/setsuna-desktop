@@ -370,6 +370,49 @@
   display: inline-flex;
 }
 
+.sd-shortcut-tooltip-target {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.sd-shortcut-tooltip-content,
+.sd-shortcut-tooltip-bindings {
+  display: inline-flex;
+  align-items: center;
+}
+
+.sd-shortcut-tooltip-content {
+  gap: 12px;
+  min-width: 0;
+}
+
+.sd-shortcut-tooltip-bindings {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.sd-shortcut-tooltip-bindings kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 5px;
+  color: inherit;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+  font-family: var(--app-font-family);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sd-shortcut-tooltip-bindings kbd.is-mac {
+  gap: 3px;
+}
+
 .sd-tooltip {
   max-width: min(280px, calc(var(--app-scaled-viewport-width) - 24px));
 }

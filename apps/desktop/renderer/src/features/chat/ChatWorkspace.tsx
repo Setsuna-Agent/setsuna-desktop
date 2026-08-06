@@ -113,6 +113,7 @@ export function ChatWorkspace({
   currentThread,
   draft,
   focusComposerOnReveal = false,
+  focusComposerRequest = 0,
   imageAttachmentRequest,
   skillSelectionRequest,
   workspaceMentionRequest,
@@ -123,6 +124,7 @@ export function ChatWorkspace({
   onAccessModeChange,
   onAnswerApproval,
   onConversationOverviewRenderedChange,
+  onFocusComposerRequestConsumed,
   onCompactContext,
   onClearContext,
   onClearThreadGoal,
@@ -163,6 +165,7 @@ export function ChatWorkspace({
   currentThread: RuntimeThread | null;
   draft: string;
   focusComposerOnReveal?: boolean;
+  focusComposerRequest?: number;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
@@ -173,6 +176,7 @@ export function ChatWorkspace({
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onConversationOverviewRenderedChange?: (visible: boolean) => void;
+  onFocusComposerRequestConsumed?: (requestId: number) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
@@ -388,6 +392,8 @@ export function ChatWorkspace({
       currentThread={currentThread}
       draft={draft}
       focusOnReveal={focusComposerOnReveal}
+      focusRequest={focusComposerRequest}
+      onFocusRequestConsumed={onFocusComposerRequestConsumed}
       imageAttachmentRequest={imageAttachmentRequest}
       skillSelectionRequest={skillSelectionRequest?.composerKey === composerKey ? skillSelectionRequest : null}
       workspaceMentionRequest={workspaceMentionRequest}

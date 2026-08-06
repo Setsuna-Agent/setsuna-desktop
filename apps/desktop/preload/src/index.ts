@@ -50,6 +50,18 @@ const runtime: DesktopRuntimeBridge = {
 const desktop: SetsunaDesktopBridge['desktop'] = {
   platform: process.platform,
   setInterfaceLanguage: (locale) => ipcRenderer.invoke('desktop:set-interface-language', locale),
+  setActiveKeyboardShortcutBindings: (bindings) =>
+    ipcRenderer.invoke('desktop:set-active-keyboard-shortcut-bindings', bindings),
+  setKeyboardShortcutRecording: (recording) =>
+    ipcRenderer.invoke('desktop:set-keyboard-shortcut-recording', recording),
+  onKeyboardShortcutInput(callback) {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      input: Parameters<typeof callback>[0],
+    ) => callback(input);
+    ipcRenderer.on('desktop:keyboard-shortcut-input', listener);
+    return () => ipcRenderer.off('desktop:keyboard-shortcut-input', listener);
+  },
   selectDirectory: (options) => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: () => ipcRenderer.invoke('desktop:get-user-profile'),
   copyImageToClipboard: (input) => ipcRenderer.invoke('desktop:copy-image-to-clipboard', input),

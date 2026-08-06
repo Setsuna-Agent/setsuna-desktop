@@ -17,10 +17,11 @@ describe('SettingsSidebar', () => {
     expect(html).toContain('<nav class="app-sidebar desktop-settings-sidebar chat-user-settings__nav">');
     expect(html).toContain('模型服务');
     expect(html).toContain('专用模型');
+    expect(html).toContain('键盘快捷键');
     expect(html).not.toContain('chat-user-settings--page');
   });
 
-  it('places usage statistics third in the settings navigation', () => {
+  it('places keyboard shortcuts before usage statistics in the settings navigation', () => {
     const html = renderToStaticMarkup(createElement(SettingsSidebar, {
       activeSection: 'general',
       onBack: vi.fn(),
@@ -34,7 +35,7 @@ describe('SettingsSidebar', () => {
       .match(/<button/gu) ?? [];
     expect(tabsIndex).toBeGreaterThan(-1);
     expect(usageLabelIndex).toBeGreaterThan(-1);
-    expect(navigationItemsBeforeUsageLabel).toHaveLength(3);
+    expect(navigationItemsBeforeUsageLabel).toHaveLength(4);
   });
 
   it('renders the settings navigation in English when selected', () => {
@@ -52,6 +53,7 @@ describe('SettingsSidebar', () => {
 
     expect(html).toContain('Model providers');
     expect(html).toContain('Task models');
+    expect(html).toContain('Keyboard shortcuts');
     expect(html).toContain('General');
     expect(html).not.toContain('模型服务');
   });

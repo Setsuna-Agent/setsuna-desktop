@@ -6,7 +6,10 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { ChatComposer } from '../../../../src/features/chat/ChatComposer.js';
+import {
+  applyChatComposerFocusRequest,
+  ChatComposer,
+} from '../../../../src/features/chat/ChatComposer.js';
 
 const composerHarness = vi.hoisted(() => ({
   attachments: {} as Record<string, unknown>,
@@ -38,6 +41,7 @@ vi.mock('antd', () => ({
     <button type="button" {...props}>{children}</button>
   ),
   Dropdown: ({ children }: { children?: React.ReactNode }) => children,
+  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
 }));
 
 vi.mock('../../../../src/shared/i18n/I18nProvider.js', () => ({
@@ -87,6 +91,21 @@ vi.mock('../../../../src/features/chat/composer/useQueuedTurnComposerEdit.js', (
 }));
 
 describe('ChatComposer view state characterization', () => {
+  it('consumes an explicit focus request only after focusing an available editor', () => {
+    const focus = vi.fn();
+    const consume = vi.fn();
+
+    applyChatComposerFocusRequest(null, false, 3, consume);
+    expect(consume).not.toHaveBeenCalled();
+
+    applyChatComposerFocusRequest({ focus }, false, 3, consume);
+    expect(focus).toHaveBeenCalledWith({ cursor: 'end', preventScroll: true });
+    expect(consume).toHaveBeenCalledWith(3);
+
+    applyChatComposerFocusRequest({ focus }, true, 0, consume);
+    expect(consume).toHaveBeenCalledTimes(1);
+  });
+
   beforeEach(() => {
     composerHarness.attachments = {
       addExistingImage: vi.fn(),

@@ -11,6 +11,8 @@ import {
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
+import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
+import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
@@ -25,6 +27,11 @@ const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; i
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
   { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
 ];
+
+const panelLauncherShortcutCommands: Partial<Record<DesktopPanelType, KeyboardShortcutCommandId>> = {
+  files: 'workspace.openFiles',
+  review: 'workspace.openReview',
+};
 
 type PanelPointerDrag = {
   active: boolean;
@@ -347,20 +354,33 @@ export function DesktopPanelHeader({
                       role="menu"
                       style={{ left: launcherPosition.left, top: launcherPosition.top }}
                     >
-                      {launcherItems.map((item) => (
-                        <button
-                          key={item.key}
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setLauncherOpen(false);
-                            onOpenPanel(item.key);
-                          }}
-                        >
-                          {item.icon}
-                          {t(item.labelKey)}
-                        </button>
-                      ))}
+                      {launcherItems.map((item) => {
+                        const button = (
+                          <button
+                            key={item.key}
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              setLauncherOpen(false);
+                              onOpenPanel(item.key);
+                            }}
+                          >
+                            {item.icon}
+                            {t(item.labelKey)}
+                          </button>
+                        );
+                        const shortcutCommandId = panelLauncherShortcutCommands[item.key];
+                        return shortcutCommandId ? (
+                          <ShortcutTooltip
+                            commandId={shortcutCommandId}
+                            key={item.key}
+                            label={t(item.labelKey)}
+                            placement="bottom"
+                          >
+                            {button}
+                          </ShortcutTooltip>
+                        ) : button;
+                      })}
                     </span>,
                     document.body,
                   )
@@ -370,37 +390,49 @@ export function DesktopPanelHeader({
         </span>
         <span className="chat-file-review-panel__heading-actions">
           {placement === 'side' && onToggleBottomTerminal ? (
-            <button
-              className={[
-                'app-shell-icon-control',
-                'chat-file-review-panel__close',
-                'chat-file-review-panel__terminal-action',
-                bottomBarActive ? 'chat-file-review-panel__close--active' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              type="button"
-              aria-label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
-              onClick={onToggleBottomTerminal}
+            <ShortcutTooltip
+              commandId="layout.toggleTerminal"
+              label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
             >
-              <Terminal size={14} />
-            </button>
+              <button
+                className={[
+                  'app-shell-icon-control',
+                  'chat-file-review-panel__close',
+                  'chat-file-review-panel__terminal-action',
+                  bottomBarActive ? 'chat-file-review-panel__close--active' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                type="button"
+                aria-label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
+                onClick={onToggleBottomTerminal}
+              >
+                <Terminal size={14} />
+              </button>
+            </ShortcutTooltip>
           ) : null}
-          <button
-            className={[
-              placement === 'side' ? 'app-shell-icon-control' : '',
-              'chat-file-review-panel__close',
-              'chat-file-review-panel__panel-close',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            type="button"
-            aria-label={t(placement === 'side' ? 'workspace.panel.collapseSide' : 'workspace.panel.close')}
-            title={t(placement === 'side' ? 'workspace.panel.collapseSide' : 'workspace.panel.close')}
-            onClick={onClose}
-          >
-            {placement === 'side' ? <PanelRight size={14} /> : <X size={14} />}
-          </button>
+          {placement === 'side' ? (
+            <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('workspace.panel.collapseSide')}>
+              <button
+                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
+                type="button"
+                aria-label={t('workspace.panel.collapseSide')}
+                onClick={onClose}
+              >
+                <PanelRight size={14} />
+              </button>
+            </ShortcutTooltip>
+          ) : (
+            <button
+              className="chat-file-review-panel__close chat-file-review-panel__panel-close"
+              type="button"
+              aria-label={t('workspace.panel.close')}
+              title={t('workspace.panel.close')}
+              onClick={onClose}
+            >
+              <X size={14} />
+            </button>
+          )}
         </span>
       </div>
       {dragOverlay ? (

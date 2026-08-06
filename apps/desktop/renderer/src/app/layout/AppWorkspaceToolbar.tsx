@@ -5,6 +5,7 @@ import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type { DesktopPanelType } from '../../features/workspace/model.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 
 export function AppWorkspaceToolbar({
   activeProject,
@@ -108,31 +109,36 @@ function WorkspaceOverviewToolbar({
         <div className="chat-file-review-panel__heading">
           <span className="chat-file-review-panel__tabs" aria-hidden="true" />
           <span className="chat-file-review-panel__heading-actions">
-            <button
-              className={[
-                'app-shell-icon-control',
-                'chat-file-review-panel__close',
-                'chat-file-review-panel__terminal-action',
-                terminalOpen ? 'chat-file-review-panel__close--active' : '',
-              ]
-                .filter(Boolean)
-                .join(' ')}
-              type="button"
-              aria-label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
-              title={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
-              onClick={onToggleTerminal}
+            <ShortcutTooltip
+              commandId="layout.toggleTerminal"
+              label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
             >
-              <Terminal size={14} />
-            </button>
-            <button
-              className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
-              type="button"
-              aria-label={t('topbar.collapseRightSidebar')}
-              title={t('topbar.collapseRightSidebar')}
-              onClick={onToggleWorkspace}
-            >
-              <PanelRight size={14} />
-            </button>
+              <button
+                className={[
+                  'app-shell-icon-control',
+                  'chat-file-review-panel__close',
+                  'chat-file-review-panel__terminal-action',
+                  terminalOpen ? 'chat-file-review-panel__close--active' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                type="button"
+                aria-label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+                onClick={onToggleTerminal}
+              >
+                <Terminal size={14} />
+              </button>
+            </ShortcutTooltip>
+            <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('topbar.collapseRightSidebar')}>
+              <button
+                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
+                type="button"
+                aria-label={t('topbar.collapseRightSidebar')}
+                onClick={onToggleWorkspace}
+              >
+                <PanelRight size={14} />
+              </button>
+            </ShortcutTooltip>
           </span>
         </div>
       </div>

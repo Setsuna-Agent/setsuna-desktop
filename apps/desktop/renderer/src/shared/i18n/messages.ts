@@ -13,6 +13,7 @@ import {
   runtimeActivityEnUS,
   runtimeActivityZhCN,
 } from './runtimeActivityMessages.js';
+import { keyboardShortcutEnUS, keyboardShortcutZhCN } from './keyboardShortcutMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
@@ -582,6 +583,7 @@ const zhCN = {
   'topbar.openBottomTerminal': '打开底栏终端',
   'topbar.collapseRightSidebar': '收起右侧栏',
   ...runtimeActivityZhCN,
+  ...keyboardShortcutZhCN,
   ...workspaceZhCN,
   ...capabilitiesZhCN,
   ...capabilitiesManagementZhCN,
@@ -590,7 +592,6 @@ const zhCN = {
   ...taskModelZhCN,
   ...toolRunZhCN,
 } as const;
-
 export type MessageKey = keyof typeof zhCN;
 
 const enUS = {
@@ -1158,6 +1159,7 @@ const enUS = {
   'topbar.openBottomTerminal': 'Open terminal in bottom panel',
   'topbar.collapseRightSidebar': 'Collapse right sidebar',
   ...runtimeActivityEnUS,
+  ...keyboardShortcutEnUS,
   ...workspaceEnUS,
   ...capabilitiesEnUS,
   ...capabilitiesManagementEnUS,

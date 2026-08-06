@@ -85,6 +85,16 @@ export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, ty
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
 export const activePanelInSlot = (slot: DesktopPanelSlotState) => slot.panels.find((panel) => panel.id === slot.active) ?? null;
 export const slotHasPanelType = (slot: DesktopPanelSlotState, type: DesktopPanelType) => slot.panels.some((panel) => panel.type === type);
+export const findDesktopPanelLocationByType = (
+  sidePanelSlot: DesktopPanelSlotState,
+  bottomPanelSlot: DesktopPanelSlotState,
+  type: DesktopPanelType,
+): { panelId: string; slot: DesktopPanelSlot } | null => {
+  const sidePanel = sidePanelSlot.panels.find((panel) => panel.type === type);
+  if (sidePanel) return { panelId: sidePanel.id, slot: 'side' };
+  const bottomPanel = bottomPanelSlot.panels.find((panel) => panel.type === type);
+  return bottomPanel ? { panelId: bottomPanel.id, slot: 'bottom' } : null;
+};
 export const addPanelToSlotState = (slot: DesktopPanelSlotState, panel: DesktopPanelTab): DesktopPanelSlotState => {
   if (panel.type === 'overview') {
     const existing = slot.panels.find((item) => item.type === 'overview');

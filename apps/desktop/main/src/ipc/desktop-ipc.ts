@@ -17,13 +17,22 @@ import { isDesktopRendererSender } from './sender.js';
 type DesktopIpcOptions = {
   mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
+  onActiveKeyboardShortcutBindingsChange: (bindings: readonly string[]) => void;
   onInterfaceLanguageChange: (locale: RuntimeInterfaceLanguage) => void;
   userDataPath: string;
 };
 
-export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLanguageChange, userDataPath }: DesktopIpcOptions): void {
+export function registerDesktopIpc({
+  mainWindow,
+  nativeBridge,
+  onActiveKeyboardShortcutBindingsChange,
+  onInterfaceLanguageChange,
+  userDataPath,
+}: DesktopIpcOptions): void {
   const channels = [
+    'desktop:set-active-keyboard-shortcut-bindings',
     'desktop:set-interface-language',
+    'desktop:set-keyboard-shortcut-recording',
     'desktop:select-directory',
     'desktop:get-user-profile',
     'desktop:open-external',
@@ -39,11 +48,27 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLangua
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
+  ipcMain.handle('desktop:set-active-keyboard-shortcut-bindings', (event, value) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    const bindings = Array.isArray(value)
+      ? [...new Set(value.filter((item): item is string => typeof item === 'string' && item.length <= 80))].slice(0, 256)
+      : [];
+    onActiveKeyboardShortcutBindingsChange(bindings);
+    return true;
+  });
+
   ipcMain.handle('desktop:set-interface-language', (event, value) => {
     if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
     const locale = normalizeNativeInterfaceLanguage(value);
     if (!locale) return false;
     onInterfaceLanguageChange(locale);
+    return true;
+  });
+  ipcMain.handle('desktop:set-keyboard-shortcut-recording', (event, value) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    // Native application-menu accelerators (for example Command+Q) must not win
+    // while the renderer is inspecting a candidate shortcut.
+    mainWindow.webContents.setIgnoreMenuShortcuts(Boolean(value));
     return true;
   });
   ipcMain.handle('desktop:select-directory', async (event, input) => {

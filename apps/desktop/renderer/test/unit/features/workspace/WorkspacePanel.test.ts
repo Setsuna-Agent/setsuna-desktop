@@ -83,7 +83,8 @@ describe('WorkspaceOverviewPanel', () => {
       onOpenSideChat: () => undefined,
       onOpenTerminalPanel: () => undefined,
     });
-    const reviewButton = panel.props.children.props.children[0];
+    const reviewTooltip = panel.props.children.props.children[0];
+    const reviewButton = reviewTooltip.props.children;
 
     reviewButton.props.onClick({ type: 'click' });
 

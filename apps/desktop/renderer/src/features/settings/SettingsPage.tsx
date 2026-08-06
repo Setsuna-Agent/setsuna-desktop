@@ -15,6 +15,7 @@ import {
   CircleGauge,
   HardDrive,
   Info,
+  Keyboard,
   SlidersHorizontal,
   Sparkles,
   Wrench,
@@ -37,12 +38,14 @@ import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import type { RuntimePreferenceInput, SettingsSectionId } from './settings-types.js';
+import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
 const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; icon: ReactNode }> = [
   { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
+  { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} /> },
   { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
   { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
@@ -54,6 +57,7 @@ const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; ico
 
 const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   general: 'settings.section.general',
+  shortcuts: 'settings.section.shortcuts',
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
   taskModels: 'settings.section.taskModels',
@@ -64,6 +68,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
 };
 
 const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageKey>> = {
+  shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
   taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
@@ -126,6 +131,8 @@ export function SettingsPage({
   const content =
     activeSection === 'general' ? (
       <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
+    ) : activeSection === 'shortcuts' ? (
+      <KeyboardShortcutsSettings />
     ) : activeSection === 'localLlm' ? (
       config ? (
         <LocalModelSettings

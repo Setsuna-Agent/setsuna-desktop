@@ -38,6 +38,12 @@
   background: transparent;
 }
 
+.desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target,
+.chat-sidebar-user > .sd-shortcut-tooltip-target {
+  display: flex;
+  width: 100%;
+}
+
 .desktop-agent-command {
   display: flex;
   align-items: center;
