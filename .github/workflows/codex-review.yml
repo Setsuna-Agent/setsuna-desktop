@@ -33,6 +33,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
+      LEGACY_FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
       PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
       PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -65,7 +66,8 @@ jobs:
             [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "success" && "${description}" == "${ADVISORY_SAFE_DESCRIPTION}" ]] \
-              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
+              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "failure" && "${description}" == "${LEGACY_FINDINGS_SAFE_DESCRIPTION}" ]]
           }
 
           head_marker_record="$({
