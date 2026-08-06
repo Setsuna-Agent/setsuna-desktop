@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { runtimeRunningTaskCount } from '../../features/runtime-activity/runtimeActivityModel.js';
 import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeActivityTrigger.js';
 import { WorkspaceAppLauncher } from '../../features/workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
@@ -65,11 +64,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
-  const runningTaskCount = runtimeRunningTaskCount([
-    ...runtime.threads,
-    ...runtime.archivedThreads,
-    ...(runtime.currentThread ? [runtime.currentThread] : []),
-  ]);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
     if (conversationOverviewRendered) {
@@ -110,7 +104,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       navigationActions={(
         <RuntimeActivityTrigger
           open={runtimeActivityOpen}
-          runningTaskCount={runningTaskCount}
           triggerRef={runtimeActivityTriggerRef}
           onToggle={() => setRuntimeActivityOpen((open) => !open)}
         />

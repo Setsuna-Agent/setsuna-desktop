@@ -1,7 +1,6 @@
 import type {
   RuntimeActiveTask,
   RuntimeBackgroundServiceActivity,
-  RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../shared/i18n/I18nProvider.js';
 
@@ -19,16 +18,6 @@ export function resolveRuntimeActivityLoadView({
   if (hasSnapshot) return 'ready';
   if (loading) return 'loading';
   return error ? 'error' : 'ready';
-}
-
-export function runtimeRunningTaskCount(
-  threads: ReadonlyArray<Pick<RuntimeThreadSummary, 'activeTurnId' | 'id'>>,
-): number {
-  const runningThreadIds = new Set<string>();
-  for (const thread of threads) {
-    if (thread.activeTurnId) runningThreadIds.add(thread.id);
-  }
-  return runningThreadIds.size;
 }
 
 export function runtimeTaskActivityKey(task: Pick<RuntimeActiveTask, 'threadId' | 'turnId'>): string {

@@ -2,7 +2,7 @@ import type { RuntimeEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
 import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
 import { RuntimeStorageInUseError, SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
@@ -17,6 +17,27 @@ afterEach(async () => {
 });
 
 describe('sqlite thread store', () => {
+  it('projects cached turn activity without cloning message history', async () => {
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await store.recover();
+    const thread = await store.createThread({ title: 'Active thread' });
+    const clone = vi.spyOn(globalThis, 'structuredClone');
+
+    try {
+      await expect(store.getTurnActivity(thread.id, 'turn_active')).resolves.toEqual({
+        queuedInputCount: 0,
+        startedAt: null,
+        taskKind: 'regular',
+        updatedAt: thread.updatedAt,
+      });
+      expect(clone).not.toHaveBeenCalled();
+    } finally {
+      clone.mockRestore();
+      await store.close();
+    }
+  });
+
   it('persists events, snapshots, summaries, and message mutations across reopen', async () => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

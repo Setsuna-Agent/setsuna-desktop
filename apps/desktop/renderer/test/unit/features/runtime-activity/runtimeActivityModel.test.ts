@@ -3,7 +3,6 @@ import { translate } from '../../../../src/shared/i18n/I18nProvider.js';
 import {
   formatRuntimeActivityDuration,
   resolveRuntimeActivityLoadView,
-  runtimeRunningTaskCount,
   runtimeServiceCanOpenThread,
   singleLineActivityCommand,
 } from '../../../../src/features/runtime-activity/runtimeActivityModel.js';
@@ -13,15 +12,6 @@ describe('runtime activity model', () => {
     expect(resolveRuntimeActivityLoadView({ error: null, hasSnapshot: false, loading: true })).toBe('loading');
     expect(resolveRuntimeActivityLoadView({ error: 'offline', hasSnapshot: false, loading: false })).toBe('error');
     expect(resolveRuntimeActivityLoadView({ error: 'stale', hasSnapshot: true, loading: false })).toBe('ready');
-  });
-
-  it('counts each active conversation once', () => {
-    expect(runtimeRunningTaskCount([
-      { id: 'thread_1', activeTurnId: 'turn_1' },
-      { id: 'thread_1', activeTurnId: 'turn_1' },
-      { id: 'thread_2', activeTurnId: null },
-      { id: 'thread_3', activeTurnId: 'turn_3' },
-    ])).toBe(2);
   });
 
   it('formats bounded human-readable durations', () => {

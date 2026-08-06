@@ -7,6 +7,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import {
   normalizeThreadSnapshot,
+  projectRuntimeTurnActivity,
   toSummary,
 } from '../../../src/adapters/store/thread-store-state.js';
 
@@ -149,6 +150,36 @@ describe('thread summary Goal projection', () => {
     });
     expect(toSummary(thread).goal?.execution).toBeUndefined();
     expect(thread.goal.execution?.attachments).toHaveLength(1);
+  });
+});
+
+describe('runtime turn activity projection', () => {
+  it('returns only current-turn metadata without carrying message history', () => {
+    const thread = threadWithMetadata({});
+    thread.updatedAt = '2026-07-23T00:02:00.000Z';
+    thread.queuedTurnInputs = [
+      { id: 'queued_1', input: 'continue', createdAt: '2026-07-23T00:01:00.000Z' },
+    ];
+    thread.turns = [
+      { id: 'turn_old', items: [], startedAt: '2026-07-22T23:00:00.000Z' },
+      {
+        id: 'turn_active',
+        items: [],
+        startedAt: '2026-07-23T00:00:30.000Z',
+        taskKind: 'review',
+      },
+    ];
+
+    const projection = projectRuntimeTurnActivity(thread, 'turn_active');
+
+    expect(projection).toEqual({
+      queuedInputCount: 1,
+      startedAt: '2026-07-23T00:00:30.000Z',
+      taskKind: 'review',
+      updatedAt: '2026-07-23T00:02:00.000Z',
+    });
+    expect(projection).not.toHaveProperty('messages');
+    expect(projection).not.toHaveProperty('turns');
   });
 });
 

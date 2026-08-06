@@ -1,6 +1,5 @@
 export const runtimeActivityZhCN = {
   'topbar.openRuntimeActivity': '打开运行中心',
-  'topbar.openRuntimeActivityCount': '打开运行中心，{count} 个任务正在运行',
   'runtimeActivity.title': '运行中心',
   'runtimeActivity.description': '查看并管理所有对话中的运行任务与后台服务',
   'runtimeActivity.close': '关闭运行中心',
@@ -47,7 +46,6 @@ export const runtimeActivityZhCN = {
 
 export const runtimeActivityEnUS = {
   'topbar.openRuntimeActivity': 'Open activity center',
-  'topbar.openRuntimeActivityCount': 'Open activity center, {count} running tasks',
   'runtimeActivity.title': 'Activity center',
   'runtimeActivity.description': 'View and manage running tasks and background services across chats',
   'runtimeActivity.close': 'Close activity center',
