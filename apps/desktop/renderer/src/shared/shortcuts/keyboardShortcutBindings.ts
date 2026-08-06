@@ -134,6 +134,22 @@ export function formatKeyboardShortcutBinding(
   return [...modifiers.map((modifier) => labels[modifier]), codeLabel].join('+');
 }
 
+export function formatKeyboardShortcutBindingParts(
+  binding: string,
+  platform: KeyboardShortcutPlatform,
+): string[] {
+  const normalized = normalizeKeyboardShortcutBinding(binding);
+  if (!normalized) return [binding];
+  const modifiers = bindingModifiers(normalized);
+  const codeLabel = displayKeyLabel(bindingCode(normalized));
+  if (platform === 'darwin') {
+    const labels = { Control: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘' };
+    return [...modifiers.map((modifier) => labels[modifier]), codeLabel];
+  }
+  const labels = { Control: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win' };
+  return [...modifiers.map((modifier) => labels[modifier]), codeLabel];
+}
+
 export function bindingCode(binding: string): string {
   return binding.split('+').at(-1) ?? '';
 }

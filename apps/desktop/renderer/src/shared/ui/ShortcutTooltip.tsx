@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   formatKeyboardShortcutBinding,
+  formatKeyboardShortcutBindingParts,
 } from '../shortcuts/keyboardShortcutBindings.js';
 import type { KeyboardShortcutCommandId } from '../shortcuts/keyboardShortcutCommands.js';
 import { useKeyboardShortcuts } from '../shortcuts/KeyboardShortcutsProvider.js';
@@ -40,9 +41,18 @@ export function ShortcutTooltipContent({
         <span className="sd-shortcut-tooltip-bindings" aria-label={bindings
           .map((binding) => formatKeyboardShortcutBinding(binding, platform, true))
           .join(', ')}>
-          {bindings.map((binding) => (
-            <kbd key={binding}>{formatKeyboardShortcutBinding(binding, platform)}</kbd>
-          ))}
+          {bindings.map((binding) => {
+            const label = formatKeyboardShortcutBinding(binding, platform);
+            return (
+              <kbd className={platform === 'darwin' ? 'is-mac' : undefined} key={binding}>
+                {platform === 'darwin'
+                  ? formatKeyboardShortcutBindingParts(binding, platform).map((part, index) => (
+                    <span key={`${part}:${index}`}>{part}</span>
+                  ))
+                  : label}
+              </kbd>
+            );
+          })}
         </span>
       ) : null}
     </span>
