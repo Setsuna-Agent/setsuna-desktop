@@ -11,6 +11,7 @@ import {
   createReviewPanel,
   createSideChatPanel,
   createWorkspaceOverviewPanel,
+  findDesktopPanelLocationByType,
   removePanelFromSlotState,
   reorderPanelInSlotState,
   updatePanelInSlotState,
@@ -72,6 +73,26 @@ describe('desktop workspace panel model', () => {
 
     expect(withDebug.active).toBe(debugPanel.id);
     expect(withDebug.panels).toEqual([debugPanel]);
+  });
+
+  it('finds a singleton panel in the bottom slot before opening a duplicate', () => {
+    const reviewPanel = createReviewPanel();
+
+    expect(findDesktopPanelLocationByType(
+      { active: null, panels: [] },
+      { active: reviewPanel.id, panels: [reviewPanel] },
+      'review',
+    )).toEqual({ panelId: reviewPanel.id, slot: 'bottom' });
+  });
+
+  it('prefers the side slot when legacy state contains duplicate singleton panels', () => {
+    const reviewPanel = createReviewPanel();
+
+    expect(findDesktopPanelLocationByType(
+      { active: reviewPanel.id, panels: [reviewPanel] },
+      { active: reviewPanel.id, panels: [reviewPanel] },
+      'review',
+    )).toEqual({ panelId: reviewPanel.id, slot: 'side' });
   });
 
   it('falls back to the default browser URL for non-string click payloads', () => {

@@ -3,6 +3,7 @@ import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeA
 import { WorkspaceAppLauncher } from '../../features/workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
+import { useAppKeyboardShortcuts, type AppKeyboardShortcutHandlers } from '../controller/useAppKeyboardShortcuts.js';
 import { AppOverlays } from './AppOverlays.js';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
@@ -62,6 +63,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
+  const [focusComposerRequest, setFocusComposerRequest] = useState(0);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
@@ -81,6 +83,22 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setSelectedCapabilitiesPluginId(pluginId);
     setActiveView('capabilities');
   }, [setActiveView]);
+  const openFilesPanel = useCallback(() => {
+    if (!activeWorkspace?.path) return;
+    workspacePanels.closeWorkspaceMenus();
+    projectWorkspace.setFilePreview(null);
+    if (!workspacePanels.activateDesktopPanelByType('files')) {
+      workspacePanels.openDesktopPanel('side', 'files');
+    }
+  }, [activeWorkspace?.path, projectWorkspace, workspacePanels]);
+  const openReviewPanel = useCallback(() => {
+    if (!activeWorkspace) return;
+    workspacePanels.closeWorkspaceMenus();
+    if (!workspacePanels.activateDesktopPanelByType('review')) {
+      workspacePanels.openDesktopPanel('side', 'review');
+    }
+    void workspacePanels.loadReviewState();
+  }, [activeWorkspace, workspacePanels]);
   const windowMenuActions = useMemo(
     () => ({
       onNewChat: () => {
@@ -92,6 +110,86 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     }),
     [navigation, openCapabilities, resetComposer, setActiveView],
   );
+  const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
+    'app.newChat': {
+      execute: windowMenuActions.onNewChat,
+    },
+    'app.searchChats': {
+      execute: () => {
+        setActiveView('chat');
+        navigation.setSidebarSearchOpen(true);
+      },
+    },
+    'app.addProject': {
+      execute: () => void navigation.selectProjectDirectory(),
+    },
+    'app.openSettings': {
+      execute: windowMenuActions.onOpenSettings,
+    },
+    'app.openCapabilities': {
+      execute: openCapabilities,
+    },
+    'app.toggleRuntimeActivity': {
+      allowInModal: runtimeActivityOpen,
+      execute: () => setRuntimeActivityOpen((open) => !open),
+    },
+    'layout.toggleSidebar': {
+      enabled: activeView !== 'settings',
+      execute: handleToggleSidebar,
+    },
+    'layout.toggleWorkspace': {
+      enabled: activeView === 'chat',
+      execute: workspacePanels.toggleSidePanel,
+    },
+    'layout.toggleTerminal': {
+      allowInTerminal: true,
+      enabled: activeView === 'chat',
+      execute: workspacePanels.toggleBottomTerminal,
+    },
+    'chat.focusComposer': {
+      allowInTerminal: true,
+      execute: () => {
+        setActiveView('chat');
+        setFocusComposerRequest((request) => request + 1);
+      },
+    },
+    'chat.cancelTurn': {
+      allowInModal: true,
+      allowInTerminal: true,
+      enabled: Boolean(runtime.activeTurnId),
+      execute: () => void chatActions.cancelActiveTurn(),
+    },
+    'chat.toggleOverview': {
+      enabled: activeView === 'chat' && Boolean(runtime.currentThread),
+      execute: handleToggleConversationOverview,
+    },
+    'workspace.openFiles': {
+      enabled: activeView === 'chat' && Boolean(activeWorkspace?.path),
+      execute: openFilesPanel,
+    },
+    'workspace.openReview': {
+      enabled: activeView === 'chat' && Boolean(activeWorkspace),
+      execute: openReviewPanel,
+    },
+  }), [
+    activeView,
+    activeWorkspace,
+    chatActions,
+    handleToggleConversationOverview,
+    handleToggleSidebar,
+    navigation,
+    openCapabilities,
+    openFilesPanel,
+    openReviewPanel,
+    runtime.activeTurnId,
+    runtime.currentThread,
+    runtimeActivityOpen,
+    setActiveView,
+    windowMenuActions,
+    workspacePanels.toggleBottomTerminal,
+    workspacePanels.toggleSidePanel,
+  ]);
+  useAppKeyboardShortcuts(shortcutHandlers);
 
   return (
     <ShellFrame
@@ -169,6 +267,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
         chatActions={chatActions}
         composerKey={composerKey}
+        focusComposerRequest={focusComposerRequest}
         conversationOverviewShowRequest={conversationOverviewShowRequest}
         conversationOverviewVisibility={conversationOverviewVisibility}
         draft={draft}

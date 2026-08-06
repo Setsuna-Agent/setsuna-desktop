@@ -113,6 +113,7 @@ export function ChatWorkspace({
   currentThread,
   draft,
   focusComposerOnReveal = false,
+  focusComposerRequest = 0,
   imageAttachmentRequest,
   skillSelectionRequest,
   workspaceMentionRequest,
@@ -163,6 +164,7 @@ export function ChatWorkspace({
   currentThread: RuntimeThread | null;
   draft: string;
   focusComposerOnReveal?: boolean;
+  focusComposerRequest?: number;
   imageAttachmentRequest?: ChatImageAttachmentRequest | null;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
@@ -388,6 +390,7 @@ export function ChatWorkspace({
       currentThread={currentThread}
       draft={draft}
       focusOnReveal={focusComposerOnReveal}
+      focusRequest={focusComposerRequest}
       imageAttachmentRequest={imageAttachmentRequest}
       skillSelectionRequest={skillSelectionRequest?.composerKey === composerKey ? skillSelectionRequest : null}
       workspaceMentionRequest={workspaceMentionRequest}

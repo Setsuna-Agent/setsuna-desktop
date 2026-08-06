@@ -21,6 +21,8 @@ import {
 } from 'react';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
+import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import {
   useWorkspaceCodeViewSurface,
@@ -506,7 +508,15 @@ export function WorkspaceOverviewPanel({
       ? 'workspace.overview.reviewFiles.one'
       : 'workspace.overview.reviewFiles.many', { count: latestReviewSummary.files.length })
     : t('workspace.overview.reviewDescription');
-  const actions = [
+  const actions: Array<{
+    key: string;
+    label: string;
+    meta: string;
+    icon: JSX.Element;
+    disabled: boolean;
+    onClick: () => void;
+    shortcutCommandId?: KeyboardShortcutCommandId;
+  }> = [
     {
       key: 'review',
       label: t('workspace.overview.review'),
@@ -514,6 +524,7 @@ export function WorkspaceOverviewPanel({
       icon: <FileDiff size={15} />,
       disabled: !activeProject || !onOpenReviewPanel,
       onClick: () => onOpenReviewPanel?.(),
+      shortcutCommandId: 'workspace.openReview',
     },
     {
       key: 'files',
@@ -522,6 +533,7 @@ export function WorkspaceOverviewPanel({
       icon: <FolderOpen size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenFilesPanel,
+      shortcutCommandId: 'workspace.openFiles',
     },
     {
       key: 'terminal',
@@ -562,27 +574,39 @@ export function WorkspaceOverviewPanel({
   return (
     <section className="desktop-workspace-overview" aria-label={t('workspace.overview.label')}>
       <div className="desktop-workspace-overview__actions">
-        {actions.map((action) => (
-          <button
-            className="desktop-workspace-overview__action"
-            data-workspace-overview-action={action.key}
-            disabled={action.disabled}
-            key={action.key}
-            type="button"
-            onClick={action.onClick}
-          >
-            <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
-            <span className="desktop-workspace-overview__action-body">
-              <span>{action.label}</span>
-              <em>{action.meta}</em>
-            </span>
-            <ChevronRight
-              aria-hidden="true"
-              className="desktop-workspace-overview__action-arrow"
-              size={14}
-            />
-          </button>
-        ))}
+        {actions.map((action) => {
+          const actionButton = (
+            <button
+              className="desktop-workspace-overview__action"
+              data-workspace-overview-action={action.key}
+              disabled={action.disabled}
+              key={action.key}
+              type="button"
+              onClick={action.onClick}
+            >
+              <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
+              <span className="desktop-workspace-overview__action-body">
+                <span>{action.label}</span>
+                <em>{action.meta}</em>
+              </span>
+              <ChevronRight
+                aria-hidden="true"
+                className="desktop-workspace-overview__action-arrow"
+                size={14}
+              />
+            </button>
+          );
+          return action.shortcutCommandId ? (
+            <ShortcutTooltip
+              commandId={action.shortcutCommandId}
+              key={action.key}
+              label={action.label}
+              placement="bottom"
+            >
+              {actionButton}
+            </ShortcutTooltip>
+          ) : actionButton;
+        })}
       </div>
     </section>
   );

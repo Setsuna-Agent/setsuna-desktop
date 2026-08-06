@@ -20,6 +20,7 @@ import {
   type Ref,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 import { SidebarThreadList } from './SidebarThreadList.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
@@ -115,18 +116,24 @@ export function AgentSidebar({
   return (
     <aside className="app-sidebar desktop-agent-sidebar" aria-hidden={collapsed || undefined}>
       <div className="desktop-agent-sidebar__top-actions">
-        <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
-          <Plus className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">{t('app.newChat')}</span>
-        </button>
-        <button ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
-          <Search className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
-        </button>
-        <button className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
-          <Blocks className="desktop-agent-command__icon" size={15} />
-          <span className="desktop-agent-command__label">{t('sidebar.plugins')}</span>
-        </button>
+        <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')} placement="bottom">
+          <button className="desktop-agent-command" type="button" onClick={onCreateCurrentThread}>
+            <Plus className="desktop-agent-command__icon" size={15} />
+            <span className="desktop-agent-command__label">{t('app.newChat')}</span>
+          </button>
+        </ShortcutTooltip>
+        <ShortcutTooltip commandId="app.searchChats" label={t('sidebar.search')} placement="bottom">
+          <button ref={searchTriggerRef} className={`desktop-agent-command ${searchOpen ? 'is-active' : ''}`} type="button" onClick={onToggleSearch}>
+            <Search className="desktop-agent-command__icon" size={15} />
+            <span className="desktop-agent-command__label">{t('sidebar.search')}</span>
+          </button>
+        </ShortcutTooltip>
+        <ShortcutTooltip commandId="app.openCapabilities" label={t('sidebar.plugins')} placement="bottom">
+          <button className={`desktop-agent-command ${activeView === 'capabilities' ? 'is-active' : ''}`} type="button" onClick={onOpenCapabilities}>
+            <Blocks className="desktop-agent-command__icon" size={15} />
+            <span className="desktop-agent-command__label">{t('sidebar.plugins')}</span>
+          </button>
+        </ShortcutTooltip>
       </div>
       <div className="desktop-agent-sidebar__body">
         <ProjectSection
@@ -252,16 +259,17 @@ function ProjectSection({
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${projectsCollapsed ? 'is-collapsed' : ''}`} size={13} />
         </button>
         <div className="desktop-agent-sidebar__section-actions">
-          <button
-            className={`agent-sidebar-icon-button ${selectingProjectDirectory ? 'is-active' : ''}`}
-            type="button"
-            aria-label={t('sidebar.chooseProject')}
-            disabled={selectingProjectDirectory}
-            title={t('sidebar.chooseProject')}
-            onClick={onSelectDirectory}
-          >
-            {selectingProjectDirectory ? <RefreshCw className="is-spinning" size={14} /> : <FolderPlus size={14} />}
-          </button>
+          <ShortcutTooltip commandId="app.addProject" label={t('sidebar.chooseProject')}>
+            <button
+              className={`agent-sidebar-icon-button ${selectingProjectDirectory ? 'is-active' : ''}`}
+              type="button"
+              aria-label={t('sidebar.chooseProject')}
+              disabled={selectingProjectDirectory}
+              onClick={onSelectDirectory}
+            >
+              {selectingProjectDirectory ? <RefreshCw className="is-spinning" size={14} /> : <FolderPlus size={14} />}
+            </button>
+          </ShortcutTooltip>
         </div>
       </div>
       {!projectsCollapsed ? (

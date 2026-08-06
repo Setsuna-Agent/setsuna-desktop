@@ -20,6 +20,7 @@ import {
   createReviewPanel,
   createSideChatPanel as createSideChatPanelTab,
   createWorkspaceOverviewPanel,
+  findDesktopPanelLocationByType,
   removePanelFromSlotState,
   reorderPanelInSlotState,
   slotHasPanelType,
@@ -376,6 +377,13 @@ export function useDesktopWorkspacePanels({
     setBottomPanelSlot(updater);
   }, [setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
 
+  const activateDesktopPanelByType = useCallback((type: DesktopPanelType) => {
+    const location = findDesktopPanelLocationByType(sidePanelSlot, bottomPanelSlot, type);
+    if (!location) return false;
+    activateDesktopPanel(location.slot, location.panelId);
+    return true;
+  }, [activateDesktopPanel, bottomPanelSlot, sidePanelSlot]);
+
   const updateBrowserPanel = useCallback((
     identity: ChatComposerTargetIdentity,
     panelId: string,
@@ -551,6 +559,7 @@ export function useDesktopWorkspacePanels({
   return useMemo(
     () => ({
       activateDesktopPanel,
+      activateDesktopPanelByType,
       bottomActivePanel,
       bottomPanelSlot,
       bottomPanelVisible,
@@ -594,6 +603,7 @@ export function useDesktopWorkspacePanels({
     }),
     [
       activateDesktopPanel,
+      activateDesktopPanelByType,
       bottomActivePanel,
       bottomPanelSlot,
       bottomPanelVisible,

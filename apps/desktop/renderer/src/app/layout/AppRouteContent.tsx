@@ -34,6 +34,7 @@ export function AppRouteContent({
   conversationOverviewShowRequest,
   conversationOverviewVisibility,
   draft,
+  focusComposerRequest,
   projectWorkspace,
   runtime,
   selectedCapabilitiesPluginId,
@@ -68,6 +69,7 @@ export function AppRouteContent({
   conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   draft: string;
+  focusComposerRequest: number;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   selectedCapabilitiesPluginId: string | null;
@@ -234,6 +236,7 @@ export function AppRouteContent({
       browserPanelInstances={workspacePanels.browserPanelInstances}
       canClearContext={Boolean(runtime.currentThread?.messages.length)}
       composerKey={composerKey}
+      focusComposerRequest={focusComposerRequest}
       config={runtime.config}
       conversationOverviewShowRequest={conversationOverviewShowRequest}
       conversationOverviewVisibility={conversationOverviewVisibility}

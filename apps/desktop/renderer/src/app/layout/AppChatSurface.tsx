@@ -101,6 +101,7 @@ export function AppChatSurface({
   contextCompacting,
   currentThread,
   draft,
+  focusComposerRequest,
   fileDraft,
   filePreview,
   plugins,
@@ -191,6 +192,7 @@ export function AppChatSurface({
   contextCompacting: boolean;
   currentThread: RuntimeThread | null;
   draft: string;
+  focusComposerRequest: number;
   fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   plugins: RuntimePluginSummary[];
@@ -326,6 +328,7 @@ export function AppChatSurface({
             config={config}
             currentThread={currentThread}
             draft={draft}
+            focusComposerRequest={focusComposerRequest}
             imageAttachmentRequest={imageAttachmentRequest}
             plugins={plugins}
             reviewError={reviewError}

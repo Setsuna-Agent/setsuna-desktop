@@ -50,6 +50,8 @@ const runtime: DesktopRuntimeBridge = {
 const desktop: SetsunaDesktopBridge['desktop'] = {
   platform: process.platform,
   setInterfaceLanguage: (locale) => ipcRenderer.invoke('desktop:set-interface-language', locale),
+  setKeyboardShortcutRecording: (recording) =>
+    ipcRenderer.invoke('desktop:set-keyboard-shortcut-recording', recording),
   selectDirectory: (options) => ipcRenderer.invoke('desktop:select-directory', options ?? {}),
   getUserProfile: () => ipcRenderer.invoke('desktop:get-user-profile'),
   copyImageToClipboard: (input) => ipcRenderer.invoke('desktop:copy-image-to-clipboard', input),

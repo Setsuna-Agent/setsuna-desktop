@@ -24,6 +24,7 @@ type DesktopIpcOptions = {
 export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLanguageChange, userDataPath }: DesktopIpcOptions): void {
   const channels = [
     'desktop:set-interface-language',
+    'desktop:set-keyboard-shortcut-recording',
     'desktop:select-directory',
     'desktop:get-user-profile',
     'desktop:open-external',
@@ -44,6 +45,13 @@ export function registerDesktopIpc({ mainWindow, nativeBridge, onInterfaceLangua
     const locale = normalizeNativeInterfaceLanguage(value);
     if (!locale) return false;
     onInterfaceLanguageChange(locale);
+    return true;
+  });
+  ipcMain.handle('desktop:set-keyboard-shortcut-recording', (event, value) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    // Native application-menu accelerators (for example Command+Q) must not win
+    // while the renderer is inspecting a candidate shortcut.
+    mainWindow.webContents.setIgnoreMenuShortcuts(Boolean(value));
     return true;
   });
   ipcMain.handle('desktop:select-directory', async (event, input) => {

@@ -190,6 +190,7 @@ export type SetsunaDesktopBridge = {
   desktop: {
     platform: string;
     setInterfaceLanguage(locale: RuntimeInterfaceLanguage): Promise<boolean>;
+    setKeyboardShortcutRecording(recording: boolean): Promise<boolean>;
     selectDirectory(options?: { title?: string }): Promise<string | null>;
     getUserProfile(): Promise<DesktopUserProfile>;
     copyImageToClipboard(input: DesktopImageInput): Promise<DesktopImageActionResult>;

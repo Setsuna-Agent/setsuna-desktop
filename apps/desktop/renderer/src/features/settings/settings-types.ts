@@ -2,6 +2,7 @@ import type { RuntimeConfigInput } from '@setsuna-desktop/contracts';
 
 export type SettingsSectionId =
   | 'general'
+  | 'shortcuts'
   | 'personalization'
   | 'localLlm'
   | 'taskModels'

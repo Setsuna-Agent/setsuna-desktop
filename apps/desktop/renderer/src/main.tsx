@@ -15,6 +15,7 @@ import { initializeAppearancePreference } from './shared/preferences/useAppearan
 import { initializeCodeAppearancePreference } from './shared/preferences/useCodeAppearancePreferences.js';
 import { initializeSidebarBackgroundPreference } from './shared/preferences/useSidebarBackgroundPreference.js';
 import { initializeThemePreference } from './shared/preferences/useThemeTransition.js';
+import { KeyboardShortcutsProvider } from './shared/shortcuts/KeyboardShortcutsProvider.js';
 
 // Shared defaults must load before feature styles so scoped components can override them.
 import './shared/styles/tokens.css';
@@ -47,9 +48,11 @@ initializeSidebarBackgroundPreference();
 createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <I18nProvider>
-      <CodeAppearanceProvider>
-        <App />
-      </CodeAppearanceProvider>
+      <KeyboardShortcutsProvider>
+        <CodeAppearanceProvider>
+          <App />
+        </CodeAppearanceProvider>
+      </KeyboardShortcutsProvider>
     </I18nProvider>
   </React.StrictMode>
 );

@@ -1,0 +1,291 @@
+.settings-shortcuts {
+  gap: 22px;
+}
+
+.settings-shortcuts__toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.settings-shortcuts__search {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+}
+
+.settings-shortcuts__search:focus-within {
+  border-color: var(--app-primary);
+  box-shadow: var(--app-focus-ring);
+}
+
+.settings-shortcuts__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--app-text);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+}
+
+.settings-shortcuts__reset-all.sd-button {
+  height: 34px;
+  white-space: nowrap;
+}
+
+.settings-shortcuts__group {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.settings-shortcuts__group h2 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.settings-shortcuts__list {
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.settings-shortcuts__row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, auto);
+  align-items: center;
+  gap: 8px 20px;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.settings-shortcuts__row + .settings-shortcuts__row {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.settings-shortcuts__copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-shortcuts__copy strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.settings-shortcuts__copy small,
+.settings-shortcuts__capture-message {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-shortcuts__bindings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-shortcuts__values {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-shortcuts__actions {
+  display: grid;
+  grid-template-columns: 30px 30px;
+  gap: 5px;
+  width: 65px;
+}
+
+.settings-shortcuts__values em {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+}
+
+.settings-shortcuts__binding {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 30px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface-muted);
+  overflow: hidden;
+}
+
+.settings-shortcuts__binding--recording {
+  position: relative;
+}
+
+.settings-shortcuts__binding-key,
+.settings-shortcuts__binding-remove,
+.settings-shortcuts__add,
+.settings-shortcuts__reset,
+.settings-shortcuts__recorder {
+  border: 0;
+  color: var(--app-text-secondary);
+  background: transparent;
+  font: inherit;
+}
+
+.settings-shortcuts__binding-key:hover,
+.settings-shortcuts__binding-key:focus-visible,
+.settings-shortcuts__binding-remove:hover,
+.settings-shortcuts__binding-remove:focus-visible,
+.settings-shortcuts__add:not(:disabled):hover,
+.settings-shortcuts__add:not(:disabled):focus-visible,
+.settings-shortcuts__reset:not(:disabled):hover,
+.settings-shortcuts__reset:not(:disabled):focus-visible {
+  outline: 0;
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.settings-shortcuts__binding-key,
+.settings-shortcuts__binding-key-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 0 10px;
+}
+
+.settings-shortcuts__binding-remove,
+.settings-shortcuts__binding-remove-placeholder {
+  display: inline-grid;
+  width: 28px;
+  place-items: center;
+  border-left: 1px solid var(--app-border);
+}
+
+.settings-shortcuts__binding-key-placeholder,
+.settings-shortcuts__binding-remove-placeholder {
+  visibility: hidden;
+}
+
+.settings-shortcuts__binding kbd {
+  color: var(--app-text);
+  font-family: var(--app-font-family);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.settings-shortcuts__add {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border-radius: 6px;
+}
+
+.settings-shortcuts__reset {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 6px;
+}
+
+.settings-shortcuts__add:disabled,
+.settings-shortcuts__reset:disabled {
+  opacity: 0.42;
+}
+
+.settings-shortcuts__recorder {
+  height: 30px;
+  border: 1px solid var(--app-primary);
+  border-radius: 6px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 7%, var(--app-surface));
+  box-shadow: var(--app-focus-ring);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.settings-shortcuts__recorder--binding {
+  position: absolute;
+  inset: -1px;
+  width: calc(100% + 2px);
+  min-width: 0;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-shortcuts__recorder--icon {
+  display: inline-grid;
+  width: 30px;
+  min-width: 30px;
+  padding: 0;
+  place-items: center;
+}
+
+.settings-shortcuts__capture-message {
+  grid-column: 1 / -1;
+  text-align: right;
+}
+
+.settings-shortcuts__capture-message.is-error {
+  color: var(--app-danger);
+}
+
+.settings-shortcuts__empty {
+  padding: 36px 18px;
+  border: 1px dashed var(--app-border);
+  border-radius: 9px;
+  color: var(--app-text-muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .settings-shortcuts__toolbar,
+  .settings-shortcuts__row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-shortcuts__reset-all.sd-button {
+    justify-self: start;
+  }
+
+  .settings-shortcuts__bindings {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-shortcuts__values {
+    justify-content: flex-start;
+  }
+
+  .settings-shortcuts__capture-message {
+    text-align: left;
+  }
+}

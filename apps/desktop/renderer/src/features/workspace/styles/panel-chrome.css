@@ -271,6 +271,10 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
+.desktop-panel-launcher-menu--native > .sd-shortcut-tooltip-target {
+  width: 100%;
+}
+
 .desktop-panel-chrome .chat-file-review-panel__title--sortable {
   cursor: grab;
   touch-action: none;

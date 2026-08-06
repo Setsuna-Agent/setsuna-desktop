@@ -38,6 +38,7 @@ vi.mock('antd', () => ({
     <button type="button" {...props}>{children}</button>
   ),
   Dropdown: ({ children }: { children?: React.ReactNode }) => children,
+  Tooltip: ({ children }: { children?: React.ReactNode }) => children,
 }));
 
 vi.mock('../../../../src/shared/i18n/I18nProvider.js', () => ({

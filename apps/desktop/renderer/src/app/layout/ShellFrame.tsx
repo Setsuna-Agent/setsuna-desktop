@@ -18,6 +18,7 @@ import {
 import { focusMenuItem, menuFocusIntent } from '../../shared/lib/menuFocus.js';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
+import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { appRouteTopbarSlotId } from '../../shared/ui/AppRouteTopbarPortal.js';
 
 type WindowMenuKey = 'file' | 'edit' | 'view' | 'help';
@@ -170,19 +171,27 @@ function TitlebarNavigation({
   return (
     <div className="app-topbar__nav">
       {showSidebarToggle && onToggleSidebar ? (
-        <IconButton
+        <ShortcutTooltip
+          commandId="layout.toggleSidebar"
           label={sidebarCollapsed ? t('shell.sidebar.expand') : t('shell.sidebar.collapse')}
-          className="app-shell-icon-control"
-          onClick={onToggleSidebar}
         >
-          <PanelLeft size={16} />
-        </IconButton>
+          <IconButton
+            label={sidebarCollapsed ? t('shell.sidebar.expand') : t('shell.sidebar.collapse')}
+            title=""
+            className="app-shell-icon-control"
+            onClick={onToggleSidebar}
+          >
+            <PanelLeft size={16} />
+          </IconButton>
+        </ShortcutTooltip>
       ) : null}
       {actions}
       {onNewChat ? (
-        <IconButton label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
-          <Plus size={15} />
-        </IconButton>
+        <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')}>
+          <IconButton title="" label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
+            <Plus size={15} />
+          </IconButton>
+        </ShortcutTooltip>
       ) : null}
     </div>
   );
