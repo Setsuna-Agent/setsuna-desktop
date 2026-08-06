@@ -78,11 +78,11 @@ describe('memory tool host', () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-test-')), systemClock, new RandomIdGenerator());
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
 
-    const disabled = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: false, dedicatedTools: true, disableOnExternalContext: true }));
+    const disabled = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: false, disableOnExternalContext: true }));
     await expect(disabled.listTools(context)).resolves.toEqual([]);
     await expect(disabled.systemPrompt()).resolves.toBeNull();
 
-    const readOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: true, generateMemories: false, dedicatedTools: true, disableOnExternalContext: true }));
+    const readOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: true, generateMemories: false, disableOnExternalContext: true }));
     await expect(readOnly.listTools(context)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'recall_memory' }),
     ]));
@@ -93,13 +93,9 @@ describe('memory tool host', () => {
       expect.objectContaining({ name: 'remember_memory' }),
     ]));
 
-    const writeOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: true, dedicatedTools: true, disableOnExternalContext: true }));
+    const writeOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: true, disableOnExternalContext: true }));
     await expect(writeOnly.listTools(context)).resolves.toEqual([expect.objectContaining({ name: 'remember_memory' })]);
     await expect(writeOnly.systemPrompt()).resolves.toContain('Use remember_memory only');
-
-    const dedicatedToolsOff = new MemoryToolHost(store, new StaticConfigStore({ useMemories: true, generateMemories: true, dedicatedTools: false, disableOnExternalContext: true }));
-    await expect(dedicatedToolsOff.listTools(context)).resolves.toEqual([]);
-    await expect(dedicatedToolsOff.systemPrompt()).resolves.toBeNull();
   });
 });
 

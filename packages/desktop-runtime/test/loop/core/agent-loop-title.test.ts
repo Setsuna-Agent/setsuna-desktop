@@ -258,7 +258,6 @@ class TitleConfigStore implements ConfigStore {
       memory: {
         useMemories: false,
         generateMemories: false,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: false,

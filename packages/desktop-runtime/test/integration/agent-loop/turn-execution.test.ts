@@ -570,7 +570,6 @@ function developerFeaturesConfig(): RuntimeConfigState {
     features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
     globalPrompt: '',
     memory: {
-      dedicatedTools: false,
       disableOnExternalContext: true,
       generateMemories: false,
       useMemories: false,

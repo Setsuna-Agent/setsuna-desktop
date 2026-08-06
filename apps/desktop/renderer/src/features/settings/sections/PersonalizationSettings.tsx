@@ -222,7 +222,6 @@ export function PersonalizationSettings({
           <MemorySettingToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
           <MemorySettingToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
           <MemorySettingToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
-          <MemorySettingToggle checked={config.memory.dedicatedTools} description={t('settings.personalization.memoryToolsDescription')} label={t('settings.personalization.memoryTools')} onChange={(checked) => void onSavePreferences({ memory: { dedicatedTools: checked } })} />
           <div className="chat-user-settings__row chat-user-settings__local-action-row">
             <span className="chat-user-settings__row-label">
               <Eye size={14} />

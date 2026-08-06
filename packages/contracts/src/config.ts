@@ -157,7 +157,6 @@ export function normalizePythonPackageIndexUrl(value: unknown): string | null {
 export type RuntimeMemorySettings = {
   useMemories: boolean;
   generateMemories: boolean;
-  dedicatedTools: boolean;
   disableOnExternalContext: boolean;
   /** @deprecated Use taskModels.memoryExtraction. */
   extractModel?: string;

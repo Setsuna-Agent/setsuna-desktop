@@ -67,7 +67,6 @@ function configWithContextWindow(contextWindowTokens: number): RuntimeConfigStat
     memory: {
       useMemories: true,
       generateMemories: true,
-      dedicatedTools: false,
       disableOnExternalContext: true,
     },
     memoryEnabled: true,

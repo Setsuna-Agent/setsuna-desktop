@@ -397,7 +397,6 @@ function developerRuntimeConfig(): RuntimeConfigState {
     memory: {
       useMemories: false,
       generateMemories: false,
-      dedicatedTools: false,
       disableOnExternalContext: true,
     },
     memoryEnabled: false,
