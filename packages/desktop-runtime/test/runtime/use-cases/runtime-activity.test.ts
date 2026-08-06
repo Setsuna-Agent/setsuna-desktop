@@ -1,13 +1,10 @@
 import type {
+  RuntimeApprovalRequest,
   RuntimeBackgroundShellProcess,
-  RuntimeThread,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  listRuntimeActivities,
-  runtimeActiveTaskState,
-} from '../../../src/runtime/use-cases/runtime-activity.js';
+import { listRuntimeActivities } from '../../../src/runtime/use-cases/runtime-activity.js';
 
 describe('runtime activity use case', () => {
   it('projects active turns and enriches persisted services with their owner', async () => {
@@ -15,22 +12,6 @@ describe('runtime activity use case', () => {
       threadSummary('thread_active', 'Build release', true, 'project_1'),
       threadSummary('thread_service', 'Dev server', false),
     ];
-    const activeThread: RuntimeThread = {
-      ...summaries[0],
-      activeTurnId: 'turn_active',
-      lastSeq: 2,
-      messages: [],
-      queuedTurnInputs: [
-        { id: 'queued_1', input: 'continue', createdAt: '2026-08-06T09:01:00.000Z' },
-      ],
-      turns: [{
-        id: 'turn_active',
-        items: [],
-        startedAt: '2026-08-06T09:00:00.000Z',
-        status: 'in_progress',
-        taskKind: 'goal',
-      }],
-    };
     const service: RuntimeBackgroundShellProcess = {
       id: 'process_1',
       threadId: 'thread_service',
@@ -50,8 +31,19 @@ describe('runtime activity use case', () => {
       backgroundShellProcesses: {
         listAllBackgroundShellProcesses: vi.fn(async () => [service]),
       },
+      approvalGate: {
+        listApprovals: vi.fn(async () => ({ approvals: [] })),
+      },
       threadStore: {
-        getThread: vi.fn(async () => activeThread),
+        getThread: vi.fn(() => {
+          throw new Error('activity polling must not load full threads');
+        }),
+        getTurnActivity: vi.fn(async () => ({
+          queuedInputCount: 1,
+          startedAt: '2026-08-06T09:00:00.000Z',
+          taskKind: 'goal' as const,
+          updatedAt: '2026-08-06T09:02:00.000Z',
+        })),
         listThreads: vi.fn(async () => summaries),
       },
     } as unknown as Parameters<typeof listRuntimeActivities>[0];
@@ -59,7 +51,8 @@ describe('runtime activity use case', () => {
     const result = await listRuntimeActivities(source);
 
     expect(source.threadStore.listThreads).toHaveBeenCalledWith({ includeArchived: true });
-    expect(source.threadStore.getThread).toHaveBeenCalledOnce();
+    expect(source.threadStore.getTurnActivity).toHaveBeenCalledWith('thread_active', 'turn_active');
+    expect(source.threadStore.getThread).not.toHaveBeenCalled();
     expect(result.tasks).toEqual([expect.objectContaining({
       archived: true,
       projectId: 'project_1',
@@ -79,19 +72,46 @@ describe('runtime activity use case', () => {
     expect(Date.parse(result.capturedAt)).not.toBeNaN();
   });
 
-  it('distinguishes approval gates from structured user input', () => {
-    const approvalThread = threadWithPendingRun({ approvalStatus: 'pending' });
-    const inputThread = threadWithPendingRun({
-      approvalStatus: 'pending',
-      userInput: {
-        message: 'Choose a target',
-        requestedSchema: { type: 'object', properties: {} },
+  it('derives waiting states from bounded pending approval records', async () => {
+    const summaries = [
+      threadSummary('thread_approval', 'Approval task', false),
+      threadSummary('thread_input', 'Input task', false),
+      threadSummary('thread_running', 'Running task', false),
+    ];
+    const approvals: RuntimeApprovalRequest[] = [
+      pendingApproval('approval_1', 'thread_approval', 'turn_approval'),
+      pendingApproval('approval_2', 'thread_input', 'turn_input'),
+      {
+        ...pendingApproval('approval_3', 'thread_input', 'turn_input'),
+        userInput: {
+          message: 'Choose a target',
+          requestedSchema: { type: 'object', properties: {} },
+        },
       },
-    });
+    ];
+    const source = {
+      agentLoop: {
+        activeTurnId: vi.fn((threadId: string) => `turn_${threadId.replace('thread_', '')}`),
+      },
+      approvalGate: {
+        listApprovals: vi.fn(async () => ({ approvals })),
+      },
+      backgroundShellProcesses: {
+        listAllBackgroundShellProcesses: vi.fn(async () => []),
+      },
+      threadStore: {
+        getTurnActivity: vi.fn(async () => null),
+        listThreads: vi.fn(async () => summaries),
+      },
+    } as unknown as Parameters<typeof listRuntimeActivities>[0];
 
-    expect(runtimeActiveTaskState(approvalThread, 'turn_1')).toBe('waiting_for_approval');
-    expect(runtimeActiveTaskState(inputThread, 'turn_1')).toBe('waiting_for_input');
-    expect(runtimeActiveTaskState(inputThread, 'turn_other')).toBe('running');
+    const result = await listRuntimeActivities(source);
+
+    expect(Object.fromEntries(result.tasks.map((task) => [task.threadId, task.state]))).toEqual({
+      thread_approval: 'waiting_for_approval',
+      thread_input: 'waiting_for_input',
+      thread_running: 'running',
+    });
   });
 });
 
@@ -113,25 +133,20 @@ function threadSummary(
   };
 }
 
-function threadWithPendingRun(
-  run: Pick<NonNullable<RuntimeThread['messages'][number]['toolRuns']>[number], 'approvalStatus' | 'userInput'>,
-): RuntimeThread {
+function pendingApproval(
+  id: string,
+  threadId: string,
+  turnId: string,
+): RuntimeApprovalRequest {
   return {
-    ...threadSummary('thread_1', 'Pending task', false),
-    activeTurnId: 'turn_1',
-    lastSeq: 1,
-    messages: [{
-      id: 'message_1',
-      role: 'assistant',
-      turnId: 'turn_1',
-      content: '',
-      createdAt: '2026-08-06T09:00:00.000Z',
-      toolRuns: [{
-        id: 'call_1',
-        name: 'request_user_input',
-        status: 'pending_approval',
-        ...run,
-      }],
-    }],
+    id,
+    threadId,
+    turnId,
+    toolCallId: `call_${id}`,
+    toolName: 'exec_command',
+    reason: 'Needs approval',
+    argumentsPreview: '{}',
+    status: 'pending',
+    createdAt: '2026-08-06T09:00:00.000Z',
   };
 }

@@ -8,6 +8,7 @@ import {
   cloneRuntimeThreadGoal,
   normalizeRuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeTurnActivityProjection } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 
 export const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
@@ -31,6 +32,27 @@ export function assertThreadSnapshot(thread: RuntimeThread, expectedThreadId: st
 
 export function cloneThread(thread: RuntimeThread): RuntimeThread {
   return structuredClone(thread);
+}
+
+/** Read only the fields needed by activity polling without cloning the full thread. */
+export function projectRuntimeTurnActivity(
+  thread: RuntimeThread,
+  turnId: string,
+): RuntimeTurnActivityProjection {
+  let activeTurn: NonNullable<RuntimeThread['turns']>[number] | undefined;
+  for (let index = (thread.turns?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const turn = thread.turns?.[index];
+    if (turn?.id === turnId) {
+      activeTurn = turn;
+      break;
+    }
+  }
+  return {
+    queuedInputCount: thread.queuedTurnInputs?.length ?? 0,
+    startedAt: activeTurn?.startedAt ?? null,
+    taskKind: activeTurn?.taskKind ?? 'regular',
+    updatedAt: thread.updatedAt,
+  };
 }
 
 export function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {

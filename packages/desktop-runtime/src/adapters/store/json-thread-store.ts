@@ -30,6 +30,7 @@ import {
   normalizeThreadSnapshot,
   normalizeThreadSummary,
   optionalSafeRuntimeId,
+  projectRuntimeTurnActivity,
   threadHasAncestor,
   toSummary,
 } from './thread-store-state.js';
@@ -106,6 +107,16 @@ export class JsonThreadStore implements ThreadStore {
     if (!recovered) return null;
     this.threadCache.set(safeThreadId, recovered);
     return cloneThread(recovered);
+  }
+
+  async getTurnActivity(threadId: string, turnId: string) {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    const cached = this.threadCache.get(safeThreadId);
+    if (cached) return projectRuntimeTurnActivity(cached, turnId);
+    const recovered = await this.loadAndRecoverThread(safeThreadId, true);
+    if (!recovered) return null;
+    this.threadCache.set(safeThreadId, recovered);
+    return projectRuntimeTurnActivity(recovered, turnId);
   }
 
   async listMessages(

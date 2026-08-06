@@ -84,7 +84,7 @@ Layout 只组合已经定义清楚的状态和 callback，不在 render 中发�
 `features/runtime-activity/` 实现全局运行中心：入口位于侧栏开关旁且不显示计数角标；打开时每两秒拉取一次
 `/v1/runtime-activities`，展示所有线程的 active turn 与持久后台服务，并复用
 thread-scoped cancel/terminate API。轮询、乐观移除和 latest-request guard 留在 feature
-hook；layout 只持有开关状态与顶栏入口。
+hook；layout 只持有开关状态与顶栏入口，不从可能过期的线程列表派生隐藏计数。
 
 ## Sidebar
 

@@ -45,6 +45,7 @@ import {
   normalizeThreadSnapshot,
   normalizeThreadSummary,
   optionalSafeRuntimeId,
+  projectRuntimeTurnActivity,
   threadHasAncestor,
   toSummary,
 } from './thread-store-state.js';
@@ -81,8 +82,7 @@ export class RuntimeStorageInUseError extends Error {
 }
 
 /**
- * SQLite-backed event store. Exact events remain the source of truth; old transient
- * deltas move to compressed archives while snapshots bound the hot replay path.
+ * Exact events remain the source of truth; transient deltas move to compressed archives while snapshots bound hot replay.
  * A fenced runtime lease prevents a second process from projecting or executing the same thread concurrently.
  */
 export class SqliteThreadStore implements ThreadStore {
@@ -201,26 +201,22 @@ export class SqliteThreadStore implements ThreadStore {
   }
 
   async getThread(threadId: string): Promise<RuntimeThread | null> {
-    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-    await this.ensureReady();
-    this.assertOwnership();
-    const cached = this.threadCache.get(safeThreadId);
-    if (cached) return cloneThread(cached);
-    const loaded = this.loadThread(safeThreadId);
-    return loaded ? cloneThread(loaded) : null;
+    const { thread } = await this.readThread(threadId);
+    return thread ? cloneThread(thread) : null;
+  }
+
+  async getTurnActivity(threadId: string, turnId: string) {
+    const { thread } = await this.readThread(threadId);
+    return thread ? projectRuntimeTurnActivity(thread, turnId) : null;
   }
 
   async listMessages(
     threadId: string,
     query: RuntimeMessagePageQuery = {},
   ): Promise<RuntimeMessagePage> {
-    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-    await this.ensureReady();
-    this.assertOwnership();
+    const { safeThreadId, thread } = await this.readThread(threadId);
     // Loading once also repairs a v1 database whose message index has not been backfilled yet.
-    if (!this.threadCache.get(safeThreadId) && !this.loadThread(safeThreadId)) {
-      throw new Error(`Thread not found: ${safeThreadId}`);
-    }
+    if (!thread) throw new Error(`Thread not found: ${safeThreadId}`);
     return listIndexedMessages(this.requireDatabase(), safeThreadId, query);
   }
 
@@ -228,10 +224,7 @@ export class SqliteThreadStore implements ThreadStore {
     threadId: string,
     query: RuntimeMessagePageQuery = {},
   ): Promise<RuntimeThread | null> {
-    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-    await this.ensureReady();
-    this.assertOwnership();
-    const thread = this.threadCache.get(safeThreadId) ?? this.loadThread(safeThreadId);
+    const { safeThreadId, thread } = await this.readThread(threadId);
     if (!thread) return null;
     const page = listIndexedMessages(this.requireDatabase(), safeThreadId, query);
     // Overwrite the full message array before cloning so REST pagination also bounds clone cost.
@@ -422,8 +415,7 @@ export class SqliteThreadStore implements ThreadStore {
 
   private async initialize(): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
-    // Vite 5 predates node:sqlite. Resolve it from Node itself so both Vitest and the bundled CJS
-    // runtime avoid treating the builtin as an npm package named "sqlite".
+    // Resolve node:sqlite from Node so Vitest and bundled CJS do not treat it as an npm package.
     const { DatabaseSync: SqliteDatabase } = loadNodeSqlite();
     const database = new SqliteDatabase(this.databasePath, {
       enableForeignKeyConstraints: true,
@@ -534,6 +526,14 @@ export class SqliteThreadStore implements ThreadStore {
     // checkpoint queue prevents compression work from delaying lifecycle publication.
     this.scheduleCheckpoint(threadId);
     return event;
+  }
+
+  private async readThread(threadId: string) {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    const thread = this.threadCache.get(safeThreadId) ?? this.loadThread(safeThreadId);
+    return { safeThreadId, thread };
   }
 
   private loadThread(threadId: string): RuntimeThread | null {

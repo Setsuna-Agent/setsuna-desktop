@@ -8,6 +8,7 @@ import type {
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
+  RuntimeTaskKind,
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
@@ -19,9 +20,18 @@ export type RuntimeEventReplay = {
   requiresResync: boolean;
 };
 
+/** Small live-turn projection used by frequent runtime activity reads. */
+export type RuntimeTurnActivityProjection = {
+  queuedInputCount: number;
+  startedAt: string | null;
+  taskKind: RuntimeTaskKind;
+  updatedAt: string;
+};
+
 export type ThreadStore = {
   listThreads(query?: ThreadQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
+  getTurnActivity(threadId: string, turnId: string): Promise<RuntimeTurnActivityProjection | null>;
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeThread | null>;
   listMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;

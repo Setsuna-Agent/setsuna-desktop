@@ -1,12 +1,30 @@
 import { appendFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('json thread store', () => {
+  it('projects cached turn activity without cloning message history', async () => {
+    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
+    const thread = await store.createThread({ title: 'Active thread' });
+    const clone = vi.spyOn(globalThis, 'structuredClone');
+
+    try {
+      await expect(store.getTurnActivity(thread.id, 'turn_active')).resolves.toEqual({
+        queuedInputCount: 0,
+        startedAt: null,
+        taskKind: 'regular',
+        updatedAt: thread.updatedAt,
+      });
+      expect(clone).not.toHaveBeenCalled();
+    } finally {
+      clone.mockRestore();
+    }
+  });
+
   it('rejects path-like thread ids at the storage boundary', async () => {
     const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-thread-store-test-')), systemClock, new RandomIdGenerator());
 

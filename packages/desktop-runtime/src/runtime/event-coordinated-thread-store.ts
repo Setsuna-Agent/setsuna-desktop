@@ -41,6 +41,10 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     return this.inner.getThread(threadId);
   }
 
+  getTurnActivity(threadId: string, turnId: string) {
+    return this.inner.getTurnActivity(threadId, turnId);
+  }
+
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery) {
     return this.inner.getThreadPage(threadId, query);
   }

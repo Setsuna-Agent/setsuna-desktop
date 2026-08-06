@@ -60,6 +60,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 - 明确 timeout/cancel/stream/cleanup。
 - 不泄漏具体 JSON path、SQLite row 或 SDK client。
 - Read/write 边界要能测试。
+- 高频聚合读取使用窄 projection；不得为了少量状态反复克隆完整 thread snapshot。
 - Optional capability 用明确 optional method/dependency，不靠捕获 `MODULE_NOT_FOUND`。
 
 ## Runtime factory
@@ -86,6 +87,7 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 
 - 把 event writer 与 generated image cleanup 等跨 store 副作用收敛。
 - 保持 AgentLoop 只依赖一个 thread facade。
+- 透传 active turn 的有界 activity projection，供运行中心轮询而不复制消息历史。
 - 删除/截断时协调相关 managed asset。
 
 它不是第二个持久化 store。
@@ -174,4 +176,3 @@ Runtime 不能 import Electron：
 - `test/adapters/<domain>/`。
 - `test/integration/adapters/`。
 - Core/loop tests 使用 support fake/harness。
-
