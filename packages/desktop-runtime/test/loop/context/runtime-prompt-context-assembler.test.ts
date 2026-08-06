@@ -210,7 +210,6 @@ function runtimeConfig(): RuntimeConfigState {
     memory: {
       useMemories: false,
       generateMemories: false,
-      dedicatedTools: false,
       disableOnExternalContext: false,
     },
     memoryEnabled: false,

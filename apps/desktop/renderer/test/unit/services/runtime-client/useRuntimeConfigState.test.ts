@@ -118,7 +118,6 @@ function runtimeConfig(providers: ProviderConfigState[]): RuntimeConfigState {
     memory: {
       useMemories: true,
       generateMemories: true,
-      dedicatedTools: true,
       disableOnExternalContext: true,
     },
     memoryEnabled: true,

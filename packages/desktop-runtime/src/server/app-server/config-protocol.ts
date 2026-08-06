@@ -459,7 +459,6 @@ function sweApplyDesktopSettings(input: RuntimeConfigInput, settings: Record<str
 function appServerMemoryConfig(memory: RuntimeMemorySettings): Record<string, unknown> {
   return {
     disable_on_external_context: memory.disableOnExternalContext,
-    dedicated_tools: memory.dedicatedTools,
     generate_memories: memory.generateMemories,
     use_memories: memory.useMemories,
     ...(memory.extractModel ? { extract_model: memory.extractModel } : {}),
@@ -477,7 +476,6 @@ function appServerMemorySettingsInput(value: unknown): Partial<RuntimeMemorySett
   const input = recordInput(value);
   return {
     ...optionalMemoryBoolean(input, ['disable_on_external_context', 'no_memories_if_mcp_or_web_search', 'disableOnExternalContext'], 'disableOnExternalContext'),
-    ...optionalMemoryBoolean(input, ['dedicated_tools', 'dedicatedTools'], 'dedicatedTools'),
     ...optionalMemoryBoolean(input, ['generate_memories', 'generateMemories'], 'generateMemories'),
     ...optionalMemoryBoolean(input, ['use_memories', 'useMemories'], 'useMemories'),
     ...optionalMemoryString(input, ['extract_model', 'extractModel'], 'extractModel'),
@@ -497,9 +495,6 @@ function appServerMemorySettingInput(key: string, value: unknown): Partial<Runti
     case 'no_memories_if_mcp_or_web_search':
     case 'disableOnExternalContext':
       return { disableOnExternalContext: requiredMemoryBoolean(value, key) };
-    case 'dedicated_tools':
-    case 'dedicatedTools':
-      return { dedicatedTools: requiredMemoryBoolean(value, key) };
     case 'generate_memories':
     case 'generateMemories':
       return { generateMemories: requiredMemoryBoolean(value, key) };

@@ -572,7 +572,6 @@ export class PersonalizationConfigStore implements ConfigStore {
       memory: {
         useMemories: false,
         generateMemories: false,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: false,
@@ -605,7 +604,6 @@ export class HooksConfigStore implements ConfigStore {
       memory: {
         useMemories: true,
         generateMemories: true,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: true,
@@ -658,7 +656,6 @@ export class ContextWindowConfigStore implements ConfigStore {
       memory: {
         useMemories: false,
         generateMemories: false,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: false,
@@ -723,7 +720,6 @@ export class StrictApprovalConfigStore implements ConfigStore {
       memory: {
         useMemories: true,
         generateMemories: true,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: true,
@@ -754,7 +750,6 @@ export class ReadOnlyConfigStore implements ConfigStore {
       memory: {
         useMemories: true,
         generateMemories: true,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: true,
@@ -789,7 +784,6 @@ export class FullApprovalConfigStore implements ConfigStore {
       memory: {
         useMemories: true,
         generateMemories: true,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: true,

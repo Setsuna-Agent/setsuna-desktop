@@ -507,7 +507,6 @@ function defaultMemorySettings(): RuntimeMemorySettings {
   return {
     useMemories: true,
     generateMemories: true,
-    dedicatedTools: false,
     disableOnExternalContext: false,
   };
 }
@@ -538,7 +537,6 @@ function normalizeMemorySettings(value: unknown, legacyMemoryEnabled?: unknown):
   return {
     useMemories: booleanValue(record.useMemories, fallback.useMemories),
     generateMemories: booleanValue(record.generateMemories, fallback.generateMemories),
-    dedicatedTools: booleanValue(record.dedicatedTools, fallback.dedicatedTools),
     disableOnExternalContext: booleanValue(record.disableOnExternalContext, fallback.disableOnExternalContext),
     extractModel: nonEmpty(record.extractModel),
     consolidationModel: nonEmpty(record.consolidationModel),

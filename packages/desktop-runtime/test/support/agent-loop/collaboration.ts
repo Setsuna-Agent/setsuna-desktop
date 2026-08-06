@@ -148,7 +148,6 @@ export class MultiAgentConfigStore implements ConfigStore {
       memory: {
         useMemories: false,
         generateMemories: false,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: false,

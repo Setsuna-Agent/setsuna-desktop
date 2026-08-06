@@ -60,7 +60,6 @@ export class ImageCapabilityConfigStore implements ConfigStore {
       memory: {
         useMemories: true,
         generateMemories: true,
-        dedicatedTools: false,
         disableOnExternalContext: true,
       },
       memoryEnabled: true,

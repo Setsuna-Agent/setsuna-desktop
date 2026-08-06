@@ -69,7 +69,6 @@ describe('agent loop memory policy', () => {
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: false,
           minRolloutIdleHours: 1,
           maxRolloutAgeDays: 10,
@@ -130,7 +129,6 @@ describe('agent loop memory policy', () => {
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: false,
           minRolloutIdleHours: 1,
           maxRolloutAgeDays: 10,
@@ -209,7 +207,6 @@ describe('agent loop memory policy', () => {
       const configStore = new MemorySettingsConfigStore({
         useMemories: false,
         generateMemories: false,
-        dedicatedTools: true,
         disableOnExternalContext: true,
       });
       const thread = await threadStore.createThread({ title: 'Disabled memory tools' });
@@ -245,7 +242,6 @@ describe('agent loop memory policy', () => {
       const configStore = new MemorySettingsConfigStore({
         useMemories: true,
         generateMemories: false,
-        dedicatedTools: true,
         disableOnExternalContext: true,
       });
       const loop = new AgentLoop({
@@ -286,7 +282,6 @@ describe('agent loop memory policy', () => {
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: true,
         }),
       });
@@ -327,7 +322,6 @@ describe('agent loop memory policy', () => {
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: true,
         }),
       });

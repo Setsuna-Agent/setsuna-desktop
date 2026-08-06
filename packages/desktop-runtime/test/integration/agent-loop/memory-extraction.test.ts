@@ -128,7 +128,6 @@ describe('agent loop memory extraction', () => {
         configStore: new TaskModelMemoryConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: false,
         }),
       });
@@ -239,7 +238,6 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
         configStore: new ActiveMemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: false,
         }),
       });
@@ -300,7 +298,6 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
         configStore: new MemorySettingsConfigStore({
           useMemories: true,
           generateMemories: true,
-          dedicatedTools: false,
           disableOnExternalContext: false,
           minRolloutIdleHours: 1,
           maxRolloutAgeDays: 10,

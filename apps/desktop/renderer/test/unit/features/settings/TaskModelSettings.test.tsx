@@ -94,7 +94,6 @@ const configFixture: RuntimeConfigState = {
   memory: {
     useMemories: true,
     generateMemories: true,
-    dedicatedTools: false,
     disableOnExternalContext: false,
   },
   memoryEnabled: true,

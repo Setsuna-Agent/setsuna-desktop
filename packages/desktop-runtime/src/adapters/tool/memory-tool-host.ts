@@ -15,7 +15,7 @@ export class MemoryToolHost implements ToolHost {
   async systemPrompt(context?: ToolExecutionContext): Promise<string | null> {
     const visibility = await this.toolVisibility();
     const lines: string[] = [];
-    if (visibility.canRead && visibility.dedicatedTools) {
+    if (visibility.canRead) {
       lines.push(
         'Memory tools read the local Setsuna memory store.',
         canUseSharedMemoryFiles(context)
@@ -26,7 +26,7 @@ export class MemoryToolHost implements ToolHost {
         'When the final answer relies on memory content, append a hidden <oai-mem-citation> block at the very end with exact source ranges and rollout_ids when available.',
       );
     }
-    if (visibility.canWrite && visibility.dedicatedTools) {
+    if (visibility.canWrite) {
       lines.push('Use remember_memory only when the user explicitly asks to save durable preferences, project rules, workflows, decisions, or facts.');
     }
     return lines.join('\n') || null;
@@ -35,7 +35,6 @@ export class MemoryToolHost implements ToolHost {
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     const visibility = await this.toolVisibility();
     const tools: RuntimeToolDefinition[] = [];
-    if (!visibility.dedicatedTools) return tools;
     if (visibility.canWrite) {
       tools.push({
         name: 'remember_memory',
@@ -121,14 +120,13 @@ export class MemoryToolHost implements ToolHost {
     return tools;
   }
 
-  private async toolVisibility(): Promise<{ canRead: boolean; canWrite: boolean; dedicatedTools: boolean }> {
-    if (!this.configStore) return { canRead: true, canWrite: true, dedicatedTools: true };
+  private async toolVisibility(): Promise<{ canRead: boolean; canWrite: boolean }> {
+    if (!this.configStore) return { canRead: true, canWrite: true };
     const config = await this.configStore.getConfig().catch(() => null);
-    if (!config) return { canRead: false, canWrite: false, dedicatedTools: false };
+    if (!config) return { canRead: false, canWrite: false };
     return {
       canRead: config.memory?.useMemories ?? config.memoryEnabled,
       canWrite: config.memory?.generateMemories ?? config.memoryEnabled,
-      dedicatedTools: config.memory?.dedicatedTools ?? false,
     };
   }
 
