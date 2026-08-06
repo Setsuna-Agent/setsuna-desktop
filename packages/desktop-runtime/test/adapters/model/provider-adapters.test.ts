@@ -7,6 +7,7 @@ import {
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
+import type { LogWarningsFunction } from 'ai';
 import { describe, expect, it } from 'vitest';
 import { AiSdkOpenAiCompatibleModelClient } from '../../../src/adapters/model/ai-sdk-model-client.js';
 import { AnthropicMessagesModelClient } from '../../../src/adapters/model/anthropic-messages-model-client.js';
@@ -1406,6 +1407,80 @@ describe('provider model adapters', () => {
     expect(JSON.stringify(expectBody(replayCaptured).input)).not.toContain('<think>');
   });
 
+  it('replays unencrypted Responses reasoning without AI SDK store warnings', async () => {
+    const captured: CapturedRequest = {};
+    const warnings: string[] = [];
+    const warningGlobal = globalThis as typeof globalThis & {
+      AI_SDK_LOG_WARNINGS?: LogWarningsFunction | false;
+    };
+    const previousWarningLogger = warningGlobal.AI_SDK_LOG_WARNINGS;
+    warningGlobal.AI_SDK_LOG_WARNINGS = ({ warnings: emittedWarnings }) => {
+      warnings.push(...emittedWarnings.map((warning) => (
+        warning.type === 'other' ? warning.message : JSON.stringify(warning)
+      )));
+    };
+
+    try {
+      await collect(
+        new OpenAiResponsesModelClient(
+          provider('openai-responses', 'https://api.openai.test/v1'),
+          fakeFetch(
+            'event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+            captured,
+          ),
+        ),
+        {
+          messages: [{
+            id: 'assistant-plain-reasoning',
+            role: 'assistant',
+            content: '<think>Checked context.</think>Visible answer',
+            createdAt: '2026-06-25T00:00:02.000Z',
+            providerMetadata: responsesMetadata([
+              {
+                type: 'reasoning',
+                id: 'reasoning_plain',
+                status: 'completed',
+                summary: [{ type: 'summary_text', text: 'Checked context.' }],
+              },
+              {
+                type: 'message',
+                id: 'message_plain',
+                role: 'assistant',
+                status: 'completed',
+                content: [{ type: 'output_text', text: 'Visible answer' }],
+              },
+            ]),
+          }, {
+            id: 'user-follow-up',
+            role: 'user',
+            content: 'Continue',
+            createdAt: '2026-06-25T00:00:03.000Z',
+          }],
+        },
+      );
+    } finally {
+      warningGlobal.AI_SDK_LOG_WARNINGS = previousWarningLogger;
+    }
+
+    expect(expectBody(captured).input).toEqual([
+      {
+        type: 'reasoning',
+        id: 'reasoning_plain',
+        status: 'completed',
+        summary: [{ type: 'summary_text', text: 'Checked context.' }],
+      },
+      {
+        type: 'message',
+        id: 'message_plain',
+        role: 'assistant',
+        status: 'completed',
+        content: [{ type: 'output_text', text: 'Visible answer' }],
+      },
+      { role: 'user', content: 'Continue' },
+    ]);
+    expect(warnings).toEqual([]);
+  });
+
   it('diagnoses native, semantic, and context-mismatched Responses replay', () => {
     const assistantBase: RuntimeMessage = {
       id: 'assistant-debug-replay',
@@ -2071,6 +2146,76 @@ describe('provider model adapters', () => {
           senderThreadId: 'thread_parent',
           newThreadId: 'thread_child',
         },
+      },
+    });
+  });
+
+  it('streams Responses reasoning after lifecycle events without waiting for the answer', async () => {
+    const staged = stagedSseFetch(
+      [
+        'event: response.created',
+        'data: {"type":"response.created","response":{"id":"resp_live_reasoning","status":"in_progress","model":"model-code"}}',
+        '',
+        'event: response.output_item.added',
+        'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"reasoning_live","type":"reasoning","status":"in_progress"}}',
+        '',
+        'event: response.reasoning_summary_text.delta',
+        'data: {"type":"response.reasoning_summary_text.delta","item_id":"reasoning_live","summary_index":0,"delta":"Inspecting the runtime chain."}',
+        '',
+      ].join('\n'),
+      [
+        'event: response.output_item.done',
+        'data: {"type":"response.output_item.done","output_index":0,"item":{"id":"reasoning_live","type":"reasoning","status":"completed","summary":[{"type":"summary_text","text":"Inspecting the runtime chain."}]}}',
+        '',
+        'event: response.completed',
+        'data: {"type":"response.completed","response":{"id":"resp_live_reasoning","status":"completed","model":"model-code","usage":{"input_tokens":1,"output_tokens":1}}}',
+        '',
+      ].join('\n'),
+    );
+    const iterator = new OpenAiResponsesModelClient(
+      provider('openai-responses', 'https://api.openai.test/v1'),
+      staged.fetch,
+    ).stream(request)[Symbol.asyncIterator]();
+
+    const started = await iterator.next();
+    const delta = await iterator.next();
+    staged.release();
+
+    expect(started).toEqual({
+      done: false,
+      value: {
+        type: 'item_started',
+        item: {
+          id: 'reasoning_live',
+          kind: 'reasoning',
+          content: '',
+          status: 'in_progress',
+        },
+      },
+    });
+    expect(delta).toEqual({
+      done: false,
+      value: {
+        type: 'reasoning_summary_delta',
+        itemId: 'reasoning_live',
+        text: 'Inspecting the runtime chain.',
+        summaryIndex: 0,
+      },
+    });
+
+    const remainingEvents = [];
+    for (;;) {
+      const next = await iterator.next();
+      if (next.done) break;
+      remainingEvents.push(next.value);
+    }
+    expect(remainingEvents).toContainEqual({
+      type: 'item_completed',
+      item: {
+        id: 'reasoning_live',
+        kind: 'reasoning',
+        content: 'Inspecting the runtime chain.',
+        status: 'completed',
       },
     });
   });

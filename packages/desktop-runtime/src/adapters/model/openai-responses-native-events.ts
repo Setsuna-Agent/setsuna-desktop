@@ -59,7 +59,18 @@ export class OpenAiResponsesNativeEvents {
 
   aiSdkPayload(payload: Record<string, unknown>): Record<string, unknown> | null {
     const type = stringValue(payload.type);
-    if (type === 'response.metadata' || type.startsWith('response.reasoning_')) return null;
+    if (
+      type === 'response.created'
+      || type === 'response.in_progress'
+      || type === 'response.queued'
+      || type === 'response.metadata'
+      || type.startsWith('response.reasoning_')
+    ) {
+      // These lifecycle events do not create a runtime-visible SDK item. Passing
+      // them through would make the raw-event ordering gate hold native reasoning
+      // until a later message or tool event, hiding it while the model is thinking.
+      return null;
+    }
     if (type === 'response.refusal.delta' || type === 'response.refusal.done') {
       return this.refusalPayloadForAiSdk(payload, type);
     }

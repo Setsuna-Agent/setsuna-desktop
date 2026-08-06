@@ -145,7 +145,8 @@ function responsesInputToAiSdkMessages(input: unknown[]): ModelMessage[] {
     } else if (role === 'assistant') {
       output.push({ role: 'assistant', content: responseAssistantContent(item) });
     } else if (item.type === 'reasoning') {
-      output.push({ role: 'assistant', content: responseReasoningContent(item) });
+      const content = responseReasoningContent(item);
+      if (content) output.push({ role: 'assistant', content });
     } else if (item.type === 'function_call') {
       const callId = typeof item.call_id === 'string' ? item.call_id : '';
       if (!callId) continue;
@@ -257,11 +258,15 @@ function responseAssistantContent(item: Record<string, unknown>): AssistantConte
   }];
 }
 
-function responseReasoningContent(item: Record<string, unknown>): AssistantContent {
+function responseReasoningContent(item: Record<string, unknown>): AssistantContent | undefined {
   const itemId = typeof item.id === 'string' ? item.id : undefined;
   const encryptedContent = typeof item.encrypted_content === 'string'
     ? item.encrypted_content
     : undefined;
+  // Compatible Responses endpoints may return replayable plaintext reasoning.
+  // Keep it out of the SDK shadow prompt because @ai-sdk/openai rejects it with
+  // store=false; createOpenAiResponsesFetch restores the exact native input.
+  if (!encryptedContent) return undefined;
   const summary = Array.isArray(item.summary)
     ? item.summary
       .map((part) => objectRecord(part))
