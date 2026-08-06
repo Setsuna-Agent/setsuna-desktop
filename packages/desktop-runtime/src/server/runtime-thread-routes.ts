@@ -107,10 +107,8 @@ export async function handleRuntimeThreadRequest(
       backgroundShellProcessMatch[2],
       'Shell process id',
     );
-    if (!await runtime.threadStore.getThread(threadId)) {
-      sendJson(response, 404, { error: 'Thread not found' });
-      return true;
-    }
+    // Persisted services can outlive a deleted source thread. The process
+    // manager still verifies the thread/process pair before terminating it.
     sendJson(
       response,
       200,

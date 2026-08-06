@@ -44,6 +44,7 @@ export function ShellFrame({
   sidebarCollapsed = false,
   onToggleSidebar,
   showSidebarToggle = true,
+  navigationActions,
   toolbarTitle,
   viewTabs,
   workspaceToolbar,
@@ -59,6 +60,7 @@ export function ShellFrame({
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   showSidebarToggle?: boolean;
+  navigationActions?: ReactNode;
   toolbarTitle?: ReactNode;
   viewTabs?: ReactNode;
   workspaceToolbar?: ReactNode;
@@ -90,6 +92,7 @@ export function ShellFrame({
       <header className="app-topbar">
         <div className="app-topbar__brand">
           <TitlebarNavigation
+            actions={navigationActions}
             sidebarCollapsed={sidebarCollapsed}
             showSidebarToggle={showSidebarToggle}
             onNewChat={menuActions?.onNewChat}
@@ -151,11 +154,13 @@ function useWindowMaximizedState(): boolean {
 }
 
 function TitlebarNavigation({
+  actions,
   onNewChat,
   sidebarCollapsed,
   showSidebarToggle,
   onToggleSidebar,
 }: {
+  actions?: ReactNode;
   onNewChat?: () => void;
   sidebarCollapsed: boolean;
   showSidebarToggle: boolean;
@@ -173,6 +178,7 @@ function TitlebarNavigation({
           <PanelLeft size={16} />
         </IconButton>
       ) : null}
+      {actions}
       {onNewChat ? (
         <IconButton label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
           <Plus size={15} />

@@ -68,8 +68,11 @@
   --app-topbar-item-gap: 8px;
   --app-topbar-navigation-control-size: 28px;
   --app-topbar-native-controls-inset: 82px;
+  /* 侧栏折叠后同时保留侧栏开关、运行中心和新对话三个导航控件。 */
   --app-topbar-collapsed-sidebar-width: calc(
     var(--app-topbar-native-controls-inset)
+    + var(--app-topbar-navigation-control-size)
+    + var(--app-topbar-item-gap)
     + var(--app-topbar-navigation-control-size)
     + var(--app-topbar-item-gap)
     + var(--app-topbar-navigation-control-size)

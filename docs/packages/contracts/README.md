@@ -64,7 +64,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `approvals.ts` | Approval、MCP elicitation、结构化用户输入 |
 | `attachments.ts` | 上传、持久化附件与引用 |
 | `artifacts.ts` | Runtime artifact |
-| `background-shell-processes.ts` | 后台 shell process 状态 |
+| `background-shell-processes.ts` | 后台 shell process 状态与全局运行活动投影 |
 | `hooks.ts` | Hook event、matcher、input 和 result |
 | `mcp.ts` | Server、transport、tool、resource、OAuth、审批 |
 | `memory.ts` | Memory record、query、preview |

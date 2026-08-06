@@ -99,23 +99,6 @@ export async function closeShellProcessStore(
   store.sessions.clear();
 }
 
-/**
- * Return only intentionally persisted, still-running processes for one conversation.
- * Foreground commands are excluded so short build/test runs never appear as services.
- */
-export function listBackgroundShellProcesses(
-  store: ShellProcessStore = createShellProcessStore(),
-  threadId = '',
-) {
-  pruneShellProcessStore(store);
-  const normalizedThreadId = String(threadId || '').trim();
-  if (!normalizedThreadId) return [];
-  return [...store.sessions.values()]
-    .filter((session) => session.persist && !session.closed && session.threadId === normalizedThreadId)
-    .map((session) => shellProcessSnapshot(session, session.root || session.cwd))
-    .sort((left, right) => right.started_at_ms - left.started_at_ms);
-}
-
 /** Terminate a persisted process only when it belongs to the requested conversation. */
 export async function terminateBackgroundShellProcess(
   store: ShellProcessStore = createShellProcessStore(),

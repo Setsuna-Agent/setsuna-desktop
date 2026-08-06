@@ -62,6 +62,7 @@ Server route 通过 container 调用明确能力，不通过全局 singleton。
 面向 Setsuna renderer：
 
 - Snapshot/CRUD REST。
+- 跨线程运行活动 snapshot。
 - Thread `RuntimeEvent` SSE。
 - Debug trace 增量 REST。
 

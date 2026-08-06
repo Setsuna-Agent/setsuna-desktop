@@ -2,18 +2,18 @@
 
 状态：当前实现（协议边界、事件完整性 P0 已完成）  
 基线提交：`a372b1fb9`（2026-07-30）  
-实施更新：2026-07-30  
+实施更新：2026-08-06
 配套评审：[架构复杂度收敛评审](architecture-complexity-review.md)
 
 本文描述已经落地的协议边界与事件投影约束。
 
 ## DesktopRuntimeClient 传输清单
 
-`packages/contracts/src/http.ts` 的 `DesktopRuntimeClient` 有 80 个业务成员。`apps/desktop/renderer/src/services/runtime-client/client.ts` 的当前分布：
+`packages/contracts/src/http.ts` 的 `DesktopRuntimeClient` 有 81 个业务成员。`apps/desktop/renderer/src/services/runtime-client/client.ts` 的当前分布：
 
 | 传输 | 数量 | 说明 |
 | --- | ---: | --- |
-| Runtime REST | 78 | 经 preload/main 的受控 `/v1/*` request |
+| Runtime REST | 79 | 经 preload/main 的受控 `/v1/*` request |
 | App-server RPC | 0 | renderer 不再使用 SWE app-server transport |
 | Thread SSE | 1 | `subscribeEvents` 经 preload/main 维护 SSE |
 | Preload upload bridge | 1 | `uploadAttachment` 走二进制上传桥 |
@@ -23,7 +23,7 @@
 | 领域 | Client 成员 | 当前传输 |
 | --- | --- | --- |
 | 底层与附件 | `uploadAttachment`、`deleteAttachment`、`subscribeEvents` | preload bridge、REST、SSE |
-| Thread lifecycle | `listThreads`、`getThread`、`createThread`、`updateThread`、`deleteThread`、`listBackgroundShellProcesses`、`terminateBackgroundShellProcess`、`setThreadGoal`、`clearThreadGoal`、`updateThreadMemoryMode`、`clearThreadContext`、`compactThreadContext`、`listDebugTraces` | 13 REST |
+| Thread lifecycle | `listThreads`、`listRuntimeActivities`、`getThread`、`createThread`、`updateThread`、`deleteThread`、`listBackgroundShellProcesses`、`terminateBackgroundShellProcess`、`setThreadGoal`、`clearThreadGoal`、`updateThreadMemoryMode`、`clearThreadContext`、`compactThreadContext`、`listDebugTraces` | 14 REST |
 | Turn、message、queue | `sendTurn`、`steerTurn`、`queueTurnInput`、`retrieveQueuedTurnInput`、`releaseQueuedTurnInputEdit`、`updateQueuedTurnInput`、`deleteQueuedTurnInput`、`sendQueuedTurnInputNow`、`updateMessage`、`deleteMessages`、`regenerateFromMessage`、`cancelTurn`、`startReview` | 13 REST |
 | Config 与依赖 | `getConfig`、`saveConfig`、`getWorkspaceDependencies`、`setWorkspaceDependencies`、`diagnoseWorkspaceDependencies`、`reinstallWorkspaceDependencies`、`fetchProviderModels` | REST |
 | Hook 与 Skill | `listHooks`、`listSkills`、`createSkill`、`getSkill`、`updateSkill`、`deleteSkill`、`installSkillMcpDependencies`、`authenticateSkillMcpDependency`、`setSkillExtraRoots` | 9 REST |

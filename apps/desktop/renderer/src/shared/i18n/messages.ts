@@ -9,9 +9,13 @@ import {
   dataRootCleanupEnUS,
   dataRootCleanupZhCN,
 } from './dataRootCleanupMessages.js';
+import {
+  runtimeActivityEnUS,
+  runtimeActivityZhCN,
+} from './runtimeActivityMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
-import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
+import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 
 const zhCN = {
   'common.back': '返回',
@@ -577,6 +581,7 @@ const zhCN = {
   'topbar.closeBottom': '关闭底栏',
   'topbar.openBottomTerminal': '打开底栏终端',
   'topbar.collapseRightSidebar': '收起右侧栏',
+  ...runtimeActivityZhCN,
   ...workspaceZhCN,
   ...capabilitiesZhCN,
   ...capabilitiesManagementZhCN,
@@ -1152,6 +1157,7 @@ const enUS = {
   'topbar.closeBottom': 'Close bottom panel',
   'topbar.openBottomTerminal': 'Open terminal in bottom panel',
   'topbar.collapseRightSidebar': 'Collapse right sidebar',
+  ...runtimeActivityEnUS,
   ...workspaceEnUS,
   ...capabilitiesEnUS,
   ...capabilitiesManagementEnUS,

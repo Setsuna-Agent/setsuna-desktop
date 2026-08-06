@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
+import { handleRuntimeActivityRequest } from './runtime-activity-routes.js';
 import { handleRuntimeCapabilityRequest } from './runtime-capability-routes.js';
 import { handleRuntimeConfigRequest } from './runtime-config-routes.js';
 import { handleRuntimeExtensionRequest } from './runtime-extension-routes.js';
@@ -22,6 +23,9 @@ export async function handleRuntimeRestRequest(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  if (await handleRuntimeActivityRequest(runtime, request, response, url)) {
+    return true;
+  }
   if (await handleRuntimeThreadCommandRequest(runtime, request, response, url)) {
     return true;
   }

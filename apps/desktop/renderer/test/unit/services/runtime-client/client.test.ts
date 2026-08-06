@@ -161,6 +161,15 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
+  it('loads the aggregate runtime activity projection', async () => {
+    const request = installRuntimeBridge(() => ({ tasks: [], backgroundServices: [] }));
+    const client = createDesktopRuntimeClient();
+
+    await client.listRuntimeActivities();
+
+    expect(request).toHaveBeenCalledWith({ path: '/v1/runtime-activities' });
+  });
+
   it('lists incremental developer traces through an encoded thread path', async () => {
     const request = installRuntimeBridge(() => ({ nextSeq: 8, traces: [] }));
     const client = createDesktopRuntimeClient();

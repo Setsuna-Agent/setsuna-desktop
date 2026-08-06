@@ -148,6 +148,16 @@ describe('runtime server REST runtime state', () => {
       expect(approvals).toEqual({ approvals: [] });
     });
 
+  it('exposes the aggregate runtime activity projection', async () => {
+      const activities = await harness.runtimeFetch('/v1/runtime-activities');
+
+      expect(activities).toMatchObject({
+        backgroundServices: [],
+        capturedAt: expect.any(String),
+        tasks: [],
+      });
+    });
+
   it('gates incremental in-memory debug traces behind developer features', async () => {
       const thread = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',

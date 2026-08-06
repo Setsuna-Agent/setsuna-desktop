@@ -29,7 +29,7 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 `http.ts` 用方法级 interface 描述 renderer 可用的 runtime 能力。方法按数据域覆盖：
 
 - Threads、messages、turns、queue、goal、review、context。
-- Attachments 与 background shell process。
+- Attachments、background shell process 与跨线程运行活动列表。
 - Config、provider models、task models。
 - Workspace dependencies。
 - Hooks、Skills、Plugins、marketplace。
@@ -91,6 +91,7 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 ```text
 /v1/config
 /v1/config/models
+/v1/runtime-activities
 /v1/threads
 /v1/threads/:id
 /v1/threads/:id/turns
@@ -219,4 +220,3 @@ UI 只根据这些结构化状态展示，不能解析 main 的自由格式日�
 5. 涉及 preload 时运行 main 对应 tests。
 
 数据格式变化还要增加旧 fixture 和损坏输入测试。
-
