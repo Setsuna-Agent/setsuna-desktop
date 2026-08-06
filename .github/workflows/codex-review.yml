@@ -23,14 +23,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      ADVISORY_SAFE_DESCRIPTION: Codex reported only P2+ findings on latest commit
+      ADVISORY_SHA_ONLY_DESCRIPTION: Codex reported only P2+ findings; reactions disabled
       CODEX_BOT: chatgpt-codex-connector[bot]
       CLEAN_SAFE_DESCRIPTION: Codex completed a clean review of the latest commit
       CLEAN_SHA_ONLY_DESCRIPTION: Codex completed a SHA-bound review; reactions disabled
-      FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
-      FINDINGS_SHA_ONLY_DESCRIPTION: Codex reported findings; reactions remain disabled
+      FINDINGS_SAFE_DESCRIPTION: Codex reported blocking findings on the latest commit
+      FINDINGS_SHA_ONLY_DESCRIPTION: Codex reported blocking findings; reactions disabled
       GH_TOKEN: ${{ github.token }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       HEAD_EVENT_AT: ${{ github.event.pull_request.updated_at }}
+      LEGACY_FINDINGS_SAFE_DESCRIPTION: Codex reported findings on the latest commit
       PENDING_SAFE_DESCRIPTION: Waiting for Codex Automatic Review
       PENDING_SHA_ONLY_DESCRIPTION: Waiting for a SHA-bound Codex review
       PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -62,7 +65,9 @@ jobs:
             [[ "${target_url}" == "${run_url}" ]] || return 1
             [[ "${state}" == "pending" && "${description}" == "${PENDING_SAFE_DESCRIPTION}" ]] \
               || [[ "${state}" == "success" && "${description}" == "${CLEAN_SAFE_DESCRIPTION}" ]] \
-              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]]
+              || [[ "${state}" == "success" && "${description}" == "${ADVISORY_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "failure" && "${description}" == "${FINDINGS_SAFE_DESCRIPTION}" ]] \
+              || [[ "${state}" == "failure" && "${description}" == "${LEGACY_FINDINGS_SAFE_DESCRIPTION}" ]]
           }
 
           head_marker_record="$({
@@ -182,7 +187,19 @@ jobs:
 
       # Repository settings trigger Codex Automatic Review on every push. This
       # trusted workflow only validates the connector result for the exact SHA.
-      - name: Wait for a clean review of the current head
+      - name: Checkout trusted review gate helpers
+        uses: actions/checkout@v4
+        with:
+          # pull_request_target must never execute the untrusted PR head.
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js for review gate helpers
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Wait for a review of the current head
         id: wait_for_review
         shell: bash
         env:
@@ -192,9 +209,11 @@ jobs:
           set -euo pipefail
           deadline=$((SECONDS + 1500))
           head_short="${HEAD_SHA:0:10}"
+          advisory_status_description="${ADVISORY_SHA_ONLY_DESCRIPTION}"
           clean_status_description="${CLEAN_SHA_ONLY_DESCRIPTION}"
           findings_status_description="${FINDINGS_SHA_ONLY_DESCRIPTION}"
           if [[ "${REACTION_SAFE}" == "true" ]]; then
+            advisory_status_description="${ADVISORY_SAFE_DESCRIPTION}"
             clean_status_description="${CLEAN_SAFE_DESCRIPTION}"
             findings_status_description="${FINDINGS_SAFE_DESCRIPTION}"
           fi
@@ -255,23 +274,47 @@ jobs:
               # Review comments are submitted with the review, but give GitHub's
               # REST projection a moment to expose both resources consistently.
               sleep 3
-              finding_urls="$({
+              finding_summary="$(
                 gh api --paginate "repos/${REPOSITORY}/pulls/${PR_NUMBER}/comments?per_page=100" \
-                  --jq ".[] | select(.user.login == \"${CODEX_BOT}\" and .commit_id == \"${HEAD_SHA}\" and .pull_request_review_id == ${review_id}) | .html_url"
-              })"
+                  | jq -s \
+                    --arg bot "${CODEX_BOT}" \
+                    --arg head "${HEAD_SHA}" \
+                    --argjson review_id "${review_id}" \
+                    '[.[][] | select(
+                      .user.login == $bot
+                      and .commit_id == $head
+                      and .pull_request_review_id == $review_id
+                    ) | {body, url: .html_url}]' \
+                  | node scripts/codex-review-findings.mjs
+              )"
+              blocking_findings="$(jq -r '.blocking | length' <<<"${finding_summary}")"
+              advisory_findings="$(jq -r '.advisory | length' <<<"${finding_summary}")"
 
-              if [[ -n "${finding_urls}" ]]; then
-                findings="$(awk 'NF { count += 1 } END { print count + 0 }' <<<"${finding_urls}")"
+              if (( blocking_findings > 0 )); then
+                blocking_records="$(jq -r '.blocking[] | "\(.priority)\t\(.url)"' <<<"${finding_summary}")"
                 gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
                   -f state=failure \
                   -f context="${STATUS_CONTEXT}" \
                   -f target_url="${RUN_URL}" \
                   -f description="${findings_status_description}" >/dev/null
                 echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
-                echo "Codex reported ${findings} finding(s) on ${HEAD_SHA}."
-                sed 's/^/- /' <<<"${finding_urls}"
+                echo "Codex reported ${blocking_findings} blocking P0/P1 or unclassified finding(s) on ${HEAD_SHA}."
+                sed 's/^/- /' <<<"${blocking_records}"
                 echo "Push a fix to trigger a fresh Codex review."
                 exit 1
+              fi
+
+              if (( advisory_findings > 0 )); then
+                advisory_records="$(jq -r '.advisory[] | "\(.priority)\t\(.url)"' <<<"${finding_summary}")"
+                gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \
+                  -f state=success \
+                  -f context="${STATUS_CONTEXT}" \
+                  -f target_url="${RUN_URL}" \
+                  -f description="${advisory_status_description}" >/dev/null
+                echo "gate_finalized=true" >>"${GITHUB_OUTPUT}"
+                echo "Codex reported ${advisory_findings} advisory P2+ finding(s) on ${HEAD_SHA}; the gate passes."
+                sed 's/^/- /' <<<"${advisory_records}"
+                exit 0
               fi
 
               gh api --method POST "repos/${REPOSITORY}/statuses/${HEAD_SHA}" \

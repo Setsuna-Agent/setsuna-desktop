@@ -261,9 +261,9 @@ packages/desktop-runtime/ — 4 direct / 451 total files
 ### `scripts/`
 
 ```text
-scripts/ — 17 direct / 23 total files
+scripts/ — 19 direct / 26 total files
 ├── ripgrep/ — 3 direct / 3 total files
-└── test/ — 2 direct / 3 total files
+└── test/ — 3 direct / 4 total files
     └── ripgrep/ — 1 direct / 1 total files
 ```
 
