@@ -59,6 +59,21 @@ import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js
 const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
 
+type ComposerFocusTarget = {
+  focus?: (options: { cursor?: 'start' | 'end' | 'all'; preventScroll?: boolean }) => void;
+};
+
+export function applyChatComposerFocusRequest(
+  editor: ComposerFocusTarget | null,
+  focusOnReveal: boolean,
+  focusRequest: number,
+  onConsumed?: (requestId: number) => void,
+): void {
+  if ((!focusOnReveal && focusRequest === 0) || !editor) return;
+  editor.focus?.({ cursor: 'end', preventScroll: true });
+  if (focusRequest !== 0) onConsumed?.(focusRequest);
+}
+
 export function ChatComposer({
   activeTurnId,
   activeProject,
@@ -84,6 +99,7 @@ export function ChatComposer({
   onClearContext,
   onClearThreadGoal,
   onDraftChange,
+  onFocusRequestConsumed,
   onSelectModel,
   onSearchProjectEntries,
   onOpenSideChat,
@@ -122,6 +138,7 @@ export function ChatComposer({
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
+  onFocusRequestConsumed?: (requestId: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenSideChat?: () => void;
@@ -272,9 +289,13 @@ export function ChatComposer({
   }, []);
 
   useEffect(() => {
-    if (!focusOnReveal && focusRequest === 0) return;
-    senderRef.current?.focus?.({ cursor: 'end', preventScroll: true });
-  }, [focusOnReveal, focusRequest]);
+    applyChatComposerFocusRequest(
+      senderRef.current,
+      focusOnReveal,
+      focusRequest,
+      onFocusRequestConsumed,
+    );
+  }, [focusOnReveal, focusRequest, onFocusRequestConsumed]);
 
   useEffect(() => {
     if (!workspaceMentionRequest || consumedWorkspaceMentionRequestIdRef.current === workspaceMentionRequest.requestId) return;

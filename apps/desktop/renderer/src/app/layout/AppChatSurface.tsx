@@ -124,6 +124,7 @@ export function AppChatSurface({
   onCancelActiveTurn,
   onAccessModeChange,
   onConversationOverviewRenderedChange,
+  onFocusComposerRequestConsumed,
   onAnswerApproval,
   onCompactContext,
   onClearContext,
@@ -215,6 +216,7 @@ export function AppChatSurface({
   onCancelActiveTurn: () => void;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
+  onFocusComposerRequestConsumed: (requestId: number) => void;
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
@@ -342,6 +344,7 @@ export function AppChatSurface({
             onCancelActiveTurn={onCancelActiveTurn}
             onAccessModeChange={onAccessModeChange}
             onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
+            onFocusComposerRequestConsumed={onFocusComposerRequestConsumed}
             onAnswerApproval={onAnswerApproval}
             onCompactContext={onCompactContext}
             onClearContext={onClearContext}

@@ -28,6 +28,12 @@ describe('keyboard shortcut bindings', () => {
       .toEqual({ status: 'invalid', reason: 'reserved' });
     expect(captureKeyboardShortcut(keyEvent({ code: 'Tab', metaKey: true }), 'darwin'))
       .toEqual({ status: 'invalid', reason: 'reserved' });
+    expect(captureKeyboardShortcut(keyEvent({ code: 'KeyC', metaKey: true }), 'darwin'))
+      .toEqual({ status: 'invalid', reason: 'reserved' });
+    expect(captureKeyboardShortcut(keyEvent({ code: 'KeyZ', metaKey: true, shiftKey: true }), 'darwin'))
+      .toEqual({ status: 'invalid', reason: 'reserved' });
+    expect(captureKeyboardShortcut(keyEvent({ altKey: true, code: 'KeyI', metaKey: true }), 'darwin'))
+      .toEqual({ status: 'invalid', reason: 'reserved' });
     expect(captureKeyboardShortcut(keyEvent({ altKey: true, code: 'Space' }), 'win32'))
       .toEqual({ status: 'invalid', reason: 'reserved' });
     expect(captureKeyboardShortcut(keyEvent({ code: 'KeyB', ctrlKey: true, metaKey: true, shiftKey: true }), 'win32'))
@@ -55,6 +61,10 @@ describe('keyboard shortcut bindings', () => {
     expect(keyboardEventMatchesBinding({
       ...keyEvent({ altKey: true, code: 'KeyQ', ctrlKey: true }),
       getModifierState: (modifier) => modifier === 'AltGraph',
+    }, 'Control+Alt+KeyQ')).toBe(false);
+    expect(keyboardEventMatchesBinding({
+      ...keyEvent({ altKey: true, code: 'KeyQ', ctrlKey: true }),
+      altGraph: true,
     }, 'Control+Alt+KeyQ')).toBe(false);
   });
 

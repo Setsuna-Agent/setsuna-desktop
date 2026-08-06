@@ -46,6 +46,7 @@ export function AppRouteContent({
   workspacePanels,
   onSelectSkillForChat,
   onConversationOverviewRenderedChange,
+  onFocusComposerRequestConsumed,
   onOpenPlugin,
   onSelectedCapabilitiesPluginIdChange,
   onSelectThread,
@@ -81,6 +82,7 @@ export function AppRouteContent({
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
+  onFocusComposerRequestConsumed: (requestId: number) => void;
   onOpenPlugin: (pluginId: string) => void;
   onSelectedCapabilitiesPluginIdChange: (pluginId: string | null) => void;
   onSelectThread: (threadId: string) => void | Promise<void>;
@@ -260,6 +262,7 @@ export function AppRouteContent({
       sidePanelSlot={workspacePanels.sidePanelSlot}
       runtimeClient={runtime.client}
       onReloadThreads={runtime.reloadThreads}
+      onFocusComposerRequestConsumed={onFocusComposerRequestConsumed}
       onSideChatError={runtime.setError}
       sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}

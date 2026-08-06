@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  activeKeyboardShortcutBindings,
   isModalDialogVisible,
   matchingKeyboardShortcutCommand,
 } from '../../../../src/app/controller/useAppKeyboardShortcuts.js';
@@ -22,6 +23,20 @@ describe('matchingKeyboardShortcutCommand', () => {
       keyEvent({ code: 'KeyJ', ctrlKey: true, shiftKey: true }),
       (commandId) => commandId === 'app.newChat' ? ['Control+KeyJ'] : [],
     )).toBeNull();
+  });
+});
+
+describe('activeKeyboardShortcutBindings', () => {
+  it('syncs only bindings whose commands can currently execute', () => {
+    const handlers = {
+      'app.newChat': { execute: () => undefined },
+      'app.openSettings': { enabled: false, execute: () => undefined },
+    } as const;
+
+    expect(activeKeyboardShortcutBindings(
+      handlers,
+      (commandId) => commandId === 'app.newChat' ? ['Control+KeyN'] : ['Control+Comma'],
+    )).toEqual(['Control+KeyN']);
   });
 });
 

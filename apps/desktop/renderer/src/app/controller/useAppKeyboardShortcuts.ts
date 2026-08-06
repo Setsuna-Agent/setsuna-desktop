@@ -1,5 +1,9 @@
+import type { DesktopKeyboardShortcutInput } from '@setsuna-desktop/contracts';
 import { useEffect } from 'react';
-import { keyboardEventMatchesBinding } from '../../shared/shortcuts/keyboardShortcutBindings.js';
+import {
+  keyboardEventMatchesBinding,
+  type KeyboardShortcutEvent,
+} from '../../shared/shortcuts/keyboardShortcutBindings.js';
 import {
   keyboardShortcutCommands,
   type KeyboardShortcutCommandId,
@@ -21,27 +25,51 @@ export function useAppKeyboardShortcuts(handlers: AppKeyboardShortcutHandlers): 
   const { bindingsFor, recording } = useKeyboardShortcuts();
 
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const executeShortcut = (event: KeyboardEvent | DesktopKeyboardShortcutInput) => {
       if (recording || event.repeat || event.isComposing || event.key === 'Process') return;
       const commandId = matchingKeyboardShortcutCommand(event, bindingsFor);
       if (!commandId) return;
       const handler = handlers[commandId];
       if (!handler || handler.enabled === false) return;
       if (hasVisibleModalDialog() && !handler.allowInModal) return;
-      if (isTerminalEventTarget(event.target) && !handler.allowInTerminal) return;
+      const target = 'target' in event ? event.target : null;
+      if (isTerminalEventTarget(target) && !handler.allowInTerminal) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+      if ('preventDefault' in event) event.preventDefault();
+      if ('stopPropagation' in event) event.stopPropagation();
       handler.execute();
     };
+    const handleKeyDown = (event: KeyboardEvent) => executeShortcut(event);
 
     window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
+    const unsubscribe = window.setsunaDesktop?.desktop.onKeyboardShortcutInput(executeShortcut);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true);
+      unsubscribe?.();
+    };
+  }, [bindingsFor, handlers, recording]);
+
+  useEffect(() => {
+    const setActiveBindings = window.setsunaDesktop?.desktop.setActiveKeyboardShortcutBindings;
+    if (!setActiveBindings) return undefined;
+    const activeBindings = recording ? [] : activeKeyboardShortcutBindings(handlers, bindingsFor);
+    void setActiveBindings(activeBindings).catch(() => undefined);
+    return () => { void setActiveBindings([]).catch(() => undefined); };
   }, [bindingsFor, handlers, recording]);
 }
 
+export function activeKeyboardShortcutBindings(
+  handlers: AppKeyboardShortcutHandlers,
+  bindingsFor: (commandId: KeyboardShortcutCommandId) => readonly string[],
+): string[] {
+  return [...new Set(keyboardShortcutCommands.flatMap((command) => {
+    const handler = handlers[command.id];
+    return handler && handler.enabled !== false ? bindingsFor(command.id) : [];
+  }))];
+}
+
 export function matchingKeyboardShortcutCommand(
-  event: KeyboardEvent,
+  event: KeyboardShortcutEvent,
   bindingsFor: (commandId: KeyboardShortcutCommandId) => readonly string[],
 ): KeyboardShortcutCommandId | null {
   for (const command of keyboardShortcutCommands) {

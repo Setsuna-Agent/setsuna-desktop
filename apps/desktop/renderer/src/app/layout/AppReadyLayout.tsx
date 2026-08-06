@@ -64,6 +64,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const [focusComposerRequest, setFocusComposerRequest] = useState(0);
+  const consumeFocusComposerRequest = useCallback((requestId: number) => {
+    setFocusComposerRequest((current) => current === requestId ? 0 : current);
+  }, []);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
@@ -283,6 +286,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         onOpenPlugin={openCapabilitiesPlugin}
         onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
         onConversationOverviewRenderedChange={setConversationOverviewRendered}
+        onFocusComposerRequestConsumed={consumeFocusComposerRequest}
         onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}

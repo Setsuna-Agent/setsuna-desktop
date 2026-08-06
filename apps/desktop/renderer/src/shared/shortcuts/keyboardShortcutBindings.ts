@@ -15,10 +15,11 @@ export type KeyboardShortcutCaptureResult =
   | { status: 'pending' }
   | { status: 'invalid'; reason: KeyboardShortcutCaptureError };
 
-type KeyboardShortcutEvent = Pick<
+export type KeyboardShortcutEvent = Pick<
   KeyboardEvent,
   'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'
 > & {
+  altGraph?: boolean;
   getModifierState?: (keyArg: string) => boolean;
 };
 
@@ -84,7 +85,7 @@ export function captureKeyboardShortcut(
   event: KeyboardShortcutEvent,
   platform: KeyboardShortcutPlatform,
 ): KeyboardShortcutCaptureResult {
-  if (event.getModifierState?.('AltGraph')) return { status: 'invalid', reason: 'alt-graph' };
+  if (event.altGraph || event.getModifierState?.('AltGraph')) return { status: 'invalid', reason: 'alt-graph' };
   if (!event.code || event.code === 'Unidentified') return { status: 'invalid', reason: 'unsupported' };
   if (modifierCodePattern.test(event.code)) return { status: 'pending' };
   if (!supportedCodePattern.test(event.code)) return { status: 'invalid', reason: 'unsupported' };
@@ -101,7 +102,7 @@ export function keyboardEventMatchesBinding(
   event: KeyboardShortcutEvent,
   binding: string,
 ): boolean {
-  if (event.getModifierState?.('AltGraph')) return false;
+  if (event.altGraph || event.getModifierState?.('AltGraph')) return false;
   const normalized = normalizeKeyboardShortcutBinding(binding);
   if (!normalized || event.code !== bindingCode(normalized)) return false;
   const modifiers = new Set(bindingModifiers(normalized));
@@ -181,17 +182,34 @@ function displayKeyLabel(code: string): string {
 function isReservedKeyboardShortcut(binding: string, platform: KeyboardShortcutPlatform): boolean {
   if (platform === 'darwin') {
     return new Set([
+      'Meta+Digit0',
+      'Meta+Equal',
+      'Meta+Minus',
+      'Meta+KeyA',
+      'Meta+KeyC',
       'Meta+KeyH',
       'Meta+KeyM',
       'Meta+KeyQ',
+      'Meta+KeyR',
+      'Meta+KeyV',
       'Meta+KeyW',
+      'Meta+KeyX',
+      'Meta+KeyZ',
       'Meta+Backquote',
       'Meta+Space',
       'Meta+Tab',
+      'Alt+Meta+KeyH',
+      'Alt+Meta+KeyI',
+      'Alt+Shift+Meta+KeyV',
       'Shift+Meta+Digit3',
       'Shift+Meta+Digit4',
       'Shift+Meta+Digit5',
+      'Shift+Meta+Equal',
+      'Shift+Meta+KeyR',
+      'Shift+Meta+KeyV',
+      'Shift+Meta+KeyZ',
       'Shift+Meta+Tab',
+      'Control+Meta+KeyF',
       'Control+Meta+KeyQ',
       'Control+Meta+Space',
     ]).has(binding);

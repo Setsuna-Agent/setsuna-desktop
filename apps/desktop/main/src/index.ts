@@ -17,6 +17,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBrowserContextMenuTemplate } from './browser/context-menu.js';
+import { embeddedBrowserKeyboardShortcut } from './browser/keyboard-shortcuts.js';
 import { BrowserControlServer } from './browser/control-server.js';
 import { DesktopBrowserController } from './browser/control.js';
 import { registerBrowserIpc } from './ipc/browser-ipc.js';
@@ -131,6 +132,7 @@ async function createWindow(): Promise<void> {
   });
   // The splash and app share one native window so the OS never animates a window swap.
   const currentMainWindow = createMainBrowserWindow(desktopIcon, windowState.bounds);
+  let activeKeyboardShortcutBindings = new Set<string>();
   trackDesktopWindowState(currentMainWindow, windowStateFilePath);
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
@@ -224,6 +226,9 @@ async function createWindow(): Promise<void> {
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
+    onActiveKeyboardShortcutBindingsChange: (bindings) => {
+      activeKeyboardShortcutBindings = new Set(bindings);
+    },
     onInterfaceLanguageChange: (locale) => { interfaceLanguage = locale; },
     userDataPath: dataLayout.root,
   });
@@ -254,6 +259,14 @@ async function createWindow(): Promise<void> {
   });
   currentMainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
     guestContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
+    guestContents.on('before-input-event', (event, input) => {
+      const shortcut = embeddedBrowserKeyboardShortcut(input, activeKeyboardShortcutBindings);
+      if (!shortcut) return;
+      const hostWebContents = guestContents.hostWebContents;
+      if (!hostWebContents || hostWebContents.isDestroyed()) return;
+      event.preventDefault();
+      hostWebContents.send('desktop:keyboard-shortcut-input', shortcut.input);
+    });
     const requestNewBrowserTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
       if (isAllowedEmbeddedBrowserUrl(url) && hostWebContents && !hostWebContents.isDestroyed()) {
