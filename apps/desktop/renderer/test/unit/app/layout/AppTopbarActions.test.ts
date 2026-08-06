@@ -26,6 +26,7 @@ describe('AppTopbarActions', () => {
     expect(html).toContain('aria-label="显示环境信息"');
     expect(html).toContain('aria-pressed="false"');
   });
+
 });
 
 function renderActions({

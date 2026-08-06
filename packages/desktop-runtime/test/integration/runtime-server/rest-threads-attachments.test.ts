@@ -174,6 +174,9 @@ describe('runtime server REST threads and attachments', () => {
       await expect(harness.runtimeFetch(`/v1/threads/${encodedThreadId}/background-shell-processes/stale-process`, {
         method: 'DELETE',
       })).resolves.toEqual({ terminated: false });
+      await expect(harness.runtimeFetch('/v1/threads/thread_deleted/background-shell-processes/stale-process', {
+        method: 'DELETE',
+      })).resolves.toEqual({ terminated: false });
     });
   
   it('renames and archives local threads through the runtime API', async () => {

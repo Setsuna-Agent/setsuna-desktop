@@ -2028,6 +2028,9 @@ describe('pc local tool host', () => {
         }),
       ]);
       await expect(host.listBackgroundShellProcesses('thread_other')).resolves.toEqual([]);
+      await expect(host.listAllBackgroundShellProcesses()).resolves.toEqual([
+        expect.objectContaining({ id: processId, threadId: context.threadId }),
+      ]);
       await expect(host.terminateBackgroundShellProcess('thread_other', processId)).resolves.toEqual({ terminated: false });
       await expect(host.listBackgroundShellProcesses(context.threadId)).resolves.toHaveLength(1);
 

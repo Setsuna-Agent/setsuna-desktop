@@ -60,6 +60,7 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 `runtime-rest-routes.ts` 是 53 行有序分发入口，只组合窄 domain handler：
 
 - `runtime-config-routes.ts`：Config 与 provider model discovery。
+- `runtime-activity-routes.ts`：跨线程 active turn 与后台服务投影。
 - `runtime-extension-routes.ts`：Skills、MCP、Hooks、Plugins 和 Approvals。
 - `runtime-resource-routes.ts`：数据迁移 readiness 与 workspace dependencies。
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
@@ -82,6 +83,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 
 ### Threads
 
+- 全局运行活动列表。
 - List/get/create/update/delete/archive。
 - Attachments。
 - Messages update/delete/regenerate。

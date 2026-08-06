@@ -36,8 +36,8 @@
 
 ### 协议与事件
 
-- `DesktopRuntimeClient` 有 80 个业务成员；协议边界 P0 前后对比：
-  - Runtime REST 从 69 个增至 78 个。
+- `DesktopRuntimeClient` 有 81 个业务成员；协议边界 P0 后新增全局运行活动查询：
+  - Runtime REST 从 69 个增至 79 个。
   - renderer app-server RPC 从 9 个降至 0 个。
   - 1 个 Thread SSE 订阅。
   - 1 个 preload 上传桥。

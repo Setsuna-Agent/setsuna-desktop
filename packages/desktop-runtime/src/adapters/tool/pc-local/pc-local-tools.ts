@@ -83,6 +83,10 @@ import {
 } from './pc-local-tool-paths.js';
 import { openValidatedReadableFile } from './pc-local-tool-secure-read.js';
 import {
+  listAllBackgroundShellProcesses,
+  listBackgroundShellProcesses,
+} from './pc-local-tool-background-shell-processes.js';
+import {
   createShellSandboxExecutionPlan,
   loadShellPolicyRules,
   normalizeShellCommandForRisk,
@@ -96,7 +100,6 @@ import {
   closeShellProcessStore,
   createShellProcessStore,
   isShellSessionVisibleToState,
-  listBackgroundShellProcesses,
   listShellProcesses,
   pruneShellProcessStore,
   readShellProcess,
@@ -140,6 +143,7 @@ export {
 export {
   closeShellProcessStore,
   createShellProcessStore,
+  listAllBackgroundShellProcesses,
   listBackgroundShellProcesses,
   terminateBackgroundShellProcess,
 };

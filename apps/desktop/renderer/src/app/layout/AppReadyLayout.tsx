@@ -1,4 +1,6 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { runtimeRunningTaskCount } from '../../features/runtime-activity/runtimeActivityModel.js';
+import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeActivityTrigger.js';
 import { WorkspaceAppLauncher } from '../../features/workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
@@ -60,7 +62,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
+  const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
+  const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
+  const runningTaskCount = runtimeRunningTaskCount([
+    ...runtime.threads,
+    ...runtime.archivedThreads,
+    ...(runtime.currentThread ? [runtime.currentThread] : []),
+  ]);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
     if (conversationOverviewRendered) {
@@ -98,40 +107,46 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
+      navigationActions={(
+        <RuntimeActivityTrigger
+          open={runtimeActivityOpen}
+          runningTaskCount={runningTaskCount}
+          triggerRef={runtimeActivityTriggerRef}
+          onToggle={() => setRuntimeActivityOpen((open) => !open)}
+        />
+      )}
       toolbarTitle={toolbarTitle}
       workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}
       className={shellClassName}
-      actions={
-        activeView === 'chat' ? (
-          <>
-            {activeWorkspace?.path ? (
-              <WorkspaceAppLauncher
-                selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
-                workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
-                workspaceApps={workspacePanels.workspaceApps}
-                onOpenCurrentWorkspaceApp={() => {
-                  workspacePanels.closeWorkspaceMenus();
-                  void workspacePanels.openSelectedWorkspaceApp();
-                }}
-                onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
-                onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
-              />
-            ) : null}
-            <AppTopbarActions
-              activeView={activeView}
-              updater={controller.updater}
-              bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
-              conversationOverviewAvailable={Boolean(runtime.currentThread)}
-              conversationOverviewVisible={conversationOverviewRendered}
-              sidePanelVisible={workspacePanels.sidePanelVisible}
-              onToggleConversationOverview={handleToggleConversationOverview}
-              onToggleSidePanel={workspacePanels.toggleSidePanel}
-              onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
+      actions={activeView === 'chat' ? (
+        <>
+          {activeWorkspace?.path ? (
+            <WorkspaceAppLauncher
+              selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
+              workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
+              workspaceApps={workspacePanels.workspaceApps}
+              onOpenCurrentWorkspaceApp={() => {
+                workspacePanels.closeWorkspaceMenus();
+                void workspacePanels.openSelectedWorkspaceApp();
+              }}
+              onSelectWorkspaceApp={workspacePanels.selectWorkspaceApp}
+              onToggleWorkspaceAppMenu={workspacePanels.toggleWorkspaceAppMenu}
             />
-          </>
-        ) : undefined
-      }
+          ) : null}
+          <AppTopbarActions
+            activeView={activeView}
+            updater={controller.updater}
+            bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
+            conversationOverviewAvailable={Boolean(runtime.currentThread)}
+            conversationOverviewVisible={conversationOverviewRendered}
+            sidePanelVisible={workspacePanels.sidePanelVisible}
+            onToggleConversationOverview={handleToggleConversationOverview}
+            onToggleSidePanel={workspacePanels.toggleSidePanel}
+            onToggleBottomTerminal={workspacePanels.toggleBottomTerminal}
+          />
+        </>
+      ) : undefined}
     >
       <AppSidebarSurface
         activeProjectId={activeProjectId}
@@ -198,8 +213,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         client={runtime.client}
         navigation={navigation}
         projects={runtime.projects}
+        runtimeActivityOpen={runtimeActivityOpen}
+        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
         searchTriggerRef={searchTriggerRef}
         threads={runtime.threads}
+        onActivitiesChanged={runtime.reloadThreads}
+        onCloseRuntimeActivity={() => setRuntimeActivityOpen(false)}
+        onOpenThread={navigation.selectThread}
       />
     </ShellFrame>
   );

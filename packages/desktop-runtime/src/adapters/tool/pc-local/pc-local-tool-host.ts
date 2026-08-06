@@ -457,19 +457,13 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   }
 
   async listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcess[]> {
-    return pcTools.listBackgroundShellProcesses(this.shellProcessStore, threadId).map((rawProcess) => {
-      const process = recordInput(rawProcess);
-      return {
-        id: stringArg(process.process_id),
-        threadId: stringArg(process.thread_id),
-        turnId: nullableString(process.turn_id),
-        toolCallId: nullableString(process.tool_call_id),
-        command: stringArg(process.command),
-        directory: stringArg(process.directory),
-        startedAt: timestampString(process.started_at_ms),
-        expiresAt: nullableTimestampString(process.expires_at_ms),
-      };
-    });
+    return pcTools.listBackgroundShellProcesses(this.shellProcessStore, threadId)
+      .map(runtimeBackgroundShellProcess);
+  }
+
+  async listAllBackgroundShellProcesses(): Promise<RuntimeBackgroundShellProcess[]> {
+    return pcTools.listAllBackgroundShellProcesses(this.shellProcessStore)
+      .map(runtimeBackgroundShellProcess);
   }
 
   async terminateBackgroundShellProcess(
@@ -719,6 +713,20 @@ function toolEnabledForContext(name: string, context: ToolExecutionContext): boo
 
 function shortSingleLine(value: unknown): string {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
+function runtimeBackgroundShellProcess(rawProcess: unknown): RuntimeBackgroundShellProcess {
+  const process = recordInput(rawProcess);
+  return {
+    id: stringArg(process.process_id),
+    threadId: stringArg(process.thread_id),
+    turnId: nullableString(process.turn_id),
+    toolCallId: nullableString(process.tool_call_id),
+    command: stringArg(process.command),
+    directory: stringArg(process.directory),
+    startedAt: timestampString(process.started_at_ms),
+    expiresAt: nullableTimestampString(process.expires_at_ms),
+  };
 }
 
 function stringArg(value: unknown): string {

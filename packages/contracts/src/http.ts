@@ -5,6 +5,7 @@ import type {
   RuntimeStoredMessageAttachment,
 } from './attachments.js';
 import type {
+  RuntimeActivityList,
   RuntimeBackgroundShellProcessList,
   RuntimeBackgroundShellProcessTermination,
 } from './background-shell-processes.js';
@@ -111,6 +112,7 @@ export type DesktopRuntimeClient = {
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;
+  listRuntimeActivities(): Promise<RuntimeActivityList>;
   getThread(threadId: string): Promise<RuntimeThread>;
   listThreadMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: CreateThreadInput): Promise<RuntimeThread>;

@@ -179,11 +179,11 @@ Policy 评估失败应保守，不因解析器“不认识”就默认安全。
 
 - 按 thread/project 记录进程。
 - 有界输出与 sequence。
-- List/terminate API。
+- Thread-scoped 与全局 list、按 thread/process 归属 terminate API。
 - Turn cleanup 决定保留或终止。
 - Runtime shutdown 终止全部。
 
-Renderer 通过 runtime REST 查看后台进程，不直接连接 pty。
+Renderer 通过 runtime REST 查看后台进程；运行中心只读取生命周期元数据，不直接连接 pty，也不暴露原始 shell 输出。
 
 ## Structured user input
 

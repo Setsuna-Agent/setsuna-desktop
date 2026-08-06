@@ -69,17 +69,22 @@
 | 文件 | 职责 |
 | --- | --- |
 | `AppReadyLayout.tsx` | Ready 工作台总装 |
-| `ShellFrame.tsx` | 桌面 frame、titlebar、窗口按钮 |
+| `ShellFrame.tsx` | 桌面 frame、titlebar、窗口按钮与左侧导航动作插槽 |
 | `AppRouteContent.tsx` | 主 view 选择 |
 | `AppChatSurface.tsx` | Chat surface 组合 |
 | `AppSidebarSurface.tsx` | Sidebar surface 组合 |
 | `AppWorkspaceToolbar.tsx` | Workspace toolbar |
-| `AppTopbarActions.tsx` | 顶部跨页面动作 |
+| `AppTopbarActions.tsx` | Chat 顶部右侧动作 |
 | `AppOverlays.tsx` | Dialog、toast、全局 overlay |
 | `RuntimeErrorNotice.tsx` | 可恢复 runtime 错误 |
 | `RenameThreadDialog.tsx` | 线程重命名交互 |
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。
+
+`features/runtime-activity/` 实现全局运行中心：入口位于侧栏开关旁且不显示计数角标；打开时每两秒拉取一次
+`/v1/runtime-activities`，展示所有线程的 active turn 与持久后台服务，并复用
+thread-scoped cancel/terminate API。轮询、乐观移除和 latest-request guard 留在 feature
+hook；layout 只持有开关状态与顶栏入口。
 
 ## Sidebar
 
