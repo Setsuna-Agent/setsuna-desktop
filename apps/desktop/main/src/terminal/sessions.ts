@@ -23,6 +23,7 @@ type TerminalSession = DesktopTerminalSession & {
   exited: boolean;
   exitDisposable: IDisposable;
   ptyProcess: IPty | null;
+  restartPromise: Promise<boolean> | null;
   rows: number;
   seq: number;
   shellArgs: string[];
@@ -60,6 +61,7 @@ export class DesktopTerminalStore {
       exited: false,
       exitDisposable: { dispose: () => undefined },
       ptyProcess: null,
+      restartPromise: null,
       rows: terminalDimension(input.rows, 24),
       seq: 0,
       shellArgs: shell.args,
@@ -103,11 +105,17 @@ export class DesktopTerminalStore {
 
   async restart(sessionId: string, cols?: number, rows?: number): Promise<boolean> {
     const session = this.requireSession(sessionId);
-    if (!session.exited) return false;
     session.cols = terminalDimension(cols, session.cols);
     session.rows = terminalDimension(rows, session.rows);
-    await this.startSessionProcess(session);
-    return true;
+    if (session.restartPromise) return session.restartPromise;
+    if (!session.exited) return false;
+    const restartPromise = this.startSessionProcess(session);
+    session.restartPromise = restartPromise;
+    try {
+      return await restartPromise;
+    } finally {
+      if (session.restartPromise === restartPromise) session.restartPromise = null;
+    }
   }
 
   close(sessionId: string): boolean {
@@ -135,9 +143,9 @@ export class DesktopTerminalStore {
     return session;
   }
 
-  private async startSessionProcess(session: TerminalSession): Promise<void> {
+  private async startSessionProcess(session: TerminalSession): Promise<boolean> {
     const environmentPatch = await this.resolveEnvironment();
-    if (this.sessions.get(session.sessionId) !== session) return;
+    if (this.sessions.get(session.sessionId) !== session) return false;
     session.dataDisposable.dispose();
     session.exitDisposable.dispose();
     const ptyProcess = pty.spawn(session.shellCommand, session.shellArgs, {
@@ -166,6 +174,7 @@ export class DesktopTerminalStore {
       cols: session.cols,
       rows: session.rows,
     });
+    return true;
   }
 
   private emit(sessionId: string, event: DesktopTerminalEventRecord['event'], data: Record<string, unknown>): void {

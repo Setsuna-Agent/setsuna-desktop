@@ -77,6 +77,9 @@ describe('DesktopNetworkProxyStore', () => {
       .toBe('socks5://127.0.0.1:1080');
     expect(systemProxyUrlFromPacResult('DIRECT; PROXY proxy.example.com:8080')).toBeNull();
     expect(systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080; DIRECT')).toBeNull();
+    expect(() => systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080'))
+      .toThrow('不包含受支持的代理或 DIRECT');
+    expect(() => systemProxyUrlFromPacResult('malformed')).toThrow('不包含受支持的代理或 DIRECT');
   });
 
   it('bypasses configured updater proxies for loopback update sources', async () => {
@@ -186,6 +189,63 @@ describe('DesktopNetworkProxyStore', () => {
     await expect(store.resolveUpstream(server.id)).resolves.toMatchObject({
       url: expect.stringContaining('alice:old-password@'),
     });
+  });
+
+  it('retains failed credential deletions and retries them from durable metadata', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-password-cleanup-'));
+    const configPath = path.join(root, 'network-proxies.json');
+    const vault = new MemoryCredentialVault();
+    const store = new DesktopNetworkProxyStore(configPath, vault);
+    const initial = await store.upsertServer({
+      name: 'Authenticated proxy',
+      url: 'http://proxy.example.com:8080',
+      username: 'alice',
+      password: 'secret',
+    });
+    vault.rejectDeletes = true;
+
+    await expect(store.deleteServer(initial.servers[0]!.id)).resolves.toMatchObject({ servers: [] });
+
+    const pendingConfig = JSON.parse(await readFile(configPath, 'utf8')) as {
+      pendingCredentialCleanupKeys: string[];
+    };
+    expect(pendingConfig.pendingCredentialCleanupKeys).toHaveLength(1);
+    expect(vault.values.size).toBe(1);
+
+    vault.rejectDeletes = false;
+    await expect(store.getState()).resolves.toMatchObject({ servers: [] });
+    const cleanedConfig = JSON.parse(await readFile(configPath, 'utf8')) as {
+      pendingCredentialCleanupKeys: string[];
+    };
+    expect(cleanedConfig.pendingCredentialCleanupKeys).toEqual([]);
+    expect(vault.values.size).toBe(0);
+  });
+
+  it('enforces SOCKS5 username and password byte limits before saving credentials', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-socks5-credentials-'));
+    const vault = new MemoryCredentialVault();
+    const store = new DesktopNetworkProxyStore(path.join(root, 'network-proxies.json'), vault);
+
+    await expect(store.upsertServer({
+      name: 'Long username',
+      url: 'socks5://127.0.0.1:1080',
+      username: '你'.repeat(86),
+      password: 'secret',
+    })).rejects.toThrow('255 个 UTF-8 字节');
+    await expect(store.upsertServer({
+      name: 'Long password',
+      url: 'socks5://127.0.0.1:1080',
+      username: 'alice',
+      password: 'x'.repeat(256),
+    })).rejects.toThrow('255 个 UTF-8 字节');
+    expect(vault.values.size).toBe(0);
+
+    await expect(store.upsertServer({
+      name: 'HTTP credentials',
+      url: 'http://127.0.0.1:8080',
+      username: 'u'.repeat(256),
+      password: 'x'.repeat(256),
+    })).resolves.toMatchObject({ servers: [expect.objectContaining({ passwordSet: true })] });
   });
 
   it('stores multiple servers and resolves independent global and scoped routes', async () => {
@@ -360,6 +420,7 @@ describe('DesktopNetworkProxyStore', () => {
 
 class MemoryCredentialVault implements CredentialVault {
   readonly values = new Map<string, string>();
+  rejectDeletes = false;
 
   async status() {
     return { available: true, backend: 'memory' };
@@ -374,6 +435,7 @@ class MemoryCredentialVault implements CredentialVault {
   }
 
   async delete(key: string) {
+    if (this.rejectDeletes) throw new Error('simulated secure-storage deletion failure');
     this.values.delete(key);
   }
 }

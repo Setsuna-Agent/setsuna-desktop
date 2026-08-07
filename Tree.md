@@ -192,9 +192,9 @@ packages/contracts/ — 4 direct / 67 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 457 total files
-├── src/ — 2 direct / 267 total files
-│   ├── adapters/ — 114 files
+packages/desktop-runtime/ — 4 direct / 459 total files
+├── src/ — 2 direct / 269 total files
+│   ├── adapters/ — 116 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -210,7 +210,7 @@ packages/desktop-runtime/ — 4 direct / 457 total files
 │   │   ├── store/ — 24 direct / 24 total files
 │   │   ├── tool/ — 14 direct / 34 total files
 │   │   │   └── pc-local/ — 20 direct / 20 total files
-│   │   └── workspace/ — 6 direct / 6 total files
+│   │   └── workspace/ — 8 direct / 8 total files
 │   ├── hooks/ — 3 direct / 3 total files
 │   ├── loop/ — 54 files
 │   │   ├── context/ — 13 direct / 13 total files

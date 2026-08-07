@@ -109,7 +109,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     requireBundledRipgrep: options.requireBundledRipgrep,
   });
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine });
-  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore);
+  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore, {
+    fetchImpl: networkProxyFetch.forRoute(),
+    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
+  });
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();

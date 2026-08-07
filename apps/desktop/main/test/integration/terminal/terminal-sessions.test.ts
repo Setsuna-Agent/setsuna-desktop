@@ -41,6 +41,37 @@ describe('desktop terminal store', () => {
     expect(store.close(session.sessionId)).toBe(true);
   });
 
+  it('coalesces concurrent restarts while proxy environment resolution is pending', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-concurrent-restart-test-'));
+    const events: DesktopTerminalEvent[] = [];
+    let environmentResolutionCount = 0;
+    let releaseRestartEnvironment: (() => void) | undefined;
+    const restartEnvironment = new Promise<void>((resolve) => {
+      releaseRestartEnvironment = resolve;
+    });
+    const store = new DesktopTerminalStore(
+      (event) => events.push(event),
+      async () => {
+        environmentResolutionCount += 1;
+        if (environmentResolutionCount > 1) await restartEnvironment;
+        return {};
+      },
+    );
+    const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
+    store.write(session.sessionId, terminalExitCommand());
+    await waitFor(() => events.some((event) => event.event === 'exit'));
+
+    const firstRestart = store.restart(session.sessionId, 90, 30);
+    const secondRestart = store.restart(session.sessionId, 100, 40);
+    await waitFor(() => environmentResolutionCount === 2);
+    releaseRestartEnvironment?.();
+
+    await expect(Promise.all([firstRestart, secondRestart])).resolves.toEqual([true, true]);
+    expect(environmentResolutionCount).toBe(2);
+    expect(events.filter((event) => event.event === 'ready')).toHaveLength(2);
+    expect(store.close(session.sessionId)).toBe(true);
+  });
+
   it('applies the current proxy environment when starting a session', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-proxy-test-'));
     const events: DesktopTerminalEvent[] = [];

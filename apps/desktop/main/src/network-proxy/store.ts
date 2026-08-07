@@ -31,6 +31,7 @@ type StoredNetworkProxyServer = {
 };
 
 type StoredNetworkProxyConfig = {
+  pendingCredentialCleanupKeys: string[];
   version: number;
   servers: StoredNetworkProxyServer[];
   routing: DesktopNetworkProxyRoutingState;
@@ -56,7 +57,13 @@ export class DesktopNetworkProxyStore {
   ) {}
 
   async getState(): Promise<DesktopNetworkProxyState> {
-    const config = await this.load();
+    let config = await this.load();
+    if (config.pendingCredentialCleanupKeys.length) {
+      await this.enqueue(async () => {
+        await this.retryPendingCredentialCleanup(await this.load());
+      });
+      config = await this.load();
+    }
     return stateFromStored(this.configPath, config);
   }
 
@@ -82,6 +89,13 @@ export class DesktopNetworkProxyStore {
       if (username && !password && !previous?.passwordCredentialKey) {
         throw new Error('首次配置代理用户名时必须同时填写密码。');
       }
+      if (new URL(url).protocol === 'socks5:' && username) {
+        const effectivePassword = password ?? (previous?.passwordCredentialKey
+          ? await this.credentialVault.get(previous.passwordCredentialKey)
+          : undefined);
+        if (effectivePassword === undefined) throw new Error(`代理服务器“${name}”的密码不可用。`);
+        validateSocks5Credentials(username, effectivePassword);
+      }
 
       let passwordCredentialKey = clearPassword ? undefined : previous?.passwordCredentialKey;
       let stagedCredentialKey: string | undefined;
@@ -106,17 +120,19 @@ export class DesktopNetworkProxyStore {
       const servers = [...config.servers];
       if (previousIndex >= 0) servers[previousIndex] = nextServer;
       else servers.push(nextServer);
+      const pendingCredentialCleanupKeys = addPendingCredentialCleanupKey(
+        config.pendingCredentialCleanupKeys,
+        credentialToDelete,
+      );
       try {
-        await this.persist({ ...config, servers });
+        await this.persist({ ...config, pendingCredentialCleanupKeys, servers });
       } catch (error) {
         if (stagedCredentialKey) {
           await this.credentialVault.delete(stagedCredentialKey).catch(() => undefined);
         }
         throw error;
       }
-      if (credentialToDelete) {
-        await this.credentialVault.delete(credentialToDelete).catch(() => undefined);
-      }
+      await this.retryPendingCredentialCleanup(await this.load());
     });
     return this.getState();
   }
@@ -131,10 +147,15 @@ export class DesktopNetworkProxyStore {
       if (routeLabels.length) {
         throw new Error(`代理服务器仍被${routeLabels.join('、')}使用，请先切换为其他代理或直连。`);
       }
-      await this.persist({ ...config, servers: config.servers.filter((item) => item.id !== id) });
-      if (server.passwordCredentialKey) {
-        await this.credentialVault.delete(server.passwordCredentialKey).catch(() => undefined);
-      }
+      await this.persist({
+        ...config,
+        pendingCredentialCleanupKeys: addPendingCredentialCleanupKey(
+          config.pendingCredentialCleanupKeys,
+          server.passwordCredentialKey,
+        ),
+        servers: config.servers.filter((item) => item.id !== id),
+      });
+      await this.retryPendingCredentialCleanup(await this.load());
     });
     return this.getState();
   }
@@ -200,6 +221,25 @@ export class DesktopNetworkProxyStore {
     this.config = config;
   }
 
+  private async retryPendingCredentialCleanup(config: StoredNetworkProxyConfig): Promise<void> {
+    if (!config.pendingCredentialCleanupKeys.length) return;
+    const deletedKeys = new Set<string>();
+    for (const credentialKey of config.pendingCredentialCleanupKeys) {
+      try {
+        await this.credentialVault.delete(credentialKey);
+        deletedKeys.add(credentialKey);
+      } catch {
+        // The durable cleanup list keeps failed secure-storage deletions retryable.
+      }
+    }
+    if (!deletedKeys.size) return;
+    await this.persist({
+      ...config,
+      pendingCredentialCleanupKeys: config.pendingCredentialCleanupKeys
+        .filter((credentialKey) => !deletedKeys.has(credentialKey)),
+    }).catch(() => undefined);
+  }
+
   private async enqueue(update: () => Promise<void>): Promise<void> {
     const run = this.updateQueue.then(update, update);
     this.updateQueue = run.catch(() => undefined);
@@ -208,7 +248,12 @@ export class DesktopNetworkProxyStore {
 }
 
 function defaultStoredConfig(): StoredNetworkProxyConfig {
-  return { version: STORE_VERSION, servers: [], routing: defaultDesktopNetworkProxyRouting() };
+  return {
+    pendingCredentialCleanupKeys: [],
+    version: STORE_VERSION,
+    servers: [],
+    routing: defaultDesktopNetworkProxyRouting(),
+  };
 }
 
 function normalizeStoredConfig(value: unknown): StoredNetworkProxyConfig {
@@ -217,6 +262,15 @@ function normalizeStoredConfig(value: unknown): StoredNetworkProxyConfig {
   if (!Array.isArray(value.servers)) throw new Error('代理服务器列表无效。');
   const servers = value.servers.map(normalizeStoredServer);
   if (hasDuplicateServers(servers)) throw new Error('代理服务器配置包含重复的 ID 或名称。');
+  const pendingCredentialCleanupKeys = normalizePendingCredentialCleanupKeys(
+    value.pendingCredentialCleanupKeys,
+  );
+  const referencedCredentialKeys = new Set(servers.flatMap((server) => (
+    server.passwordCredentialKey ? [server.passwordCredentialKey] : []
+  )));
+  if (pendingCredentialCleanupKeys.some((key) => referencedCredentialKeys.has(key))) {
+    throw new Error('代理服务器配置将正在使用的凭据标记为待清理。');
+  }
   if (!isRecord(value.routing)) throw new Error('代理路由配置无效。');
   const global = normalizeDesktopNetworkProxyRoute(value.routing.global, { allowInherit: false });
   if (!global || global.mode === 'inherit') throw new Error('全局代理路由配置无效。');
@@ -229,7 +283,7 @@ function normalizeStoredConfig(value: unknown): StoredNetworkProxyConfig {
   }
   const routing = { global: global as DesktopNetworkProxyGlobalRoute, scopes };
   validateRoutingReferences(routing, servers);
-  return { version: STORE_VERSION, servers, routing };
+  return { pendingCredentialCleanupKeys, version: STORE_VERSION, servers, routing };
 }
 
 function normalizeStoredServer(value: unknown): StoredNetworkProxyServer {
@@ -239,6 +293,9 @@ function normalizeStoredServer(value: unknown): StoredNetworkProxyServer {
   if (!id || !url) throw new Error('代理服务器条目的 ID 或地址无效。');
   const name = normalizeProxyName(value.name);
   const username = normalizeProxyUsername(value.username);
+  if (url.startsWith('socks5:') && username && Buffer.byteLength(username, 'utf8') > 255) {
+    throw new Error(`代理服务器“${name}”的 SOCKS5 用户名超过 255 字节。`);
+  }
   const passwordCredentialKey = typeof value.passwordCredentialKey === 'string'
     && isProxyPasswordCredentialKey(id, value.passwordCredentialKey)
     ? value.passwordCredentialKey
@@ -337,6 +394,15 @@ function normalizeNewPassword(value: unknown): string | undefined {
   return value;
 }
 
+function validateSocks5Credentials(username: string, password: string): void {
+  if (Buffer.byteLength(username, 'utf8') > 255) {
+    throw new Error('SOCKS5 代理用户名不能超过 255 个 UTF-8 字节。');
+  }
+  if (Buffer.byteLength(password, 'utf8') > 255) {
+    throw new Error('SOCKS5 代理密码不能超过 255 个 UTF-8 字节。');
+  }
+}
+
 function proxyPasswordCredentialKey(id: string): string {
   return `network-proxy.${id}.password`;
 }
@@ -346,10 +412,44 @@ function versionedProxyPasswordCredentialKey(id: string): string {
 }
 
 function isProxyPasswordCredentialKey(id: string, value: string): boolean {
-  const legacyKey = proxyPasswordCredentialKey(id);
-  if (value === legacyKey) return true;
-  return value.startsWith(`${legacyKey}.`)
-    && CREDENTIAL_VERSION_PATTERN.test(value.slice(legacyKey.length + 1));
+  return proxyIdForPasswordCredentialKey(value) === id;
+}
+
+function proxyIdForPasswordCredentialKey(value: string): string | undefined {
+  const prefix = 'network-proxy.';
+  const passwordMarker = '.password';
+  if (!value.startsWith(prefix)) return undefined;
+  const markerIndex = value.indexOf(passwordMarker, prefix.length);
+  if (markerIndex < 0) return undefined;
+  const id = value.slice(prefix.length, markerIndex);
+  if (normalizedProxyId(id) !== id) return undefined;
+  const suffix = value.slice(markerIndex + passwordMarker.length);
+  if (!suffix) return id;
+  return suffix.startsWith('.') && CREDENTIAL_VERSION_PATTERN.test(suffix.slice(1))
+    ? id
+    : undefined;
+}
+
+function normalizePendingCredentialCleanupKeys(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error('待清理的代理凭据列表无效。');
+  const keys = value.map((item) => {
+    if (typeof item !== 'string' || !proxyIdForPasswordCredentialKey(item)) {
+      throw new Error('待清理的代理凭据键无效。');
+    }
+    return item;
+  });
+  if (new Set(keys).size !== keys.length) throw new Error('待清理的代理凭据列表包含重复项。');
+  return keys;
+}
+
+function addPendingCredentialCleanupKey(
+  current: readonly string[],
+  credentialKey: string | undefined,
+): string[] {
+  return credentialKey && !current.includes(credentialKey)
+    ? [...current, credentialKey]
+    : [...current];
 }
 
 function normalizedProxyId(value: unknown): string | undefined {

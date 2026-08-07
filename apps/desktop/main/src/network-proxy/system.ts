@@ -38,7 +38,7 @@ export function systemProxyUrlFromPacResult(value: string): string | null {
       // PAC can contain unsupported or malformed fallbacks; continue in order.
     }
   }
-  return null;
+  throw new Error('系统代理解析结果不包含受支持的代理或 DIRECT 指令。');
 }
 
 function proxyProtocol(value: string | undefined): 'http:' | 'https:' | 'socks5:' | null {
