@@ -1,9 +1,14 @@
-import { PUBLISH_ARTIFACT_TOOL_NAME } from '@setsuna-desktop/contracts';
+import {
+  OPENAI_IMAGE_GENERATION_TOOL_NAME,
+  PUBLISH_ARTIFACT_TOOL_NAME,
+  type DesktopResolveNetworkProxyInput,
+} from '@setsuna-desktop/contracts';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createRuntimeFactory } from '../../src/runtime/runtime-factory.js';
+import { InMemoryDesktopNativeBridge } from '../support/in-memory-secret-store.js';
 
 describe('runtime factory tool wiring', () => {
   it('uses the same skill registry for chat tool creation and capability form APIs', async () => {
@@ -68,4 +73,47 @@ describe('runtime factory tool wiring', () => {
       resultPreview: expect.stringContaining('"action":"update"'),
     });
   });
+
+  it('routes image generation requests through the runtime network proxy adapter', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-image-proxy-test-'));
+    const nativeBridge = new RejectingProxyBridge();
+    const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+
+    try {
+      await runtime.pluginStore.installPlugin({
+        path: path.join(process.cwd(), 'plugins', 'openai-image-generation'),
+      });
+      await runtime.configStore.saveConfig({
+        imageGeneration: {
+          apiKey: 'image-secret',
+          baseUrl: 'https://images.example.test/v1',
+          model: 'gpt-image-1',
+        },
+      });
+
+      await expect(runtime.imageGenerationToolHost.runTool(
+        OPENAI_IMAGE_GENERATION_TOOL_NAME,
+        { prompt: 'proxy wiring test' },
+        { threadId: 'thread_1' },
+      )).rejects.toThrow('proxy resolution reached');
+      expect(nativeBridge.proxyInputs).toEqual([{
+        scope: 'runtime',
+        override: undefined,
+        targetUrl: 'https://images.example.test/v1/images/generations',
+      }]);
+    } finally {
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
 });
+
+class RejectingProxyBridge extends InMemoryDesktopNativeBridge {
+  readonly proxyInputs: DesktopResolveNetworkProxyInput[] = [];
+
+  override async resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<never> {
+    this.proxyInputs.push(input);
+    throw new Error('proxy resolution reached');
+  }
+}

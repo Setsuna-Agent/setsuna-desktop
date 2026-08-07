@@ -6,6 +6,7 @@ import path from 'node:path';
 import { Server as ProxyChainServer } from 'proxy-chain';
 import { Agent, fetch, ProxyAgent } from 'undici';
 import { afterEach, describe, expect, it } from 'vitest';
+import { writeJsonAtomically } from '../../../src/data-root/atomic-json.js';
 import { DesktopNetworkProxyFetch } from '../../../src/network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from '../../../src/network-proxy/service.js';
 import { DesktopNetworkProxyStore } from '../../../src/network-proxy/store.js';
@@ -78,6 +79,34 @@ describe('DesktopNetworkProxyStore', () => {
     expect(systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080; DIRECT')).toBeNull();
   });
 
+  it('bypasses configured updater proxies for loopback update sources', async () => {
+    const target = createHttpServer((_request, response) => response.end('local-update'));
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const targetAddress = target.address();
+    if (!targetAddress || typeof targetAddress === 'string') throw new Error('Expected target address.');
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-loopback-updater-'));
+    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+      path.join(root, 'network-proxies.json'),
+      new MemoryCredentialVault(),
+    ));
+    services.push(service);
+    const proxyFetch = new DesktopNetworkProxyFetch(service);
+
+    try {
+      const state = await service.upsertServer({ name: 'Unavailable proxy', url: 'http://127.0.0.1:9' });
+      await service.setRouting({
+        scopes: { updater: { mode: 'proxy', proxyServerId: state.servers[0]!.id } },
+      });
+
+      const response = await proxyFetch.fetch('updater', `http://127.0.0.1:${targetAddress.port}/release.zip`);
+
+      expect(await response.text()).toBe('local-update');
+    } finally {
+      await proxyFetch.close();
+      await new Promise<void>((resolve, reject) => target.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it('fails closed when an existing proxy configuration is corrupt', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-corrupt-'));
     const configPath = path.join(root, 'network-proxies.json');
@@ -123,6 +152,40 @@ describe('DesktopNetworkProxyStore', () => {
     expect(relay.hostname).toBe('127.0.0.1');
     expect(relay.username).not.toBe('alice');
     expect(resolved.proxyUrl).not.toContain('upstream-secret');
+  });
+
+  it('keeps the committed password when an edited proxy metadata write fails', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-password-rollback-'));
+    const configPath = path.join(root, 'network-proxies.json');
+    const vault = new MemoryCredentialVault();
+    let rejectConfigWrites = false;
+    const store = new DesktopNetworkProxyStore(configPath, vault, {
+      writeConfig: async (filePath, value) => {
+        if (rejectConfigWrites) throw new Error('simulated metadata write failure');
+        await writeJsonAtomically(filePath, value);
+      },
+    });
+    const initial = await store.upsertServer({
+      name: 'Authenticated proxy',
+      url: 'http://proxy.example.com:8080',
+      username: 'alice',
+      password: 'old-password',
+    });
+    const server = initial.servers[0]!;
+    const configBefore = await readFile(configPath, 'utf8');
+    const credentialsBefore = [...vault.values.entries()];
+    rejectConfigWrites = true;
+
+    await expect(store.upsertServer({
+      ...server,
+      password: 'new-password',
+    })).rejects.toThrow('simulated metadata write failure');
+
+    expect(await readFile(configPath, 'utf8')).toBe(configBefore);
+    expect([...vault.values.entries()]).toEqual(credentialsBefore);
+    await expect(store.resolveUpstream(server.id)).resolves.toMatchObject({
+      url: expect.stringContaining('alice:old-password@'),
+    });
   });
 
   it('stores multiple servers and resolves independent global and scoped routes', async () => {
@@ -231,7 +294,7 @@ describe('DesktopNetworkProxyStore', () => {
       new MemoryCredentialVault(),
     ));
     services.push(service);
-    const proxyFetch = new DesktopNetworkProxyFetch(service);
+    let agent: ProxyAgent | undefined;
 
     try {
       const state = await service.upsertServer({
@@ -242,13 +305,16 @@ describe('DesktopNetworkProxyStore', () => {
       });
       const proxyServerId = state.servers[0]!.id;
       await service.setRouting({ scopes: { updater: { mode: 'proxy', proxyServerId } } });
+      const route = await service.resolve({ scope: 'updater' });
+      if (route.mode !== 'proxy') throw new Error('Expected a proxy route.');
+      agent = new ProxyAgent(route.proxyUrl);
 
-      const response = await proxyFetch.fetch('updater', `http://127.0.0.1:${targetAddress.port}`);
+      const response = await fetch(`http://127.0.0.1:${targetAddress.port}`, { dispatcher: agent });
 
       expect(response.status).toBe(200);
       expect(await response.text()).toBe('proxied-response');
     } finally {
-      await proxyFetch.close();
+      await agent?.close();
       await new Promise<void>((resolve, reject) => target.close((error) => (error ? reject(error) : resolve())));
     }
   });

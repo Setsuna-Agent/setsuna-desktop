@@ -20,6 +20,7 @@ const MAX_PROXY_NAME_CHARS = 80;
 const MAX_PROXY_USERNAME_CHARS = 256;
 const MAX_PROXY_PASSWORD_CHARS = 4096;
 const PROXY_ID_PATTERN = /^proxy-[a-z0-9-]{8,80}$/u;
+const CREDENTIAL_VERSION_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 type StoredNetworkProxyServer = {
   id: string;
@@ -35,6 +36,10 @@ type StoredNetworkProxyConfig = {
   routing: DesktopNetworkProxyRoutingState;
 };
 
+type DesktopNetworkProxyStoreOptions = {
+  writeConfig?: typeof writeJsonAtomically;
+};
+
 export type ResolvedUpstreamProxy = {
   id: string;
   url: string;
@@ -47,6 +52,7 @@ export class DesktopNetworkProxyStore {
   constructor(
     readonly configPath: string,
     private readonly credentialVault: CredentialVault,
+    private readonly options: DesktopNetworkProxyStoreOptions = {},
   ) {}
 
   async getState(): Promise<DesktopNetworkProxyState> {
@@ -78,11 +84,17 @@ export class DesktopNetworkProxyStore {
       }
 
       let passwordCredentialKey = clearPassword ? undefined : previous?.passwordCredentialKey;
+      let stagedCredentialKey: string | undefined;
       if (password) {
-        passwordCredentialKey = proxyPasswordCredentialKey(id);
-        await this.credentialVault.set(passwordCredentialKey, password);
+        // A new key keeps the previously committed metadata and password paired
+        // until the new metadata has been durably replaced.
+        stagedCredentialKey = versionedProxyPasswordCredentialKey(id);
+        await this.credentialVault.set(stagedCredentialKey, password);
+        passwordCredentialKey = stagedCredentialKey;
       }
-      const credentialToDelete = clearPassword ? previous?.passwordCredentialKey : undefined;
+      const credentialToDelete = previous?.passwordCredentialKey !== passwordCredentialKey
+        ? previous?.passwordCredentialKey
+        : undefined;
 
       const nextServer: StoredNetworkProxyServer = {
         id,
@@ -94,7 +106,14 @@ export class DesktopNetworkProxyStore {
       const servers = [...config.servers];
       if (previousIndex >= 0) servers[previousIndex] = nextServer;
       else servers.push(nextServer);
-      await this.persist({ ...config, servers });
+      try {
+        await this.persist({ ...config, servers });
+      } catch (error) {
+        if (stagedCredentialKey) {
+          await this.credentialVault.delete(stagedCredentialKey).catch(() => undefined);
+        }
+        throw error;
+      }
       if (credentialToDelete) {
         await this.credentialVault.delete(credentialToDelete).catch(() => undefined);
       }
@@ -177,7 +196,7 @@ export class DesktopNetworkProxyStore {
   }
 
   private async persist(config: StoredNetworkProxyConfig): Promise<void> {
-    await writeJsonAtomically(this.configPath, config);
+    await (this.options.writeConfig ?? writeJsonAtomically)(this.configPath, config);
     this.config = config;
   }
 
@@ -221,7 +240,7 @@ function normalizeStoredServer(value: unknown): StoredNetworkProxyServer {
   const name = normalizeProxyName(value.name);
   const username = normalizeProxyUsername(value.username);
   const passwordCredentialKey = typeof value.passwordCredentialKey === 'string'
-    && value.passwordCredentialKey === proxyPasswordCredentialKey(id)
+    && isProxyPasswordCredentialKey(id, value.passwordCredentialKey)
     ? value.passwordCredentialKey
     : undefined;
   if (Boolean(username) !== Boolean(passwordCredentialKey)) {
@@ -320,6 +339,17 @@ function normalizeNewPassword(value: unknown): string | undefined {
 
 function proxyPasswordCredentialKey(id: string): string {
   return `network-proxy.${id}.password`;
+}
+
+function versionedProxyPasswordCredentialKey(id: string): string {
+  return `${proxyPasswordCredentialKey(id)}.${randomUUID()}`;
+}
+
+function isProxyPasswordCredentialKey(id: string, value: string): boolean {
+  const legacyKey = proxyPasswordCredentialKey(id);
+  if (value === legacyKey) return true;
+  return value.startsWith(`${legacyKey}.`)
+    && CREDENTIAL_VERSION_PATTERN.test(value.slice(legacyKey.length + 1));
 }
 
 function normalizedProxyId(value: unknown): string | undefined {

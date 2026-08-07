@@ -1,4 +1,7 @@
-import type { DesktopNetworkProxyScope } from '@setsuna-desktop/contracts';
+import {
+  isDesktopNetworkProxyLoopbackUrl,
+  type DesktopNetworkProxyScope,
+} from '@setsuna-desktop/contracts';
 import { Agent, ProxyAgent, type Dispatcher } from 'undici';
 import type { DesktopNetworkProxyService } from './service.js';
 
@@ -17,7 +20,11 @@ export class DesktopNetworkProxyFetch {
     input: Parameters<typeof globalThis.fetch>[0],
     init?: Parameters<typeof globalThis.fetch>[1],
   ): Promise<Response> {
-    const route = await this.service.resolve({ scope, targetUrl: requestUrl(input) });
+    const targetUrl = requestUrl(input);
+    if (isDesktopNetworkProxyLoopbackUrl(targetUrl)) {
+      return this.fetchImpl(input, { ...init, dispatcher: this.directAgent } as unknown as RequestInit);
+    }
+    const route = await this.service.resolve({ scope, targetUrl });
     const proxyUrl = route.mode === 'proxy' || route.mode === 'system' ? route.proxyUrl : undefined;
     const dispatcher = proxyUrl ? this.proxyAgent(proxyUrl) : this.directAgent;
     return this.fetchImpl(input, { ...init, dispatcher } as unknown as RequestInit);

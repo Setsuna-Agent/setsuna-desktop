@@ -118,7 +118,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configStore,
     pluginStore,
     generatedImageStore,
-    { threadStore, workspaceProjects },
+    {
+      fetchImpl: networkProxyFetch.forRoute(),
+      threadStore,
+      workspaceProjects,
+    },
   );
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
