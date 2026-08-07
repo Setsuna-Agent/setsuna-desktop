@@ -11,7 +11,6 @@ import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatAttachmentValidationError,
   createChatMessageAttachment,
-  isInlineImageMessageAttachment,
   maxChatAttachments,
   type ChatComposerAttachmentItem,
 } from './chatAttachments.js';
@@ -33,12 +32,20 @@ export function disposableChatAttachments(
     ));
 }
 
-export function useChatAttachments({
-  client,
-  supportsImageInput,
-}: {
+export function inlineImageAttachmentsToStore(
+  items: ChatComposerAttachmentItem[],
+): Array<{ item: ChatComposerAttachmentItem; attachment: RuntimeInlineMessageAttachment }> {
+  return items.flatMap((item) => (
+    item.attachment
+      && isRuntimeInlineMessageAttachment(item.attachment)
+      && item.attachment.type.startsWith('image/')
+      ? [{ item, attachment: item.attachment }]
+      : []
+  ));
+}
+
+export function useChatAttachments({ client }: {
   client: Pick<DesktopRuntimeClient, 'deleteAttachment' | 'uploadAttachment'>;
-  supportsImageInput: boolean;
 }) {
   const { t } = useI18n();
   const [items, setItems] = useState<ChatComposerAttachmentItem[]>([]);
@@ -74,6 +81,7 @@ export function useChatAttachments({
         type: file.type || 'application/octet-stream',
         size: file.size,
         status: error ? 'error' : 'uploading',
+        ...(!error && file.type.startsWith('image/') ? { previewUrl: createImagePreviewUrl(file) } : {}),
         ...(error ? { error } : {}),
       };
     });
@@ -82,7 +90,7 @@ export function useChatAttachments({
     await Promise.all(pending.map(async (item, index) => {
       if (item.status === 'error') return;
       try {
-        const attachment = await createChatMessageAttachment(selected[index], client, supportsImageInput, t);
+        const attachment = await createChatMessageAttachment(selected[index], client, t);
         if (cancelledKeysRef.current.has(item.key)) {
           discardStoredAttachment(attachment);
           return;
@@ -99,26 +107,28 @@ export function useChatAttachments({
         cancelledKeysRef.current.delete(item.key);
       }
     }));
-  }, [client, commitItems, discardStoredAttachment, replaceItem, supportsImageInput, t]);
+  }, [client, commitItems, discardStoredAttachment, replaceItem, t]);
 
   const storeInlineImage = useCallback((
     item: ChatComposerAttachmentItem,
     attachment: RuntimeInlineMessageAttachment,
   ) => {
-    replaceItem(item.key, { ...item, attachment, status: 'uploading' });
+    const previewUrl = item.previewUrl ?? attachment.url;
+    replaceItem(item.key, { ...item, attachment, previewUrl, status: 'uploading' });
     void uploadInlineChatImageAttachment(attachment, client)
       .then((storedAttachment) => {
         if (cancelledKeysRef.current.has(item.key)) {
           discardStoredAttachment(storedAttachment);
           return;
         }
-        replaceItem(item.key, { ...item, attachment: storedAttachment, status: 'ready' });
+        replaceItem(item.key, { ...item, attachment: storedAttachment, previewUrl, status: 'ready' });
       })
       .catch((error: unknown) => {
         if (cancelledKeysRef.current.has(item.key)) return;
         replaceItem(item.key, {
           ...item,
           attachment,
+          previewUrl,
           status: 'error',
           error: error instanceof Error ? error.message : t('chat.composer.uploadFailed'),
         });
@@ -141,11 +151,12 @@ export function useChatAttachments({
       size: attachment.size,
       status: 'ready',
       attachment,
+      previewUrl: attachment.url,
     };
     commitItems([...itemsRef.current, item]);
-    if (!supportsImageInput) storeInlineImage(item, attachment);
+    storeInlineImage(item, attachment);
     return 'added';
-  }, [commitItems, storeInlineImage, supportsImageInput]);
+  }, [commitItems, storeInlineImage]);
 
   const remove = useCallback((key: string) => {
     const item = itemsRef.current.find((candidate) => candidate.key === key);
@@ -157,6 +168,7 @@ export function useChatAttachments({
       const removed = itemsRef.current.find((candidate) => candidate.key === key);
       commitItems(itemsRef.current.filter((candidate) => candidate.key !== key));
       discardStoredAttachment(removed?.attachment);
+      releaseImagePreviewUrl(removed?.previewUrl);
     }, attachmentExitAnimationMs);
     removalTimersRef.current.set(key, timer);
   }, [commitItems, discardStoredAttachment, replaceItem]);
@@ -169,6 +181,7 @@ export function useChatAttachments({
     for (const timer of removalTimersRef.current.values()) window.clearTimeout(timer);
     removalTimersRef.current.clear();
     commitItems([]);
+    for (const item of currentItems) releaseImagePreviewUrl(item.previewUrl);
 
     // 已归属线程的队列附件不会被 deletePending 删除；编辑期间新上传但未提交的
     // 附件则会在取消或失败时被可靠回收。
@@ -181,21 +194,32 @@ export function useChatAttachments({
     const uniqueAttachments = [...new Map(
       attachments.map((attachment) => [attachment.id, attachment] as const),
     ).values()];
-    commitItems(uniqueAttachments.map((attachment) => ({
+    const nextItems = uniqueAttachments.map((attachment): ChatComposerAttachmentItem => ({
       key: attachmentKey(),
       name: attachment.name,
       type: attachment.type,
       size: attachment.size,
       status: 'ready',
       attachment: { ...attachment },
-    })));
-  }, [clear, commitItems]);
+      ...(isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/')
+        ? { previewUrl: attachment.url }
+        : {}),
+    }));
+    commitItems(nextItems);
+    // Queued inputs can contain legacy inline images. Normalize them immediately instead
+    // of relying on a capability effect that has already run before the edit is loaded.
+    for (const { item, attachment } of inlineImageAttachmentsToStore(nextItems)) {
+      storeInlineImage(item, attachment);
+    }
+  }, [clear, commitItems, storeInlineImage]);
 
   const clearAfterSend = useCallback((sentAttachments: RuntimeMessageAttachment[]) => {
     const sentIds = new Set(sentAttachments.map((attachment) => attachment.id));
     if (!sentIds.size) return;
     // 保留请求进行期间新增的上传项或错误，只移除已经接收的快照。
+    const sentItems = itemsRef.current.filter((item) => item.attachment && sentIds.has(item.attachment.id));
     commitItems(itemsRef.current.filter((item) => !item.attachment || !sentIds.has(item.attachment.id)));
+    for (const item of sentItems) releaseImagePreviewUrl(item.previewUrl);
   }, [commitItems]);
 
   const beginSend = useCallback((sentAttachments: RuntimeMessageAttachment[]) => {
@@ -216,14 +240,6 @@ export function useChatAttachments({
   }, [clearAfterSend, discardStoredAttachment]);
 
   useEffect(() => {
-    if (supportsImageInput) return;
-    for (const item of itemsRef.current) {
-      if (item.status !== 'ready' || !item.attachment || !isInlineImageMessageAttachment(item.attachment)) continue;
-      storeInlineImage(item, item.attachment);
-    }
-  }, [storeInlineImage, supportsImageInput]);
-
-  useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
@@ -233,6 +249,7 @@ export function useChatAttachments({
         cancelledKeysRef.current.add(item.key);
       }
       for (const attachment of disposableAttachments) discardStoredAttachment(attachment);
+      for (const item of itemsRef.current) releaseImagePreviewUrl(item.previewUrl);
       removalTimersRef.current.clear();
     };
   }, [discardStoredAttachment]);
@@ -258,4 +275,17 @@ export function useChatAttachments({
 
 function attachmentKey(): string {
   return `composer_attachment_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function createImagePreviewUrl(file: File): string | undefined {
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return undefined;
+  }
+}
+
+function releaseImagePreviewUrl(url: string | undefined): void {
+  if (!url?.startsWith('blob:')) return;
+  URL.revokeObjectURL(url);
 }

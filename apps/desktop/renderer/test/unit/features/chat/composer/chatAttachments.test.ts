@@ -31,7 +31,7 @@ describe('chat attachments', () => {
     const uploadAttachment = vi.fn(async () => uploaded);
     const document = file('guide.pdf', '%PDF-1.4', 'application/pdf');
 
-    await expect(createChatMessageAttachment(document, { uploadAttachment }, false)).resolves.toBe(uploaded);
+    await expect(createChatMessageAttachment(document, { uploadAttachment })).resolves.toBe(uploaded);
     expect(uploadAttachment).toHaveBeenCalledWith({
       name: 'guide.pdf',
       type: 'application/pdf',
@@ -39,7 +39,7 @@ describe('chat attachments', () => {
     });
   });
 
-  it('uploads images for non-vision models instead of creating provider image input', async () => {
+  it('uploads images as runtime-managed assets independently of the active model', async () => {
     const bytes = pngBytes();
     const uploaded: RuntimeStoredMessageAttachment = {
       id: 'attachment_1',
@@ -52,41 +52,12 @@ describe('chat attachments', () => {
     const uploadAttachment = vi.fn(async () => uploaded);
     const image = new File([bytes], 'diagram.png', { type: 'image/png' });
 
-    await expect(createChatMessageAttachment(image, { uploadAttachment }, false)).resolves.toBe(uploaded);
+    await expect(createChatMessageAttachment(image, { uploadAttachment })).resolves.toBe(uploaded);
     expect(uploadAttachment).toHaveBeenCalledWith({
       name: 'diagram.png',
       type: 'image/png',
       data: new Uint8Array(bytes),
     });
-  });
-
-  it('keeps native image input inline for vision models', async () => {
-    const bytes = pngBytes();
-    const dataUrl = `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`;
-    vi.stubGlobal('FileReader', class {
-      error: DOMException | null = null;
-      result: string | ArrayBuffer | null = null;
-      onerror: (() => void) | null = null;
-      onload: (() => void) | null = null;
-
-      readAsDataURL(): void {
-        this.result = dataUrl;
-        this.onload?.();
-      }
-    });
-    const uploadAttachment = vi.fn();
-    const image = new File([bytes], 'diagram.png', { type: 'image/png' });
-
-    try {
-      await expect(createChatMessageAttachment(image, { uploadAttachment }, true)).resolves.toMatchObject({
-        name: 'diagram.png',
-        type: 'image/png',
-        url: dataUrl,
-      });
-      expect(uploadAttachment).not.toHaveBeenCalled();
-    } finally {
-      vi.unstubAllGlobals();
-    }
   });
 
   it('formats compact file type labels from extension or MIME type', () => {

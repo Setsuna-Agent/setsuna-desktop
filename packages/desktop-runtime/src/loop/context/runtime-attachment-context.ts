@@ -1,14 +1,19 @@
 import {
+  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   isRuntimeStoredMessageAttachment,
+  type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import type { AttachmentStore } from '../../ports/attachment-store.js';
+import { readFile } from 'node:fs/promises';
+import type { AttachmentStore, RuntimeResolvedAttachment } from '../../ports/attachment-store.js';
+import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 
 export type RuntimeAttachmentContext = {
   contextMessage?: RuntimeMessage;
   readableRoots: string[];
+  resolvedAttachments: RuntimeResolvedAttachment[];
 };
 
 /** 将不透明资源引用解析为单个线程使用的临时只读工具上下文。 */
@@ -26,7 +31,7 @@ export async function buildRuntimeAttachmentContext({
   turnId: string;
 }): Promise<RuntimeAttachmentContext> {
   const attachments = uniqueStoredAttachments(messages.flatMap((message) => message.attachments ?? []));
-  if (!attachmentStore || !attachments.length) return { readableRoots: [] };
+  if (!attachmentStore || !attachments.length) return { readableRoots: [], resolvedAttachments: [] };
 
   const resolved = await attachmentStore.resolveForThread(threadId, attachments);
   const resolvedIds = new Set(resolved.map((item) => item.attachment.assetId));
@@ -64,14 +69,57 @@ export async function buildRuntimeAttachmentContext({
       visibility: 'model',
     },
     readableRoots: [...new Set(resolved.map((item) => item.readableRoot))],
+    resolvedAttachments: resolved,
   };
 }
 
-/** runtime 管理的文件只会转换为文本引用及上述可信路径上下文，绝不会成为供应商文件或图像片段。 */
-export function messageForModel(message: RuntimeMessage): RuntimeMessage {
-  if (!message.attachments?.some(isRuntimeStoredMessageAttachment)) return message;
-  const storedAttachments = message.attachments.filter(isRuntimeStoredMessageAttachment);
-  const inlineAttachments = message.attachments.filter((attachment) => !isRuntimeStoredMessageAttachment(attachment));
+/**
+ * Persisted messages keep runtime assets opaque. An image-capable model receives
+ * signature-checked inline bytes only in the transient provider request.
+ */
+export async function messagesForModel(
+  messages: RuntimeMessage[],
+  options: {
+    resolvedAttachments: RuntimeResolvedAttachment[];
+    supportsImages: boolean;
+  },
+): Promise<RuntimeMessage[]> {
+  const imageUrls = options.supportsImages
+    ? await resolvedImageDataUrls(messages, options.resolvedAttachments)
+    : new Map<string, string>();
+  return messages.map((message) => messageForModel(message, imageUrls, options.supportsImages));
+}
+
+/** runtime 管理的文件始终保留文本引用；受支持的图片仅在供应商请求副本中临时内联。 */
+export function messageForModel(
+  message: RuntimeMessage,
+  resolvedImageDataUrls: ReadonlyMap<string, string> = new Map(),
+  supportsImages = true,
+): RuntimeMessage {
+  const attachments = message.attachments ?? [];
+  const hasStoredAttachment = attachments.some(isRuntimeStoredMessageAttachment);
+  const hasUnsupportedInlineImage = !supportsImages && attachments.some((attachment) => (
+    !isRuntimeStoredMessageAttachment(attachment) && attachment.type.startsWith('image/')
+  ));
+  if (!hasStoredAttachment && !hasUnsupportedInlineImage) return message;
+  const storedAttachments = attachments.filter(isRuntimeStoredMessageAttachment);
+  const providerAttachments = attachments.flatMap((attachment): RuntimeMessageAttachment[] => {
+    if (!isRuntimeStoredMessageAttachment(attachment)) {
+      return !supportsImages && attachment.type.startsWith('image/') ? [] : [attachment];
+    }
+    const url = resolvedImageDataUrls.get(attachment.assetId);
+    if (!url || attachment.modelVisible === false) return [];
+    const inlineAttachment: RuntimeInlineMessageAttachment = {
+      id: attachment.id,
+      name: attachment.name,
+      type: attachment.type,
+      size: attachment.size,
+      source: 'inline',
+      url,
+      ...(attachment.modelVisible === undefined ? {} : { modelVisible: attachment.modelVisible }),
+    };
+    return [inlineAttachment];
+  });
   const attachmentReferences = [
     'Attached runtime files:',
     ...storedAttachments.map((attachment) => `- ${JSON.stringify({
@@ -84,8 +132,40 @@ export function messageForModel(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     content: [message.content.trim(), attachmentReferences].filter(Boolean).join('\n\n'),
-    ...(inlineAttachments.length ? { attachments: inlineAttachments } : { attachments: undefined }),
+    ...(providerAttachments.length ? { attachments: providerAttachments } : { attachments: undefined }),
   };
+}
+
+async function resolvedImageDataUrls(
+  messages: RuntimeMessage[],
+  resolvedAttachments: RuntimeResolvedAttachment[],
+): Promise<Map<string, string>> {
+  const requestedIds = new Set(messages.flatMap((message) => message.attachments ?? []).flatMap((attachment) => (
+    isRuntimeStoredMessageAttachment(attachment)
+      && attachment.type.startsWith('image/')
+      && attachment.modelVisible !== false
+      ? [attachment.assetId]
+      : []
+  )));
+  const entries = await Promise.all(resolvedAttachments.flatMap((resolved) => (
+    requestedIds.has(resolved.attachment.assetId) && resolved.attachment.type.startsWith('image/')
+      ? [resolvedImageDataUrl(resolved)]
+      : []
+  )));
+  return new Map(entries.flatMap((entry) => entry ? [entry] : []));
+}
+
+async function resolvedImageDataUrl(
+  resolved: RuntimeResolvedAttachment,
+): Promise<readonly [string, string] | null> {
+  const data = await readFile(resolved.absolutePath).catch(() => null);
+  if (!data
+    || !data.byteLength
+    || data.byteLength !== resolved.attachment.size
+    || data.byteLength > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) return null;
+  const mimeType = detectSafeImageMimeType(data);
+  if (!mimeType || mimeType !== resolved.attachment.type) return null;
+  return [resolved.attachment.assetId, `data:${mimeType};base64,${data.toString('base64')}`] as const;
 }
 
 function uniqueStoredAttachments(attachments: RuntimeMessageAttachment[]): RuntimeStoredMessageAttachment[] {

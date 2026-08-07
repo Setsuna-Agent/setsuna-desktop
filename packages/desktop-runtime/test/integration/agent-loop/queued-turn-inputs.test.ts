@@ -6,6 +6,7 @@ import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.j
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
+import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import {
   mkDataDir,
   stepSnapshotSkillRegistry,
@@ -298,6 +299,7 @@ describe('agent loop queued turn inputs', () => {
       modelClient,
       eventBus: new InMemoryEventBus(),
       clock: systemClock,
+      configStore: new ImageCapabilityConfigStore(true),
       ids,
       skillRegistry: stepSnapshotSkillRegistry(),
     });

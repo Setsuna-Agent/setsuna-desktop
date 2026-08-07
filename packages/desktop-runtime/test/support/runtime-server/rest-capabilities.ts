@@ -71,7 +71,7 @@ export async function createVisionRecognitionCaptureServer(): Promise<{
     } catch (error) {
       rejectRequest(error);
       response.writeHead(500);
-      response.end(error instanceof Error ? error.message : String(error));
+      response.end('Vision recognition test server error');
     }
   });
 

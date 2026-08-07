@@ -144,6 +144,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     attachmentStore,
     threadStore,
     configuredModelClient,
+    { clock, usageStore },
   );
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,

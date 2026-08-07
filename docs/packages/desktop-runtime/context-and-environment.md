@@ -155,10 +155,10 @@ Workflow 以 user/external fragment 注入，项目 script 不能提升为 runti
 
 - 只接受 AttachmentStore 已认领给 thread 的 asset。
 - 校验 MIME、大小和 provider vision 能力。
-- 原生视觉输入转换为 provider 图片内容；runtime 托管图片只向模型暴露只读路径和元数据。
+- 图片在线程事件中始终保持为 runtime 托管引用；仅当当前模型支持图片时，runtime 才在 provider 请求边界读取、复验签名并临时转换为图片内容，Base64 不写入线程。
 - 用户安装视觉识别插件并选定已配置的视觉模型后，`analyze_image` 通过附件 ID 再次校验 thread 归属，再复用该模型的 provider client 发送图片；主模型只接收文本结果。
 - 文件名/MIME 可参与 Skill auto-activation。
-- 与当前模型能力矛盾的 legacy 内联图片仍在 turn 准入阶段失败；托管图片不受视觉能力限制。
+- composer 和排队编辑会把 legacy 内联图片归一化为托管附件；托管图片不受当前模型视觉能力限制，切换模型也不需要改写持久化消息。
 
 ## Review profile
 

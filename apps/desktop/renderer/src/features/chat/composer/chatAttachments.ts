@@ -2,13 +2,11 @@ import {
   RUNTIME_FILE_ATTACHMENT_EXTENSIONS,
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
-  isRuntimeInlineMessageAttachment,
   type DesktopRuntimeClient,
-  type RuntimeInlineMessageAttachment,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { maxChatImageAttachments, maxChatImageSize, readChatImageAttachment } from './chatImageAttachments.js';
+import { maxChatImageAttachments, maxChatImageSize } from './chatImageAttachments.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -33,6 +31,8 @@ export type ChatComposerAttachmentItem = {
   size: number;
   status: ChatComposerAttachmentStatus;
   attachment?: RuntimeMessageAttachment;
+  /** Renderer-only preview. Blob/data URLs here are never persisted or sent to the runtime. */
+  previewUrl?: string;
   error?: string;
 };
 
@@ -50,21 +50,15 @@ export function chatAttachmentValidationError(file: File, t: Translate = default
 export async function createChatMessageAttachment(
   file: File,
   client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
-  supportsImageInput: boolean,
   t: Translate = defaultTranslate,
 ): Promise<RuntimeMessageAttachment> {
-  if (file.type.startsWith('image/') && supportsImageInput) return readChatImageAttachment(file, t);
+  const validationError = chatAttachmentValidationError(file, t);
+  if (validationError) throw new Error(validationError);
   return client.uploadAttachment({
     name: file.name,
     type: file.type,
     data: new Uint8Array(await file.arrayBuffer()),
   });
-}
-
-export function isInlineImageMessageAttachment(
-  attachment: RuntimeMessageAttachment,
-): attachment is RuntimeInlineMessageAttachment {
-  return isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/');
 }
 
 export function formatAttachmentTypeLabel(name: string, mimeType: string, t: Translate = defaultTranslate): string {
