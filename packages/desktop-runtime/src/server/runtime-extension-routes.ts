@@ -5,10 +5,13 @@ import type {
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
   RuntimePluginItemKind,
+  RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
 import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
+  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+  RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
@@ -95,6 +98,28 @@ export async function handleRuntimeExtensionRequest(
       response,
       200,
       await runtime.imageGenerationToolHost.testGeneration({ prompt: input.prompt }),
+    );
+    return true;
+  }
+
+  if (
+    request.method === 'POST'
+    && url.pathname === `/v1/plugins/${OPENAI_VISION_RECOGNITION_PLUGIN_ID}/test`
+  ) {
+    const input = await readBody<RuntimeVisionRecognitionTestInput | null>(request, null);
+    if (!input || typeof input !== 'object' || typeof input.prompt !== 'string' || !input.prompt.trim()) {
+      throw new RuntimeHttpError(400, 'prompt must be a non-empty string.');
+    }
+    if (input.prompt.trim().length > RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS) {
+      throw new RuntimeHttpError(
+        400,
+        `prompt must not exceed ${RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS} characters.`,
+      );
+    }
+    sendJson(
+      response,
+      200,
+      await runtime.visionRecognitionToolHost.testRecognition({ prompt: input.prompt }),
     );
     return true;
   }

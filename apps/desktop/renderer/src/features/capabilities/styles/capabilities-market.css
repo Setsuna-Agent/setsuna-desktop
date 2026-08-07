@@ -644,6 +644,21 @@
   gap: 12px;
 }
 
+.desktop-vision-recognition-test__result {
+  max-height: 240px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-bg) 94%, var(--app-text) 4%);
+  color: var(--app-text);
+  font: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .desktop-image-generation-test__image {
   min-width: 0;
   overflow: hidden;
@@ -856,6 +871,14 @@
 
 .desktop-capabilities-plugin-detail__item:hover {
   background: color-mix(in srgb, var(--app-primary) 5%, var(--app-surface));
+}
+
+.desktop-capabilities-plugin-detail__item.is-static {
+  cursor: default;
+}
+
+.desktop-capabilities-plugin-detail__item.is-static:hover {
+  background: color-mix(in srgb, var(--app-bg) 92%, var(--app-text) 2%);
 }
 
 .desktop-capabilities-plugin-detail__item:focus-visible {

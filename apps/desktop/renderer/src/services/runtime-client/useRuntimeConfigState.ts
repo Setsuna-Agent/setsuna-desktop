@@ -7,12 +7,14 @@ import type {
   RuntimeFetchModelsInput,
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationTestInput,
+  RuntimeVisionRecognitionConfigInput,
+  RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useState } from 'react';
 
 export type RuntimeConfigClient = Pick<
   DesktopRuntimeClient,
-  'fetchProviderModels' | 'saveConfig' | 'testImageGeneration'
+  'fetchProviderModels' | 'saveConfig' | 'testImageGeneration' | 'testVisionRecognition'
 >;
 
 export type RuntimePreferenceInput = Pick<
@@ -130,6 +132,20 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     [client],
   );
 
+  const saveVisionRecognitionConfig = useCallback(
+    async (input: RuntimeVisionRecognitionConfigInput) => {
+      await saveConfig({ visionRecognition: input });
+    },
+    [saveConfig],
+  );
+
+  const testVisionRecognition = useCallback(
+    async (input: RuntimeVisionRecognitionTestInput) => (
+      await client.testVisionRecognition(input)
+    ),
+    [client],
+  );
+
   const saveRuntimePreferences = useCallback(
     async (input: RuntimePreferenceInput) => {
       await saveConfig(input);
@@ -157,9 +173,11 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     fetchProviderModels,
     replaceConfig,
     saveImageGenerationConfig,
+    saveVisionRecognitionConfig,
     saveProviders,
     saveRuntimePreferences,
     selectProviderModel,
     testImageGeneration,
+    testVisionRecognition,
   };
 }

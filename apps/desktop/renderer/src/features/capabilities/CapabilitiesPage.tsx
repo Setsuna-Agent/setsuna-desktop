@@ -6,6 +6,9 @@ import type {
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
+  RuntimeVisionRecognitionConfigInput,
+  RuntimeVisionRecognitionTestInput,
+  RuntimeVisionRecognitionTestResult,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -104,6 +107,8 @@ export function CapabilitiesPage({
   onSelectedPluginIdChange,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
+  onSaveVisionRecognitionConfig,
+  onTestVisionRecognition,
 }: {
   config: RuntimeConfigState | null;
   skills: RuntimeSkillSummary[];
@@ -141,6 +146,8 @@ export function CapabilitiesPage({
   onSelectedPluginIdChange: (pluginId: string | null) => void;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
+  onSaveVisionRecognitionConfig: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
+  onTestVisionRecognition: (input: RuntimeVisionRecognitionTestInput) => Promise<RuntimeVisionRecognitionTestResult>;
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
@@ -461,6 +468,7 @@ export function CapabilitiesPage({
           <CapabilitiesPluginDetail
             error={pluginError}
             imageGenerationConfig={config?.imageGeneration}
+            runtimeConfig={config ?? undefined}
             installedPlugin={selectedInstalledPlugin}
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
@@ -476,6 +484,8 @@ export function CapabilitiesPage({
             onRemove={removePlugin}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
             onTestImageGeneration={onTestImageGeneration}
+            onSaveVisionRecognitionConfig={onSaveVisionRecognitionConfig}
+            onTestVisionRecognition={onTestVisionRecognition}
           />
         </section>
       </main>

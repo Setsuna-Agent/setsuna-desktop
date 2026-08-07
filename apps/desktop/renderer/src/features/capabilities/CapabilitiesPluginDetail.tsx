@@ -1,4 +1,5 @@
 import type {
+  RuntimeConfigState,
   RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationConfigState,
@@ -9,9 +10,15 @@ import type {
   RuntimePluginItemKind,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
+  RuntimeVisionRecognitionConfigInput,
+  RuntimeVisionRecognitionTestInput,
+  RuntimeVisionRecognitionTestResult,
 } from '@setsuna-desktop/contracts';
-import { OPENAI_IMAGE_GENERATION_PLUGIN_ID } from '@setsuna-desktop/contracts';
-import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow } from 'lucide-react';
+import {
+  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
+  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
+} from '@setsuna-desktop/contracts';
+import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader } from '../../shared/ui/primitives.js';
@@ -20,12 +27,14 @@ import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
 import { ImageGenerationPluginSettings } from './ImageGenerationPluginSettings.js';
-import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills } from './pluginDisplay.js';
+import { VisionRecognitionPluginSettings } from './VisionRecognitionPluginSettings.js';
+import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills, mergePluginTools } from './pluginDisplay.js';
 import { localizedPluginCopy } from './pluginLocalization.js';
 
 export function CapabilitiesPluginDetail({
   error,
   imageGenerationConfig,
+  runtimeConfig,
   installedPlugin,
   installing,
   marketplacePlugin,
@@ -36,11 +45,14 @@ export function CapabilitiesPluginDetail({
   onRemove,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
+  onSaveVisionRecognitionConfig,
+  onTestVisionRecognition,
   removing,
   runtimeHooks,
 }: {
   error: string | null;
   imageGenerationConfig?: RuntimeImageGenerationConfigState;
+  runtimeConfig?: RuntimeConfigState;
   installedPlugin?: RuntimePluginSummary;
   installing: boolean;
   marketplacePlugin?: RuntimePluginMarketplaceItem;
@@ -51,6 +63,8 @@ export function CapabilitiesPluginDetail({
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
+  onSaveVisionRecognitionConfig?: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
+  onTestVisionRecognition?: (input: RuntimeVisionRecognitionTestInput) => Promise<RuntimeVisionRecognitionTestResult>;
   removing: boolean;
   runtimeHooks?: RuntimeHookMetadata[];
 }) {
@@ -60,6 +74,7 @@ export function CapabilitiesPluginDetail({
   if (!plugin) return null;
   const copy = localizedPluginCopy(plugin, t);
 
+  const tools = mergePluginTools(marketplacePlugin?.tools ?? [], installedPlugin?.tools ?? []);
   const skills = mergePluginSkills(marketplacePlugin?.skills ?? [], installedPlugin?.skills ?? []);
   const mcpServers = mergePluginMcpServers(marketplacePlugin?.mcpServers ?? [], installedPlugin?.mcpServers ?? []);
   const hooks = mergePluginHooks(marketplacePlugin?.hooks ?? [], installedPlugin?.hooks ?? []);
@@ -146,6 +161,34 @@ export function CapabilitiesPluginDetail({
           onTest={onTestImageGeneration}
         />
       ) : null}
+
+      {installed
+        && plugin.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID
+        && onSaveVisionRecognitionConfig
+        && onTestVisionRecognition ? (
+        <VisionRecognitionPluginSettings
+          config={runtimeConfig}
+          onSave={onSaveVisionRecognitionConfig}
+          onTest={onTestVisionRecognition}
+        />
+      ) : null}
+
+      <CapabilitiesPluginDetailSection
+        icon={<Wrench size={15} />}
+        title={t('capabilities.detail.tools')}
+        count={tools.length}
+        empty={t('capabilities.detail.toolsEmpty')}
+      >
+        {tools.map((tool) => (
+          <CapabilitiesPluginItemButton
+            key={tool.name}
+            title={tool.name}
+            description={tool.description || t('capabilities.detail.toolFallback')}
+            icon={<Wrench size={16} />}
+            badges={[t('capabilities.detail.runtimeTool')]}
+          />
+        ))}
+      </CapabilitiesPluginDetailSection>
 
       <CapabilitiesPluginDetailSection
         icon={<BookOpen size={15} />}

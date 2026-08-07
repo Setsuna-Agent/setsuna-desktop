@@ -1,6 +1,8 @@
 import {
+  isRuntimeInlineMessageAttachment,
   isRuntimeStoredMessageAttachment,
   type DesktopRuntimeClient,
+  type RuntimeInlineMessageAttachment,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -9,11 +11,14 @@ import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatAttachmentValidationError,
   createChatMessageAttachment,
-  isImageMessageAttachment,
+  isInlineImageMessageAttachment,
   maxChatAttachments,
   type ChatComposerAttachmentItem,
 } from './chatAttachments.js';
-import { rejectedChatImageAttachment } from './chatImageAttachments.js';
+import {
+  rejectedChatImageAttachment,
+  uploadInlineChatImageAttachment,
+} from './chatImageAttachments.js';
 
 const attachmentExitAnimationMs = 180;
 
@@ -62,7 +67,7 @@ export function useChatAttachments({
     if (available <= 0) return;
     const selected = files.slice(0, available);
     const pending = selected.map((file): ChatComposerAttachmentItem => {
-      const error = chatAttachmentValidationError(file, supportsImageInput, t);
+      const error = chatAttachmentValidationError(file, t);
       return {
         key: attachmentKey(),
         name: file.name || 'attachment',
@@ -77,7 +82,7 @@ export function useChatAttachments({
     await Promise.all(pending.map(async (item, index) => {
       if (item.status === 'error') return;
       try {
-        const attachment = await createChatMessageAttachment(selected[index], client, t);
+        const attachment = await createChatMessageAttachment(selected[index], client, supportsImageInput, t);
         if (cancelledKeysRef.current.has(item.key)) {
           discardStoredAttachment(attachment);
           return;
@@ -96,21 +101,51 @@ export function useChatAttachments({
     }));
   }, [client, commitItems, discardStoredAttachment, replaceItem, supportsImageInput, t]);
 
+  const storeInlineImage = useCallback((
+    item: ChatComposerAttachmentItem,
+    attachment: RuntimeInlineMessageAttachment,
+  ) => {
+    replaceItem(item.key, { ...item, attachment, status: 'uploading' });
+    void uploadInlineChatImageAttachment(attachment, client)
+      .then((storedAttachment) => {
+        if (cancelledKeysRef.current.has(item.key)) {
+          discardStoredAttachment(storedAttachment);
+          return;
+        }
+        replaceItem(item.key, { ...item, attachment: storedAttachment, status: 'ready' });
+      })
+      .catch((error: unknown) => {
+        if (cancelledKeysRef.current.has(item.key)) return;
+        replaceItem(item.key, {
+          ...item,
+          attachment,
+          status: 'error',
+          error: error instanceof Error ? error.message : t('chat.composer.uploadFailed'),
+        });
+      })
+      .finally(() => {
+        cancelledKeysRef.current.delete(item.key);
+      });
+  }, [client, discardStoredAttachment, replaceItem, t]);
+
   const addExistingImage = useCallback((attachment: RuntimeMessageAttachment): ChatImageAttachmentOutcome => {
     const currentCount = itemsRef.current.filter((item) => item.status !== 'removing').length;
-    const rejection = rejectedChatImageAttachment(attachment, currentCount, supportsImageInput);
+    const rejection = rejectedChatImageAttachment(attachment, currentCount);
     if (rejection) return rejection;
+    if (!isRuntimeInlineMessageAttachment(attachment)) return 'unavailable';
     if (itemsRef.current.some((item) => item.attachment?.id === attachment.id)) return 'added';
-    commitItems([...itemsRef.current, {
+    const item: ChatComposerAttachmentItem = {
       key: attachmentKey(),
       name: attachment.name,
       type: attachment.type,
       size: attachment.size,
       status: 'ready',
       attachment,
-    }]);
+    };
+    commitItems([...itemsRef.current, item]);
+    if (!supportsImageInput) storeInlineImage(item, attachment);
     return 'added';
-  }, [commitItems, supportsImageInput]);
+  }, [commitItems, storeInlineImage, supportsImageInput]);
 
   const remove = useCallback((key: string) => {
     const item = itemsRef.current.find((candidate) => candidate.key === key);
@@ -182,10 +217,11 @@ export function useChatAttachments({
 
   useEffect(() => {
     if (supportsImageInput) return;
-    const removed = itemsRef.current.filter((item) => item.attachment && isImageMessageAttachment(item.attachment));
-    if (!removed.length) return;
-    commitItems(itemsRef.current.filter((item) => !removed.includes(item)));
-  }, [commitItems, supportsImageInput]);
+    for (const item of itemsRef.current) {
+      if (item.status !== 'ready' || !item.attachment || !isInlineImageMessageAttachment(item.attachment)) continue;
+      storeInlineImage(item, item.attachment);
+    }
+  }, [storeInlineImage, supportsImageInput]);
 
   useEffect(() => {
     mountedRef.current = true;

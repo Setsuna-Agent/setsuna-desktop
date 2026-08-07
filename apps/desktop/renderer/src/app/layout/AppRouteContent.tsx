@@ -232,6 +232,8 @@ export function AppRouteContent({
           onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
           onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
           onTestImageGeneration={runtime.testImageGeneration}
+          onSaveVisionRecognitionConfig={runtime.saveVisionRecognitionConfig}
+          onTestVisionRecognition={runtime.testVisionRecognition}
         />
       </Suspense>
     );

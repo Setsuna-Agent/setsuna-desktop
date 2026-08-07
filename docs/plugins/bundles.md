@@ -35,6 +35,12 @@ my-plugin/
   "tags": ["文档", "开发"],
   "featured": true,
   "featuredOrder": 1,
+  "tools": [
+    {
+      "name": "analyze_document",
+      "description": "分析当前会话中的受管文档。"
+    }
+  ],
   "skills": ["skills/docs-helper"],
   "mcpServers": [
     {
@@ -70,6 +76,7 @@ my-plugin/
 - `id` 会规范化为最多 80 字符的小写标识。
 - `icon` 是 renderer 管理的图标 token，只允许小写字母、数字和连字符；Bundle 不能注入 SVG、图片路径或任意 markup，未知 token 使用安全的通用插件图标。
 - `publisher`、`tags` 和 `featured` 用于市场展示，不影响运行权限；`featured: true` 的插件优先进入市场顶部编辑精选。可选的正整数 `featuredOrder` 控制精选位顺序，数字越小越靠前，且只能与 `featured: true` 一起使用。
+- `tools` 只声明应用内置 runtime 工具的名称和说明，供市场摘要与详情页在安装前后展示；它不会从 Bundle 加载或注册可执行代码。
 - `skills` 是相对 Bundle 根目录的 Skill 目录列表；省略时自动发现 `skills/*/SKILL.md`。运行时 ID 为 `<plugin-id>.<skill-directory>`，Plugin Skill 只读。
 - `mcpServers` 支持 `stdio` 和 `streamable_http`。HTTP 必须是 HTTPS，或仅限 loopback 的 HTTP。
 - `hooks` 使用现有 Hook 事件与 matcher。`id`、`name`、`description`、触发事件和 matcher 会安全投影到插件详情页；命令和本地路径不会发送给 renderer。`{{pluginRoot}}` 安装时替换为私有安装目录，并按当前平台安全引用。
@@ -95,11 +102,11 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 ### 随应用实现的原生能力
 
-普通 Bundle 仍不能注入任意 TypeScript/JavaScript 工具代码。需要凭据或本机能力的第一方插件可以由 Bundle Skill 与应用内置 ToolHost 配对，并以已安装插件 ID 作为能力开关。`openai-image-generation` 使用这一方式提供 `generate_image`：用户在插件详情页填写 OpenAI 兼容 Images API 的服务地址、默认模型和 API key；API key 只写入 runtime 的 `secrets.json`，renderer 仅接收脱敏状态。服务地址允许 HTTP 或 HTTPS，HTTP 配置会显示明文传输警告。卸载或停用插件后，工具不会再出现在模型能力列表中。
+普通 Bundle 仍不能注入任意 TypeScript/JavaScript 工具代码。需要凭据或本机能力的第一方插件可以由 Bundle Skill、manifest `tools` 元数据与应用内置 ToolHost 配对，并以已安装插件 ID 作为能力开关。`openai-image-generation` 使用这一方式提供 `generate_image`，并保留独立的 Images API 配置；`openai-vision-recognition` 提供 `analyze_image`，只接受当前 thread 的受管附件 ID。视觉插件详情页只选择“模型服务”中已启用且标记为支持图片的模型，runtime 保存 provider/model 引用并复用该模型已有的协议、服务地址、API key 和代理设置。模型只接收图片和具体视觉问题，主模型只接收作为外部上下文返回的文本结果。插件默认不安装，卸载后对应工具立即从模型能力列表消失，但不会限制普通图片发送。
 
 ## 安装和卸载
 
-应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。renderer 通过 `GET /v1/plugin-marketplace` 获取不含本地路径、命令或凭据的市场投影；投影包含用于详情页展示的 Skill、MCP 和 Hook 描述。点击安装后只向 `POST /v1/plugin-marketplace/:id/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
+应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。renderer 通过 `GET /v1/plugin-marketplace` 获取不含本地路径、命令或凭据的市场投影；投影包含用于详情页展示的 Tool、Skill、MCP、Hook 和 resource 描述。点击安装后只向 `POST /v1/plugin-marketplace/:id/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
 本地目录侧载只保留给内部开发工具 `install_plugin_bundle`，不会通过普通 renderer REST 或能力页暴露；模型发起的侧载和卸载始终需要审批。安装后：
 
@@ -123,7 +130,7 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 Hooks 页只展示真实已配置的 Hook，新环境默认为空；原先的 8 个推荐模板已分别迁移为独立插件，用户可以从市场按需安装，也可以继续手动创建 Hook。
 
-当前默认市场是随应用发布的精选目录，已包含图片生成、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务，并兼容 `b64_json` 与 URL 图片响应；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。
+当前默认市场是随应用发布的精选目录，已包含图片生成、视觉识别、OpenAI 官方文档、Context7 文档查询、PDF 文档处理、Word 文档处理，以及危险命令防护、敏感路径防护、生成目录防护、文件改动审计、项目提示、消息密钥提醒、压缩提示和 TODO 续作 8 个 Hook 插件。图片生成插件调用用户配置的 OpenAI 兼容 `POST /v1/images/generations` 服务；视觉识别插件通过现有模型 adapter 调用用户选定的视觉模型，并使用当前会话受管图片，因此实际协议和端点跟随该模型的 provider 配置；Word 文档插件复用 runtime 的 Python/uv、工作区图片读取和成品发布能力。LibreOffice 仍是可选的外部渲染依赖，缺失时只能进行结构检查。市场暂不包含远程源、自动更新、签名验证或自动执行安装脚本；这些能力加入前仍保持“可信应用目录 + 完整本地校验”的边界。
 
 ## 实现入口
 

@@ -16,7 +16,7 @@ export function taskModelSettingsForSave(
 
   for (const taskId of RUNTIME_TASK_MODEL_IDS) {
     if (!Object.hasOwn(input, taskId)) continue;
-    const reference = normalizeTaskModelReference(input[taskId]);
+    const reference = normalizeConfiguredModelReference(input[taskId]);
     if (reference) next[taskId] = reference;
     else delete next[taskId];
   }
@@ -54,13 +54,13 @@ export function normalizeTaskModelSettings(value: unknown): RuntimeTaskModelSett
   const record = value as Record<string, unknown>;
   const normalized: RuntimeTaskModelSettings = {};
   for (const taskId of RUNTIME_TASK_MODEL_IDS) {
-    const reference = normalizeTaskModelReference(record[taskId]);
+    const reference = normalizeConfiguredModelReference(record[taskId]);
     if (reference) normalized[taskId] = reference;
   }
   return normalized;
 }
 
-function normalizeTaskModelReference(
+export function normalizeConfiguredModelReference(
   value: unknown,
 ): RuntimeTaskModelSettings[RuntimeTaskModelId] | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;

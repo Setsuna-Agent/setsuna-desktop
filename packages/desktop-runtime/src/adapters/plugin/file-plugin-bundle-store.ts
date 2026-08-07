@@ -94,11 +94,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       featured: manifest.featured,
       ...(manifest.featuredOrder !== undefined ? { featuredOrder: manifest.featuredOrder } : {}),
       capabilities: {
+        ...(manifest.tools.length ? { tools: manifest.tools.length } : {}),
         skills: manifest.skillEntries.length,
         mcpServers: manifest.mcpServers.length,
         hooks: manifest.hooks.length,
         resources: manifest.resources.length,
       },
+      ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
       skills: manifest.skillEntries.map(({ id, name, description }) => ({
         id,
         name,
@@ -155,6 +157,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         installPath,
         installedAt: this.clock.now().toISOString(),
         manifestPath: installedManifestPath,
+        ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
         skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
           id: skill.id,
           name: skill.name,
@@ -343,6 +346,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           installPath,
           installedAt: plugin.installedAt,
           manifestPath: installedManifestPath,
+          ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
           skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
             id: skill.id,
             name: skill.name,

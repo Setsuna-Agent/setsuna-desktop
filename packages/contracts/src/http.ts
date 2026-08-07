@@ -42,6 +42,8 @@ import type {
   RuntimePluginList,
   RuntimePluginMarketplaceList,
   RuntimePluginRemoveResult,
+  RuntimeVisionRecognitionTestInput,
+  RuntimeVisionRecognitionTestResult,
 } from './plugins.js';
 import type {
   RuntimeSkillDetail,
@@ -167,6 +169,7 @@ export type DesktopRuntimeClient = {
   updateMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   testImageGeneration(input: RuntimeImageGenerationTestInput): Promise<RuntimeImageGenerationTestResult>;
+  testVisionRecognition(input: RuntimeVisionRecognitionTestInput): Promise<RuntimeVisionRecognitionTestResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;

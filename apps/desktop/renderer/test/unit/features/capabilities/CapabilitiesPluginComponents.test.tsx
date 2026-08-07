@@ -335,8 +335,9 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('2.0 KB');
     expect(html).not.toContain('documents.documents');
     expect(html).not.toContain('<code>');
-    expect(html.match(/aria-expanded="true"/gu)).toHaveLength(4);
-    expect(html.match(/desktop-capabilities-plugin-detail__section-content/gu)).toHaveLength(4);
+    expect(html.match(/aria-expanded="true"/gu)).toHaveLength(5);
+    expect(html.match(/desktop-capabilities-plugin-detail__section-content/gu)).toHaveLength(5);
+    expect(html).toContain('这个插件不包含工具。');
     expect(html).toContain('这个插件不包含 MCP 服务。');
     expect(html).toContain('这个插件不包含 Hook。');
     expect(html).not.toContain(' hidden=""');
@@ -384,6 +385,84 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('测试请求只携带提示词');
     expect(html).not.toContain('>启用<');
     expect(html).not.toContain('image-secret');
+  });
+
+  it('selects an existing image-capable model and lists the installed vision tool', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        runtimeConfig={{
+          configPath: 'C:\\runtime\\config.json',
+          dataPath: 'C:\\runtime',
+          storagePath: 'C:\\runtime\\memories',
+          activeProviderId: 'vision-provider',
+          providers: [{
+            id: 'vision-provider',
+            name: '已配置视觉服务',
+            provider: 'openai-compatible',
+            baseUrl: 'http://127.0.0.1:9000/v1',
+            enabled: true,
+            apiKeySet: true,
+            apiKeyPreview: 'vis••••cret',
+            models: [{
+              id: 'vision-model',
+              name: 'Qwen Vision',
+              code: 'qwen-vl-max',
+              enabled: true,
+              maxOutputTokens: 8_192,
+              thinkingEnabled: false,
+              thinkingEfforts: [],
+              supportsImages: true,
+            }],
+          }],
+          globalPrompt: '',
+          memory: {
+            useMemories: false,
+            generateMemories: false,
+            disableOnExternalContext: false,
+          },
+          memoryEnabled: false,
+          setsunaStyle: 'developer',
+          approvalPolicy: 'on-request',
+          permissionProfile: 'workspace-write',
+          visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
+        }}
+        installing={false}
+        installedPlugin={{
+          id: 'openai-vision-recognition',
+          name: '视觉识别',
+          icon: 'vision-recognition',
+          installedAt: '2026-08-08T00:00:00.000Z',
+          tools: [{
+            name: 'analyze_image',
+            description: '使用已配置视觉模型分析当前会话中的图片附件。',
+          }],
+          skills: [{ id: 'openai-vision-recognition.vision-recognition', name: '视觉识别' }],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSaveVisionRecognitionConfig={async () => undefined}
+        onTestVisionRecognition={async () => ({ content: 'Image received.', durationMs: 0 })}
+      />,
+    );
+
+    expect(html).toContain('desktop-vision-recognition-settings');
+    expect(html).toContain('已配置视觉服务 · Qwen Vision (qwen-vl-max)');
+    expect(html).toContain('qwen-vl-max');
+    expect(html).toContain('这里只显示已启用服务中标记为支持图片的模型');
+    expect(html).toContain('内置测试图片');
+    expect(html).toContain('测试模型');
+    expect(html).toContain('analyze_image');
+    expect(html).toContain('使用已配置视觉模型分析当前会话中的图片附件。');
+    expect(html).not.toContain('http://127.0.0.1:9000/v1');
+    expect(html).not.toContain('type="password"');
+    expect(html).not.toContain('vision-secret');
   });
 
   it('renders Markdown files by default while keeping a source view available', () => {
@@ -441,6 +520,7 @@ describe('capabilities plugin components', () => {
       'pdf',
       'documents',
       'image-generation',
+      'vision-recognition',
       'guard-dangerous-shell',
       'protect-secret-paths',
       'protect-generated-folders',

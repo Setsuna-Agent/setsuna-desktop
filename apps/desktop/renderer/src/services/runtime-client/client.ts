@@ -26,6 +26,8 @@ import type {
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
+  RuntimeVisionRecognitionTestInput,
+  RuntimeVisionRecognitionTestResult,
   RuntimeMcpResourceReadResult,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -378,6 +380,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     testImageGeneration(input: RuntimeImageGenerationTestInput) {
       return request<RuntimeImageGenerationTestResult>({
         path: '/v1/plugins/openai-image-generation/test',
+        method: 'POST',
+        body: input,
+      });
+    },
+    testVisionRecognition(input: RuntimeVisionRecognitionTestInput) {
+      return request<RuntimeVisionRecognitionTestResult>({
+        path: '/v1/plugins/openai-vision-recognition/test',
         method: 'POST',
         body: input,
       });

@@ -4,6 +4,7 @@ import type {
   RuntimePluginMcpServerDescriptor,
   RuntimePluginSkill,
   RuntimePluginSummary,
+  RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 
@@ -56,6 +57,7 @@ export function pluginMarketplacePresentation(
 
 export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem, t: Translate = defaultTranslate): string {
   const labels = [
+    plugin.capabilities.tools ? capabilityCountLabel('tool', plugin.capabilities.tools, t) : null,
     plugin.capabilities.skills ? capabilityCountLabel('skill', plugin.capabilities.skills, t) : null,
     plugin.capabilities.mcpServers ? capabilityCountLabel('service', plugin.capabilities.mcpServers, t) : null,
     plugin.capabilities.hooks ? capabilityCountLabel('automation', plugin.capabilities.hooks, t) : null,
@@ -65,11 +67,24 @@ export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem, t:
 }
 
 function capabilityCountLabel(
-  kind: 'automation' | 'resource' | 'service' | 'skill',
+  kind: 'automation' | 'resource' | 'service' | 'skill' | 'tool',
   count: number,
   t: Translate,
 ): string {
   return t(`capabilities.market.${kind}.${count === 1 ? 'one' : 'many'}`, { count });
+}
+
+export function mergePluginTools(
+  marketplace: RuntimePluginTool[],
+  installed: RuntimePluginTool[],
+): RuntimePluginTool[] {
+  const installedByName = new Map(installed.map((tool) => [tool.name, tool]));
+  const merged = marketplace.map((tool) => {
+    const active = installedByName.get(tool.name);
+    installedByName.delete(tool.name);
+    return active ? { ...tool, ...active, description: active.description ?? tool.description } : tool;
+  });
+  return [...merged, ...installedByName.values()];
 }
 
 export function formatPluginFileSize(size: number): string {

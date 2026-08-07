@@ -32,6 +32,7 @@ import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host
 import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { OpenAiImageGenerationToolHost } from '../adapters/tool/openai-image-generation-tool-host.js';
+import { OpenAiVisionRecognitionToolHost } from '../adapters/tool/openai-vision-recognition-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local/pc-local-tool-host.js';
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
@@ -122,6 +123,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
   const browserControl = HttpBrowserControlClient.fromEnvironment();
+  const configuredModelClient = new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
+    debugTrace: debugTraceStore,
+    fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
+  });
+  const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
   const imageGenerationToolHost = new OpenAiImageGenerationToolHost(
     configStore,
     pluginStore,
@@ -131,6 +137,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       threadStore,
       workspaceProjects,
     },
+  );
+  const visionRecognitionToolHost = new OpenAiVisionRecognitionToolHost(
+    configStore,
+    pluginStore,
+    attachmentStore,
+    threadStore,
+    configuredModelClient,
   );
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
@@ -155,19 +168,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore),
     imageGenerationToolHost,
+    visionRecognitionToolHost,
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     backgroundShellProcesses,
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
-  const modelClient = new ImageAssetResolvingModelClient(
-    new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
-      debugTrace: debugTraceStore,
-      fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
-    }),
-    generatedImageStore,
-  );
   const agentLoop = new AgentLoop({
     attachmentStore,
     threadStore,
@@ -205,6 +212,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     environmentResolver,
     generatedImageStore,
     imageGenerationToolHost,
+    visionRecognitionToolHost,
     memoryStore,
     modelClient,
     networkProxyFetch,

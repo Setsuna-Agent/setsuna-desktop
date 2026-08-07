@@ -1,28 +1,31 @@
 import {
-  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   isRuntimeStoredMessageAttachment,
   type RuntimeAttachmentUploadInput,
-  type RuntimeFileAttachmentMimeType,
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
-  RuntimeAttachmentValidationError,
   type AttachmentStore,
   type RuntimeResolvedAttachment,
 } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
+import {
+  normalizeStoredAttachmentMimeType,
+  safeAttachmentDisplayName,
+  safeStoredAttachmentFileName,
+  type StoredAttachmentMimeType,
+  validateStoredAttachmentUpload,
+} from './file-attachment-validation.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
-import { replaceControlCharacters, safeStorageFileStem } from './storage-file-name.js';
 
 type StoredAttachmentRecord = {
   id: string;
   name: string;
-  type: RuntimeFileAttachmentMimeType;
+  type: StoredAttachmentMimeType;
   size: number;
   fileName: string;
   createdAt: string;
@@ -36,10 +39,8 @@ type AttachmentIndex = {
 
 const EMPTY_INDEX: AttachmentIndex = { version: 1, attachments: [] };
 const DEFAULT_PENDING_TTL_MS = 24 * 60 * 60 * 1_000;
-const PDF_MIME_TYPE: RuntimeFileAttachmentMimeType = 'application/pdf';
-const DOCX_MIME_TYPE: RuntimeFileAttachmentMimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
-/** 在工作区外持久化用户上传的文档，并通过不透明资源 ID 授予访问权限。 */
+/** 在工作区外持久化用户上传的附件，并通过不透明资源 ID 授予访问权限。 */
 export class FileAttachmentStore implements AttachmentStore {
   private readonly root: string;
   private readonly filesRoot: string;
@@ -95,14 +96,14 @@ export class FileAttachmentStore implements AttachmentStore {
 
   create(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     return this.enqueueMutation(async () => {
-      const validated = validateUpload(input);
+      const validated = validateStoredAttachmentUpload(input);
       const id = assertSafeRuntimeId(this.ids.id('attachment'), 'Attachment id');
       const record: StoredAttachmentRecord = {
         id,
         name: validated.name,
         type: validated.type,
         size: validated.data.byteLength,
-        fileName: safeStoredFileName(validated.name, validated.type),
+        fileName: safeStoredAttachmentFileName(validated.name, validated.type),
         createdAt: this.clock.now().toISOString(),
         threadIds: [],
       };
@@ -245,56 +246,6 @@ export class FileAttachmentStore implements AttachmentStore {
   }
 }
 
-function validateUpload(input: RuntimeAttachmentUploadInput): {
-  name: string;
-  type: RuntimeFileAttachmentMimeType;
-  data: Buffer;
-} {
-  const name = safeDisplayName(input.name);
-  const data = Buffer.from(input.data);
-  if (!data.byteLength) throw new RuntimeAttachmentValidationError('附件不能为空。', 'attachment_empty');
-  if (data.byteLength > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) {
-    throw new RuntimeAttachmentValidationError('附件不能超过 20 MB。', 'attachment_too_large');
-  }
-  const extension = path.extname(name).toLowerCase();
-  const declaredType = input.type.trim().toLowerCase();
-  if (extension === '.pdf' && hasPdfSignature(data) && compatibleDeclaredType(declaredType, PDF_MIME_TYPE)) {
-    return { name, type: PDF_MIME_TYPE, data };
-  }
-  if (extension === '.docx' && hasDocxSignature(data) && compatibleDeclaredType(declaredType, DOCX_MIME_TYPE)) {
-    return { name, type: DOCX_MIME_TYPE, data };
-  }
-  throw new RuntimeAttachmentValidationError('目前仅支持有效的 PDF 和 DOCX 文件。', 'attachment_unsupported');
-}
-
-function safeDisplayName(value: string): string {
-  const segments = value.trim().split(/[\\/]+/u);
-  const baseName = replaceControlCharacters(segments.at(-1) ?? '', '').trim();
-  if (!baseName || baseName === '.' || baseName === '..') {
-    throw new RuntimeAttachmentValidationError('附件名称无效。', 'attachment_invalid');
-  }
-  return baseName.slice(0, 255);
-}
-
-function safeStoredFileName(name: string, type: RuntimeFileAttachmentMimeType): string {
-  const extension = type === PDF_MIME_TYPE ? '.pdf' : '.docx';
-  const stem = safeStorageFileStem(name.slice(0, -path.extname(name).length), 'attachment');
-  return `${stem}${extension}`;
-}
-
-function compatibleDeclaredType(declared: string, expected: RuntimeFileAttachmentMimeType): boolean {
-  return !declared || declared === 'application/octet-stream' || declared === expected;
-}
-
-function hasPdfSignature(data: Buffer): boolean {
-  return data.subarray(0, 5).toString('ascii') === '%PDF-';
-}
-
-function hasDocxSignature(data: Buffer): boolean {
-  if (data.byteLength < 4 || data[0] !== 0x50 || data[1] !== 0x4b || ![0x03, 0x05, 0x07].includes(data[2] ?? -1)) return false;
-  return data.includes(Buffer.from('[Content_Types].xml')) && data.includes(Buffer.from('word/'));
-}
-
 function storedAttachment(record: StoredAttachmentRecord): RuntimeStoredMessageAttachment {
   return {
     id: record.id,
@@ -342,10 +293,10 @@ function normalizeIndex(value: AttachmentIndex): AttachmentIndex {
     if (!record || typeof record !== 'object') return [];
     try {
       const id = assertSafeRuntimeId(String(record.id ?? ''), 'Attachment id');
-      const type = record.type === PDF_MIME_TYPE || record.type === DOCX_MIME_TYPE ? record.type : null;
+      const type = normalizeStoredAttachmentMimeType(record.type);
       if (!type || typeof record.name !== 'string' || typeof record.fileName !== 'string' || typeof record.createdAt !== 'string') return [];
       if (!Number.isFinite(record.size) || record.size < 0) return [];
-      const fileName = safeStoredFileName(record.fileName, type);
+      const fileName = safeStoredAttachmentFileName(record.fileName, type);
       const threadIds = Array.isArray(record.threadIds)
         ? [...new Set(record.threadIds.flatMap((threadId) => {
             try {
@@ -357,7 +308,7 @@ function normalizeIndex(value: AttachmentIndex): AttachmentIndex {
         : [];
       return [{
         id,
-        name: safeDisplayName(record.name),
+        name: safeAttachmentDisplayName(record.name),
         type,
         size: Math.floor(record.size),
         fileName,

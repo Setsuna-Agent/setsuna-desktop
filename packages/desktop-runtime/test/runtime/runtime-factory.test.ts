@@ -1,5 +1,7 @@
 import {
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
+  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
+  OPENAI_VISION_RECOGNITION_TOOL_NAME,
   PUBLISH_ARTIFACT_TOOL_NAME,
   type DesktopResolveNetworkProxyInput,
 } from '@setsuna-desktop/contracts';
@@ -100,6 +102,51 @@ describe('runtime factory tool wiring', () => {
         scope: 'runtime',
         override: undefined,
       }]);
+    } finally {
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
+  it('adds and removes vision recognition with the marketplace plugin lifecycle', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-vision-plugin-test-'));
+    const runtime = createRuntimeFactory({ dataDir });
+
+    try {
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
+      );
+      await runtime.pluginMarketplace.installPlugin(OPENAI_VISION_RECOGNITION_PLUGIN_ID);
+      await runtime.configStore.saveConfig({
+        providers: [{
+          id: 'vision-provider',
+          name: 'Vision provider',
+          provider: 'openai-compatible',
+          apiKey: 'vision-secret',
+          baseUrl: 'https://vision.example.test/v1',
+          enabled: true,
+          models: [{
+            id: 'vision-model',
+            name: 'Qwen Vision',
+            code: 'qwen-vl-max',
+            enabled: true,
+            maxOutputTokens: 8_192,
+            thinkingEnabled: false,
+            thinkingEfforts: [],
+            supportsImages: true,
+          }],
+        }],
+        visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
+      });
+
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
+      );
+      await runtime.pluginStore.removePlugin(OPENAI_VISION_RECOGNITION_PLUGIN_ID);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
+      );
     } finally {
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();

@@ -396,6 +396,19 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('sends only the prompt when testing the configured vision recognition plugin', async () => {
+    const request = installRuntimeBridge(() => ({ content: 'Image received.', durationMs: 8 }));
+    const client = createDesktopRuntimeClient();
+
+    await client.testVisionRecognition({ prompt: 'Describe the test image.' });
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/plugins/openai-vision-recognition/test',
+      method: 'POST',
+      body: { prompt: 'Describe the test image.' },
+    });
+  });
+
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();

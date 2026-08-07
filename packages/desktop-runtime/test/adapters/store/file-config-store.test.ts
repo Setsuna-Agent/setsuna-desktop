@@ -504,4 +504,27 @@ describe('file config store', () => {
     });
     await expect(store.getImageGenerationConfig()).resolves.toMatchObject({ apiKey: '' });
   });
+
+  it('stores only the selected configured model reference for vision recognition', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+
+    await expect(store.saveConfig({
+      visionRecognition: {
+        providerId: ' vision-provider ',
+        modelId: ' vision-model ',
+      },
+    })).resolves.toMatchObject({
+      visionRecognition: {
+        providerId: 'vision-provider',
+        modelId: 'vision-model',
+      },
+    });
+    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).toContain('"visionRecognition"');
+    expect(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')).not.toContain('vision');
+
+    const cleared = await store.saveConfig({ visionRecognition: null });
+    expect(cleared.visionRecognition).toBeUndefined();
+    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).not.toContain('"visionRecognition"');
+  });
 });

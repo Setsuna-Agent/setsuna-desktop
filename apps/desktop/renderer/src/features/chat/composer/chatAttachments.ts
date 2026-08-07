@@ -4,6 +4,7 @@ import {
   RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
   isRuntimeInlineMessageAttachment,
   type DesktopRuntimeClient,
+  type RuntimeInlineMessageAttachment,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
@@ -35,10 +36,9 @@ export type ChatComposerAttachmentItem = {
   error?: string;
 };
 
-export function chatAttachmentValidationError(file: File, supportsImageInput: boolean, t: Translate = defaultTranslate): string | null {
+export function chatAttachmentValidationError(file: File, t: Translate = defaultTranslate): string | null {
   if (!file.size) return t('chat.composer.fileEmpty');
   if (file.type.startsWith('image/')) {
-    if (!supportsImageInput) return t('chat.composer.imageUnsupported');
     if (file.size > maxChatImageSize) return t('chat.composer.imageTooLarge');
     return null;
   }
@@ -50,9 +50,10 @@ export function chatAttachmentValidationError(file: File, supportsImageInput: bo
 export async function createChatMessageAttachment(
   file: File,
   client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
+  supportsImageInput: boolean,
   t: Translate = defaultTranslate,
 ): Promise<RuntimeMessageAttachment> {
-  if (file.type.startsWith('image/')) return readChatImageAttachment(file, t);
+  if (file.type.startsWith('image/') && supportsImageInput) return readChatImageAttachment(file, t);
   return client.uploadAttachment({
     name: file.name,
     type: file.type,
@@ -60,7 +61,9 @@ export async function createChatMessageAttachment(
   });
 }
 
-export function isImageMessageAttachment(attachment: RuntimeMessageAttachment): boolean {
+export function isInlineImageMessageAttachment(
+  attachment: RuntimeMessageAttachment,
+): attachment is RuntimeInlineMessageAttachment {
   return isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/');
 }
 

@@ -65,6 +65,41 @@ describe('file attachment store', () => {
       .rejects.toThrow('Attachment is unavailable or invalid');
   });
 
+  it('stores signature-validated raster images as read-only thread attachments', async () => {
+    const fixture = await attachmentStoreFixture();
+    const bytes = pngBytes();
+    const attachment = await fixture.store.create({
+      name: '../Diagram.PNG',
+      type: 'image/png',
+      data: bytes,
+    });
+
+    expect(attachment).toMatchObject({
+      source: 'runtime',
+      name: 'Diagram.PNG',
+      type: 'image/png',
+      size: bytes.byteLength,
+    });
+    await fixture.store.claimForThread('thread_1', [attachment]);
+    const [resolved] = await fixture.store.resolveForThread('thread_1', [attachment]);
+    expect(resolved?.absolutePath).toBe(path.join(
+      fixture.dataDir,
+      'attachments',
+      'files',
+      attachment.assetId,
+      'Diagram.png',
+    ));
+    await expect(readFile(resolved!.absolutePath)).resolves.toEqual(bytes);
+    const reloadedStore = new FileAttachmentStore(fixture.dataDir, fixture.clock, new SequentialIdGenerator());
+    await expect(reloadedStore.resolveForThread('thread_1', [attachment])).resolves.toHaveLength(1);
+
+    await expect(fixture.store.create({
+      name: 'spoofed.jpg',
+      type: 'image/jpeg',
+      data: bytes,
+    })).rejects.toMatchObject({ code: 'attachment_unsupported' } satisfies Partial<RuntimeAttachmentValidationError>);
+  });
+
   it('expires abandoned uploads during recovery without deleting valid claimed files', async () => {
     const fixture = await attachmentStoreFixture(1_000);
     const abandoned = await fixture.store.create({
@@ -104,6 +139,10 @@ function fakeDocx(): Buffer {
     Buffer.from([0x50, 0x4b, 0x03, 0x04]),
     Buffer.from('[Content_Types].xml\0word/document.xml'),
   ]);
+}
+
+function pngBytes(): Buffer {
+  return Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]);
 }
 
 class MutableClock implements Clock {

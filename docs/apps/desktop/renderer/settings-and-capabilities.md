@@ -100,18 +100,20 @@ Hook editor 的 draft/metadata 转换是可独立测试的纯边界；页面不�
 - `CapabilitiesPluginInstallButton`
 - `CapabilitiesInstalledPluginShortcut`
 
-默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页由已安装快捷区、精选区和按能力分类的紧凑列表组成。详情页展示声明的 Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
+默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页由已安装快捷区、精选区和按能力分类的紧凑列表组成。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
 Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部，分类与数量分别对齐该行两端，并使用一致的顶部/左右页边距。插件、MCP、Skill 与 Hook 的详情或编辑页沿用同一顶部基线。插件市场首页不提供搜索框，其他能力分类仍保留各自的目录搜索。
 
 本地侧载不从普通 UI 暴露；不属于默认市场的已安装 Plugin 单独标识。
 
-图片生成第一方 Plugin 还有：
+图片生成和视觉识别第一方 Plugin 还有：
 
 - `ImageGenerationPluginSettings`
 - `ImageGenerationPluginTest`
+- `VisionRecognitionPluginSettings`
+- `VisionRecognitionPluginTest`
 
-API key 仍由 runtime secret store 处理。
+两个插件都默认不安装，只有用户从市场安装后详情页才显示配置。图片生成插件维护自己的 Images API 服务配置；视觉识别插件只列出“模型服务”中已启用且标记为支持图片的模型，保存 provider/model 引用并复用现有服务地址、API key、协议和代理设置。
 
 Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
