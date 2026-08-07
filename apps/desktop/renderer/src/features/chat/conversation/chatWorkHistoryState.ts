@@ -15,3 +15,15 @@ export function workHistoryDisplayState({
   }
   return { active: false, expanded: !hasFinalAnswerContent };
 }
+
+export function shouldCollapseCompletedWorkHistory({
+  defaultExpanded,
+  runActive,
+  wasActive,
+}: {
+  defaultExpanded: boolean;
+  runActive: boolean;
+  wasActive: boolean;
+}): boolean {
+  return wasActive && !runActive && !defaultExpanded;
+}

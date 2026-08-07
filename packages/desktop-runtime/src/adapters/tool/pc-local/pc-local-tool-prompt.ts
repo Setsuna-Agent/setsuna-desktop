@@ -134,8 +134,6 @@ export function pcLocalToolPrompt(
 
   lines.push(
     '- Keep paths inside the effective readable and writable roots unless the runtime grants additional access.',
-    '- Before related tool calls, send one short user-visible update. Group related actions instead of repeating a preamble for every small read.',
-    '- In normal user-facing updates, describe actions naturally. Mention raw tool names or call mechanics only when the user asks or when debugging the runtime.',
   );
   return lines.join('\n');
 }

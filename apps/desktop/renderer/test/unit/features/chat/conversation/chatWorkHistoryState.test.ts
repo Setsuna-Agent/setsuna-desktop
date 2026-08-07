@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { workHistoryDisplayState } from '../../../../../src/features/chat/conversation/chatWorkHistoryState.js';
+import {
+  shouldCollapseCompletedWorkHistory,
+  workHistoryDisplayState,
+} from '../../../../../src/features/chat/conversation/chatWorkHistoryState.js';
 
 describe('workHistoryDisplayState', () => {
   it('keeps work history active and expanded while the assistant run is still active', () => {
@@ -21,5 +24,21 @@ describe('workHistoryDisplayState', () => {
       active: false,
       expanded: false,
     });
+  });
+
+  it('collapses a live work panel when a completed final answer replaces it', () => {
+    expect(shouldCollapseCompletedWorkHistory({
+      defaultExpanded: false,
+      runActive: false,
+      wasActive: true,
+    })).toBe(true);
+  });
+
+  it('keeps interrupted work visible when no final answer exists', () => {
+    expect(shouldCollapseCompletedWorkHistory({
+      defaultExpanded: true,
+      runActive: false,
+      wasActive: true,
+    })).toBe(false);
   });
 });

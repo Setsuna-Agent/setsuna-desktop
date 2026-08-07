@@ -440,7 +440,7 @@ describe('agent loop context compaction', () => {
         maxContextTokens: 1_000,
         maxContextTokensK: 1,
         tokensUntilCompaction: expect.any(Number),
-        triggerScopes: ['total'],
+        triggerScopes: ['total', 'latest_input'],
       });
       expect(mainRequest?.messages.some((message) => message.contextCompaction?.maxContextTokens === 1_000)).toBe(true);
       expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
@@ -499,7 +499,7 @@ describe('agent loop context compaction', () => {
       expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
         source: 'remote',
-        triggerScopes: ['total'],
+        triggerScopes: ['total', 'latest_input'],
       });
       expect(mainRequest?.stepSnapshot?.contextWindow).toMatchObject({
         compactionHash: expect.stringMatching(/^sha256:/),

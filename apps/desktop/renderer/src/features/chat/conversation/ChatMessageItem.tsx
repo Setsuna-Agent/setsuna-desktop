@@ -40,7 +40,7 @@ import {
   type ChatDisplayItem,
 } from './chatMessageDisplay.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
-import { workHistoryDisplayState } from './chatWorkHistoryState.js';
+import { shouldCollapseCompletedWorkHistory, workHistoryDisplayState } from './chatWorkHistoryState.js';
 import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 
@@ -810,7 +810,8 @@ function WorkHistoryPanel({
   startedAtMs?: number | null;
 }) {
   const { t } = useI18n();
-  const wasActiveRef = useRef(active);
+  const wasActiveForTimingRef = useRef(active);
+  const wasActiveForExpansionRef = useRef(active);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
   // 此属性只用于初始化一次面板；流式更新绝不会写入展开状态。
@@ -821,19 +822,25 @@ function WorkHistoryPanel({
   useEffect(() => {
     if (completedAtMs !== null && completedAtMs !== undefined) {
       setCapturedCompletedAtMs(completedAtMs);
-      wasActiveRef.current = active;
-      return;
-    }
-    if (active) {
-      wasActiveRef.current = true;
+    } else if (active) {
       setCapturedCompletedAtMs(null);
-      return;
-    }
-    if (wasActiveRef.current) {
+    } else if (wasActiveForTimingRef.current) {
       setCapturedCompletedAtMs((value) => value ?? Date.now());
     }
-    wasActiveRef.current = active;
+    wasActiveForTimingRef.current = active;
   }, [active, completedAtMs]);
+
+  useLayoutEffect(() => {
+    if (shouldCollapseCompletedWorkHistory({
+      defaultExpanded,
+      runActive: active,
+      wasActive: wasActiveForExpansionRef.current,
+    })) {
+      // Final content replaces transient progress as the primary transcript surface.
+      setManualExpanded(false);
+    }
+    wasActiveForExpansionRef.current = active;
+  }, [active, defaultExpanded]);
 
   useEffect(() => {
     if (!active) return undefined;
