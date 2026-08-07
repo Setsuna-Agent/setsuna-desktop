@@ -83,7 +83,6 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
           rootClassName="chat-artifact-open-menu"
           trigger={['click']}
           placement="bottomRight"
-          transitionName=""
           menu={{
             items: openMenuItems,
             onClick: ({ key }) => {

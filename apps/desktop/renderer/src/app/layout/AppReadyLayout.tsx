@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeActivityTrigger.js';
+import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { WorkspaceAppLauncher } from '../../features/workspace/WorkspaceAppLauncher.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
@@ -62,6 +63,8 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
   const [conversationOverviewRendered, setConversationOverviewRendered] = useState(false);
   const [conversationOverviewShowRequest, setConversationOverviewShowRequest] = useState(0);
   const [selectedCapabilitiesPluginId, setSelectedCapabilitiesPluginId] = useState<string | null>(null);
+  // 记录下一次进入设置页时应定位到的分区；普通入口会先清空，避免上一次的直达请求残留。
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSectionId | null>(null);
   const [runtimeActivityOpen, setRuntimeActivityOpen] = useState(false);
   const [focusComposerRequest, setFocusComposerRequest] = useState(0);
   const consumeFocusComposerRequest = useCallback((requestId: number) => {
@@ -86,6 +89,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setSelectedCapabilitiesPluginId(pluginId);
     setActiveView('capabilities');
   }, [setActiveView]);
+  const openSettings = useCallback(() => {
+    setSettingsInitialSection(null);
+    setActiveView('settings');
+  }, [setActiveView]);
+  const openModelSettings = useCallback(() => {
+    setSettingsInitialSection('localLlm');
+    setActiveView('settings');
+  }, [setActiveView]);
   const openFilesPanel = useCallback(() => {
     if (!activeWorkspace?.path) return;
     workspacePanels.closeWorkspaceMenus();
@@ -109,9 +120,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         navigation.startCurrentThread();
       },
       onOpenCapabilities: openCapabilities,
-      onOpenSettings: () => setActiveView('settings'),
+      onOpenSettings: openSettings,
     }),
-    [navigation, openCapabilities, resetComposer, setActiveView],
+    [navigation, openCapabilities, openSettings, resetComposer],
   );
   const shortcutHandlers = useMemo<AppKeyboardShortcutHandlers>(() => ({
     'app.newChat': {
@@ -257,7 +268,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         maxWidth={sidebarMaxWidth}
         minWidth={sidebarMinWidth}
         onOpenCapabilities={openCapabilities}
-        onOpenSettings={() => setActiveView('settings')}
+        onOpenSettings={openSettings}
         onResetDraft={resetComposer}
         onResizeStep={handleSidebarResizeStep}
         onResizeStart={handleSidebarResizeStart}
@@ -268,6 +279,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         activeWorkspace={activeWorkspace}
         activeView={activeView}
         selectedCapabilitiesPluginId={selectedCapabilitiesPluginId}
+        settingsInitialSection={settingsInitialSection}
         chatActions={chatActions}
         composerKey={composerKey}
         focusComposerRequest={focusComposerRequest}
@@ -287,6 +299,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         onSelectedCapabilitiesPluginIdChange={setSelectedCapabilitiesPluginId}
         onConversationOverviewRenderedChange={setConversationOverviewRendered}
         onFocusComposerRequestConsumed={consumeFocusComposerRequest}
+        onOpenModelSettings={openModelSettings}
         onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}

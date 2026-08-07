@@ -333,8 +333,6 @@ function ChatThinkingMenu({
       rootClassName="chat-thinking-menu-root"
       trigger={['click']}
       placement="topLeft"
-      // Windows“最佳性能”模式禁用界面过渡事件时，此功能也要保持可用。
-      transitionName=""
       disabled={disabled}
       open={menuOpen}
       menu={{

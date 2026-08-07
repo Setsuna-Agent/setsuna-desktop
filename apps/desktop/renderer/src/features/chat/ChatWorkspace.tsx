@@ -28,6 +28,7 @@ import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
 import { ChatComposer } from './ChatComposer.js';
+import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import { runtimePluginUsesByTurn } from './artifacts/runtimePluginUsage.js';
 import {
   ActiveWorkPlaceholder,
@@ -63,6 +64,7 @@ import {
 } from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useChatMessageOperations } from './hooks/useChatMessageOperations.js';
+import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 
@@ -136,6 +138,7 @@ export function ChatWorkspace({
   onOpenSideChat,
   onOpenThread,
   onOpenFileReview,
+  onOpenModelSettings,
   onSelectModel,
   onSearchProjectEntries,
   onSend,
@@ -188,6 +191,7 @@ export function ChatWorkspace({
   onOpenSideChat?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
+  onOpenModelSettings?: () => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
@@ -257,6 +261,10 @@ export function ChatWorkspace({
     [contextUsage, currentThread?.contextCompaction?.status, t],
   );
   const showEmptyStarter = variant === 'main' && displayItems.length === 0 && !activeTurnId;
+  const { modelSetupNoticeVisible, dismissModelSetupNotice } = useModelSetupNotice(config);
+  const modelSetupNotice = showEmptyStarter && modelSetupNoticeVisible && onOpenModelSettings ? (
+    <ChatModelSetupNotice onConfigure={onOpenModelSettings} onDismiss={dismissModelSetupNotice} />
+  ) : null;
   const {
     actionError,
     allDeleteSelected,
@@ -432,7 +440,7 @@ export function ChatWorkspace({
             <MarkdownViewportProvider scrollRef={scrollRef}>
               <div className="chat-content-frame" ref={contentRef}>
                 {showEmptyStarter ? (
-                  <ChatStarter composer={composer(true)} title={starterTitle} onSelectSuggestion={onDraftChange} />
+                  <ChatStarter composer={composer(true)} modelSetupNotice={modelSetupNotice} title={starterTitle} onSelectSuggestion={onDraftChange} />
                 ) : (
                   <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
                     <div className="chat-bubble-list" ref={listRef}>
@@ -556,7 +564,7 @@ export function ChatWorkspace({
   );
 }
 
-function ChatStarter({ composer, title, onSelectSuggestion }: { composer: ReactNode; title: string; onSelectSuggestion: (prompt: string) => void }) {
+function ChatStarter({ composer, modelSetupNotice, title, onSelectSuggestion }: { composer: ReactNode; modelSetupNotice?: ReactNode; title: string; onSelectSuggestion: (prompt: string) => void }) {
   const { t } = useI18n();
 
   return (
@@ -566,6 +574,7 @@ function ChatStarter({ composer, title, onSelectSuggestion }: { composer: ReactN
           <img className="chat-starter__system-icon" src={setsunaAppIconUrl} alt="" aria-hidden="true" />
           <h1>{title}</h1>
         </div>
+        {modelSetupNotice}
         <div className="chat-starter__suggestions" role="group" aria-label={t('chat.starter.suggestions')}>
           {starterSuggestions.map((suggestion) => {
             const Icon = suggestion.icon;

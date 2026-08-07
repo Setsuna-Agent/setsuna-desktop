@@ -81,7 +81,6 @@ export function RuntimeAccessModeMenu({
         rootClassName="runtime-access-mode-menu-root"
         trigger={['click']}
         placement={settingsVariant ? 'bottomRight' : 'topLeft'}
-        transitionName=""
         disabled={disabled}
         menu={{
           items,

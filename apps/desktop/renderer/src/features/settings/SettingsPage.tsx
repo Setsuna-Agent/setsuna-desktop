@@ -79,6 +79,7 @@ const EMPTY_PROVIDER_CONFIGS: ProviderConfigState[] = [];
 export function SettingsPage({
   archivedThreads,
   config,
+  initialSection,
   projects,
   skillExtraRoots,
   updater,
@@ -99,6 +100,7 @@ export function SettingsPage({
 }: {
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
+  initialSection?: SettingsSectionId;
   projects: WorkspaceProject[];
   skillExtraRoots: string[];
   updater: DesktopUpdaterStateView;
@@ -121,7 +123,9 @@ export function SettingsPage({
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
+  // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
+  // 所以这里只需在挂载时取一次初始值。
+  const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
 
   useEffect(() => {
