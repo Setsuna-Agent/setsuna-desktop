@@ -35,6 +35,7 @@ import {
 } from './data-root/bootstrap.js';
 import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
 import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
+import { resolveDesktopInstanceProfile } from './data-root/instance-profile.js';
 import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
 import {
   DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
@@ -76,8 +77,13 @@ let appQuitAfterShutdown = false;
 let appQuitShutdownPending = false;
 let desktopRelaunchRequested = false;
 const usesCustomFrame = process.platform !== 'darwin';
-const defaultDataRoot = app.getPath('userData');
-const desktopAppDataRoot = app.getPath('appData');
+const desktopInstanceProfile = resolveDesktopInstanceProfile({
+  appDataRoot: app.getPath('appData'),
+  defaultDataRoot: app.getPath('userData'),
+  isPackaged: app.isPackaged,
+});
+const defaultDataRoot = desktopInstanceProfile.defaultDataRoot;
+const desktopAppDataRoot = desktopInstanceProfile.appDataRoot;
 const bootstrapInstanceLock = acquireBootstrapInstanceLock(desktopAppDataRoot);
 const legacyPolicyPaths = legacyDesktopPolicyPaths(os.homedir());
 const desktopDataRootBootMode = resolveDesktopDataRootBootMode({

@@ -27,6 +27,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 
 ### 1. 早期启动
 
+- 为未打包开发实例选择独立的 bootstrap 与默认数据根；正式版沿用既有路径。
 - 取得 bootstrap 实例锁。
 - 解析数据根 boot mode。
 - 在 Electron 创建 session 前设置 `userData` 与 `sessionData`。
@@ -107,4 +108,3 @@ Runtime 依赖 browser/native bridge 的地址和 token，因此它们必须先�
 - `test/integration/terminal/`
 
 修改 `index.ts` 组装顺序时，除定向测试外至少运行 `pnpm typecheck`，因为跨模块 constructor 和 bridge contract 很容易在这里暴露漂移。
-

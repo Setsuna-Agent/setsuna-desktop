@@ -45,6 +45,10 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 
 这样 main 可以在 Chromium profile 初始化前定位真正数据根，并从 rename 或崩溃中恢复。详细状态机见 [数据根模块](../apps/desktop/main/data-root.md)。
 
+未打包的开发实例把 bootstrap 与默认数据根一起隔离到
+`appData/Setsuna Desktop Development/`，避免与正在运行的正式版争抢实例锁或并发访问同一份数据。
+正式版目录保持不变。
+
 ## 进程与网络边界
 
 ### Runtime
@@ -177,4 +181,3 @@ Debug trace 不能成为业务恢复所依赖的第二真源。
 - Adapter 是否处理 symlink、大小、超时、取消和回滚。
 - Renderer 是否只展示脱敏状态。
 - 测试是否覆盖非法输入，而不只覆盖成功路径。
-

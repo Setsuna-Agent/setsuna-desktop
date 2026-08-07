@@ -8,7 +8,7 @@
 
 `apps/desktop/main/src/index.ts` 在 Electron profile 初始化前执行：
 
-1. 取得系统 `appData` 下 bootstrap 目录的稳定实例锁。
+1. 选择正式或开发实例 profile，并取得其 bootstrap 目录的稳定实例锁。
 2. 读取数据根位置指针和未完成的迁移/导入事务。
 3. 判定 `normal`、迁移、恢复或清理等启动模式。
 4. 把 Electron `userData` 与 `sessionData` 指向正常数据根或隔离的维护 profile。

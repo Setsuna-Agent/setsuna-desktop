@@ -8,6 +8,7 @@ import {
   writePendingDataMigration,
 } from '../../../src/data-root/bootstrap.js';
 import { acquireBootstrapInstanceLock } from '../../../src/data-root/instance-lock.js';
+import { resolveDesktopInstanceProfile } from '../../../src/data-root/instance-profile.js';
 import { dataRootBootstrapLayout } from '../../../src/data-root/layout.js';
 
 const temporaryRoots: string[] = [];
@@ -20,6 +21,34 @@ afterEach(async () => {
 });
 
 describe('bootstrap instance lock', () => {
+  it('uses separate lock domains for packaged and development instances', async () => {
+    const systemAppDataRoot = await temporaryRoot();
+    const packagedProfile = resolveDesktopInstanceProfile({
+      appDataRoot: systemAppDataRoot,
+      defaultDataRoot: path.join(systemAppDataRoot, 'Setsuna Desktop'),
+      isPackaged: true,
+    });
+    const developmentProfile = resolveDesktopInstanceProfile({
+      appDataRoot: systemAppDataRoot,
+      defaultDataRoot: path.join(systemAppDataRoot, 'setsuna-desktop'),
+      isPackaged: false,
+    });
+
+    const packagedLock = acquireBootstrapInstanceLock(packagedProfile.appDataRoot, {
+      pid: 101,
+      isProcessAlive: (pid) => pid === 101,
+    });
+    const developmentLock = acquireBootstrapInstanceLock(developmentProfile.appDataRoot, {
+      pid: 202,
+      isProcessAlive: (pid) => pid === 202,
+    });
+
+    expect(packagedLock).not.toBeNull();
+    expect(developmentLock).not.toBeNull();
+    packagedLock?.release();
+    developmentLock?.release();
+  });
+
   it('keeps one lock domain across processes regardless of the Electron profile', async () => {
     const appDataRoot = await temporaryRoot();
     const first = acquireBootstrapInstanceLock(appDataRoot, {

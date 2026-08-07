@@ -83,6 +83,11 @@ dev 启动流程：
    - `SETSUNA_DESKTOP_DEV_SERVER_URL=http://127.0.0.1:5174`
    - `SETSUNA_DESKTOP_RUNTIME_ENTRY=packages/desktop-runtime/dist/cli.js`
 
+未打包的 Electron 使用独立开发 profile，位于系统 `appData` 下的
+`Setsuna Desktop Development/`。它拥有独立的数据根、Chromium session、runtime
+存储和 bootstrap 实例锁，因此可以和已安装的正式版同时运行，也不会读写正式版数据。
+打包应用继续使用原有目录，不受该开发隔离影响。
+
 ## Vite
 
 `vite.config.ts`：
