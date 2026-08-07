@@ -103,7 +103,6 @@ function ChatMessageImage({
     <Dropdown
       rootClassName="chat-image-context-menu-root"
       trigger={['contextMenu']}
-      transitionName=""
       menu={{
         items,
         onClick: ({ key }) => onAction(key as DesktopImageAction),

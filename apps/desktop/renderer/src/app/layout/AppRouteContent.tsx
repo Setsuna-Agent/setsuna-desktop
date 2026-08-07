@@ -13,6 +13,7 @@ import {
 } from 'react';
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
+import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { latestBrowserOpenRequest } from '../../features/workspace/browser/runtimeBrowserActions.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -38,6 +39,7 @@ export function AppRouteContent({
   projectWorkspace,
   runtime,
   selectedCapabilitiesPluginId,
+  settingsInitialSection,
   setActiveView,
   setDraft,
   skillSelectionRequest,
@@ -48,6 +50,7 @@ export function AppRouteContent({
   onConversationOverviewRenderedChange,
   onFocusComposerRequestConsumed,
   onOpenPlugin,
+  onOpenModelSettings,
   onSelectedCapabilitiesPluginIdChange,
   onSelectThread,
   onSkillSelectionRequestConsumed,
@@ -74,6 +77,7 @@ export function AppRouteContent({
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
   selectedCapabilitiesPluginId: string | null;
+  settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
@@ -84,6 +88,7 @@ export function AppRouteContent({
   onConversationOverviewRenderedChange: (visible: boolean) => void;
   onFocusComposerRequestConsumed: (requestId: number) => void;
   onOpenPlugin: (pluginId: string) => void;
+  onOpenModelSettings: () => void;
   onSelectedCapabilitiesPluginIdChange: (pluginId: string | null) => void;
   onSelectThread: (threadId: string) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
@@ -160,6 +165,7 @@ export function AppRouteContent({
         <SettingsPage
           archivedThreads={runtime.archivedThreads}
           config={runtime.config}
+          initialSection={settingsInitialSection ?? undefined}
           projects={runtime.projects}
           skillExtraRoots={runtime.skillExtraRoots}
           updater={updater}
@@ -294,6 +300,7 @@ export function AppRouteContent({
       onOpenBrowser={(url) => workspacePanels.openBrowserPanel(url)}
       onOpenConversationDebug={() => workspacePanels.openDesktopPanel('side', 'conversation-debug')}
       onOpenMarkdownWebLink={openMarkdownWebLink}
+      onOpenModelSettings={onOpenModelSettings}
       onOpenPlugin={onOpenPlugin}
       onOpenFilesPanel={() => {
         projectWorkspace.setFilePreview(null);

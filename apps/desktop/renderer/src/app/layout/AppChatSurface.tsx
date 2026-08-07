@@ -148,6 +148,7 @@ export function AppChatSurface({
   onOpenMarkdownWebLink,
   onOpenPlugin,
   onOpenFilesPanel,
+  onOpenModelSettings,
   onOpenThread,
   onOpenFileReviewPanel,
   onOpenSideChat,
@@ -240,6 +241,7 @@ export function AppChatSurface({
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenPlugin: OpenRuntimePluginHandler;
   onOpenFilesPanel: () => void;
+  onOpenModelSettings: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReviewPanel?: (filePath?: string) => void;
   onOpenSideChat: () => void;
@@ -357,6 +359,7 @@ export function AppChatSurface({
             onOpenSideChat={onOpenSideChat}
             onOpenThread={onOpenThread}
             onOpenFileReview={onOpenFileReviewPanel}
+            onOpenModelSettings={onOpenModelSettings}
             onSearchProjectEntries={onSearchProjectEntries}
             onSelectModel={onSelectModel}
             onSend={onSend}
