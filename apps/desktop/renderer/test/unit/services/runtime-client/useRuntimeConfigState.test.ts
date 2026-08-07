@@ -24,6 +24,7 @@ describe('providerSaveConfigInput', () => {
         expect.objectContaining({
           id: 'provider_a',
           apiKey: 'secret-a',
+          proxyRoute: { mode: 'inherit' },
         }),
         expect.objectContaining({
           id: 'provider_b',
@@ -66,6 +67,7 @@ describe('providerModelSelectionConfigInput', () => {
     expect(input.providers?.[0]).toMatchObject({
       id: 'provider_a',
       enabled: true,
+      proxyRoute: { mode: 'inherit' },
       models: [
         { id: 'model_a', enabled: false },
         { id: 'model_b', enabled: true },
@@ -92,6 +94,7 @@ function provider(
     enabled,
     apiKeySet: true,
     apiKeyPreview: 'sk-…test',
+    proxyRoute: { mode: 'inherit' },
     models,
   };
 }

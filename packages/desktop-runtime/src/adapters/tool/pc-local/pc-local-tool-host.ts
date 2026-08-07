@@ -43,6 +43,7 @@ type PcLocalToolHostOptions = {
   mcpConfigPath?: string;
   memoryStorageRoot?: string;
   shellSandboxCapability?: () => ReturnType<typeof pcTools.shellSandboxCapability>;
+  resolveShellEnvironment?: () => Promise<Record<string, string | null>>;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
@@ -380,6 +381,12 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         ],
       };
     }
+    if (normalized.name === 'run_shell_command' && this.options.resolveShellEnvironment) {
+      toolState.shellEnvironment = applyShellEnvironmentPatch(
+        toolState.shellEnvironment,
+        await this.options.resolveShellEnvironment(),
+      );
+    }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
     const previewIntegrityToken = stringArg(recordInput(preview).integrityToken);
     if (context.expectedPreviewIntegrityToken && previewIntegrityToken !== context.expectedPreviewIntegrityToken) {
@@ -630,6 +637,21 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     return TOOL_ALIASES[name]?.name ?? name;
   }
 
+}
+
+export function applyShellEnvironmentPatch(
+  current: Record<string, string> | undefined,
+  patch: Record<string, string | null>,
+): Record<string, string> {
+  const next = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    // The shell process layer merges these overrides on top of process.env.
+    // An empty override is therefore required to mask an inherited proxy;
+    // deleting the key here would allow the parent value to reappear later.
+    if (value === null) next[key] = '';
+    else next[key] = value;
+  }
+  return next;
 }
 
 function toRuntimeToolDefinition(tool: unknown): RuntimeToolDefinition | null {

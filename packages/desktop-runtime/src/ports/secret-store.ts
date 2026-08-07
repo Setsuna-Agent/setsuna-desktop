@@ -1,3 +1,8 @@
+import type {
+  DesktopResolveNetworkProxyInput,
+  DesktopResolvedNetworkProxy,
+} from '@setsuna-desktop/contracts';
+
 export type SecretStoreStatus = {
   available: boolean;
   backend: string;
@@ -12,4 +17,5 @@ export interface SecretStore {
 
 export interface DesktopNativeBridge extends SecretStore {
   openExternal(url: string): Promise<void>;
+  resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
 }

@@ -68,7 +68,11 @@ export async function handleRuntimeConfigRequest(
       ? await runtime.configStore.getProviderConfig(input.providerId)
       : await runtime.configStore.getActiveProviderConfig();
     sendJson(response, 200, {
-      models: await fetchAvailableModels(input, savedProvider),
+      models: await fetchAvailableModels(
+        input,
+        savedProvider,
+        runtime.networkProxyFetch.forRoute(input.proxyRoute ?? savedProvider?.proxyRoute),
+      ),
     });
     return true;
   }

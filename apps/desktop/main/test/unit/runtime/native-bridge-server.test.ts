@@ -21,7 +21,16 @@ describe('DesktopNativeBridgeServer', () => {
       delete: async (key) => { values.delete(key); },
     };
     const openExternal = vi.fn(async () => undefined);
-    const server = new DesktopNativeBridgeServer({ credentialVault, openExternal });
+    const resolveNetworkProxy = vi.fn(async () => ({
+      mode: 'proxy' as const,
+      proxyServerId: 'proxy-example',
+      proxyUrl: 'http://relay:secret@127.0.0.1:1234',
+    }));
+    const server = new DesktopNativeBridgeServer({
+      credentialVault,
+      openExternal,
+      resolveNetworkProxy,
+    });
     servers.push(server);
     const connection = await server.start();
 
@@ -34,9 +43,29 @@ describe('DesktopNativeBridgeServer', () => {
       .resolves.toEqual({ value: 'secret' });
     await expect(nativeRequest(connection, '/v1/credentials/delete', { key: 'mcp.oauth.test' }))
       .resolves.toEqual({ ok: true });
+    const reservedCredential = await fetch(`${connection.url}/v1/credentials/get`, {
+      body: JSON.stringify({ key: 'network-proxy.proxy-example.password' }),
+      headers: {
+        Authorization: `Bearer ${connection.token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+    expect(reservedCredential.status).toBe(400);
+    await expect(reservedCredential.json()).resolves.toMatchObject({
+      error: expect.stringContaining('reserved'),
+    });
 
     await nativeRequest(connection, '/v1/external/open', { url: 'https://example.com/login' });
     expect(openExternal).toHaveBeenCalledWith('https://example.com/login');
+    await expect(nativeRequest(connection, '/v1/network-proxy/resolve', {
+      scope: 'runtime',
+      override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+    })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
+    expect(resolveNetworkProxy).toHaveBeenCalledWith({
+      scope: 'runtime',
+      override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+    });
     const rejected = await fetch(`${connection.url}/v1/external/open`, {
       body: JSON.stringify({ url: 'file:///tmp/token' }),
       headers: { Authorization: `Bearer ${connection.token}` },
@@ -57,6 +86,7 @@ describe('DesktopNativeBridgeServer', () => {
         delete: async () => undefined,
       },
       openExternal: async () => undefined,
+      resolveNetworkProxy: async () => ({ mode: 'direct' }),
     });
     servers.push(server);
     await server.start();

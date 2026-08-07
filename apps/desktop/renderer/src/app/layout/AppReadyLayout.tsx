@@ -288,6 +288,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         draft={draft}
         projectWorkspace={projectWorkspace}
         runtime={runtime}
+        networkProxy={controller.networkProxy}
         setActiveView={setActiveView}
         setDraft={setDraft}
         skillSelectionRequest={skillSelectionRequest}

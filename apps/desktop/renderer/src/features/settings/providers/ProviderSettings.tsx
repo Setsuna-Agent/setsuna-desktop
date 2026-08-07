@@ -1,5 +1,6 @@
 import {
   defaultModelMaxOutputTokens,
+  type DesktopNetworkProxyServerState,
   type ProviderConfigState,
   type ProviderModelConfig,
   type RuntimeAvailableModelsResponse,
@@ -23,6 +24,7 @@ import { formatTokens } from '../../workspace/model.js';
 import { BrandIconDialog } from '../BrandIconDialog.js';
 import { providerModelReplacementDecision } from '../providerModelReplacement.js';
 import { ProviderModelReplacementDialog } from '../ProviderModelReplacementDialog.js';
+import { ProviderProxyField } from './ProviderProxyField.js';
 import {
   customThinkingEfforts,
   defaultProviderConfig,
@@ -53,29 +55,13 @@ import {
 
 export function LocalModelSettings({
   config,
+  proxyServers,
   onFetchModels,
   onSave,
   onSaveStateChange,
 }: {
   config: RuntimeConfigState;
-  onFetchModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
-  onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
-  onSaveStateChange: (state: SaveState) => void;
-}) {
-  return (
-    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section">
-      <ProviderSettings config={config} onFetchModels={onFetchModels} onSave={onSave} onSaveStateChange={onSaveStateChange} />
-    </div>
-  );
-}
-
-function ProviderSettings({
-  config,
-  onFetchModels,
-  onSave,
-  onSaveStateChange,
-}: {
-  config: RuntimeConfigState;
+  proxyServers: DesktopNetworkProxyServerState[];
   onFetchModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
   onSave: (providers: ProviderConfigState[], apiKeysByProviderId: Record<string, string>) => Promise<void>;
   onSaveStateChange: (state: SaveState) => void;
@@ -302,6 +288,7 @@ function ProviderSettings({
       provider: provider.provider,
       baseUrl: provider.baseUrl,
       apiKey: apiKeysByProviderId[provider.id] || undefined,
+      proxyRoute: provider.proxyRoute,
     })
       .then((result) => {
         const currentProvider = providersRef.current.find((item) => item.id === provider.id);
@@ -384,7 +371,7 @@ function ProviderSettings({
   const editingModelIconConfig = editingModelIconProvider?.models.find((model) => model.id === editingModelIcon?.modelId);
 
   return (
-    <div className="chat-user-settings__local-provider-stack">
+    <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section chat-user-settings__local-provider-stack">
       <div className="chat-user-settings__local-provider-layout">
         <aside className="chat-user-settings__local-provider-rail">
           <div className="chat-user-settings__local-provider-rail-head">
@@ -521,6 +508,11 @@ function ProviderSettings({
                     <span className="settings-provider-field__label">{t('settings.providers.apiKey')} {selectedProvider.apiKeySet ? <em>{selectedProvider.apiKeyPreview}</em> : null}</span>
                     <TextField className="settings-local-control" type="password" value={apiKeysByProviderId[selectedProvider.id] ?? ''} onChange={(event) => setProviderApiKey(selectedProvider.id, event.target.value)} placeholder={selectedProvider.apiKeySet ? t('settings.providers.keepApiKey') : t('settings.providers.optionalApiKey')} />
                   </label>
+                  <ProviderProxyField
+                    proxyServers={proxyServers}
+                    route={selectedProvider.proxyRoute}
+                    onChange={(proxyRoute) => updateProvider(selectedProvider.id, (item) => ({ ...item, proxyRoute }))}
+                  />
                 </div>
               </section>
               <section className="settings-form-section settings-model-section">

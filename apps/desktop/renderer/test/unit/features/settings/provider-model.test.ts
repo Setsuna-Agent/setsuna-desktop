@@ -39,4 +39,16 @@ describe('normalizeSettingsProviders', () => {
     expect(second.id).not.toBe(first.id);
     expect(second.models[0]?.id).not.toBe(first.models[0]?.id);
   });
+
+  it('preserves a provider-specific proxy selection and defaults missing routes to inherit', () => {
+    const first = defaultProviderConfig();
+    const second = defaultProviderConfig();
+    first.proxyRoute = { mode: 'proxy', proxyServerId: 'proxy-provider' };
+    delete second.proxyRoute;
+
+    const providers = normalizeSettingsProviders([first, second]);
+
+    expect(providers[0]?.proxyRoute).toEqual({ mode: 'proxy', proxyServerId: 'proxy-provider' });
+    expect(providers[1]?.proxyRoute).toEqual({ mode: 'inherit' });
+  });
 });

@@ -5,16 +5,14 @@ import {
   capabilitiesManagementZhCN,
 } from './capabilitiesManagementMessages.js';
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
-import {
-  dataRootCleanupEnUS,
-  dataRootCleanupZhCN,
-} from './dataRootCleanupMessages.js';
+import { dataRootCleanupEnUS, dataRootCleanupZhCN } from './dataRootCleanupMessages.js';
 import {
   runtimeActivityEnUS,
   runtimeActivityZhCN,
 } from './runtimeActivityMessages.js';
 import { keyboardShortcutEnUS, keyboardShortcutZhCN } from './keyboardShortcutMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
+import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 
@@ -590,6 +588,7 @@ const zhCN = {
   ...chatZhCN,
   ...chatSupplementZhCN,
   ...taskModelZhCN,
+  ...networkProxyZhCN,
   ...toolRunZhCN,
 } as const;
 export type MessageKey = keyof typeof zhCN;
@@ -1166,6 +1165,7 @@ const enUS = {
   ...chatEnUS,
   ...chatSupplementEnUS,
   ...taskModelEnUS,
+  ...networkProxyEnUS,
   ...toolRunEnUS,
 } satisfies Record<MessageKey, string>;
 

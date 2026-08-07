@@ -6,4 +6,10 @@ describe('electron build externals', () => {
     expect(electronMainExternals).toContain('node-pty');
     expect(runtimeExternals).toContain('node-pty');
   });
+
+  it('keeps proxy transports external to the ESM Electron main bundle', () => {
+    expect(electronMainExternals).toEqual(
+      expect.arrayContaining(['proxy-chain', 'undici']),
+    );
+  });
 });

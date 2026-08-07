@@ -1,4 +1,8 @@
 import type {
+  DesktopResolveNetworkProxyInput,
+  DesktopResolvedNetworkProxy,
+} from '@setsuna-desktop/contracts';
+import type {
   DesktopNativeBridge,
   SecretStore,
   SecretStoreStatus,
@@ -29,5 +33,9 @@ export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements 
 
   async openExternal(url: string): Promise<void> {
     this.openedUrls.push(url);
+  }
+
+  async resolveNetworkProxy(_input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
+    return { mode: 'direct' };
   }
 }

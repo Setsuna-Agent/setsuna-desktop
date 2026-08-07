@@ -36,11 +36,15 @@ type TerminalOpenInput = {
 };
 
 const MAX_EVENT_QUEUE = 2000;
+type TerminalEnvironmentPatch = Record<string, string | null>;
 
 export class DesktopTerminalStore {
   private readonly sessions = new Map<string, TerminalSession>();
 
-  constructor(private readonly publish: (event: DesktopTerminalEventPayload) => void) {}
+  constructor(
+    private readonly publish: (event: DesktopTerminalEventPayload) => void,
+    private readonly resolveEnvironment: () => Promise<TerminalEnvironmentPatch> = async () => ({}),
+  ) {}
 
   async open(input: TerminalOpenInput): Promise<DesktopTerminalSession> {
     const workspaceRoot = await resolveWorkspaceRoot(input.workspaceRoot);
@@ -62,7 +66,12 @@ export class DesktopTerminalStore {
       shellCommand: shell.command,
     };
     this.sessions.set(sessionId, session);
-    this.startSessionProcess(session);
+    try {
+      await this.startSessionProcess(session);
+    } catch (error) {
+      this.sessions.delete(sessionId);
+      throw error;
+    }
 
     return {
       sessionId,
@@ -92,12 +101,12 @@ export class DesktopTerminalStore {
     return true;
   }
 
-  restart(sessionId: string, cols?: number, rows?: number): boolean {
+  async restart(sessionId: string, cols?: number, rows?: number): Promise<boolean> {
     const session = this.requireSession(sessionId);
     if (!session.exited) return false;
     session.cols = terminalDimension(cols, session.cols);
     session.rows = terminalDimension(rows, session.rows);
-    this.startSessionProcess(session);
+    await this.startSessionProcess(session);
     return true;
   }
 
@@ -126,14 +135,16 @@ export class DesktopTerminalStore {
     return session;
   }
 
-  private startSessionProcess(session: TerminalSession): void {
+  private async startSessionProcess(session: TerminalSession): Promise<void> {
+    const environmentPatch = await this.resolveEnvironment();
+    if (this.sessions.get(session.sessionId) !== session) return;
     session.dataDisposable.dispose();
     session.exitDisposable.dispose();
     const ptyProcess = pty.spawn(session.shellCommand, session.shellArgs, {
       cols: session.cols,
       cwd: session.workspaceRoot,
       encoding: 'utf8',
-      env: terminalEnvironment(),
+      env: terminalEnvironment(environmentPatch),
       name: 'xterm-256color',
       rows: session.rows,
     });
@@ -186,7 +197,7 @@ function defaultShellSpec(): { command: string; args: string[]; displayName: str
   return { command, args: ['-i'], displayName: path.basename(command) };
 }
 
-function terminalEnvironment(): NodeJS.ProcessEnv {
+function terminalEnvironment(patch: TerminalEnvironmentPatch = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     PATH: desktopShellPath(process.env.PATH),
@@ -203,6 +214,10 @@ function terminalEnvironment(): NodeJS.ProcessEnv {
   };
   delete env.NO_COLOR;
   delete env.CI;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete env[key];
+    else env[key] = value;
+  }
   return env;
 }
 

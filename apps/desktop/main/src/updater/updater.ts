@@ -33,6 +33,7 @@ type DesktopUpdaterOptions = {
   downloadsDir: string;
   sourceConfigPath: string;
   enabled: boolean;
+  fetch?: typeof globalThis.fetch;
   checkIntervalMs?: number;
 };
 
@@ -46,6 +47,7 @@ export class DesktopUpdater {
   private readonly checkIntervalMs: number;
   private readonly downloadsDir: string;
   private readonly enabled: boolean;
+  private readonly fetchImpl: typeof globalThis.fetch;
   private readonly latestReleaseUrl: string;
   private readonly sourceStore: UpdateDownloadSourceStore;
   private activeTransferController: AbortController | null = null;
@@ -57,6 +59,7 @@ export class DesktopUpdater {
   constructor(options: DesktopUpdaterOptions) {
     this.downloadsDir = options.downloadsDir;
     this.enabled = options.enabled;
+    this.fetchImpl = options.fetch ?? globalThis.fetch;
     this.checkIntervalMs = options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS;
     this.latestReleaseUrl = `https://api.github.com/repos/${options.repository}/releases/latest`;
     this.sourceStore = new UpdateDownloadSourceStore(options.sourceConfigPath);
@@ -172,7 +175,7 @@ export class DesktopUpdater {
     const sourceRevision = this.sourceRevision;
     try {
       this.setState({ status: 'checking', error: undefined, progress: null });
-      const release = await fetchJson<ReleaseInfo>(this.latestReleaseUrl);
+      const release = await fetchJson<ReleaseInfo>(this.latestReleaseUrl, this.fetchImpl);
       this.ensureSourceUnchanged(sourceRevision);
       const availableVersion = release.tag_name;
 
@@ -273,6 +276,7 @@ export class DesktopUpdater {
       METADATA_REQUEST_TIMEOUT_MS,
       `Timed out while fetching checksums for ${selectedAsset.name}.`,
       async (response) => (response.ok ? response.text() : null),
+      this.fetchImpl,
       signal,
     );
     if (!checksumText) return null;
@@ -292,6 +296,7 @@ export class DesktopUpdater {
     try {
       await downloadFile(resolveUpdateDownloadUrl(source, asset.browser_download_url), tempDestination, {
         assetName: asset.name,
+        fetch: this.fetchImpl,
         signal,
         onProgress: (progress) => {
           this.setState({ status: 'downloading', progress });
@@ -419,11 +424,11 @@ function promptOptionsForState(
   };
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, fetchImpl: typeof globalThis.fetch): Promise<T> {
   return fetchWithTimeout(url, METADATA_REQUEST_TIMEOUT_MS, 'Timed out while checking for updates.', async (response) => {
     if (!response.ok) throw new Error(`Failed to check updates: HTTP ${response.status}`);
     return (await response.json()) as T;
-  });
+  }, fetchImpl);
 }
 
 function requestInit(signal?: AbortSignal): RequestInit {
@@ -445,6 +450,7 @@ async function fetchWithTimeout<T>(
   timeoutMs: number,
   timeoutMessage: string,
   readResponse: (response: Response) => Promise<T>,
+  fetchImpl: typeof globalThis.fetch,
   externalSignal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
@@ -456,7 +462,7 @@ async function fetchWithTimeout<T>(
   }, timeoutMs);
 
   try {
-    const response = await fetch(url, requestInit(controller.signal));
+    const response = await fetchImpl(url, requestInit(controller.signal));
     return await readResponse(response);
   } catch (error) {
     if (externalSignal?.aborted) throw abortReason(externalSignal, error);
@@ -470,6 +476,7 @@ async function fetchWithTimeout<T>(
 
 type DownloadFileOptions = {
   assetName: string;
+  fetch: typeof globalThis.fetch;
   signal?: AbortSignal;
   onProgress: (progress: DesktopUpdateProgress) => void;
 };
@@ -486,7 +493,7 @@ async function downloadFile(url: string, destination: string, options: DownloadF
 
   try {
     resetStallTimer.reset();
-    const response = await fetch(url, requestInit(controller.signal));
+    const response = await options.fetch(url, requestInit(controller.signal));
     if (!response.ok) throw new Error(`Failed to download ${options.assetName}: HTTP ${response.status}`);
     if (!response.body) throw new Error(`Failed to download ${options.assetName}: empty response body.`);
 

@@ -1,5 +1,6 @@
 import type { RuntimeHooksConfig } from './hooks.js';
 import type { ModelProviderKind } from './model-provider.js';
+import type { DesktopNetworkProxyRoute } from './network-proxy/index.js';
 import type { RuntimePermissionProfile, RuntimeSandboxWorkspaceWrite } from './permissions.js';
 
 export type * from './hooks.js';
@@ -33,6 +34,7 @@ export type ProviderConfigState = {
   icon?: ProviderIconConfig;
   apiKeySet: boolean;
   apiKeyPreview: string;
+  proxyRoute?: DesktopNetworkProxyRoute;
   models: ProviderModelConfig[];
 };
 
@@ -274,6 +276,7 @@ export type RuntimeFetchModelsInput = {
   provider?: ModelProviderKind;
   baseUrl?: string;
   apiKey?: string;
+  proxyRoute?: DesktopNetworkProxyRoute;
 };
 
 export type RuntimeAvailableModelsResponse = {
@@ -289,6 +292,7 @@ export type ProviderConfigInput = {
   icon?: ProviderIconConfig | null;
   apiKey?: string;
   clearApiKey?: boolean;
+  proxyRoute?: DesktopNetworkProxyRoute;
   models?: ProviderModelConfig[];
 };
 

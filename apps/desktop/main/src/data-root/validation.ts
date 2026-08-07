@@ -7,6 +7,7 @@ import { desktopDataLayout } from './layout.js';
 
 const MANAGED_JSON_PATHS = new Set([
   '.setsuna-data-root.json',
+  'network-proxies.json',
   'secure-credentials.json',
   'update-download-sources.json',
   'window-state.json',

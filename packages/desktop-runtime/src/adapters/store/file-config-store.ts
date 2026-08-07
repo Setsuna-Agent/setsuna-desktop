@@ -15,6 +15,7 @@ import type {
 import {
   defaultModelMaxOutputTokens,
   normalizeImageGenerationServiceUrl,
+  normalizeDesktopNetworkProxyRoute,
   normalizeModelIconConfig,
   normalizeNpmRegistryUrl,
   normalizeProviderIconConfig,
@@ -36,11 +37,12 @@ import {
 } from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 4;
+const CONFIG_SCHEMA_VERSION = 5;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
 const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
+const PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION = 5;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -213,6 +215,7 @@ export class FileConfigStore implements ConfigStore {
       const { icon: _storedIcon, ...providerWithoutIcon } = provider;
       return {
         ...providerWithoutIcon,
+        proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
         ...(icon ? { icon } : {}),
         models: normalizeModels(provider.models, provider.provider),
         apiKeySet: apiKey.length > 0,
@@ -331,6 +334,9 @@ function normalizeProviders(
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,
+      proxyRoute: normalizeDesktopNetworkProxyRoute(
+        Object.hasOwn(provider, 'proxyRoute') ? provider.proxyRoute : previous?.proxyRoute,
+      ) ?? { mode: 'inherit' },
       ...(icon ? { icon } : {}),
       models: normalizeModels(
         provider.models ?? previous?.models ?? [],
@@ -439,6 +445,7 @@ function runtimeProviderConfig(
   const models = normalizeModels(provider.models, provider.provider);
   return {
     ...provider,
+    proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
     models,
     apiKey: secrets.providerApiKeys[provider.id] ?? '',
     activeModel: models.find((model) => model.enabled) ?? models[0],
@@ -489,6 +496,12 @@ function migrateStoredConfig(stored: StoredConfig): boolean {
     const accessMode = accessModeForStoredConfig(stored);
     stored.approvalPolicy = accessMode.approvalPolicy;
     stored.permissionProfile = accessMode.permissionProfile;
+  }
+  if (schemaVersion < PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION) {
+    stored.providers = stored.providers.map((provider) => ({
+      ...provider,
+      proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
+    }));
   }
   stored.schemaVersion = CONFIG_SCHEMA_VERSION;
   return true;

@@ -4,7 +4,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const electronMainExternals = ['electron', 'node-pty'];
+export const electronMainExternals = [
+  'electron',
+  'node-pty',
+  // These packages reach CommonJS modules that require Node built-ins. Bundling
+  // them into the ESM main entry turns those calls into esbuild's unsupported
+  // dynamic-require shim, so Electron must load them as regular dependencies.
+  'proxy-chain',
+  'undici',
+];
 export const runtimeExternals = ['node-pty'];
 
 export async function buildElectron(): Promise<void> {

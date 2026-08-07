@@ -121,6 +121,21 @@ const links: SetsunaDesktopBridge['links'] = {
   openExternal: (url) => ipcRenderer.invoke('desktop:open-external', url),
 };
 
+const networkProxy: SetsunaDesktopBridge['networkProxy'] = {
+  getState: () => ipcRenderer.invoke('network-proxy:get-state'),
+  upsertServer: (input) => ipcRenderer.invoke('network-proxy:upsert-server', input),
+  deleteServer: (proxyServerId) => ipcRenderer.invoke('network-proxy:delete-server', proxyServerId),
+  setRouting: (input) => ipcRenderer.invoke('network-proxy:set-routing', input),
+  onStateChange(callback) {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: Parameters<typeof callback>[0],
+    ) => callback(state);
+    ipcRenderer.on('network-proxy:state-change', listener);
+    return () => ipcRenderer.off('network-proxy:state-change', listener);
+  },
+};
+
 const browser: SetsunaDesktopBridge['browser'] = {
   captureScreenshot: (tabId) =>
     ipcRenderer.invoke('browser:capture-screenshot', { tabId }),
@@ -208,6 +223,7 @@ const bridge: SetsunaDesktopBridge = {
   desktop,
   desktopReview,
   links,
+  networkProxy,
   runtime,
   terminal,
   updater,

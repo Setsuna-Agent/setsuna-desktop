@@ -198,7 +198,9 @@ export async function summarizeMigrationPlanCategories(
 
 export function migrationCategory(relativePath: string): DesktopDataMigrationCategoryId {
   const normalized = relativePath.replaceAll(path.sep, '/').toLowerCase();
-  if (normalized === 'secure-credentials.json') return 'settings_credentials';
+  if (normalized === 'network-proxies.json' || normalized === 'secure-credentials.json') {
+    return 'settings_credentials';
+  }
   if (!normalized.startsWith('runtime/')) return 'desktop_browser';
   if (
     normalized === 'runtime/threads.sqlite'

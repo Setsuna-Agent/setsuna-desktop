@@ -1,3 +1,7 @@
+import type {
+  DesktopResolveNetworkProxyInput,
+  DesktopResolvedNetworkProxy,
+} from '@setsuna-desktop/contracts';
 import type { DesktopNativeBridge, SecretStoreStatus } from '../../ports/secret-store.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -38,6 +42,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
 
   async openExternal(url: string): Promise<void> {
     await this.request('/v1/external/open', { body: { url }, method: 'POST' });
+  }
+
+  resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
+    return this.request('/v1/network-proxy/resolve', { body: input, method: 'POST' });
   }
 
   private async request<T>(pathname: string, options: { body?: unknown; method: 'GET' | 'POST' }): Promise<T> {
@@ -83,6 +91,13 @@ export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
 
   async openExternal(_url: string): Promise<void> {
     throw new Error('Opening an external authorization page requires the Setsuna Desktop host.');
+  }
+
+  async resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
+    if (input.override?.mode === 'proxy') {
+      throw new Error('A configured network proxy requires the Setsuna Desktop host.');
+    }
+    return input.override?.mode === 'direct' ? { mode: 'direct' } : { mode: 'system' };
   }
 }
 

@@ -5,6 +5,7 @@ export type SettingsSectionId =
   | 'shortcuts'
   | 'personalization'
   | 'localLlm'
+  | 'networkProxy'
   | 'taskModels'
   | 'usage'
   | 'archives'

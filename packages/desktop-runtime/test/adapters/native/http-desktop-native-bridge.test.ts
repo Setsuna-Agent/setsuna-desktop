@@ -12,7 +12,13 @@ describe('HttpDesktopNativeBridge', () => {
       const body = request.method === 'POST' ? JSON.parse(await requestText(request)) : {};
       calls.push({ authorization: request.headers.authorization, body, url: request.url });
       response.writeHead(200, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify(request.url === '/v1/credentials/get' ? { value: 'secret' } : { ok: true, available: true, backend: 'test' }));
+      response.end(JSON.stringify(
+        request.url === '/v1/credentials/get'
+          ? { value: 'secret' }
+          : request.url === '/v1/network-proxy/resolve'
+            ? { mode: 'proxy', proxyServerId: 'proxy-example', proxyUrl: 'http://user:pass@127.0.0.1:3128' }
+            : { ok: true, available: true, backend: 'test' },
+      ));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -24,7 +30,15 @@ describe('HttpDesktopNativeBridge', () => {
       await client.set('mcp.test', 'secret');
       await expect(client.get('mcp.test')).resolves.toBe('secret');
       await client.openExternal('https://example.com/login');
+      await expect(client.resolveNetworkProxy({
+        scope: 'runtime',
+        override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+      })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
       expect(calls.every((call) => call.authorization === 'Bearer bridge-token')).toBe(true);
+      expect(calls).toContainEqual(expect.objectContaining({
+        body: { scope: 'runtime', override: { mode: 'proxy', proxyServerId: 'proxy-example' } },
+        url: '/v1/network-proxy/resolve',
+      }));
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
@@ -34,6 +48,15 @@ describe('HttpDesktopNativeBridge', () => {
     const client = new UnavailableDesktopNativeBridge();
     await expect(client.status()).resolves.toMatchObject({ available: false });
     await expect(client.set('mcp.test', 'secret')).rejects.toThrow('Setsuna Desktop host');
+    await expect(client.resolveNetworkProxy({ scope: 'runtime' })).resolves.toEqual({ mode: 'system' });
+    await expect(client.resolveNetworkProxy({
+      scope: 'runtime',
+      override: { mode: 'direct' },
+    })).resolves.toEqual({ mode: 'direct' });
+    await expect(client.resolveNetworkProxy({
+      scope: 'runtime',
+      override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+    })).rejects.toThrow('Setsuna Desktop host');
   });
 });
 

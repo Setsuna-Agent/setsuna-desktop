@@ -62,7 +62,9 @@ corepack pnpm@7.33.7 <command>
 
 external：
 
-- main external `electron`、`node-pty`。
+- main external `electron`、`node-pty`、`proxy-chain`、`undici`。后两者包含 CommonJS
+  依赖，不能内联到 ESM main bundle，否则 Node 内置模块调用会被转换为不可用的动态
+  `require`。
 - preload external `electron`。
 
 约束：

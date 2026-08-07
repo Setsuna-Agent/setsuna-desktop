@@ -1,3 +1,9 @@
+import {
+  DESKTOP_NETWORK_PROXY_SCOPES,
+  normalizeDesktopNetworkProxyRoute,
+  type DesktopResolveNetworkProxyInput,
+  type DesktopResolvedNetworkProxy,
+} from '@setsuna-desktop/contracts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';
@@ -16,6 +22,7 @@ export type DesktopNativeBridgeConnection = {
 type DesktopNativeBridgeOptions = {
   credentialVault: CredentialVault;
   openExternal(url: string): Promise<void>;
+  resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
 };
 
 type DesktopFilePreview = {
@@ -111,6 +118,11 @@ export class DesktopNativeBridgeServer {
         sendJson(response, 200, { ok: true });
         return;
       }
+      if (request.method === 'POST' && request.url === '/v1/network-proxy/resolve') {
+        const input = networkProxyInput(await readJsonBody(request));
+        sendJson(response, 200, await this.options.resolveNetworkProxy(input));
+        return;
+      }
       sendJson(response, 404, { error: 'Not found.' });
     } catch (error) {
       sendJson(response, 400, { error: error instanceof Error ? error.message : 'Desktop native bridge request failed.' });
@@ -183,6 +195,9 @@ function credentialInput(value: unknown, requiresValue: boolean): { key: string;
   const key = typeof input.key === 'string' ? input.key : '';
   const credentialValue = typeof input.value === 'string' ? input.value : '';
   if (!key.trim()) throw new Error('Credential key is required.');
+  if (key.trim().toLocaleLowerCase().startsWith('network-proxy.')) {
+    throw new Error('Credential key is reserved for the desktop network proxy service.');
+  }
   if (requiresValue && typeof input.value !== 'string') throw new Error('Credential value is required.');
   return { key, value: credentialValue };
 }
@@ -194,6 +209,17 @@ function externalUrl(value: unknown): string {
     throw new Error('Only HTTP(S) external URLs are allowed.');
   }
   return url.toString();
+}
+
+function networkProxyInput(value: unknown): DesktopResolveNetworkProxyInput {
+  const input = recordInput(value);
+  const scope = DESKTOP_NETWORK_PROXY_SCOPES.find((candidate) => candidate === input.scope);
+  if (!scope) throw new Error('Network proxy scope is invalid.');
+  const override = input.override === undefined
+    ? undefined
+    : normalizeDesktopNetworkProxyRoute(input.override);
+  if (input.override !== undefined && !override) throw new Error('Network proxy override is invalid.');
+  return { scope, ...(override ? { override } : {}) };
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {

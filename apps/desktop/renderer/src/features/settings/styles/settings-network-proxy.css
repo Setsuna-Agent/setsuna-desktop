@@ -1,0 +1,420 @@
+.desktop-settings-panel .chat-user-settings__content > .settings-network-proxy,
+.desktop-settings-panel .chat-user-settings__content:has(> .settings-network-proxy) > .chat-user-settings__page-heading {
+  width: min(900px, 100%);
+}
+
+.desktop-settings-panel .settings-network-proxy {
+  gap: 18px;
+}
+
+.desktop-settings-panel .settings-network-proxy > .settings-form-section {
+  min-width: 0;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 10px;
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.desktop-settings-panel .settings-network-proxy__section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .settings-network-proxy__section-head > div,
+.desktop-settings-panel .settings-network-proxy__route-row > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-settings-panel .settings-network-proxy__section-head strong,
+.desktop-settings-panel .settings-network-proxy__route-row strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.desktop-settings-panel .settings-network-proxy__section-head span,
+.desktop-settings-panel .settings-network-proxy__route-row small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: var(--app-font-weight);
+  line-height: 16px;
+}
+
+.desktop-settings-panel .settings-network-proxy__route-list {
+  display: grid;
+}
+
+.desktop-settings-panel .settings-network-proxy__route-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  align-items: center;
+  gap: 20px;
+  min-height: 58px;
+  padding: 10px 16px;
+}
+
+.desktop-settings-panel .settings-network-proxy__route-row + .settings-network-proxy__route-row {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-settings-panel .settings-network-proxy__server-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 14px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 58px;
+  padding: 9px 11px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: var(--app-surface);
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card:hover,
+.desktop-settings-panel .settings-network-proxy__server-card:focus-within {
+  border-color: var(--app-border-strong);
+  background: color-mix(in srgb, var(--app-text) 1.5%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-icon,
+.desktop-settings-panel .settings-network-proxy__server-empty > span,
+.settings-network-proxy-dialog__title > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--chat-settings-divider);
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-identity {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-identity strong,
+.desktop-settings-panel .settings-network-proxy__server-card-identity code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-identity strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-identity code {
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0.56;
+  transition: opacity 140ms ease;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card:hover .settings-network-proxy__server-card-actions,
+.desktop-settings-panel .settings-network-proxy__server-card:focus-within .settings-network-proxy__server-card-actions {
+  opacity: 1;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-actions .sd-icon-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-edit {
+  color: var(--app-text-secondary);
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-delete {
+  color: var(--app-text-muted);
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-delete:hover:not(:disabled) {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, var(--app-surface));
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  justify-self: end;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-meta > span {
+  display: inline-flex;
+  align-items: center;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-meta > span + span:not(.is-referenced)::before {
+  margin: 0 7px;
+  color: var(--app-text-subtle);
+  content: '·';
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-meta > span.is-referenced {
+  margin-left: auto;
+  color: var(--app-text-secondary);
+  font-weight: 600;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-card-meta > span.is-referenced::before {
+  width: 4px;
+  height: 4px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: '';
+}
+
+.desktop-settings-panel .settings-network-proxy__server-empty {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  min-height: 180px;
+  padding: 28px;
+  text-align: center;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-empty > span {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 3px;
+  border-radius: 10px;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-empty strong {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.desktop-settings-panel .settings-network-proxy__server-empty small {
+  max-width: 360px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-settings-panel .settings-network-proxy__error {
+  margin: 0 14px 14px;
+  color: var(--app-danger);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-settings-panel .settings-network-proxy__footnote {
+  margin: -4px 2px 0;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.settings-network-proxy-dialog-backdrop {
+  z-index: 150;
+}
+
+.settings-network-proxy-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(580px, calc(100vw - 48px));
+  max-height: min(680px, calc(100vh - 48px));
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-network-proxy-dialog__header {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
+}
+
+.settings-network-proxy-dialog__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  min-width: 0;
+}
+
+.settings-network-proxy-dialog__title > span {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.settings-network-proxy-dialog__title > div,
+.settings-network-proxy-dialog__field,
+.settings-network-proxy-dialog__field > span {
+  display: grid;
+  min-width: 0;
+}
+
+.settings-network-proxy-dialog__title > div {
+  gap: 2px;
+}
+
+.settings-network-proxy-dialog__title strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.settings-network-proxy-dialog__title small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-network-proxy-dialog__body {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.settings-network-proxy-dialog__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-network-proxy-dialog__field {
+  align-content: start;
+  gap: 6px;
+}
+
+.settings-network-proxy-dialog__field > span {
+  min-height: 16px;
+}
+
+.settings-network-proxy-dialog__field strong {
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.settings-network-proxy-dialog__field .sd-field {
+  width: 100%;
+  max-width: none;
+}
+
+.settings-network-proxy-dialog__clear-credentials {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.settings-network-proxy-dialog__error {
+  color: var(--app-danger);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-network-proxy-dialog__footer {
+  align-items: center;
+  padding: 12px 16px 14px;
+  border-top: 1px solid var(--chat-settings-divider);
+  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
+}
+
+@media (max-width: 860px) {
+  .desktop-settings-panel .settings-network-proxy__route-row {
+    grid-template-columns: 1fr;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-card {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    row-gap: 5px;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-card-icon {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-card-identity {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-card-meta {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-card-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 620px) {
+  .desktop-settings-panel .settings-network-proxy__section-head {
+    align-items: flex-start;
+  }
+
+  .desktop-settings-panel .settings-network-proxy__server-grid,
+  .settings-network-proxy-dialog__fields {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-network-proxy-dialog-backdrop {
+    padding: 12px;
+  }
+
+  .settings-network-proxy-dialog {
+    width: min(580px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+  }
+}

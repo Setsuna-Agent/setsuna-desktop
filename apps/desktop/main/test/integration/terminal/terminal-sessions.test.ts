@@ -34,9 +34,27 @@ describe('desktop terminal store', () => {
 
     expect(store.read(session.sessionId).some((event) => event.event === 'exit')).toBe(true);
     expect(() => store.write(session.sessionId, terminalSmokeCommand())).toThrow('重新启动');
-    expect(store.restart(session.sessionId, 90, 30)).toBe(true);
+    await expect(store.restart(session.sessionId, 90, 30)).resolves.toBe(true);
     store.write(session.sessionId, terminalSmokeCommand());
     await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text ?? '').includes('setsuna-terminal-smoke')));
+
+    expect(store.close(session.sessionId)).toBe(true);
+  });
+
+  it('applies the current proxy environment when starting a session', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-proxy-test-'));
+    const events: DesktopTerminalEvent[] = [];
+    const store = new DesktopTerminalStore(
+      (event) => events.push(event),
+      async () => ({ HTTP_PROXY: 'http://relay:secret@127.0.0.1:3128' }),
+    );
+    const session = await store.open({ workspaceRoot });
+
+    store.write(session.sessionId, terminalProxyCommand());
+    await waitFor(() => events.some((event) => (
+      event.event === 'output'
+      && String(event.data.text ?? '').includes('relay:secret@127.0.0.1:3128')
+    )));
 
     expect(store.close(session.sessionId)).toBe(true);
   });
@@ -49,6 +67,10 @@ function terminalSmokeCommand(): string {
 
 function terminalExitCommand(): string {
   return process.platform === 'win32' ? 'exit\r\n' : 'exit\n';
+}
+
+function terminalProxyCommand(): string {
+  return process.platform === 'win32' ? 'echo %HTTP_PROXY%\r\n' : "printf '%s\\n' \"$HTTP_PROXY\"\n";
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {
