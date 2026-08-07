@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isNetworkVolumePath,
   isPathOnNetworkMount,
   parseDarwinMounts,
   parseLinuxMountInfo,
@@ -27,5 +28,15 @@ describe('data root volume detection', () => {
     expect(isPathOnNetworkMount('/mnt/team/project', mounts)).toBe(true);
     expect(isPathOnNetworkMount('/mnt/share/data', mounts)).toBe(true);
     expect(isPathOnNetworkMount('/mnt/team/local/data', mounts)).toBe(false);
+  });
+
+  it('treats a failed Windows drive probe as advisory', async () => {
+    const windowsDriveDetector = async (): Promise<boolean> => {
+      throw new Error('PowerShell is unavailable');
+    };
+
+    await expect(isNetworkVolumePath('C:\\Setsuna Data', 'win32', {
+      windowsDriveDetector,
+    })).resolves.toBe(false);
   });
 });
