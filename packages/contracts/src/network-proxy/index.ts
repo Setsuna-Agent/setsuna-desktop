@@ -97,6 +97,7 @@ export function normalizeDesktopNetworkProxyUrl(value: unknown): string | null {
     if (
       !['http:', 'https:', 'socks5:'].includes(url.protocol)
       || !url.hostname
+      || url.port === '0'
       || url.username
       || url.password
       || (url.pathname && url.pathname !== '/')
@@ -131,11 +132,20 @@ export function isDesktopNetworkProxyLoopbackUrl(value: string): boolean {
     const hostname = new URL(value).hostname.toLocaleLowerCase();
     if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
     if (hostname === '[::1]' || hostname === '::1') return true;
-    const ipv4 = hostname.split('.').map(Number);
-    return ipv4.length === 4
-      && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
-      && ipv4[0] === 127;
+    if (isIpv4Loopback(hostname)) return true;
+    const ipv6 = hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
+    const mappedIpv4 = ipv6.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/u);
+    return mappedIpv4 ? (Number.parseInt(mappedIpv4[1]!, 16) >>> 8) === 127 : false;
   } catch {
     return false;
   }
+}
+
+function isIpv4Loopback(hostname: string): boolean {
+  const ipv4 = hostname.split('.').map(Number);
+  return ipv4.length === 4
+    && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+    && ipv4[0] === 127;
 }
