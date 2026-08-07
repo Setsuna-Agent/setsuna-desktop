@@ -12,6 +12,7 @@ describe('network proxy contracts', () => {
     expect(normalizeDesktopNetworkProxyUrl('https://proxy.example.com:8443')).toBe('https://proxy.example.com:8443');
     expect(normalizeDesktopNetworkProxyUrl('http://user:secret@proxy.example.com')).toBeNull();
     expect(normalizeDesktopNetworkProxyUrl('https://proxy.example.com/path')).toBeNull();
+    expect(normalizeDesktopNetworkProxyUrl('http://proxy.example.com:0')).toBeNull();
     expect(normalizeDesktopNetworkProxyUrl('ftp://proxy.example.com')).toBeNull();
   });
 
@@ -36,6 +37,8 @@ describe('network proxy contracts', () => {
     expect(isDesktopNetworkProxyLoopbackUrl('http://models.localhost:11434/v1')).toBe(true);
     expect(isDesktopNetworkProxyLoopbackUrl('http://127.42.0.8:11434/v1')).toBe(true);
     expect(isDesktopNetworkProxyLoopbackUrl('http://[::1]:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('http://[::ffff:127.42.0.8]:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('http://[::ffff:192.168.1.1]:11434/v1')).toBe(false);
     expect(isDesktopNetworkProxyLoopbackUrl('https://localhost.example.com/v1')).toBe(false);
     expect(isDesktopNetworkProxyLoopbackUrl('https://127.0.0.1.example.com/v1')).toBe(false);
   });
