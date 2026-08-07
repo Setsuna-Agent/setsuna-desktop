@@ -99,7 +99,6 @@ describe('runtime factory tool wiring', () => {
       expect(nativeBridge.proxyInputs).toEqual([{
         scope: 'runtime',
         override: undefined,
-        targetUrl: 'https://images.example.test/v1/images/generations',
       }]);
     } finally {
       await runtime.networkProxyFetch.close();

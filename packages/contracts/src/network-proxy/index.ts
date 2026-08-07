@@ -50,17 +50,25 @@ export type DesktopNetworkProxyState = {
   routing: DesktopNetworkProxyRoutingState;
 };
 
-/** Runtime-only response. The URL points at an authenticated loopback relay, never the upstream proxy. */
+/** Runtime-only response. Configured proxies expose only an authenticated loopback relay. */
 export type DesktopResolvedNetworkProxy =
-  | { mode: 'system'; proxyUrl?: string }
+  | { mode: 'system' }
   | { mode: 'direct' }
   | { mode: 'proxy'; proxyServerId: string; proxyUrl: string };
 
 export type DesktopResolveNetworkProxyInput = {
   scope: DesktopNetworkProxyScope;
   override?: DesktopNetworkProxyRoute;
-  /** HTTP(S) destination used to resolve a PAC/system proxy for this request. */
-  targetUrl?: string;
+};
+
+export const DESKTOP_SYSTEM_PROXY_FETCH_PATH = '/v1/network-proxy/system-fetch';
+export const DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER = 'x-setsuna-system-fetch-request';
+export const DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER = 'x-setsuna-system-fetch-error';
+
+export type DesktopSystemProxyFetchRequest = {
+  headers: Array<[string, string]>;
+  method: string;
+  url: string;
 };
 
 export function defaultDesktopNetworkProxyRouting(): DesktopNetworkProxyRoutingState {

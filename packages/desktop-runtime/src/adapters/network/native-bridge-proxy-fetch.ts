@@ -22,12 +22,9 @@ export class NativeBridgeProxyFetch {
       if (isDesktopNetworkProxyLoopbackUrl(targetUrl)) {
         return this.fetchWithDispatcher(input, init, this.directAgent);
       }
-      const route = await this.nativeBridge.resolveNetworkProxy({
-        scope: 'runtime',
-        override,
-        targetUrl,
-      });
-      const proxyUrl = route.mode === 'proxy' || route.mode === 'system' ? route.proxyUrl : undefined;
+      const route = await this.nativeBridge.resolveNetworkProxy({ scope: 'runtime', override });
+      if (route.mode === 'system') return this.nativeBridge.fetchWithSystemProxy(input, init);
+      const proxyUrl = route.mode === 'proxy' ? route.proxyUrl : undefined;
       return this.fetchWithDispatcher(
         input,
         init,

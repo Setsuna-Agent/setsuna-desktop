@@ -46,6 +46,11 @@ export type ResolvedUpstreamProxy = {
   url: string;
 };
 
+export type DesktopNetworkProxyUpsertResult = {
+  state: DesktopNetworkProxyState;
+  transportChanged: boolean;
+};
+
 export class DesktopNetworkProxyStore {
   private config: StoredNetworkProxyConfig | null = null;
   private updateQueue: Promise<void> = Promise.resolve();
@@ -68,8 +73,15 @@ export class DesktopNetworkProxyStore {
   }
 
   async upsertServer(input: DesktopNetworkProxyServerInput): Promise<DesktopNetworkProxyState> {
+    return (await this.upsertServerWithResult(input)).state;
+  }
+
+  async upsertServerWithResult(
+    input: DesktopNetworkProxyServerInput,
+  ): Promise<DesktopNetworkProxyUpsertResult> {
+    let transportChanged = false;
     await this.enqueue(async () => {
-      const config = await this.load();
+      let config = await this.load();
       const suppliedId = normalizedProxyId(input.id);
       if (input.id !== undefined && !suppliedId) throw new Error('代理服务器 ID 无效。');
       const id = suppliedId ?? `proxy-${randomUUID()}`;
@@ -100,9 +112,17 @@ export class DesktopNetworkProxyStore {
       let passwordCredentialKey = clearPassword ? undefined : previous?.passwordCredentialKey;
       let stagedCredentialKey: string | undefined;
       if (password) {
-        // A new key keeps the previously committed metadata and password paired
-        // until the new metadata has been durably replaced.
+        // Journal the new key before writing it so a crash or failed metadata
+        // commit cannot leave an untracked credential in secure storage.
         stagedCredentialKey = versionedProxyPasswordCredentialKey(id);
+        config = {
+          ...config,
+          pendingCredentialCleanupKeys: addPendingCredentialCleanupKey(
+            config.pendingCredentialCleanupKeys,
+            stagedCredentialKey,
+          ),
+        };
+        await this.persist(config);
         await this.credentialVault.set(stagedCredentialKey, password);
         passwordCredentialKey = stagedCredentialKey;
       }
@@ -121,20 +141,18 @@ export class DesktopNetworkProxyStore {
       if (previousIndex >= 0) servers[previousIndex] = nextServer;
       else servers.push(nextServer);
       const pendingCredentialCleanupKeys = addPendingCredentialCleanupKey(
-        config.pendingCredentialCleanupKeys,
+        config.pendingCredentialCleanupKeys.filter((key) => key !== stagedCredentialKey),
         credentialToDelete,
       );
-      try {
-        await this.persist({ ...config, pendingCredentialCleanupKeys, servers });
-      } catch (error) {
-        if (stagedCredentialKey) {
-          await this.credentialVault.delete(stagedCredentialKey).catch(() => undefined);
-        }
-        throw error;
-      }
+      await this.persist({ ...config, pendingCredentialCleanupKeys, servers });
+      transportChanged = previous ? (
+        previous.url !== nextServer.url
+        || previous.username !== nextServer.username
+        || previous.passwordCredentialKey !== nextServer.passwordCredentialKey
+      ) : false;
       await this.retryPendingCredentialCleanup(await this.load());
     });
-    return this.getState();
+    return { state: await this.getState(), transportChanged };
   }
 
   async deleteServer(proxyServerId: string): Promise<DesktopNetworkProxyState> {

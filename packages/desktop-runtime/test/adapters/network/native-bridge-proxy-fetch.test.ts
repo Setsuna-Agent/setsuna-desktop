@@ -3,7 +3,7 @@ import type {
   DesktopResolvedNetworkProxy,
 } from '@setsuna-desktop/contracts';
 import { createServer } from 'node:http';
-import { Agent, ProxyAgent } from 'undici';
+import { Agent } from 'undici';
 import { describe, expect, it } from 'vitest';
 import { NativeBridgeProxyFetch } from '../../../src/adapters/network/native-bridge-proxy-fetch.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
@@ -32,17 +32,14 @@ describe('NativeBridgeProxyFetch', () => {
     }
   });
 
-  it('resolves non-loopback destinations and keeps system and direct dispatchers distinct', async () => {
+  it('routes system requests through the native bridge and direct requests through undici', async () => {
     const route = { mode: 'proxy' as const, proxyServerId: 'proxy-example' };
     const dispatchers: unknown[] = [];
     const fetchImpl = async (_input: string | URL, init?: RequestInit) => {
       dispatchers.push((init as RequestInit & { dispatcher?: unknown } | undefined)?.dispatcher);
       return new Response('ok');
     };
-    const systemBridge = new RecordingNativeBridge({
-      mode: 'system',
-      proxyUrl: 'http://127.0.0.1:3128',
-    });
+    const systemBridge = new RecordingNativeBridge({ mode: 'system' });
     const directBridge = new RecordingNativeBridge({ mode: 'direct' });
     const systemFetch = new NativeBridgeProxyFetch(systemBridge, fetchImpl);
     const directFetch = new NativeBridgeProxyFetch(directBridge, fetchImpl);
@@ -51,14 +48,10 @@ describe('NativeBridgeProxyFetch', () => {
       await systemFetch.forRoute(route)('https://api.example.com/v1/models');
       await directFetch.forRoute(route)('https://api.example.com/v1/models');
 
-      expect(systemBridge.inputs).toEqual([{
-        scope: 'runtime',
-        override: route,
-        targetUrl: 'https://api.example.com/v1/models',
-      }]);
-      expect(dispatchers[0]).toBeInstanceOf(ProxyAgent);
-      expect(dispatchers[1]).toBeInstanceOf(Agent);
-      expect(dispatchers[0]).not.toBe(dispatchers[1]);
+      expect(systemBridge.inputs).toEqual([{ scope: 'runtime', override: route }]);
+      expect(systemBridge.systemFetchInputs).toEqual(['https://api.example.com/v1/models']);
+      expect(dispatchers).toHaveLength(1);
+      expect(dispatchers[0]).toBeInstanceOf(Agent);
     } finally {
       await systemFetch.close();
       await directFetch.close();
@@ -98,6 +91,7 @@ describe('NativeBridgeProxyFetch', () => {
 
 class RecordingNativeBridge extends InMemoryDesktopNativeBridge {
   readonly inputs: DesktopResolveNetworkProxyInput[] = [];
+  readonly systemFetchInputs: string[] = [];
 
   constructor(private readonly result: DesktopResolvedNetworkProxy) {
     super();
@@ -106,5 +100,10 @@ class RecordingNativeBridge extends InMemoryDesktopNativeBridge {
   override async resolveNetworkProxy(input: DesktopResolveNetworkProxyInput) {
     this.inputs.push(input);
     return this.result;
+  }
+
+  override async fetchWithSystemProxy(input: string | URL) {
+    this.systemFetchInputs.push(typeof input === 'string' ? input : input.href);
+    return new Response('system');
   }
 }

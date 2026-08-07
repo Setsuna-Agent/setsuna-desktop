@@ -1,4 +1,8 @@
 import { createServer } from 'node:http';
+import {
+  DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER,
+  type DesktopSystemProxyFetchRequest,
+} from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   HttpDesktopNativeBridge,
@@ -35,7 +39,6 @@ describe('HttpDesktopNativeBridge', () => {
       await expect(client.resolveNetworkProxy({
         scope: 'runtime',
         override: { mode: 'proxy', proxyServerId: 'proxy-example' },
-        targetUrl: 'https://api.example.com/v1/models',
       })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
       await client.validateNetworkProxyReferences(['proxy-example']);
       await expect(client.deleteNetworkProxy('proxy-example')).resolves.toMatchObject({ servers: [] });
@@ -44,7 +47,6 @@ describe('HttpDesktopNativeBridge', () => {
         body: {
           scope: 'runtime',
           override: { mode: 'proxy', proxyServerId: 'proxy-example' },
-          targetUrl: 'https://api.example.com/v1/models',
         },
         url: '/v1/network-proxy/resolve',
       }));
@@ -78,6 +80,49 @@ describe('HttpDesktopNativeBridge', () => {
     await expect(client.validateNetworkProxyReferences(['proxy-example']))
       .rejects.toThrow('Setsuna Desktop host');
     await expect(client.deleteNetworkProxy('proxy-example')).rejects.toThrow('Setsuna Desktop host');
+  });
+
+  it('streams system-routed requests and responses through the authenticated bridge', async () => {
+    let metadata: DesktopSystemProxyFetchRequest | undefined;
+    let requestBody = '';
+    const server = createServer(async (request, response) => {
+      const encodedMetadata = request.headers[DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER];
+      if (typeof encodedMetadata === 'string') {
+        metadata = JSON.parse(Buffer.from(encodedMetadata, 'base64url').toString('utf8')) as DesktopSystemProxyFetchRequest;
+      }
+      requestBody = await requestText(request);
+      response.writeHead(202, { 'Content-Type': 'text/plain', 'X-System-Stack': 'chromium' });
+      response.write('streamed-');
+      response.end('response');
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Expected native bridge test address.');
+    const client = new HttpDesktopNativeBridge(`http://127.0.0.1:${address.port}`, 'bridge-token');
+
+    try {
+      const response = await client.fetchWithSystemProxy('https://api.example.com/v1/messages', {
+        body: JSON.stringify({ prompt: 'hello' }),
+        headers: { Authorization: 'Bearer provider-token', 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      expect(metadata).toEqual({
+        headers: [
+          ['authorization', 'Bearer provider-token'],
+          ['content-type', 'application/json'],
+        ],
+        method: 'POST',
+        url: 'https://api.example.com/v1/messages',
+      });
+      expect(requestBody).toBe('{"prompt":"hello"}');
+      expect(response.status).toBe(202);
+      expect(response.headers.get('x-system-stack')).toBe('chromium');
+      expect(await response.text()).toBe('streamed-response');
+    } finally {
+      await client.close();
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    }
   });
 });
 

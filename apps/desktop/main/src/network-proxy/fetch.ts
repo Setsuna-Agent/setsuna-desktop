@@ -5,15 +5,25 @@ import {
 import { Agent, ProxyAgent, type Dispatcher } from 'undici';
 import type { DesktopNetworkProxyService } from './service.js';
 
+type DesktopNetworkProxyFetchOptions = {
+  directFetch?: typeof globalThis.fetch;
+  systemFetch?: typeof globalThis.fetch;
+};
+
 /** Applies a resolved desktop route to Node's built-in fetch without proxying local IPC. */
 export class DesktopNetworkProxyFetch {
   private readonly directAgent = new Agent();
   private readonly agents = new Map<string, ProxyAgent>();
+  private readonly directFetch: typeof globalThis.fetch;
+  private readonly systemFetch: typeof globalThis.fetch;
 
   constructor(
     private readonly service: DesktopNetworkProxyService,
-    private readonly fetchImpl: typeof globalThis.fetch = globalThis.fetch,
-  ) {}
+    options: DesktopNetworkProxyFetchOptions = {},
+  ) {
+    this.directFetch = options.directFetch ?? globalThis.fetch;
+    this.systemFetch = options.systemFetch ?? globalThis.fetch;
+  }
 
   async fetch(
     scope: DesktopNetworkProxyScope,
@@ -22,12 +32,13 @@ export class DesktopNetworkProxyFetch {
   ): Promise<Response> {
     const targetUrl = requestUrl(input);
     if (isDesktopNetworkProxyLoopbackUrl(targetUrl)) {
-      return this.fetchImpl(input, { ...init, dispatcher: this.directAgent } as unknown as RequestInit);
+      return this.directFetch(input, { ...init, dispatcher: this.directAgent } as unknown as RequestInit);
     }
-    const route = await this.service.resolve({ scope, targetUrl });
-    const proxyUrl = route.mode === 'proxy' || route.mode === 'system' ? route.proxyUrl : undefined;
+    const route = await this.service.resolve({ scope });
+    if (route.mode === 'system') return this.systemFetch(input, init);
+    const proxyUrl = route.mode === 'proxy' ? route.proxyUrl : undefined;
     const dispatcher = proxyUrl ? this.proxyAgent(proxyUrl) : this.directAgent;
-    return this.fetchImpl(input, { ...init, dispatcher } as unknown as RequestInit);
+    return this.directFetch(input, { ...init, dispatcher } as unknown as RequestInit);
   }
 
   private proxyAgent(proxyUrl: string): Dispatcher {

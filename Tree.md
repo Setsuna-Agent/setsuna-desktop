@@ -42,9 +42,9 @@ apps/desktop/main/ — 0 direct / 101 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 11 direct / 11 total files
-│   ├── network-proxy/ — 6 direct / 6 total files
+│   ├── network-proxy/ — 5 direct / 5 total files
 │   ├── review/ — 1 direct / 1 total files
-│   ├── runtime/ — 6 direct / 6 total files
+│   ├── runtime/ — 7 direct / 7 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
 │   ├── updater/ — 3 direct / 3 total files

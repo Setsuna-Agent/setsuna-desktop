@@ -19,6 +19,7 @@ export interface SecretStore {
 export interface DesktopNativeBridge extends SecretStore {
   close(): Promise<void>;
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
+  fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
   validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;

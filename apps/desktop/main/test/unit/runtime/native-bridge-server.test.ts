@@ -2,7 +2,12 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultDesktopNetworkProxyRouting } from '@setsuna-desktop/contracts';
+import {
+  DESKTOP_SYSTEM_PROXY_FETCH_PATH,
+  DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER,
+  defaultDesktopNetworkProxyRouting,
+  type DesktopSystemProxyFetchRequest,
+} from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
@@ -33,11 +38,16 @@ describe('DesktopNativeBridgeServer', () => {
       servers: [],
     }));
     const validateNetworkProxyReferences = vi.fn(async () => undefined);
+    const systemProxyFetch = vi.fn(async (input: string, init?: RequestInit) => new Response(
+      `${input}:${await new Response(init?.body).text()}`,
+      { headers: { 'X-Upstream': 'chromium' }, status: 201 },
+    ));
     const server = new DesktopNativeBridgeServer({
       credentialVault,
       deleteNetworkProxy,
       openExternal,
       resolveNetworkProxy,
+      systemProxyFetch,
       validateNetworkProxyReferences,
     });
     servers.push(server);
@@ -83,6 +93,30 @@ describe('DesktopNativeBridgeServer', () => {
       proxyServerId: 'proxy-example',
     })).resolves.toMatchObject({ servers: [] });
     expect(deleteNetworkProxy).toHaveBeenCalledWith('proxy-example');
+    const systemFetchRequest: DesktopSystemProxyFetchRequest = {
+      headers: [['Authorization', 'Bearer provider-token']],
+      method: 'POST',
+      url: 'https://api.example.com/v1/messages',
+    };
+    const systemFetchResponse = await fetch(`${connection.url}${DESKTOP_SYSTEM_PROXY_FETCH_PATH}`, {
+      body: 'stream me',
+      headers: {
+        Authorization: `Bearer ${connection.token}`,
+        [DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER]: Buffer.from(JSON.stringify(systemFetchRequest))
+          .toString('base64url'),
+      },
+      method: 'POST',
+    });
+    expect(systemFetchResponse.status).toBe(201);
+    expect(systemFetchResponse.headers.get('x-upstream')).toBe('chromium');
+    expect(await systemFetchResponse.text()).toBe('https://api.example.com/v1/messages:stream me');
+    expect(systemProxyFetch).toHaveBeenCalledWith(
+      'https://api.example.com/v1/messages',
+      expect.objectContaining({
+        headers: [['authorization', 'Bearer provider-token']],
+        method: 'POST',
+      }),
+    );
     const rejected = await fetch(`${connection.url}/v1/external/open`, {
       body: JSON.stringify({ url: 'file:///tmp/token' }),
       headers: { Authorization: `Bearer ${connection.token}` },
@@ -109,6 +143,7 @@ describe('DesktopNativeBridgeServer', () => {
       }),
       openExternal: async () => undefined,
       resolveNetworkProxy: async () => ({ mode: 'direct' }),
+      systemProxyFetch: async () => new Response('ok'),
       validateNetworkProxyReferences: async () => undefined,
     });
     servers.push(server);

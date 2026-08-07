@@ -53,7 +53,6 @@ import { DesktopBrowserProxyController } from './network-proxy/browser.js';
 import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from './network-proxy/service.js';
 import { DesktopNetworkProxyStore } from './network-proxy/store.js';
-import { createDesktopSystemProxyResolver } from './network-proxy/system.js';
 import { DesktopTerminalStore } from './terminal/sessions.js';
 import { DesktopUpdater } from './updater/updater.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
@@ -193,7 +192,6 @@ async function createWindow(): Promise<void> {
   );
   const currentNetworkProxyService = new DesktopNetworkProxyService(
     new DesktopNetworkProxyStore(dataLayout.networkProxyPath, credentialVault),
-    { resolveSystemProxy: createDesktopSystemProxyResolver(session.defaultSession) },
   );
   const currentBrowserProxyController = new DesktopBrowserProxyController(currentNetworkProxyService);
   networkProxyService = currentNetworkProxyService;
@@ -216,6 +214,7 @@ async function createWindow(): Promise<void> {
     deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
     resolveNetworkProxy: (input) => currentNetworkProxyService.resolve(input),
+    systemProxyFetch: fetchWithElectronSystemProxy,
     validateNetworkProxyReferences: (proxyServerIds) =>
       currentNetworkProxyService.validateServerReferences(proxyServerIds),
   });
@@ -244,7 +243,9 @@ async function createWindow(): Promise<void> {
   registerRuntimeIpc(currentRuntimeHost);
   if (startupClosedBeforeHandoff) return;
 
-  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService);
+  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService, {
+    systemFetch: fetchWithElectronSystemProxy,
+  });
   networkProxyFetch = currentNetworkProxyFetch;
 
   desktopUpdater = new DesktopUpdater({
@@ -494,6 +495,17 @@ function getMacTrafficLightPosition(pageScale: number): { x: number; y: number }
     x: macTrafficLightX,
     y: Math.round((appTopbarHeight * normalizedScale - macTrafficLightSize) / 2),
   };
+}
+
+/**
+ * Keep PAC fallback ordering and platform proxy authentication inside Chromium;
+ * reducing resolveProxy() output to one Node proxy loses both behaviors.
+ */
+function fetchWithElectronSystemProxy(
+  input: Parameters<typeof globalThis.fetch>[0],
+  init?: Parameters<typeof globalThis.fetch>[1],
+): Promise<Response> {
+  return session.defaultSession.fetch(input instanceof URL ? input.href : input, init);
 }
 
 function shutdownDesktopServices(

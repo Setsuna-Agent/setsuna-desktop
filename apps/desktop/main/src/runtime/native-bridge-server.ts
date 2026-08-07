@@ -1,5 +1,6 @@
 import {
   DESKTOP_NETWORK_PROXY_SCOPES,
+  DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   normalizeDesktopNetworkProxyRoute,
   type DesktopNetworkProxyState,
   type DesktopResolveNetworkProxyInput,
@@ -11,6 +12,10 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import type { CredentialVault } from '../security/credential-vault.js';
+import {
+  serveDesktopSystemProxyFetch,
+  type DesktopSystemProxyFetch,
+} from './native-bridge-system-fetch.js';
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_FILE_PREVIEWS = 256;
@@ -25,6 +30,7 @@ type DesktopNativeBridgeOptions = {
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
+  systemProxyFetch: DesktopSystemProxyFetch;
   validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;
 };
 
@@ -124,6 +130,10 @@ export class DesktopNativeBridgeServer {
       if (request.method === 'POST' && request.url === '/v1/network-proxy/resolve') {
         const input = networkProxyInput(await readJsonBody(request));
         sendJson(response, 200, await this.options.resolveNetworkProxy(input));
+        return;
+      }
+      if (request.method === 'POST' && request.url === DESKTOP_SYSTEM_PROXY_FETCH_PATH) {
+        await serveDesktopSystemProxyFetch(request, response, this.options.systemProxyFetch);
         return;
       }
       if (request.method === 'POST' && request.url === '/v1/network-proxy/validate-references') {
@@ -233,21 +243,10 @@ function networkProxyInput(value: unknown): DesktopResolveNetworkProxyInput {
     ? undefined
     : normalizeDesktopNetworkProxyRoute(input.override);
   if (input.override !== undefined && !override) throw new Error('Network proxy override is invalid.');
-  const targetUrl = input.targetUrl === undefined ? undefined : networkProxyTargetUrl(input.targetUrl);
   return {
     scope,
     ...(override ? { override } : {}),
-    ...(targetUrl ? { targetUrl } : {}),
   };
-}
-
-function networkProxyTargetUrl(value: unknown): string {
-  if (typeof value !== 'string') throw new Error('Network proxy target URL is invalid.');
-  const url = new URL(value);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error('Network proxy target URL must use HTTP(S).');
-  }
-  return url.toString();
 }
 
 function networkProxyReferenceInput(value: unknown): string[] {

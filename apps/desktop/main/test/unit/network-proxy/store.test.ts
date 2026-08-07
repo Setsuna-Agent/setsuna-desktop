@@ -10,7 +10,6 @@ import { writeJsonAtomically } from '../../../src/data-root/atomic-json.js';
 import { DesktopNetworkProxyFetch } from '../../../src/network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from '../../../src/network-proxy/service.js';
 import { DesktopNetworkProxyStore } from '../../../src/network-proxy/store.js';
-import { systemProxyUrlFromPacResult } from '../../../src/network-proxy/system.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
 const services: DesktopNetworkProxyService[] = [];
@@ -42,18 +41,23 @@ describe('DesktopNetworkProxyStore', () => {
     });
   });
 
-  it('keeps system and direct fetch routes on distinct explicit dispatchers', async () => {
+  it('uses Chromium fetch for system routes and an explicit dispatcher for direct routes', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-route-'));
     const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
-    ), {
-      resolveSystemProxy: async () => 'http://127.0.0.1:3128',
-    });
+    ));
     const dispatchers: unknown[] = [];
-    const proxyFetch = new DesktopNetworkProxyFetch(service, async (_input, init) => {
-      dispatchers.push((init as RequestInit & { dispatcher?: unknown } | undefined)?.dispatcher);
-      return new Response('ok');
+    const systemRequests: string[] = [];
+    const proxyFetch = new DesktopNetworkProxyFetch(service, {
+      directFetch: async (_input, init) => {
+        dispatchers.push((init as RequestInit & { dispatcher?: unknown } | undefined)?.dispatcher);
+        return new Response('direct');
+      },
+      systemFetch: async (input) => {
+        systemRequests.push(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+        return new Response('system');
+      },
     });
 
     try {
@@ -61,25 +65,13 @@ describe('DesktopNetworkProxyStore', () => {
       await service.setRouting({ global: { mode: 'direct' } });
       await proxyFetch.fetch('updater', 'https://updates.example.com/latest');
 
-      expect(dispatchers[0]).toBeInstanceOf(ProxyAgent);
-      expect(dispatchers[1]).toBeInstanceOf(Agent);
-      expect(dispatchers[0]).not.toBe(dispatchers[1]);
+      expect(systemRequests).toEqual(['https://updates.example.com/latest']);
+      expect(dispatchers).toHaveLength(1);
+      expect(dispatchers[0]).toBeInstanceOf(Agent);
     } finally {
       await proxyFetch.close();
       await service.close();
     }
-  });
-
-  it('parses supported system proxy directives in PAC fallback order', () => {
-    expect(systemProxyUrlFromPacResult('PROXY proxy.example.com:8080; DIRECT'))
-      .toBe('http://proxy.example.com:8080');
-    expect(systemProxyUrlFromPacResult('SOCKS5 127.0.0.1:1080'))
-      .toBe('socks5://127.0.0.1:1080');
-    expect(systemProxyUrlFromPacResult('DIRECT; PROXY proxy.example.com:8080')).toBeNull();
-    expect(systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080; DIRECT')).toBeNull();
-    expect(() => systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080'))
-      .toThrow('不包含受支持的代理或 DIRECT');
-    expect(() => systemProxyUrlFromPacResult('malformed')).toThrow('不包含受支持的代理或 DIRECT');
   });
 
   it('bypasses configured updater proxies for loopback update sources', async () => {
@@ -157,14 +149,16 @@ describe('DesktopNetworkProxyStore', () => {
     expect(resolved.proxyUrl).not.toContain('upstream-secret');
   });
 
-  it('keeps the committed password when an edited proxy metadata write fails', async () => {
+  it('retains failed staged-credential cleanup for retry when metadata commit fails', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-password-rollback-'));
     const configPath = path.join(root, 'network-proxies.json');
     const vault = new MemoryCredentialVault();
-    let rejectConfigWrites = false;
+    let rejectedWriteNumber: number | undefined;
+    let writeCount = 0;
     const store = new DesktopNetworkProxyStore(configPath, vault, {
       writeConfig: async (filePath, value) => {
-        if (rejectConfigWrites) throw new Error('simulated metadata write failure');
+        writeCount += 1;
+        if (writeCount === rejectedWriteNumber) throw new Error('simulated metadata write failure');
         await writeJsonAtomically(filePath, value);
       },
     });
@@ -177,18 +171,36 @@ describe('DesktopNetworkProxyStore', () => {
     const server = initial.servers[0]!;
     const configBefore = await readFile(configPath, 'utf8');
     const credentialsBefore = [...vault.values.entries()];
-    rejectConfigWrites = true;
+    // Password edits first persist a cleanup journal, then commit the new key.
+    rejectedWriteNumber = writeCount + 2;
+    vault.rejectDeletes = true;
 
     await expect(store.upsertServer({
       ...server,
       password: 'new-password',
     })).rejects.toThrow('simulated metadata write failure');
 
-    expect(await readFile(configPath, 'utf8')).toBe(configBefore);
-    expect([...vault.values.entries()]).toEqual(credentialsBefore);
+    const pendingConfig = JSON.parse(await readFile(configPath, 'utf8')) as {
+      pendingCredentialCleanupKeys: string[];
+    };
+    expect(pendingConfig.pendingCredentialCleanupKeys).toHaveLength(1);
+    expect(vault.values.size).toBe(2);
     await expect(store.resolveUpstream(server.id)).resolves.toMatchObject({
       url: expect.stringContaining('alice:old-password@'),
     });
+    await store.getState();
+    const stillPendingConfig = JSON.parse(await readFile(configPath, 'utf8')) as {
+      pendingCredentialCleanupKeys: string[];
+    };
+    expect(stillPendingConfig.pendingCredentialCleanupKeys).toEqual(
+      pendingConfig.pendingCredentialCleanupKeys,
+    );
+    expect(vault.values.size).toBe(2);
+
+    vault.rejectDeletes = false;
+    await store.getState();
+    expect(await readFile(configPath, 'utf8')).toBe(configBefore);
+    expect([...vault.values.entries()]).toEqual(credentialsBefore);
   });
 
   it('retains failed credential deletions and retries them from durable metadata', async () => {
@@ -332,6 +344,29 @@ describe('DesktopNetworkProxyStore', () => {
 
     expect(routes.every((route) => route.mode === 'proxy')).toBe(true);
     expect(new Set(routes.map((route) => route.mode === 'proxy' ? route.proxyUrl : '')).size).toBe(1);
+  });
+
+  it('keeps an active relay alive for name-only edits and replaces it for transport edits', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-relay-edit-'));
+    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+      path.join(root, 'network-proxies.json'),
+      new MemoryCredentialVault(),
+    ));
+    services.push(service);
+    const state = await service.upsertServer({ name: 'Proxy', url: 'http://127.0.0.1:3128' });
+    const server = state.servers[0]!;
+    await service.setRouting({ scopes: { runtime: { mode: 'proxy', proxyServerId: server.id } } });
+    const initialRoute = await service.resolve({ scope: 'runtime' });
+    if (initialRoute.mode !== 'proxy') throw new Error('Expected a proxy route.');
+
+    await service.upsertServer({ ...server, name: 'Renamed proxy' });
+    const renamedRoute = await service.resolve({ scope: 'runtime' });
+    expect(renamedRoute).toEqual(initialRoute);
+
+    await service.upsertServer({ ...server, name: 'Renamed proxy', url: 'http://127.0.0.1:4128' });
+    const changedRoute = await service.resolve({ scope: 'runtime' });
+    expect(changedRoute.mode).toBe('proxy');
+    if (changedRoute.mode === 'proxy') expect(changedRoute.proxyUrl).not.toBe(initialRoute.proxyUrl);
   });
 
   it('forwards requests through the protected relay and an authenticated upstream proxy', async () => {

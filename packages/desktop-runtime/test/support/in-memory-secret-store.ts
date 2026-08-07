@@ -37,6 +37,10 @@ export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements 
 
   async close(): Promise<void> {}
 
+  fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response> {
+    return fetch(input, init);
+  }
+
   async deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState> {
     this.deletedNetworkProxyServerIds.push(proxyServerId);
     return {
