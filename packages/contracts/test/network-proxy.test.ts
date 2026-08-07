@@ -16,7 +16,7 @@ describe('network proxy contracts', () => {
   });
 
   it('normalizes route variants and rejects inherit for the global route', () => {
-    expect(normalizeDesktopNetworkProxyRoute({ mode: 'proxy', proxyServerId: ' proxy-a ' }))
+    expect(normalizeDesktopNetworkProxyRoute({ mode: 'proxy', proxyServerId: ' Proxy-A ' }))
       .toEqual({ mode: 'proxy', proxyServerId: 'proxy-a' });
     expect(normalizeDesktopNetworkProxyRoute({ mode: 'inherit' }, { allowInherit: false })).toBeNull();
     expect(normalizeDesktopNetworkProxyRoute({ mode: 'proxy', proxyServerId: '' })).toBeNull();

@@ -6,8 +6,9 @@ import type {
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER,
+  DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES,
+  DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
-  DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER,
 } from '@setsuna-desktop/contracts';
 import { Agent } from 'undici';
 import type { DesktopNativeBridge, SecretStoreStatus } from '../../ports/secret-store.js';
@@ -72,9 +73,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.token}`,
-        [DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER]: Buffer.from(JSON.stringify(metadata)).toString('base64url'),
       },
-      body: targetRequest.body,
+      // Metadata belongs in the framed body: provider tokens and MCP headers can
+      // legitimately exceed Node's aggregate HTTP header limit on this bridge.
+      body: framedSystemProxyRequestBody(metadata, targetRequest.body),
       signal: targetRequest.signal,
       dispatcher: this.directAgent,
       duplex: 'half',
@@ -179,4 +181,51 @@ function headerEntries(headers: Headers): Array<[string, string]> {
   const entries: Array<[string, string]> = [];
   headers.forEach((value, name) => entries.push([name, value]));
   return entries;
+}
+
+function framedSystemProxyRequestBody(
+  metadata: DesktopSystemProxyFetchRequest,
+  body: ReadableStream<Uint8Array> | null,
+): ReadableStream<Uint8Array> {
+  const metadataBytes = Buffer.from(JSON.stringify(metadata), 'utf8');
+  if (metadataBytes.length > DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES) {
+    throw new Error('Desktop system proxy request metadata is too large.');
+  }
+  const prefix = Buffer.allocUnsafe(DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES);
+  prefix.writeUInt32BE(metadataBytes.length, 0);
+  const firstChunk = Buffer.concat([prefix, metadataBytes]);
+  const reader = body?.getReader();
+  let sentMetadata = false;
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (!sentMetadata) {
+        sentMetadata = true;
+        controller.enqueue(firstChunk);
+        if (!reader) controller.close();
+        return;
+      }
+      if (!reader) return;
+      try {
+        const next = await reader.read();
+        if (next.done) {
+          reader.releaseLock();
+          controller.close();
+        } else {
+          controller.enqueue(next.value);
+        }
+      } catch (error) {
+        reader.releaseLock();
+        controller.error(error);
+      }
+    },
+    async cancel(reason) {
+      if (!reader) return;
+      try {
+        await reader.cancel(reason);
+      } finally {
+        reader.releaseLock();
+      }
+    },
+  });
 }

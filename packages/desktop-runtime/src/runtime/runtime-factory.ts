@@ -96,6 +96,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     nativeBridge,
     elicitationCoordinator: mcpElicitations,
     fetchImpl: networkProxyFetch.forRoute(),
+    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
   });
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);

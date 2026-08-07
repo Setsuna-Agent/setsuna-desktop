@@ -222,11 +222,13 @@ export class FileConfigStore implements ConfigStore {
     proxyServerId: string,
     deleteServer: () => Promise<T>,
   ): Promise<T> {
+    const canonicalProxyServerId = proxyServerId.trim().toLowerCase();
+    if (!canonicalProxyServerId) throw new Error('代理服务器 ID 无效。');
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       const providerNames = stored.providers.flatMap((provider) => {
         const route = normalizeDesktopNetworkProxyRoute(provider.proxyRoute);
-        return route?.mode === 'proxy' && route.proxyServerId === proxyServerId
+        return route?.mode === 'proxy' && route.proxyServerId === canonicalProxyServerId
           ? [provider.name || provider.id]
           : [];
       });

@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
-  DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER,
   defaultDesktopNetworkProxyRouting,
   type DesktopSystemProxyFetchRequest,
 } from '@setsuna-desktop/contracts';
@@ -99,11 +99,9 @@ describe('DesktopNativeBridgeServer', () => {
       url: 'https://api.example.com/v1/messages',
     };
     const systemFetchResponse = await fetch(`${connection.url}${DESKTOP_SYSTEM_PROXY_FETCH_PATH}`, {
-      body: 'stream me',
+      body: systemFetchFrame(systemFetchRequest, 'stream me'),
       headers: {
         Authorization: `Bearer ${connection.token}`,
-        [DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER]: Buffer.from(JSON.stringify(systemFetchRequest))
-          .toString('base64url'),
       },
       method: 'POST',
     });
@@ -165,6 +163,13 @@ describe('DesktopNativeBridgeServer', () => {
     expect(await rangeResponse.text()).toBe('2345');
   });
 });
+
+function systemFetchFrame(metadata: DesktopSystemProxyFetchRequest, body = ''): Buffer {
+  const metadataBytes = Buffer.from(JSON.stringify(metadata), 'utf8');
+  const prefix = Buffer.alloc(DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES);
+  prefix.writeUInt32BE(metadataBytes.length, 0);
+  return Buffer.concat([prefix, metadataBytes, Buffer.from(body)]);
+}
 
 async function nativeRequest(
   connection: { token: string; url: string },

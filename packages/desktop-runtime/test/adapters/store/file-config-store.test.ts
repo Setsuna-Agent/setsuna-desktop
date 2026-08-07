@@ -189,10 +189,13 @@ describe('file config store', () => {
       providers: [{
         ...provider,
         name: 'Local models',
-        proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-example' },
+        proxyRoute: { mode: 'proxy', proxyServerId: 'PROXY-EXAMPLE' },
       }],
     });
 
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-example' } }],
+    });
     await expect(store.deleteProxyServerIfUnreferenced('proxy-example', async () => 'deleted'))
       .rejects.toThrow('Local models');
   });

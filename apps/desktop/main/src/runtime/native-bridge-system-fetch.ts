@@ -1,12 +1,16 @@
 import {
   DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER,
-  DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER,
+  DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES,
+  DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   type DesktopSystemProxyFetchRequest,
 } from '@setsuna-desktop/contracts';
 import { once } from 'node:events';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 const MAX_REQUEST_BODY_BYTES = 128 * 1024 * 1024;
+const MAX_REQUEST_FRAME_BYTES = MAX_REQUEST_BODY_BYTES
+  + DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES
+  + DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES;
 const ALLOWED_METHODS = new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT']);
 const FORWARDED_RESPONSE_HEADERS_DENYLIST = new Set([
   'connection',
@@ -39,10 +43,7 @@ export async function serveDesktopSystemProxyFetch(
   response.once('close', abortIfIncomplete);
 
   try {
-    const metadata = systemProxyFetchRequest(request.headers[DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER]);
-    const body = requestBodyAllowed(metadata.method)
-      ? await readRequestBody(request)
-      : undefined;
+    const { body, ...metadata } = systemProxyFetchRequest(await readRequestFrame(request));
     const upstream = await fetchWithSystemProxy(metadata.url, {
       method: metadata.method,
       headers: metadata.headers,
@@ -55,7 +56,11 @@ export async function serveDesktopSystemProxyFetch(
       return;
     }
     for await (const chunk of upstream.body) {
-      if (!response.write(Buffer.from(chunk))) await once(response, 'drain');
+      if (!response.write(Buffer.from(chunk))) {
+        // A closed response never emits drain. Bind the wait to the same abort
+        // signal so a disconnected runtime cannot strand this bridge handler.
+        await once(response, 'drain', { signal: abortController.signal });
+      }
     }
     response.end();
   } catch (error) {
@@ -78,11 +83,22 @@ export async function serveDesktopSystemProxyFetch(
   }
 }
 
-function systemProxyFetchRequest(value: string | string[] | undefined): DesktopSystemProxyFetchRequest {
-  if (typeof value !== 'string') throw new Error('Desktop system proxy request metadata is missing.');
+function systemProxyFetchRequest(frame: Buffer): DesktopSystemProxyFetchRequest & { body: Buffer } {
+  if (frame.length < DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES) {
+    throw new Error('Desktop system proxy request metadata is missing.');
+  }
+  const metadataLength = frame.readUInt32BE(0);
+  if (
+    metadataLength > DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES
+    || metadataLength > frame.length - DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES
+  ) {
+    throw new Error('Desktop system proxy request metadata is invalid.');
+  }
+  const metadataEnd = DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES + metadataLength;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as unknown;
+    const metadataBytes = frame.subarray(DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES, metadataEnd);
+    parsed = JSON.parse(metadataBytes.toString('utf8')) as unknown;
   } catch {
     throw new Error('Desktop system proxy request metadata is invalid.');
   }
@@ -104,17 +120,24 @@ function systemProxyFetchRequest(value: string | string[] | undefined): DesktopS
     }
     return [entry[0] as string, entry[1] as string];
   });
+  const body = frame.subarray(metadataEnd);
+  if (body.length > MAX_REQUEST_BODY_BYTES) {
+    throw new Error('Desktop system proxy request body is too large.');
+  }
+  if (!requestBodyAllowed(method) && body.length) {
+    throw new Error(`Desktop system proxy method does not allow a request body: ${method}`);
+  }
   // Constructing Headers rejects invalid names and values before Chromium sees them.
-  return { headers: headerEntries(new Headers(headers)), method, url: url.toString() };
+  return { body, headers: headerEntries(new Headers(headers)), method, url: url.toString() };
 }
 
-async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
+async function readRequestFrame(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > MAX_REQUEST_BODY_BYTES) throw new Error('Desktop system proxy request body is too large.');
+    if (size > MAX_REQUEST_FRAME_BYTES) throw new Error('Desktop system proxy request body is too large.');
     chunks.push(buffer);
   }
   return Buffer.concat(chunks, size);

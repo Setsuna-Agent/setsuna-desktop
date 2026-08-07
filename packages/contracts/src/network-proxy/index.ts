@@ -62,8 +62,9 @@ export type DesktopResolveNetworkProxyInput = {
 };
 
 export const DESKTOP_SYSTEM_PROXY_FETCH_PATH = '/v1/network-proxy/system-fetch';
-export const DESKTOP_SYSTEM_PROXY_FETCH_REQUEST_HEADER = 'x-setsuna-system-fetch-request';
 export const DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER = 'x-setsuna-system-fetch-error';
+export const DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES = 4;
+export const DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES = 1024 * 1024;
 
 export type DesktopSystemProxyFetchRequest = {
   headers: Array<[string, string]>;
@@ -120,7 +121,7 @@ export function normalizeDesktopNetworkProxyRoute(
   if (record.mode === 'system') return { mode: 'system' };
   if (record.mode === 'direct') return { mode: 'direct' };
   if (record.mode !== 'proxy' || typeof record.proxyServerId !== 'string') return null;
-  const proxyServerId = record.proxyServerId.trim();
+  const proxyServerId = record.proxyServerId.trim().toLowerCase();
   return proxyServerId ? { mode: 'proxy', proxyServerId } : null;
 }
 

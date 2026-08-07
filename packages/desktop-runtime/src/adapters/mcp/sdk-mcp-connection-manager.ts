@@ -43,6 +43,7 @@ import {
   normalizedMcpTransport,
   resolvedMcpHttpHeaders,
   type ManagedMcpTransport,
+  type McpNetworkEnvironment,
 } from './mcp-transport-factory.js';
 
 export { stdioTransportEnvironment } from './mcp-transport-factory.js';
@@ -62,7 +63,7 @@ type ManagedConnection = {
   fingerprint: string;
   server: RuntimeMcpServerInput;
   client: Client;
-  transport: ManagedMcpTransport;
+  transport?: ManagedMcpTransport;
   state: McpServerRuntimeSnapshot['state'];
   ready: Promise<void>;
   tools: RuntimeMcpToolInfo[];
@@ -104,6 +105,7 @@ export type SdkMcpConnectionManagerOptions = {
   oauthCoordinator?: McpOAuthCoordinator;
   elicitationCoordinator?: McpElicitationHandler;
   fetchImpl?: FetchImpl;
+  resolveNetworkEnvironment?: () => Promise<McpNetworkEnvironment>;
 };
 
 /**
@@ -121,6 +123,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   private readonly nativeBridge: DesktopNativeBridge;
   private readonly elicitations?: McpElicitationHandler;
   private readonly fetchImpl: FetchImpl;
+  private readonly resolveNetworkEnvironment: () => Promise<McpNetworkEnvironment>;
   private shuttingDown = false;
 
   constructor(options: SdkMcpConnectionManagerOptions = {}) {
@@ -128,6 +131,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     this.now = options.now ?? Date.now;
     this.nativeBridge = options.nativeBridge ?? new UnavailableDesktopNativeBridge();
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.resolveNetworkEnvironment = options.resolveNetworkEnvironment ?? (async () => ({}));
     this.oauth = options.oauthCoordinator
       ?? new McpOAuthCoordinator(this.nativeBridge, this.now, this.fetchImpl);
     this.elicitations = options.elicitationCoordinator;
@@ -352,7 +356,6 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   private createConnection(server: RuntimeMcpServerInput, scopeId: string, fingerprint: string): ManagedConnection {
     const key = connectionKey(scopeId, server.key);
     const now = this.now();
-    const transport = createMcpTransport(server, this.oauth, this.fetchImpl);
     let connection: ManagedConnection;
     const client = new Client(CLIENT_INFO, {
       capabilities: this.elicitations
@@ -400,7 +403,6 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
       fingerprint,
       server,
       client,
-      transport,
       state: 'connecting',
       ready: Promise.resolve(),
       tools: [],
@@ -438,7 +440,14 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   private async connect(connection: ManagedConnection): Promise<void> {
     try {
-      await connection.client.connect(connection.transport as Transport, {
+      const transport = await createMcpTransport(
+        connection.server,
+        this.oauth,
+        this.fetchImpl,
+        this.resolveNetworkEnvironment,
+      );
+      connection.transport = transport;
+      await connection.client.connect(transport as Transport, {
         timeout: timeoutMilliseconds(connection.server.startupTimeoutMs),
         maxTotalTimeout: timeoutMilliseconds(connection.server.startupTimeoutMs),
       });
@@ -697,10 +706,11 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     if (this.connections.get(connection.key) === connection) this.connections.delete(connection.key);
     try {
       await connection.ready.catch(() => undefined);
-      if (terminateSession && connection.transport instanceof StreamableHTTPClientTransport) {
-        await connection.transport.terminateSession().catch(() => undefined);
+      const transport = connection.transport;
+      if (terminateSession && transport instanceof StreamableHTTPClientTransport) {
+        await transport.terminateSession().catch(() => undefined);
       }
-      await connection.client.close().catch(() => connection.transport.close().catch(() => undefined));
+      await connection.client.close().catch(() => transport?.close().catch(() => undefined));
     } finally {
       connection.state = 'disconnected';
       connection.updatedAt = new Date(this.now()).toISOString();

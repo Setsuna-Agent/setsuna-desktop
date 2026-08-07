@@ -19,9 +19,41 @@ describe('SdkMcpConnectionManager', () => {
       expect(stdioTransportEnvironment(process.execPath, { ELECTRON_RUN_AS_NODE: '0' })).toMatchObject({
         ELECTRON_RUN_AS_NODE: '0',
       });
+      expect(stdioTransportEnvironment(
+        'different-node',
+        { HTTPS_PROXY: 'http://server-specific.example:8080' },
+        {
+          ALL_PROXY: null,
+          HTTP_PROXY: 'http://runtime-route.example:8080',
+          HTTPS_PROXY: null,
+        },
+      )).toMatchObject({
+        HTTP_PROXY: 'http://runtime-route.example:8080',
+        HTTPS_PROXY: 'http://server-specific.example:8080',
+      });
+      expect(stdioTransportEnvironment('different-node', undefined, { ALL_PROXY: null }))
+        .not.toHaveProperty('ALL_PROXY');
     } finally {
       if (previous === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
       else process.env.ELECTRON_RUN_AS_NODE = previous;
+    }
+  });
+
+  it('resolves the Runtime proxy environment before starting a stdio server', async () => {
+    const manager = new SdkMcpConnectionManager({
+      resolveNetworkEnvironment: async () => {
+        throw new Error('stdio proxy environment reached');
+      },
+    });
+
+    try {
+      await expect(manager.listTools({
+        key: 'stdio_proxy_fixture',
+        transport: 'stdio',
+        command: process.execPath,
+      }, { scopeId: 'thread:stdio-proxy' })).rejects.toThrow('stdio proxy environment reached');
+    } finally {
+      await manager.shutdown();
     }
   });
 

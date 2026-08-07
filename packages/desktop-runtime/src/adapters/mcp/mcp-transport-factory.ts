@@ -13,20 +13,23 @@ const RESERVED_HTTP_HEADERS = new Set([
 ]);
 
 export type ManagedMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
+export type McpNetworkEnvironment = Record<string, string | null>;
 
-export function createMcpTransport(
+export async function createMcpTransport(
   server: RuntimeMcpServerInput,
   oauth: McpOAuthCoordinator,
   fetchImpl: FetchImpl,
-): ManagedMcpTransport {
+  resolveNetworkEnvironment: () => Promise<McpNetworkEnvironment>,
+): Promise<ManagedMcpTransport> {
   if (normalizedMcpTransport(server) === 'stdio') {
     const command = server.command?.trim();
     if (!command) throw new Error(`stdio MCP server '${server.key}' requires a command.`);
+    const networkEnvironment = await resolveNetworkEnvironment();
     return new StdioClientTransport({
       command,
       args: server.args ?? [],
       cwd: server.cwd?.trim() || undefined,
-      env: stdioTransportEnvironment(command, server.env),
+      env: stdioTransportEnvironment(command, server.env, networkEnvironment),
       stderr: 'pipe',
     });
   }
@@ -55,8 +58,15 @@ export function createMcpTransport(
 export function stdioTransportEnvironment(
   command: string,
   configuredEnvironment: Record<string, string> | undefined,
+  networkEnvironment: McpNetworkEnvironment = {},
 ): Record<string, string> {
-  const environment = { ...getDefaultEnvironment(), ...(configuredEnvironment ?? {}) };
+  const environment = { ...getDefaultEnvironment() };
+  for (const [key, value] of Object.entries(networkEnvironment)) {
+    if (value === null) delete environment[key];
+    else environment[key] = value;
+  }
+  // Per-server MCP values are the most specific layer and intentionally win.
+  Object.assign(environment, configuredEnvironment ?? {});
   const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
   if (
     electronRunAsNode !== undefined
