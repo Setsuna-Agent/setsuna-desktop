@@ -120,6 +120,15 @@ export class DesktopNetworkProxyStore {
     return this.getState();
   }
 
+  async validateServerReferences(proxyServerIds: readonly string[]): Promise<void> {
+    const config = await this.load();
+    const availableIds = new Set(config.servers.map((server) => server.id));
+    const missingId = proxyServerIds
+      .map(requireProxyId)
+      .find((proxyServerId) => !availableIds.has(proxyServerId));
+    if (missingId) throw new Error(`选择的代理服务器不存在：${missingId}`);
+  }
+
   async setRouting(input: DesktopNetworkProxyRoutingInput): Promise<DesktopNetworkProxyState> {
     await this.enqueue(async () => {
       const config = await this.load();
@@ -161,10 +170,8 @@ export class DesktopNetworkProxyStore {
       const parsed = JSON.parse(await readFile(this.configPath, 'utf8')) as unknown;
       this.config = normalizeStoredConfig(parsed);
     } catch (error) {
-      if (!isMissingFileError(error)) {
-        console.warn(`[network-proxy] Ignoring invalid proxy config: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      this.config = defaultStoredConfig();
+      if (isMissingFileError(error)) this.config = defaultStoredConfig();
+      else throw new Error(`无法读取代理服务器配置：${error instanceof Error ? error.message : String(error)}`);
     }
     return this.config;
   }
@@ -186,48 +193,47 @@ function defaultStoredConfig(): StoredNetworkProxyConfig {
 }
 
 function normalizeStoredConfig(value: unknown): StoredNetworkProxyConfig {
-  if (!isRecord(value)) return defaultStoredConfig();
-  const servers = Array.isArray(value.servers)
-    ? value.servers.flatMap(normalizeStoredServer)
-    : [];
-  const uniqueServers = deduplicateServers(servers);
-  const defaults = defaultDesktopNetworkProxyRouting();
-  const rawRouting = isRecord(value.routing) ? value.routing : {};
-  const global = normalizeDesktopNetworkProxyRoute(rawRouting.global, { allowInherit: false })
-    ?? defaults.global;
-  const rawScopes = isRecord(rawRouting.scopes) ? rawRouting.scopes : {};
-  const scopes = { ...defaults.scopes };
+  if (!isRecord(value)) throw new Error('代理服务器配置必须是对象。');
+  if (value.version !== STORE_VERSION) throw new Error('代理服务器配置版本不受支持。');
+  if (!Array.isArray(value.servers)) throw new Error('代理服务器列表无效。');
+  const servers = value.servers.map(normalizeStoredServer);
+  if (hasDuplicateServers(servers)) throw new Error('代理服务器配置包含重复的 ID 或名称。');
+  if (!isRecord(value.routing)) throw new Error('代理路由配置无效。');
+  const global = normalizeDesktopNetworkProxyRoute(value.routing.global, { allowInherit: false });
+  if (!global || global.mode === 'inherit') throw new Error('全局代理路由配置无效。');
+  if (!isRecord(value.routing.scopes)) throw new Error('代理范围路由配置无效。');
+  const scopes = {} as DesktopNetworkProxyRoutingState['scopes'];
   for (const scope of DESKTOP_NETWORK_PROXY_SCOPES) {
-    scopes[scope] = normalizeDesktopNetworkProxyRoute(rawScopes[scope]) ?? defaults.scopes[scope];
+    const route = normalizeDesktopNetworkProxyRoute(value.routing.scopes[scope]);
+    if (!route) throw new Error(`代理范围路由配置无效：${scope}`);
+    scopes[scope] = route;
   }
   const routing = { global: global as DesktopNetworkProxyGlobalRoute, scopes };
-  clearMissingRouteReferences(routing, new Set(uniqueServers.map((server) => server.id)));
-  return { version: STORE_VERSION, servers: uniqueServers, routing };
+  validateRoutingReferences(routing, servers);
+  return { version: STORE_VERSION, servers, routing };
 }
 
-function normalizeStoredServer(value: unknown): StoredNetworkProxyServer[] {
-  if (!isRecord(value)) return [];
+function normalizeStoredServer(value: unknown): StoredNetworkProxyServer {
+  if (!isRecord(value)) throw new Error('代理服务器条目无效。');
   const id = normalizedProxyId(value.id);
   const url = normalizeDesktopNetworkProxyUrl(value.url);
-  if (!id || !url) return [];
-  let name: string;
-  try {
-    name = normalizeProxyName(value.name);
-  } catch {
-    return [];
-  }
+  if (!id || !url) throw new Error('代理服务器条目的 ID 或地址无效。');
+  const name = normalizeProxyName(value.name);
   const username = normalizeProxyUsername(value.username);
   const passwordCredentialKey = typeof value.passwordCredentialKey === 'string'
     && value.passwordCredentialKey === proxyPasswordCredentialKey(id)
     ? value.passwordCredentialKey
     : undefined;
-  return [{
+  if (Boolean(username) !== Boolean(passwordCredentialKey)) {
+    throw new Error(`代理服务器“${name}”的凭据元数据无效。`);
+  }
+  return {
     id,
     name,
     url,
     ...(username ? { username } : {}),
     ...(username && passwordCredentialKey ? { passwordCredentialKey } : {}),
-  }];
+  };
 }
 
 function stateFromStored(configPath: string, config: StoredNetworkProxyConfig): DesktopNetworkProxyState {
@@ -273,18 +279,6 @@ function validateRoutingReferences(
   const routes = [routing.global, ...DESKTOP_NETWORK_PROXY_SCOPES.map((scope) => routing.scopes[scope])];
   const missing = routes.find((route) => route.mode === 'proxy' && !serverIds.has(route.proxyServerId));
   if (missing?.mode === 'proxy') throw new Error(`选择的代理服务器不存在：${missing.proxyServerId}`);
-}
-
-function clearMissingRouteReferences(routing: DesktopNetworkProxyRoutingState, serverIds: Set<string>): void {
-  if (routing.global.mode === 'proxy' && !serverIds.has(routing.global.proxyServerId)) {
-    routing.global = { mode: 'system' };
-  }
-  for (const scope of DESKTOP_NETWORK_PROXY_SCOPES) {
-    const route = routing.scopes[scope];
-    if (route.mode === 'proxy' && !serverIds.has(route.proxyServerId)) {
-      routing.scopes[scope] = { mode: 'inherit' };
-    }
-  }
 }
 
 function routingReferences(routing: DesktopNetworkProxyRoutingState, proxyServerId: string): string[] {
@@ -340,15 +334,15 @@ function requireProxyId(value: unknown): string {
   return id;
 }
 
-function deduplicateServers(servers: StoredNetworkProxyServer[]): StoredNetworkProxyServer[] {
+function hasDuplicateServers(servers: StoredNetworkProxyServer[]): boolean {
   const ids = new Set<string>();
   const names = new Set<string>();
-  return servers.filter((server) => {
+  return servers.some((server) => {
     const normalizedName = server.name.toLocaleLowerCase();
-    if (ids.has(server.id) || names.has(normalizedName)) return false;
+    if (ids.has(server.id) || names.has(normalizedName)) return true;
     ids.add(server.id);
     names.add(normalizedName);
-    return true;
+    return false;
   });
 }
 

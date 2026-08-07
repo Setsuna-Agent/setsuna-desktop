@@ -144,6 +144,59 @@ describe('file config store', () => {
       });
   });
 
+  it('rejects a queued stale provider save after the referenced proxy is deleted', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const availableProxyIds = new Set(['proxy-example']);
+    const store = new FileConfigStore(dataDir, {
+      validateProxyServerReferences: async (proxyServerIds) => {
+        const missing = proxyServerIds.find((proxyServerId) => !availableProxyIds.has(proxyServerId));
+        if (missing) throw new Error(`选择的代理服务器不存在：${missing}`);
+      },
+    });
+    const provider = (await store.getConfig()).providers[0]!;
+    let releaseDeletion!: () => void;
+    let markDeletionStarted!: () => void;
+    const deletionStarted = new Promise<void>((resolve) => { markDeletionStarted = resolve; });
+    const holdDeletion = new Promise<void>((resolve) => { releaseDeletion = resolve; });
+    const deletion = store.deleteProxyServerIfUnreferenced('proxy-example', async () => {
+      availableProxyIds.delete('proxy-example');
+      markDeletionStarted();
+      await holdDeletion;
+      return 'deleted';
+    });
+    await deletionStarted;
+
+    const staleSave = store.saveConfig({
+      providers: [{
+        ...provider,
+        proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-example' },
+      }],
+    });
+    releaseDeletion();
+
+    await expect(deletion).resolves.toBe('deleted');
+    await expect(staleSave).rejects.toThrow('选择的代理服务器不存在');
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ proxyRoute: { mode: 'inherit' } }],
+    });
+  });
+
+  it('blocks proxy deletion while a saved provider still references it', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    const provider = (await store.getConfig()).providers[0]!;
+    await store.saveConfig({
+      providers: [{
+        ...provider,
+        name: 'Local models',
+        proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-example' },
+      }],
+    });
+
+    await expect(store.deleteProxyServerIfUnreferenced('proxy-example', async () => 'deleted'))
+      .rejects.toThrow('Local models');
+  });
+
   it('persists task model references, migrates legacy memory models, and supports clearing assignments', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

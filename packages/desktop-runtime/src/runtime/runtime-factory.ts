@@ -83,8 +83,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     debugTraceStore,
   );
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
-  const configStore = new FileConfigStore(runtimeDataDir);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
+  const configStore = new FileConfigStore(runtimeDataDir, {
+    validateProxyServerReferences: (proxyServerIds) =>
+      nativeBridge.validateNetworkProxyReferences(proxyServerIds),
+  });
   const networkProxyFetch = new NativeBridgeProxyFetch(nativeBridge);
   const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);

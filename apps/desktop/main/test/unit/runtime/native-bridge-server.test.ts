@@ -2,6 +2,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { defaultDesktopNetworkProxyRouting } from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
@@ -26,10 +27,18 @@ describe('DesktopNativeBridgeServer', () => {
       proxyServerId: 'proxy-example',
       proxyUrl: 'http://relay:secret@127.0.0.1:1234',
     }));
+    const deleteNetworkProxy = vi.fn(async () => ({
+      configPath: '/test/network-proxies.json',
+      routing: defaultDesktopNetworkProxyRouting(),
+      servers: [],
+    }));
+    const validateNetworkProxyReferences = vi.fn(async () => undefined);
     const server = new DesktopNativeBridgeServer({
       credentialVault,
+      deleteNetworkProxy,
       openExternal,
       resolveNetworkProxy,
+      validateNetworkProxyReferences,
     });
     servers.push(server);
     const connection = await server.start();
@@ -66,6 +75,14 @@ describe('DesktopNativeBridgeServer', () => {
       scope: 'runtime',
       override: { mode: 'proxy', proxyServerId: 'proxy-example' },
     });
+    await expect(nativeRequest(connection, '/v1/network-proxy/validate-references', {
+      proxyServerIds: ['proxy-example', 'proxy-example'],
+    })).resolves.toEqual({ ok: true });
+    expect(validateNetworkProxyReferences).toHaveBeenCalledWith(['proxy-example']);
+    await expect(nativeRequest(connection, '/v1/network-proxy/delete', {
+      proxyServerId: 'proxy-example',
+    })).resolves.toMatchObject({ servers: [] });
+    expect(deleteNetworkProxy).toHaveBeenCalledWith('proxy-example');
     const rejected = await fetch(`${connection.url}/v1/external/open`, {
       body: JSON.stringify({ url: 'file:///tmp/token' }),
       headers: { Authorization: `Bearer ${connection.token}` },
@@ -85,8 +102,14 @@ describe('DesktopNativeBridgeServer', () => {
         set: async () => undefined,
         delete: async () => undefined,
       },
+      deleteNetworkProxy: async () => ({
+        configPath: '/test/network-proxies.json',
+        routing: defaultDesktopNetworkProxyRouting(),
+        servers: [],
+      }),
       openExternal: async () => undefined,
       resolveNetworkProxy: async () => ({ mode: 'direct' }),
+      validateNetworkProxyReferences: async () => undefined,
     });
     servers.push(server);
     await server.start();

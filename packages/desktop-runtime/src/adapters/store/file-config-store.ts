@@ -77,11 +77,25 @@ type StoredSecrets = {
   imageGenerationApiKey?: string;
 };
 
+type FileConfigStoreOptions = {
+  validateProxyServerReferences?(proxyServerIds: readonly string[]): Promise<void>;
+};
+
+export class ProviderProxyReferenceError extends Error {
+  constructor(readonly providerNames: string[]) {
+    super(`代理服务器仍被模型厂商 ${providerNames.join('、')} 使用，请先修改厂商代理。`);
+    this.name = 'ProviderProxyReferenceError';
+  }
+}
+
 export class FileConfigStore implements ConfigStore {
   private readonly configPath: string;
   private readonly secretsPath: string;
 
-  constructor(private readonly dataDir: string) {
+  constructor(
+    private readonly dataDir: string,
+    private readonly options: FileConfigStoreOptions = {},
+  ) {
     this.configPath = path.join(dataDir, 'config.json');
     this.secretsPath = path.join(dataDir, 'secrets.json');
   }
@@ -152,6 +166,7 @@ export class FileConfigStore implements ConfigStore {
       const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       const secrets = await this.readSecrets();
       const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
+      await this.validateProviderProxyReferences(providers);
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const memory = memorySettingsForSave(input, previous);
@@ -196,6 +211,40 @@ export class FileConfigStore implements ConfigStore {
       await writeJsonFile(this.configPath, stored);
       return this.toState(stored, secrets);
     });
+  }
+
+  /**
+   * Holds the same config-file lock used by saveConfig while the main process
+   * deletes a proxy. A queued stale provider save is then revalidated after the
+   * deletion instead of persisting a dangling proxy ID.
+   */
+  async deleteProxyServerIfUnreferenced<T>(
+    proxyServerId: string,
+    deleteServer: () => Promise<T>,
+  ): Promise<T> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const providerNames = stored.providers.flatMap((provider) => {
+        const route = normalizeDesktopNetworkProxyRoute(provider.proxyRoute);
+        return route?.mode === 'proxy' && route.proxyServerId === proxyServerId
+          ? [provider.name || provider.id]
+          : [];
+      });
+      if (providerNames.length) throw new ProviderProxyReferenceError(providerNames);
+      return deleteServer();
+    });
+  }
+
+  private async validateProviderProxyReferences(
+    providers: Array<StoredConfig['providers'][number] & { apiKey?: string }>,
+  ): Promise<void> {
+    const proxyServerIds = [...new Set(providers.flatMap((provider) => {
+      const route = normalizeDesktopNetworkProxyRoute(provider.proxyRoute);
+      return route?.mode === 'proxy' ? [route.proxyServerId] : [];
+    }))];
+    if (proxyServerIds.length) {
+      await this.options.validateProxyServerReferences?.(proxyServerIds);
+    }
   }
 
   private async readSecrets(): Promise<StoredSecrets> {

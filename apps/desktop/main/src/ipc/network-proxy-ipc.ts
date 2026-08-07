@@ -1,7 +1,7 @@
 import type {
   DesktopNetworkProxyRoutingInput,
   DesktopNetworkProxyServerInput,
-  RuntimeConfigState,
+  DesktopNetworkProxyState,
 } from '@setsuna-desktop/contracts';
 import { ipcMain, type BrowserWindow } from 'electron';
 import type { DesktopNetworkProxyService } from '../network-proxy/service.js';
@@ -25,8 +25,10 @@ export function registerNetworkProxyIpc(
     service.upsertServer(proxyServerInput(value)));
   ipcMain.handle('network-proxy:delete-server', async (_event, value) => {
     const proxyServerId = String(value ?? '').trim();
-    await ensureNoProviderReferences(runtimeHost, proxyServerId);
-    return service.deleteServer(proxyServerId);
+    return runtimeHost.request<DesktopNetworkProxyState>({
+      method: 'DELETE',
+      path: `/v1/config/network-proxy/${encodeURIComponent(proxyServerId)}`,
+    });
   });
   ipcMain.handle('network-proxy:set-routing', async (_event, value) =>
     service.setRouting(routingInput(value)));
@@ -54,17 +56,6 @@ function routingInput(value: unknown): DesktopNetworkProxyRoutingInput {
     ...(input.global === undefined ? {} : { global: input.global as DesktopNetworkProxyRoutingInput['global'] }),
     ...(input.scopes === undefined ? {} : { scopes: input.scopes as DesktopNetworkProxyRoutingInput['scopes'] }),
   };
-}
-
-async function ensureNoProviderReferences(runtimeHost: RuntimeHost, proxyServerId: string): Promise<void> {
-  const config = await runtimeHost.request<RuntimeConfigState>({ path: '/v1/config' });
-  const providers = config.providers
-    .filter((provider) => provider.proxyRoute?.mode === 'proxy'
-      && provider.proxyRoute.proxyServerId === proxyServerId)
-    .map((provider) => provider.name);
-  if (providers.length) {
-    throw new Error(`代理服务器仍被模型厂商 ${providers.join('、')} 使用，请先修改厂商代理。`);
-  }
 }
 
 function recordInput(value: unknown): Record<string, unknown> {

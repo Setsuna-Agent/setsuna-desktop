@@ -9,10 +9,15 @@ import {
 } from '@setsuna-desktop/contracts';
 import { NetworkProxyGatewayPool } from './gateway.js';
 import { DesktopNetworkProxyStore } from './store.js';
+import type { DesktopSystemProxyResolver } from './system.js';
 
 type StateListener = (state: DesktopNetworkProxyState) => void;
 
 export type NetworkProxyEnvironmentPatch = Record<string, string | null>;
+
+type DesktopNetworkProxyServiceOptions = {
+  resolveSystemProxy?: DesktopSystemProxyResolver;
+};
 
 export class DesktopNetworkProxyService {
   private readonly gateways = new NetworkProxyGatewayPool();
@@ -20,7 +25,10 @@ export class DesktopNetworkProxyService {
   private readonly serverRevisions = new Map<string, number>();
   private routingRevision = 0;
 
-  constructor(private readonly store: DesktopNetworkProxyStore) {}
+  constructor(
+    private readonly store: DesktopNetworkProxyStore,
+    private readonly options: DesktopNetworkProxyServiceOptions = {},
+  ) {}
 
   getState(): Promise<DesktopNetworkProxyState> {
     return this.store.getState();
@@ -46,6 +54,10 @@ export class DesktopNetworkProxyService {
     return state;
   }
 
+  validateServerReferences(proxyServerIds: readonly string[]): Promise<void> {
+    return this.store.validateServerReferences(proxyServerIds);
+  }
+
   async setRouting(input: DesktopNetworkProxyRoutingInput): Promise<DesktopNetworkProxyState> {
     const state = await this.store.setRouting(input);
     this.routingRevision += 1;
@@ -61,9 +73,22 @@ export class DesktopNetworkProxyService {
       const routingRevision = this.routingRevision;
       const state = await this.store.getState();
       const route = effectiveRoute(state, input.scope, input.override);
-      if (route.mode !== 'proxy') {
+      if (route.mode === 'system') {
+        const systemProxyUrl = input.targetUrl && this.options.resolveSystemProxy
+          ? await this.options.resolveSystemProxy(input.targetUrl)
+          : null;
         if (routingRevision !== this.routingRevision) continue;
-        return { mode: route.mode };
+        if (!systemProxyUrl) return { mode: 'system' };
+        const gateway = await this.gateways.resolve({
+          id: `system:${systemProxyUrl}`,
+          url: systemProxyUrl,
+        });
+        if (routingRevision !== this.routingRevision) continue;
+        return { mode: 'system', proxyUrl: gateway.authenticatedUrl };
+      }
+      if (route.mode === 'direct') {
+        if (routingRevision !== this.routingRevision) continue;
+        return { mode: 'direct' };
       }
       const serverRevision = this.serverRevisions.get(route.proxyServerId) ?? 0;
       const upstream = await this.store.resolveUpstream(route.proxyServerId);

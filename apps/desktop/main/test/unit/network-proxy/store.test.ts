@@ -1,14 +1,15 @@
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createConnection, createServer as createTcpServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Server as ProxyChainServer } from 'proxy-chain';
-import { fetch, ProxyAgent } from 'undici';
+import { Agent, fetch, ProxyAgent } from 'undici';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DesktopNetworkProxyFetch } from '../../../src/network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from '../../../src/network-proxy/service.js';
 import { DesktopNetworkProxyStore } from '../../../src/network-proxy/store.js';
+import { systemProxyUrlFromPacResult } from '../../../src/network-proxy/system.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
 const services: DesktopNetworkProxyService[] = [];
@@ -38,6 +39,55 @@ describe('DesktopNetworkProxyStore', () => {
       HTTPS_PROXY: null,
       ALL_PROXY: null,
     });
+  });
+
+  it('keeps system and direct fetch routes on distinct explicit dispatchers', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-route-'));
+    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+      path.join(root, 'network-proxies.json'),
+      new MemoryCredentialVault(),
+    ), {
+      resolveSystemProxy: async () => 'http://127.0.0.1:3128',
+    });
+    const dispatchers: unknown[] = [];
+    const proxyFetch = new DesktopNetworkProxyFetch(service, async (_input, init) => {
+      dispatchers.push((init as RequestInit & { dispatcher?: unknown } | undefined)?.dispatcher);
+      return new Response('ok');
+    });
+
+    try {
+      await proxyFetch.fetch('updater', 'https://updates.example.com/latest');
+      await service.setRouting({ global: { mode: 'direct' } });
+      await proxyFetch.fetch('updater', 'https://updates.example.com/latest');
+
+      expect(dispatchers[0]).toBeInstanceOf(ProxyAgent);
+      expect(dispatchers[1]).toBeInstanceOf(Agent);
+      expect(dispatchers[0]).not.toBe(dispatchers[1]);
+    } finally {
+      await proxyFetch.close();
+      await service.close();
+    }
+  });
+
+  it('parses supported system proxy directives in PAC fallback order', () => {
+    expect(systemProxyUrlFromPacResult('PROXY proxy.example.com:8080; DIRECT'))
+      .toBe('http://proxy.example.com:8080');
+    expect(systemProxyUrlFromPacResult('SOCKS5 127.0.0.1:1080'))
+      .toBe('socks5://127.0.0.1:1080');
+    expect(systemProxyUrlFromPacResult('DIRECT; PROXY proxy.example.com:8080')).toBeNull();
+    expect(systemProxyUrlFromPacResult('SOCKS4 old.example.com:1080; DIRECT')).toBeNull();
+  });
+
+  it('fails closed when an existing proxy configuration is corrupt', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-corrupt-'));
+    const configPath = path.join(root, 'network-proxies.json');
+    await writeFile(configPath, '{ invalid json', 'utf8');
+    const store = new DesktopNetworkProxyStore(configPath, new MemoryCredentialVault());
+
+    await expect(store.getState()).rejects.toThrow('无法读取代理服务器配置');
+    await expect(store.upsertServer({ name: 'Replacement', url: 'http://127.0.0.1:3128' }))
+      .rejects.toThrow('无法读取代理服务器配置');
+    await expect(readFile(configPath, 'utf8')).resolves.toBe('{ invalid json');
   });
 
   it('persists metadata separately from credentials and exposes only a protected relay', async () => {

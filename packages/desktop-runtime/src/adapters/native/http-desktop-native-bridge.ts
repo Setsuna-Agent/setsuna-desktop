@@ -1,12 +1,16 @@
 import type {
+  DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
 } from '@setsuna-desktop/contracts';
+import { Agent } from 'undici';
 import type { DesktopNativeBridge, SecretStoreStatus } from '../../ports/secret-store.js';
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class HttpDesktopNativeBridge implements DesktopNativeBridge {
+  private readonly directAgent = new Agent();
+
   constructor(
     private readonly baseUrl: string,
     private readonly token: string,
@@ -18,6 +22,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     return baseUrl && token
       ? new HttpDesktopNativeBridge(baseUrl, token)
       : new UnavailableDesktopNativeBridge();
+  }
+
+  async close(): Promise<void> {
+    await this.directAgent.close().catch(() => undefined);
   }
 
   status(): Promise<SecretStoreStatus> {
@@ -44,8 +52,22 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     await this.request('/v1/external/open', { body: { url }, method: 'POST' });
   }
 
+  deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState> {
+    return this.request('/v1/network-proxy/delete', {
+      body: { proxyServerId },
+      method: 'POST',
+    });
+  }
+
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
     return this.request('/v1/network-proxy/resolve', { body: input, method: 'POST' });
+  }
+
+  async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {
+    await this.request('/v1/network-proxy/validate-references', {
+      body: { proxyServerIds },
+      method: 'POST',
+    });
   }
 
   private async request<T>(pathname: string, options: { body?: unknown; method: 'GET' | 'POST' }): Promise<T> {
@@ -61,7 +83,8 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
         },
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         signal: controller.signal,
-      });
+        dispatcher: this.directAgent,
+      } as unknown as RequestInit);
       const text = await response.text();
       const body = text ? JSON.parse(text) as Record<string, unknown> : {};
       if (!response.ok) throw new Error(typeof body.error === 'string' ? body.error : `Desktop native bridge failed: ${response.status}`);
@@ -73,6 +96,8 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
 }
 
 export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
+  async close(): Promise<void> {}
+
   async status(): Promise<SecretStoreStatus> {
     return { available: false, backend: 'unavailable' };
   }
@@ -93,11 +118,19 @@ export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
     throw new Error('Opening an external authorization page requires the Setsuna Desktop host.');
   }
 
+  async deleteNetworkProxy(_proxyServerId: string): Promise<DesktopNetworkProxyState> {
+    throw unavailableError();
+  }
+
   async resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
     if (input.override?.mode === 'proxy') {
       throw new Error('A configured network proxy requires the Setsuna Desktop host.');
     }
     return input.override?.mode === 'direct' ? { mode: 'direct' } : { mode: 'system' };
+  }
+
+  async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {
+    if (proxyServerIds.length) throw unavailableError();
   }
 }
 

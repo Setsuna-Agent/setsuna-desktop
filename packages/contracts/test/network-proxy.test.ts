@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   defaultDesktopNetworkProxyRouting,
+  isDesktopNetworkProxyLoopbackUrl,
   normalizeDesktopNetworkProxyRoute,
   normalizeDesktopNetworkProxyUrl,
 } from '../src/network-proxy/index.js';
@@ -28,5 +29,14 @@ describe('network proxy contracts', () => {
         updater: { mode: 'inherit' },
       },
     });
+  });
+
+  it('recognizes local provider URLs without treating lookalike hosts as loopback', () => {
+    expect(isDesktopNetworkProxyLoopbackUrl('http://localhost:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('http://models.localhost:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('http://127.42.0.8:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('http://[::1]:11434/v1')).toBe(true);
+    expect(isDesktopNetworkProxyLoopbackUrl('https://localhost.example.com/v1')).toBe(false);
+    expect(isDesktopNetworkProxyLoopbackUrl('https://127.0.0.1.example.com/v1')).toBe(false);
   });
 });

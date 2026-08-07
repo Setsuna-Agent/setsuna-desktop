@@ -44,6 +44,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   } catch (error) {
     await runtime.mcpConnections.shutdown().catch(() => undefined);
     await runtime.networkProxyFetch.close().catch(() => undefined);
+    await runtime.nativeBridge.close().catch(() => undefined);
     await runtime.threadStore.close().catch(() => undefined);
     throw error;
   }
@@ -181,9 +182,13 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
                 await runtime.networkProxyFetch.close();
               } finally {
                 try {
-                  await runtime.threadStore.close();
+                  await runtime.nativeBridge.close();
                 } finally {
-                  await serverClosed;
+                  try {
+                    await runtime.threadStore.close();
+                  } finally {
+                    await serverClosed;
+                  }
                 }
               }
             }

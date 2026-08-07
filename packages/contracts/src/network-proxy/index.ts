@@ -52,13 +52,15 @@ export type DesktopNetworkProxyState = {
 
 /** Runtime-only response. The URL points at an authenticated loopback relay, never the upstream proxy. */
 export type DesktopResolvedNetworkProxy =
-  | { mode: 'system' }
+  | { mode: 'system'; proxyUrl?: string }
   | { mode: 'direct' }
   | { mode: 'proxy'; proxyServerId: string; proxyUrl: string };
 
 export type DesktopResolveNetworkProxyInput = {
   scope: DesktopNetworkProxyScope;
   override?: DesktopNetworkProxyRoute;
+  /** HTTP(S) destination used to resolve a PAC/system proxy for this request. */
+  targetUrl?: string;
 };
 
 export function defaultDesktopNetworkProxyRouting(): DesktopNetworkProxyRoutingState {
@@ -112,4 +114,19 @@ export function normalizeDesktopNetworkProxyRoute(
   if (record.mode !== 'proxy' || typeof record.proxyServerId !== 'string') return null;
   const proxyServerId = record.proxyServerId.trim();
   return proxyServerId ? { mode: 'proxy', proxyServerId } : null;
+}
+
+/** Local model endpoints and native loopback bridges must never leave the host. */
+export function isDesktopNetworkProxyLoopbackUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLocaleLowerCase();
+    if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
+    if (hostname === '[::1]' || hostname === '::1') return true;
+    const ipv4 = hostname.split('.').map(Number);
+    return ipv4.length === 4
+      && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+      && ipv4[0] === 127;
+  } catch {
+    return false;
+  }
 }

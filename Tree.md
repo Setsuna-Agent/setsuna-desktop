@@ -35,14 +35,14 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 100 total files
-├── src/ — 2 direct / 63 total files
+apps/desktop/main/ — 0 direct / 101 total files
+├── src/ — 2 direct / 64 total files
 │   ├── browser/ — 6 direct / 9 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 11 direct / 11 total files
-│   ├── network-proxy/ — 5 direct / 5 total files
+│   ├── network-proxy/ — 6 direct / 6 total files
 │   ├── review/ — 1 direct / 1 total files
 │   ├── runtime/ — 6 direct / 6 total files
 │   ├── security/ — 2 direct / 2 total files

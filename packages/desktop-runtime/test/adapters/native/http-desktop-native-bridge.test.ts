@@ -17,6 +17,8 @@ describe('HttpDesktopNativeBridge', () => {
           ? { value: 'secret' }
           : request.url === '/v1/network-proxy/resolve'
             ? { mode: 'proxy', proxyServerId: 'proxy-example', proxyUrl: 'http://user:pass@127.0.0.1:3128' }
+            : request.url === '/v1/network-proxy/delete'
+              ? { configPath: '/test/network-proxies.json', routing: { global: { mode: 'system' }, scopes: {} }, servers: [] }
             : { ok: true, available: true, backend: 'test' },
       ));
     });
@@ -33,13 +35,29 @@ describe('HttpDesktopNativeBridge', () => {
       await expect(client.resolveNetworkProxy({
         scope: 'runtime',
         override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+        targetUrl: 'https://api.example.com/v1/models',
       })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
+      await client.validateNetworkProxyReferences(['proxy-example']);
+      await expect(client.deleteNetworkProxy('proxy-example')).resolves.toMatchObject({ servers: [] });
       expect(calls.every((call) => call.authorization === 'Bearer bridge-token')).toBe(true);
       expect(calls).toContainEqual(expect.objectContaining({
-        body: { scope: 'runtime', override: { mode: 'proxy', proxyServerId: 'proxy-example' } },
+        body: {
+          scope: 'runtime',
+          override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+          targetUrl: 'https://api.example.com/v1/models',
+        },
         url: '/v1/network-proxy/resolve',
       }));
+      expect(calls).toContainEqual(expect.objectContaining({
+        body: { proxyServerIds: ['proxy-example'] },
+        url: '/v1/network-proxy/validate-references',
+      }));
+      expect(calls).toContainEqual(expect.objectContaining({
+        body: { proxyServerId: 'proxy-example' },
+        url: '/v1/network-proxy/delete',
+      }));
     } finally {
+      await client.close();
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }
   });
@@ -57,6 +75,9 @@ describe('HttpDesktopNativeBridge', () => {
       scope: 'runtime',
       override: { mode: 'proxy', proxyServerId: 'proxy-example' },
     })).rejects.toThrow('Setsuna Desktop host');
+    await expect(client.validateNetworkProxyReferences(['proxy-example']))
+      .rejects.toThrow('Setsuna Desktop host');
+    await expect(client.deleteNetworkProxy('proxy-example')).rejects.toThrow('Setsuna Desktop host');
   });
 });
 

@@ -7,6 +7,7 @@ import {
   nativeImage,
   safeStorage,
   screen,
+  session,
   shell,
   WebContentsView,
   type NativeImage,
@@ -52,6 +53,7 @@ import { DesktopBrowserProxyController } from './network-proxy/browser.js';
 import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from './network-proxy/service.js';
 import { DesktopNetworkProxyStore } from './network-proxy/store.js';
+import { createDesktopSystemProxyResolver } from './network-proxy/system.js';
 import { DesktopTerminalStore } from './terminal/sessions.js';
 import { DesktopUpdater } from './updater/updater.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
@@ -191,6 +193,7 @@ async function createWindow(): Promise<void> {
   );
   const currentNetworkProxyService = new DesktopNetworkProxyService(
     new DesktopNetworkProxyStore(dataLayout.networkProxyPath, credentialVault),
+    { resolveSystemProxy: createDesktopSystemProxyResolver(session.defaultSession) },
   );
   const currentBrowserProxyController = new DesktopBrowserProxyController(currentNetworkProxyService);
   networkProxyService = currentNetworkProxyService;
@@ -210,8 +213,11 @@ async function createWindow(): Promise<void> {
   const browserControl = await currentBrowserControlServer.start();
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
+    deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
     resolveNetworkProxy: (input) => currentNetworkProxyService.resolve(input),
+    validateNetworkProxyReferences: (proxyServerIds) =>
+      currentNetworkProxyService.validateServerReferences(proxyServerIds),
   });
   desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
   const nativeBridge = await currentDesktopNativeBridgeServer.start();

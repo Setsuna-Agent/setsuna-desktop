@@ -1,6 +1,7 @@
 import {
   DESKTOP_NETWORK_PROXY_SCOPES,
   normalizeDesktopNetworkProxyRoute,
+  type DesktopNetworkProxyState,
   type DesktopResolveNetworkProxyInput,
   type DesktopResolvedNetworkProxy,
 } from '@setsuna-desktop/contracts';
@@ -21,8 +22,10 @@ export type DesktopNativeBridgeConnection = {
 
 type DesktopNativeBridgeOptions = {
   credentialVault: CredentialVault;
+  deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
+  validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;
 };
 
 type DesktopFilePreview = {
@@ -123,6 +126,17 @@ export class DesktopNativeBridgeServer {
         sendJson(response, 200, await this.options.resolveNetworkProxy(input));
         return;
       }
+      if (request.method === 'POST' && request.url === '/v1/network-proxy/validate-references') {
+        const proxyServerIds = networkProxyReferenceInput(await readJsonBody(request));
+        await this.options.validateNetworkProxyReferences(proxyServerIds);
+        sendJson(response, 200, { ok: true });
+        return;
+      }
+      if (request.method === 'POST' && request.url === '/v1/network-proxy/delete') {
+        const proxyServerId = networkProxyServerIdInput(await readJsonBody(request));
+        sendJson(response, 200, await this.options.deleteNetworkProxy(proxyServerId));
+        return;
+      }
       sendJson(response, 404, { error: 'Not found.' });
     } catch (error) {
       sendJson(response, 400, { error: error instanceof Error ? error.message : 'Desktop native bridge request failed.' });
@@ -219,7 +233,43 @@ function networkProxyInput(value: unknown): DesktopResolveNetworkProxyInput {
     ? undefined
     : normalizeDesktopNetworkProxyRoute(input.override);
   if (input.override !== undefined && !override) throw new Error('Network proxy override is invalid.');
-  return { scope, ...(override ? { override } : {}) };
+  const targetUrl = input.targetUrl === undefined ? undefined : networkProxyTargetUrl(input.targetUrl);
+  return {
+    scope,
+    ...(override ? { override } : {}),
+    ...(targetUrl ? { targetUrl } : {}),
+  };
+}
+
+function networkProxyTargetUrl(value: unknown): string {
+  if (typeof value !== 'string') throw new Error('Network proxy target URL is invalid.');
+  const url = new URL(value);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Network proxy target URL must use HTTP(S).');
+  }
+  return url.toString();
+}
+
+function networkProxyReferenceInput(value: unknown): string[] {
+  const input = recordInput(value);
+  if (!Array.isArray(input.proxyServerIds) || input.proxyServerIds.length > 256) {
+    throw new Error('Network proxy references are invalid.');
+  }
+  const proxyServerIds = input.proxyServerIds.map((proxyServerId) => {
+    if (typeof proxyServerId !== 'string' || !proxyServerId.trim()) {
+      throw new Error('Network proxy reference is invalid.');
+    }
+    return proxyServerId.trim();
+  });
+  return [...new Set(proxyServerIds)];
+}
+
+function networkProxyServerIdInput(value: unknown): string {
+  const input = recordInput(value);
+  if (typeof input.proxyServerId !== 'string' || !input.proxyServerId.trim()) {
+    throw new Error('Network proxy server ID is invalid.');
+  }
+  return input.proxyServerId.trim();
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
