@@ -8,6 +8,7 @@ import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-deskt
 import { createHash } from 'node:crypto';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
 import { errorMessage } from '../../shared/node-errors.js';
+import type { FetchImpl } from '../model/provider-http.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 
 type StoredOAuthTokens = {
@@ -43,6 +44,7 @@ export class McpOAuthCoordinator {
   constructor(
     private readonly nativeBridge: DesktopNativeBridge,
     private readonly now: () => number = Date.now,
+    private readonly fetchImpl: FetchImpl = globalThis.fetch,
   ) {}
 
   providerFor(server: RuntimeMcpServerInput): OAuthClientProvider {
@@ -56,12 +58,12 @@ export class McpOAuthCoordinator {
     });
   }
 
-  fetchFor(serverKey: string): typeof fetch {
+  fetchFor(serverKey: string): FetchImpl {
     return async (input, init) => {
-      if (!isRefreshRequest(init?.body)) return fetch(input, init);
+      if (!isRefreshRequest(init?.body)) return this.fetchImpl(input, init);
       let refresh = this.refreshes.get(serverKey);
       if (!refresh) {
-        refresh = fetch(input, init).then(serializeResponse).finally(() => {
+        refresh = this.fetchImpl(input, init).then(serializeResponse).finally(() => {
           if (this.refreshes.get(serverKey) === refresh) this.refreshes.delete(serverKey);
         });
         this.refreshes.set(serverKey, refresh);

@@ -13,7 +13,7 @@ type DesktopNetworkProxyFetchOptions = {
 /** Applies a resolved desktop route to Node's built-in fetch without proxying local IPC. */
 export class DesktopNetworkProxyFetch {
   private readonly directAgent = new Agent();
-  private readonly agents = new Map<string, ProxyAgent>();
+  private readonly proxyDispatchers = new Map<string, { agent: ProxyAgent; dispatcher: Dispatcher }>();
   private readonly directFetch: typeof globalThis.fetch;
   private readonly systemFetch: typeof globalThis.fetch;
 
@@ -37,22 +37,31 @@ export class DesktopNetworkProxyFetch {
     const route = await this.service.resolve({ scope });
     if (route.mode === 'system') return this.systemFetch(input, init);
     const proxyUrl = route.mode === 'proxy' ? route.proxyUrl : undefined;
-    const dispatcher = proxyUrl ? this.proxyAgent(proxyUrl) : this.directAgent;
+    const dispatcher = proxyUrl ? this.proxyDispatcher(proxyUrl) : this.directAgent;
     return this.directFetch(input, { ...init, dispatcher } as unknown as RequestInit);
   }
 
-  private proxyAgent(proxyUrl: string): Dispatcher {
-    let agent = this.agents.get(proxyUrl);
-    if (!agent) {
-      agent = new ProxyAgent(proxyUrl);
-      this.agents.set(proxyUrl, agent);
+  private proxyDispatcher(proxyUrl: string): Dispatcher {
+    let route = this.proxyDispatchers.get(proxyUrl);
+    if (!route) {
+      const agent = new ProxyAgent(proxyUrl);
+      const dispatcher = this.directAgent.compose((dispatchDirect) => (options, handler) => {
+        const origin = typeof options.origin === 'string'
+          ? options.origin
+          : options.origin?.href ?? '';
+        return isDesktopNetworkProxyLoopbackUrl(origin)
+          ? dispatchDirect(options, handler)
+          : agent.dispatch(options, handler);
+      });
+      route = { agent, dispatcher };
+      this.proxyDispatchers.set(proxyUrl, route);
     }
-    return agent;
+    return route.dispatcher;
   }
 
   async close(): Promise<void> {
-    const agents = [...this.agents.values()];
-    this.agents.clear();
+    const agents = [...this.proxyDispatchers.values()].map(({ agent }) => agent);
+    this.proxyDispatchers.clear();
     await Promise.all([
       this.directAgent.close().catch(() => undefined),
       ...agents.map((agent) => agent.close().catch(() => undefined)),

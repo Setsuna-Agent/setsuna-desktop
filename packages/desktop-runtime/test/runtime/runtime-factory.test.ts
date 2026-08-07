@@ -106,6 +106,29 @@ describe('runtime factory tool wiring', () => {
       await runtime.threadStore.close();
     }
   });
+
+  it('routes streamable HTTP MCP requests through the runtime network proxy adapter', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-mcp-proxy-test-'));
+    const nativeBridge = new RejectingProxyBridge();
+    const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+
+    try {
+      await expect(runtime.mcpConnections.listTools({
+        key: 'remote-docs',
+        transport: 'streamableHttp',
+        url: 'https://mcp.example.test/api',
+      }, { scopeId: 'thread:proxy-test' })).rejects.toThrow('proxy resolution reached');
+      expect(nativeBridge.proxyInputs).toEqual([{
+        scope: 'runtime',
+        override: undefined,
+      }]);
+    } finally {
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
 });
 
 class RejectingProxyBridge extends InMemoryDesktopNativeBridge {

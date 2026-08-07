@@ -92,7 +92,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
   const mcpElicitations = new McpElicitationCoordinator(approvalGate, eventWriter, clock, ids);
-  const mcpConnections = new SdkMcpConnectionManager({ nativeBridge, elicitationCoordinator: mcpElicitations });
+  const mcpConnections = new SdkMcpConnectionManager({
+    nativeBridge,
+    elicitationCoordinator: mcpElicitations,
+    fetchImpl: networkProxyFetch.forRoute(),
+  });
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);

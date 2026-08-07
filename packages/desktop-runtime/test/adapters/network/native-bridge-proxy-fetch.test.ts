@@ -3,6 +3,7 @@ import type {
   DesktopResolvedNetworkProxy,
 } from '@setsuna-desktop/contracts';
 import { createServer } from 'node:http';
+import { Server as ProxyChainServer } from 'proxy-chain';
 import { Agent } from 'undici';
 import { describe, expect, it } from 'vitest';
 import { NativeBridgeProxyFetch } from '../../../src/adapters/network/native-bridge-proxy-fetch.js';
@@ -78,13 +79,69 @@ describe('NativeBridgeProxyFetch', () => {
     }
   });
 
-  it('preserves the existing shell environment for the system-default route', async () => {
-    const proxyFetch = new NativeBridgeProxyFetch(new RecordingNativeBridge({ mode: 'system' }));
+  it('preserves inherited proxy variables for system-routed Agent Shells', async () => {
+    const proxyFetch = new NativeBridgeProxyFetch(
+      new RecordingNativeBridge({ mode: 'system' }),
+      globalThis.fetch,
+      {
+        HTTP_PROXY: 'http://system-proxy.example.com:8080',
+        NO_PROXY: 'localhost,127.0.0.1',
+      },
+    );
 
     try {
-      await expect(proxyFetch.environmentForRoute()).resolves.toEqual({});
+      await expect(proxyFetch.environmentForRoute()).resolves.toEqual({
+        HTTP_PROXY: 'http://system-proxy.example.com:8080',
+        NO_PROXY: 'localhost,127.0.0.1',
+      });
     } finally {
       await proxyFetch.close();
+    }
+  });
+
+  it('rechecks loopback bypass rules for every redirected request', async () => {
+    let targetPort = 0;
+    const target = createServer((request, response) => {
+      if (request.url === '/redirect') {
+        response.writeHead(302, { Location: `http://127.0.0.1:${targetPort}/final` });
+        response.end();
+        return;
+      }
+      response.end('redirected-directly');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const targetAddress = target.address();
+    if (!targetAddress || typeof targetAddress === 'string') throw new Error('Expected redirect target address.');
+    targetPort = targetAddress.port;
+    let proxyRequests = 0;
+    const upstream = new ProxyChainServer({
+      host: '127.0.0.1',
+      port: 0,
+      prepareRequestFunction: () => {
+        proxyRequests += 1;
+        return {};
+      },
+    });
+    await upstream.listen();
+    const bridge = new RecordingNativeBridge({
+      mode: 'proxy',
+      proxyServerId: 'proxy-example',
+      proxyUrl: `http://127.0.0.1:${upstream.port}`,
+    });
+    const proxyFetch = new NativeBridgeProxyFetch(bridge);
+
+    try {
+      const response = await proxyFetch.forRoute({
+        mode: 'proxy',
+        proxyServerId: 'proxy-example',
+      })(`http://0.0.0.0:${targetPort}/redirect`);
+
+      expect(await response.text()).toBe('redirected-directly');
+      expect(proxyRequests).toBe(1);
+    } finally {
+      await proxyFetch.close();
+      await upstream.close(true);
+      await new Promise<void>((resolve, reject) => target.close((error) => (error ? reject(error) : resolve())));
     }
   });
 });

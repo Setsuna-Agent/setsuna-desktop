@@ -102,6 +102,60 @@ describe('DesktopNetworkProxyStore', () => {
     }
   });
 
+  it('rechecks updater loopback bypass rules after redirects', async () => {
+    let targetPort = 0;
+    const target = createHttpServer((request, response) => {
+      if (request.url === '/redirect') {
+        response.writeHead(302, { Location: `http://127.0.0.1:${targetPort}/release.zip` });
+        response.end();
+        return;
+      }
+      response.end('redirected-update');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    const targetAddress = target.address();
+    if (!targetAddress || typeof targetAddress === 'string') throw new Error('Expected target address.');
+    targetPort = targetAddress.port;
+    let upstreamRequests = 0;
+    const upstream = new ProxyChainServer({
+      host: '127.0.0.1',
+      port: 0,
+      prepareRequestFunction: () => {
+        upstreamRequests += 1;
+        return {};
+      },
+    });
+    upstreamProxies.push(upstream);
+    await upstream.listen();
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-redirect-updater-'));
+    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+      path.join(root, 'network-proxies.json'),
+      new MemoryCredentialVault(),
+    ));
+    services.push(service);
+    const state = await service.upsertServer({
+      name: 'Updater proxy',
+      url: `http://127.0.0.1:${upstream.port}`,
+    });
+    await service.setRouting({
+      scopes: { updater: { mode: 'proxy', proxyServerId: state.servers[0]!.id } },
+    });
+    const proxyFetch = new DesktopNetworkProxyFetch(service);
+
+    try {
+      const response = await proxyFetch.fetch(
+        'updater',
+        `http://0.0.0.0:${targetPort}/redirect`,
+      );
+
+      expect(await response.text()).toBe('redirected-update');
+      expect(upstreamRequests).toBe(1);
+    } finally {
+      await proxyFetch.close();
+      await new Promise<void>((resolve, reject) => target.close((error) => (error ? reject(error) : resolve())));
+    }
+  });
+
   it('fails closed when an existing proxy configuration is corrupt', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-corrupt-'));
     const configPath = path.join(root, 'network-proxies.json');

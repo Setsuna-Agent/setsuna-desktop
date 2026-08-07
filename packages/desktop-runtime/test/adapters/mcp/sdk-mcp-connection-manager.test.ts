@@ -83,7 +83,13 @@ describe('SdkMcpConnectionManager', () => {
 
   it('negotiates the current protocol, keeps an HTTP session, refreshes list_changed, and deletes the session', async () => {
     const testServer = await createStatefulHttpMcpServer();
-    const manager = new SdkMcpConnectionManager();
+    const routedRequests: string[] = [];
+    const manager = new SdkMcpConnectionManager({
+      fetchImpl: async (input, init) => {
+        routedRequests.push(input.toString());
+        return fetch(input, init);
+      },
+    });
     const server = {
       key: 'http_fixture',
       transport: 'streamableHttp' as const,
@@ -102,6 +108,8 @@ describe('SdkMcpConnectionManager', () => {
         content: [{ type: 'text', text: 'session session_1' }],
       });
       expect(testServer.initializeCount()).toBe(1);
+      expect(routedRequests.length).toBeGreaterThan(0);
+      expect(routedRequests.every((url) => new URL(url).origin === new URL(testServer.url).origin)).toBe(true);
       expect(testServer.protocolHeaders()).toEqual(['2025-11-25', '2025-11-25', '2025-11-25']);
 
       await testServer.changeTools();
