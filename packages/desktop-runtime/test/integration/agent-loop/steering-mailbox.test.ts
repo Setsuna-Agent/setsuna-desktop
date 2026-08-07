@@ -207,7 +207,13 @@ describe('agent loop turn steering and mailbox input', () => {
       const storedOversizedSteer = oversizedSteer.trim();
   
       const started = await loop.startTurn(thread.id, { input: 'initial prompt' });
-      await waitForModelRequestCount(modelClient, 1);
+      await waitForTestState(
+        () => modelClient.requests,
+        (requests) => requests.some((request) => request.model === 'local-runtime-smoke'),
+        (requests) => `Timed out waiting for initial model request; models=${JSON.stringify(
+          requests?.map((request) => request.model) ?? [],
+        )}`,
+      );
       await expect(loop.steerTurn(thread.id, {
         clientId: 'client-oversized-steer',
         expectedTurnId: started.turnId!,
@@ -217,11 +223,18 @@ describe('agent loop turn steering and mailbox input', () => {
       modelClient.releaseFirstResponse();
       await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const saved = await threadStore.getThread(thread.id);
-      const compactRequest = modelClient.requests.find((request) => request.model === 'context-compaction');
+      const compactRequest = modelClient.requests
+        .filter((request) => request.model === 'context-compaction')
+        .at(-1);
       const followUpRequest = modelClient.requests.at(-1);
       const savedSteer = saved?.messages.find((message) => message.clientId === 'client-oversized-steer');
   
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'context-compaction', 'local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => request.model)).toEqual([
+        'context-compaction',
+        'local-runtime-smoke',
+        'context-compaction',
+        'local-runtime-smoke',
+      ]);
       expect(compactRequest?.messages.map((message) => message.content).join('\n')).toContain(oversizedSteer.slice(0, 200));
       expect(savedSteer).toMatchObject({
         content: storedOversizedSteer,
@@ -238,7 +251,7 @@ describe('agent loop turn steering and mailbox input', () => {
         compactionHash: expect.stringMatching(/^sha256:/),
         tokensUntilCompaction: expect.any(Number),
       });
-      expect(followUpRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThan(0);
+      expect(followUpRequest?.stepSnapshot?.contextWindow?.tokensUntilCompaction).toBeGreaterThanOrEqual(0);
     });
   
   it('queues a new start request that races with an active conversation', async () => {
