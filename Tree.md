@@ -35,11 +35,11 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 91 total files
-├── src/ — 2 direct / 56 total files
+apps/desktop/main/ — 0 direct / 93 total files
+├── src/ — 2 direct / 57 total files
 │   ├── browser/ — 6 direct / 9 total files
 │   │   └── cdp/ — 3 direct / 3 total files
-│   ├── data-root/ — 13 direct / 13 total files
+│   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 10 direct / 10 total files
 │   ├── review/ — 1 direct / 1 total files
@@ -50,15 +50,15 @@ apps/desktop/main/ — 0 direct / 91 total files
 │   ├── window/ — 3 direct / 5 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 35 files
+└── test/ — 36 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 1 direct / 1 total files
-    └── unit/ — 1 direct / 32 total files
+    └── unit/ — 1 direct / 33 total files
         ├── browser/ — 5 direct / 7 total files
         │   └── cdp/ — 2 direct / 2 total files
-        ├── data-root/ — 7 direct / 7 total files
+        ├── data-root/ — 8 direct / 8 total files
         ├── runtime/ — 5 direct / 5 total files
         ├── security/ — 2 direct / 2 total files
         ├── updater/ — 2 direct / 2 total files

@@ -9,6 +9,7 @@
 | 文件 | 职责 |
 | --- | --- |
 | `model.ts` | main 内部迁移/恢复模型和阶段 |
+| `instance-profile.ts` | 隔离正式版与未打包开发实例的数据/元数据根 |
 | `layout.ts` | 数据根、runtime、窗口、凭据、bootstrap 等受管路径 |
 | `bootstrap.ts` | 早期读取位置指针和 pending，判定 boot mode |
 | `instance-lock.ts` | 在稳定 bootstrap 目录维护唯一进程锁 |
@@ -148,6 +149,7 @@ Phase 2 memory 增量以内部 snapshot baseline 计算，不读取或修改用�
 
 - `bootstrap.test.ts`
 - `coordinator.test.ts`
+- `instance-profile.test.ts`
 - `instance-lock.test.ts`
 - `manifest.test.ts`
 - `relocate.test.ts`
@@ -155,4 +157,3 @@ Phase 2 memory 增量以内部 snapshot baseline 计算，不读取或修改用�
 - `volume-kind.test.ts`
 
 需要覆盖的不只是成功复制，还包括空间不足、路径嵌套、网络卷、symlink、过期 plan、runtime 非正常退出、每个 rename 间隙崩溃、marker 不匹配和活动根删除保护。
-
