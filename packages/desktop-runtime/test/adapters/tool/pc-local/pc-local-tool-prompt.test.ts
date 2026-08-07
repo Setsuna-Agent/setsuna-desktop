@@ -14,6 +14,7 @@ describe('pcLocalToolPrompt', () => {
     expect(prompt).not.toContain('file deletion');
     expect(prompt).toContain('execute them in parallel');
     expect(prompt).toContain('Keep dependent calls sequential');
+    expect(prompt).not.toContain('Before related tool calls');
   });
 
   it('includes focused mutation and shell policy when those tools are advertised', () => {
