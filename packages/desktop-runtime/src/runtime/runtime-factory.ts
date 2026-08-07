@@ -10,6 +10,7 @@ import { SdkMcpConnectionManager } from '../adapters/mcp/sdk-mcp-connection-mana
 import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
 import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
 import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-bridge.js';
+import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-fetch.js';
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
@@ -82,12 +83,21 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     debugTraceStore,
   );
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
-  const configStore = new FileConfigStore(runtimeDataDir);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
+  const configStore = new FileConfigStore(runtimeDataDir, {
+    validateProxyServerReferences: (proxyServerIds) =>
+      nativeBridge.validateNetworkProxyReferences(proxyServerIds),
+  });
+  const networkProxyFetch = new NativeBridgeProxyFetch(nativeBridge);
   const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
   const mcpElicitations = new McpElicitationCoordinator(approvalGate, eventWriter, clock, ids);
-  const mcpConnections = new SdkMcpConnectionManager({ nativeBridge, elicitationCoordinator: mcpElicitations });
+  const mcpConnections = new SdkMcpConnectionManager({
+    nativeBridge,
+    elicitationCoordinator: mcpElicitations,
+    fetchImpl: networkProxyFetch.forRoute(),
+    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
+  });
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);
@@ -104,7 +114,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     requireBundledRipgrep: options.requireBundledRipgrep,
   });
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine });
-  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore);
+  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore, {
+    fetchImpl: networkProxyFetch.forRoute(),
+    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
+  });
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
@@ -113,7 +126,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configStore,
     pluginStore,
     generatedImageStore,
-    { threadStore, workspaceProjects },
+    {
+      fetchImpl: networkProxyFetch.forRoute(),
+      threadStore,
+      workspaceProjects,
+    },
   );
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
@@ -127,6 +144,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       ],
       mcpConfigPath: path.join(runtimeDataDir, 'mcp.json'),
       memoryStorageRoot: path.join(runtimeDataDir, 'memories'),
+      resolveShellEnvironment: () => networkProxyFetch.environmentForRoute(),
     },
   );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
@@ -144,7 +162,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new MemoryToolHost(memoryStore, configStore),
   ]);
   const modelClient = new ImageAssetResolvingModelClient(
-    new ConfiguredModelClient(configStore, globalThis.fetch, undefined, { debugTrace: debugTraceStore }),
+    new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
+      debugTrace: debugTraceStore,
+      fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
+    }),
     generatedImageStore,
   );
   const agentLoop = new AgentLoop({
@@ -186,6 +207,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     imageGenerationToolHost,
     memoryStore,
     modelClient,
+    networkProxyFetch,
     mcpConnections,
     mcpElicitations,
     mcpStore,

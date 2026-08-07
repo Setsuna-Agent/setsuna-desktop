@@ -7,6 +7,7 @@ import {
   nativeImage,
   safeStorage,
   screen,
+  session,
   shell,
   WebContentsView,
   type NativeImage,
@@ -23,6 +24,7 @@ import { DesktopBrowserController } from './browser/control.js';
 import { registerBrowserIpc } from './ipc/browser-ipc.js';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
+import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
 import { registerReviewIpc } from './ipc/review-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerTerminalIpc } from './ipc/terminal-ipc.js';
@@ -47,6 +49,10 @@ import { RuntimeHost } from './runtime/host.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
 import { DesktopCredentialVault } from './security/credential-vault.js';
+import { DesktopBrowserProxyController } from './network-proxy/browser.js';
+import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
+import { DesktopNetworkProxyService } from './network-proxy/service.js';
+import { DesktopNetworkProxyStore } from './network-proxy/store.js';
 import { DesktopTerminalStore } from './terminal/sessions.js';
 import { DesktopUpdater } from './updater/updater.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
@@ -70,6 +76,9 @@ let browserControlServer: BrowserControlServer | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let terminalStore: DesktopTerminalStore | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
+let networkProxyService: DesktopNetworkProxyService | null = null;
+let browserProxyController: DesktopBrowserProxyController | null = null;
+let networkProxyFetch: DesktopNetworkProxyFetch | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
@@ -177,6 +186,18 @@ async function createWindow(): Promise<void> {
   });
   installDesktopRipgrepEnvironment(process.env, ripgrepPath, { required: app.isPackaged });
 
+  const credentialVault = new DesktopCredentialVault(
+    dataLayout.credentialVaultPath,
+    electronCredentialEncryption(safeStorage),
+  );
+  const currentNetworkProxyService = new DesktopNetworkProxyService(
+    new DesktopNetworkProxyStore(dataLayout.networkProxyPath, credentialVault),
+  );
+  const currentBrowserProxyController = new DesktopBrowserProxyController(currentNetworkProxyService);
+  networkProxyService = currentNetworkProxyService;
+  browserProxyController = currentBrowserProxyController;
+  await currentBrowserProxyController.start();
+
   const currentBrowserController = new DesktopBrowserController({
     openTab: async (url) => {
       if (!mainWindow || mainWindow.isDestroyed()) return false;
@@ -189,11 +210,13 @@ async function createWindow(): Promise<void> {
   browserControlServer = currentBrowserControlServer;
   const browserControl = await currentBrowserControlServer.start();
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
-    credentialVault: new DesktopCredentialVault(
-      dataLayout.credentialVaultPath,
-      electronCredentialEncryption(safeStorage),
-    ),
+    credentialVault,
+    deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
+    resolveNetworkProxy: (input) => currentNetworkProxyService.resolve(input),
+    systemProxyFetch: fetchWithElectronSystemProxy,
+    validateNetworkProxyReferences: (proxyServerIds) =>
+      currentNetworkProxyService.validateServerReferences(proxyServerIds),
   });
   desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
   const nativeBridge = await currentDesktopNativeBridgeServer.start();
@@ -213,10 +236,17 @@ async function createWindow(): Promise<void> {
   } catch (error) {
     await currentBrowserControlServer.stop();
     await currentDesktopNativeBridgeServer.stop();
+    currentBrowserProxyController.stop();
+    await currentNetworkProxyService.close();
     throw error;
   }
   registerRuntimeIpc(currentRuntimeHost);
   if (startupClosedBeforeHandoff) return;
+
+  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService, {
+    systemFetch: fetchWithElectronSystemProxy,
+  });
+  networkProxyFetch = currentNetworkProxyFetch;
 
   desktopUpdater = new DesktopUpdater({
     currentVersion: app.getVersion(),
@@ -224,11 +254,12 @@ async function createWindow(): Promise<void> {
     downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
     sourceConfigPath: dataLayout.updateSourcesPath,
     enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+    fetch: (input, init) => currentNetworkProxyFetch.fetch('updater', input, init),
   });
   await desktopUpdater.initialize();
   terminalStore = new DesktopTerminalStore((payload) => {
     mainWindow?.webContents.send('terminal:event', payload);
-  });
+  }, () => currentNetworkProxyService.environmentFor('terminal'));
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
@@ -244,8 +275,14 @@ async function createWindow(): Promise<void> {
   registerWorkspaceIpc();
   registerTerminalIpc(terminalStore);
   registerBrowserIpc(currentBrowserController, currentMainWindow);
+  const unregisterNetworkProxyState = registerNetworkProxyIpc(
+    currentNetworkProxyService,
+    currentRuntimeHost,
+    currentMainWindow,
+  );
 
   currentMainWindow.on('closed', () => {
+    unregisterNetworkProxyState();
     void shutdownDesktopServices();
     if (mainWindow === currentMainWindow) mainWindow = null;
   });
@@ -460,6 +497,17 @@ function getMacTrafficLightPosition(pageScale: number): { x: number; y: number }
   };
 }
 
+/**
+ * Keep PAC fallback ordering and platform proxy authentication inside Chromium;
+ * reducing resolveProxy() output to one Node proxy loses both behaviors.
+ */
+function fetchWithElectronSystemProxy(
+  input: Parameters<typeof globalThis.fetch>[0],
+  init?: Parameters<typeof globalThis.fetch>[1],
+): Promise<Response> {
+  return session.defaultSession.fetch(input instanceof URL ? input.href : input, init);
+}
+
 function shutdownDesktopServices(
   options: { requireRuntimeExit?: boolean } = {},
 ): Promise<void> {
@@ -471,10 +519,14 @@ function shutdownDesktopServices(
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
   const currentTerminalStore = terminalStore;
   const currentDesktopUpdater = desktopUpdater;
+  const currentNetworkProxyService = networkProxyService;
+  const currentBrowserProxyController = browserProxyController;
+  const currentNetworkProxyFetch = networkProxyFetch;
 
   currentDesktopUpdater?.stop();
   currentTerminalStore?.closeAll();
   currentBrowserController?.clear();
+  currentBrowserProxyController?.stop();
 
   desktopServicesShutdownPromise = (async () => {
     let runtimeStopError: unknown;
@@ -488,6 +540,8 @@ function shutdownDesktopServices(
     const bridgeResults = await Promise.allSettled([
       currentBrowserControlServer?.stop() ?? Promise.resolve(),
       currentDesktopNativeBridgeServer?.stop() ?? Promise.resolve(),
+      currentNetworkProxyFetch?.close() ?? Promise.resolve(),
+      currentNetworkProxyService?.close() ?? Promise.resolve(),
     ]);
     for (const result of bridgeResults) {
       if (result.status === 'rejected') console.error('[desktop] local bridge shutdown failed', result.reason);
@@ -499,6 +553,9 @@ function shutdownDesktopServices(
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (terminalStore === currentTerminalStore) terminalStore = null;
     if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;
+    if (networkProxyService === currentNetworkProxyService) networkProxyService = null;
+    if (browserProxyController === currentBrowserProxyController) browserProxyController = null;
+    if (networkProxyFetch === currentNetworkProxyFetch) networkProxyFetch = null;
     if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();
   return desktopServicesShutdownPromise;

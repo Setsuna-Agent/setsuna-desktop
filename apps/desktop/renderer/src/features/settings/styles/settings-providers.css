@@ -498,6 +498,24 @@
   max-width: none;
 }
 
+.desktop-settings-panel .settings-provider-field--proxy {
+  grid-column: 1 / -1;
+}
+
+.desktop-settings-panel .settings-provider-field--proxy .settings-provider-field__label {
+  display: grid;
+  gap: 1px;
+}
+
+.desktop-settings-panel .settings-provider-field--proxy .settings-provider-field__label em {
+  overflow: visible;
+  font-family: inherit;
+  font-weight: var(--app-font-weight);
+  line-height: 16px;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .desktop-settings-panel .settings-model-list {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;

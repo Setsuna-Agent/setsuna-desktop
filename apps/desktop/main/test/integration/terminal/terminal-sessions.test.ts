@@ -34,9 +34,58 @@ describe('desktop terminal store', () => {
 
     expect(store.read(session.sessionId).some((event) => event.event === 'exit')).toBe(true);
     expect(() => store.write(session.sessionId, terminalSmokeCommand())).toThrow('重新启动');
-    expect(store.restart(session.sessionId, 90, 30)).toBe(true);
+    await expect(store.restart(session.sessionId, 90, 30)).resolves.toBe(true);
     store.write(session.sessionId, terminalSmokeCommand());
     await waitFor(() => events.some((event) => event.event === 'output' && String(event.data.text ?? '').includes('setsuna-terminal-smoke')));
+
+    expect(store.close(session.sessionId)).toBe(true);
+  });
+
+  it('coalesces concurrent restarts while proxy environment resolution is pending', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-concurrent-restart-test-'));
+    const events: DesktopTerminalEvent[] = [];
+    let environmentResolutionCount = 0;
+    let releaseRestartEnvironment: (() => void) | undefined;
+    const restartEnvironment = new Promise<void>((resolve) => {
+      releaseRestartEnvironment = resolve;
+    });
+    const store = new DesktopTerminalStore(
+      (event) => events.push(event),
+      async () => {
+        environmentResolutionCount += 1;
+        if (environmentResolutionCount > 1) await restartEnvironment;
+        return {};
+      },
+    );
+    const session = await store.open({ workspaceRoot, cols: 80, rows: 24 });
+    store.write(session.sessionId, terminalExitCommand());
+    await waitFor(() => events.some((event) => event.event === 'exit'));
+
+    const firstRestart = store.restart(session.sessionId, 90, 30);
+    const secondRestart = store.restart(session.sessionId, 100, 40);
+    await waitFor(() => environmentResolutionCount === 2);
+    releaseRestartEnvironment?.();
+
+    await expect(Promise.all([firstRestart, secondRestart])).resolves.toEqual([true, true]);
+    expect(environmentResolutionCount).toBe(2);
+    expect(events.filter((event) => event.event === 'ready')).toHaveLength(2);
+    expect(store.close(session.sessionId)).toBe(true);
+  });
+
+  it('applies the current proxy environment when starting a session', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-proxy-test-'));
+    const events: DesktopTerminalEvent[] = [];
+    const store = new DesktopTerminalStore(
+      (event) => events.push(event),
+      async () => ({ HTTP_PROXY: 'http://relay:secret@127.0.0.1:3128' }),
+    );
+    const session = await store.open({ workspaceRoot });
+
+    store.write(session.sessionId, terminalProxyCommand());
+    await waitFor(() => events.some((event) => (
+      event.event === 'output'
+      && String(event.data.text ?? '').includes('relay:secret@127.0.0.1:3128')
+    )));
 
     expect(store.close(session.sessionId)).toBe(true);
   });
@@ -49,6 +98,10 @@ function terminalSmokeCommand(): string {
 
 function terminalExitCommand(): string {
   return process.platform === 'win32' ? 'exit\r\n' : 'exit\n';
+}
+
+function terminalProxyCommand(): string {
+  return process.platform === 'win32' ? 'echo %HTTP_PROXY%\r\n' : "printf '%s\\n' \"$HTTP_PROXY\"\n";
 }
 
 async function waitFor(assertion: () => boolean): Promise<void> {

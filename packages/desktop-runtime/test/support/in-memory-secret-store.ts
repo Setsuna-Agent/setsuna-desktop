@@ -1,4 +1,10 @@
 import type {
+  DesktopNetworkProxyState,
+  DesktopResolveNetworkProxyInput,
+  DesktopResolvedNetworkProxy,
+} from '@setsuna-desktop/contracts';
+import { defaultDesktopNetworkProxyRouting } from '@setsuna-desktop/contracts';
+import type {
   DesktopNativeBridge,
   SecretStore,
   SecretStoreStatus,
@@ -25,9 +31,34 @@ export class InMemorySecretStore implements SecretStore {
 }
 
 export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements DesktopNativeBridge {
+  readonly deletedNetworkProxyServerIds: string[] = [];
   readonly openedUrls: string[] = [];
+  readonly validatedNetworkProxyServerIds: string[][] = [];
+
+  async close(): Promise<void> {}
+
+  fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response> {
+    return fetch(input, init);
+  }
+
+  async deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState> {
+    this.deletedNetworkProxyServerIds.push(proxyServerId);
+    return {
+      configPath: 'memory://network-proxies.json',
+      routing: defaultDesktopNetworkProxyRouting(),
+      servers: [],
+    };
+  }
 
   async openExternal(url: string): Promise<void> {
     this.openedUrls.push(url);
+  }
+
+  async resolveNetworkProxy(_input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
+    return { mode: 'direct' };
+  }
+
+  async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {
+    this.validatedNetworkProxyServerIds.push([...proxyServerIds]);
   }
 }

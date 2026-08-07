@@ -41,6 +41,41 @@ describe('runtime server REST config and model discovery', () => {
       expect(config.providers[0].baseUrl).toBe('https://example.com/v1/');
       expect(config.providers[0].apiKeySet).toBe(true);
     });
+
+  it('coordinates proxy deletion with provider configuration writes', async () => {
+      const config = await harness.runtimeFetch('/v1/config');
+      const provider = config.providers[0];
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          providers: [{
+            ...provider,
+            name: 'Local models',
+            proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-example' },
+          }],
+        }),
+      });
+
+      const blocked = await fetch(`${harness.baseUrl}/v1/config/network-proxy/proxy-example`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${harness.token}` },
+      });
+      expect(blocked.status).toBe(409);
+      await expect(blocked.json()).resolves.toMatchObject({
+        code: 'network_proxy_in_use',
+        error: expect.stringContaining('Local models'),
+      });
+
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          providers: [{ ...provider, proxyRoute: { mode: 'inherit' } }],
+        }),
+      });
+      await expect(harness.runtimeFetch('/v1/config/network-proxy/proxy-example', {
+        method: 'DELETE',
+      })).resolves.toMatchObject({ servers: [] });
+    });
   
   it('returns real host dependency status without provisioning during startup', async () => {
       const status = await harness.runtimeFetch('/v1/workspace-dependencies');

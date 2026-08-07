@@ -65,7 +65,7 @@ describe('McpOAuthCoordinator', () => {
 
   it('coalesces concurrent refresh token requests', async () => {
     let refreshCount = 0;
-    const server = createServer(async (request, response) => {
+    const server = createServer(async (_request, response) => {
       refreshCount += 1;
       await new Promise((resolve) => setTimeout(resolve, 20));
       response.writeHead(200, { 'Content-Type': 'application/json' });
@@ -74,7 +74,15 @@ describe('McpOAuthCoordinator', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected OAuth refresh test address.');
-    const fetchFn = new McpOAuthCoordinator(new InMemoryDesktopNativeBridge()).fetchFor('docs');
+    let routedFetchCount = 0;
+    const fetchFn = new McpOAuthCoordinator(
+      new InMemoryDesktopNativeBridge(),
+      Date.now,
+      async (input, init) => {
+        routedFetchCount += 1;
+        return fetch(input, init);
+      },
+    ).fetchFor('docs');
     const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: 'refresh' });
 
     try {
@@ -85,6 +93,7 @@ describe('McpOAuthCoordinator', () => {
       await expect(first.json()).resolves.toMatchObject({ access_token: 'refreshed' });
       await expect(second.json()).resolves.toMatchObject({ access_token: 'refreshed' });
       expect(refreshCount).toBe(1);
+      expect(routedFetchCount).toBe(1);
     } finally {
       await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     }

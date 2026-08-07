@@ -22,6 +22,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
+import { useDesktopNetworkProxy } from './useDesktopNetworkProxy.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useDesktopUpdater } from './useDesktopUpdater.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
@@ -36,6 +37,7 @@ export function useDesktopAppController() {
   const skillSelectionRequestIdRef = useRef(0);
 
   const updater = useDesktopUpdater();
+  const networkProxy = useDesktopNetworkProxy();
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
     activeTurnId,
@@ -265,6 +267,7 @@ export function useDesktopAppController() {
     handleWorkspaceResizeStart,
     loadState,
     navigation,
+    networkProxy,
     projectWorkspace,
     resetComposer,
     runtime,

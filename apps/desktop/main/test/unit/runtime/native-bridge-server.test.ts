@@ -2,6 +2,12 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
+  DESKTOP_SYSTEM_PROXY_FETCH_PATH,
+  defaultDesktopNetworkProxyRouting,
+  type DesktopSystemProxyFetchRequest,
+} from '@setsuna-desktop/contracts';
 import { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 
@@ -21,7 +27,29 @@ describe('DesktopNativeBridgeServer', () => {
       delete: async (key) => { values.delete(key); },
     };
     const openExternal = vi.fn(async () => undefined);
-    const server = new DesktopNativeBridgeServer({ credentialVault, openExternal });
+    const resolveNetworkProxy = vi.fn(async () => ({
+      mode: 'proxy' as const,
+      proxyServerId: 'proxy-example',
+      proxyUrl: 'http://relay:secret@127.0.0.1:1234',
+    }));
+    const deleteNetworkProxy = vi.fn(async () => ({
+      configPath: '/test/network-proxies.json',
+      routing: defaultDesktopNetworkProxyRouting(),
+      servers: [],
+    }));
+    const validateNetworkProxyReferences = vi.fn(async () => undefined);
+    const systemProxyFetch = vi.fn(async (input: string, init?: RequestInit) => new Response(
+      `${input}:${await new Response(init?.body).text()}`,
+      { headers: { 'X-Upstream': 'chromium' }, status: 201 },
+    ));
+    const server = new DesktopNativeBridgeServer({
+      credentialVault,
+      deleteNetworkProxy,
+      openExternal,
+      resolveNetworkProxy,
+      systemProxyFetch,
+      validateNetworkProxyReferences,
+    });
     servers.push(server);
     const connection = await server.start();
 
@@ -34,9 +62,59 @@ describe('DesktopNativeBridgeServer', () => {
       .resolves.toEqual({ value: 'secret' });
     await expect(nativeRequest(connection, '/v1/credentials/delete', { key: 'mcp.oauth.test' }))
       .resolves.toEqual({ ok: true });
+    const reservedCredential = await fetch(`${connection.url}/v1/credentials/get`, {
+      body: JSON.stringify({ key: 'network-proxy.proxy-example.password' }),
+      headers: {
+        Authorization: `Bearer ${connection.token}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+    expect(reservedCredential.status).toBe(400);
+    await expect(reservedCredential.json()).resolves.toMatchObject({
+      error: expect.stringContaining('reserved'),
+    });
 
     await nativeRequest(connection, '/v1/external/open', { url: 'https://example.com/login' });
     expect(openExternal).toHaveBeenCalledWith('https://example.com/login');
+    await expect(nativeRequest(connection, '/v1/network-proxy/resolve', {
+      scope: 'runtime',
+      override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+    })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
+    expect(resolveNetworkProxy).toHaveBeenCalledWith({
+      scope: 'runtime',
+      override: { mode: 'proxy', proxyServerId: 'proxy-example' },
+    });
+    await expect(nativeRequest(connection, '/v1/network-proxy/validate-references', {
+      proxyServerIds: ['proxy-example', 'proxy-example'],
+    })).resolves.toEqual({ ok: true });
+    expect(validateNetworkProxyReferences).toHaveBeenCalledWith(['proxy-example']);
+    await expect(nativeRequest(connection, '/v1/network-proxy/delete', {
+      proxyServerId: 'proxy-example',
+    })).resolves.toMatchObject({ servers: [] });
+    expect(deleteNetworkProxy).toHaveBeenCalledWith('proxy-example');
+    const systemFetchRequest: DesktopSystemProxyFetchRequest = {
+      headers: [['Authorization', 'Bearer provider-token']],
+      method: 'POST',
+      url: 'https://api.example.com/v1/messages',
+    };
+    const systemFetchResponse = await fetch(`${connection.url}${DESKTOP_SYSTEM_PROXY_FETCH_PATH}`, {
+      body: systemFetchFrame(systemFetchRequest, 'stream me'),
+      headers: {
+        Authorization: `Bearer ${connection.token}`,
+      },
+      method: 'POST',
+    });
+    expect(systemFetchResponse.status).toBe(201);
+    expect(systemFetchResponse.headers.get('x-upstream')).toBe('chromium');
+    expect(await systemFetchResponse.text()).toBe('https://api.example.com/v1/messages:stream me');
+    expect(systemProxyFetch).toHaveBeenCalledWith(
+      'https://api.example.com/v1/messages',
+      expect.objectContaining({
+        headers: [['authorization', 'Bearer provider-token']],
+        method: 'POST',
+      }),
+    );
     const rejected = await fetch(`${connection.url}/v1/external/open`, {
       body: JSON.stringify({ url: 'file:///tmp/token' }),
       headers: { Authorization: `Bearer ${connection.token}` },
@@ -56,7 +134,15 @@ describe('DesktopNativeBridgeServer', () => {
         set: async () => undefined,
         delete: async () => undefined,
       },
+      deleteNetworkProxy: async () => ({
+        configPath: '/test/network-proxies.json',
+        routing: defaultDesktopNetworkProxyRouting(),
+        servers: [],
+      }),
       openExternal: async () => undefined,
+      resolveNetworkProxy: async () => ({ mode: 'direct' }),
+      systemProxyFetch: async () => new Response('ok'),
+      validateNetworkProxyReferences: async () => undefined,
     });
     servers.push(server);
     await server.start();
@@ -77,6 +163,13 @@ describe('DesktopNativeBridgeServer', () => {
     expect(await rangeResponse.text()).toBe('2345');
   });
 });
+
+function systemFetchFrame(metadata: DesktopSystemProxyFetchRequest, body = ''): Buffer {
+  const metadataBytes = Buffer.from(JSON.stringify(metadata), 'utf8');
+  const prefix = Buffer.alloc(DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES);
+  prefix.writeUInt32BE(metadataBytes.length, 0);
+  return Buffer.concat([prefix, metadataBytes, Buffer.from(body)]);
+}
 
 async function nativeRequest(
   connection: { token: string; url: string },

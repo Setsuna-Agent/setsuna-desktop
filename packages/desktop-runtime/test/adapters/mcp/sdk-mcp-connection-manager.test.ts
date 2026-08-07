@@ -19,9 +19,41 @@ describe('SdkMcpConnectionManager', () => {
       expect(stdioTransportEnvironment(process.execPath, { ELECTRON_RUN_AS_NODE: '0' })).toMatchObject({
         ELECTRON_RUN_AS_NODE: '0',
       });
+      expect(stdioTransportEnvironment(
+        'different-node',
+        { HTTPS_PROXY: 'http://server-specific.example:8080' },
+        {
+          ALL_PROXY: null,
+          HTTP_PROXY: 'http://runtime-route.example:8080',
+          HTTPS_PROXY: null,
+        },
+      )).toMatchObject({
+        HTTP_PROXY: 'http://runtime-route.example:8080',
+        HTTPS_PROXY: 'http://server-specific.example:8080',
+      });
+      expect(stdioTransportEnvironment('different-node', undefined, { ALL_PROXY: null }))
+        .not.toHaveProperty('ALL_PROXY');
     } finally {
       if (previous === undefined) delete process.env.ELECTRON_RUN_AS_NODE;
       else process.env.ELECTRON_RUN_AS_NODE = previous;
+    }
+  });
+
+  it('resolves the Runtime proxy environment before starting a stdio server', async () => {
+    const manager = new SdkMcpConnectionManager({
+      resolveNetworkEnvironment: async () => {
+        throw new Error('stdio proxy environment reached');
+      },
+    });
+
+    try {
+      await expect(manager.listTools({
+        key: 'stdio_proxy_fixture',
+        transport: 'stdio',
+        command: process.execPath,
+      }, { scopeId: 'thread:stdio-proxy' })).rejects.toThrow('stdio proxy environment reached');
+    } finally {
+      await manager.shutdown();
     }
   });
 
@@ -83,7 +115,13 @@ describe('SdkMcpConnectionManager', () => {
 
   it('negotiates the current protocol, keeps an HTTP session, refreshes list_changed, and deletes the session', async () => {
     const testServer = await createStatefulHttpMcpServer();
-    const manager = new SdkMcpConnectionManager();
+    const routedRequests: string[] = [];
+    const manager = new SdkMcpConnectionManager({
+      fetchImpl: async (input, init) => {
+        routedRequests.push(input.toString());
+        return fetch(input, init);
+      },
+    });
     const server = {
       key: 'http_fixture',
       transport: 'streamableHttp' as const,
@@ -102,6 +140,8 @@ describe('SdkMcpConnectionManager', () => {
         content: [{ type: 'text', text: 'session session_1' }],
       });
       expect(testServer.initializeCount()).toBe(1);
+      expect(routedRequests.length).toBeGreaterThan(0);
+      expect(routedRequests.every((url) => new URL(url).origin === new URL(testServer.url).origin)).toBe(true);
       expect(testServer.protocolHeaders()).toEqual(['2025-11-25', '2025-11-25', '2025-11-25']);
 
       await testServer.changeTools();

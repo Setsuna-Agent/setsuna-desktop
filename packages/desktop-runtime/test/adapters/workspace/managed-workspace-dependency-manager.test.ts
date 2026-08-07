@@ -190,6 +190,47 @@ describe('managed workspace dependency manager', () => {
     }
   });
 
+  it.skipIf(process.platform === 'win32')('routes the managed uv installer and its process environment', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-proxy-'));
+    const fakeBin = path.join(dataDir, 'fake-bin');
+    const previousPath = process.env.PATH;
+    await mkdir(fakeBin, { recursive: true });
+    process.env.PATH = fakeBin;
+    let requestedUrl = '';
+
+    try {
+      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir), {
+        fetchImpl: async (input) => {
+          requestedUrl = String(input);
+          return new Response([
+            '#!/bin/sh',
+            'if [ "$HTTP_PROXY" != "http://runtime-relay:3128" ]; then',
+            '  echo "runtime proxy missing" >&2',
+            '  exit 3',
+            'fi',
+            'if [ -n "${HTTPS_PROXY+x}" ]; then',
+            '  echo "direct-mode deletion missing" >&2',
+            '  exit 3',
+            'fi',
+            'echo "proxy-environment-applied" >&2',
+            'exit 4',
+            '',
+          ].join('\n'));
+        },
+        resolveNetworkEnvironment: async () => ({
+          HTTP_PROXY: 'http://runtime-relay:3128',
+          HTTPS_PROXY: null,
+        }),
+      });
+
+      await expect(manager.reinstall()).rejects.toThrow('proxy-environment-applied');
+      expect(requestedUrl).toBe('https://astral.sh/uv/0.11.28/install.sh');
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it('does not provision Python for an unrelated first shell command', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-lazy-'));
     try {

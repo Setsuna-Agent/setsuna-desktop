@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { applyShellEnvironmentPatch } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
 import { classifyShellSessionFailure } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
 
 describe('classifyShellSessionFailure', () => {
@@ -28,6 +29,19 @@ describe('classifyShellSessionFailure', () => {
     });
     expect(classifyShellSessionFailure(shellSession({ sandboxed: false, stderr: 'Error: spawn EPERM' }))).toMatchObject({
       failure_kind: 'process_exit',
+    });
+  });
+});
+
+describe('applyShellEnvironmentPatch', () => {
+  it('masks parent proxy variables when the resolved route is direct', () => {
+    expect(applyShellEnvironmentPatch(
+      { PATH: '/usr/bin', HTTP_PROXY: 'http://parent-proxy.example' },
+      { HTTP_PROXY: null, HTTPS_PROXY: null },
+    )).toEqual({
+      PATH: '/usr/bin',
+      HTTP_PROXY: '',
+      HTTPS_PROXY: '',
     });
   });
 });

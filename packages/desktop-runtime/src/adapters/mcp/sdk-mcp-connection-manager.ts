@@ -1,5 +1,4 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import {
   StreamableHTTPClientTransport,
   StreamableHTTPError,
@@ -36,8 +35,18 @@ import type {
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
 import { recordInput } from '../../shared/unknown.js';
 import { UnavailableDesktopNativeBridge } from '../native/http-desktop-native-bridge.js';
+import type { FetchImpl } from '../model/provider-http.js';
 import type { McpElicitationExecutionContext, McpElicitationHandler } from './mcp-elicitation-coordinator.js';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from './mcp-oauth-coordinator.js';
+import {
+  createMcpTransport,
+  normalizedMcpTransport,
+  resolvedMcpHttpHeaders,
+  type ManagedMcpTransport,
+  type McpNetworkEnvironment,
+} from './mcp-transport-factory.js';
+
+export { stdioTransportEnvironment } from './mcp-transport-factory.js';
 
 const CLIENT_INFO = { name: 'setsuna-desktop', version: '0.1.0' } satisfies Implementation;
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -47,16 +56,6 @@ const DEFAULT_IDLE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
 const MAX_LIST_PAGES = 100;
 const MAX_INSTRUCTIONS_BYTES = 32 * 1024;
-const RESERVED_HTTP_HEADERS = new Set([
-  'accept',
-  'content-type',
-  'last-event-id',
-  'mcp-protocol-version',
-  'mcp-session-id',
-]);
-
-type ManagedTransport = StdioClientTransport | StreamableHTTPClientTransport;
-
 type ManagedConnection = {
   key: string;
   scopeId: string;
@@ -64,7 +63,7 @@ type ManagedConnection = {
   fingerprint: string;
   server: RuntimeMcpServerInput;
   client: Client;
-  transport: ManagedTransport;
+  transport?: ManagedMcpTransport;
   state: McpServerRuntimeSnapshot['state'];
   ready: Promise<void>;
   tools: RuntimeMcpToolInfo[];
@@ -105,6 +104,8 @@ export type SdkMcpConnectionManagerOptions = {
   now?: () => number;
   oauthCoordinator?: McpOAuthCoordinator;
   elicitationCoordinator?: McpElicitationHandler;
+  fetchImpl?: FetchImpl;
+  resolveNetworkEnvironment?: () => Promise<McpNetworkEnvironment>;
 };
 
 /**
@@ -121,14 +122,18 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   private readonly oauth: McpOAuthCoordinator;
   private readonly nativeBridge: DesktopNativeBridge;
   private readonly elicitations?: McpElicitationHandler;
+  private readonly fetchImpl: FetchImpl;
+  private readonly resolveNetworkEnvironment: () => Promise<McpNetworkEnvironment>;
   private shuttingDown = false;
 
   constructor(options: SdkMcpConnectionManagerOptions = {}) {
     this.idleTtlMs = positiveMilliseconds(options.idleTtlMs, DEFAULT_IDLE_TTL_MS);
     this.now = options.now ?? Date.now;
     this.nativeBridge = options.nativeBridge ?? new UnavailableDesktopNativeBridge();
+    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.resolveNetworkEnvironment = options.resolveNetworkEnvironment ?? (async () => ({}));
     this.oauth = options.oauthCoordinator
-      ?? new McpOAuthCoordinator(this.nativeBridge, this.now);
+      ?? new McpOAuthCoordinator(this.nativeBridge, this.now, this.fetchImpl);
     this.elicitations = options.elicitationCoordinator;
     const cleanupIntervalMs = positiveMilliseconds(options.cleanupIntervalMs, DEFAULT_CLEANUP_INTERVAL_MS);
     this.cleanupTimer = setInterval(() => {
@@ -251,7 +256,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   }
 
   async login(server: RuntimeMcpServerInput, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<void> {
-    if (normalizedTransport(server) !== 'streamableHttp') {
+    if (normalizedMcpTransport(server) !== 'streamableHttp') {
       throw new Error('OAuth login is only supported for streamable HTTP MCP servers.');
     }
     await this.invalidateServer(server.key);
@@ -266,8 +271,8 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   async authStatus(server: RuntimeMcpServerInput) {
     try {
-      const authorization = normalizedTransport(server) === 'streamableHttp'
-        && Object.keys(resolvedHttpHeaders(server)).some((name) => name.toLowerCase() === 'authorization');
+      const authorization = normalizedMcpTransport(server) === 'streamableHttp'
+        && Object.keys(resolvedMcpHttpHeaders(server)).some((name) => name.toLowerCase() === 'authorization');
       return authorization
         ? { status: 'bearerToken' as const }
         : this.oauth.authStatus(server);
@@ -351,7 +356,6 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   private createConnection(server: RuntimeMcpServerInput, scopeId: string, fingerprint: string): ManagedConnection {
     const key = connectionKey(scopeId, server.key);
     const now = this.now();
-    const transport = createTransport(server, this.oauth);
     let connection: ManagedConnection;
     const client = new Client(CLIENT_INFO, {
       capabilities: this.elicitations
@@ -399,7 +403,6 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
       fingerprint,
       server,
       client,
-      transport,
       state: 'connecting',
       ready: Promise.resolve(),
       tools: [],
@@ -437,7 +440,14 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   private async connect(connection: ManagedConnection): Promise<void> {
     try {
-      await connection.client.connect(connection.transport as Transport, {
+      const transport = await createMcpTransport(
+        connection.server,
+        this.oauth,
+        this.fetchImpl,
+        this.resolveNetworkEnvironment,
+      );
+      connection.transport = transport;
+      await connection.client.connect(transport as Transport, {
         timeout: timeoutMilliseconds(connection.server.startupTimeoutMs),
         maxTotalTimeout: timeoutMilliseconds(connection.server.startupTimeoutMs),
       });
@@ -696,10 +706,11 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     if (this.connections.get(connection.key) === connection) this.connections.delete(connection.key);
     try {
       await connection.ready.catch(() => undefined);
-      if (terminateSession && connection.transport instanceof StreamableHTTPClientTransport) {
-        await connection.transport.terminateSession().catch(() => undefined);
+      const transport = connection.transport;
+      if (terminateSession && transport instanceof StreamableHTTPClientTransport) {
+        await transport.terminateSession().catch(() => undefined);
       }
-      await connection.client.close().catch(() => connection.transport.close().catch(() => undefined));
+      await connection.client.close().catch(() => transport?.close().catch(() => undefined));
     } finally {
       connection.state = 'disconnected';
       connection.updatedAt = new Date(this.now()).toISOString();
@@ -711,95 +722,15 @@ export function threadScopeId(threadId: string): string {
   return `thread:${threadId}`;
 }
 
-function createTransport(server: RuntimeMcpServerInput, oauth: McpOAuthCoordinator): ManagedTransport {
-  const transport = normalizedTransport(server);
-  if (transport === 'stdio') {
-    const command = server.command?.trim();
-    if (!command) throw new Error(`stdio MCP server '${server.key}' requires a command.`);
-    return new StdioClientTransport({
-      command,
-      args: server.args ?? [],
-      cwd: server.cwd?.trim() || undefined,
-      env: stdioTransportEnvironment(command, server.env),
-      stderr: 'pipe',
-    });
-  }
-
-  const rawUrl = server.url?.trim();
-  if (!rawUrl) throw new Error(`HTTP MCP server '${server.key}' requires a URL.`);
-  const url = new URL(rawUrl);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new Error(`HTTP MCP server '${server.key}' must use http or https.`);
-  }
-  const headers = resolvedHttpHeaders(server);
-  const hasAuthorization = Object.keys(headers).some((name) => name.toLowerCase() === 'authorization');
-  return new StreamableHTTPClientTransport(url, {
-    requestInit: { headers },
-    ...(!hasAuthorization ? { authProvider: oauth.providerFor(server), fetch: oauth.fetchFor(server.key) } : {}),
-    reconnectionOptions: {
-      initialReconnectionDelay: 500,
-      maxReconnectionDelay: 10_000,
-      reconnectionDelayGrowFactor: 1.8,
-      maxRetries: 5,
-    },
-  });
-}
-
-export function stdioTransportEnvironment(
-  command: string,
-  configuredEnvironment: Record<string, string> | undefined,
-): Record<string, string> {
-  const environment = { ...getDefaultEnvironment(), ...(configuredEnvironment ?? {}) };
-  const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
-  if (
-    electronRunAsNode !== undefined
-    && configuredEnvironment?.ELECTRON_RUN_AS_NODE === undefined
-    && sameExecutable(command, process.execPath)
-  ) {
-    // The packaged runtime is Electron running in Node mode. MCP fixtures and servers that reuse
-    // process.execPath must retain this flag or they accidentally launch a second desktop instance.
-    environment.ELECTRON_RUN_AS_NODE = electronRunAsNode;
-  }
-  return environment;
-}
-
-function sameExecutable(left: string, right: string): boolean {
-  const normalizedLeft = left.trim();
-  const normalizedRight = right.trim();
-  return process.platform === 'win32'
-    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-    : normalizedLeft === normalizedRight;
-}
-
-function resolvedHttpHeaders(server: RuntimeMcpServerInput): Record<string, string> {
-  const headers: Record<string, string> = {};
-  for (const [name, value] of Object.entries(server.headers ?? {})) {
-    if (!RESERVED_HTTP_HEADERS.has(name.toLowerCase())) headers[name] = value;
-  }
-  for (const [name, envVar] of Object.entries(server.envHttpHeaders ?? {})) {
-    if (RESERVED_HTTP_HEADERS.has(name.toLowerCase())) continue;
-    const value = process.env[envVar];
-    if (value?.trim()) headers[name] = value;
-  }
-  const bearerTokenEnvVar = server.bearerTokenEnvVar?.trim();
-  if (bearerTokenEnvVar) {
-    const value = process.env[bearerTokenEnvVar];
-    if (value === undefined) throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${server.key}' is not set`);
-    if (!value.trim()) throw new Error(`Environment variable ${bearerTokenEnvVar} for MCP server '${server.key}' is empty`);
-    headers.Authorization = `Bearer ${value}`;
-  }
-  return headers;
-}
-
 function connectionFingerprint(server: RuntimeMcpServerInput): string {
   const connectionConfig = {
-    transport: normalizedTransport(server),
+    transport: normalizedMcpTransport(server),
     command: server.command?.trim(),
     args: server.args ?? [],
     cwd: server.cwd?.trim(),
     url: server.url?.trim(),
     env: server.env ?? {},
-    headers: normalizedTransport(server) === 'streamableHttp' ? resolvedHttpHeaders(server) : {},
+    headers: normalizedMcpTransport(server) === 'streamableHttp' ? resolvedMcpHttpHeaders(server) : {},
     timeoutMs: timeoutMilliseconds(server.timeoutMs),
     startupTimeoutMs: timeoutMilliseconds(server.startupTimeoutMs),
     toolTimeoutMs: timeoutMilliseconds(server.toolTimeoutMs),
@@ -910,11 +841,6 @@ function withAuthSnapshot(
 
 function connectionKey(scopeId: string, serverKey: string): string {
   return `${scopeId}\u0000${serverKey}`;
-}
-
-function normalizedTransport(server: RuntimeMcpServerInput): 'stdio' | 'streamableHttp' {
-  if (server.transport === 'stdio' || server.transport === 'streamableHttp') return server.transport;
-  return server.command ? 'stdio' : 'streamableHttp';
 }
 
 function timeoutMilliseconds(value: number | undefined): number {

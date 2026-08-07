@@ -3220,6 +3220,46 @@ describe('provider model adapters', () => {
     });
   });
 
+  it('selects the fetch transport from the configured provider proxy route', async () => {
+    const captured: CapturedRequest = {};
+    const proxyRoute = { mode: 'proxy' as const, proxyServerId: 'proxy-provider' };
+    let routedProvider: RuntimeProviderConfig | undefined;
+    const configuredProvider = {
+      ...provider('openai-compatible', 'https://proxied-llm.example/v1'),
+      proxyRoute,
+    };
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => configuredProvider,
+      },
+      async () => {
+        throw new Error('default fetch must not be used');
+      },
+      undefined,
+      {
+        fetchForProvider: (selectedProvider) => {
+          routedProvider = selectedProvider;
+          return fakeFetch(
+            'data: {"choices":[{"delta":{"content":"Proxied"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+            captured,
+          );
+        },
+      },
+    );
+
+    const events = await collect(client);
+
+    expect(routedProvider?.proxyRoute).toEqual(proxyRoute);
+    expect(captured.url).toBe('https://proxied-llm.example/v1/chat/completions');
+    expect(events).toContainEqual({ type: 'item_delta', itemId: 'ai_sdk_agent_message_0', delta: 'Proxied' });
+  });
+
   it('uses Responses and Anthropic providers without an API key', async () => {
     const responsesCaptured: CapturedRequest = {};
     const responsesClient = new ConfiguredModelClient(

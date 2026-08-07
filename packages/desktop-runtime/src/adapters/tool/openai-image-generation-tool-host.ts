@@ -22,6 +22,7 @@ import type {
 import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
 import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
+import type { FetchImpl } from '../model/provider-http.js';
 import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
 import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
@@ -44,7 +45,7 @@ type GeneratedImageReferenceStore = {
 };
 
 type OpenAiImageGenerationToolHostOptions = {
-  fetchImpl?: typeof fetch;
+  fetchImpl?: FetchImpl;
   threadStore?: GeneratedImageReferenceStore;
   workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
 };
@@ -90,7 +91,7 @@ const IMAGE_GENERATION_TOOL: RuntimeToolDefinition = {
 export class OpenAiImageGenerationToolHost implements ToolHost {
   private readonly pendingAssetIdsByTurn = new Map<string, Set<string>>();
   private readonly quickTestAssetIds: string[] = [];
-  private readonly fetchImpl: typeof fetch;
+  private readonly fetchImpl: FetchImpl;
   private readonly threadStore?: GeneratedImageReferenceStore;
   private readonly workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
   private quickTestSequence = 0;
@@ -468,7 +469,7 @@ function decodeBase64Image(value: string): Buffer {
   return Buffer.from(encoded, 'base64');
 }
 
-async function downloadImage(fetchImpl: typeof fetch, url: string, signal: AbortSignal): Promise<Buffer> {
+async function downloadImage(fetchImpl: FetchImpl, url: string, signal: AbortSignal): Promise<Buffer> {
   const response = await fetchImpl(url, { signal });
   if (!response.ok) throw new Error(`下载生成图片失败（HTTP ${response.status}）。`);
   return readBoundedResponse(response, MAX_IMAGE_BYTES, '生成图片超过 20 MB 限制。');

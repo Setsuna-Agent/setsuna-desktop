@@ -25,6 +25,7 @@ import { TestModelClient } from './test-model-client.js';
 
 export type ConfiguredModelClientOptions = ModelRequestTimeoutOptions & {
   debugTrace?: RuntimeDebugTraceSink;
+  fetchForProvider?: (provider: RuntimeProviderConfig) => FetchImpl;
 };
 
 export class ConfiguredModelClient implements ModelClient {
@@ -44,7 +45,10 @@ export class ConfiguredModelClient implements ModelClient {
     }
 
     const requestModel = requestProvider.activeModel?.code || request.model;
-    const client = providerModelClient(requestProvider, this.fetchImpl);
+    const client = providerModelClient(
+      requestProvider,
+      this.timeoutOptions.fetchForProvider?.(requestProvider) ?? this.fetchImpl,
+    );
     const configuredRequest: ModelRequest = {
       ...request,
       model: requestModel,
@@ -75,7 +79,10 @@ export class ConfiguredModelClient implements ModelClient {
     }
 
     const requestModel = requestProvider.activeModel?.code || request.model;
-    const client = providerModelClient(requestProvider, this.fetchImpl);
+    const client = providerModelClient(
+      requestProvider,
+      this.timeoutOptions.fetchForProvider?.(requestProvider) ?? this.fetchImpl,
+    );
     if (!client.compactConversation) throw new Error(`Remote context compaction is not supported by provider ${requestProvider.provider}.`);
     const configuredRequest: ModelCompactionRequest = {
       ...request,

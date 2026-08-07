@@ -20,6 +20,7 @@ import type { ProjectWorkspaceState } from '../../features/workspace/hooks/usePr
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
+import type { DesktopNetworkProxyStateView } from '../controller/useDesktopNetworkProxy.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
 
@@ -38,6 +39,7 @@ export function AppRouteContent({
   focusComposerRequest,
   projectWorkspace,
   runtime,
+  networkProxy,
   selectedCapabilitiesPluginId,
   settingsInitialSection,
   setActiveView,
@@ -76,6 +78,7 @@ export function AppRouteContent({
   focusComposerRequest: number;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
+  networkProxy: DesktopNetworkProxyStateView;
   selectedCapabilitiesPluginId: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
@@ -172,6 +175,7 @@ export function AppRouteContent({
           usage={runtime.usage}
           memoryPreview={runtime.memoryPreview}
           memoryPreviewLoading={runtime.memoryPreviewLoading}
+          networkProxy={networkProxy}
           onBack={() => setActiveView('chat')}
           onFetchProviderModels={runtime.fetchProviderModels}
           onSaveProviders={runtime.saveProviders}

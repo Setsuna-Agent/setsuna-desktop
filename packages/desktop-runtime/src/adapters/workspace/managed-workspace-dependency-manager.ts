@@ -9,7 +9,6 @@ import {
   DEFAULT_NPM_REGISTRY_URL,
   DEFAULT_PYTHON_PACKAGE_INDEX_URL,
 } from '@setsuna-desktop/contracts';
-import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
 import {
@@ -36,6 +35,14 @@ import type {
 } from '../../ports/workspace-dependency-manager.js';
 import { errorMessage } from '../../shared/node-errors.js';
 import { readJsonFile, writeJsonFile } from '../store/json-file.js';
+import {
+  runManagedWorkspaceCommand as runCommand,
+  type ManagedWorkspaceCommandResult as CommandResult,
+} from './managed-workspace-command.js';
+import {
+  ManagedWorkspaceDependencyNetwork,
+  type ManagedWorkspaceDependencyNetworkOptions,
+} from './managed-workspace-dependency-network.js';
 
 const BUNDLE_VERSION = '2026.07.3';
 const MANIFEST_FILE_NAME = 'manifest.json';
@@ -44,7 +51,6 @@ const MINIMUM_PYTHON_VERSION = [3, 10] as const;
 const MINIMUM_NODE_MAJOR = 18;
 const UV_VERSION = '0.11.28';
 const FALLBACK_PNPM_VERSION = '7.33.7';
-const MAX_COMMAND_OUTPUT_CHARS = 24_000;
 const MAX_PROJECT_HINT_BYTES = 64 * 1024;
 const BASELINE_SHELL_COMMANDS = [
   'node',
@@ -73,12 +79,6 @@ type WorkspaceDependencyManifest = {
   python: ManagedToolManifest;
   updatedAt: string;
   uv: ManagedToolManifest;
-};
-
-type CommandResult = {
-  exitCode: number | null;
-  stderr: string;
-  stdout: string;
 };
 
 type ProjectToolchainHints = {
@@ -118,6 +118,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   private readonly nodeBinDir: string;
   private readonly projectBinDir: string;
   private readonly workspaceDependencyRoot: string;
+  private readonly network: ManagedWorkspaceDependencyNetwork;
   private installPromise: Promise<void> | null = null;
   private nodeShimTarget = '';
   private nodeShimPromise: Promise<void> | null = null;
@@ -126,12 +127,14 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   constructor(
     runtimeDataDir: string,
     private readonly configStore: ConfigStore,
+    networkOptions: ManagedWorkspaceDependencyNetworkOptions = {},
   ) {
     this.workspaceDependencyRoot = path.join(runtimeDataDir, 'workspace-dependencies');
     this.cacheRoot = path.join(this.workspaceDependencyRoot, 'cache');
     this.installRoot = path.join(this.workspaceDependencyRoot, 'toolchain');
     this.nodeBinDir = path.join(this.workspaceDependencyRoot, 'bin');
     this.projectBinDir = path.join(this.workspaceDependencyRoot, 'project-bin');
+    this.network = new ManagedWorkspaceDependencyNetwork(networkOptions);
   }
 
   async getStatus(): Promise<RuntimeWorkspaceDependenciesStatus> {
@@ -513,9 +516,16 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
     ]);
 
+    const downloadEnvironment = () => this.network.processEnvironment();
     const node = await this.resolveNode();
-    const uv = await this.resolveUv(stagingRoot, uvInstallDir);
-    const python = await this.resolvePython(uv, pythonBinDir, pythonInstallDir, path.join(this.cacheRoot, 'uv'));
+    const uv = await this.resolveUv(stagingRoot, uvInstallDir, downloadEnvironment);
+    const python = await this.resolvePython(
+      uv,
+      pythonBinDir,
+      pythonInstallDir,
+      path.join(this.cacheRoot, 'uv'),
+      downloadEnvironment,
+    );
     const finalNode = relocateManagedTool(node, stagingRoot, this.installRoot);
     const finalUv = relocateManagedTool(uv, stagingRoot, this.installRoot);
     const finalPython = relocateManagedTool(python, stagingRoot, this.installRoot);
@@ -556,18 +566,22 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       : null;
   }
 
-  private async resolveUv(stagingRoot: string, uvInstallDir: string): Promise<ManagedToolManifest> {
+  private async resolveUv(
+    stagingRoot: string,
+    uvInstallDir: string,
+    downloadEnvironment: () => Promise<NodeJS.ProcessEnv>,
+  ): Promise<ManagedToolManifest> {
     const systemUv = await this.findSystemUv();
     if (systemUv) return systemUv;
 
     const installerExtension = process.platform === 'win32' ? 'ps1' : 'sh';
     const installerUrl = `https://astral.sh/uv/${UV_VERSION}/install.${installerExtension}`;
     const installerPath = path.join(stagingRoot, `install-uv.${installerExtension}`);
-    const response = await fetch(installerUrl);
+    const response = await this.network.fetch(installerUrl);
     if (!response.ok) throw new Error(`下载 uv 安装器失败：HTTP ${response.status}`);
     await writeFile(installerPath, new Uint8Array(await response.arrayBuffer()));
     const installerEnv = {
-      ...process.env,
+      ...await downloadEnvironment(),
       UV_NO_MODIFY_PATH: '1',
       UV_UNMANAGED_INSTALL: uvInstallDir,
     };
@@ -586,6 +600,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     pythonBinDir: string,
     pythonInstallDir: string,
     uvCacheDir: string,
+    downloadEnvironment: () => Promise<NodeJS.ProcessEnv>,
   ): Promise<ManagedToolManifest> {
     const systemPython = await this.findSystemPython();
     if (systemPython) return systemPython;
@@ -600,7 +615,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       '--managed-python',
       '--no-progress',
     ], {
-      ...process.env,
+      ...await downloadEnvironment(),
       UV_CACHE_DIR: uvCacheDir,
       UV_NO_MODIFY_PATH: '1',
       UV_PYTHON_BIN_DIR: pythonBinDir,
@@ -1152,30 +1167,4 @@ function versionAtLeast(version: string, minimum: readonly [number, number]): bo
 
 function commandFailure(result: CommandResult): string {
   return (result.stderr || result.stdout || `exit code ${String(result.exitCode)}`).trim().slice(0, 1200);
-}
-
-function runCommand(command: string, args: string[], environment?: NodeJS.ProcessEnv): Promise<CommandResult> {
-  return new Promise((resolve, reject) => {
-    let stdout = '';
-    let stderr = '';
-    const child = spawn(command, args, {
-      env: environment ?? process.env,
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      windowsHide: true,
-    });
-    child.stdout.on('data', (chunk: Buffer) => {
-      stdout = appendCommandOutput(stdout, chunk.toString());
-    });
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr = appendCommandOutput(stderr, chunk.toString());
-    });
-    child.once('error', reject);
-    child.once('close', (exitCode) => resolve({ exitCode, stderr, stdout }));
-  });
-}
-
-function appendCommandOutput(current: string, delta: string): string {
-  const next = current + delta;
-  return next.length <= MAX_COMMAND_OUTPUT_CHARS ? next : next.slice(-MAX_COMMAND_OUTPUT_CHARS);
 }

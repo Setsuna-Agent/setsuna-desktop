@@ -15,6 +15,7 @@ import type {
 import {
   defaultModelMaxOutputTokens,
   normalizeImageGenerationServiceUrl,
+  normalizeDesktopNetworkProxyRoute,
   normalizeModelIconConfig,
   normalizeNpmRegistryUrl,
   normalizeProviderIconConfig,
@@ -36,11 +37,12 @@ import {
 } from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 4;
+const CONFIG_SCHEMA_VERSION = 5;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
 const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
+const PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION = 5;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -75,11 +77,25 @@ type StoredSecrets = {
   imageGenerationApiKey?: string;
 };
 
+type FileConfigStoreOptions = {
+  validateProxyServerReferences?(proxyServerIds: readonly string[]): Promise<void>;
+};
+
+export class ProviderProxyReferenceError extends Error {
+  constructor(readonly providerNames: string[]) {
+    super(`代理服务器仍被模型厂商 ${providerNames.join('、')} 使用，请先修改厂商代理。`);
+    this.name = 'ProviderProxyReferenceError';
+  }
+}
+
 export class FileConfigStore implements ConfigStore {
   private readonly configPath: string;
   private readonly secretsPath: string;
 
-  constructor(private readonly dataDir: string) {
+  constructor(
+    private readonly dataDir: string,
+    private readonly options: FileConfigStoreOptions = {},
+  ) {
     this.configPath = path.join(dataDir, 'config.json');
     this.secretsPath = path.join(dataDir, 'secrets.json');
   }
@@ -150,6 +166,7 @@ export class FileConfigStore implements ConfigStore {
       const previous = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       const secrets = await this.readSecrets();
       const providers = normalizeProviders(input.providers ?? previous.providers, previous.providers, secrets);
+      await this.validateProviderProxyReferences(providers);
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const memory = memorySettingsForSave(input, previous);
@@ -196,6 +213,42 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  /**
+   * Holds the same config-file lock used by saveConfig while the main process
+   * deletes a proxy. A queued stale provider save is then revalidated after the
+   * deletion instead of persisting a dangling proxy ID.
+   */
+  async deleteProxyServerIfUnreferenced<T>(
+    proxyServerId: string,
+    deleteServer: () => Promise<T>,
+  ): Promise<T> {
+    const canonicalProxyServerId = proxyServerId.trim().toLowerCase();
+    if (!canonicalProxyServerId) throw new Error('代理服务器 ID 无效。');
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const providerNames = stored.providers.flatMap((provider) => {
+        const route = normalizeDesktopNetworkProxyRoute(provider.proxyRoute);
+        return route?.mode === 'proxy' && route.proxyServerId === canonicalProxyServerId
+          ? [provider.name || provider.id]
+          : [];
+      });
+      if (providerNames.length) throw new ProviderProxyReferenceError(providerNames);
+      return deleteServer();
+    });
+  }
+
+  private async validateProviderProxyReferences(
+    providers: Array<StoredConfig['providers'][number] & { apiKey?: string }>,
+  ): Promise<void> {
+    const proxyServerIds = [...new Set(providers.flatMap((provider) => {
+      const route = normalizeDesktopNetworkProxyRoute(provider.proxyRoute);
+      return route?.mode === 'proxy' ? [route.proxyServerId] : [];
+    }))];
+    if (proxyServerIds.length) {
+      await this.options.validateProxyServerReferences?.(proxyServerIds);
+    }
+  }
+
   private async readSecrets(): Promise<StoredSecrets> {
     return normalizeSecrets(await readJsonFile<StoredSecrets>(this.secretsPath, { providerApiKeys: {} }));
   }
@@ -213,6 +266,7 @@ export class FileConfigStore implements ConfigStore {
       const { icon: _storedIcon, ...providerWithoutIcon } = provider;
       return {
         ...providerWithoutIcon,
+        proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
         ...(icon ? { icon } : {}),
         models: normalizeModels(provider.models, provider.provider),
         apiKeySet: apiKey.length > 0,
@@ -331,6 +385,9 @@ function normalizeProviders(
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,
+      proxyRoute: normalizeDesktopNetworkProxyRoute(
+        Object.hasOwn(provider, 'proxyRoute') ? provider.proxyRoute : previous?.proxyRoute,
+      ) ?? { mode: 'inherit' },
       ...(icon ? { icon } : {}),
       models: normalizeModels(
         provider.models ?? previous?.models ?? [],
@@ -439,6 +496,7 @@ function runtimeProviderConfig(
   const models = normalizeModels(provider.models, provider.provider);
   return {
     ...provider,
+    proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
     models,
     apiKey: secrets.providerApiKeys[provider.id] ?? '',
     activeModel: models.find((model) => model.enabled) ?? models[0],
@@ -489,6 +547,12 @@ function migrateStoredConfig(stored: StoredConfig): boolean {
     const accessMode = accessModeForStoredConfig(stored);
     stored.approvalPolicy = accessMode.approvalPolicy;
     stored.permissionProfile = accessMode.permissionProfile;
+  }
+  if (schemaVersion < PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION) {
+    stored.providers = stored.providers.map((provider) => ({
+      ...provider,
+      proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
+    }));
   }
   stored.schemaVersion = CONFIG_SCHEMA_VERSION;
   return true;

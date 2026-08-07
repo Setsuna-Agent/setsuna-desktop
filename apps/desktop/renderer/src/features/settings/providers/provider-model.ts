@@ -1,5 +1,6 @@
 import {
   defaultModelMaxOutputTokens,
+  normalizeDesktopNetworkProxyRoute,
   type BrandIconConfig,
   type ProviderConfigState,
   type ProviderModelConfig,
@@ -107,6 +108,7 @@ export function normalizeSettingsProviders(
     return {
       ...provider,
       provider: providerKind,
+      proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
       // 空名称可能是用户主动清除的结果；默认名称只应在创建服务时生成。
       name: typeof provider.name === 'string' ? provider.name : fallbackNames.provider,
       models: normalizeProviderModels(provider.models, providerKind, fallbackNames.model),
@@ -158,6 +160,7 @@ export function defaultProviderConfig(name = '新模型服务', modelName = '新
     enabled: true,
     apiKeySet: false,
     apiKeyPreview: '',
+    proxyRoute: { mode: 'inherit' },
     models: [defaultProviderModel('', true, DEFAULT_PROVIDER_KIND, modelName)],
   };
 }

@@ -2,6 +2,7 @@
 @import './settings-personalization.css';
 @import './settings-task-models.css';
 @import './settings-providers.css';
+@import './settings-network-proxy.css';
 @import './settings-dialogs.css';
 @import './settings-runtime.css';
 @import './settings-data-root.css';

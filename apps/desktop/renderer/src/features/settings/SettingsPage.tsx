@@ -16,12 +16,14 @@ import {
   HardDrive,
   Info,
   Keyboard,
+  Network,
   SlidersHorizontal,
   Sparkles,
   Wrench,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { DesktopUpdaterStateView } from '../../app/controller/useDesktopUpdater.js';
+import type { DesktopNetworkProxyStateView } from '../../app/controller/useDesktopNetworkProxy.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
@@ -39,6 +41,7 @@ import { RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import type { RuntimePreferenceInput, SettingsSectionId } from './settings-types.js';
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
+import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
@@ -49,6 +52,7 @@ const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; ico
   { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
   { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
+  { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
   { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
   { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
   { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
@@ -60,6 +64,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   shortcuts: 'settings.section.shortcuts',
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
+  networkProxy: 'settings.section.networkProxy',
   taskModels: 'settings.section.taskModels',
   usage: 'settings.section.usage',
   archives: 'settings.section.archives',
@@ -70,6 +75,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
 const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageKey>> = {
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
+  networkProxy: 'settings.section.networkProxyDescription',
   taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
 };
@@ -86,6 +92,7 @@ export function SettingsPage({
   usage,
   memoryPreview,
   memoryPreviewLoading,
+  networkProxy,
   onBack,
   onFetchProviderModels,
   onSaveProviders,
@@ -107,6 +114,7 @@ export function SettingsPage({
   usage: RuntimeUsageResponse | null;
   memoryPreview: RuntimeMemoryPreview | null;
   memoryPreviewLoading: boolean;
+  networkProxy: DesktopNetworkProxyStateView;
   onBack: () => void;
   onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
   onSaveProviders: (
@@ -141,6 +149,7 @@ export function SettingsPage({
       config ? (
         <LocalModelSettings
           config={config}
+          proxyServers={networkProxy.state?.servers ?? []}
           onFetchModels={onFetchProviderModels}
           onSave={onSaveProviders}
           onSaveStateChange={setLocalModelSaveState}
@@ -150,6 +159,8 @@ export function SettingsPage({
       )
     ) : activeSection === 'usage' ? (
       <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
+    ) : activeSection === 'networkProxy' ? (
+      <NetworkProxySettings proxy={networkProxy} />
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
