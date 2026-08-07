@@ -24,9 +24,14 @@ export type MountedVolume = {
   fileSystem: string;
 };
 
+export type NetworkVolumeDetectionOptions = {
+  windowsDriveDetector?: (target: string) => Promise<boolean>;
+};
+
 export async function isNetworkVolumePath(
   target: string,
   platform: NodeJS.Platform = process.platform,
+  options: NetworkVolumeDetectionOptions = {},
 ): Promise<boolean> {
   if (isUncPath(target)) return true;
   try {
@@ -41,7 +46,10 @@ export async function isNetworkVolumePath(
       const mountInfo = await readFile('/proc/self/mountinfo', 'utf8');
       return isPathOnNetworkMount(target, parseLinuxMountInfo(mountInfo));
     }
-    if (platform === 'win32') return windowsDriveIsNetwork(target);
+    if (platform === 'win32') {
+      // Await inside the try so PowerShell/CIM failures remain advisory.
+      return await (options.windowsDriveDetector ?? windowsDriveIsNetwork)(target);
+    }
   } catch {
     // Detection is advisory. Failure must not turn a valid local target into a blocker.
   }
