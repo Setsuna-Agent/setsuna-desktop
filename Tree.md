@@ -79,23 +79,23 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 570 total files
-├── src/ — 2 direct / 415 total files
+apps/desktop/renderer/ — 0 direct / 571 total files
+├── src/ — 2 direct / 416 total files
 │   ├── app/ — 2 direct / 34 total files
 │   │   ├── controller/ — 7 direct / 7 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 299 files
+│   ├── features/ — 300 files
 │   │   ├── capabilities/ — 22 direct / 29 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
-│   │   ├── chat/ — 5 direct / 115 total files
+│   │   ├── chat/ — 5 direct / 116 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
 │   │   │   ├── composer/ — 26 direct / 26 total files
-│   │   │   ├── conversation/ — 30 direct / 30 total files
+│   │   │   ├── conversation/ — 31 direct / 31 total files
 │   │   │   ├── hooks/ — 9 direct / 9 total files
 │   │   │   ├── markdown/ — 11 direct / 11 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files

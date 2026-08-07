@@ -11,6 +11,8 @@ import { contextBridge, ipcRenderer } from 'electron';
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
   uploadAttachment: (input) => ipcRenderer.invoke('runtime:upload-attachment', input),
+  readAttachmentImage: (threadId, assetId) =>
+    ipcRenderer.invoke('runtime:read-attachment-image', { threadId, assetId }),
   startSse(threadId, sinceSeq, onBatch) {
     let cancelled = false;
     let subscriptionId: string | null = null;

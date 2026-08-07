@@ -14,7 +14,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ArrowDown, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import setsunaAppIconUrl from '../../shared/assets/setsuna-app.png';
 import type {
   ChatImageAttachmentOutcome,
@@ -46,6 +46,7 @@ import {
 import { ContextCompactionStatus } from './conversation/ContextCompactionStatus.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import { StreamingScrollPinProvider } from './conversation/StreamingScrollPinProvider.js';
+import { ChatThreadProvider } from './conversation/ChatThreadProvider.js';
 import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './conversation/chat-workspace-types.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
@@ -452,7 +453,7 @@ export function ChatWorkspace({
                         />
                       ) : null}
                       {renderedDisplayItems.map((item) => (
-                        <Fragment key={chatDisplayItemRenderKey(item)}>
+                        <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null}>
                           <MessageItem
                             activeAssistantItemId={activeAssistantItemId}
                             activeTurnId={activeTurnId}
@@ -483,7 +484,7 @@ export function ChatWorkspace({
                               segments={[item.message]}
                             />
                           ) : null}
-                        </Fragment>
+                        </ChatThreadProvider>
                       ))}
                       {showActiveTurnPlaceholder && !activeUserVisible ? (
                         <ActiveWorkPlaceholder

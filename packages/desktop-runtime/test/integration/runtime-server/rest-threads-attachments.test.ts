@@ -131,11 +131,12 @@ describe('runtime server REST threads and attachments', () => {
       const capture = await createOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('non-vision-attachment-provider', capture.baseUrl, { supportsImages: false });
+        const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]);
         const query = new URLSearchParams({ name: 'diagram.png', type: 'image/png' });
         const upload = await fetch(`${harness.baseUrl}/v1/attachments?${query}`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/octet-stream' },
-          body: Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]),
+          body: imageBytes,
         });
         expect(upload.status).toBe(201);
         const attachment = await upload.json();
@@ -156,6 +157,27 @@ describe('runtime server REST threads and attachments', () => {
         expect(serializedRequest).not.toContain('input_image');
         expect(serializedRequest).not.toContain('image_url');
         expect(serializedRequest).not.toContain('iVBOR');
+
+        const preview = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(thread.id)}/attachments/${encodeURIComponent(attachment.assetId)}/image`,
+          { headers: { Authorization: `Bearer ${harness.token}` } },
+        );
+        expect(preview.status).toBe(200);
+        expect(preview.headers.get('content-type')).toBe('image/png');
+        await expect(preview.arrayBuffer()).resolves.toEqual(imageBytes.buffer.slice(
+          imageBytes.byteOffset,
+          imageBytes.byteOffset + imageBytes.byteLength,
+        ));
+
+        const unrelatedThread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'Unrelated image attachment thread' }),
+        });
+        const deniedPreview = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(unrelatedThread.id)}/attachments/${encodeURIComponent(attachment.assetId)}/image`,
+          { headers: { Authorization: `Bearer ${harness.token}` } },
+        );
+        expect(deniedPreview.status).toBe(404);
       } finally {
         await capture.close();
       }

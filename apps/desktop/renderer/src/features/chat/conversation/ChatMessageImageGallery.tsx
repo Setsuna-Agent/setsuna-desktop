@@ -1,9 +1,11 @@
 import {
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
+  isRuntimeStoredMessageAttachment,
   type DesktopImageInput,
   type RuntimeGeneratedMessageAttachment,
   type RuntimeInlineMessageAttachment,
+  type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { Dropdown, Image, type MenuProps } from 'antd';
 import { Copy, FolderOpen } from 'lucide-react';
@@ -11,7 +13,7 @@ import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useDesktopImageAction, type DesktopImageAction } from '../../workspace/hooks/useDesktopImageAction.js';
 
-type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment;
+type ChatImageAttachment = RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment;
 type GalleryStyle = CSSProperties & {
   '--chat-image-gallery-columns': number;
   '--chat-image-gallery-width': string;
@@ -36,9 +38,11 @@ export function chatImageGalleryWidth(
 
 export function ChatMessageImageGallery({
   attachments,
+  threadId = null,
   variant,
 }: {
   attachments: ChatImageAttachment[];
+  threadId?: string | null;
   variant: 'user' | 'assistant';
 }) {
   const { t } = useI18n();
@@ -51,8 +55,10 @@ export function ChatMessageImageGallery({
     '--chat-image-gallery-width': chatImageGalleryWidth(attachments.length, variant),
   };
 
-  const runAction = (action: DesktopImageAction, attachment: ChatImageAttachment) =>
-    runDesktopImageAction(action, desktopImageInput(attachment));
+  const runAction = (action: DesktopImageAction, attachment: ChatImageAttachment) => {
+    const input = desktopImageInput(attachment);
+    if (input) runDesktopImageAction(action, input);
+  };
 
   return (
     <div className="chat-image-gallery-shell" style={style}>
@@ -61,13 +67,19 @@ export function ChatMessageImageGallery({
           className={`chat-image-gallery chat-image-gallery--${variant} ${multiple ? 'chat-image-gallery--multiple' : 'chat-image-gallery--single'}`}
           aria-label={t('chat.image.count', { count: attachments.length })}
         >
-          {attachments.map((attachment) => (
-            <ChatMessageImage
-              attachment={attachment}
-              key={attachment.id}
-              onAction={(action) => void runAction(action, attachment)}
-            />
-          ))}
+          {attachments.map((attachment) => {
+            const supportsDesktopActions = !isRuntimeStoredMessageAttachment(attachment);
+            return (
+              <ChatMessageImage
+                attachment={attachment}
+                key={attachment.id}
+                threadId={threadId}
+                onAction={supportsDesktopActions
+                  ? (action) => void runAction(action, attachment)
+                  : undefined}
+              />
+            );
+          })}
         </div>
       </Image.PreviewGroup>
     </div>
@@ -77,13 +89,15 @@ export function ChatMessageImageGallery({
 function ChatMessageImage({
   attachment,
   onAction,
+  threadId,
 }: {
   attachment: ChatImageAttachment;
-  onAction: (action: DesktopImageAction) => void;
+  onAction?: (action: DesktopImageAction) => void;
+  threadId: string | null;
 }) {
   const { t } = useI18n();
   const imageRef = useRef<HTMLDivElement>(null);
-  const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef);
+  const { loadError, reservedAspectRatio, source } = useChatImageSource(attachment, imageRef, threadId);
   const reservesLayout = !source && reservedAspectRatio !== null;
 
   const items: MenuProps['items'] = [
@@ -99,6 +113,28 @@ function ChatMessageImage({
     },
   ];
 
+  const image = (
+    <div
+      className={`chat-message-image${reservesLayout ? ' chat-message-image--reserved' : ''}`}
+      ref={imageRef}
+      style={reservesLayout ? { aspectRatio: reservedAspectRatio } : undefined}
+      title={attachment.name}
+    >
+      {source ? (
+        <Image
+          src={source}
+          alt={attachment.name}
+          className="chat-message-image__content"
+          preview={{ mask: null }}
+        />
+      ) : (
+        <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>
+          {t(loadError ? 'chat.image.unavailable' : 'chat.image.loading')}
+        </div>
+      )}
+    </div>
+  );
+  if (!onAction) return image;
   return (
     <Dropdown
       rootClassName="chat-image-context-menu-root"
@@ -108,25 +144,7 @@ function ChatMessageImage({
         onClick: ({ key }) => onAction(key as DesktopImageAction),
       }}
     >
-      <div
-        className={`chat-message-image${reservesLayout ? ' chat-message-image--reserved' : ''}`}
-        ref={imageRef}
-        style={reservesLayout ? { aspectRatio: reservedAspectRatio } : undefined}
-        title={attachment.name}
-      >
-        {source ? (
-          <Image
-            src={source}
-            alt={attachment.name}
-            className="chat-message-image__content"
-            preview={{ mask: null }}
-          />
-        ) : (
-          <div className="chat-message-image__placeholder" role={loadError ? 'alert' : 'status'}>
-            {t(loadError ? 'chat.image.unavailable' : 'chat.image.loading')}
-          </div>
-        )}
-      </div>
+      {image}
     </Dropdown>
   );
 }
@@ -134,17 +152,20 @@ function ChatMessageImage({
 function useChatImageSource(
   attachment: ChatImageAttachment,
   targetRef: RefObject<HTMLDivElement | null>,
+  threadId: string | null,
 ): { loadError: string | null; reservedAspectRatio: number | null; source: string | null } {
   const { t } = useI18n();
   const inlineSource = isRuntimeInlineMessageAttachment(attachment) ? attachment.url : null;
   const generatedAssetId = isRuntimeGeneratedMessageAttachment(attachment) ? attachment.assetId : null;
+  const storedAssetId = isRuntimeStoredMessageAttachment(attachment) ? attachment.assetId : null;
+  const deferredAssetId = generatedAssetId ?? storedAssetId;
   const [shouldLoad, setShouldLoad] = useState(false);
-  const [generatedSource, setGeneratedSource] = useState<string | null>(null);
+  const [loadedSource, setLoadedSource] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reservedAspectRatio, setReservedAspectRatio] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!generatedAssetId) {
+    if (!deferredAssetId) {
       setShouldLoad(false);
       return;
     }
@@ -169,24 +190,29 @@ function useChatImageSource(
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [generatedAssetId, targetRef]);
+  }, [deferredAssetId, targetRef]);
 
   useEffect(() => {
-    if (!generatedAssetId || !shouldLoad) {
-      setGeneratedSource(null);
+    if (!deferredAssetId || !shouldLoad) {
+      setLoadedSource(null);
       setLoadError(null);
       return;
     }
-    const desktop = window.setsunaDesktop?.desktop;
-    if (!desktop) {
+    const bridge = window.setsunaDesktop;
+    const read = generatedAssetId
+      ? bridge?.desktop.readImageAsset(generatedAssetId)
+      : storedAssetId && threadId
+        ? bridge?.runtime.readAttachmentImage(threadId, storedAssetId)
+        : undefined;
+    if (!read) {
       setLoadError(t('chat.image.readUnavailable'));
       return;
     }
     let cancelled = false;
     let objectUrl: string | null = null;
-    setGeneratedSource(null);
+    setLoadedSource(null);
     setLoadError(null);
-    void desktop.readImageAsset(generatedAssetId)
+    void read
       .then((result) => {
         if (cancelled) return;
         if (!result.ok) {
@@ -195,7 +221,7 @@ function useChatImageSource(
         }
         const bytes = Uint8Array.from(result.data);
         objectUrl = URL.createObjectURL(new Blob([bytes.buffer], { type: result.type }));
-        setGeneratedSource(objectUrl);
+        setLoadedSource(objectUrl);
       })
       .catch((error: unknown) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : t('chat.image.readFailed'));
@@ -204,18 +230,19 @@ function useChatImageSource(
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [generatedAssetId, shouldLoad, t]);
+  }, [deferredAssetId, generatedAssetId, shouldLoad, storedAssetId, t, threadId]);
 
-  return { loadError, reservedAspectRatio, source: inlineSource ?? generatedSource };
+  return { loadError, reservedAspectRatio, source: inlineSource ?? loadedSource };
 }
 
-function desktopImageInput(attachment: ChatImageAttachment): DesktopImageInput {
+function desktopImageInput(attachment: ChatImageAttachment): DesktopImageInput | null {
   if (isRuntimeGeneratedMessageAttachment(attachment)) {
     return { assetId: attachment.assetId, name: attachment.name };
   }
-  return {
+  if (isRuntimeInlineMessageAttachment(attachment)) return {
     ...(attachment.localAssetId ? { assetId: attachment.localAssetId } : {}),
     dataUrl: attachment.url,
     name: attachment.name,
   };
+  return null;
 }

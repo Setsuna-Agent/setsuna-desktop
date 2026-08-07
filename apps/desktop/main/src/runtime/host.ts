@@ -1,5 +1,7 @@
 import {
+  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
+  type DesktopImageDataResult,
   type DesktopRuntimeEventPayload,
   type RuntimeDataMigrationReadiness,
   type RuntimeAttachmentUploadInput,
@@ -191,6 +193,36 @@ export class RuntimeHost {
       body: Buffer.from(input.data),
     });
     return runtimeJsonResponse<RuntimeStoredMessageAttachment>(response, 'POST /v1/attachments');
+  }
+
+  /** Reads one thread-owned raster image without exposing the runtime token or its local path. */
+  async readAttachmentImage(threadId: string, assetId: string): Promise<DesktopImageDataResult> {
+    const encodedThreadId = encodeURIComponent(threadId.trim());
+    const encodedAssetId = encodeURIComponent(assetId.trim());
+    if (!encodedThreadId || !encodedAssetId) return { ok: false, error: 'Image attachment id is invalid.' };
+    const requestPath = `/v1/threads/${encodedThreadId}/attachments/${encodedAssetId}/image`;
+    const response = await fetchRuntimeResponse(
+      `http://127.0.0.1:${this.port}${requestPath}`,
+      { headers: { Authorization: `Bearer ${this.token}` } },
+      {
+        label: `GET ${requestPath}`,
+        retryDelayMs: this.options.runtimeRequestRetryDelayMs,
+        retryOnce: true,
+        runtimeState: () => this.runtimeProcessState(),
+      },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await runtimeResponseError(response, 'Image attachment is unavailable.') };
+    }
+    const type = response.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (!runtimeImageMimeTypes.has(type)) {
+      return { ok: false, error: 'Runtime returned an unsupported image type.' };
+    }
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (!data.byteLength || data.byteLength > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) {
+      return { ok: false, error: 'Runtime returned invalid image bytes.' };
+    }
+    return { ok: true, data, type };
   }
 
   /**
@@ -397,6 +429,19 @@ async function runtimeJsonResponse<T>(response: Response, requestLabel: string):
     throw new Error(`${reason} (${requestLabel})`);
   }
   return body as T;
+}
+
+const runtimeImageMimeTypes = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);
+
+async function runtimeResponseError(response: Response, fallback: string): Promise<string> {
+  const text = await response.text();
+  if (!text) return fallback;
+  try {
+    const body = JSON.parse(text) as { error?: unknown };
+    return typeof body.error === 'string' && body.error.trim() ? body.error : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function resolvePackagedRuntimeEntry(appRoot: string): string {

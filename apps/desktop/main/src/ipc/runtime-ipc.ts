@@ -5,6 +5,7 @@ import type { RuntimeHost } from '../runtime/host.js';
 export function registerRuntimeIpc(host: RuntimeHost): void {
   ipcMain.removeHandler('runtime:request');
   ipcMain.removeHandler('runtime:upload-attachment');
+  ipcMain.removeHandler('runtime:read-attachment-image');
   ipcMain.removeHandler('runtime:subscribe');
   ipcMain.removeHandler('runtime:unsubscribe');
   ipcMain.handle('runtime:request', async (_event, input) => host.request(input));
@@ -13,6 +14,10 @@ export function registerRuntimeIpc(host: RuntimeHost): void {
     type: String(input?.type ?? ''),
     data: runtimeAttachmentBytes(input?.data),
   }));
+  ipcMain.handle('runtime:read-attachment-image', async (_event, input) => host.readAttachmentImage(
+    String(input?.threadId ?? ''),
+    String(input?.assetId ?? ''),
+  ));
   ipcMain.handle('runtime:subscribe', async (event, input) =>
     host.subscribeEvents(event.sender, {
       threadId: String(input?.threadId ?? ''),

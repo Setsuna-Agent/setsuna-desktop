@@ -166,6 +166,7 @@ export type DesktopCommitMessageGenerationSource = {
 export type DesktopRuntimeBridge = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
+  readAttachmentImage(threadId: string, assetId: string): Promise<DesktopImageDataResult>;
   startSse(threadId: string, sinceSeq: number | undefined, onBatch: (batch: RuntimeEventBatch) => void): () => void;
 };
 

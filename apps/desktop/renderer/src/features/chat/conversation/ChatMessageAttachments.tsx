@@ -1,14 +1,17 @@
 import {
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
+  isRuntimeStoredMessageAttachment,
   type RuntimeGeneratedMessageAttachment,
   type RuntimeInlineMessageAttachment,
   type RuntimeMessageAttachment,
+  type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
 import { formatAttachmentTypeLabel } from '../composer/chatAttachments.js';
 import { ChatMessageImageGallery } from './ChatMessageImageGallery.js';
+import { useChatThreadId } from './ChatThreadProvider.js';
 
 export function ChatMessageAttachments({
   attachments,
@@ -18,15 +21,20 @@ export function ChatMessageAttachments({
   variant?: 'user' | 'assistant';
 }) {
   const { t } = useI18n();
-  const imageAttachments = attachments.filter((attachment): attachment is RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment => (
+  const threadId = useChatThreadId();
+  const imageAttachments = attachments.filter((attachment): attachment is RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment => (
     attachment.type.startsWith('image/')
-    && (isRuntimeGeneratedMessageAttachment(attachment) || isRuntimeInlineMessageAttachment(attachment))
+    && (
+      isRuntimeGeneratedMessageAttachment(attachment)
+      || isRuntimeInlineMessageAttachment(attachment)
+      || isRuntimeStoredMessageAttachment(attachment)
+    )
   ));
   const imageAttachmentIds = new Set(imageAttachments.map((attachment) => attachment.id));
   const fileAttachments = attachments.filter((attachment) => !imageAttachmentIds.has(attachment.id));
   return (
     <div className={`chat-user-message-attachments chat-user-message-attachments--${variant}`} aria-label={t('chat.message.attachments')}>
-      <ChatMessageImageGallery attachments={imageAttachments} variant={variant} />
+      <ChatMessageImageGallery attachments={imageAttachments} threadId={threadId} variant={variant} />
       {fileAttachments.map((attachment) => (
         <div className="chat-user-message-file" key={attachment.id} title={attachment.name}>
           <WorkspaceFileIcon className="chat-user-message-file__icon" path={attachment.name} type="file" />
