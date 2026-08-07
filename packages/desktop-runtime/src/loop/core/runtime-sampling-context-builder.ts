@@ -29,7 +29,7 @@ import {
   estimateRuntimeToolDefinitionTokens,
 } from '../context/context-compaction.js';
 import { compileRuntimePrompt } from '../context/prompt-compiler.js';
-import { buildRuntimeAttachmentContext, messageForModel } from '../context/runtime-attachment-context.js';
+import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runtime-attachment-context.js';
 import type { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import {
   contextCompactionBudgetForConfig,
@@ -158,6 +158,7 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
+    const activeModelSupportsImages = activeModelForConfig(stepRuntimeConfig)?.supportsImages === true;
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
     const sandboxWorkspaceWrite = attachmentContext.readableRoots.length
       ? {
@@ -175,7 +176,7 @@ export class RuntimeSamplingContextBuilder {
       projectId: thread.projectId,
       turnId,
       modelCapabilities: {
-        supportsImages: activeModelForConfig(stepRuntimeConfig)?.supportsImages === true,
+        supportsImages: activeModelSupportsImages,
       },
       permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite,
@@ -231,9 +232,13 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
+    const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
+      resolvedAttachments: attachmentContext.resolvedAttachments,
+      supportsImages: activeModelSupportsImages,
+    });
     const compiledPrompt = compileRuntimePrompt({
       fragments,
-      conversationMessages: compactedConversationMessages.map(messageForModel),
+      conversationMessages: providerConversationMessages,
       createdAt: this.options.clock.now().toISOString(),
     });
     const messages = compiledPrompt.messages;

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import {
   createImageGenerationCaptureServer,
+  createVisionRecognitionCaptureServer,
   ONE_PIXEL_PNG_BASE64,
 } from '../../support/runtime-server/rest-capabilities.js';
 
@@ -106,6 +107,22 @@ describe('runtime server REST skills and capabilities', () => {
             capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
           }),
           expect.objectContaining({
+            id: 'openai-vision-recognition',
+            name: '视觉识别',
+            icon: 'vision-recognition',
+            featured: true,
+            installed: false,
+            skills: [expect.objectContaining({
+              id: 'openai-vision-recognition.vision-recognition',
+              name: '视觉识别',
+            })],
+            tools: [{
+              name: 'analyze_image',
+              description: expect.stringContaining('视觉模型'),
+            }],
+            capabilities: { tools: 1, skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+          }),
+          expect.objectContaining({
             id: 'guard-dangerous-shell',
             name: '阻止危险 Shell 命令',
             icon: 'guard-dangerous-shell',
@@ -127,6 +144,7 @@ describe('runtime server REST skills and capabilities', () => {
         'documents',
         'pdf',
         'openai-image-generation',
+        'openai-vision-recognition',
       ]);
       expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
       expect(JSON.stringify(marketplace)).not.toContain('.mjs');
@@ -327,6 +345,76 @@ describe('runtime server REST skills and capabilities', () => {
         });
       } finally {
         await imageServer.close();
+      }
+    });
+
+  it('tests the installed vision plugin through a selected configured model', async () => {
+      const visionServer = await createVisionRecognitionCaptureServer();
+      try {
+        const installed = await harness.runtimeFetch('/v1/plugin-marketplace/openai-vision-recognition/install', { method: 'POST' });
+        expect(installed).toMatchObject({
+          plugin: { tools: [{ name: 'analyze_image' }] },
+        });
+        const savedConfig = await harness.runtimeFetch('/v1/config', {
+          method: 'PUT',
+          body: JSON.stringify({
+            providers: [{
+              id: 'vision-provider',
+              name: 'Configured vision provider',
+              provider: 'openai-compatible',
+              baseUrl: `${visionServer.baseUrl}/v1`,
+              enabled: true,
+              apiKey: 'private-vision-key',
+              models: [{
+                id: 'vision-model',
+                name: 'Test vision model',
+                code: 'test-vision-model',
+                enabled: true,
+                maxOutputTokens: 8_192,
+                thinkingEnabled: false,
+                thinkingEfforts: [],
+                supportsImages: true,
+              }],
+            }],
+            visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
+          }),
+        });
+        expect(savedConfig.visionRecognition).toEqual({
+          providerId: 'vision-provider',
+          modelId: 'vision-model',
+        });
+        expect(savedConfig.providers).toEqual(expect.arrayContaining([
+          expect.objectContaining({ id: 'vision-provider', apiKeySet: true }),
+        ]));
+        expect(JSON.stringify(savedConfig)).not.toContain('private-vision-key');
+
+        const result = await harness.runtimeFetch('/v1/plugins/openai-vision-recognition/test', {
+          method: 'POST',
+          body: JSON.stringify({ prompt: 'Describe the test image.' }),
+        });
+        expect(result).toMatchObject({
+          content: 'The test image was received.',
+          durationMs: expect.any(Number),
+          model: 'test-vision-model',
+        });
+        expect(JSON.stringify(result)).not.toContain(ONE_PIXEL_PNG_BASE64);
+        expect(JSON.stringify(result)).not.toContain('private-vision-key');
+        const request = await visionServer.nextRequest;
+        expect(request.authorization).toBe('Bearer private-vision-key');
+        expect(request.path).toBe('/v1/chat/completions');
+        expect(request.body).toMatchObject({
+          model: 'test-vision-model',
+          stream: true,
+          messages: [{
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Describe the test image.' },
+              { type: 'image_url' },
+            ],
+          }],
+        });
+      } finally {
+        await visionServer.close();
       }
     });
   

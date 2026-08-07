@@ -3,6 +3,7 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeDesktopSettings,
   RuntimeHookEventName,
   RuntimeHookHandlerConfig,
@@ -32,6 +33,7 @@ import type {
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 import {
+  normalizeConfiguredModelReference,
   taskModelSettingsForSave,
   taskModelSettingsForState,
 } from './task-model-config.js';
@@ -61,7 +63,7 @@ type StoredImageGenerationConfig = Omit<RuntimeImageGenerationConfigState, 'apiK
 
 type StoredConfig = Omit<
   RuntimeConfigState,
-  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration'
+  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration' | 'visionRecognition'
 > & {
   schemaVersion?: number;
   /** Pre-v3 compatibility input. It is consumed once and never written again. */
@@ -69,6 +71,7 @@ type StoredConfig = Omit<
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
   imageGeneration?: StoredImageGenerationConfig;
+  visionRecognition?: RuntimeConfiguredModelReference;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
 };
 
@@ -177,7 +180,14 @@ export class FileConfigStore implements ConfigStore {
       if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryConsolidation')) {
         delete memory.consolidationModel;
       }
-      const imageGeneration = imageGenerationSettingsForSave(input.imageGeneration, previous.imageGeneration, secrets);
+      const imageGeneration = imageGenerationSettingsForSave(
+        input.imageGeneration,
+        previous.imageGeneration,
+        secrets,
+      );
+      const visionRecognition = input.visionRecognition === undefined
+        ? normalizeConfiguredModelReference(previous.visionRecognition)
+        : normalizeConfiguredModelReference(input.visionRecognition);
       const previousAccessMode = accessModeForStoredConfig(previous);
 
       const stored: StoredConfig = {
@@ -203,6 +213,7 @@ export class FileConfigStore implements ConfigStore {
         features: normalizeFeatureFlags(input.features ?? previous.features),
         desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
         imageGeneration,
+        ...(visionRecognition ? { visionRecognition } : {}),
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
       };
 
@@ -273,6 +284,7 @@ export class FileConfigStore implements ConfigStore {
         apiKeyPreview: maskApiKey(apiKey),
       };
     });
+    const visionRecognition = normalizeConfiguredModelReference(stored.visionRecognition);
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
@@ -299,6 +311,7 @@ export class FileConfigStore implements ConfigStore {
       features: normalizeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
       imageGeneration: imageGenerationState(stored.imageGeneration, secrets),
+      ...(visionRecognition ? { visionRecognition } : {}),
       providers,
     };
   }
@@ -423,7 +436,10 @@ function normalizeModels(
 
 function normalizeSecrets(value: unknown): StoredSecrets {
   if (!value || typeof value !== 'object') return { providerApiKeys: {} };
-  const record = value as { providerApiKeys?: unknown; imageGenerationApiKey?: unknown };
+  const record = value as {
+    providerApiKeys?: unknown;
+    imageGenerationApiKey?: unknown;
+  };
   const providerApiKeys = record.providerApiKeys;
   return {
     providerApiKeys: providerApiKeys && typeof providerApiKeys === 'object'
@@ -473,12 +489,10 @@ function imageGenerationState(
   value: StoredImageGenerationConfig | undefined,
   secrets: StoredSecrets,
 ): RuntimeImageGenerationConfigState {
-  const config = normalizeStoredImageGeneration(value);
-  const apiKey = secrets.imageGenerationApiKey ?? '';
   return {
-    ...config,
-    apiKeySet: apiKey.length > 0,
-    apiKeyPreview: maskApiKey(apiKey),
+    ...normalizeStoredImageGeneration(value),
+    apiKeySet: Boolean(secrets.imageGenerationApiKey),
+    apiKeyPreview: maskApiKey(secrets.imageGenerationApiKey ?? ''),
   };
 }
 

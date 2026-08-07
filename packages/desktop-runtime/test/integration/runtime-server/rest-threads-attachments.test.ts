@@ -126,6 +126,62 @@ describe('runtime server REST threads and attachments', () => {
         await capture.close();
       }
     });
+
+  it('sends stored images to non-vision models as paths instead of provider image parts', async () => {
+      const capture = await createOpenAiCaptureServer();
+      try {
+        await harness.configureOpenAiProvider('non-vision-attachment-provider', capture.baseUrl, { supportsImages: false });
+        const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x01]);
+        const query = new URLSearchParams({ name: 'diagram.png', type: 'image/png' });
+        const upload = await fetch(`${harness.baseUrl}/v1/attachments?${query}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/octet-stream' },
+          body: imageBytes,
+        });
+        expect(upload.status).toBe(201);
+        const attachment = await upload.json();
+        const thread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'Non-vision image attachment' }),
+        });
+
+        await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+          method: 'POST',
+          body: JSON.stringify({ input: 'Please inspect the attached image.', attachments: [attachment] }),
+        });
+        const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for image attachment model request');
+        const serializedRequest = JSON.stringify(request);
+
+        expect(serializedRequest).toContain('Runtime-managed user attachments for this thread');
+        expect(serializedRequest).toContain('diagram.png');
+        expect(serializedRequest).not.toContain('input_image');
+        expect(serializedRequest).not.toContain('image_url');
+        expect(serializedRequest).not.toContain('iVBOR');
+
+        const preview = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(thread.id)}/attachments/${encodeURIComponent(attachment.assetId)}/image`,
+          { headers: { Authorization: `Bearer ${harness.token}` } },
+        );
+        expect(preview.status).toBe(200);
+        expect(preview.headers.get('content-type')).toBe('image/png');
+        await expect(preview.arrayBuffer()).resolves.toEqual(imageBytes.buffer.slice(
+          imageBytes.byteOffset,
+          imageBytes.byteOffset + imageBytes.byteLength,
+        ));
+
+        const unrelatedThread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'Unrelated image attachment thread' }),
+        });
+        const deniedPreview = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(unrelatedThread.id)}/attachments/${encodeURIComponent(attachment.assetId)}/image`,
+          { headers: { Authorization: `Bearer ${harness.token}` } },
+        );
+        expect(deniedPreview.status).toBe(404);
+      } finally {
+        await capture.close();
+      }
+    });
   
   it('creates and lists local and project threads', async () => {
       const created = await harness.runtimeFetch('/v1/threads', {

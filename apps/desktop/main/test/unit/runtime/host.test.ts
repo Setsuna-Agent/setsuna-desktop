@@ -306,6 +306,26 @@ describe('runtime host packaging paths', () => {
     expect(Buffer.from(init?.body as Uint8Array)).toEqual(Buffer.from([1, 2, 3]));
   });
 
+  it('reads thread-owned image bytes through the authenticated runtime endpoint', async () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+    const fetchMock = vi.fn(async (..._args: Parameters<typeof fetch>) => new Response(bytes, {
+      status: 200,
+      headers: { 'Content-Type': 'image/png' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+
+    await expect(host.readAttachmentImage('thread 1', 'attachment 1')).resolves.toEqual({
+      ok: true,
+      data: bytes,
+      type: 'image/png',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain('/v1/threads/thread%201/attachments/attachment%201/image');
+    expect(init?.headers).toEqual(expect.objectContaining({ Authorization: expect.stringMatching(/^Bearer /u) }));
+  });
+
   it('asks the runtime to shut down through stdin before terminating it', async () => {
     const stdin = new PassThrough();
     const childState = Object.assign(new EventEmitter(), {

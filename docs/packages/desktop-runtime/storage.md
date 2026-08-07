@@ -140,7 +140,7 @@ canonical snapshot resync。
 
 `file-attachment-store.ts`：
 
-- 上传时验证名称、MIME、大小和安全图片。
+- 上传时验证名称、MIME、大小，以及 PNG/JPEG/GIF/WebP 的真实文件签名。
 - 临时 asset 在 turn/thread 认领后转为持久化归属。
 - Recovery 清理无主或不完整 staging。
 - Thread 删除/消息截断时由协调层清理不再引用 asset。

@@ -12,17 +12,12 @@ export function CapabilitiesPluginItemButton({
   badges?: string[];
   description: string;
   icon: ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   title: string;
 }) {
   const { t } = useI18n();
-  return (
-    <button
-      type="button"
-      className="desktop-capabilities-plugin-detail__item"
-      aria-label={t('capabilities.detail.viewItem', { title })}
-      onClick={onClick}
-    >
+  const content = (
+    <>
       <span className="desktop-capabilities-plugin-detail__item-icon">{icon}</span>
       <span className="desktop-capabilities-plugin-detail__item-body">
         <strong>{title}</strong>
@@ -34,8 +29,19 @@ export function CapabilitiesPluginItemButton({
             {badges.map((badge) => <span key={badge}>{badge}</span>)}
           </span>
         ) : null}
-        <ChevronRight className="desktop-capabilities-plugin-detail__item-chevron" size={15} />
+        {onClick ? <ChevronRight className="desktop-capabilities-plugin-detail__item-chevron" size={15} /> : null}
       </span>
+    </>
+  );
+  if (!onClick) return <div className="desktop-capabilities-plugin-detail__item is-static">{content}</div>;
+  return (
+    <button
+      type="button"
+      className="desktop-capabilities-plugin-detail__item"
+      aria-label={t('capabilities.detail.viewItem', { title })}
+      onClick={onClick}
+    >
+      {content}
     </button>
   );
 }

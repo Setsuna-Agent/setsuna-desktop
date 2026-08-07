@@ -7,6 +7,9 @@ export type { RuntimePluginReference } from './plugin-reference.js';
 export const OPENAI_IMAGE_GENERATION_PLUGIN_ID = 'openai-image-generation';
 export const OPENAI_IMAGE_GENERATION_TOOL_NAME = 'generate_image';
 export const RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS = 4_000;
+export const OPENAI_VISION_RECOGNITION_PLUGIN_ID = 'openai-vision-recognition';
+export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
+export const RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS = 4_000;
 
 export type RuntimeImageGenerationTestInput = {
   prompt: string;
@@ -19,8 +22,25 @@ export type RuntimeImageGenerationTestResult = {
   model?: string;
 };
 
+export type RuntimeVisionRecognitionTestInput = {
+  prompt: string;
+};
+
+/** 配置页使用内置测试图片得到的文本结果，不包含 API key 或图片 Base64。 */
+export type RuntimeVisionRecognitionTestResult = {
+  content: string;
+  durationMs: number;
+  model?: string;
+};
+
 export type RuntimePluginSkill = {
   id: string;
+  name: string;
+  description?: string;
+};
+
+/** 插件清单声明的 runtime 工具元数据；声明本身不会注册或执行工具。 */
+export type RuntimePluginTool = {
   name: string;
   description?: string;
 };
@@ -81,6 +101,7 @@ export type RuntimePluginSummary = {
   publisher?: string;
   tags?: string[];
   installedAt: string;
+  tools?: RuntimePluginTool[];
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServer[];
   hooks: RuntimePluginHook[];
@@ -101,6 +122,7 @@ export type RuntimePluginMarketplaceItem = {
   publisher?: string;
   tags: string[];
   featured: boolean;
+  tools?: RuntimePluginTool[];
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServerDescriptor[];
   hooks: RuntimePluginHook[];
@@ -110,6 +132,7 @@ export type RuntimePluginMarketplaceItem = {
     mcpServers: number;
     hooks: number;
     resources: number;
+    tools?: number;
   };
   installed: boolean;
   installedVersion?: string;

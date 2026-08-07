@@ -1,4 +1,7 @@
-import type { RuntimeGeneratedMessageAttachment } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeGeneratedMessageAttachment,
+  RuntimeStoredMessageAttachment,
+} from '@setsuna-desktop/contracts';
 import { Children, type ReactElement, type ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ChatMessageImageGallery } from '../../../../../src/features/chat/conversation/ChatMessageImageGallery.js';
@@ -114,6 +117,15 @@ const generatedAttachment: RuntimeGeneratedMessageAttachment = {
   modelVisible: false,
 };
 
+const storedAttachment: RuntimeStoredMessageAttachment = {
+  id: 'stored_1',
+  source: 'runtime',
+  assetId: 'attachment_image_1',
+  name: 'stored-1.png',
+  type: 'image/png',
+  size: 3,
+};
+
 describe('ChatMessageImageGallery generated image lifecycle', () => {
   afterEach(() => {
     hookHarness.unmount();
@@ -198,14 +210,58 @@ describe('ChatMessageImageGallery generated image lifecycle', () => {
     expect(revokeObjectURL).not.toHaveBeenCalled();
     expect(viewport.disconnect).toHaveBeenCalledTimes(1);
   });
+
+  it('loads a stored image through its thread-scoped runtime bridge', async () => {
+    const readAttachmentImage = vi.fn().mockResolvedValue({
+      ok: true as const,
+      data: new Uint8Array([1, 2, 3]),
+      type: 'image/png',
+    });
+    const readImageAsset = vi.fn();
+    const createObjectURL = vi.fn().mockReturnValue('blob:stored-1');
+    const revokeObjectURL = vi.fn();
+    const viewport = installGeneratedImageEnvironment({
+      createObjectURL,
+      readAttachmentImage,
+      readImageAsset,
+      revokeObjectURL,
+    });
+    const image = mountStoredImage();
+
+    viewport.setIntersecting(true);
+    image.rerender();
+    hookHarness.flushEffects();
+    await settlePromiseCallbacks();
+
+    expect(readAttachmentImage).toHaveBeenCalledWith('thread_1', storedAttachment.assetId);
+    expect(readImageAsset).not.toHaveBeenCalled();
+    expect(createObjectURL).toHaveBeenCalledTimes(1);
+
+    hookHarness.unmount();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:stored-1');
+  });
 });
 
 function mountGeneratedImage(): { rerender: () => ReactElement } {
-  const imageComponent = extractImageComponent();
+  return mountImage(generatedAttachment, null);
+}
+
+function mountStoredImage(): { rerender: () => ReactElement } {
+  return mountImage(storedAttachment, 'thread_1');
+}
+
+type LifecycleAttachment = RuntimeGeneratedMessageAttachment | RuntimeStoredMessageAttachment;
+
+function mountImage(attachment: LifecycleAttachment, threadId: string | null): { rerender: () => ReactElement } {
+  const imageComponent = extractImageComponent(attachment, threadId);
   hookHarness.reset();
   const rerender = () => {
     hookHarness.beginRender();
-    return imageComponent({ attachment: generatedAttachment, onAction: vi.fn() });
+    return imageComponent({
+      attachment,
+      threadId,
+      ...(attachment.source === 'runtime' ? {} : { onAction: vi.fn() }),
+    });
   };
   rerender();
   hookHarness.refAt(0).current = {
@@ -216,13 +272,18 @@ function mountGeneratedImage(): { rerender: () => ReactElement } {
   return { rerender };
 }
 
-function extractImageComponent(): (props: {
-  attachment: RuntimeGeneratedMessageAttachment;
-  onAction: (action: 'copy' | 'reveal') => void;
+function extractImageComponent(
+  attachment: LifecycleAttachment,
+  threadId: string | null,
+): (props: {
+  attachment: LifecycleAttachment;
+  onAction?: (action: 'copy' | 'reveal') => void;
+  threadId: string | null;
 }) => ReactElement {
   hookHarness.beginRender();
   const shell = ChatMessageImageGallery({
-    attachments: [generatedAttachment],
+    attachments: [attachment],
+    threadId,
     variant: 'assistant',
   }) as ReactElement<{ children: ReactNode }>;
   const previewGroup = Children.toArray(shell.props.children)[0] as ReactElement<{ children: ReactElement<{ children: ReactNode }> }>;
@@ -233,10 +294,12 @@ function extractImageComponent(): (props: {
 
 function installGeneratedImageEnvironment({
   createObjectURL,
+  readAttachmentImage,
   readImageAsset,
   revokeObjectURL,
 }: {
   createObjectURL: ReturnType<typeof vi.fn>;
+  readAttachmentImage?: ReturnType<typeof vi.fn>;
   readImageAsset: ReturnType<typeof vi.fn>;
   revokeObjectURL: ReturnType<typeof vi.fn>;
 }): {
@@ -265,6 +328,7 @@ function installGeneratedImageEnvironment({
   vi.stubGlobal('window', {
     setsunaDesktop: {
       desktop: { readImageAsset },
+      runtime: { readAttachmentImage: readAttachmentImage ?? vi.fn() },
     },
   });
 

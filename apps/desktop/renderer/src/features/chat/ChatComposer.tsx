@@ -185,10 +185,7 @@ export function ChatComposer({
     replaceWithExisting: replaceAttachmentsWithExisting,
     sendableAttachments,
     settleSend: settleAttachmentSend,
-  } = useChatAttachments({
-    client,
-    supportsImageInput: modeController.supportsImageInput,
-  });
+  } = useChatAttachments({ client });
   const attachmentOnlyReady = sendableAttachments.length > 0 && !draft.trim();
   const activeQueueReady = Boolean(
     activeTurnId

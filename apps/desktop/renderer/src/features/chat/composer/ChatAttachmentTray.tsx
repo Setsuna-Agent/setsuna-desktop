@@ -46,14 +46,17 @@ function ComposerAttachmentCard({
     && item.attachment.type.startsWith('image/')
     ? item.attachment
     : null;
+  const imagePreviewUrl = item.type.startsWith('image/')
+    ? item.previewUrl ?? inlineImage?.url
+    : undefined;
   const removing = item.status === 'removing';
   return (
     <div
-      className={`chat-attachment ${inlineImage ? 'chat-attachment--image' : 'chat-attachment--file'} ${removing ? 'is-removing' : ''} ${item.status === 'error' ? 'has-error' : ''}`}
+      className={`chat-attachment ${imagePreviewUrl ? 'chat-attachment--image' : 'chat-attachment--file'} ${removing ? 'is-removing' : ''} ${item.status === 'error' ? 'has-error' : ''}`}
       title={item.error || item.name}
     >
-      {inlineImage ? (
-        <Image src={inlineImage.url} alt={item.name} className="chat-attachment__image" preview={{ mask: null }} />
+      {imagePreviewUrl ? (
+        <Image src={imagePreviewUrl} alt={item.name} className="chat-attachment__image" preview={{ mask: null }} />
       ) : (
         <>
           <span className="chat-attachment__file-icon" aria-hidden="true">

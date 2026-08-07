@@ -35,7 +35,7 @@ Renderer 看不到：
 仓库内 Bundle 主要分为：
 
 - Skill 插件：OpenAI docs、Context7、PDF、Documents 等。
-- 第一方能力插件：图片生成，用 Skill + runtime 内置 ToolHost 配对。
+- 第一方能力插件：图片生成和视觉识别，用 Skill + runtime 内置 ToolHost 配对，并由用户从市场按需安装。
 - Hook 插件：危险 shell、secret/path/generated folder 防护、审计和流程提示。
 
 目录内容以 `plugins/` 实际文件和各 Bundle manifest 为准，生成索引见根 [Tree.md](../../Tree.md)。

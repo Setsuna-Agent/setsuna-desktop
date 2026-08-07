@@ -13,6 +13,7 @@ describe('built-in plugin localization', () => {
     ['guard-dangerous-shell', 'Block Dangerous Shell Commands'],
     ['openai-docs', 'OpenAI Official Documentation'],
     ['openai-image-generation', 'Image Generation'],
+    ['openai-vision-recognition', 'Vision Recognition'],
     ['pdf', 'PDF Document Processing'],
     ['prompt-secret-detector', 'Secret Detection in User Messages'],
     ['protect-generated-folders', 'Protect Generated Directories'],

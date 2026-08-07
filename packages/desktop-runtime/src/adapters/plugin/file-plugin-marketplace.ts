@@ -41,6 +41,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
           ...(plugin.publisher ? { publisher: plugin.publisher } : {}),
           tags: [...plugin.tags],
           featured: plugin.featured,
+          ...(plugin.tools?.length ? { tools: plugin.tools.map((tool) => ({ ...tool })) } : {}),
           skills: plugin.skills.map((skill) => ({ ...skill })),
           mcpServers: plugin.mcpServers.map((server) => ({ ...server })),
           hooks: plugin.hooks.map((hook) => ({ ...hook })),

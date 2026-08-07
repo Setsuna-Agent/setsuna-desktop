@@ -41,6 +41,10 @@ const builtInPluginCopyKeys = {
     name: 'capabilities.plugin.openai-image-generation.name',
     description: 'capabilities.plugin.openai-image-generation.description',
   },
+  'openai-vision-recognition': {
+    name: 'capabilities.plugin.openai-vision-recognition.name',
+    description: 'capabilities.plugin.openai-vision-recognition.description',
+  },
   pdf: {
     name: 'capabilities.plugin.pdf.name',
     description: 'capabilities.plugin.pdf.description',

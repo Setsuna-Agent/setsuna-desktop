@@ -185,7 +185,9 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
 - 文件打开仍走 main/workspace API。
-- 图片附件先上传为 runtime 管理 asset，再在 message input 中引用。
+- 图片统一上传为 runtime 管理 asset；composer 仅保留不持久化的本地预览 URL，不根据当前模型能力来回改写附件类型。
+- 原生视觉模型由 runtime 在 provider 请求边界临时取得受管图片字节；非视觉模型只接收附件 ID、元数据和只读工具上下文。
+- 已发送的托管图片通过带 thread 归属校验的窄 bridge 按需读取，并继续使用消息图片画廊预览；本地路径和 Base64 不进入 renderer 状态或线程事件。
 - Thread/project 切换时迟到 upload 不得附加到新 composer。
 - 仅附件输入也是合法输入。
 

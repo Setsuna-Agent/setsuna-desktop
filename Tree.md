@@ -79,23 +79,23 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 568 total files
-├── src/ — 2 direct / 413 total files
+apps/desktop/renderer/ — 0 direct / 571 total files
+├── src/ — 2 direct / 416 total files
 │   ├── app/ — 2 direct / 34 total files
 │   │   ├── controller/ — 7 direct / 7 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 297 files
-│   │   ├── capabilities/ — 20 direct / 27 total files
+│   ├── features/ — 300 files
+│   │   ├── capabilities/ — 22 direct / 29 total files
 │   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 4 direct / 4 total files
-│   │   ├── chat/ — 5 direct / 115 total files
+│   │   ├── chat/ — 5 direct / 116 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
 │   │   │   ├── composer/ — 26 direct / 26 total files
-│   │   │   ├── conversation/ — 30 direct / 30 total files
+│   │   │   ├── conversation/ — 31 direct / 31 total files
 │   │   │   ├── hooks/ — 9 direct / 9 total files
 │   │   │   ├── markdown/ — 11 direct / 11 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files
@@ -192,9 +192,9 @@ packages/contracts/ — 4 direct / 67 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 460 total files
-├── src/ — 2 direct / 270 total files
-│   ├── adapters/ — 117 files
+packages/desktop-runtime/ — 4 direct / 463 total files
+├── src/ — 2 direct / 272 total files
+│   ├── adapters/ — 119 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -207,8 +207,8 @@ packages/desktop-runtime/ — 4 direct / 460 total files
 │   │   ├── plugin/ — 3 direct / 3 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 2 direct / 2 total files
-│   │   ├── store/ — 24 direct / 24 total files
-│   │   ├── tool/ — 14 direct / 34 total files
+│   │   ├── store/ — 25 direct / 25 total files
+│   │   ├── tool/ — 15 direct / 35 total files
 │   │   │   └── pc-local/ — 20 direct / 20 total files
 │   │   └── workspace/ — 8 direct / 8 total files
 │   ├── hooks/ — 3 direct / 3 total files
@@ -226,8 +226,8 @@ packages/desktop-runtime/ — 4 direct / 460 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 2 direct / 2 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 186 files
-    ├── adapters/ — 57 files
+└── test/ — 187 files
+    ├── adapters/ — 58 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -239,7 +239,7 @@ packages/desktop-runtime/ — 4 direct / 460 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 14 direct / 14 total files
-    │   ├── tool/ — 11 direct / 15 total files
+    │   ├── tool/ — 12 direct / 16 total files
     │   │   └── pc-local/ — 4 direct / 4 total files
     │   └── workspace/ — 6 direct / 6 total files
     ├── fixtures/ — 4 files
@@ -290,7 +290,7 @@ skills/ — 0 direct / 2 total files
 ### `plugins/`
 
 ```text
-plugins/ — 0 direct / 44 total files
+plugins/ — 0 direct / 46 total files
 ├── audit-file-mutations/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -322,6 +322,10 @@ plugins/ — 0 direct / 44 total files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── skills/ — 1 files
 │       └── image-generation/ — 1 direct / 1 total files
+├── openai-vision-recognition/ — 2 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   └── skills/ — 1 files
+│       └── vision-recognition/ — 1 direct / 1 total files
 ├── pdf/ — 3 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── skills/ — 2 files

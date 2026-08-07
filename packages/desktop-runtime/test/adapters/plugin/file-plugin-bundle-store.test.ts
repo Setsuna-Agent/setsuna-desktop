@@ -27,6 +27,7 @@ describe('file plugin bundle store', () => {
         id: 'demo',
         name: 'Demo Plugin',
         icon: 'context7',
+        tools: [{ name: 'analyze_document', description: 'Analyze the current document.' }],
         skills: [{ id: 'demo.docs-helper', name: 'Plugin Docs Helper', description: 'Reads bundled documentation.' }],
         mcpServers: [{
           key: 'plugin_docs',
@@ -323,6 +324,18 @@ describe('file plugin bundle store', () => {
     expect(discoverRuntimeHooks(await runtime.config.getConfig()).hooks).toEqual([]);
   });
 
+  it('rejects duplicate runtime tool metadata before installation', async () => {
+    const fixture = await createPluginFixture();
+    const manifest = await readPluginManifestFixture(fixture.bundleDir);
+    manifest.tools = [{ name: 'analyze_document' }, { name: 'analyze_document' }];
+    await writePluginManifestFixture(fixture.bundleDir, manifest);
+    const runtime = await createPluginRuntime(fixture.root);
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('Duplicate plugin tool name');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
   it('accepts only renderer-owned icon tokens, never bundle paths or markup', async () => {
     const fixture = await createPluginFixture();
     const manifestPath = path.join(fixture.bundleDir, '.setsuna-plugin', 'plugin.json');
@@ -402,6 +415,10 @@ async function createPluginFixture(parent?: string): Promise<{ root: string; bun
       icon: 'context7',
       version: '1.0.0',
       description: 'Plugin fixture',
+      tools: [{
+        name: 'analyze_document',
+        description: 'Analyze the current document.',
+      }],
       skills: ['skills/docs-helper'],
       mcpServers: [{
         key: 'plugin_docs',

@@ -1,6 +1,7 @@
 import type { RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
+  chatImageDataUrlBytes,
   maxChatImageAttachments,
   maxChatImageSize,
   rejectedChatImageAttachment,
@@ -16,13 +17,16 @@ const imageAttachment: RuntimeMessageAttachment = {
 
 describe('rejectedChatImageAttachment', () => {
   it('accepts a valid image while capacity remains', () => {
-    expect(rejectedChatImageAttachment(imageAttachment, 0, true)).toBeNull();
+    expect(rejectedChatImageAttachment(imageAttachment, 0)).toBeNull();
   });
 
   it('reports the reason an external image cannot enter the composer', () => {
-    expect(rejectedChatImageAttachment(imageAttachment, 0, false)).toBe('unsupported');
-    expect(rejectedChatImageAttachment({ ...imageAttachment, size: maxChatImageSize + 1 }, 0, true)).toBe('too-large');
-    expect(rejectedChatImageAttachment(imageAttachment, maxChatImageAttachments, true)).toBe('limit-reached');
-    expect(rejectedChatImageAttachment({ ...imageAttachment, url: 'https://example.com/image.png' }, 0, true)).toBe('unavailable');
+    expect(rejectedChatImageAttachment({ ...imageAttachment, size: maxChatImageSize + 1 }, 0)).toBe('too-large');
+    expect(rejectedChatImageAttachment(imageAttachment, maxChatImageAttachments)).toBe('limit-reached');
+    expect(rejectedChatImageAttachment({ ...imageAttachment, url: 'https://example.com/image.png' }, 0)).toBe('unavailable');
+  });
+
+  it('decodes inline image data for runtime attachment upload', () => {
+    expect(chatImageDataUrlBytes(imageAttachment.url)).toEqual(Uint8Array.from(Buffer.from('image')));
   });
 });

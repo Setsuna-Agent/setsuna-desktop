@@ -2,12 +2,11 @@ import {
   RUNTIME_FILE_ATTACHMENT_EXTENSIONS,
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
   RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
-  isRuntimeInlineMessageAttachment,
   type DesktopRuntimeClient,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { maxChatImageAttachments, maxChatImageSize, readChatImageAttachment } from './chatImageAttachments.js';
+import { maxChatImageAttachments, maxChatImageSize } from './chatImageAttachments.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
@@ -32,13 +31,14 @@ export type ChatComposerAttachmentItem = {
   size: number;
   status: ChatComposerAttachmentStatus;
   attachment?: RuntimeMessageAttachment;
+  /** Renderer-only preview. Blob/data URLs here are never persisted or sent to the runtime. */
+  previewUrl?: string;
   error?: string;
 };
 
-export function chatAttachmentValidationError(file: File, supportsImageInput: boolean, t: Translate = defaultTranslate): string | null {
+export function chatAttachmentValidationError(file: File, t: Translate = defaultTranslate): string | null {
   if (!file.size) return t('chat.composer.fileEmpty');
   if (file.type.startsWith('image/')) {
-    if (!supportsImageInput) return t('chat.composer.imageUnsupported');
     if (file.size > maxChatImageSize) return t('chat.composer.imageTooLarge');
     return null;
   }
@@ -52,16 +52,13 @@ export async function createChatMessageAttachment(
   client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
   t: Translate = defaultTranslate,
 ): Promise<RuntimeMessageAttachment> {
-  if (file.type.startsWith('image/')) return readChatImageAttachment(file, t);
+  const validationError = chatAttachmentValidationError(file, t);
+  if (validationError) throw new Error(validationError);
   return client.uploadAttachment({
     name: file.name,
     type: file.type,
     data: new Uint8Array(await file.arrayBuffer()),
   });
-}
-
-export function isImageMessageAttachment(attachment: RuntimeMessageAttachment): boolean {
-  return isRuntimeInlineMessageAttachment(attachment) && attachment.type.startsWith('image/');
 }
 
 export function formatAttachmentTypeLabel(name: string, mimeType: string, t: Translate = defaultTranslate): string {

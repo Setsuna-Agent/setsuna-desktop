@@ -99,7 +99,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 - Skills 和 MCP dependencies。
 - MCP servers/tools/resources/OAuth。
 - Hooks。
-- Plugins、marketplace、image generation config/test。
+- Plugins、marketplace、image generation 配置/测试与 vision recognition 模型选择/测试。
 - Approvals。
 
 ### 数据域

@@ -9,7 +9,8 @@ import type {
   RuntimePluginItemKind,
   RuntimePluginMcpServerDescriptor,
   RuntimePluginResource,
-  RuntimePluginSummary
+  RuntimePluginSummary,
+  RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -34,6 +35,7 @@ export type ParsedPluginManifest = {
   featuredOrder?: number;
   sourcePath: string;
   manifestPath: string;
+  tools: RuntimePluginTool[];
   skillEntries: Array<{ id: string; name: string; description?: string; relativePath: string }>;
   mcpServers: RuntimeMcpServerInput[];
   hooks: ParsedPluginHook[];
@@ -166,11 +168,29 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
     ...optionalMarketplaceFields(record),
     sourcePath,
     manifestPath,
+    tools: normalizePluginTools(record.tools),
     skillEntries: skills,
     mcpServers: normalizePluginMcpServers(record.mcpServers ?? record.mcp_servers),
     hooks: normalizePluginHooks(record.hooks),
     resources,
   };
+}
+
+export function normalizePluginTools(value: unknown): RuntimePluginTool[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error('Plugin tools must be an array.');
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    const record = objectRecord(item, `Plugin tools[${index}] must be an object.`);
+    const name = requiredString(record.name, `Plugin tools[${index}].name`);
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/u.test(name)) {
+      throw new Error(`Plugin tools[${index}].name is invalid.`);
+    }
+    if (seen.has(name)) throw new Error(`Duplicate plugin tool name: ${name}`);
+    seen.add(name);
+    const description = optionalString(record.description);
+    return { name, ...(description ? { description } : {}) };
+  });
 }
 
 export async function normalizePluginSkills(
@@ -641,6 +661,7 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
   } = plugin;
   return {
     ...summary,
+    ...(summary.tools?.length ? { tools: summary.tools.map((tool) => ({ ...tool })) } : {}),
     ...(summary.tags ? { tags: [...summary.tags] } : {}),
     skills: summary.skills.map((skill) => ({
       id: skill.id,
@@ -673,6 +694,7 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
 export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPluginRecord {
   return {
     ...plugin,
+    ...(plugin.tools?.length ? { tools: plugin.tools.map((tool) => ({ ...tool })) } : {}),
     ...(plugin.tags ? { tags: [...plugin.tags] } : {}),
     skills: plugin.skills.map((skill) => ({
       id: skill.id,

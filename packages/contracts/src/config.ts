@@ -186,6 +186,9 @@ export type RuntimeConfiguredModelReference = {
   modelId: string;
 };
 
+export type RuntimeVisionRecognitionConfigState = RuntimeConfiguredModelReference;
+export type RuntimeVisionRecognitionConfigInput = RuntimeConfiguredModelReference | null;
+
 export type RuntimeTaskModelSettings = Partial<
   Record<RuntimeTaskModelId, RuntimeConfiguredModelReference>
 >;
@@ -213,6 +216,7 @@ export type RuntimeConfigState = {
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
   imageGeneration?: RuntimeImageGenerationConfigState;
+  visionRecognition?: RuntimeVisionRecognitionConfigState;
 };
 
 export type RuntimeAccessMode =
@@ -312,5 +316,6 @@ export type RuntimeConfigInput = {
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
   imageGeneration?: RuntimeImageGenerationConfigInput;
+  visionRecognition?: RuntimeVisionRecognitionConfigInput;
   providers?: ProviderConfigInput[];
 };
