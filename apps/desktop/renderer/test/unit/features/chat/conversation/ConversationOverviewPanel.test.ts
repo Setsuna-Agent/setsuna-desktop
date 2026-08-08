@@ -113,6 +113,24 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('Forked conversation');
   });
 
+  it('renders active plan progress with its detail popover', () => {
+    const html = renderOverviewPanel({
+      ...baseProps,
+      compact: false,
+      overview: {
+        ...overview,
+        planItems: [
+          { step: 'Inspect implementation', status: 'completed' },
+          { step: 'Apply focused change', status: 'in_progress' },
+        ],
+      },
+    });
+
+    expect(html).toContain('aria-label="计划推进中，已完成 1/2"');
+    expect(html).toContain('chat-conversation-overview-panel__plan-popover');
+    expect(html).toContain('Apply focused change');
+  });
+
 });
 
 function renderOverviewPanel(

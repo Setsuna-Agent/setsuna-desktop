@@ -7,6 +7,7 @@ import {
   markdownPreviewBody,
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
+import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
 
 describe('capabilities plugin components', () => {
   it('renders a one-click marketplace row without card chrome or local paths', () => {
@@ -146,6 +147,38 @@ describe('capabilities plugin components', () => {
     expect(detailHtml).toContain('卸载');
     expect(detailHtml).toContain('role="alert">更新插件失败：EPERM');
     expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
+  });
+
+  it('composes installed shortcuts with the featured plugin catalog', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginMarket
+        marketplacePlugins={[{
+          id: 'demo-plugin',
+          name: 'Demo Plugin',
+          version: '1.0.0',
+          description: 'Demo capabilities.',
+          publisher: 'Setsuna',
+          tags: ['demo'],
+          featured: true,
+          skills: [{ id: 'demo-plugin.skill', name: 'Demo Skill' }],
+          mcpServers: [],
+          hooks: [],
+          resources: [],
+          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+          installed: true,
+          updateAvailable: false,
+        }]}
+        localPlugins={[]}
+        installingPluginIds={new Set()}
+        onInstall={async () => undefined}
+        onOpenLocal={() => undefined}
+        onOpenMarketplace={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('desktop-plugin-market__installed');
+    expect(html).toContain('desktop-plugin-list-item');
+    expect(html).toContain('Demo Plugin');
   });
 
   it('keeps Hook cards user-facing without exposing runtime identifiers', () => {

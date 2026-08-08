@@ -221,6 +221,23 @@ describe('DesktopReviewPanel', () => {
     });
   });
 
+  it('wraps review lines when the project has no saved preference', () => {
+    withWindowLocalStorage({}, () => {
+      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+        activeProject: project,
+        error: null,
+        latestSummary,
+        loading: false,
+        reviewState: null,
+        onExternalOpenFile: () => undefined,
+        onOpenProjectFile: () => undefined,
+        onRefresh: () => undefined,
+      }));
+
+      expect(html).toContain('desktop-review-diff--wrap');
+    });
+  });
+
   it('virtualizes large wrapped unified diffs in the shared review scroller', () => {
     const largeWrappedSummary = largeWrappedReviewSummary('large-unified.ts', 450);
 
