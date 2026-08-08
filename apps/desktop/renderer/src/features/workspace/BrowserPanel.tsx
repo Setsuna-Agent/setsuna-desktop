@@ -73,6 +73,7 @@ export function BrowserPanel({
   const { t } = useI18n();
   const toast = useToast();
   const webviewRef = useRef<WebviewTag | null>(null);
+  const registeredTabIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, t));
   const {
     captureScreenshot,
@@ -88,6 +89,13 @@ export function BrowserPanel({
   const setWebview = useCallback((node: WebviewTag | null) => {
     webviewRef.current = node;
   }, []);
+  const updateBrowserRegistration = useCallback((tabId: string, registered: boolean) => {
+    if (registered) {
+      registeredTabIdRef.current = tabId;
+    } else if (registeredTabIdRef.current === tabId) {
+      registeredTabIdRef.current = null;
+    }
+  }, []);
   const reportBrowserActionFailure = useCallback((message: string, error?: unknown) => {
     console.warn('[browser] embedded page action failed', error);
     toast.warning(message);
@@ -95,6 +103,22 @@ export function BrowserPanel({
   const reportDeviceEmulationFailure = useCallback((error?: unknown) => {
     reportBrowserActionFailure(t('workspace.browser.deviceEmulationFailed'), error);
   }, [reportBrowserActionFailure, t]);
+
+  const applyActiveDeviceEmulation = async () => {
+    // A false result before registerTab completes means "not ready", not a
+    // failed user action. Registration reapplies the latest settings.
+    const shouldReportFailure = registeredTabIdRef.current === tab.id;
+    try {
+      const applied = await applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation);
+      if (shouldReportFailure && tab.deviceEmulation.enabled && !applied) {
+        reportDeviceEmulationFailure();
+      }
+    } catch (error) {
+      if (shouldReportFailure && tab.deviceEmulation.enabled) {
+        reportDeviceEmulationFailure(error);
+      }
+    }
+  };
 
   useEffect(() => {
     if (hidden) return undefined;
@@ -127,14 +151,7 @@ export function BrowserPanel({
     });
     if (webview) {
       void (async () => {
-        try {
-          const applied = await applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation);
-          if (tab.deviceEmulation.enabled && !applied) {
-            reportDeviceEmulationFailure();
-          }
-        } catch (error) {
-          reportDeviceEmulationFailure(error);
-        }
+        await applyActiveDeviceEmulation();
         try {
           await webview.loadURL(url);
         } catch (error) {
@@ -163,14 +180,7 @@ export function BrowserPanel({
       // UA 和客户端提示覆盖是异步操作。导航前先应用覆盖，防止选择设备后立即刷新时
       // 使用桌面端请求头。
       void (async () => {
-        try {
-          const applied = await applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation);
-          if (tab.deviceEmulation.enabled && !applied) {
-            reportDeviceEmulationFailure();
-          }
-        } catch (error) {
-          reportDeviceEmulationFailure(error);
-        }
+        await applyActiveDeviceEmulation();
         if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.reload())) {
           reportBrowserActionFailure(t('workspace.browser.reloadFailed'));
         }
@@ -271,6 +281,7 @@ export function BrowserPanel({
           active={!hidden}
           tab={tab}
           onDeviceEmulationFailure={reportDeviceEmulationFailure}
+          onRegistrationChange={updateBrowserRegistration}
           onRef={setWebview}
           onUpdate={updateTab}
         />
@@ -283,12 +294,14 @@ export function BrowserPanel({
 function BrowserWebview({
   active,
   onDeviceEmulationFailure,
+  onRegistrationChange,
   onRef,
   onUpdate,
   tab,
 }: {
   active: boolean;
   onDeviceEmulationFailure: (error?: unknown) => void;
+  onRegistrationChange: (tabId: string, registered: boolean) => void;
   onRef: (node: WebviewTag | null) => void;
   onUpdate: (tabId: string, patch: Partial<BrowserTab>) => void;
   tab: BrowserTab;
@@ -365,6 +378,7 @@ function BrowserWebview({
         void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId).then(async (registered) => {
           if (!registered || disposed) return;
           registeredRef.current = true;
+          onRegistrationChange(tab.id, true);
           const deviceEmulation = deviceEmulationRef.current;
           try {
             const applied = await applyBrowserDeviceEmulation(tab.id, deviceEmulation);
@@ -386,12 +400,13 @@ function BrowserWebview({
     return () => {
       disposed = true;
       registeredRef.current = false;
+      onRegistrationChange(tab.id, false);
       node.removeEventListener('dom-ready', register);
       if (registeredWebContentsId !== null) {
         void window.setsunaDesktop?.browser.unregisterTab(tab.id, registeredWebContentsId);
       }
     };
-  }, [onDeviceEmulationFailure, tab.id]);
+  }, [onDeviceEmulationFailure, onRegistrationChange, tab.id]);
 
   useEffect(() => {
     if (!registeredRef.current) return;

@@ -43,12 +43,20 @@ describe('BrowserPanel interactions', () => {
     expect(screen.getByText('Could not change the current page zoom')).toBeTruthy();
   });
 
-  it('waits for webview registration before reporting device emulation failures', async () => {
+  it('defers device emulation warnings until the webview is registered', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const registerTab = vi.fn(async () => true);
-    const setDeviceEmulation = vi.fn(async () => true);
+    const setDeviceEmulation = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
     installBrowserBridge({ registerTab, setDeviceEmulation });
     renderBrowserPanel();
+
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    const loadURL = vi.fn(async () => undefined);
+    const reload = vi.fn();
+    Object.assign(webview, { loadURL, reload });
 
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'Browser menu' }));
@@ -58,12 +66,24 @@ describe('BrowserPanel interactions', () => {
     expect(setDeviceEmulation).not.toHaveBeenCalled();
     expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
 
-    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Reload page' }));
+    await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(1));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
+
+    const address = screen.getByRole('textbox', { name: 'Address or search' });
+    await user.clear(address);
+    await user.type(address, 'example.org/docs{Enter}');
+    await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(loadURL).toHaveBeenCalledWith('https://example.org/docs'));
+    expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
+
     Object.assign(webview, { getWebContentsId: () => 42 });
     webview.dispatchEvent(new Event('dom-ready'));
 
     await waitFor(() => expect(registerTab).toHaveBeenCalledWith('browser-interaction', 42));
-    await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(3));
     expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
   });
 });
