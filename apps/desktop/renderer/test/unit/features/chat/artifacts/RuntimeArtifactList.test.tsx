@@ -18,6 +18,7 @@ describe('RuntimeArtifactList', () => {
 
     const html = renderToStaticMarkup(<RuntimeArtifactList artifacts={[artifact]} />);
 
+    expect(html).toContain('aria-label="生成的产物"');
     expect(html).toContain('deliverable.pdf');
     expect(html).toContain('文档 · PDF');
     expect(html).toContain('打开方式');

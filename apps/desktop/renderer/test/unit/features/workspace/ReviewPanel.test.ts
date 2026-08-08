@@ -78,23 +78,36 @@ describe('DesktopReviewPanel', () => {
     expect(html).toContain('line 40 full diff');
   });
 
-  it('restores the selected review source for the active project', () => {
-    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'staged' }, () => {
-      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-        activeProject: project,
-        error: null,
-        latestSummary,
-        loading: false,
-        reviewState,
-        onExternalOpenFile: () => undefined,
-        onOpenProjectFile: () => undefined,
-        onRefresh: () => undefined,
-      }));
+  it('restores every selected review source with its own diff totals', () => {
+    const summaries = {
+      unstaged: { additions: 11, deletions: 12, files: [] },
+      staged: { additions: 21, deletions: 22, files: [] },
+      branch: { additions: 31, deletions: 32, files: [] },
+      latest: { additions: 41, deletions: 42, files: [] },
+    } satisfies Record<'unstaged' | 'staged' | 'branch' | 'latest', DesktopDiffSummary>;
 
-      expect(html).toContain('已暂存');
-      expect(html).toContain('desktop-review-change-counts__addition">+3</span>');
-      expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
-    });
+    for (const source of ['unstaged', 'staged', 'branch', 'latest'] as const) {
+      withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': source }, () => {
+        const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+          activeProject: project,
+          error: null,
+          latestSummary: summaries.latest,
+          loading: false,
+          reviewState: {
+            ...reviewState,
+            branchSummary: summaries.branch,
+            stagedSummary: summaries.staged,
+            unstagedSummary: summaries.unstaged,
+          },
+          onExternalOpenFile: () => undefined,
+          onOpenProjectFile: () => undefined,
+          onRefresh: () => undefined,
+        }));
+
+        expect(html).toContain(`desktop-review-change-counts__addition">+${summaries[source].additions}</span>`);
+        expect(html).toContain(`desktop-review-change-counts__deletion">-${summaries[source].deletions}</span>`);
+      });
+    }
   });
 
   it('consumes automatic file focus once so manual source selection is not reverted', () => {

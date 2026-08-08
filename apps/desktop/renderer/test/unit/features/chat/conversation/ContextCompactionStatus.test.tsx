@@ -23,6 +23,7 @@ describe('ContextCompactionStatus', () => {
     };
 
     expect(activeHtml).toContain('chat-timeline-divider is-loading');
+    expect(activeHtml).toContain('正在压缩上下文');
     expect(activeHtml).not.toContain('%');
     expect(renderToStaticMarkup(<ContextCompactionStatus message={message} />)).toContain('已压缩 12 条上下文');
   });

@@ -178,6 +178,7 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('desktop-plugin-market__installed');
     expect(html).toContain('desktop-plugin-list-item');
     expect(html).toContain('Demo Plugin');
+    expect(html).toContain('aria-label="查看已安装插件：Demo Plugin"');
   });
 
   it('keeps Hook cards user-facing without exposing runtime identifiers', () => {

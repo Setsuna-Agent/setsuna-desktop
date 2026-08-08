@@ -18,10 +18,21 @@ describe('BrandIconDialog', () => {
         onConfirm={() => undefined}
       />,
     );
+    const modelHtml = renderToStaticMarkup(
+      <BrandIconDialog
+        automaticBrand={automaticBrand}
+        name="gpt-5.6-sol"
+        subject="model"
+        onClose={() => undefined}
+        onConfirm={() => undefined}
+      />,
+    );
 
     expect(html).toContain('settings-provider-icon-option__mark is-automatic');
     expect(html).toContain('settings-provider-icon-option is-selected');
     expect(html).toContain('aria-checked="true"');
     expect(html).toContain('accept="image/png,image/jpeg,image/webp"');
+    expect(modelHtml).toContain('配置模型图标');
+    expect(modelHtml).toContain('aria-label="模型图标"');
   });
 });

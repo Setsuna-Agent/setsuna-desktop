@@ -1,7 +1,7 @@
 import type { RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import type {
@@ -11,7 +11,7 @@ import { ConversationOverviewPanel } from '../../../../../src/features/chat/conv
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../../src/features/workspace/model.js';
 
 describe('ConversationOverviewPanel', () => {
-  it('uses the same local git change summary in compact and expanded modes', () => {
+  it('uses the same local git summary and keeps the review action argument-free', () => {
     const localReviewState: DesktopReviewState = {
       ...reviewState,
       stagedSummary: {
@@ -42,6 +42,12 @@ describe('ConversationOverviewPanel', () => {
     expect(expandedHtml).not.toContain('2 个文件');
     expect(expandedHtml).not.toContain('无变更');
     expect(expandedHtml).not.toContain('打开文件');
+
+    const onOpenReview = vi.fn();
+    const panel = captureOverviewPanel({ ...baseProps, compact: false, onOpenReview });
+    const reviewButton = panel.props.children[1].props.children[0];
+    reviewButton.props.onClick({ type: 'click' });
+    expect(onOpenReview).toHaveBeenCalledWith();
   });
 
   it('shows untracked worktree changes before a repository has its first commit', () => {
@@ -154,6 +160,21 @@ function renderOverviewPanel(
     { initialLocale: 'zh-CN' },
     createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
   ));
+}
+
+function captureOverviewPanel(props: Parameters<typeof ConversationOverviewPanel>[0]) {
+  const captured: { panel?: ReturnType<typeof ConversationOverviewPanel> } = {};
+  function Capture() {
+    captured.panel = ConversationOverviewPanel(props);
+    return captured.panel;
+  }
+  renderToStaticMarkup(createElement(
+    I18nProvider,
+    { initialLocale: 'zh-CN' },
+    createElement(ToastProvider, null, createElement(Capture)),
+  ));
+  if (!captured.panel) throw new Error('Conversation overview panel did not render.');
+  return captured.panel;
 }
 
 const project: WorkspaceProject = {
