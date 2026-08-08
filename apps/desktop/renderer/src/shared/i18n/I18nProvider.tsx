@@ -8,6 +8,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import { readBrowserStorageValue, writeBrowserStorageValue } from '../preferences/browserStorage.js';
 import { messages, type MessageKey } from './messages.js';
 
 export type AppLocale = RuntimeInterfaceLanguage;
@@ -68,20 +69,10 @@ export function initializeLocalePreference(): void {
 }
 
 function readStoredLocale(): AppLocale {
-  if (typeof window === 'undefined') return DEFAULT_APP_LOCALE;
-  try {
-    return normalizeAppLocale(window.localStorage.getItem(APP_LOCALE_STORAGE_KEY)) ?? DEFAULT_APP_LOCALE;
-  } catch {
-    return DEFAULT_APP_LOCALE;
-  }
+  return normalizeAppLocale(readBrowserStorageValue(APP_LOCALE_STORAGE_KEY)) ?? DEFAULT_APP_LOCALE;
 }
 
 function applyLocalePreference(locale: AppLocale): void {
   if (typeof document !== 'undefined') document.documentElement.lang = locale;
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(APP_LOCALE_STORAGE_KEY, locale);
-  } catch {
-    // Sandboxed previews may deny storage; the in-memory preference still applies.
-  }
+  writeBrowserStorageValue(APP_LOCALE_STORAGE_KEY, locale);
 }

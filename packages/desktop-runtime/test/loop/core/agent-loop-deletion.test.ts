@@ -11,7 +11,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { closeTestThreadStores, createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { AttachmentStore, RuntimeResolvedAttachment } from '../../../src/ports/attachment-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -21,6 +21,7 @@ describe('agent loop thread deletion barrier', () => {
   const roots: string[] = [];
 
   afterEach(async () => {
+    await closeTestThreadStores();
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
@@ -28,7 +29,7 @@ describe('agent loop thread deletion barrier', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-delete-'));
     roots.push(root);
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Delete active goal' });
     const modelClient = new AbortIgnoringModelClient();
     const loop = new AgentLoop({
@@ -77,7 +78,7 @@ describe('agent loop thread deletion barrier', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-delete-'));
     roots.push(root);
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Retry after failed deletion' });
     const modelClient = new AbortIgnoringModelClient();
     modelClient.release();
@@ -101,7 +102,7 @@ describe('agent loop thread deletion barrier', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-delete-'));
     roots.push(root);
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Delete during preprocessing' });
     const attachmentStore = new DeferredClaimAttachmentStore();
     const loop = new AgentLoop({
@@ -145,7 +146,7 @@ describe('agent loop thread deletion barrier', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-delete-'));
     roots.push(root);
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Direct mutation admission' });
     const modelClient = new AbortIgnoringModelClient();
     modelClient.release();
@@ -191,7 +192,7 @@ describe('agent loop thread deletion barrier', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-migration-'));
     roots.push(root);
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(root, systemClock, ids);
+    const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Migration admission barrier' });
     const modelClient = new AbortIgnoringModelClient();
     const loop = new AgentLoop({

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -58,7 +58,7 @@ describe('agent loop stream history and regeneration', () => {
       ]);
 
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const legacy = await threadStore.getThread('thread_n1_protocol_history');
       expect(await threadStore.listEvents('thread_n1_protocol_history')).toHaveLength(10);
       expect(legacy?.messages.every((message) => message.providerMetadata === undefined)).toBe(true);
@@ -111,7 +111,7 @@ describe('agent loop stream history and regeneration', () => {
 
   it('keeps assistant history populated when the model streams item-based content', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Item stream loop' });
       const modelClient = new ItemBasedModelClient();
       const usageStore = new CapturingUsageStore();
@@ -176,7 +176,7 @@ describe('agent loop stream history and regeneration', () => {
   
   it('executes tool calls surfaced as native stream items', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Native item tool loop', projectId: 'project_1' });
       const modelClient = new NativeItemToolCallModelClient();
       const toolHost = new CapturingToolHost();
@@ -223,7 +223,7 @@ describe('agent loop stream history and regeneration', () => {
   
   it('edits a user message, truncates following replies, and regenerates without duplicating the user turn', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Regenerate loop' });
       const modelClient = new RegenerateModelClient();
       const loop = new AgentLoop({

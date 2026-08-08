@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 
 export const fontSizeOptions = ['80', '85', '90', '95', '100', '105', '110', '115', '120'] as const;
 export type FontSizeMode = typeof fontSizeOptions[number];
@@ -290,21 +291,21 @@ export function useAppearancePreferences() {
   }, []);
 
   const setFontSize = useCallback((nextFontSize: FontSizeMode) => {
-    window.localStorage.setItem(fontSizeStorageKey, nextFontSize);
+    writeBrowserStorageValue(fontSizeStorageKey, nextFontSize);
     setFontSizeState(nextFontSize);
     applyAppearance(nextFontSize, getInitialFontFamily(), getInitialFontWeight());
     window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
   }, []);
 
   const setFontFamily = useCallback((nextFontFamily: FontFamilyMode) => {
-    window.localStorage.setItem(fontFamilyStorageKey, nextFontFamily);
+    writeBrowserStorageValue(fontFamilyStorageKey, nextFontFamily);
     setFontFamilyState(nextFontFamily);
     applyAppearance(getInitialFontSize(), nextFontFamily, getInitialFontWeight());
     window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
   }, []);
 
   const setFontWeight = useCallback((nextFontWeight: FontWeightMode) => {
-    window.localStorage.setItem(fontWeightStorageKey, nextFontWeight);
+    writeBrowserStorageValue(fontWeightStorageKey, nextFontWeight);
     setFontWeightState(nextFontWeight);
     applyAppearance(getInitialFontSize(), getInitialFontFamily(), nextFontWeight);
     window.dispatchEvent(new CustomEvent(appearanceChangeEventName));
@@ -318,19 +319,19 @@ export function initializeAppearancePreference(): void {
 }
 
 function getInitialFontSize(): FontSizeMode {
-  const saved = window.localStorage.getItem(fontSizeStorageKey);
+  const saved = readBrowserStorageValue(fontSizeStorageKey);
   if (fontSizeOptions.includes(saved as FontSizeMode)) return saved as FontSizeMode;
   return saved ? legacyFontSizeMap[saved] ?? '100' : '100';
 }
 
 function getInitialFontFamily(): FontFamilyMode {
-  const saved = window.localStorage.getItem(fontFamilyStorageKey);
+  const saved = readBrowserStorageValue(fontFamilyStorageKey);
   if (fontFamilyOptions.some((item) => item.value === saved)) return saved as FontFamilyMode;
   return saved ? legacyFontFamilyMap[saved] ?? 'system' : 'system';
 }
 
 function getInitialFontWeight(): FontWeightMode {
-  const saved = window.localStorage.getItem(fontWeightStorageKey);
+  const saved = readBrowserStorageValue(fontWeightStorageKey);
   if (fontWeightOptions.some((item) => item.value === saved)) return saved as FontWeightMode;
   return '500';
 }

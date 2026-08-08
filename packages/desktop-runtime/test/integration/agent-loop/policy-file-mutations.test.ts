@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -35,7 +35,7 @@ import {
 describe('agent loop tool policy and file mutations', () => {
   it('requires approval for every tool when approval policy is strict', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Strict approval loop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -66,7 +66,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('lets PermissionRequest hooks approve tools before user approval UI', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Permission hook allow' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -115,7 +115,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('lets PermissionRequest hooks deny tools before user approval UI', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Permission hook deny' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -173,7 +173,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('marks invalid PermissionRequest hook output as failed and continues to approval UI', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Permission hook invalid' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -227,7 +227,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('routes strict file mutations through the tool orchestrator approval flow', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Strict file write loop' });
       const modelClient = new ToolDeltaModelClient();
       const toolHost = new PreviewingToolHost();
@@ -268,7 +268,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('caches strict file mutation approvals only when approved for session', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session file approval loop' });
       const modelClient = new RepeatedFileWriteModelClient();
       const toolHost = new PreviewingToolHost();
@@ -301,7 +301,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('does not cache strict file mutation approvals for one-time approvals', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'One-time file approval loop' });
       const modelClient = new RepeatedFileWriteModelClient();
       const toolHost = new PreviewingToolHost();
@@ -334,7 +334,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('rejects file mutations before execution in read-only permission profile', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Read-only file write loop' });
       const modelClient = new ToolDeltaModelClient();
       const toolHost = new PreviewingToolHost();
@@ -362,7 +362,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('rejects protected workspace metadata file mutations before execution', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Protected metadata write loop' });
       const modelClient = new ProtectedMetadataWriteModelClient();
       const toolHost = new PreviewingToolHost();
@@ -389,7 +389,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('intercepts shell apply_patch commands into the file mutation approval path', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Shell patch loop' });
       const modelClient = new ShellApplyPatchModelClient('src/from-shell.txt');
       const toolHost = new ShellApplyPatchInterceptHost();
@@ -432,7 +432,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('preserves shell cd workdir when intercepting apply_patch commands', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Shell cd patch loop' });
       const modelClient = new ShellApplyPatchModelClient('from-shell-cd.txt', 'cd src && ');
       const toolHost = new ShellApplyPatchInterceptHost();
@@ -469,7 +469,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('intercepts shell applypatch alias commands into apply_patch', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Shell applypatch alias loop' });
       const modelClient = new ShellApplyPatchModelClient('src/from-alias.txt', '', 'applypatch');
       const toolHost = new ShellApplyPatchInterceptHost();
@@ -505,7 +505,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('rejects protected workspace metadata writes hidden in shell apply_patch commands', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Protected shell patch loop' });
       const modelClient = new ShellApplyPatchModelClient('.git/config');
       const toolHost = new ShellApplyPatchInterceptHost();
@@ -532,7 +532,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('does not intercept ordinary shell commands that merely mention apply_patch', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Shell search loop' });
       const modelClient = new ShellMentionApplyPatchModelClient();
       const toolHost = new ShellApplyPatchInterceptHost();
@@ -560,7 +560,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('skips tool approvals when approval policy is full', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Full approval loop' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -587,7 +587,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('runs unsandboxed exec without prompting under full access', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Full approval escalated exec loop' });
       const modelClient = new EscalatedExecModelClient();
       const toolHost = new EscalatedExecToolHost();
@@ -610,7 +610,7 @@ describe('agent loop tool policy and file mutations', () => {
   
   it('treats an empty additional-permissions override as the default sandbox under full policy', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Empty additional permissions exec loop' });
       const toolHost = new AdditionalPermissionsExecToolHost();
       const approvalGate = new InMemoryApprovalGate(systemClock, ids);

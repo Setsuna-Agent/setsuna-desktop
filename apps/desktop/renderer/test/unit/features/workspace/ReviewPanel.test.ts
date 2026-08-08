@@ -2,7 +2,6 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
 import {
   DesktopReviewPanel,
   branchCompareDisplayName,
@@ -13,50 +12,10 @@ import {
   reviewWorkspaceFilePath,
   shouldRestoreBranchBaseRefPreference,
 } from '../../../../src/features/workspace/ReviewPanel.js';
-import { WorkspaceGitCommitProvider } from '../../../../src/features/workspace/git/WorkspaceGitCommitDialog.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
 import { I18nProvider, translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('DesktopReviewPanel', () => {
-  it('renders an enabled commit or push button backed by the shared Git dialog', () => {
-    const html = renderToStaticMarkup(createElement(
-      I18nProvider,
-      { initialLocale: 'zh-CN' },
-      createElement(
-        ToastProvider,
-        null,
-        createElement(
-          WorkspaceGitCommitProvider,
-          {
-            activeProject: project,
-            reviewLoading: false,
-            reviewState,
-            onReviewRefresh: () => undefined,
-          },
-          createElement(DesktopReviewPanel, {
-            activeProject: project,
-            error: null,
-            latestSummary,
-            loading: false,
-            reviewState,
-            onExternalOpenFile: () => undefined,
-            onOpenProjectFile: () => undefined,
-            onRefresh: () => undefined,
-          }),
-        ),
-      ),
-    ));
-
-    const triggerStart = html.indexOf('class="desktop-review-panel__commit-action"');
-    const triggerEnd = html.indexOf('</button>', triggerStart);
-    const triggerHtml = html.slice(triggerStart, triggerEnd);
-    expect(triggerStart).toBeGreaterThan(-1);
-    expect(triggerHtml).toContain('lucide-git-commit-horizontal');
-    expect(triggerHtml).toContain('提交或推送');
-    expect(triggerHtml).not.toContain('disabled');
-    expect(triggerHtml).not.toContain('lucide-chevron-down');
-  });
-
   it('renders compact file diffs through a valid Pierre patch', () => {
     const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
       activeProject: project,

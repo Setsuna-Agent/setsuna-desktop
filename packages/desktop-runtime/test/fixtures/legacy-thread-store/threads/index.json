@@ -1,0 +1,15 @@
+{
+  "threads": [
+    {
+      "id": "thread_legacy_fixture_1",
+      "parentThreadId": "thread_parent",
+      "title": "Legacy import",
+      "createdAt": "2025-01-02T03:04:05.000Z",
+      "updatedAt": "2025-01-02T03:04:05.000Z",
+      "archived": false,
+      "memoryMode": "enabled",
+      "messageCount": 1,
+      "lastMessagePreview": "preserve me"
+    }
+  ]
+}

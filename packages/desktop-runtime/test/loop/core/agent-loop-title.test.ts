@@ -11,7 +11,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { closeTestThreadStores, createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import {
   THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
@@ -23,13 +23,14 @@ import type { ModelClient } from '../../../src/ports/model-client.js';
 const testDirs: string[] = [];
 
 afterEach(async () => {
+  await closeTestThreadStores();
   await Promise.all(testDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })));
 });
 
 describe('agent loop thread titles', () => {
   it('replaces the first-message fallback with a title from the current model', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
     const thread = await threadStore.createThread();
     const modelClient = new TitleAwareModelClient();
     const eventBus = new InMemoryEventBus();
@@ -58,7 +59,7 @@ describe('agent loop thread titles', () => {
 
   it('uses the configured dedicated model and provider for title generation', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
     const thread = await threadStore.createThread();
     const modelClient = new TitleAwareModelClient();
     const loop = new AgentLoop({
@@ -82,7 +83,7 @@ describe('agent loop thread titles', () => {
 
   it('keeps the deterministic fallback when title generation fails', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
     const thread = await threadStore.createThread();
     const input = '这是一个很长的首条用户输入，用来确认模型标题生成失败时仍然会保留原来的内容截取逻辑作为稳定兜底，而且不会让整轮回答失败';
     const loop = new AgentLoop({
@@ -103,7 +104,7 @@ describe('agent loop thread titles', () => {
 
   it('keeps the deterministic fallback when the model returns a generic placeholder', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
     const thread = await threadStore.createThread();
     const loop = new AgentLoop({
       threadStore,
@@ -124,7 +125,7 @@ describe('agent loop thread titles', () => {
 
   it('does not overwrite a manual rename made while the first turn is running', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await testDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await testDataDir(), systemClock, ids);
     const thread = await threadStore.createThread();
     const modelClient = new DelayedTitleModelClient();
     const loop = new AgentLoop({

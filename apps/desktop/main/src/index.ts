@@ -19,6 +19,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createBrowserContextMenuTemplate } from './browser/context-menu.js';
 import { embeddedBrowserKeyboardShortcut } from './browser/keyboard-shortcuts.js';
+import {
+  isAllowedEmbeddedBrowserUrl,
+  requestEmbeddedBrowserNewTab,
+} from './browser/new-tab.js';
 import { BrowserControlServer } from './browser/control-server.js';
 import { DesktopBrowserController } from './browser/control.js';
 import { registerBrowserIpc } from './ipc/browser-ipc.js';
@@ -312,12 +316,8 @@ async function createWindow(): Promise<void> {
     });
     const requestNewBrowserTab = (url: string): boolean => {
       const hostWebContents = guestContents.hostWebContents;
-      if (isAllowedEmbeddedBrowserUrl(url) && hostWebContents && !hostWebContents.isDestroyed()) {
+      if (requestEmbeddedBrowserNewTab(hostWebContents, guestContents.id, url)) {
         console.info('[browser] intercepted new-window request', { openerWebContentsId: guestContents.id, url });
-        hostWebContents.send('browser:open-new-tab', {
-          openerWebContentsId: guestContents.id,
-          url,
-        });
         return true;
       }
       console.warn('[browser] blocked new-window request', {
@@ -469,15 +469,6 @@ function loadDesktopIcon(): NativeImage | undefined {
   if (!iconPath) return undefined;
   const image = nativeImage.createFromPath(iconPath);
   return image.isEmpty() ? undefined : image;
-}
-
-export function isAllowedEmbeddedBrowserUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    return url.protocol === 'http:' || url.protocol === 'https:' || (url.protocol === 'about:' && url.href === 'about:blank');
-  } catch {
-    return false;
-  }
 }
 
 function resolveDesktopIconPath(): string | undefined {

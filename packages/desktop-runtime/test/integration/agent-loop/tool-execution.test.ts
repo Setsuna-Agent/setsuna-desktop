@@ -4,7 +4,7 @@ import type {
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -39,7 +39,7 @@ import {
 describe('agent loop tool execution', () => {
   it('publishes tool output deltas before completing command tools', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Output delta loop' });
       const loop = new AgentLoop({
         threadStore,
@@ -71,7 +71,7 @@ describe('agent loop tool execution', () => {
   
   it('runs consecutive read-only local tool calls in parallel', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Parallel tools', projectId: 'project_1' });
       const modelClient = new ParallelReadModelClient();
       const toolHost = new ParallelReadToolHost();
@@ -108,7 +108,7 @@ describe('agent loop tool execution', () => {
   
   it('runs search_text calls emitted in the same model response in parallel', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Parallel searches', projectId: 'project_1' });
       const modelClient = new ParallelSearchModelClient();
       const toolHost = new ParallelReadToolHost();
@@ -143,7 +143,7 @@ describe('agent loop tool execution', () => {
   
   it('honors tool runtime profile when deciding parallel execution', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Serial profiled tools', projectId: 'project_1' });
       const modelClient = new ParallelReadModelClient();
       const toolHost = new SerialProfileReadToolHost();
@@ -171,7 +171,7 @@ describe('agent loop tool execution', () => {
   
   it('advertises host tools directly on the first sampling step', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Direct tools', projectId: 'project_1' });
       const modelClient = new DirectLookupToolModelClient();
       const toolHost = new LookupToolHost();
@@ -214,7 +214,7 @@ describe('agent loop tool execution', () => {
   
   it('advertises AppServer dynamic tools directly', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Direct dynamic tool', projectId: 'project_1' });
       const modelClient = new SingleToolCallModelClient({
         id: 'call_dynamic_lookup',
@@ -265,7 +265,7 @@ describe('agent loop tool execution', () => {
   
   it('cancels an AppServer dynamic tool without publishing a tool error', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cancel dynamic tool', projectId: 'project_1' });
       let notifyStarted!: () => void;
       const dynamicCallStarted = new Promise<void>((resolve) => { notifyStarted = resolve; });
@@ -309,7 +309,7 @@ describe('agent loop tool execution', () => {
   
   it('executes all inspection calls without injecting progress copy', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Inspection batch', projectId: 'project_1' });
       const modelClient = new ManyInspectionModelClient();
       const toolHost = new CountingReadToolHost();
@@ -354,7 +354,7 @@ describe('agent loop tool execution', () => {
   
   it('honors a tool host forced tool choice for the next model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Forced tool choice', projectId: 'project_1' });
       const modelClient = new ForcedToolChoiceModelClient();
       const loop = new AgentLoop({
@@ -374,7 +374,7 @@ describe('agent loop tool execution', () => {
   
   it('publishes streaming tool-call previews from tool argument deltas', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Tool delta loop', projectId: 'project_1' });
       const modelClient = new ToolDeltaModelClient();
       const toolHost = new PreviewingToolHost();
@@ -417,7 +417,7 @@ describe('agent loop tool execution', () => {
   
   it('keeps large structured tool result previews valid for thread projections', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Large structured preview', projectId: 'project_1' });
       const loop = new AgentLoop({
         threadStore,
@@ -442,7 +442,7 @@ describe('agent loop tool execution', () => {
   
   it('bounds persisted previews for token-heavy tool arguments', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Noisy tool delta loop', projectId: 'project_1' });
       const modelClient = new NoisyToolDeltaModelClient();
       const toolHost = new PreviewingToolHost();
@@ -474,7 +474,7 @@ describe('agent loop tool execution', () => {
   
   it('publishes streaming previews for directly advertised tools', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Direct delta preview', projectId: 'project_1' });
       const modelClient = new LookupToolDeltaModelClient();
       const toolHost = new LookupPreviewingToolHost();

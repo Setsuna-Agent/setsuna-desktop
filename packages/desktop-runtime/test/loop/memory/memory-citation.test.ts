@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   MemoryCitationStreamParser,
   parseMemoryCitationBodies,
-  stripMemoryCitations,
 } from '../../../src/loop/memory/memory-citation.js';
 
 describe('memory citation parser', () => {
@@ -18,14 +17,14 @@ describe('memory citation parser', () => {
   });
 
   it('auto-closes unfinished citation tags at finish', () => {
-    const stripped = stripMemoryCitations('x<oai-mem-citation>source');
+    const stripped = parseCompleteStream('x<oai-mem-citation>source');
 
     expect(stripped.visibleText).toBe('x');
     expect(stripped.citationBodies).toEqual(['source']);
   });
 
   it('preserves partial open tags at finish when they never become a full tag', () => {
-    const stripped = stripMemoryCitations('hello <oai-mem-');
+    const stripped = parseCompleteStream('hello <oai-mem-');
 
     expect(stripped.visibleText).toBe('hello <oai-mem-');
     expect(stripped.citationBodies).toEqual([]);
@@ -62,3 +61,13 @@ describe('memory citation parser', () => {
     });
   });
 });
+
+function parseCompleteStream(text: string): { visibleText: string; citationBodies: string[] } {
+  const parser = new MemoryCitationStreamParser();
+  const first = parser.push(text);
+  const tail = parser.finish();
+  return {
+    visibleText: `${first.visibleText}${tail.visibleText}`,
+    citationBodies: [...first.citations, ...tail.citations],
+  };
+}

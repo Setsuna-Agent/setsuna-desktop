@@ -2,10 +2,11 @@ import type { ModelRequest, ModelStreamEvent } from '@setsuna-desktop/contracts'
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
+import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import {
   mkDataDir,
@@ -291,7 +292,7 @@ describe('agent loop queued turn inputs', () => {
 
   it('turns a typed Goal item into a persistent goal and consumes it atomically', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Queued goal test' });
     const modelClient = new QueuedGoalModelClient();
     const loop = new AgentLoop({
@@ -421,7 +422,7 @@ describe('agent loop queued turn inputs', () => {
 
   it('rejects another Goal before persistence while an unfinished Goal exists', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Existing goal validation' });
     const modelClient = new QueuedGoalModelClient();
     const loop = new AgentLoop({
@@ -454,7 +455,7 @@ describe('agent loop queued turn inputs', () => {
 
   it('keeps an active Goal idle while a queued Plan awaits confirmation', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Goal waits for plan confirmation' });
     const modelClient = new GoalWithQueuedPlanModelClient();
     const loop = new AgentLoop({
@@ -543,7 +544,7 @@ describe('agent loop queued turn inputs', () => {
 
   it('pauses after an error and resumes old items before newly submitted input', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Paused queue after error' });
     const modelClient = new FailingFirstModelClient();
     const loop = new AgentLoop({
@@ -605,7 +606,7 @@ describe('agent loop queued turn inputs', () => {
 
 async function createBlockedLoop() {
   const ids = new RandomIdGenerator();
-  const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+  const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
   const thread = await threadStore.createThread({ title: 'Queued input test' });
   const modelClient = new SteerableModelClient();
   const loop = new AgentLoop({
@@ -620,7 +621,7 @@ async function createBlockedLoop() {
 }
 
 function waitForThreadIdle(
-  threadStore: JsonThreadStore,
+  threadStore: ThreadStore,
   threadId: string,
 ) {
   return waitForTestState(
@@ -641,7 +642,7 @@ function inlineAttachment(id: string, name: string) {
 }
 
 async function waitForQueueDrain(
-  threadStore: JsonThreadStore,
+  threadStore: ThreadStore,
   threadId: string,
   expectedUserMessages: number,
 ) {

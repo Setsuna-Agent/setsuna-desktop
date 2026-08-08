@@ -1,6 +1,9 @@
-import { renderToStaticMarkup } from 'react-dom/server';
+// @vitest-environment happy-dom
+
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { App, reloadRenderer } from '../../../src/app/App.js';
+import { App } from '../../../src/app/App.js';
 
 const useDesktopAppController = vi.hoisted(() => vi.fn());
 
@@ -10,36 +13,59 @@ vi.mock('../../../src/app/controller/useDesktopAppController.js', () => ({
 
 describe('App', () => {
   afterEach(() => {
+    cleanup();
     useDesktopAppController.mockReset();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it('renders an empty neutral surface when the desktop bridge is unavailable', () => {
-    vi.stubGlobal('window', {});
+    setDesktopBridge(undefined);
 
-    const html = renderToStaticMarkup(<App />);
+    const { container } = render(<App />);
 
-    expect(html).toBe('<div class="app-blank-surface" aria-hidden="true"></div>');
-    expect(html).not.toContain('Renderer error');
-    expect(html).not.toContain('Desktop runtime bridge is unavailable');
+    expect(container.querySelector('.app-blank-surface')).toBeTruthy();
+    expect(container.querySelector('.app-shell')).toBeNull();
   });
 
   it('keeps the runtime loading state free of shell chrome', () => {
-    vi.stubGlobal('window', { setsunaDesktop: { runtime: {} } });
+    setDesktopBridge(createDesktopBridge());
     useDesktopAppController.mockReturnValue({ loadState: 'loading' });
 
-    const html = renderToStaticMarkup(<App />);
+    const { container } = render(<App />);
 
-    expect(html).toBe('<div class="app-blank-surface" aria-hidden="true"></div>');
-    expect(html).not.toContain('app-shell');
-    expect(html).not.toContain('Starting runtime');
+    expect(container.querySelector('.app-blank-surface')).toBeTruthy();
+    expect(container.querySelector('.app-shell')).toBeNull();
   });
 
-  it('reloads the renderer when recovering from a render failure', () => {
-    const reload = vi.fn();
+  it('offers a renderer reload after a descendant render failure', async () => {
+    setDesktopBridge(createDesktopBridge());
+    useDesktopAppController.mockImplementation(() => {
+      throw new Error('render exploded');
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => undefined);
 
-    reloadRenderer({ reload });
+    render(<App />);
 
+    expect(screen.getByText('render exploded')).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: /重试|retry/iu }));
     expect(reload).toHaveBeenCalledOnce();
   });
 });
+
+function setDesktopBridge(value: unknown): void {
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value,
+  });
+}
+
+function createDesktopBridge(): unknown {
+  return {
+    desktop: {
+      setInterfaceLanguage: vi.fn().mockResolvedValue(undefined),
+    },
+    runtime: {},
+  };
+}

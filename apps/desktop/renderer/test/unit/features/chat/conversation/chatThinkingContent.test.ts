@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  hasOpenThinkingSegments,
   hasRenderableThinkingContent,
   hasThinkingSegments,
   splitThinkingContent,
@@ -29,11 +28,5 @@ describe('chatThinkingContent', () => {
   it('keeps thinking evidence available for the work panel', () => {
     expect(hasThinkingSegments('<think>plan</think>answer')).toBe(true);
     expect(hasThinkingSegments('answer')).toBe(false);
-  });
-
-  it('distinguishes open streaming thinking from completed hidden thinking', () => {
-    expect(hasOpenThinkingSegments('<think>plan', true)).toBe(true);
-    expect(hasOpenThinkingSegments('<think>plan</think>answer', true)).toBe(false);
-    expect(hasOpenThinkingSegments('<think>plan', false)).toBe(false);
   });
 });

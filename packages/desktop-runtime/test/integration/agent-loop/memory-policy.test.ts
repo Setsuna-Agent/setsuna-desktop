@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { MemoryToolHost } from '../../../src/adapters/tool/memory-tool-host.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -25,7 +25,7 @@ describe('agent loop memory policy', () => {
   it('excludes injected AGENTS and skill fragments from passive memory extraction', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Injected context', projectId: 'project_1' });
       const modelClient = new PassiveMemoryModelClient();
@@ -53,7 +53,7 @@ describe('agent loop memory policy', () => {
       const ids = new RandomIdGenerator();
       const clock = new MutableClock('2026-01-01T00:00:00.000Z');
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, clock, ids);
+      const threadStore = createTestThreadStore(dataDir, clock, ids);
       const memoryStore = new FileMemoryStore(dataDir, clock, ids);
       const thread = await threadStore.createThread({ title: 'Historical memory', projectId: 'project_1' });
       await appendCompletedExchange(threadStore, ids, clock, thread.id, 'turn_history', '以后记忆生成模型要跟随当前切换的模型。', '收到，我会记住这个偏好。');
@@ -107,7 +107,7 @@ describe('agent loop memory policy', () => {
       const ids = new RandomIdGenerator();
       const clock = new MutableClock('2026-01-01T00:00:00.000Z');
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, clock, ids);
+      const threadStore = createTestThreadStore(dataDir, clock, ids);
       const memoryStore = new FileMemoryStore(dataDir, clock, ids);
       const oldThreadA = await threadStore.createThread({ title: 'Old A' });
       await appendCompletedExchange(threadStore, ids, clock, oldThreadA.id, 'turn_old_a', '请记住 A 偏好。', '好的。');
@@ -147,7 +147,7 @@ describe('agent loop memory policy', () => {
   it('skips passive memory extraction when the same turn already saved an active memory', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Active memory', projectId: 'project_1' });
       const modelClient = new ActiveMemoryModelClient();
@@ -179,7 +179,7 @@ describe('agent loop memory policy', () => {
   it('skips passive memory extraction when memories are disabled', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Disabled memory extraction' });
       const modelClient = new PassiveMemoryModelClient();
@@ -202,7 +202,7 @@ describe('agent loop memory policy', () => {
   it('does not expose memory tools to the model when memory is disabled', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const configStore = new MemorySettingsConfigStore({
         useMemories: false,
@@ -234,7 +234,7 @@ describe('agent loop memory policy', () => {
   it('can use memories without generating new memories', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Read-only memory' });
       await memoryStore.rememberMemory({ content: 'The user wants concise verification notes.' });
@@ -267,7 +267,7 @@ describe('agent loop memory policy', () => {
   it('marks threads polluted after successful MCP tools and skips passive memory extraction', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'External context', memoryMode: 'enabled' });
       const modelClient = new ExternalContextMemoryModelClient();
@@ -307,7 +307,7 @@ describe('agent loop memory policy', () => {
   it('marks threads polluted when tool output contains external context', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'External output marker', memoryMode: 'enabled' });
       const modelClient = new ExternalContextMemoryModelClient('external_search');

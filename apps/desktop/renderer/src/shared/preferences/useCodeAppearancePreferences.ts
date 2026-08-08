@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 import { getFontPlatform, type FontPlatform } from './useAppearancePreferences.js';
 
 type CodeFontPlatformScope = FontPlatform | 'all';
@@ -192,19 +193,11 @@ function applyCodeAppearance(codeFontFamily: CodeFontFamilyMode, codeTheme: Code
 }
 
 function readStoredPreference(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
+  return readBrowserStorageValue(key);
 }
 
 function writeStoredPreference(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // The in-memory preference still applies when storage is unavailable.
-  }
+  writeBrowserStorageValue(key, value);
 }
 
 export function getCodeFontFamilyOptionsForPlatform(platform: FontPlatform = getFontPlatform()): CodeFontFamilyOption[] {

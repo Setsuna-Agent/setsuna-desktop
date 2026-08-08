@@ -2,7 +2,7 @@ import type { RuntimeConfigState, RuntimeMessage } from '@setsuna-desktop/contra
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -27,7 +27,7 @@ import {
 describe('agent loop context compaction', () => {
   it('uses the model client to compact context manually', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Context compaction' });
       for (let index = 0; index < 12; index += 1) {
         await threadStore.appendEvent(thread.id, {
@@ -138,7 +138,7 @@ describe('agent loop context compaction', () => {
 
   it('keeps only the nearest reused-id tool transaction across a manual compaction boundary', async () => {
     const ids = new RandomIdGenerator();
-    const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Repeated tool id compaction' });
     const messages: RuntimeMessage[] = [
       {
@@ -219,7 +219,7 @@ describe('agent loop context compaction', () => {
   
   it('lets PreCompact hooks stop manual context compaction before the model call', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'PreCompact stop' });
       for (let index = 0; index < 12; index += 1) {
         await threadStore.appendEvent(thread.id, {
@@ -280,7 +280,7 @@ describe('agent loop context compaction', () => {
   
   it('registers manual context compaction as an active cancellable compact task', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cancellable context compaction' });
       for (let index = 0; index < 12; index += 1) {
         await threadStore.appendEvent(thread.id, {
@@ -332,7 +332,7 @@ describe('agent loop context compaction', () => {
   
   it('automatically compacts oversized context before the next model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Automatic context compaction' });
       const oversizedHistory = 'older context '.repeat(90_000);
       for (let index = 0; index < 9; index += 1) {
@@ -391,7 +391,7 @@ describe('agent loop context compaction', () => {
   
   it('uses the active model context window when deciding automatic compaction', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Small window automatic context compaction' });
       const smallWindowHistory = 'older context '.repeat(600);
       for (let index = 0; index < 3; index += 1) {
@@ -454,7 +454,7 @@ describe('agent loop context compaction', () => {
   
   it('uses provider-native context compaction when available', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Remote automatic context compaction' });
       const smallWindowHistory = 'remote older context '.repeat(600);
       for (let index = 0; index < 3; index += 1) {
@@ -556,7 +556,7 @@ describe('agent loop context compaction', () => {
   it('automatically compacts oversized tool results during a long tool chain', async () => {
       const toolCallBatches = 5;
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Mid-turn context compaction', projectId: 'project_1' });
       const modelClient = new LongToolChainCompactionModelClient(toolCallBatches);
       const toolHost = new LateLargeToolResultHost(toolCallBatches);
@@ -596,7 +596,7 @@ describe('agent loop context compaction', () => {
   
   it('lets PreCompact hooks stop automatic compaction and complete the turn without model calls', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Automatic context compaction stop' });
       const oversizedHistory = 'older context '.repeat(90_000);
       for (let index = 0; index < 9; index += 1) {
@@ -657,7 +657,7 @@ describe('agent loop context compaction', () => {
   it('keeps tools available until the model ends a long tool chain', async () => {
       const toolCallBatches = 5;
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Long tool chain', projectId: 'project_1' });
       const modelClient = new LongToolChainModelClient(toolCallBatches);
       const toolHost = new CapturingToolHost();

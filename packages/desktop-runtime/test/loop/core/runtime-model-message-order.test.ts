@@ -5,7 +5,6 @@ import {
   assertNewToolCallBatchInvariants,
   LEGACY_ORPHAN_TOOL_RESULT_OMITTED_WARNING,
   normalizeModelConversationHistory,
-  normalizeModelConversationOrder,
 } from '../../../src/loop/core/runtime-model-message-order.js';
 
 describe('model conversation ordering', () => {
@@ -20,7 +19,7 @@ describe('model conversation ordering', () => {
     });
     const final = message('assistant_final', 'assistant', 'Done.');
 
-    expect(normalizeModelConversationOrder([assistant, steer, tool, final]).map((item) => item.id)).toEqual([
+    expect(normalizeModelConversationHistory([assistant, steer, tool, final]).messages.map((item) => item.id)).toEqual([
       'assistant_call',
       'tool_result',
       'steer',
@@ -41,7 +40,7 @@ describe('model conversation ordering', () => {
       toolName: 'read_file',
     });
 
-    const normalized = normalizeModelConversationOrder([missingAssistant, user, nextAssistant, nextTool]);
+    const normalized = normalizeModelConversationHistory([missingAssistant, user, nextAssistant, nextTool]).messages;
 
     expect(normalized.map((item) => item.id)).toEqual([
       'assistant_missing',
@@ -65,7 +64,7 @@ describe('model conversation ordering', () => {
     });
     const user = message('user_continue', 'user', 'Continue.');
 
-    expect(normalizeModelConversationOrder([transcriptAssistant, user])).toEqual([transcriptAssistant, user]);
+    expect(normalizeModelConversationHistory([transcriptAssistant, user]).messages).toEqual([transcriptAssistant, user]);
   });
 
   it('preserves parallel tool result order and is idempotent', () => {
@@ -79,7 +78,7 @@ describe('model conversation ordering', () => {
     const second = message('tool_2', 'tool', 'two', { toolCallId: 'call_2', toolName: 'read_file' });
     const first = message('tool_1', 'tool', 'one', { toolCallId: 'call_1', toolName: 'read_file' });
 
-    const normalized = normalizeModelConversationOrder([assistant, steer, second, first]);
+    const normalized = normalizeModelConversationHistory([assistant, steer, second, first]).messages;
 
     expect(normalized.map((item) => item.id)).toEqual([
       'assistant_parallel',
@@ -87,7 +86,7 @@ describe('model conversation ordering', () => {
       'tool_1',
       'steer',
     ]);
-    expect(normalizeModelConversationOrder(normalized)).toEqual(normalized);
+    expect(normalizeModelConversationHistory(normalized).messages).toEqual(normalized);
   });
 
   it('rejects duplicate call IDs within one assistant transaction', () => {

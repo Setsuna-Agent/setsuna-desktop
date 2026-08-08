@@ -1,15 +1,19 @@
-import type { RuntimeEvent, RuntimeMessage } from '@setsuna-desktop/contracts';
-import { appendFile, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import type { RuntimeEvent, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import { appendFile, cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
 import { RuntimeStorageInUseError, SqliteThreadStore } from '../../../src/adapters/store/sqlite-thread-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
 
+const LEGACY_FIXTURE_THREAD_ID = 'thread_legacy_fixture_1';
+const legacyFixtureThreadsDir = fileURLToPath(
+  new URL('../../fixtures/legacy-thread-store/threads/', import.meta.url),
+);
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
@@ -466,28 +470,13 @@ describe('sqlite thread store', () => {
 
   it('imports a valid legacy JSON store once without modifying the source files', async () => {
     const dataDir = await temporaryDirectory();
-    const legacy = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await legacy.createThread({ title: 'Legacy import', parentThreadId: 'thread_parent' });
-    await legacy.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_legacy', 'preserve me', {
-      role: 'assistant',
-      providerMetadata: {
-        anthropic: {
-          contentBlocks: [
-            { type: 'thinking', thinking: 'Legacy thought', signature: 'legacy-signature' },
-            { type: 'text', text: 'preserve me' },
-          ],
-        },
-      },
-    }));
-    await legacy.flush();
-    const snapshotPath = path.join(dataDir, 'threads', `${thread.id}.json`);
-    const eventsPath = path.join(dataDir, 'threads', `${thread.id}.jsonl`);
+    const { snapshotPath, eventsPath } = await installLegacyThreadFixture(dataDir);
     const beforeSnapshot = await readFile(snapshotPath, 'utf8');
     const beforeEvents = await readFile(eventsPath, 'utf8');
 
     const sqlite = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await sqlite.recover();
-    await expect(sqlite.getThread(thread.id)).resolves.toMatchObject({
+    await expect(sqlite.getThread(LEGACY_FIXTURE_THREAD_ID)).resolves.toMatchObject({
       parentThreadId: 'thread_parent',
       messages: [expect.objectContaining({
         id: 'msg_legacy',
@@ -504,13 +493,16 @@ describe('sqlite thread store', () => {
     });
     expect(await readFile(snapshotPath, 'utf8')).toBe(beforeSnapshot);
     expect(await readFile(eventsPath, 'utf8')).toBe(beforeEvents);
-    await sqlite.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_after_import', 'continue normally'));
+    await sqlite.appendEvent(
+      LEGACY_FIXTURE_THREAD_ID,
+      messageCreatedEvent(LEGACY_FIXTURE_THREAD_ID, 'msg_after_import', 'continue normally'),
+    );
     await sqlite.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await expect(reopened.recover()).resolves.toBeUndefined();
     await expect(reopened.listThreads({ includeArchived: true })).resolves.toHaveLength(1);
-    await expect(reopened.getThread(thread.id)).resolves.toMatchObject({
+    await expect(reopened.getThread(LEGACY_FIXTURE_THREAD_ID)).resolves.toMatchObject({
       messages: [
         expect.objectContaining({ id: 'msg_legacy' }),
         expect.objectContaining({ id: 'msg_after_import', content: 'continue normally' }),
@@ -521,25 +513,31 @@ describe('sqlite thread store', () => {
 
   it('recovers an interior duplicate sequence when a later snapshot proves the last writer continued', async () => {
     const dataDir = await temporaryDirectory();
-    const legacy = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await legacy.createThread({ title: 'Duplicate sequence recovery' });
-    await legacy.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_1', 'first'));
-    await legacy.appendEvent(thread.id, messageCreatedEvent(thread.id, 'msg_2', 'second'));
-    await legacy.flush();
-
-    const eventsPath = path.join(dataDir, 'threads', `${thread.id}.jsonl`);
+    const { snapshotPath, eventsPath } = await installLegacyThreadFixture(dataDir);
     const originalLines = (await readFile(eventsPath, 'utf8')).trimEnd().split('\n');
     const duplicate = {
       ...JSON.parse(originalLines[1]) as RuntimeEvent,
       id: 'event_last_writer_seq_2',
     };
     originalLines.splice(2, 0, JSON.stringify(duplicate));
+    const continuation = {
+      ...messageCreatedEvent(LEGACY_FIXTURE_THREAD_ID, 'msg_after_duplicate', 'continued after duplicate'),
+      seq: 3,
+    } satisfies RuntimeEvent;
+    originalLines.push(JSON.stringify(continuation));
     const sourceWithConflict = `${originalLines.join('\n')}\n`;
     await writeFile(eventsPath, sourceWithConflict, 'utf8');
+    const snapshot = JSON.parse(await readFile(snapshotPath, 'utf8')) as RuntimeThread;
+    snapshot.messages.push(continuation.payload.message);
+    snapshot.lastSeq = 3;
+    snapshot.messageCount = snapshot.messages.length;
+    snapshot.lastMessagePreview = continuation.payload.message.content;
+    snapshot.updatedAt = continuation.createdAt;
+    await writeFile(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
 
     const sqlite = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await expect(sqlite.recover()).resolves.toBeUndefined();
-    await expect(sqlite.listEvents(thread.id)).resolves.toMatchObject([
+    await expect(sqlite.listEvents(LEGACY_FIXTURE_THREAD_ID)).resolves.toMatchObject([
       { seq: 1 },
       { id: 'event_last_writer_seq_2', seq: 2 },
       { seq: 3 },
@@ -558,7 +556,7 @@ describe('sqlite thread store', () => {
         keptEventId: 'event_last_writer_seq_2',
         keptLine: 3,
         seq: 2,
-        threadId: thread.id,
+        threadId: LEGACY_FIXTURE_THREAD_ID,
       }],
     });
     inspected.close();
@@ -566,12 +564,9 @@ describe('sqlite thread store', () => {
 
   it('rejects corrupt legacy sequences without silently truncating or partially importing them', async () => {
     const dataDir = await temporaryDirectory();
-    const legacy = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await legacy.createThread({ title: 'Corrupt legacy import' });
-    await legacy.flush();
-    const eventsPath = path.join(dataDir, 'threads', `${thread.id}.jsonl`);
+    const { eventsPath } = await installLegacyThreadFixture(dataDir);
     const original = await readFile(eventsPath, 'utf8');
-    const firstEvent = JSON.parse(original.trim()) as RuntimeEvent;
+    const firstEvent = JSON.parse(original.trimEnd().split('\n')[0]) as RuntimeEvent;
     await appendFile(eventsPath, `${JSON.stringify({ ...firstEvent, id: 'event_duplicate_seq' })}\n`, 'utf8');
 
     const sqlite = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -606,6 +601,18 @@ function messageCreatedEvent(
         createdAt,
       },
     },
+  };
+}
+
+async function installLegacyThreadFixture(dataDir: string): Promise<{
+  eventsPath: string;
+  snapshotPath: string;
+}> {
+  const threadsDir = path.join(dataDir, 'threads');
+  await cp(legacyFixtureThreadsDir, threadsDir, { recursive: true });
+  return {
+    eventsPath: path.join(threadsDir, `${LEGACY_FIXTURE_THREAD_ID}.jsonl`),
+    snapshotPath: path.join(threadsDir, `${LEGACY_FIXTURE_THREAD_ID}.json`),
   };
 }
 

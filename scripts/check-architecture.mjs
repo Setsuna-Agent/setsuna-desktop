@@ -12,6 +12,14 @@ const layerRoots = new Map([
   ['preload', path.join(repositoryRoot, 'apps/desktop/preload/src')],
   ['renderer', path.join(repositoryRoot, 'apps/desktop/renderer/src')],
 ]);
+const testRoots = [
+  path.join(repositoryRoot, 'packages/contracts/test'),
+  path.join(repositoryRoot, 'packages/desktop-runtime/test'),
+  path.join(repositoryRoot, 'apps/desktop/main/test'),
+  path.join(repositoryRoot, 'apps/desktop/preload/test'),
+  path.join(repositoryRoot, 'apps/desktop/renderer/test'),
+  path.join(repositoryRoot, 'scripts/test'),
+];
 const allowedLayerDependencies = new Map([
   ['contracts', new Set()],
   ['runtime', new Set(['contracts'])],
@@ -25,10 +33,20 @@ const testFilePattern = /\.(?:spec|test)\.[cm]?[jt]sx?$/u;
 const compiledTestArtifactPattern = /\.(?:spec|test)(?:\.d)?\.[cm]?[jt]sx?(?:\.map)?$/u;
 const maxCodeLines = 1_200;
 const maxUnreviewedCodeLines = 900;
+const maxTestCodeLines = 1_200;
+const maxUnreviewedTestCodeLines = 900;
 const maxStyleLines = 1_600;
 const maxDirectSourceFiles = 35;
 const rendererRoot = layerRoots.get('renderer');
 const rendererAppServerPath = '/v1/swe/app-server';
+const productionEntrypoints = new Set([
+  path.join(repositoryRoot, 'packages/contracts/src/index.ts'),
+  path.join(repositoryRoot, 'packages/desktop-runtime/src/cli.ts'),
+  path.join(repositoryRoot, 'packages/desktop-runtime/src/index.ts'),
+  path.join(repositoryRoot, 'apps/desktop/main/src/index.ts'),
+  path.join(repositoryRoot, 'apps/desktop/preload/src/index.ts'),
+  path.join(repositoryRoot, 'apps/desktop/renderer/src/main.tsx'),
+]);
 // Existing hotspots may be reduced in place, but cannot grow without first
 // extracting a responsibility and updating this deliberately reviewed budget.
 const legacyHotspotLineBudgets = new Map([
@@ -42,6 +60,9 @@ const legacyHotspotLineBudgets = new Map([
   ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-process.ts', 1_070],
   ['packages/desktop-runtime/src/adapters/workspace/managed-workspace-dependency-manager.ts', 1_181],
   ['packages/desktop-runtime/src/loop/tools/tool-orchestrator-policy.ts', 939],
+]);
+const legacyTestHotspotLineBudgets = new Map([
+  ['packages/desktop-runtime/test/support/agent-loop/shared.ts', 901],
 ]);
 
 async function collectFiles(directory, files = []) {
@@ -159,6 +180,59 @@ for (const root of layerRoots.values()) {
   productionFiles.push(...await collectFiles(root));
 }
 
+const testCodeFiles = [];
+for (const root of testRoots) {
+  testCodeFiles.push(...(await collectFiles(root)).filter((filePath) => codeExtensions.has(path.extname(filePath))));
+}
+let testReviewHotspotCount = 0;
+for (const filePath of testCodeFiles) {
+  const sourceText = await readFile(filePath, 'utf8');
+  const lineCount = countLines(sourceText);
+  const fileName = repositoryPath(filePath);
+  const reviewedBudget = legacyTestHotspotLineBudgets.get(fileName);
+  if (lineCount > maxTestCodeLines) {
+    violations.push(
+      `${repositoryPath(filePath)}: ${lineCount} lines exceeds the ${maxTestCodeLines}-line test-module limit.`,
+    );
+  } else if (lineCount > maxUnreviewedTestCodeLines && reviewedBudget === undefined) {
+    violations.push(
+      `${repositoryPath(filePath)}: ${lineCount} lines exceeds the ${maxUnreviewedTestCodeLines}-line unreviewed test-module limit.`,
+    );
+  } else if (reviewedBudget !== undefined && lineCount > reviewedBudget) {
+    violations.push(
+      `${fileName}: ${lineCount} lines exceeds its reviewed test non-growth budget of ${reviewedBudget}.`,
+    );
+  }
+  if (lineCount >= 700) {
+    testReviewHotspotCount += 1;
+  }
+}
+
+const productionCodeFiles = productionFiles.filter((filePath) => codeExtensions.has(path.extname(filePath)));
+const productionCodeFileSet = new Set(productionCodeFiles);
+const productionImportTargets = new Set();
+for (const filePath of productionCodeFiles) {
+  const sourceText = await readFile(filePath, 'utf8');
+  for (const specifier of importedSpecifiers(sourceText)) {
+    const target = resolveLocalModule(filePath, specifier);
+    if (target && productionCodeFileSet.has(target)) productionImportTargets.add(target);
+  }
+}
+const testImportTargets = new Set();
+for (const filePath of testCodeFiles) {
+  const sourceText = await readFile(filePath, 'utf8');
+  for (const specifier of importedSpecifiers(sourceText)) {
+    const target = resolveLocalModule(filePath, specifier);
+    if (target && productionCodeFileSet.has(target)) testImportTargets.add(target);
+  }
+}
+for (const filePath of testImportTargets) {
+  if (productionImportTargets.has(filePath) || productionEntrypoints.has(filePath)) continue;
+  violations.push(
+    `${repositoryPath(filePath)}: source module is imported by tests but not by production; move test support under test/ or wire the module into a production entrypoint.`,
+  );
+}
+
 const directSourceCounts = new Map();
 for (const filePath of productionFiles) {
   const extension = path.extname(filePath);
@@ -262,6 +336,6 @@ if (violations.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Architecture check passed: ${productionFiles.length} production files; ${reviewHotspotCount} code modules are at least 700 lines, and modules above 900 lines are held to explicit non-growth budgets.`,
+    `Architecture check passed: ${productionFiles.length} production files; ${reviewHotspotCount} production and ${testReviewHotspotCount} test modules are at least 700 lines, with 900-line unreviewed-module limits.`,
   );
 }

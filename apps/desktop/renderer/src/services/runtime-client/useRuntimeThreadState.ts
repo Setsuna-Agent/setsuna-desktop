@@ -20,6 +20,7 @@ import { startThreadReview } from '../../features/workspace/hooks/startThreadRev
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import { isActivityEvent } from './runtimeEvents.js';
 import {
   reportRuntimeBackgroundFailure,
@@ -603,35 +604,14 @@ function mergeRecentActivityEvents(
 }
 
 function readPersistedActiveThreadId(): string | null {
-  const storage = browserLocalStorage();
-  if (!storage) return null;
-  try {
-    return normalizeStoredThreadId(storage.getItem(lastActiveThreadStorageKey));
-  } catch {
-    return null;
-  }
+  return normalizeStoredThreadId(readBrowserStorageValue(lastActiveThreadStorageKey));
 }
 
 function persistActiveThreadId(threadId: string): void {
-  const storage = browserLocalStorage();
-  if (!storage) return;
-  try {
-    storage.setItem(lastActiveThreadStorageKey, threadId);
-  } catch {
-    // 受限的渲染进程环境中可能无法使用 localStorage，此时 runtime 回退方案仍然有效。
-  }
+  writeBrowserStorageValue(lastActiveThreadStorageKey, threadId);
 }
 
 function normalizeStoredThreadId(value: string | null): string | null {
   const trimmed = value?.trim();
   return trimmed || null;
-}
-
-function browserLocalStorage(): Storage | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }

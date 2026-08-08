@@ -126,7 +126,7 @@ canonical snapshot resync。
 
 ### Legacy JSON import
 
-`legacy-json-thread-reader.ts` 和 `json-thread-store.ts` 支持旧 `threads/*.json/.jsonl`：
+`legacy-json-thread-reader.ts` 支持旧 `threads/*.json/.jsonl`：
 
 - 首次 SQLite 启动只读导入。
 - 不截断旧文件。
@@ -134,7 +134,7 @@ canonical snapshot resync。
 - 缺号/乱序等无法证明的损坏停止迁移。
 - 有连续后续事件且最终 snapshot 可佐证时，特定重复 seq 可 last-writer-wins，并记录被替换信息。
 
-`JsonThreadStore` 留给 legacy 测试/读取，不是生产 factory 主 store。
+Legacy import 测试使用冻结的历史 JSON/JSONL fixture，避免由当前实现动态生成旧格式而掩盖兼容性回归。
 
 ## Attachments
 

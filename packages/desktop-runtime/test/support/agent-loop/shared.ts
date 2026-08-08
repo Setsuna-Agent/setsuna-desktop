@@ -15,7 +15,6 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
 import { type Clock } from '../../../src/ports/clock.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -868,7 +867,7 @@ export async function waitForModelRequestCount(modelClient: { requests: ModelReq
   );
 }
 
-export async function waitForTurnCancelled(threadStore: JsonThreadStore, threadId: string) {
+export async function waitForTurnCancelled(threadStore: ThreadStore, threadId: string) {
   return waitForTestState(
     () => threadStore.listEvents(threadId, 0),
     (events) => events.some((event) => event.type === 'turn.cancelled'),

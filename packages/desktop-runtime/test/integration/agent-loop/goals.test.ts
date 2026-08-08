@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -20,7 +20,7 @@ import {
 describe('agent loop persistent goals', () => {
   it('continues a persistent goal across idle turns until the model marks it complete', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Persistent goal', projectId: 'project_1' });
       const modelClient = new PersistentGoalModelClient();
       const loop = new AgentLoop({
@@ -72,7 +72,7 @@ describe('agent loop persistent goals', () => {
   
   it('pauses a persistent goal when its active turn is cancelled', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cancelled goal' });
       const modelClient = new CancellableModelClient();
       const loop = new AgentLoop({
@@ -101,7 +101,7 @@ describe('agent loop persistent goals', () => {
   
   it('accepts visible user guidance during an active goal turn and samples it next', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Guided goal' });
       const modelClient = new GoalSteerModelClient();
       const loop = new AgentLoop({

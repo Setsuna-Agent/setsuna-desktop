@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createMarkdownRenderBlocks,
   parseMarkdownBlocks,
   reconcileMarkdownRenderBlocks,
   type StreamingMarkdownRenderState,
@@ -8,7 +7,7 @@ import {
 
 describe('streamingMarkdown', () => {
   it('keeps completed blocks stable and marks only the streaming tail mutable', () => {
-    const blocks = createMarkdownRenderBlocks('Stable paragraph.\n\nCurrent **bold', true);
+    const blocks = reconcileMarkdownRenderBlocks(null, 'Stable paragraph.\n\nCurrent **bold', true).blocks;
 
     expect(blocks).toHaveLength(2);
     expect(blocks[0]).toEqual({ content: 'Stable paragraph.', mutable: false });
@@ -16,7 +15,7 @@ describe('streamingMarkdown', () => {
   });
 
   it('does not mutate finalized markdown', () => {
-    const blocks = createMarkdownRenderBlocks('Current **bold', false);
+    const blocks = reconcileMarkdownRenderBlocks(null, 'Current **bold', false).blocks;
 
     expect(blocks).toEqual([{ content: 'Current **bold', mutable: false }]);
   });

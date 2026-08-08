@@ -1,7 +1,7 @@
 const STARTUP_SPLASH_DATA_URL_PREFIX = 'data:text/html;base64,';
 const STARTUP_SPLASH_WINDOW_ACTION_PROTOCOL = 'setsuna-startup-action:';
 
-export const STARTUP_SPLASH_SHIMMER_DURATION_MS = 5_000;
+const STARTUP_SPLASH_SHIMMER_DURATION_MS = 5_000;
 
 export type StartupSplashWindowAction = 'close' | 'minimize' | 'toggle-maximize';
 
@@ -44,13 +44,6 @@ export function startupSplashWindowActionFromUrl(value: string): StartupSplashWi
     // Ignore malformed and unrelated navigation targets.
   }
   return null;
-}
-
-export function decodeStartupSplashPageUrl(pageUrl: string): string {
-  if (!pageUrl.startsWith(STARTUP_SPLASH_DATA_URL_PREFIX)) {
-    throw new Error('Startup splash page URL is invalid.');
-  }
-  return Buffer.from(pageUrl.slice(STARTUP_SPLASH_DATA_URL_PREFIX.length), 'base64').toString('utf8');
 }
 
 function normalizeLogoDataUrl(value?: string): string {

@@ -6,7 +6,7 @@ import {
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -34,7 +34,7 @@ import {
 describe('agent loop turn execution', () => {
   it('executes model tool calls and continues with tool results', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Tool loop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -100,7 +100,7 @@ describe('agent loop turn execution', () => {
   
   it('persists provider metadata and carries it into the tool-result sampling step', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Provider metadata tool loop', projectId: 'project_1' });
       const modelClient = new ProviderMetadataToolModelClient();
       const loop = new AgentLoop({
@@ -137,7 +137,7 @@ describe('agent loop turn execution', () => {
   
   it('fails an empty model stream instead of completing a blank assistant message', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Empty model response' });
       const loop = new AgentLoop({
         threadStore,
@@ -166,7 +166,7 @@ describe('agent loop turn execution', () => {
   
   it('keeps a completed turn terminal when tool cleanup fails', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cleanup warning', projectId: 'project_1' });
       const loop = new AgentLoop({
         threadStore,
@@ -194,7 +194,7 @@ describe('agent loop turn execution', () => {
   
   it('captures a fresh sampling step before each model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Step snapshot', projectId: 'project_1' });
       const modelClient = new StepSnapshotModelClient();
       const toolHost = new RefreshingToolHost();
@@ -316,7 +316,7 @@ describe('agent loop turn execution', () => {
 
   it('uses the committed step event only as a transient developer trace anchor', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Debug trace anchor' });
       const modelClient = new MemoryCapturingModelClient();
       const config = developerFeaturesConfig();
@@ -354,7 +354,7 @@ describe('agent loop turn execution', () => {
   
   it('injects project workflow and instructions before the first model sampling step', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Project instructions', projectId: 'project_1' });
       const modelClient = new MemoryCapturingModelClient();
       const loop = new AgentLoop({
@@ -419,7 +419,7 @@ describe('agent loop turn execution', () => {
   
   it('keeps plan collaboration mode from executing tools', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Plan-only loop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -451,7 +451,7 @@ describe('agent loop turn execution', () => {
   
   it('uses the dedicated review policy and exposes only read-only review tools', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Review profile', projectId: 'project_1' });
       const modelClient = new MemoryCapturingModelClient();
       const toolHost = new CapturingToolHost([
@@ -493,7 +493,7 @@ describe('agent loop turn execution', () => {
   
   it('persists PlanDelta-only model output as the plan-mode assistant message', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Plan delta loop', projectId: 'project_1' });
       const modelClient = new PlanDeltaOnlyModelClient();
       const toolHost = new CapturingToolHost();
@@ -523,7 +523,7 @@ describe('agent loop turn execution', () => {
   
   it('accepts an awaiting Plan mode message when a default turn continues execution', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Plan accept loop', projectId: 'project_1' });
       const modelClient = new PlanThenToolModelClient();
       const toolHost = new CapturingToolHost();

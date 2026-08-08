@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -20,7 +20,7 @@ import {
 describe('agent loop tool hook results', () => {
   it('allows PreToolUse hooks to rewrite tool input before execution', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook rewrite', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -71,7 +71,7 @@ describe('agent loop tool hook results', () => {
   
   it('normalizes shell PreToolUse payload as Bash and preserves local args when rewriting', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Bash hook rewrite', projectId: 'project_1' });
       const modelClient = new SingleToolCallModelClient({
         id: 'call_shell_hook',
@@ -113,7 +113,7 @@ describe('agent loop tool hook results', () => {
   
   it('normalizes apply_patch hook payload to Codex command shape and rewrites patch only', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Apply patch hook rewrite', projectId: 'project_1' });
       const originalPatch = '*** Begin Patch\n*** Add File: old.txt\n+old\n*** End Patch';
       const rewrittenPatch = '*** Begin Patch\n*** Add File: new.txt\n+new\n*** End Patch';
@@ -158,7 +158,7 @@ describe('agent loop tool hook results', () => {
   
   it('marks invalid PreToolUse hook output as failed and ignores rewrites', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook invalid rewrite', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -203,7 +203,7 @@ describe('agent loop tool hook results', () => {
   
   it('runs PostToolUse hooks and returns feedback to the model', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook post feedback', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -257,7 +257,7 @@ describe('agent loop tool hook results', () => {
   
   it('adds non-blocking PostToolUse context to the model while retaining the UI warning', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook post context', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const loop = new AgentLoop({
@@ -298,7 +298,7 @@ describe('agent loop tool hook results', () => {
   
   it('marks PostToolUse continue false hooks as stopped and returns feedback', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook post stop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();

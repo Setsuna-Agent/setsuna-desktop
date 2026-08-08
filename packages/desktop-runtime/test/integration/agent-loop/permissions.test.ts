@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -24,7 +24,7 @@ import {
 describe('agent loop permission grants', () => {
   it('applies request_permissions grants to later exec_command calls in the same turn', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Request permissions loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const grantedRoot = 'relative-grant';
@@ -101,7 +101,7 @@ describe('agent loop permission grants', () => {
   
   it('auto-denies request_permissions when the feature is disabled', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Disabled request permissions loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const modelClient = new RequestPermissionsThenExecModelClient('disabled-grant');
@@ -131,7 +131,7 @@ describe('agent loop permission grants', () => {
   
   it('clamps request_permissions approval grants to the originally requested permissions', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Clamped request permissions loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const grantedRoot = 'requested-grant';
@@ -181,7 +181,7 @@ describe('agent loop permission grants', () => {
   
   it('enables strict auto review for later tools in the same request_permissions turn', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Strict request permissions loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const grantedRoot = 'strict-grant';
@@ -227,7 +227,7 @@ describe('agent loop permission grants', () => {
   
   it('normalizes session-scoped strict request_permissions responses to an empty turn grant', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Invalid strict session permissions loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const grantedRoot = 'strict-session-grant';
@@ -270,7 +270,7 @@ describe('agent loop permission grants', () => {
   
   it('keeps request_permissions grants when approved for session', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session request permissions loop', projectId: 'project_1' });
       const grantedRoot = path.join(await mkDataDir(), 'setsuna-request-permissions-session');
       const modelClient = new SessionRequestPermissionsModelClient(grantedRoot);
@@ -302,7 +302,7 @@ describe('agent loop permission grants', () => {
   
   it('rejects additional sandbox write permissions for protected metadata', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Protected additional permissions loop', projectId: 'project_1' });
       const modelClient = new ProtectedAdditionalPermissionsExecModelClient();
       const toolHost = new AdditionalPermissionsExecToolHost();

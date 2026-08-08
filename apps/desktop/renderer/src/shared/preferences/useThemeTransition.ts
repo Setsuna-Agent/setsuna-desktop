@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 export type ResolvedThemeMode = 'light' | 'dark';
@@ -108,7 +109,7 @@ export function useResolvedThemeMode(): ResolvedThemeMode {
 }
 
 function getInitialThemeMode(): ThemeMode {
-  const saved = window.localStorage.getItem(storageKey);
+  const saved = readBrowserStorageValue(storageKey);
   if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
   return 'system';
 }
@@ -116,7 +117,7 @@ function getInitialThemeMode(): ThemeMode {
 function applyThemeModePreference(mode: ThemeMode): void {
   document.documentElement.dataset.theme = resolveThemeMode(mode);
   document.documentElement.dataset.themePreference = mode;
-  window.localStorage.setItem(storageKey, mode);
+  writeBrowserStorageValue(storageKey, mode);
 }
 
 function resolveThemeMode(mode: ThemeMode): ResolvedThemeMode {
