@@ -9,7 +9,7 @@ import { RuntimePluginUses } from '../../../../../src/features/chat/artifacts/Ru
 afterEach(cleanup);
 
 describe('RuntimePluginUses', () => {
-  it('opens an installed plugin from conversation history', async () => {
+  it('keeps plugin history visible and opens installed plugins', async () => {
     const onOpenPlugin = vi.fn();
     render(
       <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
@@ -25,7 +25,15 @@ describe('RuntimePluginUses', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Context7 文档查询' }));
+    render(
+      <RuntimePluginUses
+        active={false}
+        plugins={[{ id: 'documents', installed: false, name: 'Word 文档处理' }]}
+      />,
+    );
 
     expect(onOpenPlugin).toHaveBeenCalledWith('context7-docs');
+    expect(screen.getByText('Word 文档处理')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Word 文档处理' })).toBeNull();
   });
 });

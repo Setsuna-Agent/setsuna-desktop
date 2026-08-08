@@ -23,6 +23,7 @@ describe('DesktopPanelHeader browser tabs', () => {
 
     expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
     expect(html).toContain('title="Example"');
+    expect(html).toContain('aria-label="关闭Example"');
     expect(html).toContain('aria-label="添加面板"');
   });
 });

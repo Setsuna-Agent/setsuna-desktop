@@ -3,6 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ArchivedThreadsSettings, SettingsSidebar } from '../../../../src/features/settings/SettingsPage.js';
+import { updateDownloadSourceName } from '../../../../src/features/settings/sections/AboutSettings.js';
+import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('SettingsSidebar', () => {
   it('exposes keyboard shortcuts and usage statistics in settings navigation', () => {
@@ -14,6 +16,9 @@ describe('SettingsSidebar', () => {
 
     expect(html).toContain('键盘快捷键');
     expect(html).toContain('用量统计');
+    const en: Translate = (key, params) => translate('en-US', key, params);
+    expect(updateDownloadSourceName({ builtIn: true, id: 'github-direct', name: 'GitHub 直连' }, en)).toBe('GitHub Direct');
+    expect(updateDownloadSourceName({ builtIn: false, id: 'custom-1', name: '公司镜像' }, en)).toBe('公司镜像');
   });
 });
 

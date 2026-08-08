@@ -32,9 +32,15 @@ describe('pcLocalToolPrompt', () => {
 
   it('adds managed dependency guidance only when that runtime is enabled', () => {
     const tools = [tool('run_shell_command')];
-    expect(pcLocalToolPrompt(tools)).not.toContain('manages and prepends Node.js');
-    expect(pcLocalToolPrompt(tools, { workspaceDependencies: { enabled: true } }))
-      .toContain('manages and prepends Node.js');
+    const unmanaged = pcLocalToolPrompt(tools);
+    const managed = pcLocalToolPrompt(tools, { workspaceDependencies: { enabled: true } });
+
+    expect(unmanaged).not.toContain('manages and prepends Node.js');
+    expect(managed).toContain('manages and prepends Node.js');
+    expect(managed).toContain('configured Python package index is already applied');
+    expect(managed).toContain('Do not run a bare pip install');
+    expect(managed).toContain('Never install into the system Python or user site');
+    expect(managed).toContain('uv run --with <package>');
   });
 });
 

@@ -1,10 +1,12 @@
-import type { DesktopNetworkProxyServerState } from '@setsuna-desktop/contracts';
+import type { DesktopNetworkProxyServerState, DesktopNetworkProxyState } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import type { DesktopNetworkProxyStateView } from '../../../../src/app/controller/useDesktopNetworkProxy.js';
+import { NetworkProxySettings } from '../../../../src/features/settings/network-proxy/NetworkProxySettings.js';
 import { ProxyServerDialog } from '../../../../src/features/settings/network-proxy/ProxyServerDialog.js';
 
 describe('network proxy settings', () => {
-  it('preserves authenticated proxy identity while exposing credential controls', () => {
+  it('shows the active configured proxy and preserves its credential controls', () => {
     const server: DesktopNetworkProxyServerState = {
       id: 'proxy-local',
       name: 'Local proxy',
@@ -12,7 +14,30 @@ describe('network proxy settings', () => {
       url: 'socks5://127.0.0.1:7897',
       username: 'setsuna',
     };
+    const state: DesktopNetworkProxyState = {
+      configPath: '/tmp/network-proxy.json',
+      servers: [server],
+      routing: {
+        global: { mode: 'proxy', proxyServerId: server.id },
+        scopes: {
+          browser: { mode: 'inherit' },
+          runtime: { mode: 'inherit' },
+          terminal: { mode: 'inherit' },
+          updater: { mode: 'inherit' },
+        },
+      },
+    };
+    const proxy: DesktopNetworkProxyStateView = {
+      busy: false,
+      deleteServer: vi.fn(),
+      error: null,
+      loading: false,
+      setRouting: vi.fn(),
+      state,
+      upsertServer: vi.fn(),
+    };
 
+    const summaryHtml = renderToStaticMarkup(<NetworkProxySettings proxy={proxy} />);
     const html = renderToStaticMarkup(
       <ProxyServerDialog
         busy={false}
@@ -22,6 +47,10 @@ describe('network proxy settings', () => {
       />,
     );
 
+    expect(summaryHtml).toContain('Local proxy');
+    expect(summaryHtml).toContain('socks5://127.0.0.1:7897');
+    expect(summaryHtml).toContain('已配置认证');
+    expect(summaryHtml).toContain('使用中');
     expect(html).toContain('value="Local proxy"');
     expect(html).toContain('value="socks5://127.0.0.1:7897"');
     expect(html).toContain('value="setsuna"');

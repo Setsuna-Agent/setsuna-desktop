@@ -103,6 +103,10 @@ describe('BrowserToolHost', () => {
     });
     expect(router.advertisedToolNames()).toContain('browser_screenshot');
     expect(router.advertisedToolNames()).toContain('browser_tabs');
+    const systemPrompt = await router.systemPrompt();
+    expect(systemPrompt).toContain('Call browser_screenshot directly');
+    expect(systemPrompt).toContain('Prefer nodes marked clickable=true');
+    expect(systemPrompt).toContain('Successful browser input calls confirm dispatch only');
     await expect(host.runTool('browser_screenshot', { tabId: 'tab-1' }, visionContext)).resolves.toMatchObject({
       attachments: [{
         id: 'browser_screenshot_call_screenshot',

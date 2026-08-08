@@ -33,6 +33,15 @@ describe('browser device controls', () => {
     expect(toolbarHtml).toContain('desktop-browser-device-toolbar__rotate');
     expect(toolbarHtml).toContain('desktop-browser-device-toolbar__scale');
     expect(responsiveHtml.match(/desktop-browser-device-resize-handle--/gu)).toHaveLength(5);
+    for (const label of [
+      '拖动左侧调整视口宽度',
+      '拖动右侧调整视口宽度',
+      '拖动底部调整视口高度',
+      '拖动左下角调整视口尺寸',
+      '拖动右下角调整视口尺寸',
+    ]) {
+      expect(responsiveHtml).toContain(`aria-label="${label}"`);
+    }
     expect(fixedHtml).not.toContain('desktop-browser-device-resize-handle');
   });
 });
