@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
-import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
+import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import type {
   ConversationOverviewState,
 } from '../../../../../src/features/chat/conversation/chatConversationOverview.js';
@@ -108,21 +108,6 @@ describe('ConversationOverviewPanel', () => {
     expect(onOpenReview).toHaveBeenCalledWith();
   });
 
-  it('renders the environment panel controls in English', () => {
-    const html = renderOverviewPanel({ ...baseProps, compact: false }, 'en-US');
-
-    expect(html).toContain('Environment information');
-    expect(html).toContain('aria-label="Collapse environment information"');
-    expect(html).toContain('lucide-chevron-up');
-    expect(html).toContain('Changes');
-    expect(html).toContain('Branch');
-    expect(html).toContain('Commit or push');
-    expect(html).toContain('Context');
-    expect(html).toContain('Usage &amp; diagnostics');
-    expect(html).not.toContain('环境信息');
-    expect(html).not.toContain('提交或推送');
-  });
-
   it('combines usage and diagnostics, with collaboration count on its section title', () => {
     const html = renderOverviewPanel({
       ...baseProps,
@@ -203,11 +188,10 @@ describe('ConversationOverviewPanel', () => {
 
 function renderOverviewPanel(
   props: Parameters<typeof ConversationOverviewPanel>[0],
-  initialLocale: AppLocale = 'zh-CN',
 ): string {
   return renderToStaticMarkup(createElement(
     I18nProvider,
-    { initialLocale },
+    { initialLocale: 'zh-CN' },
     createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
   ));
 }

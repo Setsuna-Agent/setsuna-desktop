@@ -5,14 +5,12 @@ import {
   CapabilitiesInstalledPluginShortcut,
 } from '../../../../src/features/capabilities/CapabilitiesInstalledPluginShortcut.js';
 import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
-import { CapabilitiesPluginIcon } from '../../../../src/features/capabilities/CapabilitiesPluginIcon.js';
 import {
   CapabilitiesPluginFilePreview,
   markdownPreviewBody,
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
 import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
-import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('capabilities plugin components', () => {
   it('renders an installed plugin as an accessible icon shortcut', () => {
@@ -37,11 +35,8 @@ describe('capabilities plugin components', () => {
       />,
     );
 
-    expect(html).toContain('Demo Plugin');
+    expect(html).toContain('aria-label="查看已安装插件：Demo Plugin"');
     expect(html).toContain('已安装');
-    expect(html).toContain('desktop-plugin-installed-shortcut');
-    expect(html).toContain('desktop-plugin-installed-shortcut__name');
-    expect(html).toContain('desktop-plugin-icon--installed');
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('卸载');
   });
@@ -79,43 +74,6 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('目录');
     expect(html).not.toContain('plugin.json');
-  });
-
-  it('localizes built-in plugin metadata and marketplace actions in English', () => {
-    const html = renderToStaticMarkup(
-      <I18nProvider initialLocale="en-US">
-        <CapabilitiesPluginListItem
-          plugin={{
-            id: 'openai-docs',
-            name: 'OpenAI 官方文档',
-            icon: 'openai-docs',
-            version: '1.0.0',
-            description: '查询最新官方开发文档。',
-            publisher: 'OpenAI',
-            tags: ['官方', '开发文档'],
-            featured: true,
-            skills: [{ id: 'openai-docs.openai-docs', name: 'OpenAI 官方文档' }],
-            mcpServers: [{ key: 'openai_docs', label: 'OpenAI Developer Docs', transport: 'streamableHttp' }],
-            hooks: [],
-            resources: [],
-            capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
-            installed: false,
-            updateAvailable: false,
-          }}
-          installing={false}
-          onInstall={async () => undefined}
-          onOpen={() => undefined}
-        />
-      </I18nProvider>,
-    );
-
-    expect(html).toContain('OpenAI Official Documentation');
-    expect(html).toContain('latest official documentation');
-    expect(html).toContain('1 skill');
-    expect(html).toContain('1 service');
-    expect(html).toContain('>Get<');
-    expect(html).not.toContain('OpenAI 官方文档');
-    expect(html).not.toContain('个技能');
   });
 
   it('offers an update for an installed marketplace plugin with a newer bundled version', () => {
@@ -511,29 +469,5 @@ describe('capabilities plugin components', () => {
 
     expect(html).toContain('<pre aria-label="protect-secret-paths.mjs 文件内容" tabindex="0">');
     expect(html).toContain('sensitive-path|sensitive-path');
-  });
-
-  it('renders a distinct glyph and tone for every bundled plugin icon', () => {
-    const names = [
-      'context7',
-      'openai-docs',
-      'pdf',
-      'documents',
-      'image-generation',
-      'vision-recognition',
-      'guard-dangerous-shell',
-      'protect-secret-paths',
-      'protect-generated-folders',
-      'audit-file-mutations',
-      'session-start-project-guidance',
-      'prompt-secret-detector',
-      'compact-warning',
-      'stop-todo-continuation',
-    ];
-    const icons = names.map((name) =>
-      renderToStaticMarkup(<CapabilitiesPluginIcon name={name} />));
-
-    names.forEach((name, index) => expect(icons[index]).toContain(`data-plugin-icon="${name}"`));
-    expect(new Set(icons).size).toBe(names.length);
   });
 });

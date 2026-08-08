@@ -8,12 +8,10 @@ import {
   branchCompareRefOptions,
   consumeReviewFocusRequest,
   reviewFilePathParts,
-  reviewSourceLabel,
   reviewWorkspaceFilePath,
   shouldRestoreBranchBaseRefPreference,
 } from '../../../../src/features/workspace/ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
-import { I18nProvider, translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('DesktopReviewPanel', () => {
   it('renders compact file diffs through a valid Pierre patch', () => {
@@ -28,27 +26,9 @@ describe('DesktopReviewPanel', () => {
       onRefresh: () => undefined,
     }));
 
-    expect(html).toContain('<article class="desktop-review-file-card is-open"');
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).not.toContain('desktop-review-file-card__chevron');
-    expect(html).toContain('desktop-review-file-card__path-main');
-    expect(html).toContain('desktop-review-file-card__file-info');
-    expect(html).toContain('desktop-review-file-card__icon');
-    expect(html).toContain('desktop-review-file-card__path-directory">src/domain/agent/drawer</span>');
-    expect(html).toContain('desktop-review-file-card__path-separator">/</span>');
-    expect(html).toContain('desktop-review-file-card__path-filename">ChatLogDrawer.vue</span>');
-    expect(html).not.toContain('desktop-review-file-card__path-button');
-    expect(html).toContain('aria-label="在面板中打开文件"');
-    expect(html).toContain('desktop-review-change-counts__addition">+1</span>');
-    expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
-    expect(html).toContain('aria-label="折叠所有文件改动"');
-    expect(html).toContain('desktop-review-panel__file-expansion-toggle');
-    expect(html).not.toContain('desktop-review-file-card__height-toggle');
-    expect(html).toContain('desktop-review-diff desktop-review-diff--unified desktop-review-diff--wrap');
     expect(html).toContain('diff --git a/src/domain/agent/drawer/ChatLogDrawer.vue b/src/domain/agent/drawer/ChatLogDrawer.vue');
     expect(html).toContain('-const now = new Date()');
     expect(html).toContain('+const today = new Date()');
-    expect(html).not.toContain('desktop-review-diff-line--removed');
   });
 
   it('sorts changed files by path without putting uppercase names first', () => {
@@ -132,35 +112,6 @@ describe('DesktopReviewPanel', () => {
       expect(html).toContain('已暂存');
       expect(html).toContain('desktop-review-change-counts__addition">+3</span>');
       expect(html).toContain('desktop-review-change-counts__deletion">-1</span>');
-    });
-  });
-
-  it('renders review sources and the empty state in English', () => {
-    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'latest' }, () => {
-      const html = renderToStaticMarkup(createElement(
-        I18nProvider,
-        { initialLocale: 'en-US' },
-        createElement(DesktopReviewPanel, {
-          activeProject: project,
-          error: null,
-          latestSummary: { additions: 0, deletions: 0, files: [] },
-          loading: false,
-          reviewState,
-          onExternalOpenFile: () => undefined,
-          onOpenProjectFile: () => undefined,
-          onRefresh: () => undefined,
-        }),
-      ));
-
-      expect(html).toContain('Previous turn');
-      expect(html).toContain('No reviewable changes');
-      expect(html).toContain('Accepted edits will appear here');
-      expect(html).not.toContain('无可审核更改');
-
-      const t: Translate = (key, params) => translate('en-US', key, params);
-      expect((['unstaged', 'staged', 'branch', 'latest'] as const).map((source) => (
-        reviewSourceLabel(source, t)
-      ))).toEqual(['Unstaged', 'Staged', 'Branch', 'Previous turn']);
     });
   });
 

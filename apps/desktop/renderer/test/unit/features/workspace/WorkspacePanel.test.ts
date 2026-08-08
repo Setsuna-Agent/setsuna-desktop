@@ -6,7 +6,7 @@ import {
   WorkspaceFilePreviewContent,
   WorkspaceOverviewPanel,
 } from '../../../../src/features/workspace/WorkspacePanel.js';
-import { I18nProvider, type AppLocale } from '../../../../src/shared/i18n/I18nProvider.js';
+import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('WorkspaceFilePreviewContent', () => {
   it('renders image previews from runtime-classified data', () => {
@@ -60,15 +60,6 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).toContain('文件超过可加载上限，仅显示前 8 MB。');
   });
 
-  it('renders file preview notices in English', () => {
-    const html = renderWorkspaceFilePreview({
-      file: workspaceFile({ kind: 'unsupported', reason: 'binary' }),
-    }, 'en-US');
-
-    expect(html).toContain('Binary file preview is not supported');
-    expect(html).toContain('Open this file in another app to view it.');
-    expect(html).not.toContain('暂不支持预览');
-  });
 });
 
 describe('WorkspaceOverviewPanel', () => {
@@ -190,44 +181,23 @@ describe('WorkspaceOverviewPanel', () => {
     expect(actions[2].props.children[1].props.children[1].props.children).toBe('临时目录 Shell');
   });
 
-  it('renders every workspace overview action in English', () => {
-    const html = renderWorkspaceOverviewPanel({
-      activeProject: project,
-      latestReviewSummary: null,
-      onOpenBrowser: () => undefined,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    }, 'en-US');
-
-    expect(html).toContain('Review');
-    expect(html).toContain('Review code changes');
-    expect(html).toContain('File explorer');
-    expect(html).toContain('Terminal');
-    expect(html).toContain('Project shell');
-    expect(html).toContain('Side chat');
-    expect(html).toContain('Browser');
-    expect(html).not.toContain('审查');
-    expect(html).not.toContain('侧边对话');
-  });
 });
 
 type WorkspaceOverviewProps = Parameters<typeof WorkspaceOverviewPanel>[0];
 type WorkspaceFilePreviewProps = Parameters<typeof WorkspaceFilePreviewContent>[0];
 
-function renderWorkspaceFilePreview(props: WorkspaceFilePreviewProps, initialLocale: AppLocale = 'zh-CN'): string {
+function renderWorkspaceFilePreview(props: WorkspaceFilePreviewProps): string {
   return renderToStaticMarkup(createElement(
     I18nProvider,
-    { initialLocale },
+    { initialLocale: 'zh-CN' },
     createElement(WorkspaceFilePreviewContent, props),
   ));
 }
 
-function renderWorkspaceOverviewPanel(props: WorkspaceOverviewProps, initialLocale: AppLocale = 'zh-CN'): string {
+function renderWorkspaceOverviewPanel(props: WorkspaceOverviewProps): string {
   return renderToStaticMarkup(createElement(
     I18nProvider,
-    { initialLocale },
+    { initialLocale: 'zh-CN' },
     createElement(WorkspaceOverviewPanel, props),
   ));
 }

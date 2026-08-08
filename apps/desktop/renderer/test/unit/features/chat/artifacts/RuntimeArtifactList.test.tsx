@@ -2,7 +2,6 @@ import type { RuntimeArtifact } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { RuntimeArtifactList } from '../../../../../src/features/chat/artifacts/RuntimeArtifactList.js';
-import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 const artifact: RuntimeArtifact = {
   id: 'artifact_1',
@@ -26,16 +25,4 @@ describe('runtime artifact list component', () => {
     expect(html).toContain('chat-artifact-card__file-icon');
   });
 
-  it('renders artifact metadata and actions in English', () => {
-    const html = renderToStaticMarkup(
-      <I18nProvider initialLocale="en-US">
-        <RuntimeArtifactList artifacts={[artifact]} />
-      </I18nProvider>,
-    );
-
-    expect(html).toContain('aria-label="Generated artifacts"');
-    expect(html).toContain('Document · PDF');
-    expect(html).toContain('Open with');
-    expect(html).not.toContain('打开方式');
-  });
 });

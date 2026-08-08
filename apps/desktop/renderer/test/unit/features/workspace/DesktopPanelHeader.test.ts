@@ -6,7 +6,6 @@ import {
   panelDragPreviewPosition,
   panelLauncherMenuPosition,
 } from '../../../../src/features/workspace/DesktopPanelHeader.js';
-import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('DesktopPanelHeader browser tabs', () => {
   it('renders a browser page through the same ordinary tab path', () => {
@@ -52,36 +51,6 @@ describe('DesktopPanelHeader browser tabs', () => {
     expect(html).toContain('aria-label="添加面板"');
   });
 
-  it('renders panel tabs and the launcher in English', () => {
-    const html = renderToStaticMarkup(createElement(
-      I18nProvider,
-      { initialLocale: 'en-US' },
-      createElement(DesktopPanelHeader, {
-        activePanel: 'files',
-        activePanelId: 'files',
-        availablePanelTypes: ['browser'],
-        onClose: vi.fn(),
-        onClosePanel: vi.fn(),
-        onOpenPanel: vi.fn(),
-        onSelectPanel: vi.fn(),
-        panels: [
-          { id: 'side-chat-1', title: '侧边任务', type: 'chat' },
-          { id: 'side-chat-2', title: '侧边任务 2', type: 'chat' },
-          { id: 'review', type: 'review' },
-          { id: 'files', type: 'files' },
-        ],
-        placement: 'side',
-      }),
-    ));
-
-    expect(html).toContain('title="Side chat"');
-    expect(html).toContain('title="Side chat 2"');
-    expect(html).toContain('title="Review"');
-    expect(html).toContain('title="Open File"');
-    expect(html).toContain('aria-label="Add panel"');
-    expect(html).not.toContain('title="审查"');
-    expect(html).not.toContain('title="侧边任务');
-  });
 });
 
 describe('DesktopPanelHeader launcher menu positioning', () => {

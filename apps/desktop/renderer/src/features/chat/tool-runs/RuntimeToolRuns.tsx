@@ -94,7 +94,7 @@ export function shouldAutoOpenToolRunDisclosure(previousAutoOpenKey: string | un
   return Boolean(autoOpenKey && autoOpenKey !== previousAutoOpenKey);
 }
 
-export function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
+function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
   const modifier = kind === 'fileMutation' ? 'file-mutation' : kind;
   return `chat-tool-run--${modifier}`;
 }
