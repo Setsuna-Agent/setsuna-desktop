@@ -79,7 +79,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 566 total files
+apps/desktop/renderer/ — 0 direct / 568 total files
 ├── src/ — 2 direct / 417 total files
 │   ├── app/ — 2 direct / 34 total files
 │   │   ├── controller/ — 7 direct / 7 total files
@@ -135,14 +135,14 @@ apps/desktop/renderer/ — 0 direct / 566 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 149 files
-    └── unit/ — 149 files
+└── test/ — 151 files
+    └── unit/ — 151 files
         ├── app/ — 1 direct / 12 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 111 files
+        ├── features/ — 112 files
         │   ├── capabilities/ — 5 direct / 6 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 60 total files
@@ -154,7 +154,7 @@ apps/desktop/renderer/ — 0 direct / 566 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
         │   │   └── tool-runs/ — 7 direct / 7 total files
         │   ├── conversation-debug/ — 7 direct / 7 total files
-        │   ├── runtime-activity/ — 2 direct / 2 total files
+        │   ├── runtime-activity/ — 3 direct / 3 total files
         │   ├── settings/ — 9 direct / 14 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
@@ -164,7 +164,7 @@ apps/desktop/renderer/ — 0 direct / 566 total files
         │       └── model/ — 1 direct / 1 total files
         ├── services/ — 9 files
         │   └── runtime-client/ — 9 direct / 9 total files
-        └── shared/ — 17 files
+        └── shared/ — 18 files
             ├── branding/ — 1 direct / 1 total files
             ├── code/ — 1 direct / 1 total files
             ├── hooks/ — 2 direct / 2 total files
@@ -172,7 +172,7 @@ apps/desktop/renderer/ — 0 direct / 566 total files
             ├── lib/ — 4 direct / 4 total files
             ├── preferences/ — 5 direct / 5 total files
             ├── shortcuts/ — 2 direct / 2 total files
-            └── ui/ — 1 direct / 1 total files
+            └── ui/ — 2 direct / 2 total files
 ```
 
 ### `packages/contracts/`

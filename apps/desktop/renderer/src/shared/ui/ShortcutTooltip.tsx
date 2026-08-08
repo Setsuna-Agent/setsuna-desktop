@@ -25,7 +25,7 @@ export function ShortcutTooltip({
   );
 }
 
-function ShortcutTooltipContent({
+export function ShortcutTooltipContent({
   commandId,
   label,
 }: {

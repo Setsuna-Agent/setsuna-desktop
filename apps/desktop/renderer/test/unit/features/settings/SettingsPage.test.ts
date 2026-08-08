@@ -2,7 +2,20 @@ import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { ArchivedThreadsSettings } from '../../../../src/features/settings/SettingsPage.js';
+import { ArchivedThreadsSettings, SettingsSidebar } from '../../../../src/features/settings/SettingsPage.js';
+
+describe('SettingsSidebar', () => {
+  it('exposes keyboard shortcuts and usage statistics in settings navigation', () => {
+    const html = renderToStaticMarkup(createElement(SettingsSidebar, {
+      activeSection: 'general',
+      onBack: vi.fn(),
+      onSelectSection: vi.fn(),
+    }));
+
+    expect(html).toContain('键盘快捷键');
+    expect(html).toContain('用量统计');
+  });
+});
 
 describe('ArchivedThreadsSettings', () => {
   it('shows the delete-all action when archived threads exist', () => {

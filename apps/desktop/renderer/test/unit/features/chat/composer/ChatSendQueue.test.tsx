@@ -54,6 +54,10 @@ describe('ChatSendQueue', () => {
       queuedInput({ id: 'queued_goal', input: 'Goal', kind: 'goal' }),
     ], false, true);
 
+    expect(html).toContain('data-queue-kind="plan"');
+    expect(html).toContain('data-queue-kind="goal"');
+    expect(html).toMatch(/class="chat-send-queue__marker is-plan" role="img" aria-label="[^"]+"/);
+    expect(html).toMatch(/class="chat-send-queue__marker is-goal" role="img" aria-label="[^"]+"/);
     expect(html.match(/aria-label="计划和目标需等待当前轮次结束"/g)).toHaveLength(2);
     expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
   });
