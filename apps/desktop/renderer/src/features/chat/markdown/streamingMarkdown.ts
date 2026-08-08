@@ -49,10 +49,6 @@ export function parseMarkdownBlocks(markdown: string): string[] {
   }
 }
 
-export function createMarkdownRenderBlocks(markdown: string, streaming: boolean): MarkdownRenderBlock[] {
-  return reconcileMarkdownRenderBlocks(null, markdown, streaming).blocks;
-}
-
 /**
  * Reuses parser-confirmed block prefixes across append-only stream updates. Only the
  * unresolved tail is repaired and lexed again; completion always rebuilds from the

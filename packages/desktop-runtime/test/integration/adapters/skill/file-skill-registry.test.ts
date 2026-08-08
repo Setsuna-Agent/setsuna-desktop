@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../../src/adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../../../../src/adapters/skill/file-skill-registry.js';
-import { JsonThreadStore } from '../../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../../support/thread-store.js';
 import { AgentLoop } from '../../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../../src/ports/clock.js';
 import type { ModelClient } from '../../../../src/ports/model-client.js';
@@ -356,7 +356,7 @@ describe('file skill registry', () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
     await registry.updateSkill('builtin-demo', { selected: true });
-    const threadStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await threadStore.createThread({ title: 'Skill injection' });
     const modelClient = new CapturingModelClient();
     const loop = new AgentLoop({
@@ -378,7 +378,7 @@ describe('file skill registry', () => {
   it('injects per-turn skills without persisting selected state', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
-    const threadStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await threadStore.createThread({ title: 'Per-turn skill injection' });
     const modelClient = new CapturingModelClient();
     const loop = new AgentLoop({
@@ -401,7 +401,7 @@ describe('file skill registry', () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
-    const threadStore = new JsonThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
     const thread = await threadStore.createThread({ title: 'Automatic Plugin Skill routing' });
     const modelClient = new CapturingModelClient();
     const loop = new AgentLoop({

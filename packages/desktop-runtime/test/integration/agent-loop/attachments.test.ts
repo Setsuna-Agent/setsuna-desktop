@@ -5,7 +5,7 @@ import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bu
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { ImageAssetResolvingModelClient } from '../../../src/adapters/model/image-asset-resolving-model-client.js';
 import { FileGeneratedImageStore } from '../../../src/adapters/store/file-generated-image-store.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { BrowserToolHost } from '../../../src/adapters/tool/browser-tool-host.js';
 import { WorkspaceImageToolHost } from '../../../src/adapters/tool/workspace-image-tool-host.js';
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
@@ -27,7 +27,7 @@ import {
 describe('agent loop reasoning and attachments', () => {
   it('passes per-turn thinking options and stores reasoning deltas', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Thinking loop' });
       const modelClient = new ReasoningModelClient();
       const loop = new AgentLoop({
@@ -69,7 +69,7 @@ describe('agent loop reasoning and attachments', () => {
   
   it('rejects image attachments when the active model does not support image input', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Image support' });
       const modelClient = new ToolCallingModelClient();
       const loop = new AgentLoop({
@@ -99,7 +99,7 @@ describe('agent loop reasoning and attachments', () => {
   
   it('advertises browser screenshots and returns them as image tool attachments for vision models', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Browser screenshot vision' });
       const modelClient = new BrowserScreenshotModelClient();
       const browserControl: BrowserControlPort = {
@@ -157,7 +157,7 @@ describe('agent loop reasoning and attachments', () => {
       const projects = new FileWorkspaceProjectStore(path.join(dataDir, 'workspace-state'), systemClock);
       const project = await projects.addProject({ path: projectDir });
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(path.join(dataDir, 'thread-state'), systemClock, ids);
+      const threadStore = createTestThreadStore(path.join(dataDir, 'thread-state'), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Workspace image vision', projectId: project.id });
       const capturedModelClient = new SingleToolCallModelClient({
         id: 'call_view_image',
@@ -207,7 +207,7 @@ describe('agent loop reasoning and attachments', () => {
   it('publishes only one terminal event when tool attachment externalization fails', async () => {
       const dataDir = await mkDataDir();
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(path.join(dataDir, 'threads'), systemClock, ids);
+      const threadStore = createTestThreadStore(path.join(dataDir, 'threads'), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Invalid tool attachment' });
       const toolHost: ToolHost = {
         listTools: async () => [{

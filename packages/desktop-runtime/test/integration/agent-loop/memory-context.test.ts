@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { MemoryToolHost } from '../../../src/adapters/tool/memory-tool-host.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -20,7 +20,7 @@ describe('agent loop memory context', () => {
   it('injects local memories into model context', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Memory loop' });
       await memoryStore.rememberMemory({ content: 'The user prefers local-only runtime answers.' });
@@ -49,7 +49,7 @@ describe('agent loop memory context', () => {
   it('keeps project memory context isolated from other projects and shared summaries', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Project alpha', projectId: 'project_alpha' });
       await memoryStore.rememberMemory({ content: 'Global preference is safe everywhere.', scope: 'global' });
@@ -78,7 +78,7 @@ describe('agent loop memory context', () => {
   it('strips hidden memory citations from assistant output and stores citation metadata', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const citedMemory = await memoryStore.rememberMemory({ content: 'Cited local memory.', sourceThreadId: 'thread_a' });
       const thread = await threadStore.createThread({ title: 'Memory citation' });
@@ -120,7 +120,7 @@ describe('agent loop memory context', () => {
   it('stores explicit user memory requests even when the model does not call the memory tool', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Explicit memory', projectId: 'project_1' });
       const loop = new AgentLoop({
@@ -149,7 +149,7 @@ describe('agent loop memory context', () => {
   it('does not duplicate explicit memories when the memory tool already saved them', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Memory tool', projectId: 'project_1' });
       const loop = new AgentLoop({
@@ -177,7 +177,7 @@ describe('agent loop memory context', () => {
   it('injects desktop personalization and honors disabled memories', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Personalization loop' });
       await memoryStore.rememberMemory({ content: 'This memory should stay out.' });

@@ -1,4 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  readBrowserStorageValue,
+  removeBrowserStorageValue,
+  writeBrowserStorageValue,
+} from './browserStorage.js';
 
 export const sidebarBackgroundOptions = [
   { value: 'soft', label: '柔和', lightSwatch: '#f7f7f7', darkSwatch: '#282b2e' },
@@ -31,7 +36,7 @@ export function useSidebarBackgroundPreference() {
   }, []);
 
   const setSidebarBackgroundStyle = useCallback((nextStyle: SidebarBackgroundStyle) => {
-    window.localStorage.setItem(sidebarBackgroundStorageKey, nextStyle);
+    writeBrowserStorageValue(sidebarBackgroundStorageKey, nextStyle);
     setSidebarBackgroundStyleState(nextStyle);
     applySidebarBackgroundStyle(nextStyle);
     window.dispatchEvent(new CustomEvent(sidebarBackgroundChangeEventName));
@@ -43,11 +48,11 @@ export function useSidebarBackgroundPreference() {
 export function initializeSidebarBackgroundPreference(): void {
   applySidebarBackgroundStyle(getInitialSidebarBackgroundStyle());
   // 不透明度已不再属于外观模型；移除旧值，防止旧版安装意外恢复半透明窗口基底。
-  window.localStorage.removeItem(legacySidebarOpacityStorageKey);
+  removeBrowserStorageValue(legacySidebarOpacityStorageKey);
 }
 
 function getInitialSidebarBackgroundStyle(): SidebarBackgroundStyle {
-  const saved = window.localStorage.getItem(sidebarBackgroundStorageKey);
+  const saved = readBrowserStorageValue(sidebarBackgroundStorageKey);
   return sidebarBackgroundOptions.some((option) => option.value === saved)
     ? saved as SidebarBackgroundStyle
     : defaultSidebarBackgroundStyle;

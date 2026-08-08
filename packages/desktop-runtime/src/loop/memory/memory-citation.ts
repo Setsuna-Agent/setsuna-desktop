@@ -106,18 +106,6 @@ export function parseMemoryCitationBodies(citations: string[]): RuntimeMemoryCit
   return { entries, rolloutIds };
 }
 
-export function stripMemoryCitations(text: string): { visibleText: string; citationBodies: string[]; memoryCitation?: RuntimeMemoryCitation } {
-  const parser = new MemoryCitationStreamParser();
-  const first = parser.push(text);
-  const tail = parser.finish();
-  const citationBodies = [...first.citations, ...tail.citations];
-  return {
-    visibleText: `${first.visibleText}${tail.visibleText}`,
-    citationBodies,
-    memoryCitation: parseMemoryCitationBodies(citationBodies),
-  };
-}
-
 function parseMemoryCitationEntry(value: string): RuntimeMemoryCitationEntry | null {
   const line = value.trim();
   if (!line) return null;

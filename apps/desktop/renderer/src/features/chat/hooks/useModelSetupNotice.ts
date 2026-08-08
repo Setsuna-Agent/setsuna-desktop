@@ -1,5 +1,10 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useState } from 'react';
+import {
+  readBrowserStorageValue,
+  removeBrowserStorageValue,
+  writeBrowserStorageValue,
+} from '../../../shared/preferences/browserStorage.js';
 import { hasRealModelConfigured } from '../chatModelAvailability.js';
 
 const MODEL_SETUP_NOTICE_STORAGE_KEY = 'setsuna.chat.modelSetupNoticeDismissed';
@@ -28,26 +33,13 @@ export function useModelSetupNotice(config: RuntimeConfigState | null) {
 }
 
 function readModelSetupNoticeDismissed(): boolean {
-  try {
-    return window.localStorage.getItem(MODEL_SETUP_NOTICE_STORAGE_KEY) === '1';
-  } catch {
-    // 受限渲染环境可能无法访问 localStorage，此时按未忽略处理。
-    return false;
-  }
+  return readBrowserStorageValue(MODEL_SETUP_NOTICE_STORAGE_KEY) === '1';
 }
 
 function rememberModelSetupNoticeDismissal(): void {
-  try {
-    window.localStorage.setItem(MODEL_SETUP_NOTICE_STORAGE_KEY, '1');
-  } catch {
-    // 忽略持久化失败，组件内状态仍可保证当次会话不再展示。
-  }
+  writeBrowserStorageValue(MODEL_SETUP_NOTICE_STORAGE_KEY, '1');
 }
 
 function clearModelSetupNoticeDismissal(): void {
-  try {
-    window.localStorage.removeItem(MODEL_SETUP_NOTICE_STORAGE_KEY);
-  } catch {
-    // 同上，清除失败只影响下次启动时的引导重现。
-  }
+  removeBrowserStorageValue(MODEL_SETUP_NOTICE_STORAGE_KEY);
 }

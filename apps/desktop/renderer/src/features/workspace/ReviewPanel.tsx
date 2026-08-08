@@ -18,6 +18,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
+import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import { ActionTooltip, EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import type {
   DesktopDiffSummary,
@@ -492,81 +493,44 @@ function reviewLineWrapPreferenceKey(project: WorkspaceProject): string {
 }
 
 function readReviewSourcePreference(key: string | null): DesktopReviewSource | null {
-  if (!key || typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(key);
-    return isDesktopReviewSource(value) ? value : null;
-  } catch {
-    return null;
-  }
+  if (!key) return null;
+  const value = readBrowserStorageValue(key);
+  return isDesktopReviewSource(value) ? value : null;
 }
 
 function readBranchBaseRefPreference(key: string | null): string | null {
-  if (!key || typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(key);
-    return value?.trim() || null;
-  } catch {
-    return null;
-  }
+  if (!key) return null;
+  return readBrowserStorageValue(key)?.trim() || null;
 }
 
 function readReviewDiffLayoutPreference(key: string | null): DesktopReviewDiffLayout | null {
-  if (!key || typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(key);
-    return isDesktopReviewDiffLayout(value) ? value : null;
-  } catch {
-    return null;
-  }
+  if (!key) return null;
+  const value = readBrowserStorageValue(key);
+  return isDesktopReviewDiffLayout(value) ? value : null;
 }
 
 function readReviewLineWrapPreference(key: string | null): boolean | null {
-  if (!key || typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(key);
-    if (value === 'wrap') return true;
-    if (value === 'nowrap') return false;
-    return null;
-  } catch {
-    return null;
-  }
+  if (!key) return null;
+  const value = readBrowserStorageValue(key);
+  if (value === 'wrap') return true;
+  if (value === 'nowrap') return false;
+  return null;
 }
 
 function writeReviewSourcePreference(key: string, source: DesktopReviewSource): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, source);
-  } catch {
-    // 偏好设置持久化绝不能阻塞审查面板本身。
-  }
+  writeBrowserStorageValue(key, source);
 }
 
 function writeBranchBaseRefPreference(key: string, baseRef: string): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, baseRef);
-  } catch {
-    // 偏好设置持久化绝不能阻塞审查面板本身。
-  }
+  writeBrowserStorageValue(key, baseRef);
 }
 
 function writeReviewDiffLayoutPreference(key: string, layout: DesktopReviewDiffLayout): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, layout);
-  } catch {
-    // 偏好设置持久化绝不能阻塞审查面板本身。
-  }
+  writeBrowserStorageValue(key, layout);
 }
 
 function writeReviewLineWrapPreference(key: string, lineWrap: boolean): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, lineWrap ? 'wrap' : 'nowrap');
-  } catch {
-    // 偏好设置持久化绝不能阻塞审查面板本身。
-  }
+  writeBrowserStorageValue(key, lineWrap ? 'wrap' : 'nowrap');
 }
 
 function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -27,7 +27,7 @@ import {
 describe('agent loop tool approval', () => {
   it('pauses tool execution until approval is answered', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Approval loop' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -66,7 +66,7 @@ describe('agent loop tool approval', () => {
   
   it('persists tool approvals across loop instances', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Persistent approval loop' });
       const persistentToolApprovalStore = new InMemoryPersistentToolApprovalStore();
       const approvalKeys = ['mcp:search:write_note'];
@@ -124,7 +124,7 @@ describe('agent loop tool approval', () => {
   
   it('cancels the active turn when command approval is cancelled', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Approval cancel loop' });
       const modelClient = new ApprovalToolModelClient();
       const toolHost = new ApprovalToolHost();
@@ -157,7 +157,7 @@ describe('agent loop tool approval', () => {
   
   it('runs exec_command with require_escalated as a bypassed sandbox attempt after approval', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Escalated exec loop' });
       const modelClient = new EscalatedExecModelClient();
       const toolHost = new EscalatedExecToolHost();
@@ -187,7 +187,7 @@ describe('agent loop tool approval', () => {
   
   it('reuses exec prefix_rule approvals for matching require_escalated commands', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Escalated prefix exec loop' });
       const modelClient = new RepeatedEscalatedPrefixExecModelClient();
       const toolHost = new EscalatedExecToolHost();
@@ -238,7 +238,7 @@ describe('agent loop tool approval', () => {
   
   it('does not reuse banned broad exec prefix_rule approvals', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Broad prefix exec loop' });
       const modelClient = new BroadEscalatedPrefixExecModelClient();
       const toolHost = new EscalatedExecToolHost();
@@ -272,7 +272,7 @@ describe('agent loop tool approval', () => {
   
   it('runs exec_command with approved additional sandbox permissions', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Additional permissions exec loop', projectId: 'project_1' });
       const environmentCwd = await mkDataDir();
       const expectedWritableRoot = path.join(environmentCwd, 'extra-write');

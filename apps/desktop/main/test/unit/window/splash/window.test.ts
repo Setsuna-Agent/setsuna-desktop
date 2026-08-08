@@ -1,10 +1,8 @@
 import type { BrowserWindow, WebContentsView } from 'electron';
 import { EventEmitter } from 'node:events';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  createStartupSplashWindowActionUrl,
-  decodeStartupSplashPageUrl,
-} from '../../../../src/window/splash/page.js';
+import { createStartupSplashWindowActionUrl } from '../../../../src/window/splash/page.js';
+import { decodeStartupSplashPageUrl } from '../../../support/startup-splash-page.js';
 import { showStartupSplash, waitForRendererFirstPaint } from '../../../../src/window/splash/window.js';
 
 describe('startup splash window', () => {

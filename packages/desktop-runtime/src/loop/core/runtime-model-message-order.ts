@@ -18,14 +18,6 @@ export type RuntimeModelConversationNormalization = {
 };
 
 /**
- * Keeps immediately persisted steer messages visible in the transcript while restoring the
- * assistant tool-call -> tool-result ordering required by model provider protocols.
- */
-export function normalizeModelConversationOrder(messages: RuntimeMessage[]): RuntimeMessage[] {
-  return normalizeModelConversationHistory(messages).messages;
-}
-
-/**
  * Repairs model-wire compatibility without mutating semantic history.
  *
  * Provider call IDs are transaction-local in practice, even though provider request formats need

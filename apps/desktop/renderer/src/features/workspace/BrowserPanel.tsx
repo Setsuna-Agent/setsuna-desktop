@@ -8,6 +8,7 @@ import type {
 } from 'electron';
 import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useToast } from '../../app/providers/ToastProvider.js';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
@@ -70,6 +71,7 @@ export function BrowserPanel({
   resizeValue: number;
 }) {
   const { t } = useI18n();
+  const toast = useToast();
   const webviewRef = useRef<WebviewTag | null>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, t));
   const {
@@ -86,6 +88,13 @@ export function BrowserPanel({
   const setWebview = useCallback((node: WebviewTag | null) => {
     webviewRef.current = node;
   }, []);
+  const reportBrowserActionFailure = useCallback((message: string, error?: unknown) => {
+    console.warn('[browser] embedded page action failed', error);
+    toast.warning(message);
+  }, [toast]);
+  const reportDeviceEmulationFailure = useCallback((error?: unknown) => {
+    reportBrowserActionFailure(t('workspace.browser.deviceEmulationFailed'), error);
+  }, [reportBrowserActionFailure, t]);
 
   useEffect(() => {
     if (hidden) return undefined;
@@ -117,13 +126,22 @@ export function BrowserPanel({
       url,
     });
     if (webview) {
-      void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
-        .catch(() => false)
-        .then(() => webview.loadURL(url))
-        .catch((error) => {
+      void (async () => {
+        try {
+          const applied = await applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation);
+          if (tab.deviceEmulation.enabled && !applied) {
+            reportDeviceEmulationFailure();
+          }
+        } catch (error) {
+          reportDeviceEmulationFailure(error);
+        }
+        try {
+          await webview.loadURL(url);
+        } catch (error) {
           if (isAbortedNavigationError(error)) return;
           updateTab(tab.id, { error: error instanceof Error ? error.message : String(error), loading: false });
-        });
+        }
+      })();
     }
   };
 
@@ -137,19 +155,26 @@ export function BrowserPanel({
   const reload = () => {
     const webview = webviewRef.current;
     if (!webview) return;
-    if (tab.loading) webview.stop();
-    else {
+    if (tab.loading) {
+      if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.stop())) {
+        reportBrowserActionFailure(t('workspace.browser.reloadFailed'));
+      }
+    } else {
       // UA 和客户端提示覆盖是异步操作。导航前先应用覆盖，防止选择设备后立即刷新时
       // 使用桌面端请求头。
-      void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
-        .catch(() => false)
-        .then(() => {
-          try {
-            webview.reload();
-          } catch {
-            // 主进程应用覆盖配置期间，来宾页面可能会分离。
+      void (async () => {
+        try {
+          const applied = await applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation);
+          if (tab.deviceEmulation.enabled && !applied) {
+            reportDeviceEmulationFailure();
           }
-        });
+        } catch (error) {
+          reportDeviceEmulationFailure(error);
+        }
+        if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.reload())) {
+          reportBrowserActionFailure(t('workspace.browser.reloadFailed'));
+        }
+      })();
     }
   };
 
@@ -157,17 +182,18 @@ export function BrowserPanel({
     const webview = webviewRef.current;
     if (!webview) return;
     try {
-      void webview.print().catch(() => undefined);
-    } catch {
-      // 从打开菜单到选择打印之间，来宾页面可能会分离。
+      void webview.print().catch((error) => {
+        reportBrowserActionFailure(t('workspace.browser.printFailed'), error);
+      });
+    } catch (error) {
+      reportBrowserActionFailure(t('workspace.browser.printFailed'), error);
     }
   };
 
   const openActivePageDevTools = () => {
-    try {
-      webviewRef.current?.openDevTools();
-    } catch {
-      // 忽略菜单打开期间已经分离的来宾页面。
+    const webview = webviewRef.current;
+    if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.openDevTools())) {
+      reportBrowserActionFailure(t('workspace.browser.devToolsFailed'));
     }
   };
 
@@ -176,14 +202,13 @@ export function BrowserPanel({
     let currentZoomFactor = tab.zoomFactor;
     try {
       currentZoomFactor = webview?.getZoomFactor() ?? currentZoomFactor;
-    } catch {
-      // 来宾页面不再附加时，保留标签页最后已知的缩放比例。
+    } catch (error) {
+      console.warn('[browser] could not read embedded page zoom', error);
     }
     const nextZoomFactor = nextBrowserZoomFactor(currentZoomFactor, direction);
-    try {
-      webview?.setZoomFactor(nextZoomFactor);
-    } catch {
-      // 状态仍会记录请求值，供下一个附加的来宾页面使用。
+    if (!runAttachedWebviewAction(webview, (attachedWebview) => attachedWebview.setZoomFactor(nextZoomFactor))) {
+      reportBrowserActionFailure(t('workspace.browser.zoomFailed'));
+      return;
     }
     updateTab(tab.id, { zoomFactor: nextZoomFactor });
   };
@@ -242,7 +267,13 @@ export function BrowserPanel({
         <BrowserDeviceToolbar value={tab.deviceEmulation} onChange={updateActiveDeviceEmulation} />
       ) : null}
       <div className={`desktop-browser-content ${tab.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
-        <BrowserWebview active={!hidden} tab={tab} onRef={setWebview} onUpdate={updateTab} />
+        <BrowserWebview
+          active={!hidden}
+          tab={tab}
+          onDeviceEmulationFailure={reportDeviceEmulationFailure}
+          onRef={setWebview}
+          onUpdate={updateTab}
+        />
         {tab.error ? <div className="desktop-browser-error"><strong>{t('workspace.browser.loadFailed')}</strong><span>{tab.error}</span></div> : null}
       </div>
     </aside>
@@ -251,11 +282,13 @@ export function BrowserPanel({
 
 function BrowserWebview({
   active,
+  onDeviceEmulationFailure,
   onRef,
   onUpdate,
   tab,
 }: {
   active: boolean;
+  onDeviceEmulationFailure: (error?: unknown) => void;
   onRef: (node: WebviewTag | null) => void;
   onUpdate: (tabId: string, patch: Partial<BrowserTab>) => void;
   tab: BrowserTab;
@@ -346,8 +379,17 @@ function BrowserWebview({
   }, [tab.id]);
 
   useEffect(() => {
-    void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation).catch(() => undefined);
+    void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
+      .then((applied) => {
+        if (tab.deviceEmulation.enabled && !applied) {
+          onDeviceEmulationFailure();
+        }
+      })
+      .catch((error) => {
+        onDeviceEmulationFailure(error);
+      });
   }, [
+    onDeviceEmulationFailure,
     tab.deviceEmulation.deviceScaleFactor,
     tab.deviceEmulation.enabled,
     tab.deviceEmulation.height,
@@ -405,6 +447,19 @@ function applyBrowserDeviceEmulation(
     tabId,
     toDesktopBrowserDeviceEmulation(deviceEmulation),
   ) ?? Promise.resolve(false);
+}
+
+function runAttachedWebviewAction(
+  webview: WebviewTag | null,
+  action: (webview: WebviewTag) => void,
+): boolean {
+  if (!webview || webview.isConnected === false) return false;
+  try {
+    action(webview);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const browserZoomFactors = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;

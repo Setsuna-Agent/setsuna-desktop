@@ -6,14 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { RuntimeEventWriter } from '../../../src/loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 describe('runtime event writer', () => {
   it('records per-turn stream coalescing metrics without adding transcript events', async () => {
     const ids = new RandomIdGenerator();
-    const store = new JsonThreadStore(
+    const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-metrics-test-')),
       systemClock,
       ids,
@@ -107,7 +107,7 @@ describe('runtime event writer', () => {
 
   it('does not reopen finalized metrics for late events after cancellation', async () => {
     const ids = new RandomIdGenerator();
-    const store = new JsonThreadStore(
+    const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-cancelled-metrics-test-')),
       systemClock,
       ids,
@@ -180,7 +180,7 @@ describe('runtime event writer', () => {
   });
 
   it('coalesces stream deltas and flushes them before terminal events', async () => {
-    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-test-')), systemClock, new RandomIdGenerator());
+    const store = createTestThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-test-')), systemClock, new RandomIdGenerator());
     const eventBus = new InMemoryEventBus();
     const writer = new RuntimeEventWriter(store, eventBus, 10_000);
     const thread = await store.createThread({ title: 'Delta batching' });
@@ -231,7 +231,7 @@ describe('runtime event writer', () => {
   });
 
   it('coalesces plan and reasoning parts without crossing turn or lifecycle boundaries', async () => {
-    const store = new JsonThreadStore(
+    const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-structured-delta-test-')),
       systemClock,
       new RandomIdGenerator(),
@@ -366,7 +366,7 @@ describe('runtime event writer', () => {
   });
 
   it('keeps only the latest buffered tool preview before execution starts', async () => {
-    const store = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-preview-test-')), systemClock, new RandomIdGenerator());
+    const store = createTestThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-preview-test-')), systemClock, new RandomIdGenerator());
     const eventBus = new InMemoryEventBus();
     const writer = new RuntimeEventWriter(store, eventBus, 10_000);
     const thread = await store.createThread({ title: 'Tool preview batching' });

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { RuntimeQueuedTurnCoordinator } from '../../../src/loop/lifecycle/runtime-queued-turn-coordinator.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
@@ -108,7 +108,7 @@ describe('runtime queued turn coordinator', () => {
 
 async function createHarness() {
   const ids = new RandomIdGenerator();
-  const threadStore = new JsonThreadStore(
+  const threadStore = createTestThreadStore(
     await mkdtemp(path.join(tmpdir(), 'setsuna-queued-turn-coordinator-test-')),
     systemClock,
     ids,

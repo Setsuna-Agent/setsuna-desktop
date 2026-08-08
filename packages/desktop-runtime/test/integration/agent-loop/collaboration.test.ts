@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -18,7 +18,7 @@ import {
 describe('agent loop collaboration tools', () => {
   it('runs built-in collaboration tools across spawned child threads', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const parent = await threadStore.createThread({ title: 'Parent collaboration loop', projectId: 'project_1' });
       const modelClient = new CollaborationToolModelClient();
       const loop = new AgentLoop({
@@ -69,7 +69,7 @@ describe('agent loop collaboration tools', () => {
   
   it('keeps the parent turn active until spawned child research is collected', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const parent = await threadStore.createThread({ title: 'Parent waits for research' });
       const modelClient = new CollaborationJoinModelClient();
       const loop = new AgentLoop({

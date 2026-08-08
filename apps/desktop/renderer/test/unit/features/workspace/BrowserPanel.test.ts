@@ -77,7 +77,7 @@ describe('browserScreenshotOutcomeFeedback', () => {
 });
 
 describe('BrowserPanel', () => {
-  it('allows popup requests so main can route them into ordinary workspace tabs', () => {
+  it('enables Electron popup requests on the embedded webview', () => {
     const html = renderToStaticMarkup(createElement(ToastProvider, null,
       createElement(BrowserPanel, {
         hidden: false,

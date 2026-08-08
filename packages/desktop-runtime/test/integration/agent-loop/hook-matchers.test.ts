@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -15,7 +15,7 @@ import {
 describe('agent loop hook matching', () => {
   it('runs PreToolUse hooks and blocks denied tool calls', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook block', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -81,7 +81,7 @@ describe('agent loop hook matching', () => {
   
   it('treats star hook matchers as match-all like Codex', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook star matcher', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -121,7 +121,7 @@ describe('agent loop hook matching', () => {
   
   it('uses exact matching for literal hook matchers instead of substring regex matching', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Hook literal matcher', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();

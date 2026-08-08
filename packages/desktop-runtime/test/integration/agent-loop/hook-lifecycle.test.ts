@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { createRuntimeToolHookRunner } from '../../../src/hooks/runtime-hooks.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -22,7 +22,7 @@ import {
 describe('agent loop hook lifecycle', () => {
   it('runs SessionStart hooks before the first model request and injects context', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session start hook context', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -64,7 +64,7 @@ describe('agent loop hook lifecycle', () => {
   
   it('lets SessionStart hooks stop the turn before user prompt hooks and model calls', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session start hook stop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -116,7 +116,7 @@ describe('agent loop hook lifecycle', () => {
   
   it('runs SessionStart clear hooks after clearing thread context through AgentLoop', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session start clear hook', projectId: 'project_1' });
       await threadStore.appendEvent(thread.id, {
         id: ids.id('event'),
@@ -241,7 +241,7 @@ describe('agent loop hook lifecycle', () => {
   
   it('runs UserPromptSubmit hooks and stops the turn before model calls', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'User prompt hook block', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -287,7 +287,7 @@ describe('agent loop hook lifecycle', () => {
   
   it('injects UserPromptSubmit additional context into the next model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'User prompt hook context', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new CapturingToolHost();
@@ -330,7 +330,7 @@ describe('agent loop hook lifecycle', () => {
   
   it('runs Stop hooks and continues the turn when they block stopping', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Stop hook continuation', projectId: 'project_1' });
       const modelClient = new StopHookModelClient();
       const loop = new AgentLoop({

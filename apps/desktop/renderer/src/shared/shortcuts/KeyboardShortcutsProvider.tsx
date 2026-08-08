@@ -7,6 +7,11 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import {
+  browserLocalStorage,
+  readStorageValue,
+  writeStorageValue,
+} from '../preferences/browserStorage.js';
 import { normalizeKeyboardShortcutBinding } from './keyboardShortcutBindings.js';
 import {
   KEYBOARD_SHORTCUT_PLATFORMS,
@@ -212,11 +217,11 @@ export function resetKeyboardShortcutCommandPreferences(
 }
 
 export function readKeyboardShortcutPreferences(
-  storage: Pick<Storage, 'getItem'> | null = browserStorage(),
+  storage: Pick<Storage, 'getItem'> | null = browserLocalStorage(),
 ): StoredKeyboardShortcutPreferences {
   if (!storage) return { version: 1, platforms: {} };
   try {
-    const stored = storage.getItem(KEYBOARD_SHORTCUTS_STORAGE_KEY);
+    const stored = readStorageValue(storage, KEYBOARD_SHORTCUTS_STORAGE_KEY);
     return stored ? normalizeKeyboardShortcutPreferences(JSON.parse(stored)) : { version: 1, platforms: {} };
   } catch {
     return { version: 1, platforms: {} };
@@ -225,14 +230,9 @@ export function readKeyboardShortcutPreferences(
 
 export function writeKeyboardShortcutPreferences(
   preferences: StoredKeyboardShortcutPreferences,
-  storage: Pick<Storage, 'setItem'> | null = browserStorage(),
+  storage: Pick<Storage, 'setItem'> | null = browserLocalStorage(),
 ): void {
-  if (!storage) return;
-  try {
-    storage.setItem(KEYBOARD_SHORTCUTS_STORAGE_KEY, JSON.stringify(preferences));
-  } catch {
-    // The in-memory preference remains usable when a sandboxed surface denies storage.
-  }
+  writeStorageValue(storage, KEYBOARD_SHORTCUTS_STORAGE_KEY, JSON.stringify(preferences));
 }
 
 function normalizeBindingList(bindings: readonly unknown[]): string[] {
@@ -245,13 +245,4 @@ function currentKeyboardShortcutPlatform(): KeyboardShortcutPlatform {
   if (detected === 'darwin' || detected.includes('mac')) return 'darwin';
   if (detected === 'linux' || detected.includes('linux')) return 'linux';
   return keyboardShortcutPlatform(detected);
-}
-
-function browserStorage(): Storage | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    return window.localStorage;
-  } catch {
-    return null;
-  }
 }

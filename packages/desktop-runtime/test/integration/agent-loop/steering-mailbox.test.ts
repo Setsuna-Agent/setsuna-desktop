@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -25,7 +25,7 @@ import {
 describe('agent loop turn steering and mailbox input', () => {
   it('runs standalone user shell commands as cancellable user_shell tasks', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'User shell task', projectId: 'project_1' });
       const toolHost = new BlockingUserShellHost();
       const loop = new AgentLoop({
@@ -80,7 +80,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('queues mailbox input that arrives while a user_shell task is active', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Busy shell mailbox queue', projectId: 'project_1' });
       const modelClient = new MailboxAwareModelClient();
       const toolHost = new BlockingUserShellHost();
@@ -128,7 +128,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('steers active user input into the next model request of the same turn', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Steer loop' });
       const modelClient = new SteerableModelClient();
       const loop = new AgentLoop({
@@ -192,7 +192,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('compacts oversized active steer input before the follow-up sampling step', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Oversized steer loop' });
       const modelClient = new OversizedSteerCompactionModelClient();
       const loop = new AgentLoop({
@@ -256,7 +256,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('queues a new start request that races with an active conversation', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Start while active' });
       const modelClient = new SteerableModelClient();
       const loop = new AgentLoop({
@@ -317,7 +317,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('publishes steered input immediately but queues it behind the current tool result for the next model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Steer during tool loop', projectId: 'project_1' });
       const modelClient = new ToolCallingModelClient();
       const toolHost = new BlockingToolHost();
@@ -377,7 +377,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('waits for an accepted steer message to be stored before the final drain closes the turn', async () => {
       const ids = new RandomIdGenerator();
-      const innerThreadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const innerThreadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const threadStore = new DelayedSteerAppendThreadStore(innerThreadStore, 'client-delayed-steer');
       const thread = await threadStore.createThread({ title: 'Delayed steer append' });
       const modelClient = new SteerableModelClient();
@@ -414,7 +414,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('delivers mailbox input into the next model request within the active turn', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Mailbox loop' });
       const modelClient = new SteerableModelClient();
       const loop = new AgentLoop({
@@ -460,7 +460,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('queues idle mailbox input for the next user-started model request', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Queued mailbox loop' });
       const modelClient = new MailboxAwareModelClient();
       const loop = new AgentLoop({
@@ -498,7 +498,7 @@ describe('agent loop turn steering and mailbox input', () => {
   
   it('starts a trigger-turn mailbox delivery when the thread is idle', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Trigger mailbox loop' });
       const modelClient = new MailboxAwareModelClient();
       const loop = new AgentLoop({

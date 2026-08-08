@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -29,7 +29,7 @@ import {
 describe('agent loop sandbox and network retries', () => {
   it('retries a sandbox-denied tool after bypass approval', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Sandbox retry loop' });
       const modelClient = new SandboxDeniedModelClient();
       const toolHost = new SandboxRetryToolHost();
@@ -69,7 +69,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('starts without a sandbox or prompt under full access', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Full-policy sandbox retry loop' });
       const toolHost = new SandboxRetryToolHost();
       const approvalGate = new InMemoryApprovalGate(systemClock, ids);
@@ -94,7 +94,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('caches sandbox retry approvals when approved for session', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session sandbox retry loop' });
       const modelClient = new RepeatedSandboxDeniedModelClient();
       const toolHost = new SandboxRetryToolHost();
@@ -125,7 +125,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('retries a network-denied tool after network approval', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Network retry loop' });
       const modelClient = new NetworkDeniedModelClient();
       const toolHost = new NetworkRetryToolHost();
@@ -163,7 +163,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('preserves require_escalated sandbox intent when retrying after network approval', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Escalated network retry loop' });
       const modelClient = new EscalatedNetworkDeniedModelClient();
       const toolHost = new EscalatedNetworkRetryToolHost();
@@ -195,7 +195,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('caches network retry approvals when approved for session', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Session network approval loop' });
       const modelClient = new RepeatedNetworkDeniedModelClient();
       const toolHost = new NetworkRetryToolHost();
@@ -226,7 +226,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('scopes shell network approvals to exact commands while retaining a host deny option', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Host network approval loop', projectId: 'project_1' });
       const modelClient = new RepeatedHostNetworkShellModelClient();
       const toolHost = new ShellNetworkRetryToolHost();
@@ -299,7 +299,7 @@ describe('agent loop sandbox and network retries', () => {
   
   it('persists network deny amendments and skips later prompts for the same host', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Host network deny policy loop', projectId: 'project_1' });
       const modelClient = new RepeatedHostNetworkShellModelClient();
       const policyAmendmentStore = new InMemoryPolicyAmendmentStore();

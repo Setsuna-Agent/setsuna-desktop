@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStorage.js';
 
 export const accentColorOptions = [
   { value: 'neutral', label: '默认', lightSwatch: '#15171a', darkSwatch: '#f4f4f5' },
@@ -31,7 +32,7 @@ export function useAccentColorPreference() {
   }, []);
 
   const setAccentColor = useCallback((nextAccentColor: AccentColor) => {
-    window.localStorage.setItem(accentColorStorageKey, nextAccentColor);
+    writeBrowserStorageValue(accentColorStorageKey, nextAccentColor);
     setAccentColorState(nextAccentColor);
     applyAccentColor(nextAccentColor);
     window.dispatchEvent(new CustomEvent(accentColorChangeEventName));
@@ -45,7 +46,7 @@ export function initializeAccentColorPreference(): void {
 }
 
 function getInitialAccentColor(): AccentColor {
-  const saved = window.localStorage.getItem(accentColorStorageKey);
+  const saved = readBrowserStorageValue(accentColorStorageKey);
   return accentColorOptions.some((option) => option.value === saved) ? saved as AccentColor : 'neutral';
 }
 

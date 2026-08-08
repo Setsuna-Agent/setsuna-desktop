@@ -2,31 +2,19 @@ import { describe, expect, it } from 'vitest';
 import {
   createStartupSplashPageUrl,
   createStartupSplashWindowActionUrl,
-  decodeStartupSplashPageUrl,
-  STARTUP_SPLASH_SHIMMER_DURATION_MS,
   startupSplashWindowActionFromUrl,
 } from '../../../../src/window/splash/page.js';
+import { decodeStartupSplashPageUrl } from '../../../support/startup-splash-page.js';
 
 describe('startup splash page', () => {
-  it('renders a centered logo with a refined five-second left-to-right shimmer', () => {
+  it('renders a script-free data page with the supplied safe logo', () => {
     const logo = 'data:image/png;base64,aGVsbG8=';
-    const html = decodeStartupSplashPageUrl(createStartupSplashPageUrl(logo));
+    const pageUrl = createStartupSplashPageUrl(logo);
+    const html = decodeStartupSplashPageUrl(pageUrl);
 
-    expect(STARTUP_SPLASH_SHIMMER_DURATION_MS).toBe(5_000);
-    expect(html).toContain('place-items: center');
-    expect(html).toContain('background: #f7f6fa');
-    expect(html).not.toContain('radial-gradient');
-    expect(html).toContain('class="startup-splash-running"');
-    expect(html).toContain('animation: setsuna-logo-shimmer 5s linear infinite');
-    expect(html).toMatch(
-      /@keyframes setsuna-logo-shimmer[\s\S]*?0%\s*\{[\s\S]*?-webkit-mask-position: -90% 0[\s\S]*?25%\s*\{[\s\S]*?-webkit-mask-position: 190% 0/,
-    );
-    expect(html).toContain('-webkit-mask-size: 36% 100%');
-    expect(html).toContain('filter: grayscale(1) contrast(0.72) brightness(2.25)');
-    expect(html).not.toContain('box-shadow');
-    expect(html).not.toContain('mix-blend-mode: screen');
-    expect(html).not.toContain('prefers-reduced-motion');
-    expect(html.match(/src="data:image\/png;base64,aGVsbG8="/g)).toHaveLength(2);
+    expect(pageUrl).toMatch(/^data:text\/html;base64,/);
+    expect(html).toContain("default-src 'none'; img-src data:; style-src 'unsafe-inline';");
+    expect(html).toContain(`src="${logo}"`);
     expect(html).not.toContain('<script');
   });
 

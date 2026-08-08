@@ -4,14 +4,14 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../support/thread-store.js';
 import { RuntimeEventWriter } from '../../src/loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../../src/ports/clock.js';
 import { EventCoordinatedThreadStore } from '../../src/runtime/event-coordinated-thread-store.js';
 
 describe('event-coordinated thread store', () => {
   it('flushes buffered deltas before assigning seq to a direct mutation', async () => {
-    const inner = new JsonThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-coordinated-store-test-')), systemClock, new RandomIdGenerator());
+    const inner = createTestThreadStore(await mkdtemp(path.join(tmpdir(), 'setsuna-coordinated-store-test-')), systemClock, new RandomIdGenerator());
     const writer = new RuntimeEventWriter(inner, new InMemoryEventBus(), 10_000);
     const store = new EventCoordinatedThreadStore(inner, writer);
     const thread = await store.createThread({ title: 'Original title' });
@@ -53,7 +53,7 @@ describe('event-coordinated thread store', () => {
   });
 
   it('cleans up generated image assets removed by destructive thread mutations', async () => {
-    const inner = new JsonThreadStore(
+    const inner = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-coordinated-store-test-')),
       systemClock,
       new RandomIdGenerator(),
@@ -101,7 +101,7 @@ describe('event-coordinated thread store', () => {
   });
 
   it('does not report a committed mutation as failed when the image reference scan fails', async () => {
-    const inner = new JsonThreadStore(
+    const inner = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-coordinated-store-test-')),
       systemClock,
       new RandomIdGenerator(),

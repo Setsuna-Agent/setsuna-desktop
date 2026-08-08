@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -27,7 +27,7 @@ describe('agent loop memory extraction', () => {
   it('extracts passive memories after completed turns without exposing a tool call', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Memory extraction', projectId: 'project_1' });
       const modelClient = new PassiveMemoryModelClient();
@@ -80,7 +80,7 @@ describe('agent loop memory extraction', () => {
   it('does not keep the active turn open while passive memory extraction is blocked', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Background memory extraction' });
       const modelClient = new BlockingPassiveMemoryModelClient();
@@ -114,7 +114,7 @@ describe('agent loop memory extraction', () => {
   it('uses the configured task model and provider for passive memory extraction', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Memory extraction model', projectId: 'project_1' });
       const modelClient = new PassiveMemoryModelClient();
@@ -142,7 +142,7 @@ describe('agent loop memory extraction', () => {
   it('prefers Codex stage-1 fields from passive memory extraction output', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Codex stage one', projectId: 'project_1' });
       const modelClient = new CodexStage1MemoryModelClient();
@@ -222,7 +222,7 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
   it('runs phase-2 consolidation with a locked-down internal memory agent', async () => {
       const ids = new RandomIdGenerator();
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, systemClock, ids);
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
       const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Codex phase two', projectId: 'project_1' });
       const modelClient = new ConsolidatingCodexMemoryModelClient();
@@ -282,7 +282,7 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
       const ids = new RandomIdGenerator();
       const clock = new MutableClock('2026-01-01T00:00:00.000Z');
       const dataDir = await mkDataDir();
-      const threadStore = new JsonThreadStore(dataDir, clock, ids);
+      const threadStore = createTestThreadStore(dataDir, clock, ids);
       const memoryStore = new FileMemoryStore(dataDir, clock, ids);
       const thread = await threadStore.createThread({ title: 'No durable memory', projectId: 'project_1' });
       await appendCompletedExchange(threadStore, ids, clock, thread.id, 'turn_empty', '今天随便问一句天气。', '这类实时信息下次应重新查询。');

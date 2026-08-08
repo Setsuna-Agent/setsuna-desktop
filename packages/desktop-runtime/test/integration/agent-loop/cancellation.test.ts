@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { JsonThreadStore } from '../../../src/adapters/store/json-thread-store.js';
+import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
@@ -20,7 +20,7 @@ import {
 describe('agent loop turn cancellation', () => {
   it('cancels active turns without publishing runtime errors', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cancel loop' });
       const modelClient = new CancellableModelClient();
       const loop = new AgentLoop({
@@ -64,7 +64,7 @@ describe('agent loop turn cancellation', () => {
   
   it('publishes cancellation immediately when a model stream ignores abort', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Non-cooperative cancel' });
       const modelClient = new NonCooperativeCancellationModelClient();
       const loop = new AgentLoop({
@@ -93,7 +93,7 @@ describe('agent loop turn cancellation', () => {
   
   it('does not wait for tool runtimes that opt out of cancellation waiting', async () => {
       const ids = new RandomIdGenerator();
-      const threadStore = new JsonThreadStore(await mkDataDir(), systemClock, ids);
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Non waiting tool cancel', projectId: 'project_1' });
       const toolHost = new NonWaitingCancellationToolHost();
       const loop = new AgentLoop({
