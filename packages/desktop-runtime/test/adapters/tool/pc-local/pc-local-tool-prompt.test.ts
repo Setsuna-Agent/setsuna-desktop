@@ -18,6 +18,18 @@ describe('pcLocalToolPrompt', () => {
     expect(mutating).toContain('exactly one step in progress');
   });
 
+  it.each([
+    [['search_text'], 'search_text', 'git_log'],
+    [['git_log', 'git_show'], 'git_log/git_show', 'search_text'],
+    [['exec_command'], 'exec_command', 'run_shell_command'],
+    [['edit', 'write_file'], 'edit/write_file', 'apply_patch'],
+  ])('isolates %s guidance from unrelated tool branches', (names, included, excluded) => {
+    const prompt = pcLocalToolPrompt(names.map(tool));
+
+    expect(prompt).toContain(included);
+    expect(prompt).not.toContain(excluded);
+  });
+
   it('adds managed dependency guidance only when that runtime is enabled', () => {
     const tools = [tool('run_shell_command')];
     expect(pcLocalToolPrompt(tools)).not.toContain('manages and prepends Node.js');

@@ -77,8 +77,9 @@ export function pcLocalToolPrompt(
     if (singleFileTools.length) {
       lines.push(`- ${singleFileTools.join('/')} each modify one file; choose the narrowest operation that matches the requested change.`);
     }
-    if (advertised.has('write_file') && (advertised.has('edit') || advertised.has('apply_patch'))) {
-      lines.push('- For an existing file, use edit or apply_patch when they can express the change without regenerating unchanged content. Reserve write_file for new files or genuine full-file rewrites; large full-file arguments delay visible progress.');
+    const targetedEditTools = advertisedNames(advertised, ['edit', 'apply_patch']);
+    if (advertised.has('write_file') && targetedEditTools.length) {
+      lines.push(`- For an existing file, use ${targetedEditTools.join(' or ')} when they can express the change without regenerating unchanged content. Reserve write_file for new files or genuine full-file rewrites; large full-file arguments delay visible progress.`);
     }
     if (advertised.has('append_file')) lines.push('- Use append_file for a pure append instead of simulating one with an exact replacement.');
     if (advertised.has('delete_file')) lines.push('- Verify a requested file deletion and relevant references, then use delete_file rather than a shell deletion command.');
