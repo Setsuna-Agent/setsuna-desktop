@@ -79,7 +79,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 557 total files
+apps/desktop/renderer/ — 0 direct / 561 total files
 ├── src/ — 2 direct / 417 total files
 │   ├── app/ — 2 direct / 34 total files
 │   │   ├── controller/ — 7 direct / 7 total files
@@ -135,27 +135,27 @@ apps/desktop/renderer/ — 0 direct / 557 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 140 files
-    └── unit/ — 140 files
+└── test/ — 144 files
+    └── unit/ — 144 files
         ├── app/ — 1 direct / 11 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 3 direct / 3 total files
-        ├── features/ — 103 files
+        ├── features/ — 107 files
         │   ├── capabilities/ — 5 direct / 6 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 2 direct / 57 total files
-        │   │   ├── artifacts/ — 3 direct / 3 total files
+        │   ├── chat/ — 2 direct / 60 total files
+        │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 15 direct / 15 total files
-        │   │   ├── conversation/ — 19 direct / 19 total files
+        │   │   ├── conversation/ — 20 direct / 20 total files
         │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
-        │   │   ├── mentions/ — 2 direct / 2 total files
+        │   │   ├── mentions/ — 3 direct / 3 total files
         │   │   └── tool-runs/ — 7 direct / 7 total files
         │   ├── conversation-debug/ — 6 direct / 6 total files
         │   ├── runtime-activity/ — 2 direct / 2 total files
-        │   ├── settings/ — 6 direct / 11 total files
+        │   ├── settings/ — 7 direct / 12 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
         │   └── workspace/ — 12 direct / 21 total files
@@ -192,7 +192,7 @@ packages/contracts/ — 4 direct / 71 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 475 total files
+packages/desktop-runtime/ — 4 direct / 476 total files
 ├── src/ — 2 direct / 271 total files
 │   ├── adapters/ — 118 files
 │   │   ├── approval/ — 1 direct / 1 total files
@@ -226,7 +226,7 @@ packages/desktop-runtime/ — 4 direct / 475 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 2 direct / 2 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 200 files
+└── test/ — 201 files
     ├── adapters/ — 63 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
@@ -254,8 +254,8 @@ packages/desktop-runtime/ — 4 direct / 475 total files
     │   │   └── tool/ — 6 direct / 6 total files
     │   ├── agent-loop/ — 20 direct / 20 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 25 files
-    │   ├── context/ — 9 direct / 9 total files
+    ├── loop/ — 26 files
+    │   ├── context/ — 10 direct / 10 total files
     │   ├── core/ — 5 direct / 5 total files
     │   ├── lifecycle/ — 6 direct / 6 total files
     │   ├── memory/ — 2 direct / 2 total files

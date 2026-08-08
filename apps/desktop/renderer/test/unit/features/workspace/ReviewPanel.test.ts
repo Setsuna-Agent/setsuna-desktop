@@ -123,6 +123,24 @@ describe('DesktopReviewPanel', () => {
     });
   });
 
+  it('renders the selected branch comparison control', () => {
+    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'branch' }, () => {
+      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+        activeProject: project,
+        error: null,
+        latestSummary,
+        loading: false,
+        reviewState,
+        onExternalOpenFile: () => undefined,
+        onOpenProjectFile: () => undefined,
+        onRefresh: () => undefined,
+      }));
+
+      expect(html).toContain('desktop-review-branch-compare');
+      expect(html).toContain('title="origin/main"');
+    });
+  });
+
   it('falls back to unstaged changes when an unborn repository has no branch comparison base', () => {
     withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'branch' }, () => {
       const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {

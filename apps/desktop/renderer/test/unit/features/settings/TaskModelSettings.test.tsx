@@ -1,8 +1,10 @@
 import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   configuredTaskModelOptions,
 } from '../../../../src/features/settings/providers/provider-model.js';
+import { TaskModelSettings } from '../../../../src/features/settings/sections/TaskModelSettings.js';
 
 describe('TaskModelSettings', () => {
   it('offers configured models from every enabled provider', () => {
@@ -16,6 +18,19 @@ describe('TaskModelSettings', () => {
       'MiniMax · MiniMax M3 (MiniMax-M3)',
       '火山方舟 · Kimi K2.7 (kimi-k2.7)',
     ]);
+  });
+
+  it('renders all four task-model selectors with configured choices', () => {
+    const html = renderToStaticMarkup(
+      <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
+    );
+
+    expect(html.match(/task-model-settings__select/gu)).toHaveLength(4);
+    for (const label of ['标题生成', '记忆提取', '记忆整理', '上下文压缩']) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
+    expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
+    expect(html).toContain('火山方舟 · Kimi K2.7 (kimi-k2.7)');
   });
 
 });

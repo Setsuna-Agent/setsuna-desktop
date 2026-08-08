@@ -44,6 +44,40 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('plugin.json');
   });
 
+  it('shows inspectable Skill and MCP details before plugin installation', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installing={false}
+        marketplacePlugin={{
+          id: 'docs-plugin',
+          name: 'Docs Plugin',
+          version: '1.0.0',
+          description: 'Documentation tools.',
+          publisher: 'Setsuna',
+          tags: ['docs'],
+          featured: true,
+          skills: [{ id: 'docs-plugin.skill', name: 'Docs Skill', description: 'Read project documentation.' }],
+          mcpServers: [{ key: 'docs_server', label: 'Docs Server', description: 'Search project documentation.', transport: 'streamableHttp' }],
+          hooks: [],
+          resources: [],
+          capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
+          installed: false,
+          updateAvailable: false,
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('Read project documentation.');
+    expect(html).toContain('Search project documentation.');
+    expect(html).toMatch(/aria-label="[^"]*Docs Skill[^"]*"/u);
+    expect(html).toMatch(/aria-label="[^"]*Docs Server[^"]*"/u);
+  });
+
   it('offers an update for an installed marketplace plugin with a newer bundled version', () => {
     const marketplacePlugin = {
       id: 'openai-image-generation',
