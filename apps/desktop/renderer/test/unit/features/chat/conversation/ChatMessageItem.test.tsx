@@ -54,9 +54,14 @@ function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = fal
 }
 
 describe('MessageItem user messages', () => {
-  it('does not offer transcript regeneration for a Goal input', () => {
+  it('marks Plan and Goal inputs distinctly without offering Goal regeneration', () => {
+    const planHtml = renderUserMessage('plan');
     const goalHtml = renderUserMessage('goal');
 
+    expect(planHtml).toContain('chat-user-message-kind--plan');
+    expect(planHtml).toContain('计划');
+    expect(goalHtml).toContain('chat-user-message-kind--goal');
+    expect(goalHtml).toContain('目标');
     expect(goalHtml).not.toContain('aria-label="编辑"');
   });
 

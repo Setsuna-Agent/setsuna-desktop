@@ -16,6 +16,12 @@ describe('pcLocalToolPrompt', () => {
     expect(mutating).toContain('apply_patch');
     expect(mutating).toContain('run_shell_command');
     expect(mutating).toContain('exactly one step in progress');
+
+    const searchOnly = pcLocalToolPrompt([tool('search_text')]);
+    expect(searchOnly).toContain('regular expression by default');
+    expect(searchOnly).toContain('runtime-managed ripgrep path');
+    expect(searchOnly).toContain('instead of shell grep/find');
+    expect(searchOnly).toContain('issue all of them together in the same response');
   });
 
   it.each([

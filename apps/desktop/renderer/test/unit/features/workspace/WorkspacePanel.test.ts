@@ -59,7 +59,8 @@ describe('WorkspaceFilePreviewContent', () => {
 });
 
 describe('WorkspaceOverviewPanel', () => {
-  it('routes the side-chat and browser actions to their handlers', () => {
+  it('routes review, side-chat, and browser actions without forwarding click events', () => {
+    const onOpenReviewPanel = vi.fn();
     const onOpenSideChat = vi.fn();
     const onOpenBrowser = vi.fn();
     const panel = captureWorkspaceOverviewPanel({
@@ -67,15 +68,18 @@ describe('WorkspaceOverviewPanel', () => {
       latestReviewSummary: null,
       onOpenBrowser,
       onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
+      onOpenReviewPanel,
       onOpenSideChat,
       onOpenTerminalPanel: () => undefined,
     });
     const actions = panel.props.children.props.children;
+    const reviewButton = actions[0].props.children;
 
+    reviewButton.props.onClick({ type: 'click' });
     actions[3].props.onClick();
     actions[4].props.onClick();
 
+    expect(onOpenReviewPanel).toHaveBeenCalledWith();
     expect(onOpenSideChat).toHaveBeenCalledOnce();
     expect(onOpenBrowser).toHaveBeenCalledOnce();
   });

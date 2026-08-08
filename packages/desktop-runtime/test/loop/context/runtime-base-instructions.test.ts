@@ -12,5 +12,8 @@ describe('runtime base instructions', () => {
     expect(RUNTIME_BASE_INSTRUCTIONS).toMatch(
       /clickable Markdown link.*exact current 1-based start line.*Never guess a line number/su,
     );
+    expect(RUNTIME_BASE_INSTRUCTIONS).toContain(
+      'Keep the final answer self-contained because the interface collapses intermediate updates after the final answer appears.',
+    );
   });
 });
