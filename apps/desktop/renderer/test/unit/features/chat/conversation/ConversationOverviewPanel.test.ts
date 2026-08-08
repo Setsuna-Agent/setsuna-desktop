@@ -93,23 +93,36 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
-  it('does not treat a forked conversation as a collaboration task', () => {
+  it('shows child collaboration tasks without treating forks as tasks', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
-      threads: [{
-        id: 'fork_1',
-        forkedFromId: 'thread_1',
-        title: 'Forked conversation',
-        createdAt: '2026-07-01T00:00:00.000Z',
-        updatedAt: '2026-07-01T00:00:00.000Z',
-        archived: false,
-        messageCount: 0,
-        lastMessagePreview: '',
-      }],
+      threads: [
+        {
+          id: 'child_1',
+          parentThreadId: 'thread_1',
+          title: 'Child agent',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+          archived: false,
+          messageCount: 1,
+          lastMessagePreview: 'working',
+        },
+        {
+          id: 'fork_1',
+          forkedFromId: 'thread_1',
+          title: 'Forked conversation',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+          archived: false,
+          messageCount: 0,
+          lastMessagePreview: '',
+        },
+      ],
     });
 
-    expect(html).not.toContain('协作任务');
+    expect(html).toContain('aria-label="1 个协作任务"');
+    expect(html).toContain('Child agent');
     expect(html).not.toContain('Forked conversation');
   });
 
