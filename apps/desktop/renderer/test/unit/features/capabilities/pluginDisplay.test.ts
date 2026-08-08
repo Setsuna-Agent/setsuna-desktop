@@ -8,6 +8,9 @@ import {
   pluginCapabilitySummary,
   pluginMarketplacePresentation,
 } from '../../../../src/features/capabilities/pluginDisplay.js';
+import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
+
+const en: Translate = (key, params) => translate('en-US', key, params);
 
 describe('plugin display helpers', () => {
   it('keeps marketplace descriptions while adding installed MCP ownership', () => {
@@ -64,8 +67,9 @@ describe('plugin display helpers', () => {
       { id: 'automation', plugins: [{ id: 'guard' }] },
     ]);
     expect(pluginCapabilitySummary(guard)).toBe('1 项自动化');
+    expect(pluginMarketplacePresentation([documents, guard], en).sections[0]?.title).toBe('Featured');
+    expect(pluginCapabilitySummary(guard, en)).toBe('1 automation');
   });
-
 });
 
 function marketplacePlugin(

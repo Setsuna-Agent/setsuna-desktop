@@ -72,7 +72,6 @@ describe('capabilities plugin components', () => {
         onRemove={async () => undefined}
       />,
     );
-
     expect(html).toContain('Read project documentation.');
     expect(html).toContain('Search project documentation.');
     expect(html).toMatch(/aria-label="[^"]*Docs Skill[^"]*"/u);
@@ -364,6 +363,16 @@ describe('capabilities plugin components', () => {
         }}
       />,
     );
+    const plainTextHtml = renderToStaticMarkup(
+      <CapabilitiesPluginFilePreview
+        file={{
+          path: 'hooks/protect-secret-paths.mjs',
+          mimeType: 'text/javascript',
+          size: 25,
+          text: 'export const hook = true;',
+        }}
+      />,
+    );
 
     expect(html).toContain('<h1>使用说明</h1>');
     expect(html).toContain('<table>');
@@ -372,6 +381,6 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('name: Demo Skill');
     expect(markdownPreviewBody('普通 Markdown')).toBe('普通 Markdown');
     expect(markdownPreviewBody('---\n分隔内容\n---\n正文')).toBe('---\n分隔内容\n---\n正文');
+    expect(plainTextHtml).toMatch(/<pre aria-label="[^"]+" tabindex="0">export const hook = true;<\/pre>/);
   });
-
 });

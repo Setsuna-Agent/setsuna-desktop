@@ -37,20 +37,14 @@ const orphanedService: RuntimeBackgroundServiceActivity = {
 };
 
 describe('RuntimeActiveTaskRows', () => {
-  it('disables the row action while the task is stopping', () => {
-    const html = renderToStaticMarkup(
-      <RuntimeActiveTaskRows
-        nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
-        onOpenThread={vi.fn()}
-        onStopTask={vi.fn()}
-        projectNameById={new Map()}
-        stoppingKeys={new Set([runtimeTaskActivityKey(task)])}
-        tasks={[task]}
-      />,
-    );
+  it('exposes the task-specific stop action and disables it while stopping', () => {
+    const activeHtml = renderTaskRows(new Set());
+    const stoppingHtml = renderTaskRows(new Set([runtimeTaskActivityKey(task)]));
 
-    expect(html).toContain('class="runtime-activity-row__action" disabled=""');
-    expect(html).toContain('is-spinning');
+    expect(activeHtml).toContain('aria-label="终止任务：整理运行中心"');
+    expect(activeHtml).toContain('>终止<');
+    expect(stoppingHtml).toContain('class="runtime-activity-row__action" disabled=""');
+    expect(stoppingHtml).toContain('is-spinning');
   });
 
   it('does not offer an open action when a service source thread was deleted', () => {
@@ -69,3 +63,16 @@ describe('RuntimeActiveTaskRows', () => {
     expect(html).toContain('aria-label="终止服务：pnpm dev"');
   });
 });
+
+function renderTaskRows(stoppingKeys: Set<string>): string {
+  return renderToStaticMarkup(
+    <RuntimeActiveTaskRows
+      nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
+      onOpenThread={vi.fn()}
+      onStopTask={vi.fn()}
+      projectNameById={new Map()}
+      stoppingKeys={stoppingKeys}
+      tasks={[task]}
+    />,
+  );
+}
