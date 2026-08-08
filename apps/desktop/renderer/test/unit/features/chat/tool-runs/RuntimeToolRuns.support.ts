@@ -120,10 +120,20 @@ export function renderedText(runs: RuntimeToolRun[], summaryMode?: 'aggregate' |
 }
 
 export function renderedTextFromHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/gu, '')
-    .replace(/\s+/gu, ' ')
-    .trim();
+  let text = '';
+  let insideTag = false;
+
+  for (const character of html) {
+    if (character === '<') {
+      insideTag = true;
+    } else if (character === '>') {
+      insideTag = false;
+    } else if (!insideTag) {
+      text += character;
+    }
+  }
+
+  return text.replace(/\s+/gu, ' ').trim();
 }
 
 export function firstToolRunSummaryHtml(html: string): string {
