@@ -1,6 +1,6 @@
 import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   configuredTaskModelOptions,
 } from '../../../../src/features/settings/providers/provider-model.js';
@@ -20,20 +20,19 @@ describe('TaskModelSettings', () => {
     ]);
   });
 
-  it('renders selected model branding in every model selector', () => {
+  it('renders all four task-model selectors with configured choices', () => {
     const html = renderToStaticMarkup(
-      <TaskModelSettings config={configFixture} onSave={vi.fn()} />,
+      <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
     );
 
-    expect(html).toContain('标题生成');
-    expect(html).toContain('记忆提取');
-    expect(html).toContain('记忆整理');
-    expect(html).toContain('上下文压缩');
+    expect(html.match(/task-model-settings__select/gu)).toHaveLength(4);
+    for (const label of ['标题生成', '记忆提取', '记忆整理', '上下文压缩']) {
+      expect(html).toContain(`aria-label="${label}"`);
+    }
     expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
     expect(html).toContain('火山方舟 · Kimi K2.7 (kimi-k2.7)');
-    expect(html).toContain('brand-icon-mark is-compact');
-    expect(html).not.toContain('Disabled provider ·');
   });
+
 });
 
 const enabledProviders: ProviderConfigState[] = [

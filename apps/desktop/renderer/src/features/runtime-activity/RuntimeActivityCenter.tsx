@@ -214,7 +214,7 @@ export function RuntimeActivityCenter({
   );
 }
 
-export function RuntimeActivityTabButton({
+function RuntimeActivityTabButton({
   active,
   count,
   id,

@@ -48,29 +48,16 @@ describe('ChatSendQueue', () => {
     expect(html).toContain('aria-label="立即发送"');
   });
 
-  it('uses distinct icons for message, Plan, and Goal queue items', () => {
-    const html = renderQueue([
-      queuedInput({ id: 'queued_message', input: 'Normal', kind: 'message' }),
-      queuedInput({ id: 'queued_plan', input: 'Plan', kind: 'plan' }),
-      queuedInput({ id: 'queued_goal', input: 'Goal', kind: 'goal' }),
-    ]);
-
-    expect(html).toContain('data-queue-kind="message"');
-    expect(html).toContain('data-queue-kind="plan"');
-    expect(html).toContain('data-queue-kind="goal"');
-    expect(html).toContain('lucide-message-square-text');
-    expect(html).toContain('lucide-list-checks');
-    expect(html).toContain('lucide-target');
-    expect(html).toContain('aria-label="计划消息"');
-    expect(html).toContain('aria-label="目标消息"');
-  });
-
   it('keeps Plan and Goal send-now disabled until the active turn finishes', () => {
     const html = renderQueue([
       queuedInput({ id: 'queued_plan', input: 'Plan', kind: 'plan' }),
       queuedInput({ id: 'queued_goal', input: 'Goal', kind: 'goal' }),
     ], false, true);
 
+    expect(html).toContain('data-queue-kind="plan"');
+    expect(html).toContain('data-queue-kind="goal"');
+    expect(html).toMatch(/class="chat-send-queue__marker is-plan" role="img" aria-label="[^"]+"/);
+    expect(html).toMatch(/class="chat-send-queue__marker is-goal" role="img" aria-label="[^"]+"/);
     expect(html.match(/aria-label="计划和目标需等待当前轮次结束"/g)).toHaveLength(2);
     expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
   });

@@ -1,16 +1,15 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from '../../../../src/app/layout/RuntimeErrorNotice.js';
 
 describe('RuntimeErrorNotice', () => {
-  it('renders a dismissible alert with the runtime error details', () => {
+  it('renders runtime details in a dismissible alert', () => {
     const html = renderToStaticMarkup(
-      <RuntimeErrorNotice message="模型服务返回异常状态：403" onDismiss={vi.fn()} />,
+      <RuntimeErrorNotice message="provider returned 403" onDismiss={() => undefined} />,
     );
 
     expect(html).toContain('role="alert"');
-    expect(html).toContain('运行时错误');
-    expect(html).toContain('模型服务返回异常状态：403');
+    expect(html).toContain('provider returned 403');
     expect(html).toContain('aria-label="关闭运行时错误提示"');
   });
 

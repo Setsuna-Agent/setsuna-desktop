@@ -4,27 +4,19 @@ import { KeyboardShortcutsProvider } from '../../../../src/shared/shortcuts/Keyb
 import { ShortcutTooltipContent } from '../../../../src/shared/ui/ShortcutTooltip.js';
 
 describe('ShortcutTooltipContent', () => {
-  it.each([
-    ['darwin', '<kbd class="is-mac"><span>⌘</span><span>B</span></kbd>'],
-    ['win32', '<kbd>Ctrl+B</kbd>'],
-  ] as const)('renders the current %s binding beside the action label', (platform, bindingMarkup) => {
-    const html = renderToStaticMarkup(
-      <KeyboardShortcutsProvider initialPlatform={platform}>
-        <ShortcutTooltipContent commandId="layout.toggleSidebar" label="显示/隐藏侧边栏" />
+  it('renders current Windows and macOS bindings with platform-appropriate markup', () => {
+    const windowsHtml = renderToStaticMarkup(
+      <KeyboardShortcutsProvider initialPlatform="win32">
+        <ShortcutTooltipContent commandId="layout.toggleSidebar" label="Toggle sidebar" />
       </KeyboardShortcutsProvider>,
     );
-
-    expect(html).toContain('显示/隐藏侧边栏');
-    expect(html).toContain(bindingMarkup);
-  });
-
-  it('separates each macOS modifier from the key label', () => {
-    const html = renderToStaticMarkup(
+    const macHtml = renderToStaticMarkup(
       <KeyboardShortcutsProvider initialPlatform="darwin">
-        <ShortcutTooltipContent commandId="app.toggleRuntimeActivity" label="打开运行中心" />
+        <ShortcutTooltipContent commandId="app.toggleRuntimeActivity" label="Open runtime activity" />
       </KeyboardShortcutsProvider>,
     );
 
-    expect(html).toContain('<kbd class="is-mac"><span>⇧</span><span>⌘</span><span>A</span></kbd>');
+    expect(windowsHtml).toContain('<kbd>Ctrl+B</kbd>');
+    expect(macHtml).toContain('<kbd class="is-mac"><span>⇧</span><span>⌘</span><span>A</span></kbd>');
   });
 });

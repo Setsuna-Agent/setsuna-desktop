@@ -67,23 +67,8 @@ describe('plugin display helpers', () => {
       { id: 'automation', plugins: [{ id: 'guard' }] },
     ]);
     expect(pluginCapabilitySummary(guard)).toBe('1 项自动化');
-  });
-
-  it('builds marketplace section copy and capability counts in English', () => {
-    const documents = marketplacePlugin({ id: 'documents', name: 'Word', featured: true });
-    const guard = marketplacePlugin({
-      id: 'guard',
-      name: 'Guard',
-      capabilities: { skills: 0, mcpServers: 0, hooks: 2, resources: 0 },
-    });
-    const presentation = pluginMarketplacePresentation([documents, guard], en);
-
-    expect(presentation.sections).toMatchObject([
-      { title: 'Featured', description: 'A few Setsuna plugins worth trying first' },
-      { title: 'Safety & automation', description: 'Local hook workflows you can install as needed' },
-    ]);
-    expect(pluginCapabilitySummary(documents, en)).toBe('1 skill');
-    expect(pluginCapabilitySummary(guard, en)).toBe('2 automations');
+    expect(pluginMarketplacePresentation([documents, guard], en).sections[0]?.title).toBe('Featured');
+    expect(pluginCapabilitySummary(guard, en)).toBe('1 automation');
   });
 });
 

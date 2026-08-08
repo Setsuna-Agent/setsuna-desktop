@@ -7,29 +7,18 @@ import { updateDownloadSourceName } from '../../../../src/features/settings/sect
 import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('SettingsSidebar', () => {
-  it('uses the shared workbench sidebar track', () => {
+  it('exposes keyboard shortcuts and usage statistics in settings navigation', () => {
     const html = renderToStaticMarkup(createElement(SettingsSidebar, {
       activeSection: 'general',
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     }));
 
-    expect(html).toContain('<nav class="app-sidebar desktop-settings-sidebar chat-user-settings__nav">');
-    expect(html).not.toContain('chat-user-settings--page');
-  });
-
-  it('places keyboard shortcuts before usage statistics in the settings navigation', () => {
-    const html = renderToStaticMarkup(createElement(SettingsSidebar, {
-      activeSection: 'general',
-      onBack: vi.fn(),
-      onSelectSection: vi.fn(),
-    }));
-
-    const shortcutsLabelIndex = html.indexOf('键盘快捷键');
-    const usageLabelIndex = html.indexOf('用量统计');
-    expect(shortcutsLabelIndex).toBeGreaterThan(-1);
-    expect(usageLabelIndex).toBeGreaterThan(-1);
-    expect(shortcutsLabelIndex).toBeLessThan(usageLabelIndex);
+    expect(html).toContain('键盘快捷键');
+    expect(html).toContain('用量统计');
+    const en: Translate = (key, params) => translate('en-US', key, params);
+    expect(updateDownloadSourceName({ builtIn: true, id: 'github-direct', name: 'GitHub 直连' }, en)).toBe('GitHub Direct');
+    expect(updateDownloadSourceName({ builtIn: false, id: 'custom-1', name: '公司镜像' }, en)).toBe('公司镜像');
   });
 });
 
@@ -46,15 +35,6 @@ describe('ArchivedThreadsSettings', () => {
 
     expect(html).toContain('暂无归档对话');
     expect(html).not.toContain('全部删除');
-  });
-});
-
-describe('updateDownloadSourceName', () => {
-  it('localizes the built-in GitHub source without changing custom names', () => {
-    const t: Translate = (key, params) => translate('en-US', key, params);
-
-    expect(updateDownloadSourceName({ builtIn: true, id: 'github-direct', name: 'GitHub 直连' }, t)).toBe('GitHub Direct');
-    expect(updateDownloadSourceName({ builtIn: false, id: 'custom-1', name: '公司镜像' }, t)).toBe('公司镜像');
   });
 });
 

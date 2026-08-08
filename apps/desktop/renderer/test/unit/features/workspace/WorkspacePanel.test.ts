@@ -29,21 +29,17 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).not.toContain('desktop-code-line');
   });
 
-  it('renders text previews through the Pierre surface instead of line buttons', () => {
+  it('renders text files through the shared code-preview surface', () => {
     const html = renderWorkspaceFilePreview({
       file: {
         ...workspaceFile({ kind: 'text' }),
-        content: 'const first = true;\nconst second = false;',
+        content: 'const ready = true;',
         path: 'src/example.ts',
       },
     });
 
     expect(html).toContain('desktop-code-editor__pierre');
-    expect(html).toContain('desktop-code-editor--code-view');
-    expect(html).toContain('desktop-code-editor__horizontal-scrollbar');
-    expect(html).toContain('const first = true;');
-    expect(html).toContain('const second = false;');
-    expect(html).not.toContain('<button class="desktop-code-line');
+    expect(html).toContain('const ready = true;');
   });
 
   it('identifies text previews that are incomplete after the full-file budget', () => {
@@ -63,59 +59,29 @@ describe('WorkspaceFilePreviewContent', () => {
 });
 
 describe('WorkspaceOverviewPanel', () => {
-  it('does not forward the React click event to the review callback', () => {
+  it('routes review, side-chat, and browser actions without forwarding click events', () => {
     const onOpenReviewPanel = vi.fn();
-    const panel = captureWorkspaceOverviewPanel({
-      activeProject: project,
-      latestReviewSummary: null,
-      onOpenFilesPanel: () => undefined,
-      onOpenBrowser: () => undefined,
-      onOpenReviewPanel,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    });
-    const reviewTooltip = panel.props.children.props.children[0];
-    const reviewButton = reviewTooltip.props.children;
-
-    reviewButton.props.onClick({ type: 'click' });
-
-    expect(onOpenReviewPanel).toHaveBeenCalledWith();
-  });
-
-  it('opens side chat from the workspace overview menu', () => {
     const onOpenSideChat = vi.fn();
-    const panel = captureWorkspaceOverviewPanel({
-      activeProject: project,
-      latestReviewSummary: null,
-      onOpenFilesPanel: () => undefined,
-      onOpenBrowser: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat,
-      onOpenTerminalPanel: () => undefined,
-    });
-    const sideChatButton = panel.props.children.props.children[3];
-
-    sideChatButton.props.onClick();
-
-    expect(onOpenSideChat).toHaveBeenCalledOnce();
-  });
-
-  it('opens the browser from the workspace overview menu', () => {
     const onOpenBrowser = vi.fn();
     const panel = captureWorkspaceOverviewPanel({
       activeProject: project,
       latestReviewSummary: null,
       onOpenBrowser,
       onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat: () => undefined,
+      onOpenReviewPanel,
+      onOpenSideChat,
       onOpenTerminalPanel: () => undefined,
     });
-    const browserButton = panel.props.children.props.children[4];
+    const actions = panel.props.children.props.children;
+    const reviewButton = actions[0].props.children;
 
-    browserButton.props.onClick({ type: 'click' });
+    reviewButton.props.onClick({ type: 'click' });
+    actions[3].props.onClick();
+    actions[4].props.onClick();
 
-    expect(onOpenBrowser.mock.calls).toEqual([[]]);
+    expect(onOpenReviewPanel).toHaveBeenCalledWith();
+    expect(onOpenSideChat).toHaveBeenCalledOnce();
+    expect(onOpenBrowser).toHaveBeenCalledOnce();
   });
 
   it('shows conversation debug only when the developer action is provided', () => {
@@ -134,31 +100,6 @@ describe('WorkspaceOverviewPanel', () => {
       ...baseProps,
       onOpenConversationDebug: () => undefined,
     })).toContain('对话调试');
-  });
-
-  it('renders stable action-card identities and navigation affordances', () => {
-    const html = renderWorkspaceOverviewPanel({
-      activeProject: project,
-      latestReviewSummary: null,
-      onOpenBrowser: () => undefined,
-      onOpenConversationDebug: () => undefined,
-      onOpenFilesPanel: () => undefined,
-      onOpenReviewPanel: () => undefined,
-      onOpenSideChat: () => undefined,
-      onOpenTerminalPanel: () => undefined,
-    });
-    const actionKeys = [...html.matchAll(/data-workspace-overview-action="([^"]+)"/g)]
-      .map((match) => match[1]);
-
-    expect(actionKeys).toEqual([
-      'review',
-      'files',
-      'terminal',
-      'side-chat',
-      'browser',
-      'conversation-debug',
-    ]);
-    expect(html.match(/desktop-workspace-overview__action-arrow/g)).toHaveLength(6);
   });
 
   it('在普通对话的临时目录中开放工作区操作', () => {

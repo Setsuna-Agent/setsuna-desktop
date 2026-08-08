@@ -665,7 +665,7 @@ export function branchCompareRefOptions(refs: string[], selectedRef?: string | n
   return [...options.values()];
 }
 
-export function branchCompareDisplayName(ref?: string | null): string {
+function branchCompareDisplayName(ref?: string | null): string {
   const trimmed = String(ref ?? '').trim();
   if (!trimmed || trimmed === 'origin' || trimmed === 'upstream') return '';
   return trimmed;

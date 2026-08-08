@@ -4,16 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { ContextCompactionStatus } from '../../../../../src/features/chat/conversation/ContextCompactionStatus.js';
 
 describe('ContextCompactionStatus', () => {
-  it('renders an indeterminate loading state without a fake percentage', () => {
-    const html = renderToStaticMarkup(<ContextCompactionStatus active />);
-
-    expect(html).toContain('正在压缩上下文');
-    expect(html).toContain('chat-timeline-divider is-loading');
-    expect(html).toContain('chat-loading-text chat-timeline-divider__label');
-    expect(html).not.toContain('%');
-  });
-
-  it('renders the completed compacted message count', () => {
+  it('renders active progress and the completed compacted-message count', () => {
+    const activeHtml = renderToStaticMarkup(<ContextCompactionStatus active />);
     const message: RuntimeMessage = {
       id: 'message_compaction',
       role: 'system',
@@ -30,6 +22,9 @@ describe('ContextCompactionStatus', () => {
       },
     };
 
+    expect(activeHtml).toContain('chat-timeline-divider is-loading');
+    expect(activeHtml).toContain('正在压缩上下文');
+    expect(activeHtml).not.toContain('%');
     expect(renderToStaticMarkup(<ContextCompactionStatus message={message} />)).toContain('已压缩 12 条上下文');
   });
 });

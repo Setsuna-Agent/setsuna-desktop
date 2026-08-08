@@ -1,39 +1,33 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import { WorkspaceMentionText } from '../../../../../src/features/chat/mentions/WorkspaceMentionText.js';
 
+afterEach(cleanup);
+
 describe('WorkspaceMentionText', () => {
-  it('renders sent workspace mentions with the shared icon and visual label', () => {
-    const html = renderToStaticMarkup(
-      <MarkdownNavigationProvider onOpenWorkspaceFile={() => undefined}>
-        <WorkspaceMentionText content="@tsconfig.renderer.json 这个文件是干啥的" />
+  it('opens sent file and directory mentions with their serialized paths', async () => {
+    const onOpenWorkspaceFile = vi.fn();
+    const onOpenWorkspaceDirectory = vi.fn();
+    render(
+      <MarkdownNavigationProvider
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
+        onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
+      >
+        <WorkspaceMentionText content="@src/App.tsx" />
+        <WorkspaceMentionText content="@src/components/" />
       </MarkdownNavigationProvider>,
     );
 
-    expect(html).toContain('class="chat-workspace-mention chat-workspace-mention--action"');
-    expect(html).toContain('type="button"');
-    expect(html).toContain('使用默认打开方式打开 tsconfig.renderer.json');
-    expect(html).toContain('data-file-icon-theme="seti"');
-    expect(html).toContain('>tsconfig.renderer.json</span>');
-    expect(html).toContain(' 这个文件是干啥的');
-    expect(html).not.toContain('>@tsconfig.renderer.json</span>');
-    expect(html).not.toContain('data-composer-cursor-offset-adjustment');
-  });
+    const mentions = screen.getAllByRole('button');
+    expect(mentions).toHaveLength(2);
+    await userEvent.click(mentions[0]!);
+    await userEvent.click(mentions[1]!);
 
-  it('keeps a directory serialized with a slash while omitting it from the visual label', () => {
-    const html = renderToStaticMarkup(
-      <MarkdownNavigationProvider onOpenWorkspaceDirectory={() => undefined}>
-        <WorkspaceMentionText content="请看 @agent-pc/ 目录" />
-      </MarkdownNavigationProvider>,
-    );
-
-    expect(html).toContain('class="chat-workspace-mention chat-workspace-mention--action"');
-    expect(html).toContain('type="button"');
-    expect(html).toContain('在文件管理器中打开 agent-pc/');
-    expect(html).toContain('title="agent-pc/"');
-    expect(html).toContain('>agent-pc</span>');
-    expect(html).not.toContain('>agent-pc/</span>');
-    expect(html).toContain(' 目录');
+    expect(onOpenWorkspaceFile).toHaveBeenCalledWith('src/App.tsx');
+    expect(onOpenWorkspaceDirectory).toHaveBeenCalledWith('src/components/');
   });
 });

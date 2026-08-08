@@ -294,8 +294,3 @@ function gitControlErrorMessage(error: unknown, t: Translate): string {
   const withoutRuntimePath = withoutIpcPrefix.replace(/\s*\((?:GET|POST|PUT|PATCH|DELETE)\s+\/v\d+\/[^)]+\)\s*$/u, '');
   return withoutRuntimePath.trim() || t('conversation.git.operationFailed');
 }
-
-export {
-  GitActionButton,
-  commitSuccessMessage,
-} from '../../workspace/git/WorkspaceGitCommitDialog.js';

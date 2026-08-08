@@ -1,9 +1,7 @@
 import type { DesktopImageInput } from '@setsuna-desktop/contracts';
 import { useCallback } from 'react';
 import { useToast } from '../../../app/providers/ToastProvider.js';
-import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-
-const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
 export type DesktopImageAction = 'copy' | 'reveal';
 
@@ -34,6 +32,6 @@ export function useDesktopImageAction() {
   }, [t, toast]);
 }
 
-export function desktopImageActionSuccessMessage(action: DesktopImageAction, t: Translate = defaultTranslate): string {
+function desktopImageActionSuccessMessage(action: DesktopImageAction, t: Translate): string {
   return t(action === 'copy' ? 'workspace.image.copied' : 'workspace.image.revealed');
 }

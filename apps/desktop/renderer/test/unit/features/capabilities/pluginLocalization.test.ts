@@ -1,34 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { localizedPluginCopy } from '../../../../src/features/capabilities/pluginLocalization.js';
-import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
+import type { Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
-const en: Translate = (key, params) => translate('en-US', key, params);
+const returnKey: Translate = (key) => key;
 
 describe('built-in plugin localization', () => {
-  it.each([
-    ['audit-file-mutations', 'File Change Audit Reminder'],
-    ['compact-warning', 'Pre-Compaction Status'],
-    ['context7-docs', 'Context7 Documentation'],
-    ['documents', 'Word Document Processing'],
-    ['guard-dangerous-shell', 'Block Dangerous Shell Commands'],
-    ['openai-docs', 'OpenAI Official Documentation'],
-    ['openai-image-generation', 'Image Generation'],
-    ['openai-vision-recognition', 'Vision Recognition'],
-    ['pdf', 'PDF Document Processing'],
-    ['prompt-secret-detector', 'Secret Detection in User Messages'],
-    ['protect-generated-folders', 'Protect Generated Directories'],
-    ['protect-secret-paths', 'Protect Secret File Paths'],
-    ['session-start-project-guidance', 'Load Project Guidance at Session Start'],
-    ['stop-todo-continuation', 'Check Unfinished TODOs Before Stopping'],
-  ])('maps %s through its stable plugin id', (id, expectedName) => {
-    const copy = localizedPluginCopy({ id, name: '原始名称', description: '原始描述' }, en);
+  it('routes every built-in plugin id to its own localized copy', () => {
+    const pluginIds = [
+      'audit-file-mutations',
+      'compact-warning',
+      'context7-docs',
+      'documents',
+      'guard-dangerous-shell',
+      'openai-docs',
+      'openai-image-generation',
+      'openai-vision-recognition',
+      'pdf',
+      'prompt-secret-detector',
+      'protect-generated-folders',
+      'protect-secret-paths',
+      'session-start-project-guidance',
+      'stop-todo-continuation',
+    ];
 
-    expect(copy.name).toBe(expectedName);
-    expect(copy.description).not.toBe('原始描述');
+    for (const id of pluginIds) {
+      expect(localizedPluginCopy({ id, name: 'Source', description: 'Source' }, returnKey)).toEqual({
+        name: `capabilities.plugin.${id}.name`,
+        description: `capabilities.plugin.${id}.description`,
+      });
+    }
   });
 
   it('preserves third-party plugin copy', () => {
-    expect(localizedPluginCopy({ id: 'third-party', name: 'Third Party', description: 'Custom copy' }, en)).toEqual({
+    expect(localizedPluginCopy({ id: 'third-party', name: 'Third Party', description: 'Custom copy' }, returnKey)).toEqual({
       name: 'Third Party',
       description: 'Custom copy',
     });

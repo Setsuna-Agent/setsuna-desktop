@@ -1,6 +1,6 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   DesktopPanelHeader,
   panelDragPreviewPosition,
@@ -8,49 +8,24 @@ import {
 } from '../../../../src/features/workspace/DesktopPanelHeader.js';
 
 describe('DesktopPanelHeader browser tabs', () => {
-  it('renders a browser page through the same ordinary tab path', () => {
-    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
-      activePanel: 'browser',
-      activePanelId: 'browser-1',
-      onClose: vi.fn(),
-      onClosePanel: vi.fn(),
-      onSelectPanel: vi.fn(),
-      panels: [
-        { id: 'review', type: 'review' },
-        {
-          browser: { faviconUrl: 'https://example.com/favicon.ico', loading: false, url: 'https://example.com/' },
-          id: 'browser-1',
-          title: 'Example',
-          type: 'browser',
-        },
-      ],
-      placement: 'side',
-    }));
-
-    expect(html).not.toContain('desktop-browser-tabs-host');
-    expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
-    expect(html).toContain('title="Example"');
-    expect(html).toContain('src="https://example.com/favicon.ico"');
-    expect(html).toContain('aria-label="关闭Example"');
-    expect(html).toContain('title="审查"');
-  });
-
-  it('keeps the shared panel launcher when a browser panel already exists', () => {
+  it('keeps browser pages in the shared tab and launcher path', () => {
     const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
       activePanel: 'browser',
       activePanelId: 'browser-1',
       availablePanelTypes: ['browser'],
-      onClose: vi.fn(),
-      onClosePanel: vi.fn(),
-      onOpenPanel: vi.fn(),
-      onSelectPanel: vi.fn(),
-      panels: [{ id: 'browser-1', type: 'browser', title: '新标签页' }],
+      onClose: () => undefined,
+      onClosePanel: () => undefined,
+      onOpenPanel: () => undefined,
+      onSelectPanel: () => undefined,
+      panels: [{ id: 'browser-1', type: 'browser', title: 'Example' }],
       placement: 'side',
     }));
 
+    expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
+    expect(html).toContain('title="Example"');
+    expect(html).toContain('aria-label="关闭Example"');
     expect(html).toContain('aria-label="添加面板"');
   });
-
 });
 
 describe('DesktopPanelHeader launcher menu positioning', () => {

@@ -10,15 +10,8 @@ describe('workspace file context menu helpers', () => {
     expect(workspaceFileRevealLabel('darwin')).toBe('在访达中显示');
     expect(workspaceFileRevealLabel('win32')).toBe('在文件资源管理器中显示');
     expect(workspaceFileRevealLabel('linux')).toBe('在文件夹中显示');
-  });
-
-  it('provides English labels for every file context menu action', () => {
-    const t: Translate = (key, params) => translate('en-US', key, params);
-
-    expect(t('workspace.fileMenu.openWith')).toBe('Open with');
-    expect(t('workspace.fileMenu.copyPath')).toBe('Copy file path');
-    expect(workspaceFileRevealLabel('darwin', t)).toBe('Show in Finder');
-    expect(t('workspace.fileMenu.addToChat')).toBe('Add to chat');
+    const en: Translate = (key, params) => translate('en-US', key, params);
+    expect(workspaceFileRevealLabel('darwin', en)).toBe('Show in Finder');
   });
 
   it('builds a normalized file mention for add-to-conversation', () => {

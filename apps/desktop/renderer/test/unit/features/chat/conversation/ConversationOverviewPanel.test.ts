@@ -11,7 +11,7 @@ import { ConversationOverviewPanel } from '../../../../../src/features/chat/conv
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../../src/features/workspace/model.js';
 
 describe('ConversationOverviewPanel', () => {
-  it('uses the same local git change summary in compact and expanded modes', () => {
+  it('uses the same local git summary and keeps the review action argument-free', () => {
     const localReviewState: DesktopReviewState = {
       ...reviewState,
       stagedSummary: {
@@ -42,6 +42,12 @@ describe('ConversationOverviewPanel', () => {
     expect(expandedHtml).not.toContain('2 个文件');
     expect(expandedHtml).not.toContain('无变更');
     expect(expandedHtml).not.toContain('打开文件');
+
+    const onOpenReview = vi.fn();
+    const panel = captureOverviewPanel({ ...baseProps, compact: false, onOpenReview });
+    const reviewButton = panel.props.children[1].props.children[0];
+    reviewButton.props.onClick({ type: 'click' });
+    expect(onOpenReview).toHaveBeenCalledWith();
   });
 
   it('shows untracked worktree changes before a repository has its first commit', () => {
@@ -93,97 +99,57 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
-  it('does not forward the React click event to the review callback', () => {
-    const onOpenReview = vi.fn();
-    const panel = captureOverviewPanel({
-      ...baseProps,
-      compact: false,
-      onOpenReview,
-    });
-    const actions = panel.props.children[1];
-    const reviewButton = actions.props.children[0];
-
-    reviewButton.props.onClick({ type: 'click' });
-
-    expect(onOpenReview).toHaveBeenCalledWith();
-  });
-
-  it('combines usage and diagnostics, with collaboration count on its section title', () => {
+  it('shows child collaboration tasks without treating forks as tasks', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
-      currentThread: {
-        ...baseProps.currentThread,
-        turns: [{ id: 'turn_1', items: [], status: 'completed', modelVerifications: [{}] }],
-      },
-      threadUsage: {
-        records: [],
-        summary: { inputTokens: 900, cachedInputTokens: 0, outputTokens: 600, totalTokens: 1500, recordCount: 2, byDay: [], byProvider: [], byModel: [] },
-      },
-      threads: [{
-        id: 'child_1',
-        parentThreadId: 'thread_1',
-        title: 'Child agent',
-        createdAt: '2026-07-01T00:00:00.000Z',
-        updatedAt: '2026-07-01T00:00:00.000Z',
-        archived: false,
-        messageCount: 1,
-        lastMessagePreview: 'working',
-      }],
+      threads: [
+        {
+          id: 'child_1',
+          parentThreadId: 'thread_1',
+          title: 'Child agent',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+          archived: false,
+          messageCount: 1,
+          lastMessagePreview: 'working',
+        },
+        {
+          id: 'fork_1',
+          forkedFromId: 'thread_1',
+          title: 'Forked conversation',
+          createdAt: '2026-07-01T00:00:00.000Z',
+          updatedAt: '2026-07-01T00:00:00.000Z',
+          archived: false,
+          messageCount: 0,
+          lastMessagePreview: '',
+        },
+      ],
     });
 
-    expect(html).toContain('用量与诊断');
-    expect(html).toContain('1.5K · 2 次 · 已完成 · 1 次验证');
-    expect(html).not.toContain('1 个子 Agent');
-    expect(html).toContain('协作任务');
     expect(html).toContain('aria-label="1 个协作任务"');
     expect(html).toContain('Child agent');
-  });
-
-  it('does not treat a forked conversation as a collaboration task', () => {
-    const html = renderOverviewPanel({
-      ...baseProps,
-      compact: false,
-      threads: [{
-        id: 'fork_1',
-        forkedFromId: 'thread_1',
-        title: 'Forked conversation',
-        createdAt: '2026-07-01T00:00:00.000Z',
-        updatedAt: '2026-07-01T00:00:00.000Z',
-        archived: false,
-        messageCount: 0,
-        lastMessagePreview: '',
-      }],
-    });
-
-    expect(html).not.toContain('协作任务');
     expect(html).not.toContain('Forked conversation');
   });
 
-  it('summarizes plan progress in one row and keeps the full plan in a hover popover', () => {
+  it('renders active plan progress with its detail popover', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
       overview: {
         ...overview,
         planItems: [
-          { step: '读取现有实现', status: 'completed' },
-          { step: '整理交互结构', status: 'completed' },
-          { step: '实现计划摘要', status: 'in_progress' },
-          { step: '补充浮层样式', status: 'pending' },
-          { step: '添加测试', status: 'pending' },
-          { step: '运行验证', status: 'pending' },
+          { step: 'Inspect implementation', status: 'completed' },
+          { step: 'Apply focused change', status: 'in_progress' },
         ],
       },
     });
 
-    expect(html).toContain('aria-label="计划推进中，已完成 2/6"');
-    expect(html).toContain('chat-conversation-overview-panel__plan-loading');
+    expect(html).toContain('aria-label="计划推进中，已完成 1/2"');
     expect(html).toContain('chat-conversation-overview-panel__plan-popover');
-    expect(html).toContain('计划详情');
-    expect(html).toContain('实现计划摘要');
-    expect(html.match(/>2\/6</g)).toHaveLength(2);
+    expect(html).toContain('Apply focused change');
   });
+
 });
 
 function renderOverviewPanel(

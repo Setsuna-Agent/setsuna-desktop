@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RuntimeActivityTrigger } from '../../../../src/features/runtime-activity/RuntimeActivityTrigger.js';
 
 describe('RuntimeActivityTrigger', () => {
-  it('uses a stable accessible label without deriving hidden activity counts', () => {
+  it('exposes the runtime activity dialog through an accessible trigger', () => {
     const html = renderToStaticMarkup(
       <RuntimeActivityTrigger
         open={false}

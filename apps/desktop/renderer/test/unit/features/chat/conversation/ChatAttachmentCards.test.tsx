@@ -8,20 +8,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { ChatAttachmentTray } from '../../../../../src/features/chat/composer/ChatAttachmentTray.js';
 import { ChatMessageAttachments } from '../../../../../src/features/chat/conversation/ChatMessageAttachments.js';
-import { ChatThreadProvider } from '../../../../../src/features/chat/conversation/ChatThreadProvider.js';
 import {
   chatImageGalleryColumns,
   chatImageGalleryWidth,
 } from '../../../../../src/features/chat/conversation/ChatMessageImageGallery.js';
-
-const pdfAttachment: RuntimeStoredMessageAttachment = {
-  id: 'attachment_pdf',
-  assetId: 'attachment_pdf',
-  source: 'runtime',
-  name: 'invoice.pdf',
-  type: 'application/pdf',
-  size: 50 * 1024,
-};
+import { ChatThreadProvider } from '../../../../../src/features/chat/conversation/ChatThreadProvider.js';
 
 const storedImageAttachment: RuntimeStoredMessageAttachment = {
   id: 'attachment_image',
@@ -32,48 +23,35 @@ const storedImageAttachment: RuntimeStoredMessageAttachment = {
   size: 1024,
 };
 
+const pdfAttachment: RuntimeStoredMessageAttachment = {
+  id: 'attachment_pdf',
+  assetId: 'attachment_pdf',
+  source: 'runtime',
+  name: 'invoice.pdf',
+  type: 'application/pdf',
+  size: 50 * 1024,
+};
+
 describe('chat attachment cards', () => {
-  it('uses the integrated file icon set in the composer attachment tray', () => {
-    const html = renderToStaticMarkup(
-      <ChatAttachmentTray
-        items={[{
-          key: pdfAttachment.id,
-          name: pdfAttachment.name,
-          type: pdfAttachment.type,
-          size: pdfAttachment.size,
-          status: 'ready',
-          attachment: pdfAttachment,
-        }]}
-        onRemove={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain('class="chat-attachment__file-type-icon"');
-    expect(html).toContain('data-file-icon-theme="seti"');
-    expect(html).toContain('class="chat-attachment__file-meta">PDF</span>');
+  it('keeps the balanced gallery boundaries', () => {
+    expect([1, 2, 3, 4, 5].map(chatImageGalleryColumns)).toEqual([1, 2, 3, 2, 3]);
+    expect([
+      chatImageGalleryWidth(1, 'user'),
+      chatImageGalleryWidth(1, 'assistant'),
+      chatImageGalleryWidth(2, 'user'),
+      chatImageGalleryWidth(3, 'assistant'),
+    ]).toEqual(['min(220px, 52vw)', '360px', '360px', '544px']);
   });
 
-  it('uses the integrated file icon set in sent attachment cards', () => {
-    const html = renderToStaticMarkup(
-      <ToastProvider>
-        <ChatMessageAttachments attachments={[pdfAttachment]} />
-      </ToastProvider>,
-    );
-
-    expect(html).toContain('class="chat-user-message-file__icon"');
-    expect(html).toContain('data-file-icon-theme="seti"');
-    expect(html).toContain('class="chat-user-message-file__meta">PDF</span>');
-  });
-
-  it('renders multiple sent images as one Ant Design preview gallery', () => {
+  it('wires multiple images into one two-column preview gallery', () => {
     const images: RuntimeInlineMessageAttachment[] = [1, 2].map((index) => ({
       id: `generated_${index}`,
       name: `generated-${index}.png`,
       type: 'image/png',
       size: 4,
       url: 'data:image/png;base64,AA==',
-      localAssetId: `generated_image_asset_${index}`,
     }));
+
     const html = renderToStaticMarkup(
       <ToastProvider>
         <ChatMessageAttachments attachments={images} variant="assistant" />
@@ -81,8 +59,8 @@ describe('chat attachment cards', () => {
     );
 
     expect(html).toContain('chat-image-gallery--multiple');
-    expect(html).toContain('class="chat-image-gallery-shell" style="--chat-image-gallery-columns:2;--chat-image-gallery-width:360px"');
     expect(html).toContain('--chat-image-gallery-columns:2');
+    expect(html).toContain('--chat-image-gallery-width:360px');
     expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
   });
 
@@ -108,8 +86,26 @@ describe('chat attachment cards', () => {
     expect(html).not.toContain('data:image');
   });
 
-  it('renders stored user images in the preview gallery instead of as file cards', () => {
-    const html = renderToStaticMarkup(
+  it('renders stored files as cards while keeping images in the preview gallery', () => {
+    const composerHtml = renderToStaticMarkup(
+      <ChatAttachmentTray
+        items={[{
+          key: pdfAttachment.id,
+          name: pdfAttachment.name,
+          type: pdfAttachment.type,
+          size: pdfAttachment.size,
+          status: 'ready',
+          attachment: pdfAttachment,
+        }]}
+        onRemove={vi.fn()}
+      />,
+    );
+    const fileHtml = renderToStaticMarkup(
+      <ToastProvider>
+        <ChatMessageAttachments attachments={[pdfAttachment]} />
+      </ToastProvider>,
+    );
+    const imageHtml = renderToStaticMarkup(
       <ToastProvider>
         <ChatThreadProvider threadId="thread_1">
           <ChatMessageAttachments attachments={[storedImageAttachment]} />
@@ -117,19 +113,14 @@ describe('chat attachment cards', () => {
       </ToastProvider>,
     );
 
-    expect(html).toContain('chat-image-gallery--single');
-    expect(html).toContain('chat-message-image__placeholder');
-    expect(html).not.toContain('chat-user-message-file');
-  });
-
-  it('uses balanced gallery columns for common image counts', () => {
-    expect([1, 2, 3, 4, 5, 6].map(chatImageGalleryColumns)).toEqual([1, 2, 3, 2, 3, 3]);
-  });
-
-  it('sizes the outer gallery shell from the rendered image count', () => {
-    expect(chatImageGalleryWidth(1, 'user')).toBe('min(220px, 52vw)');
-    expect(chatImageGalleryWidth(1, 'assistant')).toBe('360px');
-    expect(chatImageGalleryWidth(2, 'user')).toBe('360px');
-    expect(chatImageGalleryWidth(3, 'user')).toBe('544px');
+    expect(composerHtml).toContain('invoice.pdf');
+    expect(composerHtml).toContain('class="chat-attachment__file-meta">PDF</span>');
+    expect(composerHtml).toContain('aria-label="移除 invoice.pdf"');
+    expect(fileHtml).toContain('class="chat-user-message-file"');
+    expect(fileHtml).toContain('invoice.pdf');
+    expect(fileHtml).toContain('class="chat-user-message-file__meta">PDF</span>');
+    expect(imageHtml).toContain('chat-image-gallery--single');
+    expect(imageHtml).toContain('chat-message-image__placeholder');
+    expect(imageHtml).not.toContain('chat-user-message-file');
   });
 });

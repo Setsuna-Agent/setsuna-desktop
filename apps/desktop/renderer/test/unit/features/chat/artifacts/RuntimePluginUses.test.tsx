@@ -1,46 +1,39 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RuntimePluginNavigationProvider } from '../../../../../src/features/chat/artifacts/RuntimePluginNavigation.js';
 import { RuntimePluginUses } from '../../../../../src/features/chat/artifacts/RuntimePluginUses.js';
 
+afterEach(cleanup);
+
 describe('RuntimePluginUses', () => {
-  it('announces active Plugin usage with an inline Plugin label', () => {
-    const html = renderToStaticMarkup(
-      <RuntimePluginUses
-        active
-        plugins={[{ id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' }]}
-      />,
-    );
-
-    expect(html).toContain('正在使用插件');
-    expect(html).toContain('Word 文档处理');
-    expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('desktop-plugin-icon--inline');
-    expect(html).toContain('data-plugin-icon="documents"');
-  });
-
-  it('keeps an uninstalled Plugin in history without showing a placeholder icon', () => {
-    const html = renderToStaticMarkup(
-      <RuntimePluginUses active={false} plugins={[{ id: 'documents', installed: false, name: 'Word 文档处理' }]} />,
-    );
-
-    expect(html).toContain('已使用插件');
-    expect(html).toContain('Word 文档处理');
-    expect(html).not.toContain('desktop-plugin-icon');
-    expect(html).not.toContain('aria-live');
-  });
-
-  it('renders highlighted Plugin names as native buttons when navigation is available', () => {
-    const html = renderToStaticMarkup(
-      <RuntimePluginNavigationProvider onOpenPlugin={() => undefined}>
+  it('keeps plugin history visible and opens installed plugins', async () => {
+    const onOpenPlugin = vi.fn();
+    render(
+      <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
         <RuntimePluginUses
           active={false}
-          plugins={[{ id: 'context7-docs', installed: true, name: 'Context7 文档查询' }]}
+          plugins={[{
+            id: 'context7-docs',
+            installed: true,
+            name: 'Context7 文档查询',
+          }]}
         />
       </RuntimePluginNavigationProvider>,
     );
 
-    expect(html).toContain('<button class="chat-plugin-use" type="button"');
-    expect(html).toContain('Context7 文档查询</span></button>');
+    await userEvent.click(screen.getByRole('button', { name: 'Context7 文档查询' }));
+    render(
+      <RuntimePluginUses
+        active={false}
+        plugins={[{ id: 'documents', installed: false, name: 'Word 文档处理' }]}
+      />,
+    );
+
+    expect(onOpenPlugin).toHaveBeenCalledWith('context7-docs');
+    expect(screen.getByText('Word 文档处理')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Word 文档处理' })).toBeNull();
   });
 });

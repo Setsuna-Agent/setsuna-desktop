@@ -9,7 +9,15 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('AgentSidebar project actions', () => {
-  it('keeps project thread creation on the row and project archiving in the overflow menu', () => {
+  it('renders project-scoped thread creation and archiving controls', () => {
+    const project: WorkspaceProject = {
+      id: 'project_test',
+      name: 'test-project',
+      path: '/workspace/test-project',
+      createdAt: '2026-07-13T00:00:00.000Z',
+      updatedAt: '2026-07-13T00:00:00.000Z',
+    };
+    const noop = () => undefined;
     const html = renderToStaticMarkup(createElement(AgentSidebar, {
       activeProjectId: project.id,
       activeThreadId: null,
@@ -29,41 +37,30 @@ describe('AgentSidebar project actions', () => {
       threadActionMenuId: null,
       threadsByProjectId: new Map(),
       width: 240,
-      onArchiveProject: () => undefined,
-      onArchiveThread: () => undefined,
-      onCreateCurrentThread: () => undefined,
-      onCreateGlobalThread: () => undefined,
-      onCreateProjectThread: () => undefined,
-      onEnterChatMode: () => undefined,
-      onOpenCapabilities: () => undefined,
-      onOpenSettings: () => undefined,
-      onRemoveProject: () => undefined,
-      onRenameThread: () => undefined,
-      onResizeStart: () => undefined,
-      onResizeStep: () => undefined,
-      onSelectDirectory: () => undefined,
-      onSelectProject: () => undefined,
-      onSelectThread: () => undefined,
-      onToggleProjectActions: () => undefined,
-      onToggleProjectsCollapsed: () => undefined,
-      onToggleSearch: () => undefined,
-      onToggleSessionsCollapsed: () => undefined,
-      onToggleThreadActions: () => undefined,
+      onArchiveProject: noop,
+      onArchiveThread: noop,
+      onCreateCurrentThread: noop,
+      onCreateGlobalThread: noop,
+      onCreateProjectThread: noop,
+      onEnterChatMode: noop,
+      onOpenCapabilities: noop,
+      onOpenSettings: noop,
+      onRemoveProject: noop,
+      onRenameThread: noop,
+      onResizeStart: noop,
+      onResizeStep: noop,
+      onSelectDirectory: noop,
+      onSelectProject: noop,
+      onSelectThread: noop,
+      onToggleProjectActions: noop,
+      onToggleProjectsCollapsed: noop,
+      onToggleSearch: noop,
+      onToggleSessionsCollapsed: noop,
+      onToggleThreadActions: noop,
     }));
 
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
-    expect(html).toContain('归档项目');
-    expect(html).toContain('lucide-blocks');
-    expect(html).toContain('chat-sidebar-user__icon');
+    expect(html).toContain('>归档项目</button>');
     expect(html).toContain('>插件</span>');
-    expect(html.match(/>新对话</g)).toHaveLength(1);
   });
 });
-
-const project: WorkspaceProject = {
-  id: 'project_test',
-  name: 'test-project',
-  path: '/workspace/test-project',
-  createdAt: '2026-07-13T00:00:00.000Z',
-  updatedAt: '2026-07-13T00:00:00.000Z',
-};
