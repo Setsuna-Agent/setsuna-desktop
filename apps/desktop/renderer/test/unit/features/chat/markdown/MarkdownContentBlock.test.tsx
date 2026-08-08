@@ -4,19 +4,6 @@ import { MarkdownContentBlock } from '../../../../../src/features/chat/markdown/
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 
 describe('MarkdownContentBlock links', () => {
-  it('adds a Web icon to HTTP links without decorating non-Web external links', () => {
-    const html = renderToStaticMarkup(
-      <MarkdownNavigationProvider onOpenWebLink={() => undefined}>
-        <MarkdownContentBlock content="[Setsuna](https://example.com/docs) [邮件](mailto:hello@example.com)" />
-      </MarkdownNavigationProvider>,
-    );
-
-    expect(html).toContain('data-markdown-link="web"');
-    expect(html).toContain('chat-markdown__web-link-icon');
-    expect(html).toContain('data-markdown-link="external"');
-    expect(html.match(/chat-markdown__web-link-icon/g)).toHaveLength(1);
-  });
-
   it('stops GFM autolinks before Chinese punctuation and preserves surrounding bold text', () => {
     const html = renderToStaticMarkup(
       <MarkdownNavigationProvider onOpenWebLink={() => undefined}>

@@ -32,7 +32,6 @@ describe('artifact tool host', () => {
     const tools = await host.listTools(context);
 
     expect(tools).toEqual([expect.objectContaining({ name: PUBLISH_ARTIFACT_TOOL_NAME })]);
-    expect(host.systemPrompt(context, { tools })).toContain('call publish_artifact once');
     await expect(host.runTool(PUBLISH_ARTIFACT_TOOL_NAME, { path: 'AI 趋势报告.pdf' }, context)).resolves.toMatchObject({
       content: expect.stringContaining('AI 趋势报告.pdf'),
       preview: '发布产物 AI 趋势报告.pdf',

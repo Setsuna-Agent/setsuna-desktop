@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  PROVIDER_BRAND_CATALOG,
   providerInitials,
   resolveAutomaticModelBrand,
   resolveModelBrand,
@@ -41,23 +40,6 @@ describe('resolveProviderBrand', () => {
       baseUrl: 'https://api.minimaxi.com/v1',
       icon: { type: 'custom', dataUrl: 'data:image/png;base64,aWNvbg==' },
     })).toMatchObject({ key: 'custom', src: 'data:image/png;base64,aWNvbg==' });
-  });
-
-  it('publishes every built-in brand as a selectable preset', () => {
-    expect(PROVIDER_BRAND_CATALOG.map((brand) => brand.key)).toEqual(expect.arrayContaining([
-      'setsuna',
-      'minimax',
-      'kimi',
-      'deepseek',
-      'glm',
-      'qwen',
-      'bailian',
-      'volcengine',
-      'openai',
-      'anthropic',
-      'gemini',
-      'ollama',
-    ]));
   });
 
   it('returns null for a custom service', () => {

@@ -364,7 +364,7 @@ function CommitBranchMenu({
   );
 }
 
-export function GitActionButton({
+function GitActionButton({
   disabled,
   icon,
   loading,
@@ -393,7 +393,7 @@ export function GitActionButton({
   );
 }
 
-export function commitSuccessMessage(
+function commitSuccessMessage(
   result: Pick<DesktopReviewCommitResult, 'commitHash'>,
   pushed: boolean,
   t?: Translate,

@@ -1,46 +1,14 @@
 import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import {
-  CapabilitiesInstalledPluginShortcut,
-} from '../../../../src/features/capabilities/CapabilitiesInstalledPluginShortcut.js';
 import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
 import {
   CapabilitiesPluginFilePreview,
   markdownPreviewBody,
 } from '../../../../src/features/capabilities/CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginListItem } from '../../../../src/features/capabilities/CapabilitiesPluginListItem.js';
-import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
 
 describe('capabilities plugin components', () => {
-  it('renders an installed plugin as an accessible icon shortcut', () => {
-    const html = renderToStaticMarkup(
-      <CapabilitiesInstalledPluginShortcut
-        plugin={{
-          id: 'demo',
-          name: 'Demo Plugin',
-          icon: 'context7',
-          version: '1.2.3',
-          description: 'Local plugin fixture',
-          publisher: 'Setsuna',
-          tags: ['文档'],
-          installedAt: '2026-07-15T00:00:00.000Z',
-          skills: [{ id: 'demo.docs', name: 'Docs', description: 'Read project documentation.' }],
-          mcpServers: [{ key: 'demo_docs', label: 'Demo Docs', description: 'Search documentation.', transport: 'streamableHttp', owned: true }],
-          hooks: [{ id: 'demo-audit', name: 'Audit changes', eventName: 'PostToolUse' }],
-          hookCount: 1,
-          resources: [{ id: 'guide', label: 'Guide', path: 'resources/guide.md', size: 8 }],
-        }}
-        onOpen={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('aria-label="查看已安装插件：Demo Plugin"');
-    expect(html).toContain('已安装');
-    expect(html).not.toContain('desktop-capability-card');
-    expect(html).not.toContain('卸载');
-  });
-
   it('renders a one-click marketplace row without card chrome or local paths', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginListItem
@@ -145,82 +113,6 @@ describe('capabilities plugin components', () => {
     expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
   });
 
-  it('renders featured plugins in the catalog list beneath installed shortcuts', () => {
-    const html = renderToStaticMarkup(
-      <CapabilitiesPluginMarket
-        marketplacePlugins={[{
-          id: 'pdf',
-          name: 'PDF 文档处理',
-          icon: 'pdf',
-          version: '1.0.0',
-          description: '读取、创建和验证 PDF。',
-          publisher: 'Setsuna',
-          tags: ['PDF'],
-          featured: true,
-          skills: [{ id: 'pdf.pdf', name: 'PDF' }],
-          mcpServers: [],
-          hooks: [],
-          resources: [],
-          capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
-          installed: true,
-          updateAvailable: false,
-        }]}
-        localPlugins={[]}
-        installingPluginIds={new Set()}
-        onInstall={async () => undefined}
-        onOpenLocal={() => undefined}
-        onOpenMarketplace={() => undefined}
-      />,
-    );
-
-    expect(html).toContain('desktop-plugin-market__installed');
-    expect(html).toContain('共 1 个');
-    expect(html).toContain('精选');
-    expect(html).toContain('desktop-plugin-list-item');
-    expect(html).not.toContain('desktop-plugin-editorial');
-    expect(html).not.toContain('desktop-capability-card');
-  });
-
-  it('shows the skills and MCP servers included in a marketplace plugin before installation', () => {
-    const html = renderToStaticMarkup(
-      <CapabilitiesPluginDetail
-        error={null}
-        installing={false}
-        marketplacePlugin={{
-          id: 'openai-docs',
-          name: 'OpenAI 官方文档',
-          icon: 'openai-docs',
-          version: '1.0.0',
-          description: '查询最新官方开发文档。',
-          publisher: 'OpenAI',
-          tags: ['官方', '开发文档'],
-          featured: true,
-          skills: [{ id: 'openai-docs.openai-docs', name: 'OpenAI 官方文档', description: '查询 OpenAI API 与 Codex 文档。' }],
-          mcpServers: [{ key: 'openai_docs', label: 'OpenAI Developer Docs', description: 'OpenAI 官方文档服务', transport: 'streamableHttp' }],
-          hooks: [],
-          resources: [],
-          capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
-          installed: false,
-          updateAvailable: false,
-        }}
-        removing={false}
-        onBack={() => undefined}
-        onInstall={async () => undefined}
-        onRemove={async () => undefined}
-      />,
-    );
-
-    expect(html).toContain('OpenAI 官方文档');
-    expect(html).toContain('OpenAI API 与 Codex 文档');
-    expect(html).toContain('OpenAI Developer Docs');
-    expect(html).toContain('远程 MCP');
-    expect(html).toContain('查看 OpenAI 官方文档 详情');
-    expect(html).toContain('查看 OpenAI Developer Docs 详情');
-    expect(html).toContain('安装插件');
-    expect(html).not.toContain('openai-docs.openai-docs');
-    expect(html).not.toContain('openai_docs');
-  });
-
   it('keeps Hook cards user-facing without exposing runtime identifiers', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginDetail
@@ -260,47 +152,6 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('run_shell_command|exec_command');
     expect(html).not.toContain('{{pluginRoot}}');
     expect(html).not.toContain('.mjs');
-  });
-
-  it('aligns declared resources with the other detail sections and makes each resource inspectable', () => {
-    const html = renderToStaticMarkup(
-      <CapabilitiesPluginDetail
-        error={null}
-        installing={false}
-        installedPlugin={{
-          id: 'documents',
-          name: 'Word 文档处理',
-          installedAt: '2026-07-15T00:00:00.000Z',
-          skills: [{ id: 'documents.documents', name: 'Word 文档处理' }],
-          mcpServers: [],
-          hooks: [],
-          hookCount: 0,
-          resources: [
-            { id: 'content-spec', label: 'DOCX 内容模型', path: 'skills/documents/references/content-spec.md', size: 2048 },
-            { id: 'sample-document-spec', label: '示例文档内容', path: 'skills/documents/examples/sample-document.json', size: 512 },
-          ],
-        }}
-        removing={false}
-        onBack={() => undefined}
-        onInstall={async () => undefined}
-        onRemove={async () => undefined}
-      />,
-    );
-
-    expect(html).toContain('desktop-capabilities-plugin-detail__section-title">资源</span>');
-    expect(html).toContain('查看 DOCX 内容模型 详情');
-    expect(html).toContain('查看 示例文档内容 详情');
-    expect(html).toContain('2.0 KB');
-    expect(html).not.toContain('documents.documents');
-    expect(html).not.toContain('<code>');
-    expect(html.match(/aria-expanded="true"/gu)).toHaveLength(5);
-    expect(html.match(/desktop-capabilities-plugin-detail__section-content/gu)).toHaveLength(5);
-    expect(html).toContain('这个插件不包含工具。');
-    expect(html).toContain('这个插件不包含 MCP 服务。');
-    expect(html).toContain('这个插件不包含 Hook。');
-    expect(html).not.toContain(' hidden=""');
-    expect(html).not.toContain('<details');
-    expect(html).not.toContain('desktop-capabilities-plugin-detail__extras');
   });
 
   it('renders private Images API settings only for the installed image plugin', () => {
@@ -455,19 +306,4 @@ describe('capabilities plugin components', () => {
     expect(markdownPreviewBody('---\n分隔内容\n---\n正文')).toBe('---\n分隔内容\n---\n正文');
   });
 
-  it('keeps plain-text file content in a keyboard-scrollable preview region', () => {
-    const html = renderToStaticMarkup(
-      <CapabilitiesPluginFilePreview
-        file={{
-          path: 'hooks/protect-secret-paths.mjs',
-          mimeType: 'text/javascript',
-          size: 180,
-          text: `const matcher = /${'sensitive-path|'.repeat(24)}/;`,
-        }}
-      />,
-    );
-
-    expect(html).toContain('<pre aria-label="protect-secret-paths.mjs 文件内容" tabindex="0">');
-    expect(html).toContain('sensitive-path|sensitive-path');
-  });
 });

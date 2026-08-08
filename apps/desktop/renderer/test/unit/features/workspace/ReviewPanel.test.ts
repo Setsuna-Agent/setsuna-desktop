@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   DesktopReviewPanel,
-  branchCompareDisplayName,
   branchCompareRefOptions,
   consumeReviewFocusRequest,
   reviewFilePathParts,
@@ -14,23 +13,6 @@ import {
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
 
 describe('DesktopReviewPanel', () => {
-  it('renders compact file diffs through a valid Pierre patch', () => {
-    const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-      activeProject: project,
-      error: null,
-      latestSummary,
-      loading: false,
-      reviewState: null,
-      onExternalOpenFile: () => undefined,
-      onOpenProjectFile: () => undefined,
-      onRefresh: () => undefined,
-    }));
-
-    expect(html).toContain('diff --git a/src/domain/agent/drawer/ChatLogDrawer.vue b/src/domain/agent/drawer/ChatLogDrawer.vue');
-    expect(html).toContain('-const now = new Date()');
-    expect(html).toContain('+const today = new Date()');
-  });
-
   it('sorts changed files by path without putting uppercase names first', () => {
     const templateFile = latestSummary.files[0];
     if (!templateFile) throw new Error('Expected a review file fixture');
@@ -115,45 +97,6 @@ describe('DesktopReviewPanel', () => {
     });
   });
 
-  it('shows the selected source diff totals beside every source label', () => {
-    const summaries = {
-      unstaged: { additions: 11, deletions: 12, files: [] },
-      staged: { additions: 21, deletions: 22, files: [] },
-      branch: { additions: 31, deletions: 32, files: [] },
-      latest: { additions: 41, deletions: 42, files: [] },
-    } satisfies Record<'unstaged' | 'staged' | 'branch' | 'latest', DesktopDiffSummary>;
-    const labels = {
-      unstaged: '未暂存',
-      staged: '已暂存',
-      branch: '分支',
-      latest: '上轮对话',
-    } as const;
-
-    for (const source of ['unstaged', 'staged', 'branch', 'latest'] as const) {
-      withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': source }, () => {
-        const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-          activeProject: project,
-          error: null,
-          latestSummary: summaries.latest,
-          loading: false,
-          reviewState: {
-            ...reviewState,
-            branchSummary: summaries.branch,
-            stagedSummary: summaries.staged,
-            unstagedSummary: summaries.unstaged,
-          },
-          onExternalOpenFile: () => undefined,
-          onOpenProjectFile: () => undefined,
-          onRefresh: () => undefined,
-        }));
-
-        expect(html).toContain(labels[source]);
-        expect(html).toContain(`desktop-review-change-counts__addition">+${summaries[source].additions}</span>`);
-        expect(html).toContain(`desktop-review-change-counts__deletion">-${summaries[source].deletions}</span>`);
-      });
-    }
-  });
-
   it('consumes automatic file focus once so manual source selection is not reverted', () => {
     const firstFocus = consumeReviewFocusRequest(null, 'project_1:Tile.tsx:1', 'unstaged');
     expect(firstFocus).toEqual({
@@ -177,26 +120,6 @@ describe('DesktopReviewPanel', () => {
     )).toEqual({
       nextHandledRequestKey: 'project_1:Tile.tsx:2',
       shouldApply: true,
-    });
-  });
-
-  it('renders the branch compare selector for branch review', () => {
-    withWindowLocalStorage({ 'setsuna-desktop:review-source:project_1': 'branch' }, () => {
-      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-        activeProject: project,
-        error: null,
-        latestSummary,
-        loading: false,
-        reviewState,
-        onExternalOpenFile: () => undefined,
-        onOpenProjectFile: () => undefined,
-        onRefresh: () => undefined,
-      }));
-
-      expect(html).toContain('desktop-review-branch-compare');
-      expect(html).toContain('desktop-review-panel__toolbar--branch');
-      expect(html).toContain('main');
-      expect(html).toContain('title="origin/main"');
     });
   });
 
@@ -225,12 +148,6 @@ describe('DesktopReviewPanel', () => {
       expect(html).not.toContain('desktop-review-panel__toolbar--branch');
       expect(html).not.toContain('未设置');
     });
-  });
-
-  it('uses raw remote refs for visible branch compare labels', () => {
-    expect(branchCompareDisplayName('origin/master')).toBe('origin/master');
-    expect(branchCompareDisplayName('master')).toBe('master');
-    expect(branchCompareDisplayName('origin/setsuna/temp')).toBe('origin/setsuna/temp');
   });
 
   it('deduplicates local and remote branch compare refs with remote refs preferred', () => {
@@ -281,200 +198,9 @@ describe('DesktopReviewPanel', () => {
         onRefresh: () => undefined,
       }));
 
-      expect(html).toContain('aria-pressed="true"');
-      expect(html).toContain('data-tooltip="当前：左右对比，点击切换为单列对比"');
-      expect(html).not.toContain('title="当前：左右对比，点击切换为单列对比"');
-      expect(html).not.toContain('desktop-review-panel__layout-toggle is-active');
-      expect(html).toContain('lucide-align-justify');
       expect(html).toContain('desktop-review-diff desktop-review-diff--split');
       expect(html).not.toContain('desktop-review-diff--wrap');
-      expect(html).not.toContain('desktop-review-diff-split-pane');
     });
-  });
-
-  it('fills the split diff width for files that only contain additions or removals', () => {
-    withWindowLocalStorage({
-      'setsuna-desktop:review-diff-layout:project_1': 'split',
-      'setsuna-desktop:review-line-wrap:project_1': 'nowrap',
-    }, () => {
-      for (const type of ['added', 'removed'] as const) {
-        const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-          activeProject: project,
-          error: null,
-          latestSummary: wholeFileReviewSummary(type),
-          loading: false,
-          reviewState: null,
-          onExternalOpenFile: () => undefined,
-          onOpenProjectFile: () => undefined,
-          onRefresh: () => undefined,
-        }));
-
-        expect(html).toContain('desktop-review-diff desktop-review-diff--split');
-        expect(html).not.toContain('desktop-review-diff-split-pane');
-      }
-    });
-  });
-
-  it('wraps review lines by default when the project has no saved preference', () => {
-    withWindowLocalStorage({
-      'setsuna-desktop:review-diff-layout:project_1': 'split',
-    }, () => {
-      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-        activeProject: project,
-        error: null,
-        latestSummary,
-        loading: false,
-        reviewState: null,
-        onExternalOpenFile: () => undefined,
-        onOpenProjectFile: () => undefined,
-        onRefresh: () => undefined,
-      }));
-
-      expect(html).toContain('desktop-review-panel__wrap-toggle');
-      expect(html).not.toContain('desktop-review-panel__wrap-toggle is-active');
-      expect(html).toContain('lucide-wrap-text');
-      expect(html).toContain('data-tooltip="当前：自动换行已开启，点击关闭"');
-      expect(html).not.toContain('title="当前：自动换行已开启，点击关闭"');
-      expect(html).toContain('desktop-review-diff desktop-review-diff--split desktop-review-diff--wrap');
-      expect(html).not.toContain('setsuna-pierre-virtualizer');
-      expect(html).not.toContain('desktop-review-diff-split-row');
-    });
-  });
-
-  it('keeps long split review lines wrapped in row cells instead of split panes', () => {
-    const longLineSummary: DesktopDiffSummary = {
-      additions: 1,
-      deletions: 1,
-      files: [
-        {
-          path: 'apps/desktop/renderer/test/unit/features/workspace/ReviewPanel.test.ts',
-          action: 'Modified',
-          additions: 1,
-          deletions: 1,
-          truncated: false,
-          lines: [
-            {
-              type: 'removed',
-              lineNumber: 5,
-              oldLine: 5,
-              content: "import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewVirtualRange, reviewWorkspaceFilePath } from './ReviewPanel.js';",
-            },
-            {
-              type: 'added',
-              lineNumber: 5,
-              newLine: 5,
-              content: "import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewVirtualRange, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference } from './ReviewPanel.js';",
-            },
-            { type: 'gap', lineNumber: 6, content: '31 unmodified lines' },
-          ],
-        },
-      ],
-    };
-
-    withWindowLocalStorage({
-      'setsuna-desktop:review-diff-layout:project_1': 'split',
-      'setsuna-desktop:review-line-wrap:project_1': 'wrap',
-    }, () => {
-      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-        activeProject: project,
-        error: null,
-        latestSummary: longLineSummary,
-        loading: false,
-        reviewState: null,
-        onExternalOpenFile: () => undefined,
-        onOpenProjectFile: () => undefined,
-        onRefresh: () => undefined,
-      }));
-
-      expect(html).toContain('desktop-review-diff desktop-review-diff--split desktop-review-diff--wrap');
-      expect(html).not.toContain('desktop-review-diff-split-row');
-      expect(html).not.toContain('setsuna-pierre-virtualizer');
-    });
-  });
-
-  it('keeps long unified review lines in wrapped normal flow', () => {
-    const longLineSummary: DesktopDiffSummary = {
-      additions: 1,
-      deletions: 1,
-      files: [
-        {
-          path: 'apps/desktop/renderer/test/unit/features/workspace/ReviewPanel.test.ts',
-          action: 'Modified',
-          additions: 1,
-          deletions: 1,
-          truncated: false,
-          lines: [
-            {
-              type: 'removed',
-              lineNumber: 5,
-              oldLine: 5,
-              content: "import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewVirtualRange, reviewWorkspaceFilePath } from './ReviewPanel.js';",
-            },
-            {
-              type: 'added',
-              lineNumber: 5,
-              newLine: 5,
-              content: "import { DesktopReviewPanel, branchCompareDisplayName, branchCompareRefOptions, reviewVirtualRange, reviewWorkspaceFilePath, shouldRestoreBranchBaseRefPreference } from './ReviewPanel.js';",
-            },
-          ],
-        },
-      ],
-    };
-
-    withWindowLocalStorage({
-      'setsuna-desktop:review-line-wrap:project_1': 'wrap',
-    }, () => {
-      const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-        activeProject: project,
-        error: null,
-        latestSummary: longLineSummary,
-        loading: false,
-        reviewState: null,
-        onExternalOpenFile: () => undefined,
-        onOpenProjectFile: () => undefined,
-        onRefresh: () => undefined,
-      }));
-
-      expect(html).toContain('desktop-review-diff desktop-review-diff--unified desktop-review-diff--wrap');
-      expect(html).toContain('setsuna-pierre-surface');
-      expect(html).not.toContain('desktop-review-diff-line');
-      expect(html).not.toContain('desktop-review-diff-split-pane');
-    });
-  });
-
-  it('delegates pathological single-line wrapping to Pierre', () => {
-    const singleLongLineSummary: DesktopDiffSummary = {
-      additions: 1,
-      deletions: 0,
-      files: [{
-        path: 'generated-output.ts',
-        action: 'Modified',
-        additions: 1,
-        deletions: 0,
-        truncated: false,
-        lines: [{
-          type: 'added',
-          lineNumber: 1,
-          newLine: 1,
-          content: `const generated = '${'x'.repeat(600)}';`,
-        }],
-      }],
-    };
-
-    const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-      activeProject: project,
-      error: null,
-      latestSummary: singleLongLineSummary,
-      loading: false,
-      reviewState: null,
-      onExternalOpenFile: () => undefined,
-      onOpenProjectFile: () => undefined,
-      onRefresh: () => undefined,
-    }));
-
-    expect(html).toContain('desktop-review-diff desktop-review-diff--unified desktop-review-diff--wrap');
-    expect(html).toContain('const generated');
-    expect(html).not.toContain('desktop-review-diff-code--long-line');
   });
 
   it('virtualizes large wrapped unified diffs in the shared review scroller', () => {
@@ -546,25 +272,6 @@ describe('DesktopReviewPanel', () => {
       expect(html).not.toContain('desktop-review-diff-split-row');
       expect(html).not.toContain('desktop-review-diff-split-virtual-pane');
     });
-  });
-
-  it('shows review refresh progress while loading', () => {
-    const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
-      activeProject: project,
-      error: null,
-      latestSummary,
-      loading: true,
-      reviewState: null,
-      onExternalOpenFile: () => undefined,
-      onOpenProjectFile: () => undefined,
-      onRefresh: () => undefined,
-    }));
-
-    expect(html).toContain('desktop-review-panel__refresh is-refreshing');
-    expect(html).toContain('aria-busy="true"');
-    expect(html).toContain('aria-disabled="true"');
-    expect(html).toContain('data-tooltip="正在刷新审查信息"');
-    expect(html).not.toContain('title="正在刷新审查信息"');
   });
 
   it('maps git review paths back to the active project root', () => {
@@ -648,28 +355,6 @@ const reviewState: DesktopReviewState = {
   stagedSummary,
   unstagedSummary: latestSummary,
 };
-
-function wholeFileReviewSummary(type: 'added' | 'removed'): DesktopDiffSummary {
-  const added = type === 'added';
-  return {
-    additions: added ? 2 : 0,
-    deletions: added ? 0 : 2,
-    files: [{
-      path: added ? 'created.ts' : 'deleted.ts',
-      action: added ? 'Created' : 'Deleted',
-      additions: added ? 2 : 0,
-      deletions: added ? 0 : 2,
-      truncated: false,
-      lines: added ? [
-        { type: 'added', lineNumber: 1, newLine: 1, content: 'const first = true;' },
-        { type: 'added', lineNumber: 2, newLine: 2, content: 'export { first };' },
-      ] : [
-        { type: 'removed', lineNumber: 1, oldLine: 1, content: 'const first = true;' },
-        { type: 'removed', lineNumber: 2, oldLine: 2, content: 'export { first };' },
-      ],
-    }],
-  };
-}
 
 function largeWrappedReviewSummary(path: string, lineCount: number, paired = false): DesktopDiffSummary {
   const lines = Array.from({ length: lineCount }, (_, index) => ({

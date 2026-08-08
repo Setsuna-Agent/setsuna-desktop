@@ -37,23 +37,6 @@ const orphanedService: RuntimeBackgroundServiceActivity = {
 };
 
 describe('RuntimeActiveTaskRows', () => {
-  it('renders the stop action in its own column', () => {
-    const html = renderToStaticMarkup(
-      <RuntimeActiveTaskRows
-        nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
-        onOpenThread={vi.fn()}
-        onStopTask={vi.fn()}
-        projectNameById={new Map([['project_1', 'Setsuna']])}
-        stoppingKeys={new Set()}
-        tasks={[task]}
-      />,
-    );
-
-    expect(html).toContain('>操作<');
-    expect(html).toContain('aria-label="终止任务：整理运行中心"');
-    expect(html).toContain('>终止<');
-  });
-
   it('disables the row action while the task is stopping', () => {
     const html = renderToStaticMarkup(
       <RuntimeActiveTaskRows

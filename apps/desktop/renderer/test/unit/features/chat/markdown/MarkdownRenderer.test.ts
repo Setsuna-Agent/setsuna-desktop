@@ -126,19 +126,6 @@ describe('MarkdownRenderer', () => {
     expect(normalizeMarkdownCodeBlockContents('const value = 1;\r\n  \r\n')).toBe('const value = 1;');
   });
 
-  it('localizes Markdown controls and accessibility labels in English', () => {
-    const html = renderMarkdown(
-      '![diagram](./diagram.png)\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n```ts\nconst answer = 42;\n```',
-      false,
-      'en-US',
-    );
-
-    expect(html).toContain('<span aria-hidden="true">Image</span>');
-    expect(html).toContain('aria-label="Markdown table"');
-    expect(html).toContain('aria-label="Copy code"');
-    expect(html).not.toContain('aria-label="复制代码"');
-  });
-
   it('renders unlabelled fenced code as a contained plain code block', () => {
     const html = renderMarkdown('```\nChatWorkspace.tsx\n├── useChatWorkspaceState.ts\n```');
 

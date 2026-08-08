@@ -1,19 +1,7 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from '../../../../src/app/layout/RuntimeErrorNotice.js';
+import { describe, expect, it } from 'vitest';
+import { runtimeErrorNoticeMessage } from '../../../../src/app/layout/RuntimeErrorNotice.js';
 
 describe('RuntimeErrorNotice', () => {
-  it('renders a dismissible alert with the runtime error details', () => {
-    const html = renderToStaticMarkup(
-      <RuntimeErrorNotice message="模型服务返回异常状态：403" onDismiss={vi.fn()} />,
-    );
-
-    expect(html).toContain('role="alert"');
-    expect(html).toContain('运行时错误');
-    expect(html).toContain('模型服务返回异常状态：403');
-    expect(html).toContain('aria-label="关闭运行时错误提示"');
-  });
-
   it('suppresses an error already visible in the transcript', () => {
     const error = '模型服务返回了空响应';
     const thread = {

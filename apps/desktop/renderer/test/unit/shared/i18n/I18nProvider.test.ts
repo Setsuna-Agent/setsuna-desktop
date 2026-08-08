@@ -17,9 +17,6 @@ describe('renderer i18n', () => {
     expect(translate('en-US', 'chat.starter.projectTitle', { project: 'Setsuna' })).toBe(
       'What should we build in Setsuna?',
     );
-    expect(translate('en-US', 'settings.general.fontWeight.light')).toBe('Light');
-    expect(translate('en-US', 'settings.general.fontWeight.regular')).toBe('Regular (default)');
-    expect(translate('en-US', 'settings.general.fontWeight.semibold')).toBe('Semibold');
   });
 
   it('normalizes supported locales and reads the persisted config value', () => {

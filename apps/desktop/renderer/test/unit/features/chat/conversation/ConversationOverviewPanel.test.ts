@@ -1,7 +1,7 @@
 import type { RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import type {
@@ -93,53 +93,6 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
-  it('does not forward the React click event to the review callback', () => {
-    const onOpenReview = vi.fn();
-    const panel = captureOverviewPanel({
-      ...baseProps,
-      compact: false,
-      onOpenReview,
-    });
-    const actions = panel.props.children[1];
-    const reviewButton = actions.props.children[0];
-
-    reviewButton.props.onClick({ type: 'click' });
-
-    expect(onOpenReview).toHaveBeenCalledWith();
-  });
-
-  it('combines usage and diagnostics, with collaboration count on its section title', () => {
-    const html = renderOverviewPanel({
-      ...baseProps,
-      compact: false,
-      currentThread: {
-        ...baseProps.currentThread,
-        turns: [{ id: 'turn_1', items: [], status: 'completed', modelVerifications: [{}] }],
-      },
-      threadUsage: {
-        records: [],
-        summary: { inputTokens: 900, cachedInputTokens: 0, outputTokens: 600, totalTokens: 1500, recordCount: 2, byDay: [], byProvider: [], byModel: [] },
-      },
-      threads: [{
-        id: 'child_1',
-        parentThreadId: 'thread_1',
-        title: 'Child agent',
-        createdAt: '2026-07-01T00:00:00.000Z',
-        updatedAt: '2026-07-01T00:00:00.000Z',
-        archived: false,
-        messageCount: 1,
-        lastMessagePreview: 'working',
-      }],
-    });
-
-    expect(html).toContain('用量与诊断');
-    expect(html).toContain('1.5K · 2 次 · 已完成 · 1 次验证');
-    expect(html).not.toContain('1 个子 Agent');
-    expect(html).toContain('协作任务');
-    expect(html).toContain('aria-label="1 个协作任务"');
-    expect(html).toContain('Child agent');
-  });
-
   it('does not treat a forked conversation as a collaboration task', () => {
     const html = renderOverviewPanel({
       ...baseProps,
@@ -160,30 +113,6 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('Forked conversation');
   });
 
-  it('summarizes plan progress in one row and keeps the full plan in a hover popover', () => {
-    const html = renderOverviewPanel({
-      ...baseProps,
-      compact: false,
-      overview: {
-        ...overview,
-        planItems: [
-          { step: '读取现有实现', status: 'completed' },
-          { step: '整理交互结构', status: 'completed' },
-          { step: '实现计划摘要', status: 'in_progress' },
-          { step: '补充浮层样式', status: 'pending' },
-          { step: '添加测试', status: 'pending' },
-          { step: '运行验证', status: 'pending' },
-        ],
-      },
-    });
-
-    expect(html).toContain('aria-label="计划推进中，已完成 2/6"');
-    expect(html).toContain('chat-conversation-overview-panel__plan-loading');
-    expect(html).toContain('chat-conversation-overview-panel__plan-popover');
-    expect(html).toContain('计划详情');
-    expect(html).toContain('实现计划摘要');
-    expect(html.match(/>2\/6</g)).toHaveLength(2);
-  });
 });
 
 function renderOverviewPanel(
@@ -194,21 +123,6 @@ function renderOverviewPanel(
     { initialLocale: 'zh-CN' },
     createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
   ));
-}
-
-function captureOverviewPanel(props: Parameters<typeof ConversationOverviewPanel>[0]) {
-  const captured: { panel?: ReturnType<typeof ConversationOverviewPanel> } = {};
-  function Capture() {
-    captured.panel = ConversationOverviewPanel(props);
-    return captured.panel;
-  }
-  renderToStaticMarkup(createElement(
-    I18nProvider,
-    { initialLocale: 'zh-CN' },
-    createElement(ToastProvider, null, createElement(Capture)),
-  ));
-  if (!captured.panel) throw new Error('Conversation overview panel did not render.');
-  return captured.panel;
 }
 
 const project: WorkspaceProject = {

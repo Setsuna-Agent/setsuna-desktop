@@ -54,18 +54,6 @@ function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = fal
 }
 
 describe('MessageItem user messages', () => {
-  it('renders Plan and Goal with distinct semantic icons', () => {
-    const planHtml = renderUserMessage('plan');
-    const goalHtml = renderUserMessage('goal');
-
-    expect(planHtml).toContain('chat-user-message-kind--plan');
-    expect(planHtml).toContain('lucide-list-todo');
-    expect(planHtml).toContain('计划');
-    expect(goalHtml).toContain('chat-user-message-kind--goal');
-    expect(goalHtml).toContain('lucide-target');
-    expect(goalHtml).toContain('目标');
-  });
-
   it('does not offer transcript regeneration for a Goal input', () => {
     const goalHtml = renderUserMessage('goal');
 

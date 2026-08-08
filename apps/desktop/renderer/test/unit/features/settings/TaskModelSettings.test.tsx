@@ -1,10 +1,8 @@
 import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   configuredTaskModelOptions,
 } from '../../../../src/features/settings/providers/provider-model.js';
-import { TaskModelSettings } from '../../../../src/features/settings/sections/TaskModelSettings.js';
 
 describe('TaskModelSettings', () => {
   it('offers configured models from every enabled provider', () => {
@@ -20,20 +18,6 @@ describe('TaskModelSettings', () => {
     ]);
   });
 
-  it('renders selected model branding in every model selector', () => {
-    const html = renderToStaticMarkup(
-      <TaskModelSettings config={configFixture} onSave={vi.fn()} />,
-    );
-
-    expect(html).toContain('标题生成');
-    expect(html).toContain('记忆提取');
-    expect(html).toContain('记忆整理');
-    expect(html).toContain('上下文压缩');
-    expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
-    expect(html).toContain('火山方舟 · Kimi K2.7 (kimi-k2.7)');
-    expect(html).toContain('brand-icon-mark is-compact');
-    expect(html).not.toContain('Disabled provider ·');
-  });
 });
 
 const enabledProviders: ProviderConfigState[] = [

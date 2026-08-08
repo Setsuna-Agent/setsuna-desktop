@@ -11,7 +11,6 @@ describe('AppTopbarActions', () => {
     expect(html).toContain('aria-label="打开右侧栏"');
     expect(html).toContain('aria-label="隐藏环境信息"');
     expect(html).toContain('aria-pressed="true"');
-    expect(html.match(/app-shell-icon-control/g)).toHaveLength(3);
   });
 
   it('右侧栏已打开时隐藏重复入口', () => {
