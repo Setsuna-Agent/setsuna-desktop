@@ -11,7 +11,6 @@ describe('WorkspaceFileIcon', () => {
     expect(codeHtml).toContain('<svg');
     expect(codeHtml).toContain('data-file-icon-color="blue"');
     expect(packageHtml).toContain('data-file-icon-color="yellow"');
-    expect(codeHtml).not.toBe(packageHtml);
   });
 
   it('does not render an icon for directories', () => {

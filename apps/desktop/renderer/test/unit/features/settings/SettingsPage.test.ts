@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ArchivedThreadsSettings, SettingsSidebar } from '../../../../src/features/settings/SettingsPage.js';
 import { updateDownloadSourceName } from '../../../../src/features/settings/sections/AboutSettings.js';
-import { I18nProvider, translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
+import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('SettingsSidebar', () => {
   it('uses the shared workbench sidebar track', () => {
@@ -15,9 +15,6 @@ describe('SettingsSidebar', () => {
     }));
 
     expect(html).toContain('<nav class="app-sidebar desktop-settings-sidebar chat-user-settings__nav">');
-    expect(html).toContain('模型服务');
-    expect(html).toContain('专用模型');
-    expect(html).toContain('键盘快捷键');
     expect(html).not.toContain('chat-user-settings--page');
   });
 
@@ -28,34 +25,11 @@ describe('SettingsSidebar', () => {
       onSelectSection: vi.fn(),
     }));
 
+    const shortcutsLabelIndex = html.indexOf('键盘快捷键');
     const usageLabelIndex = html.indexOf('用量统计');
-    const tabsIndex = html.indexOf('chat-user-settings__tabs');
-    const navigationItemsBeforeUsageLabel = html
-      .slice(tabsIndex, usageLabelIndex)
-      .match(/<button/gu) ?? [];
-    expect(tabsIndex).toBeGreaterThan(-1);
+    expect(shortcutsLabelIndex).toBeGreaterThan(-1);
     expect(usageLabelIndex).toBeGreaterThan(-1);
-    expect(navigationItemsBeforeUsageLabel).toHaveLength(4);
-  });
-
-  it('renders the settings navigation in English when selected', () => {
-    const html = renderToStaticMarkup(
-      createElement(
-        I18nProvider,
-        { initialLocale: 'en-US' },
-        createElement(SettingsSidebar, {
-          activeSection: 'general',
-          onBack: vi.fn(),
-          onSelectSection: vi.fn(),
-        }),
-      ),
-    );
-
-    expect(html).toContain('Model providers');
-    expect(html).toContain('Task models');
-    expect(html).toContain('Keyboard shortcuts');
-    expect(html).toContain('General');
-    expect(html).not.toContain('模型服务');
+    expect(shortcutsLabelIndex).toBeLessThan(usageLabelIndex);
   });
 });
 

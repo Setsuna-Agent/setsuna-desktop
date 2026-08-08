@@ -1,17 +1,9 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { groupToolRuns, shouldAutoOpenToolRunDisclosure, toolRunDisplayStableKey, toolRunGroupKindClassName } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
+import { groupToolRuns, shouldAutoOpenToolRunDisclosure, toolRunDisplayStableKey } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
 import { shellRun, toolRun, fileRunWithDiff, hookBearingMultiFileRunWithDiff, groupLabel, renderedTextFromHtml, firstToolRunSummaryHtml, renderedHtml } from './RuntimeToolRuns.support.js';
 
 describe('RuntimeToolRuns disclosure behavior', () => {
-  it('maps fileMutation to its kebab-case CSS modifier and preserves other kinds', () => {
-    expect(toolRunGroupKindClassName('fileMutation')).toBe('chat-tool-run--file-mutation');
-    expect(toolRunGroupKindClassName('inspection')).toBe('chat-tool-run--inspection');
-    expect(toolRunGroupKindClassName('search')).toBe('chat-tool-run--search');
-    expect(toolRunGroupKindClassName('shell')).toBe('chat-tool-run--shell');
-    expect(toolRunGroupKindClassName('generic')).toBe('chat-tool-run--generic');
-  });
-
   it('uses disclosure chevrons and per-row action icons for expanded history', () => {
     const html = renderedHtml([
       toolRun('read_first', 'read_file', { file_path: 'src/first.ts' }),

@@ -49,7 +49,7 @@ const reviewSourceLabelKeys: Record<DesktopReviewSource, MessageKey> = {
 };
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
-export function reviewSourceLabel(source: DesktopReviewSource, t: Translate = defaultTranslate): string {
+function reviewSourceLabel(source: DesktopReviewSource, t: Translate = defaultTranslate): string {
   return t(reviewSourceLabelKeys[source]);
 }
 
