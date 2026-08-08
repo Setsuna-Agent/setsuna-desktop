@@ -60,8 +60,8 @@ describe('capabilities plugin components', () => {
           skills: [{ id: 'docs-plugin.skill', name: 'Docs Skill', description: 'Read project documentation.' }],
           mcpServers: [{ key: 'docs_server', label: 'Docs Server', description: 'Search project documentation.', transport: 'streamableHttp' }],
           hooks: [],
-          resources: [],
-          capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 0 },
+          resources: [{ id: 'docs-guide', label: 'Docs Guide', path: 'resources/guide.md', size: 1024 }],
+          capabilities: { skills: 1, mcpServers: 1, hooks: 0, resources: 1 },
           installed: false,
           updateAvailable: false,
         }}
@@ -76,6 +76,7 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('Search project documentation.');
     expect(html).toMatch(/aria-label="[^"]*Docs Skill[^"]*"/u);
     expect(html).toMatch(/aria-label="[^"]*Docs Server[^"]*"/u);
+    expect(html).toMatch(/aria-label="[^"]*Docs Guide[^"]*"/u);
   });
 
   it('offers an update for an installed marketplace plugin with a newer bundled version', () => {

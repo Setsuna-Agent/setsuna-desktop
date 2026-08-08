@@ -1,7 +1,7 @@
 import { temporaryWorkspaceProjectId, type WorkspaceFileRead, type WorkspaceProject } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   WorkspaceFilePreviewContent,
   WorkspaceOverviewPanel,
@@ -29,6 +29,19 @@ describe('WorkspaceFilePreviewContent', () => {
     expect(html).not.toContain('desktop-code-line');
   });
 
+  it('renders text files through the shared code-preview surface', () => {
+    const html = renderWorkspaceFilePreview({
+      file: {
+        ...workspaceFile({ kind: 'text' }),
+        content: 'const ready = true;',
+        path: 'src/example.ts',
+      },
+    });
+
+    expect(html).toContain('desktop-code-editor__pierre');
+    expect(html).toContain('const ready = true;');
+  });
+
   it('identifies text previews that are incomplete after the full-file budget', () => {
     const html = renderWorkspaceFilePreview({
       file: {
@@ -46,6 +59,27 @@ describe('WorkspaceFilePreviewContent', () => {
 });
 
 describe('WorkspaceOverviewPanel', () => {
+  it('routes the side-chat and browser actions to their handlers', () => {
+    const onOpenSideChat = vi.fn();
+    const onOpenBrowser = vi.fn();
+    const panel = captureWorkspaceOverviewPanel({
+      activeProject: project,
+      latestReviewSummary: null,
+      onOpenBrowser,
+      onOpenFilesPanel: () => undefined,
+      onOpenReviewPanel: () => undefined,
+      onOpenSideChat,
+      onOpenTerminalPanel: () => undefined,
+    });
+    const actions = panel.props.children.props.children;
+
+    actions[3].props.onClick();
+    actions[4].props.onClick();
+
+    expect(onOpenSideChat).toHaveBeenCalledOnce();
+    expect(onOpenBrowser).toHaveBeenCalledOnce();
+  });
+
   it('shows conversation debug only when the developer action is provided', () => {
     const baseProps: WorkspaceOverviewProps = {
       activeProject: project,

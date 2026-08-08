@@ -1,8 +1,31 @@
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  DesktopPanelHeader,
   panelDragPreviewPosition,
   panelLauncherMenuPosition,
 } from '../../../../src/features/workspace/DesktopPanelHeader.js';
+
+describe('DesktopPanelHeader browser tabs', () => {
+  it('keeps browser pages in the shared tab and launcher path', () => {
+    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
+      activePanel: 'browser',
+      activePanelId: 'browser-1',
+      availablePanelTypes: ['browser'],
+      onClose: () => undefined,
+      onClosePanel: () => undefined,
+      onOpenPanel: () => undefined,
+      onSelectPanel: () => undefined,
+      panels: [{ id: 'browser-1', type: 'browser', title: 'Example' }],
+      placement: 'side',
+    }));
+
+    expect(html).toContain('data-desktop-panel-tab-id="browser-1"');
+    expect(html).toContain('title="Example"');
+    expect(html).toContain('aria-label="添加面板"');
+  });
+});
 
 describe('DesktopPanelHeader launcher menu positioning', () => {
   it('opens the menu to the right from the launcher', () => {

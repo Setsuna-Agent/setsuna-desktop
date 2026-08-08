@@ -12,6 +12,8 @@ describe('SidebarThreadRow', () => {
 
     expect(html).toContain('is-running');
     expect(html).toContain('aria-label="对话进行中"');
+    expect(html).toContain('aria-label="归档对话"');
+    expect(html).not.toContain('aria-label="对话操作"');
   });
 
   it('keeps the explicit current-thread running state as a snapshot race fallback', () => {

@@ -1,5 +1,8 @@
 import type { ProviderModelConfig } from '@setsuna-desktop/contracts';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { ProviderModelReplacementDialog } from '../../../../src/features/settings/ProviderModelReplacementDialog.js';
 import {
   providerModelListsEqual,
   providerModelReplacementDecision,
@@ -32,6 +35,21 @@ describe('provider model replacement', () => {
     const next = [model({ id: 'same', name: 'Same', code: 'same-model', supportsImages: true })];
 
     expect(providerModelReplacementDecision(current, next)).toBe('confirm');
+  });
+
+  it('shows both model lists behind an explicit replacement confirmation', () => {
+    const html = renderToStaticMarkup(createElement(ProviderModelReplacementDialog, {
+      providerName: 'Kimi',
+      currentModels: [model({ id: 'old', name: 'Old', code: 'old-model' })],
+      nextModels: [model({ id: 'new', name: 'New', code: 'new-model' })],
+      onCancel: () => undefined,
+      onConfirm: () => undefined,
+    }));
+
+    expect(html).toContain('old-model');
+    expect(html).toContain('new-model');
+    expect(html).toContain('确认替换');
+    expect(html).toContain('保留当前配置');
   });
 });
 
