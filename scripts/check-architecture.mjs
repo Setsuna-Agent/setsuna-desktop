@@ -41,6 +41,7 @@ const rendererRoot = layerRoots.get('renderer');
 const rendererAppServerPath = '/v1/swe/app-server';
 const productionEntrypoints = new Set([
   path.join(repositoryRoot, 'packages/contracts/src/index.ts'),
+  path.join(repositoryRoot, 'packages/desktop-runtime/src/cli.ts'),
   path.join(repositoryRoot, 'packages/desktop-runtime/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/main/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/preload/src/index.ts'),

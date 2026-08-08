@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { WebviewTag } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -42,6 +42,30 @@ describe('BrowserPanel interactions', () => {
     expect(screen.getByRole('menuitem', { name: 'Reset zoom' }).textContent).toBe('100%');
     expect(screen.getByText('Could not change the current page zoom')).toBeTruthy();
   });
+
+  it('waits for webview registration before reporting device emulation failures', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const registerTab = vi.fn(async () => true);
+    const setDeviceEmulation = vi.fn(async () => true);
+    installBrowserBridge({ registerTab, setDeviceEmulation });
+    renderBrowserPanel();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Browser menu' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Show device toolbar' }));
+
+    expect(screen.getByRole('toolbar', { name: 'Device toolbar' })).toBeTruthy();
+    expect(setDeviceEmulation).not.toHaveBeenCalled();
+    expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
+
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    Object.assign(webview, { getWebContentsId: () => 42 });
+    webview.dispatchEvent(new Event('dom-ready'));
+
+    await waitFor(() => expect(registerTab).toHaveBeenCalledWith('browser-interaction', 42));
+    await waitFor(() => expect(setDeviceEmulation).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText('Device emulation could not be applied; the page will keep its current settings')).toBeNull();
+  });
 });
 
 function renderBrowserPanel() {
@@ -72,4 +96,24 @@ function installZoomMethods(setZoomFactor: (value: number) => void): WebviewTag 
     setZoomFactor,
   });
   return webview;
+}
+
+function installBrowserBridge({
+  registerTab,
+  setDeviceEmulation,
+}: {
+  registerTab: (tabId: string, webContentsId: number) => Promise<boolean>;
+  setDeviceEmulation: (tabId: string, deviceEmulation: unknown) => Promise<boolean>;
+}): void {
+  Object.defineProperty(window, 'setsunaDesktop', {
+    configurable: true,
+    value: {
+      browser: {
+        registerTab,
+        setActiveTab: vi.fn(async () => undefined),
+        setDeviceEmulation,
+        unregisterTab: vi.fn(async () => undefined),
+      },
+    },
+  });
 }

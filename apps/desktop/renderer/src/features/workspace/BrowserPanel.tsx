@@ -295,6 +295,7 @@ function BrowserWebview({
 }) {
   const { t } = useI18n();
   const nodeRef = useRef<WebviewTag | null>(null);
+  const registeredRef = useRef(false);
   const deviceEmulationRef = useRef(tab.deviceEmulation);
   deviceEmulationRef.current = tab.deviceEmulation;
 
@@ -354,15 +355,27 @@ function BrowserWebview({
   useEffect(() => {
     const node = nodeRef.current;
     if (!node) return undefined;
+    let disposed = false;
     let registeredWebContentsId: number | null = null;
     const register = () => {
       try {
         const webContentsId = node.getWebContentsId();
         if (!Number.isSafeInteger(webContentsId) || webContentsId <= 0) return;
         registeredWebContentsId = webContentsId;
-        void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId).then((registered) => {
-          if (!registered) return;
-          return applyBrowserDeviceEmulation(tab.id, deviceEmulationRef.current);
+        void window.setsunaDesktop?.browser.registerTab(tab.id, webContentsId).then(async (registered) => {
+          if (!registered || disposed) return;
+          registeredRef.current = true;
+          const deviceEmulation = deviceEmulationRef.current;
+          try {
+            const applied = await applyBrowserDeviceEmulation(tab.id, deviceEmulation);
+            if (!disposed && deviceEmulation.enabled && !applied) {
+              onDeviceEmulationFailure();
+            }
+          } catch (error) {
+            if (!disposed && deviceEmulation.enabled) {
+              onDeviceEmulationFailure(error);
+            }
+          }
         }).catch(() => undefined);
       } catch {
         // webview 可能尚未附加；dom-ready 时会重试注册。
@@ -371,14 +384,17 @@ function BrowserWebview({
     node.addEventListener('dom-ready', register);
     register();
     return () => {
+      disposed = true;
+      registeredRef.current = false;
       node.removeEventListener('dom-ready', register);
       if (registeredWebContentsId !== null) {
         void window.setsunaDesktop?.browser.unregisterTab(tab.id, registeredWebContentsId);
       }
     };
-  }, [tab.id]);
+  }, [onDeviceEmulationFailure, tab.id]);
 
   useEffect(() => {
+    if (!registeredRef.current) return;
     void applyBrowserDeviceEmulation(tab.id, tab.deviceEmulation)
       .then((applied) => {
         if (tab.deviceEmulation.enabled && !applied) {

@@ -43,7 +43,7 @@
 
 - 改窗口、IPC、本机能力：先看 `apps/desktop/main/src/index.ts`、对应 main 模块、`apps/desktop/preload/src/index.ts`，再补 renderer 类型/调用。
 - 改 runtime REST API：同步改 `packages/contracts/src/http.ts`、`apps/desktop/renderer/src/services/runtime-client/client.ts`、`packages/desktop-runtime/src/server/runtime-rest-routes.ts` 和相关测试。
-- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/json-thread-store.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeEvents.ts`。
+- 改线程事件或消息投影：同步看 `packages/contracts/src/events.ts`、`packages/contracts/src/thread-events.ts`、`packages/contracts/src/thread-event-projection.ts`、`packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts`、`packages/desktop-runtime/src/adapters/store/legacy-json-thread-reader.ts`、`apps/desktop/renderer/src/services/runtime-client/runtimeEvents.ts`。
 - 改 agent 行为：从 `packages/desktop-runtime/src/loop/core/agent-loop.ts` 入手，再按 `context/lifecycle/memory/tools` 找对应 coordinator；保持事件先落盘再发布，注意取消、审批、usage、memory 和 context compaction。
 - 改本地工具：优先走 `ToolHost` 抽象，重点看 `packages/desktop-runtime/src/adapters/tool/pc-local/`、approval/preview 流程和对应测试。
 - 改模型供应商：先看 `ConfiguredModelClient` 和具体 provider client；HTTP/SSE、消息转换、usage、replay 分别放在 `provider-http.ts`、`provider-stream.ts`、`*-provider-messages.ts`、`provider-usage.ts`、`provider-replay-debug.ts`，模型列表看 `model-discovery.ts`，再按需更新设置页和 contract。
