@@ -1,11 +1,16 @@
 import type {
   RuntimeGeneratedMessageAttachment,
+  RuntimeInlineMessageAttachment,
   RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { ChatMessageAttachments } from '../../../../../src/features/chat/conversation/ChatMessageAttachments.js';
+import {
+  chatImageGalleryColumns,
+  chatImageGalleryWidth,
+} from '../../../../../src/features/chat/conversation/ChatMessageImageGallery.js';
 import { ChatThreadProvider } from '../../../../../src/features/chat/conversation/ChatThreadProvider.js';
 
 const storedImageAttachment: RuntimeStoredMessageAttachment = {
@@ -18,6 +23,37 @@ const storedImageAttachment: RuntimeStoredMessageAttachment = {
 };
 
 describe('chat attachment cards', () => {
+  it('keeps the balanced gallery boundaries', () => {
+    expect([1, 2, 3, 4, 5].map(chatImageGalleryColumns)).toEqual([1, 2, 3, 2, 3]);
+    expect([
+      chatImageGalleryWidth(1, 'user'),
+      chatImageGalleryWidth(1, 'assistant'),
+      chatImageGalleryWidth(2, 'user'),
+      chatImageGalleryWidth(3, 'assistant'),
+    ]).toEqual(['min(220px, 52vw)', '360px', '360px', '544px']);
+  });
+
+  it('wires multiple images into one two-column preview gallery', () => {
+    const images: RuntimeInlineMessageAttachment[] = [1, 2].map((index) => ({
+      id: `generated_${index}`,
+      name: `generated-${index}.png`,
+      type: 'image/png',
+      size: 4,
+      url: 'data:image/png;base64,AA==',
+    }));
+
+    const html = renderToStaticMarkup(
+      <ToastProvider>
+        <ChatMessageAttachments attachments={images} variant="assistant" />
+      </ToastProvider>,
+    );
+
+    expect(html).toContain('chat-image-gallery--multiple');
+    expect(html).toContain('--chat-image-gallery-columns:2');
+    expect(html).toContain('--chat-image-gallery-width:360px');
+    expect(html.match(/class="ant-image-img/g)).toHaveLength(2);
+  });
+
   it('renders generated asset references without requiring persisted Base64 data', () => {
     const generated: RuntimeGeneratedMessageAttachment = {
       id: 'generated_1',
@@ -53,5 +89,4 @@ describe('chat attachment cards', () => {
     expect(html).toContain('chat-message-image__placeholder');
     expect(html).not.toContain('chat-user-message-file');
   });
-
 });
