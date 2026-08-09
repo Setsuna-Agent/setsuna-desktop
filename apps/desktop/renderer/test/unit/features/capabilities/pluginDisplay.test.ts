@@ -1,7 +1,8 @@
-import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
+import type { RuntimePluginMarketplaceItem, RuntimePluginSummary } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   formatPluginFileSize,
+  installedPluginsOutsideCatalog,
   mergePluginHooks,
   mergePluginMcpServers,
   mergePluginSkills,
@@ -13,6 +14,17 @@ import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvi
 const en: Translate = (key, params) => translate('en-US', key, params);
 
 describe('plugin display helpers', () => {
+  it('keeps installed marketplace plugins reachable after they leave the catalog', () => {
+    const current = installedPlugin({ id: 'current', installationSource: 'marketplace' });
+    const orphaned = installedPlugin({ id: 'orphaned', installationSource: 'marketplace' });
+    const local = installedPlugin({ id: 'local', installationSource: 'local' });
+
+    expect(installedPluginsOutsideCatalog(
+      [current, orphaned, local],
+      [marketplacePlugin({ id: 'current', name: 'Current' })],
+    ).map((plugin) => plugin.id)).toEqual(['orphaned', 'local']);
+  });
+
   it('keeps marketplace descriptions while adding installed MCP ownership', () => {
     expect(mergePluginSkills(
       [{ id: 'demo.docs', name: 'Docs', description: 'Marketplace description' }],
@@ -100,6 +112,21 @@ function marketplacePlugin(
     capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
     installed: false,
     updateAvailable: false,
+    ...input,
+  };
+}
+
+function installedPlugin(
+  input: Pick<RuntimePluginSummary, 'id'> & Partial<RuntimePluginSummary>,
+): RuntimePluginSummary {
+  return {
+    name: input.id,
+    installedAt: '2026-08-09T00:00:00.000Z',
+    skills: [],
+    mcpServers: [],
+    hooks: [],
+    hookCount: 0,
+    resources: [],
     ...input,
   };
 }

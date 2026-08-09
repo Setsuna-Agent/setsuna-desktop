@@ -19,6 +19,15 @@ export type PluginMarketplaceSection = {
   plugins: RuntimePluginMarketplaceItem[];
 };
 
+export function installedPluginsOutsideCatalog(
+  installedPlugins: RuntimePluginSummary[],
+  marketplacePlugins: RuntimePluginMarketplaceItem[],
+): RuntimePluginSummary[] {
+  const catalogIds = new Set(marketplacePlugins.map((plugin) => plugin.id));
+  return installedPlugins.filter((plugin) =>
+    plugin.installationSource !== 'marketplace' || !catalogIds.has(plugin.id));
+}
+
 export function pluginMarketplacePresentation(
   plugins: RuntimePluginMarketplaceItem[],
   t: Translate = defaultTranslate,

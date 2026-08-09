@@ -232,6 +232,35 @@ describe('extension manager', () => {
     }
   });
 
+  it('marks an idle worker that exits after activation as failed', async () => {
+    const fixture = await extensionFixture({ exitAfterActivation: true });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+
+    try {
+      await expect(manager.listTools({ threadId: 'thread_1' })).resolves.not.toEqual([]);
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      await expect(manager.listStatuses()).resolves.toMatchObject({
+        extensions: [{
+          pluginId: 'worker-demo',
+          state: 'failed',
+          error: 'Extension worker exited unexpectedly.',
+        }],
+      });
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('rechecks the exact bundle hash immediately before each tool execution', async () => {
     const fixture = await extensionFixture();
     const manager = testManager(
@@ -278,6 +307,7 @@ describe('extension manager', () => {
 });
 
 async function extensionFixture(options: {
+  exitAfterActivation?: boolean;
   failFirstActivation?: boolean;
   includeDelayedUiTool?: boolean;
 } = {}): Promise<{
@@ -304,6 +334,7 @@ if (existsSync(${JSON.stringify(failOncePath)})) {
 
 export default function activate(api) {
   console.log('extension activated');
+  ${options.exitAfterActivation ? 'setTimeout(() => process.exit(17), 50);' : ''}
   api.registerTool({
     name: 'echo',
     description: 'Echo a value and update state.',

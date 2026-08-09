@@ -92,6 +92,27 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('updates extension trust on a legacy marketplace record without re-entering the index lock', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-trust-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      extensionScript: 'export default function activate() {}\n',
+    });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('worker');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(runtime.plugins.setExtensionTrust('worker', false)).resolves.toMatchObject({
+      plugins: [{
+        id: 'worker',
+        installationSource: 'marketplace',
+        extension: { trust: 'untrusted' },
+      }],
+    });
+  });
+
   it('does not migrate a legacy local bundle that only shares a marketplace id', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-local-'));
     const catalogDir = path.join(root, 'catalog');

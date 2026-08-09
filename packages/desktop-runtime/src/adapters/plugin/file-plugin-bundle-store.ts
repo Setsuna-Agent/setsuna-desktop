@@ -614,7 +614,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 
   async setExtensionTrust(pluginId: string, trusted: boolean): Promise<RuntimePluginList> {
-    return withFileStateUpdate(this.indexPath, async () => {
+    await withFileStateUpdate(this.indexPath, async () => {
       const id = normalizePluginId(pluginId);
       const index = await this.readIndex();
       const plugin = index.plugins.find((item) => item.id === id);
@@ -648,11 +648,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
           version: 1,
           plugins: index.plugins.map((item) => item.id === id ? { ...item, extension } : item),
         } satisfies PluginIndexFile);
-        return this.listPlugins();
       } finally {
         await finishRuntimeMutation();
       }
     });
+    // listPlugins may migrate legacy marketplace provenance and therefore take
+    // the same index lock. Project the result only after the mutation releases it.
+    return this.listPlugins();
   }
 
   async readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead> {

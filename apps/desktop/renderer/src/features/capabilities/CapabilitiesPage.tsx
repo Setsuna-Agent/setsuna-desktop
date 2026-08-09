@@ -48,6 +48,7 @@ import { CapabilitiesLegacyHooksDetail } from './CapabilitiesLegacyHooksDetail.j
 import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
+import { installedPluginsOutsideCatalog } from './pluginDisplay.js';
 import { CapabilitiesMcpEditor } from './mcp/CapabilitiesMcpEditor.js';
 import {
   emptyMcpDraft,
@@ -202,7 +203,7 @@ export function CapabilitiesPage({
   const selectedInstalledPlugin = selectedPluginId
     ? plugins.find((plugin) => plugin.id === selectedPluginId)
     : undefined;
-  const localPlugins = plugins.filter((plugin) => plugin.installationSource !== 'marketplace');
+  const localPlugins = installedPluginsOutsideCatalog(plugins, pluginMarketplace);
   const selectedMarketplacePlugin = selectedInstalledPlugin && selectedInstalledPlugin.installationSource !== 'marketplace'
     ? undefined
     : selectedPluginId

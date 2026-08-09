@@ -89,6 +89,12 @@ export class ExtensionWorkerClient {
       },
     );
     this.child = child;
+    child.stdin.on('error', (error) => {
+      // Pipe failures such as EPIPE are emitted asynchronously, after write()
+      // has already returned. Keep the listener during shutdown as well so an
+      // expected late failure never becomes an uncaught stream error.
+      if (this.child === child && !this.stopping) this.fail(error);
+    });
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => this.consumeStdout(chunk));

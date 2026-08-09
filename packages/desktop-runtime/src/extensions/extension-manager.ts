@@ -172,6 +172,10 @@ export class ExtensionManager implements ExtensionRuntime {
       const active = this.active.get(plugin.id);
       if (!active) continue;
       try {
+        if (!active.client.isRunning()) {
+          await this.markFailed(plugin.id, new Error('Extension worker exited unexpectedly.'), active.client);
+          continue;
+        }
         const bundle = await inspectBundleTree(plugin.installPath);
         if (!plugin.extension?.trustedHash || plugin.extension.trustedHash !== bundle.bundleHash) {
           await this.stopActive(plugin.id);
