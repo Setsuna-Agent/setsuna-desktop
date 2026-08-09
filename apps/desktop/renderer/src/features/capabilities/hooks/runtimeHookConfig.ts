@@ -67,12 +67,9 @@ function remapHookStateKey(
   location: HookConfigLocation,
   removesGroup: boolean,
 ): string | null {
-  const prefix = `${location.sourcePath}:${location.eventKeyLabel}:`;
-  if (!key.startsWith(prefix)) return key;
-  const match = key.slice(prefix.length).match(/^(\d+):(\d+)$/u);
-  if (!match) return key;
-  const groupIndex = Number(match[1]);
-  const handlerIndex = Number(match[2]);
+  const parsed = parseHookStateKey(key);
+  if (!parsed || parsed.eventKeyLabel !== location.eventKeyLabel) return key;
+  const { groupIndex, handlerIndex, prefix } = parsed;
 
   if (removesGroup) {
     if (groupIndex === location.groupIndex) return null;
@@ -85,6 +82,27 @@ function remapHookStateKey(
   return handlerIndex > location.handlerIndex
     ? `${prefix}${groupIndex}:${handlerIndex - 1}`
     : key;
+}
+
+function parseHookStateKey(key: string): {
+  eventKeyLabel: string;
+  groupIndex: number;
+  handlerIndex: number;
+  prefix: string;
+} | null {
+  const parts = key.split(':');
+  if (parts.length < 4) return null;
+  const handlerIndex = Number(parts.at(-1));
+  const groupIndex = Number(parts.at(-2));
+  const eventKeyLabel = parts.at(-3);
+  const sourcePath = parts.slice(0, -3).join(':');
+  if (!Number.isInteger(groupIndex) || !Number.isInteger(handlerIndex) || !eventKeyLabel || !sourcePath) return null;
+  return {
+    eventKeyLabel,
+    groupIndex,
+    handlerIndex,
+    prefix: `${sourcePath}:${eventKeyLabel}:`,
+  };
 }
 
 function hookConfigEventName(hook: RuntimeHookMetadata): RuntimeHookEventName {

@@ -12,7 +12,12 @@ import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
 
 type MarketplaceBundleStore = Pick<
   PluginBundleStore,
-  'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent' | 'updatePlugin'
+  | 'inspectPlugin'
+  | 'installPlugin'
+  | 'listPlugins'
+  | 'migrateLegacyMarketplaceInstallations'
+  | 'readBundleItemContent'
+  | 'updatePlugin'
 >;
 
 /** 暴露应用内置的精选插件，同时不向渲染进程泄露其文件系统位置。 */
@@ -23,10 +28,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
   ) {}
 
   async listPlugins(): Promise<RuntimePluginMarketplaceList> {
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const installedById = new Map(installedPlugins.map((plugin) => [plugin.id, plugin]));
     const errors = [...catalog.errors];
     const plugins = catalog.plugins
@@ -67,10 +69,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     itemId: string,
   ): Promise<RuntimePluginItemContent> {
     const id = pluginId.trim().toLowerCase();
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
@@ -82,10 +81,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
 
   async installPlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
@@ -101,10 +97,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
 
   async updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
@@ -119,6 +112,19 @@ export class FilePluginMarketplace implements PluginMarketplace {
       { path: plugin.sourcePath },
       { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
     );
+  }
+
+  private async readCatalogState(): Promise<{
+    catalog: { plugins: PluginBundleInspection[]; errors: string[] };
+    installedPlugins: Awaited<ReturnType<MarketplaceBundleStore['listPlugins']>>['plugins'];
+  }> {
+    const catalog = await this.readCatalog();
+    // Legacy records predate installationSource. Only reclaim records whose
+    // stored source is the exact controlled catalog bundle, preserving local
+    // bundles that merely reuse a marketplace id.
+    await this.bundles.migrateLegacyMarketplaceInstallations(catalog.plugins);
+    const { plugins: installedPlugins } = await this.bundles.listPlugins();
+    return { catalog, installedPlugins };
   }
 
   private async readCatalog(): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {

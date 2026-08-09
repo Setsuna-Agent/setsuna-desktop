@@ -1,6 +1,6 @@
 # 可执行扩展 API v1
 
-Setsuna 的可执行扩展借鉴了 Pi 一类扩展系统的核心体验：插件可以动态注册工具、订阅 Agent 生命周期、保存隔离状态，并通过受控 UI 与用户交互。但 v1 是 Setsuna 原生协议，不直接兼容 Pi 扩展源码；现有 Pi 扩展需要把注册入口和事件名适配到本文 API。
+Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命周期、保存隔离状态，并通过受控 UI 与用户交互。v1 是 Setsuna 原生协议，不直接兼容任意第三方扩展源码。
 
 可执行扩展属于 Plugin Bundle v2。它与 Skill、MCP、命令 Hook 和资源共用安装事务，但代码只在独立 Node worker 中加载，不进入 runtime 或 renderer 进程。
 
@@ -8,11 +8,11 @@ Setsuna 的可执行扩展借鉴了 Pi 一类扩展系统的核心体验：插�
 
 普通用户通过“插件市场 → 工具与工作流”一键安装 Setsuna 原生扩展，不需要准备本地目录。首批随应用发布：
 
-- 结构化提问（内部 ID `pi-question`）：使用 Setsuna 结构化选择和自由输入实现单问题交互，交互设计参考 Pi 官方 `question.ts`。
-- 任务清单（内部 ID `pi-todo`）：通过 thread scope Extension State 保存任务，操作语义参考 Pi 官方 `todo.ts`；不包含 `/todos` 命令和分支回放语义。
-- Claude Rules 兼容（内部 ID `pi-claude-rules`）：在 `session.start` 中发现 `.claude/rules` 路径并追加上下文，行为设计参考 Pi 官方 `claude-rules.ts`。
+- 结构化提问：使用 Setsuna 结构化选择和自由输入实现单问题交互。
+- 任务清单：通过 thread scope Extension State 保存任务。
+- Claude Rules 兼容：在 `session.start` 中发现 `.claude/rules` 路径并追加上下文。
 
-三个实现都使用 Setsuna 原生 v1 API。Bundle 源码内保留 `resources/UPSTREAM.md`，仅用于记录设计参考、固定提交和 MIT 许可，不作为市场品牌或用户能力资源。内部 ID 暂时保留以兼容已安装记录；这不代表提供 Pi ABI 或任意第三方扩展兼容层。
+三个实现都使用 Setsuna 原生 v1 API。历史内部 ID 仅为兼容已安装记录而保留，不在产品 UI 中展示。设计参考与第三方许可统一记录在 `plugins/THIRD_PARTY_NOTICES.md`，不再作为插件能力资源。
 
 ## 最小 Bundle
 
@@ -198,7 +198,7 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 
 ## v1 暂不提供
 
-- 任意 Pi API 或第三方包的通用源码级兼容层；内置工具只使用 Setsuna 已审查的 v1 能力子集。
+- 任意第三方扩展 API 或第三方包的通用源码级兼容层；内置工具只使用 Setsuna 已审查的 v1 能力子集。
 - 任意 renderer 组件、主题、快捷键、命令面板或模型 provider 注入。
 - 远程扩展仓库、签名验证、依赖安装脚本和自动更新。
 - OS 级沙箱或按 Node 模块划分的权限系统。

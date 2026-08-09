@@ -209,6 +209,8 @@ describe('capabilities plugin components', () => {
           id: marketplacePlugin.id,
           name: marketplacePlugin.name,
           version: marketplacePlugin.version,
+          publisher: 'Pi ecosystem / Setsuna port',
+          tags: ['Pi'],
           installedAt: '2026-08-09T00:00:00.000Z',
           installationSource: 'marketplace',
           skills: [],
@@ -240,6 +242,8 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('已信任当前包');
     expect(html).not.toContain('撤销运行信任');
     expect(html).not.toContain('信任并允许运行');
+    expect(html).not.toContain('Pi ecosystem');
+    expect(html).not.toContain('>Pi<');
     expect(html).not.toContain('上游来源与兼容说明');
     expect(html).not.toContain('resources/UPSTREAM.md');
   });

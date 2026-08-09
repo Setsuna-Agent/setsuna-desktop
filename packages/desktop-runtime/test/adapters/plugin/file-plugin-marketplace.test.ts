@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -69,11 +69,56 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('migrates marketplace installs created before provenance was persisted', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.0.0' });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('docs');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      errors: [],
+      plugins: [{ id: 'docs', installed: true, installedVersion: '1.0.0' }],
+    });
+
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.1.0' });
+    await expect(marketplace.updatePlugin('docs')).resolves.toMatchObject({
+      plugin: { id: 'docs', version: '1.1.0', installationSource: 'marketplace' },
+    });
+  });
+
+  it('does not migrate a legacy local bundle that only shares a marketplace id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-local-'));
+    const catalogDir = path.join(root, 'catalog');
+    const localDir = path.join(root, 'local');
+    await Promise.all([
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Local Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
+    });
+  });
+
   it('does not conflate a local plugin with a bundled plugin that has the same id', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-local-conflict-'));
     const catalogDir = path.join(root, 'catalog');
     await createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' });
-    const runtime = await createPluginRuntime(root);
+    const runtime = await createPluginRuntime(root, catalogDir);
     const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
 
     const installed = await runtime.plugins.installPlugin({ path: path.join(catalogDir, 'docs') });
@@ -219,7 +264,7 @@ describe('file plugin marketplace', () => {
   });
 });
 
-async function createPluginRuntime(root: string) {
+async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
   const dataDir = path.join(root, 'runtime');
   const builtinDir = path.join(root, 'builtin-skills');
   await mkdir(builtinDir, { recursive: true });
@@ -233,6 +278,7 @@ async function createPluginRuntime(root: string) {
     { invalidateServer: vi.fn(async () => undefined) },
     config,
     systemClock,
+    bundledPluginsDir,
   );
   return { config, plugins };
 }
@@ -311,4 +357,13 @@ async function createCatalogPlugin(
       capabilities: ['tools', 'events'],
     },
   }, null, 2));
+}
+
+async function removePersistedInstallationSource(indexPath: string): Promise<void> {
+  const index = JSON.parse(await readFile(indexPath, 'utf8')) as {
+    version: number;
+    plugins: Array<Record<string, unknown>>;
+  };
+  for (const plugin of index.plugins) delete plugin.installationSource;
+  await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
 }

@@ -113,14 +113,22 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
   const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpConnections);
-  const pluginStore = new FilePluginBundleStore(runtimeDataDir, fileSkillRegistry, mcpStore, mcpConnections, configStore, clock);
+  const builtinPluginsDir =
+    options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
+  const pluginStore = new FilePluginBundleStore(
+    runtimeDataDir,
+    fileSkillRegistry,
+    mcpStore,
+    mcpConnections,
+    configStore,
+    clock,
+    builtinPluginsDir,
+  );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
   const extensionState = new FileExtensionStateStore(runtimeDataDir);
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi);
   pluginStore.setRuntimeMutationCoordinator(extensionManager);
-  const builtinPluginsDir =
-    options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
   const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
   const workspaceSearchEngine = createWorkspaceSearchEngine({
     ripgrepPath: options.ripgrepPath,

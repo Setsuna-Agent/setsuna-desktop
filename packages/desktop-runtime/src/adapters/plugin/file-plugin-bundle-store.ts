@@ -69,6 +69,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
     private readonly clock: Clock,
+    private readonly bundledPluginsDir?: string,
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
     this.pluginsDir = path.join(dataDir, 'plugins');
@@ -79,6 +80,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 
   async listPlugins(): Promise<RuntimePluginList> {
+    await this.migrateConfiguredLegacyMarketplaceInstallations();
     const index = await this.readIndex();
     return {
       plugins: await Promise.all(index.plugins.map(async (plugin) => {
@@ -96,6 +98,39 @@ export class FilePluginBundleStore implements PluginBundleStore {
 
   async listInstalledRecords(): Promise<InstalledPluginRecord[]> {
     return (await this.readIndex()).plugins.map(cloneInstalledRecord);
+  }
+
+  async migrateLegacyMarketplaceInstallations(
+    candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>>,
+  ): Promise<void> {
+    if (!candidates.length) return;
+    const sourceById = new Map(candidates.map((candidate) => [normalizePluginId(candidate.id), candidate.sourcePath]));
+    await withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      let changed = false;
+      const plugins = index.plugins.map((plugin) => {
+        const catalogSource = sourceById.get(plugin.id);
+        if (plugin.installationSource || !catalogSource || !samePath(plugin.sourcePath, catalogSource)) return plugin;
+        changed = true;
+        return { ...plugin, installationSource: 'marketplace' as const };
+      });
+      if (changed) {
+        await writeJsonFile(this.indexPath, { version: 1, plugins } satisfies PluginIndexFile);
+      }
+    });
+  }
+
+  private async migrateConfiguredLegacyMarketplaceInstallations(): Promise<void> {
+    const bundledPluginsDir = this.bundledPluginsDir;
+    if (!bundledPluginsDir) return;
+    const index = await this.readIndex();
+    const candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>> = [];
+    for (const plugin of index.plugins) {
+      if (plugin.installationSource) continue;
+      const sourcePath = await requiredBundleDirectory(path.join(bundledPluginsDir, plugin.id)).catch(() => null);
+      if (sourcePath) candidates.push({ id: plugin.id, sourcePath });
+    }
+    await this.migrateLegacyMarketplaceInstallations(candidates);
   }
 
   async inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection> {
@@ -681,6 +716,14 @@ function installedExtensionRecord(
     bundleHash,
     ...(trustedHash ? { trustedHash } : {}),
   };
+}
+
+function samePath(left: string, right: string): boolean {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return process.platform === 'win32'
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
 }
 
 async function readManifestItemContent(

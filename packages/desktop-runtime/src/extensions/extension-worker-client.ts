@@ -222,7 +222,8 @@ export class ExtensionWorkerClient {
       return;
     }
     if (message.type === 'host.request') {
-      void this.handleHostRequest(message.id, message.parentId, message.method, message.params);
+      void this.handleHostRequest(message.id, message.parentId, message.method, message.params)
+        .catch((error) => this.fail(asError(error)));
       return;
     }
     throw new Error(`Unsupported extension worker message: ${record.type}`);
@@ -231,14 +232,32 @@ export class ExtensionWorkerClient {
   private async handleHostRequest(id: string, parentId: string, method: string, params: unknown): Promise<void> {
     const parent = this.pending.get(parentId);
     if (!parent) {
-      this.send({ type: 'host.response', id, ok: false, error: 'Extension parent request is no longer active.' });
+      this.sendHostResponse({
+        type: 'host.response',
+        id,
+        ok: false,
+        error: 'Extension parent request is no longer active.',
+      });
       return;
     }
     try {
       const result = await this.options.onHostRequest(method, params, parent.context);
-      this.send({ type: 'host.response', id, ok: true, result });
+      if (!this.pending.has(parentId)) return;
+      this.sendHostResponse({ type: 'host.response', id, ok: true, result });
     } catch (error) {
-      this.send({ type: 'host.response', id, ok: false, error: asError(error).message });
+      if (!this.pending.has(parentId)) return;
+      this.sendHostResponse({ type: 'host.response', id, ok: false, error: asError(error).message });
+    }
+  }
+
+  private sendHostResponse(message: HostToExtensionWorkerMessage): void {
+    try {
+      this.send(message);
+    } catch (error) {
+      // A host UI request may settle after its parent timed out and killed the
+      // worker. Late replies are stale; live-worker write failures still fail
+      // the client so no request can remain pending indefinitely.
+      if (this.isRunning()) this.fail(asError(error));
     }
   }
 

@@ -65,6 +65,9 @@ export type PluginRuntimeMutationCoordinator = {
 export type PluginBundleStore = {
   listPlugins(): Promise<RuntimePluginList>;
   inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection>;
+  migrateLegacyMarketplaceInstallations(
+    candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>>,
+  ): Promise<void>;
   installPlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
   updatePlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;

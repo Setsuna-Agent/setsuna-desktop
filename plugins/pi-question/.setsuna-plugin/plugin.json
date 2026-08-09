@@ -3,7 +3,7 @@
   "id": "pi-question",
   "name": "结构化提问",
   "icon": "pi-question",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "让模型通过选项和自由输入向用户提出单个结构化问题。",
   "publisher": "Setsuna",
   "tags": ["交互", "工具"],

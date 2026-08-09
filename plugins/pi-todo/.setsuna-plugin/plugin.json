@@ -3,7 +3,7 @@
   "id": "pi-todo",
   "name": "任务清单",
   "icon": "pi-todo",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "让模型在当前会话中添加、查看、完成和清空任务。",
   "publisher": "Setsuna",
   "tags": ["任务", "状态"],

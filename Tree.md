@@ -296,7 +296,7 @@ skills/ — 0 direct / 4 total files
 ### `plugins/`
 
 ```text
-plugins/ — 0 direct / 56 total files
+plugins/ — 1 direct / 54 total files
 ├── audit-file-mutations/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -337,18 +337,15 @@ plugins/ — 0 direct / 56 total files
 │   └── skills/ — 2 files
 │       └── pdf/ — 1 direct / 2 total files
 │           └── agents/ — 1 direct / 1 total files
-├── pi-claude-rules/ — 3 files
+├── pi-claude-rules/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   ├── extension/ — 1 direct / 1 total files
-│   └── resources/ — 1 direct / 1 total files
-├── pi-question/ — 3 files
+│   └── extension/ — 1 direct / 1 total files
+├── pi-question/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   ├── extension/ — 1 direct / 1 total files
-│   └── resources/ — 1 direct / 1 total files
-├── pi-todo/ — 3 files
+│   └── extension/ — 1 direct / 1 total files
+├── pi-todo/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   ├── extension/ — 1 direct / 1 total files
-│   └── resources/ — 1 direct / 1 total files
+│   └── extension/ — 1 direct / 1 total files
 ├── prompt-secret-detector/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files

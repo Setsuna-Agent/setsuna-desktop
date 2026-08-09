@@ -163,6 +163,7 @@ function pluginStoreFixture(): PluginBundleStore {
       capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
       sourcePath: '/tmp/demo',
     })),
+    migrateLegacyMarketplaceInstallations: vi.fn(async () => undefined),
     installPlugin: vi.fn(async () => ({
       plugin: {
         id: 'demo',

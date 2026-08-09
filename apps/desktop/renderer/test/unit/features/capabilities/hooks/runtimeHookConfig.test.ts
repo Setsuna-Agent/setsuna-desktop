@@ -76,4 +76,47 @@ describe('runtime hook config helpers', () => {
       },
     });
   });
+
+  it('rekeys later Hook groups even when their source paths differ', () => {
+    const location = {
+      eventName: 'PreToolUse',
+      eventKeyLabel: 'pre_tool_use',
+      groupIndex: 0,
+      handlerIndex: 0,
+      sourcePath: 'C:\\runtime\\config.json',
+    } as const;
+    const pluginSourcePath = 'C:\\runtime\\plugins\\audit\\.setsuna-plugin\\plugin.json';
+
+    expect(deleteHookFromConfig({
+      PreToolUse: [
+        { matcher: 'shell', hooks: [{ type: 'command', command: 'echo removed' }] },
+        {
+          matcher: 'read_file',
+          hooks: [{
+            type: 'command',
+            command: 'echo plugin',
+            sourcePath: pluginSourcePath,
+            pluginId: 'audit',
+          }],
+        },
+      ],
+      state: {
+        [`${location.sourcePath}:pre_tool_use:0:0`]: { trustedHash: 'removed' },
+        [`${pluginSourcePath}:pre_tool_use:1:0`]: { enabled: false, trustedHash: 'plugin' },
+      },
+    }, location)).toEqual({
+      PreToolUse: [{
+        matcher: 'read_file',
+        hooks: [{
+          type: 'command',
+          command: 'echo plugin',
+          sourcePath: pluginSourcePath,
+          pluginId: 'audit',
+        }],
+      }],
+      state: {
+        [`${pluginSourcePath}:pre_tool_use:0:0`]: { enabled: false, trustedHash: 'plugin' },
+      },
+    });
+  });
 });

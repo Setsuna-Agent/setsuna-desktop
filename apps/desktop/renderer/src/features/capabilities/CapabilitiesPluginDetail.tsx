@@ -85,7 +85,8 @@ export function CapabilitiesPluginDetail({
     && (!installedPlugin || installedPlugin.installationSource === 'marketplace')
     ? marketplacePlugin
     : undefined;
-  const copy = localizedPluginCopy(plugin, t);
+  const displayPlugin = marketplaceMetadata ?? plugin;
+  const copy = localizedPluginCopy(displayPlugin, t);
 
   const tools = mergePluginTools(marketplaceMetadata?.tools ?? [], installedPlugin?.tools ?? []);
   const skills = mergePluginSkills(marketplaceMetadata?.skills ?? [], installedPlugin?.skills ?? []);
@@ -98,7 +99,7 @@ export function CapabilitiesPluginDetail({
   const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
-  const tags = plugin.tags ?? [];
+  const tags = displayPlugin.tags ?? [];
   const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
   const isBundledExtension = Boolean(marketplaceMetadata);
   const installedExtensionTrust = installedPlugin?.extension?.trust;

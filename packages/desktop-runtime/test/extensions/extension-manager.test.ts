@@ -116,6 +116,50 @@ describe('extension manager', () => {
     }
   });
 
+  it('ignores a host UI reply that arrives after its parent request is cancelled', async () => {
+    const fixture = await extensionFixture({ includeDelayedUiTool: true });
+    let resolveUi!: (value: unknown) => void;
+    const delayedUi = new Promise<unknown>((resolve) => {
+      resolveUi = resolve;
+    });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => delayedUi) },
+    );
+    try {
+      const tools = await manager.listTools({ threadId: 'thread_1' });
+      const delayed = tools.find((tool) => tool.localName === 'delayed-ui')!;
+      const abort = new AbortController();
+      const execution = manager.runTool(delayed.name, {}, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        toolCallId: 'call_delayed_ui',
+        signal: abort.signal,
+      });
+      setTimeout(() => abort.abort(new Error('cancelled while waiting for UI')), 30);
+      await expect(execution).rejects.toThrow('cancelled while waiting for UI');
+
+      resolveUi(true);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const restartedTools = await manager.listTools({ threadId: 'thread_1' });
+      const echo = restartedTools.find((tool) => tool.localName === 'echo')!;
+      await expect(manager.runTool(echo.name, { text: 'still-alive' }, {
+        threadId: 'thread_1',
+        turnId: 'turn_2',
+        toolCallId: 'call_echo',
+      })).resolves.toMatchObject({ content: 'thread_1:still-alive:1' });
+    } finally {
+      resolveUi?.(false);
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('honors the plugin feature flag for tool and lifecycle execution', async () => {
     const fixture = await extensionFixture();
     const manager = testManager(
@@ -233,7 +277,10 @@ describe('extension manager', () => {
   });
 });
 
-async function extensionFixture(options: { failFirstActivation?: boolean } = {}): Promise<{
+async function extensionFixture(options: {
+  failFirstActivation?: boolean;
+  includeDelayedUiTool?: boolean;
+} = {}): Promise<{
   activationPath: string;
   entryPath: string;
   record: InstalledPluginRecord;
@@ -291,6 +338,15 @@ export default function activate(api) {
       });
     },
   });
+  ${options.includeDelayedUiTool ? `api.registerTool({
+    name: 'delayed-ui',
+    description: 'Wait for a host UI response.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async execute(_input, context) {
+      const approved = await context.ui.confirm({ title: 'Continue?' });
+      return { content: String(approved) };
+    },
+  });` : ''}
   api.on('prompt.before', (payload) => ({
     input: String(payload.input).toUpperCase(),
     context: ['from extension'],

@@ -1,13 +1,16 @@
-# 任务清单：设计参考与许可说明
+# Third-Party Notices
 
-本插件使用 Setsuna 原生扩展 API 实现，操作语义参考 Pi 官方 `todo.ts` 示例，固定参考提交：
+## Pi extension examples
 
-- Source: <https://github.com/earendil-works/pi/blob/936aff00918de1187f085f123c2812d8f2d67745/packages/coding-agent/examples/extensions/todo.ts>
-- Upstream project: <https://github.com/earendil-works/pi>
+Setsuna's built-in Structured Question, Todo List, and Claude Rules Compatibility plugins run on the Setsuna-native extension API. Their interaction and operation design was informed by, and adapted from, these MIT-licensed Pi examples at commit `936aff00918de1187f085f123c2812d8f2d67745`:
 
-Setsuna 实现：提供 `list`、`add`、`toggle` 和 `clear`；任务通过 Setsuna Extension State 按会话保存。不包含 Pi 的 `/todos` 命令、自定义 TUI renderer 和分支消息回放，因此分叉会话不会自动回到分叉点的任务状态。
+- `packages/coding-agent/examples/extensions/question.ts`
+- `packages/coding-agent/examples/extensions/todo.ts`
+- `packages/coding-agent/examples/extensions/claude-rules.ts`
 
-## Upstream license
+Source: <https://github.com/earendil-works/pi/tree/936aff00918de1187f085f123c2812d8f2d67745/packages/coding-agent/examples/extensions>
+
+The bundled plugins do not include or load the Pi runtime, packages, renderer, or extension ABI.
 
 MIT License
 
