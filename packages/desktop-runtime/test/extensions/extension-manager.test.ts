@@ -254,13 +254,14 @@ describe('extension manager', () => {
     const uiCancelled = new Promise<unknown>((resolve) => {
       notifyUiCancelled = resolve;
     });
+    const state = {
+      get: vi.fn(async () => undefined),
+      set: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined),
+    };
     const manager = testManager(
       fixture.record,
-      {
-        get: vi.fn(async () => undefined),
-        set: vi.fn(async () => undefined),
-        delete: vi.fn(async () => undefined),
-      },
+      state,
       {
         handle: vi.fn(async (_method: string, _params: unknown, context: ExtensionUiContext) => {
           const signal = context.signal;
@@ -299,7 +300,8 @@ describe('extension manager', () => {
         threadId: 'thread_1',
         turnId: 'turn_2',
         toolCallId: 'call_detached_ui_status',
-      })).resolves.toMatchObject({ content: 'settled:false' });
+      })).resolves.toMatchObject({ content: 'settled:false;continuation:settled' });
+      expect(state.set).not.toHaveBeenCalled();
     } finally {
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
@@ -527,12 +529,16 @@ export default function activate(api) {
     },
   });` : ''}
   ${options.includeDetachedUiTool ? `let detachedUi;
+  let detachedContinuation;
   api.registerTool({
     name: 'detached-ui',
     description: 'Start host UI without awaiting its response.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     execute(_input, context) {
       detachedUi = context.ui.confirm({ title: 'Detached?' });
+      detachedContinuation = detachedUi.then((approved) => (
+        context.state.set('late-after-parent', approved, 'thread')
+      ));
       return { content: 'parent complete' };
     },
   });
@@ -548,7 +554,14 @@ export default function activate(api) {
         ),
         new Promise((resolve) => setTimeout(() => resolve('pending'), 100)),
       ]);
-      return { content: status };
+      const continuation = await Promise.race([
+        detachedContinuation.then(
+          () => 'settled',
+          () => 'rejected',
+        ),
+        new Promise((resolve) => setTimeout(() => resolve('pending'), 100)),
+      ]);
+      return { content: status + ';continuation:' + continuation };
     },
   });` : ''}
   ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (

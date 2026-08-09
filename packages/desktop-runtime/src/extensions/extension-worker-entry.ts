@@ -233,6 +233,10 @@ function handlerContext(requestId: string, value: unknown, signal: AbortSignal):
 }
 
 function hostCall(parentId: string, method: string, params: unknown): Promise<unknown> {
+  const parent = activeRequests.get(parentId);
+  if (!parent || parent.signal.aborted) {
+    return Promise.resolve(cancelledHostCallResult(method));
+  }
   const id = `host_${++hostCallSequence}`;
   return new Promise((resolve, reject) => {
     pendingHostCalls.set(id, { parentId, method, resolve, reject });
@@ -246,10 +250,14 @@ function settleCancelledHostCalls(parentId: string): void {
     pendingHostCalls.delete(id);
     // Interactive cancellation has a documented non-throwing result. Resolving
     // detached calls also avoids an unhandled rejection in third-party code.
-    if (pending.method === 'ui.confirm') pending.resolve(false);
-    else if (pending.method === 'ui.select' || pending.method === 'ui.input') pending.resolve(null);
-    else pending.resolve(undefined);
+    pending.resolve(cancelledHostCallResult(pending.method));
   }
+}
+
+function cancelledHostCallResult(method: string): unknown {
+  if (method === 'ui.confirm') return false;
+  if (method === 'ui.select' || method === 'ui.input') return null;
+  return undefined;
 }
 
 function requireCapability(capability: RuntimeExtensionCapability): void {
