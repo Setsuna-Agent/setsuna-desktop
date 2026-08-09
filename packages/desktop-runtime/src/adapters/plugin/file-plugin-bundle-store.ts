@@ -191,7 +191,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const conflictingSkill = manifest.skillEntries.find((skill) => existingSkillIds.has(skill.id));
       if (conflictingSkill) throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
 
-      const installPath = path.join(this.pluginsDir, manifest.id);
+      const installPath = strictPluginInstallPath(this.pluginsDir, manifest.id);
       const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
       const mcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
       const existingServers = await this.mcpStore.listServerInputs();
@@ -244,6 +244,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const stagingPath = path.join(this.pluginsDir, `.${manifest.id}.${randomUUID()}.tmp`);
       const installedMcpServers: string[] = [];
       let hooksSaved = false;
+      let installActivated = false;
       const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(installPath);
       try {
         await mkdir(this.pluginsDir, { recursive: true });
@@ -253,6 +254,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           throw new Error('Plugin bundle changed while staging the install.');
         }
         await renameWithRetry(stagingPath, installPath);
+        installActivated = true;
         for (const ownership of mcpOwnership) {
           if (!ownership.owned) continue;
           const server = mcpInputs.find((candidate) => candidate.key === ownership.key);
@@ -273,7 +275,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       } catch (error) {
         if (hooksSaved) await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} }).catch(() => undefined);
         await Promise.allSettled(installedMcpServers.map((key) => this.mcpStore.deleteServer(key)));
-        await Promise.allSettled([rm(stagingPath, { force: true, recursive: true }), rm(installPath, { force: true, recursive: true })]);
+        await Promise.allSettled([
+          rm(stagingPath, { force: true, recursive: true }),
+          ...(installActivated ? [rm(installPath, { force: true, recursive: true })] : []),
+        ]);
         throw error;
       } finally {
         await finishPluginDirectoryMutation();
@@ -305,8 +310,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const plugin = index.plugins.find((item) => item.id === sourceManifest.id);
       if (!plugin) throw new Error(`Plugin not found: ${sourceManifest.id}`);
 
-      const expectedInstallPath = path.join(this.pluginsDir, plugin.id);
-      if (path.resolve(plugin.installPath) !== path.resolve(expectedInstallPath)) {
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
         throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
       }
       const installStat = await stat(plugin.installPath).catch(() => null);
@@ -550,6 +555,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const index = await this.readIndex();
       const plugin = index.plugins.find((item) => item.id === id);
       if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
+        throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
+      }
       const currentServers = await this.mcpStore.listServerInputs();
       const preservedMcpServers: string[] = [];
       const serversToRemove: RuntimeMcpServerInput[] = [];
@@ -621,6 +630,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const index = await this.readIndex();
       const plugin = index.plugins.find((item) => item.id === id);
       if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
+        throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
+      }
       if (!plugin.extension) throw new Error(`Plugin does not provide an executable extension: ${id}`);
       const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
 
@@ -729,6 +742,16 @@ function samePath(left: string, right: string): boolean {
   return process.platform === 'win32'
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
+}
+
+function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
+  const resolvedRoot = path.resolve(pluginsDir);
+  const installPath = path.resolve(resolvedRoot, pluginId);
+  const relative = path.relative(resolvedRoot, installPath);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Plugin install path must be inside the plugin directory: ${pluginId}`);
+  }
+  return installPath;
 }
 
 function sameLegacyMarketplaceSource(left: string, right: string): boolean {

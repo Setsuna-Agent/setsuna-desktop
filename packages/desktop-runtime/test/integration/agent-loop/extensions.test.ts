@@ -73,4 +73,59 @@ describe('agent loop extension lifecycle', () => {
     }));
     expect(extensionManager.dispatch).toHaveBeenLastCalledWith('turn.settled', expect.any(Object));
   });
+
+  it('settles a turn cancelled while a start extension is running', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Extension cancellation' });
+    const modelClient = new ToolCallingModelClient();
+    let settledPayload: Record<string, unknown> | undefined;
+    let markPromptStarted: () => void = () => undefined;
+    let markTurnSettled: () => void = () => undefined;
+    const promptStarted = new Promise<void>((resolve) => {
+      markPromptStarted = resolve;
+    });
+    const turnSettled = new Promise<void>((resolve) => {
+      markTurnSettled = resolve;
+    });
+    const extensionManager: Pick<ExtensionRuntime, 'dispatch'> = {
+      dispatch: vi.fn(async (eventName, context) => {
+        if (eventName === 'prompt.before') {
+          const signal = context.signal;
+          if (!signal) throw new Error('Expected prompt extension cancellation signal.');
+          markPromptStarted();
+          await new Promise<void>((_resolve, reject) => {
+            const rejectWithAbortReason = () => reject(signal.reason);
+            if (signal.aborted) rejectWithAbortReason();
+            else signal.addEventListener('abort', rejectWithAbortReason, { once: true });
+          });
+          return {};
+        }
+        if (eventName === 'turn.settled') {
+          settledPayload = context.payload;
+          markTurnSettled();
+        }
+        return {};
+      }),
+    };
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      extensionManager,
+    });
+
+    const started = await loop.startTurn(thread.id, { input: 'cancel during prompt extension' });
+    await promptStarted;
+    await expect(loop.cancelTurn(thread.id, started.turnId!)).resolves.toBe(true);
+    await turnSettled;
+
+    expect(modelClient.requests).toHaveLength(0);
+    expect(settledPayload).toMatchObject({ status: 'cancelled', content: 'Turn cancelled.' });
+    expect(extensionManager.dispatch).toHaveBeenCalledWith('turn.settled', expect.objectContaining({
+      payload: expect.objectContaining({ status: 'cancelled' }),
+    }));
+  });
 });

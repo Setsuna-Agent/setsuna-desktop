@@ -424,6 +424,33 @@ describe('file plugin bundle store', () => {
     await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
   });
 
+  it.each(['.', '..'])('rejects unsafe plugin id %s without touching runtime data', async (pluginId) => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    const sentinelPath = path.join(runtime.dataDir, 'sentinel.txt');
+    await mkdir(runtime.dataDir, { recursive: true });
+    await writeFile(sentinelPath, 'keep');
+    await patchPluginManifest(fixture.bundleDir, { id: pluginId });
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('Plugin id must be a safe path segment');
+    await expect(readFile(sentinelPath, 'utf8')).resolves.toBe('keep');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
+  it('does not delete an existing plugin directory when install activation fails', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    const existingInstallPath = path.join(runtime.dataDir, 'plugins', 'demo');
+    const sentinelPath = path.join(existingInstallPath, 'sentinel.txt');
+    await mkdir(existingInstallPath, { recursive: true });
+    await writeFile(sentinelPath, 'keep');
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir })).rejects.toThrow();
+    await expect(readFile(sentinelPath, 'utf8')).resolves.toBe('keep');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
   it('accepts only renderer-owned icon tokens, never bundle paths or markup', async () => {
     const fixture = await createPluginFixture();
     const manifestPath = path.join(fixture.bundleDir, '.setsuna-plugin', 'plugin.json');

@@ -549,8 +549,22 @@ function executableExists(candidate: string): boolean {
 function normalizeRuntimePath(value: string): string {
   // bridge 必须是窄白名单，避免 renderer 借 runtime host 代理任意 localhost 路径。
   if (!value.startsWith('/')) throw new Error('Runtime path must be absolute.');
-  if (!value.startsWith('/v1/') && value !== '/health') throw new Error('Runtime path is not allowed.');
-  return value;
+  const runtimeOrigin = new URL('http://setsuna-runtime.local');
+  let normalized: URL;
+  try {
+    normalized = new URL(value, runtimeOrigin);
+  } catch {
+    throw new Error('Runtime path is not allowed.');
+  }
+  // Validate the canonical URL. WHATWG URL parsing collapses literal and encoded
+  // dot segments, preventing an allowed /v1 path from reaching a main-only route.
+  if (normalized.origin !== runtimeOrigin.origin || normalized.hash) {
+    throw new Error('Runtime path is not allowed.');
+  }
+  if (!normalized.pathname.startsWith('/v1/') && normalized.pathname !== '/health') {
+    throw new Error('Runtime path is not allowed.');
+  }
+  return `${normalized.pathname}${normalized.search}`;
 }
 
 type RuntimeSseFrame =

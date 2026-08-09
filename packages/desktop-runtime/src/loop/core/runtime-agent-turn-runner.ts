@@ -134,63 +134,56 @@ export class RuntimeAgentTurnRunner {
       });
     }
     if (options.review) await this.options.turnFinalizer.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
-    const turnStartHooks = await this.options.hooks.runTurnStartHooks({
-      prompt: options.modelInput ?? text,
-      runtimeConfig,
-      signal,
-      thread,
-      turnId,
-    });
-    if (turnStartHooks.stopped) {
-      this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
-      await this.options.publishMessage(threadId, turnId, {
-        id: this.options.ids.id('msg'),
-        turnId,
-        role: 'assistant',
-        content: turnStartHooks.reason,
-        createdAt: this.options.clock.now().toISOString(),
-        status: 'complete',
-      });
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'turn.completed',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { taskKind },
-      });
-      await this.dispatchTurnSettled(
-        thread,
-        turnId,
-        'completed',
-        turnStartHooks.reason,
-        undefined,
-        runtimeConfig?.features,
-      );
-      return;
-    }
-    if (turnStartHooks.prompt !== undefined) {
-      modelUserMessage = { ...modelUserMessage, content: turnStartHooks.prompt };
-    }
-    const additionalContextMessages = [
-      ...(options.runtimeContextMessages ?? []),
-      ...turnStartHooks.contextMessages,
-      ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
-    ];
-    // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
-    const threadTitleGeneration = this.options.threadTitles.start({
-      attachments,
-      signal,
-      taskKind,
-      thread,
-      userContent: userMessage.content,
-    });
-
     let usage: RuntimeUsage | undefined;
     let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
     let cleanupEnvironment: RuntimeEnvironment | undefined;
     let settledContent: string | undefined;
     try {
+      const turnStartHooks = await this.options.hooks.runTurnStartHooks({
+        prompt: options.modelInput ?? text,
+        runtimeConfig,
+        signal,
+        thread,
+        turnId,
+      });
+      if (turnStartHooks.stopped) {
+        settledContent = turnStartHooks.reason;
+        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
+        await this.options.publishMessage(threadId, turnId, {
+          id: this.options.ids.id('msg'),
+          turnId,
+          role: 'assistant',
+          content: turnStartHooks.reason,
+          createdAt: this.options.clock.now().toISOString(),
+          status: 'complete',
+        });
+        await this.options.appendEvent(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId,
+          type: 'turn.completed',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: { taskKind },
+        });
+        return;
+      }
+      if (turnStartHooks.prompt !== undefined) {
+        modelUserMessage = { ...modelUserMessage, content: turnStartHooks.prompt };
+      }
+      const additionalContextMessages = [
+        ...(options.runtimeContextMessages ?? []),
+        ...turnStartHooks.contextMessages,
+        ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
+      ];
+      // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
+      const threadTitleGeneration = this.options.threadTitles.start({
+        attachments,
+        signal,
+        taskKind,
+        thread,
+        userContent: userMessage.content,
+      });
+
       throwIfAborted(signal);
       // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
       // 工具模式和输出预留空间。

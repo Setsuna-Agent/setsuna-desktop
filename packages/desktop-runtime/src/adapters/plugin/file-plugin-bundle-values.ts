@@ -3,6 +3,7 @@ import path from 'node:path';
 export function normalizePluginId(value: string): string {
   const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80);
   if (!id) throw new Error('Plugin id is required.');
+  if (id === '.' || id === '..') throw new Error('Plugin id must be a safe path segment.');
   return id;
 }
 

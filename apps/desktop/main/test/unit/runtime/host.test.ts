@@ -272,6 +272,10 @@ describe('runtime host packaging paths', () => {
 
     await expect(host.request({ path: RUNTIME_LOCAL_PLUGIN_INSTALL_PATH }))
       .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.request({ path: `/v1/..${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+      .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.request({ path: `/v1/%2e%2e${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+      .rejects.toThrow('Runtime path is not allowed');
     await expect(host.installLocalPluginBundle(bundlePath)).resolves.toMatchObject({
       plugin: { id: 'local-plugin' },
     });
