@@ -230,7 +230,7 @@ describe('file plugin bundle store', () => {
     }
   });
 
-  it('reuses compatible MCP servers and preserves plugin-owned servers modified after install', async () => {
+  it('reuses compatible MCP servers and preserves customized plugin-owned servers', async () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);
     await runtime.mcp.upsertServer({
@@ -252,13 +252,23 @@ describe('file plugin bundle store', () => {
     const secondRuntime = await createPluginRuntime(second.root);
     const installed = await secondRuntime.plugins.installPlugin({ path: second.bundleDir });
     expect(installed.installedMcpServers).toEqual(['plugin_docs']);
-    await secondRuntime.mcp.updateServer('plugin_docs', { url: 'https://user-modified.example/mcp' });
+    await secondRuntime.mcp.updateServer('plugin_docs', {
+      allowedTools: ['search'],
+      enabled: false,
+      toolTimeoutMs: 5_000,
+    });
     expect(await secondRuntime.plugins.removePlugin('demo')).toMatchObject({
       removedMcpServers: [],
       preservedMcpServers: ['plugin_docs'],
     });
     await expect(secondRuntime.mcp.listServerInputs()).resolves.toEqual([
-      expect.objectContaining({ key: 'plugin_docs', url: 'https://user-modified.example/mcp' }),
+      expect.objectContaining({
+        key: 'plugin_docs',
+        url: 'https://docs.example/mcp',
+        allowedTools: ['search'],
+        enabled: false,
+        toolTimeoutMs: 5_000,
+      }),
     ]);
   });
 

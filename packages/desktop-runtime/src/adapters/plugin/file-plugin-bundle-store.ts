@@ -567,7 +567,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         const expected = plugin.mcpServerInputs.find((server) => server.key === ownership.key);
         const current = currentServers.find((server) => server.key === ownership.key);
         if (!current) continue;
-        if (!expected || !compatibleMcpServer(current, expected)) {
+        if (!expected || !pluginMcpServerUnmodified(current, expected)) {
           preservedMcpServers.push(ownership.key);
           continue;
         }
