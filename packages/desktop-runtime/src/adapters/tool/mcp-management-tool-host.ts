@@ -1,10 +1,11 @@
-import type {
-  RuntimeMcpRequireApproval,
-  RuntimeMcpServer,
-  RuntimeMcpServerInput,
-  RuntimeMcpTransport,
-  RuntimeMcpTrustLevel,
-  RuntimeToolDefinition,
+import {
+  mergeRuntimeMcpServerInput,
+  type RuntimeMcpRequireApproval,
+  type RuntimeMcpServer,
+  type RuntimeMcpServerInput,
+  type RuntimeMcpTransport,
+  type RuntimeMcpTrustLevel,
+  type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
@@ -234,7 +235,7 @@ export class McpManagementToolHost implements ToolHost {
     const before = await this.mcpStore.listServers();
     const existing = before.servers.find((server) => server.key === normalized.key);
     const existingInput = (await this.mcpStore.listServerInputs()).find((server) => server.key === normalized.key);
-    const discovery = await discoverToolsForSave(mergeMcpServerInput(existingInput, normalized), this.mcpClient);
+    const discovery = await discoverToolsForSave(mergeRuntimeMcpServerInput(existingInput, normalized), this.mcpClient);
     const inputToSave = discovery.tools.length ? { ...normalized, tools: discovery.tools } : normalized;
     const savedList = await this.mcpStore.upsertServer(inputToSave);
     const saved = savedList.servers.find((server) => server.key === normalized.key);
@@ -376,21 +377,6 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
 
 function inferTransport(input: RuntimeMcpServerInput): RuntimeMcpTransport {
   return input.command || !input.url ? 'stdio' : 'streamableHttp';
-}
-
-function mergeMcpServerInput(
-  existing: RuntimeMcpServerInput | undefined,
-  input: RuntimeMcpServerInput,
-): RuntimeMcpServerInput {
-  if (!existing) return input;
-  return {
-    ...existing,
-    ...input,
-    ...(input.env === undefined ? { env: existing.env } : {}),
-    ...(input.headers === undefined ? { headers: existing.headers } : {}),
-    ...(input.envHttpHeaders === undefined ? { envHttpHeaders: existing.envHttpHeaders } : {}),
-    ...(input.bearerTokenEnvVar === undefined ? { bearerTokenEnvVar: existing.bearerTokenEnvVar } : {}),
-  };
 }
 
 function mcpHeaderKeys(input: RuntimeMcpServerInput): string[] {

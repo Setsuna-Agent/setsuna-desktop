@@ -7,7 +7,6 @@ import type {
   RuntimePluginFilePreview,
   RuntimePluginHook,
   RuntimePluginItemKind,
-  RuntimePluginMcpServerDescriptor,
   RuntimePluginResource,
   RuntimePluginSummary,
   RuntimePluginTool,
@@ -20,6 +19,30 @@ import type {
   InstalledPluginRecord
 } from '../../ports/plugin-bundle-store.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
+import {
+  normalizePluginMcpServers,
+  pluginMcpServerDescriptor,
+  replacePluginRoot,
+} from './file-plugin-bundle-mcp.js';
+import {
+  binaryMimeType,
+  normalizeHookId,
+  normalizePluginId,
+  normalizeResourceId,
+  normalizeSkillId,
+  objectRecord,
+  optionalMarketplaceFields,
+  optionalPositiveInteger,
+  optionalString,
+  optionalTextFields,
+  removeUndefined,
+  requiredString,
+  skillMetadata,
+  textMimeType,
+} from './file-plugin-bundle-values.js';
+
+export * from './file-plugin-bundle-values.js';
+export * from './file-plugin-bundle-mcp.js';
 
 export type PluginIndexFile = { version: 1; plugins: InstalledPluginRecord[] };
 
@@ -148,7 +171,6 @@ export async function readPluginFilePreview(
     text: buffer.toString('utf8'),
   };
 }
-
 export async function readPluginManifest(sourcePath: string): Promise<ParsedPluginManifest> {
   const manifestPath = path.join(sourcePath, PLUGIN_MANIFEST_RELATIVE_PATH);
   const manifestStat = await stat(manifestPath).catch(() => null);
@@ -244,57 +266,6 @@ export async function normalizePluginResources(sourcePath: string, value: unknow
   }));
 }
 
-export function normalizePluginMcpServers(value: unknown): RuntimeMcpServerInput[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) throw new Error('Plugin mcpServers must be an array.');
-  const seen = new Set<string>();
-  return value.map((item, index) => {
-    const record = objectRecord(item, `Plugin mcpServers[${index}] must be an object.`);
-    if (record.env !== undefined || record.headers !== undefined || record.envHttpHeaders !== undefined
-      || record.env_http_headers !== undefined || record.bearerTokenEnvVar !== undefined || record.bearer_token_env_var !== undefined) {
-      throw new Error(`Plugin mcpServers[${index}] cannot embed credentials or environment values.`);
-    }
-    const key = normalizeMcpKey(requiredString(record.key, `Plugin mcpServers[${index}].key`));
-    if (seen.has(key)) throw new Error(`Duplicate plugin MCP key: ${key}`);
-    seen.add(key);
-    const transport = normalizeMcpTransport(record.transport, record.command, record.url);
-    const server: RuntimeMcpServerInput = {
-      key,
-      label: optionalString(record.label),
-      description: optionalString(record.description),
-      transport,
-      args: stringArray(record.args, `Plugin mcpServers[${index}].args`),
-      timeoutMs: optionalPositiveInteger(record.timeoutMs ?? record.timeout_ms),
-      startupTimeoutMs: optionalPositiveInteger(record.startupTimeoutMs ?? record.startup_timeout_ms),
-      toolTimeoutMs: optionalPositiveInteger(record.toolTimeoutMs ?? record.tool_timeout_ms),
-      allowedTools: stringArray(record.allowedTools ?? record.allowed_tools, `Plugin mcpServers[${index}].allowedTools`),
-      disabledTools: stringArray(record.disabledTools ?? record.disabled_tools, `Plugin mcpServers[${index}].disabledTools`),
-      oauthClientId: optionalString(record.oauthClientId ?? record.oauth_client_id),
-      oauthResource: optionalString(record.oauthResource ?? record.oauth_resource),
-      required: false,
-      enabled: true,
-      requireApproval: 'always',
-      trustLevel: 'untrusted',
-    };
-    if (transport === 'streamableHttp') {
-      server.url = safeHttpUrl(requiredString(record.url, `Plugin mcpServers[${index}].url`));
-    } else {
-      server.command = requiredString(record.command, `Plugin mcpServers[${index}].command`);
-      server.cwd = optionalString(record.cwd);
-    }
-    return removeUndefined(server);
-  });
-}
-
-export function pluginMcpServerDescriptor(server: RuntimeMcpServerInput): RuntimePluginMcpServerDescriptor {
-  return {
-    key: server.key,
-    label: server.label ?? server.key,
-    ...(server.description ? { description: server.description } : {}),
-    transport: normalizeMcpTransport(server.transport, server.command, server.url),
-  };
-}
-
 export function normalizePluginHooks(value: unknown): ParsedPluginHook[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error('Plugin hooks must be an array.');
@@ -330,15 +301,6 @@ export function pluginHookDescriptor(hook: ParsedPluginHook): RuntimePluginHook 
     ...(hook.matcher ? { matcher: hook.matcher } : {}),
     ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
   };
-}
-
-export function materializePluginMcpServer(server: RuntimeMcpServerInput, installPath: string): RuntimeMcpServerInput {
-  return removeUndefined({
-    ...server,
-    command: replacePluginRoot(server.command, installPath, false),
-    cwd: replacePluginRoot(server.cwd, installPath, false),
-    args: server.args?.map((arg) => replacePluginRoot(arg, installPath, false) ?? arg),
-  });
 }
 
 export function materializePluginHook(
@@ -507,149 +469,6 @@ export function pathIsInside(root: string, target: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-export function compatibleMcpServer(left: RuntimeMcpServerInput, right: RuntimeMcpServerInput): boolean {
-  const leftTransport = normalizeMcpTransport(left.transport, left.command, left.url);
-  const rightTransport = normalizeMcpTransport(right.transport, right.command, right.url);
-  if (leftTransport !== rightTransport) return false;
-  if (leftTransport === 'streamableHttp') return comparableUrl(left.url) === comparableUrl(right.url);
-  return left.command?.trim() === right.command?.trim()
-    && arraysEqual(left.args ?? [], right.args ?? [])
-    && normalizeOptionalPath(left.cwd) === normalizeOptionalPath(right.cwd);
-}
-
-export function pluginMcpServerUnmodified(current: RuntimeMcpServerInput, expected: RuntimeMcpServerInput): boolean {
-  return JSON.stringify(comparablePluginMcpServer(current)) === JSON.stringify(comparablePluginMcpServer(expected));
-}
-
-export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record<string, unknown> {
-  const transport = normalizeMcpTransport(server.transport, server.command, server.url);
-  const timeoutMs = normalizedMcpTimeout(server.timeoutMs, 120_000);
-  return {
-    key: server.key,
-    label: server.label?.trim() || server.key,
-    description: server.description?.trim() || null,
-    transport,
-    command: transport === 'stdio' ? server.command?.trim() || null : null,
-    args: transport === 'stdio' ? normalizedStringList(server.args) : [],
-    cwd: transport === 'stdio' ? normalizeOptionalPath(server.cwd) || null : null,
-    url: transport === 'streamableHttp' ? comparableUrl(server.url) || null : null,
-    timeoutMs,
-    startupTimeoutMs: normalizedMcpTimeout(server.startupTimeoutMs, timeoutMs),
-    toolTimeoutMs: normalizedMcpTimeout(server.toolTimeoutMs, timeoutMs),
-    required: server.required === true,
-    requireApproval: comparableMcpApproval(server.requireApproval),
-    trustLevel: server.trustLevel === 'trusted' ? 'trusted' : 'untrusted',
-    enabled: server.enabled !== false,
-    allowedTools: normalizedStringSet(server.allowedTools),
-    disabledTools: normalizedStringSet(server.disabledTools),
-    tools: canonicalValue(server.tools ?? []),
-    env: canonicalStringMap(server.env),
-    headers: canonicalStringMap(server.headers),
-    envHttpHeaders: canonicalStringMap(server.envHttpHeaders),
-    bearerTokenEnvVar: server.bearerTokenEnvVar?.trim() || null,
-    oauthClientId: server.oauthClientId?.trim() || null,
-    oauthResource: server.oauthResource?.trim() || null,
-  };
-}
-
-export function comparableMcpApproval(value: RuntimeMcpServerInput['requireApproval']): 'auto' | 'prompt' | 'approve' {
-  if (value === 'approve' || value === 'never') return 'approve';
-  if (value === 'prompt' || value === 'always') return 'prompt';
-  return 'auto';
-}
-
-export function normalizedMcpTimeout(value: number | undefined, fallback: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return fallback;
-  return Math.min(Math.floor(value), 30 * 60 * 1_000);
-}
-
-export function normalizedStringList(values: string[] | undefined): string[] {
-  return (values ?? []).map((value) => value.trim()).filter(Boolean);
-}
-
-export function normalizedStringSet(values: string[] | undefined): string[] {
-  return [...new Set(normalizedStringList(values))].sort((left, right) => left.localeCompare(right));
-}
-
-export function canonicalStringMap(value: Record<string, string> | undefined): Record<string, string> | null {
-  if (!value) return null;
-  const entries = Object.entries(value)
-    .map(([key, item]) => [key.trim(), item.trim()] as const)
-    .filter(([key, item]) => key && item)
-    .sort(([left], [right]) => left.localeCompare(right));
-  return entries.length ? Object.fromEntries(entries) : null;
-}
-
-export function canonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => [key, canonicalValue(item)]),
-  );
-}
-
-export function comparableUrl(value: string | undefined): string {
-  if (!value) return '';
-  try {
-    const url = new URL(value);
-    url.hash = '';
-    return url.toString().replace(/\/$/u, '');
-  } catch {
-    return value.trim().replace(/\/$/u, '');
-  }
-}
-
-export function normalizeOptionalPath(value: string | undefined): string {
-  return value ? path.normalize(value) : '';
-}
-
-export function arraysEqual(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((item, index) => item === right[index]);
-}
-
-export function normalizeMcpTransport(transport: unknown, command: unknown, url: unknown): 'stdio' | 'streamableHttp' {
-  if (transport === 'stdio') return 'stdio';
-  if (transport === 'streamableHttp' || transport === 'streamable_http' || transport === 'streamable-http' || transport === 'http') {
-    return 'streamableHttp';
-  }
-  if (typeof command === 'string' && command.trim()) return 'stdio';
-  if (typeof url === 'string' && url.trim()) return 'streamableHttp';
-  throw new Error('Plugin MCP server requires transport stdio or streamable_http.');
-}
-
-export function safeHttpUrl(value: string): string {
-  const url = new URL(value);
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    throw new Error('Plugin MCP URL must use HTTPS or loopback HTTP.');
-  }
-  if (url.username || url.password) throw new Error('Plugin MCP URL cannot contain credentials.');
-  return url.toString();
-}
-
-export function replacePluginRoot(value: string | undefined, installPath: string, shellQuote: boolean): string | undefined {
-  if (!value) return undefined;
-  return value.replace(/\{\{pluginRoot\}\}([^\s'"`]*)/gu, (_match, suffix: string) => {
-    const pluginPath = pluginRootPath(installPath, suffix);
-    return shellQuote ? shellQuotedPath(pluginPath) : pluginPath;
-  });
-}
-
-export function pluginRootPath(installPath: string, suffix: string): string {
-  if (!suffix) return installPath;
-  if (!/^[\\/]/u.test(suffix)) return `${installPath}${suffix}`;
-  const segments = suffix.replace(/^[\\/]+/u, '').split(/[\\/]+/u).filter(Boolean);
-  return path.join(installPath, ...segments);
-}
-
-export function shellQuotedPath(value: string): string {
-  return process.platform === 'win32'
-    ? `"${value.replaceAll('"', '""')}"`
-    : `'${value.replaceAll("'", "'\\''")}'`;
-}
-
 export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePluginSummary {
   const {
     installPath: _installPath,
@@ -707,151 +526,4 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
     hooks: (plugin.hooks ?? []).map((hook) => ({ ...hook })),
     resources: plugin.resources.map((resource) => ({ ...resource })),
   };
-}
-
-export function normalizePluginId(value: string): string {
-  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80);
-  if (!id) throw new Error('Plugin id is required.');
-  return id;
-}
-
-export function normalizeSkillId(value: string): string {
-  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 80);
-  if (!id) throw new Error('Plugin skill directory requires a valid id.');
-  return id;
-}
-
-export function normalizeMcpKey(value: string): string {
-  const key = value.trim().toLowerCase().replace(/[^a-z0-9_-]+/gu, '_').replace(/^_+|_+$/gu, '');
-  if (!key) throw new Error('Plugin MCP key is required.');
-  return key;
-}
-
-export function normalizeResourceId(value: string): string {
-  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 100);
-  if (!id) throw new Error('Plugin resource id is required.');
-  return id;
-}
-
-export function normalizeHookId(value: string): string {
-  const id = value.trim().toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 100);
-  if (!id) throw new Error('Plugin Hook requires a valid id.');
-  return id;
-}
-
-export function skillMetadata(content: string, fallback: string): { name: string; description?: string } {
-  const frontmatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(content)?.[1];
-  if (frontmatter === undefined) return { name: fallback };
-  const lines = frontmatter.split(/\r?\n/u);
-  const name = frontmatterText(lines, 'name') || fallback;
-  const description = frontmatterText(lines, 'description');
-  return { name, ...(description ? { description } : {}) };
-}
-
-export function frontmatterText(lines: string[], key: string): string | undefined {
-  const prefix = `${key}:`;
-  const line = lines.find((item) => item.startsWith(prefix));
-  return line?.slice(prefix.length).trim().replace(/^['"]|['"]$/gu, '') || undefined;
-}
-
-export function textMimeType(filePath: string): string {
-  switch (path.extname(filePath).toLowerCase()) {
-    case '.json': return 'application/json';
-    case '.yaml':
-    case '.yml': return 'application/yaml';
-    case '.md': return 'text/markdown';
-    case '.html': return 'text/html';
-    case '.css': return 'text/css';
-    case '.js':
-    case '.mjs':
-    case '.ts': return 'text/javascript';
-    default: return 'text/plain';
-  }
-}
-
-export function binaryMimeType(filePath: string): string {
-  switch (path.extname(filePath).toLowerCase()) {
-    case '.pdf': return 'application/pdf';
-    case '.docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    case '.xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    case '.pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-    case '.zip': return 'application/zip';
-    default: return 'application/octet-stream';
-  }
-}
-
-export function optionalTextFields(record: Record<string, unknown>): { version?: string; description?: string } {
-  const version = optionalString(record.version);
-  const description = optionalString(record.description);
-  return { ...(version ? { version } : {}), ...(description ? { description } : {}) };
-}
-
-export function optionalMarketplaceFields(record: Record<string, unknown>): {
-  icon?: string;
-  publisher?: string;
-  tags: string[];
-  featured: boolean;
-  featuredOrder?: number;
-} {
-  const icon = normalizePluginIcon(record.icon);
-  const publisher = optionalString(record.publisher);
-  const featured = record.featured === true;
-  const featuredOrder = optionalFeaturedOrder(record.featuredOrder ?? record.featured_order);
-  if (!featured && featuredOrder !== undefined) {
-    throw new Error('Plugin featuredOrder requires featured: true.');
-  }
-  return {
-    ...(icon ? { icon } : {}),
-    ...(publisher ? { publisher } : {}),
-    tags: stringArray(record.tags, 'Plugin tags'),
-    featured,
-    ...(featuredOrder !== undefined ? { featuredOrder } : {}),
-  };
-}
-
-export function optionalFeaturedOrder(value: unknown): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    throw new Error('Plugin featuredOrder must be a positive integer.');
-  }
-  return value;
-}
-
-export function normalizePluginIcon(value: unknown): string | undefined {
-  const icon = optionalString(value);
-  if (!icon) return undefined;
-  if (!/^[a-z0-9][a-z0-9-]{0,39}$/u.test(icon)) {
-    throw new Error('Plugin icon must be a lowercase renderer icon token.');
-  }
-  return icon;
-}
-
-export function objectRecord(value: unknown, error: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(error);
-  return value as Record<string, unknown>;
-}
-
-export function requiredString(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !value.trim()) throw new Error(`${label} is required.`);
-  return value.trim();
-}
-
-export function optionalString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
-}
-
-export function optionalPositiveInteger(value: unknown): number | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error('Plugin timeout values must be positive numbers.');
-  return Math.floor(value);
-}
-
-export function stringArray(value: unknown, label: string): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) throw new Error(`${label} must be a string array.`);
-  return value.map((item) => item.trim()).filter(Boolean);
-}
-
-export function removeUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as T;
 }

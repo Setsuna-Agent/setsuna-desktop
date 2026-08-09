@@ -1,6 +1,5 @@
 import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { InMemoryDesktopNativeBridge } from '../in-memory-secret-store.js';
 import type { AppServerPtyFactory } from '../../../src/server/app-server/command-exec.js';
@@ -10,6 +9,10 @@ import {
   RuntimeEventStream,
   sleep
 } from './shared.js';
+import {
+  createTestTempDirectory,
+  removeTestTempDirectory,
+} from '../test-temp-directory.js';
 type AppServerRequestOptions = {
   connectionId?: string;
 };
@@ -89,8 +92,9 @@ export async function createRuntimeServerTestHarness() {
   let server: RuntimeServer;
   let baseUrl: string;
   let runtimeDataDir: string;
+  let closePromise: Promise<void> | undefined;
   async function startRuntimeServer(dataDir: string): Promise<void> {
-      server = await createRuntimeServer({
+      const nextServer = await createRuntimeServer({
         dataDir,
         token,
         version: 'test',
@@ -98,10 +102,16 @@ export async function createRuntimeServerTestHarness() {
         // Windows CI 可能没有可附加的 ConPTY 控制台，因此这些协议测试不使用真实 node-pty。
         commandExecPtyFactory: process.platform === 'win32' ? createTestAppServerPtyFactory() : undefined,
       });
-      await server.listen(0);
-      const address = server.address();
-      if (!address || typeof address === 'string') throw new Error('Expected TCP address');
-      baseUrl = `http://127.0.0.1:${address.port}`;
+      try {
+        await nextServer.listen(0);
+        const address = nextServer.address();
+        if (!address || typeof address === 'string') throw new Error('Expected TCP address');
+        server = nextServer;
+        baseUrl = `http://127.0.0.1:${address.port}`;
+      } catch (error) {
+        await nextServer.close().catch(() => undefined);
+        throw error;
+      }
     }
   async function seedStaleRuntimeThread(dataDir: string): Promise<string> {
       const now = '2026-06-26T00:00:00.000Z';
@@ -508,11 +518,31 @@ export async function createRuntimeServerTestHarness() {
   function appServerSessionHeaders(options: AppServerRequestOptions): Record<string, string> {
       return options.connectionId ? { 'x-setsuna-app-server-connection-id': options.connectionId } : {};
     }
-  async function close(): Promise<void> {
-    await server.close();
+  function close(): Promise<void> {
+    closePromise ??= closeRuntimeHarness();
+    return closePromise;
   }
-  runtimeDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-test-'));
-  await startRuntimeServer(runtimeDataDir);
+  async function closeRuntimeHarness(): Promise<void> {
+    const failures: unknown[] = [];
+    try {
+      await server.close();
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      await removeTestTempDirectory(runtimeDataDir);
+    } catch (error) {
+      failures.push(error);
+    }
+    if (failures.length) throw new AggregateError(failures, 'Failed to close runtime test harness.');
+  }
+  runtimeDataDir = await createTestTempDirectory('setsuna-runtime-test-');
+  try {
+    await startRuntimeServer(runtimeDataDir);
+  } catch (error) {
+    await removeTestTempDirectory(runtimeDataDir).catch(() => undefined);
+    throw error;
+  }
   return {
     get server() { return server; },
     get baseUrl() { return baseUrl; },

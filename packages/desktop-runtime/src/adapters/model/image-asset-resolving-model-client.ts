@@ -7,6 +7,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { GeneratedImageReader } from '../../ports/generated-image-store.js';
 import type { ModelClient, ModelCompactionRequest } from '../../ports/model-client.js';
+import { providerErrorDetails } from './provider-request-error.js';
 
 const IMAGE_INPUT_FALLBACK_MESSAGE = [
   'The runtime has already handled any user-facing disclosure for unavailable image inputs.',
@@ -184,23 +185,11 @@ function isModelVisibleImage(attachment: RuntimeMessageAttachment): boolean {
 }
 
 function isRejectedImageInputError(error: unknown): boolean {
-  const details = collectErrorDetails(error).toLowerCase();
+  const details = providerErrorDetails(error).toLowerCase();
   if (!details.includes('image')) return false;
   return details.includes('new_sensitive')
     || details.includes('image is sensitive')
     || (details.includes('image input') && /\b(?:unsafe|moderation|rejected|not allowed|sensitive)\b/.test(details));
-}
-
-function collectErrorDetails(value: unknown, seen = new Set<object>(), depth = 0): string {
-  if (depth > 4 || value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value !== 'object' || seen.has(value)) return '';
-  seen.add(value);
-  const record = value as Record<string, unknown>;
-  return ['name', 'message', 'responseBody', 'data', 'error', 'cause']
-    .map((key) => collectErrorDetails(record[key], seen, depth + 1))
-    .filter(Boolean)
-    .join(' ');
 }
 
 function needsModelAssetResolution(

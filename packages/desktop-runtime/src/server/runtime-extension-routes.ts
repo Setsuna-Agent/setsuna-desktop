@@ -8,6 +8,7 @@ import type {
   RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
 import {
+  mergeRuntimeMcpServerInput,
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
@@ -258,7 +259,7 @@ export async function handleRuntimeExtensionRequest(
       response,
       200,
       await runtime.mcpConnections.discoverTools(
-        mergeMcpServerInput(existing, input),
+        mergeRuntimeMcpServerInput(existing, input),
         { scopeId: `discovery:${serverKey}` },
       ),
     );
@@ -355,25 +356,6 @@ function normalizeMcpServerKey(value: string): string {
     );
   }
   return key;
-}
-
-function mergeMcpServerInput(
-  existing: RuntimeMcpServerInput | undefined,
-  input: RuntimeMcpServerInput,
-): RuntimeMcpServerInput {
-  if (!existing) return input;
-  return {
-    ...existing,
-    ...input,
-    ...(input.env === undefined ? { env: existing.env } : {}),
-    ...(input.headers === undefined ? { headers: existing.headers } : {}),
-    ...(input.envHttpHeaders === undefined
-      ? { envHttpHeaders: existing.envHttpHeaders }
-      : {}),
-    ...(input.bearerTokenEnvVar === undefined
-      ? { bearerTokenEnvVar: existing.bearerTokenEnvVar }
-      : {}),
-  };
 }
 
 async function withMcpAuthStatuses(

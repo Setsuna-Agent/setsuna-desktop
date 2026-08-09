@@ -10,8 +10,7 @@ import type {
   RuntimeToolDefinition,
   RuntimeUsageRecord
 } from '@setsuna-desktop/contracts';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -23,6 +22,10 @@ import type { SkillRegistry } from '../../../src/ports/skill-registry.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost, type ToolTurnCleanupOutcome } from '../../../src/ports/tool-host.js';
 import type { UsageStore } from '../../../src/ports/usage-store.js';
+import {
+  createTestTempDirectory,
+  createTestTempDirectorySync,
+} from '../test-temp-directory.js';
 
 
 
@@ -548,264 +551,134 @@ export async function appendCompletedExchange(
   });
 }
 
-export const hookScriptDir = mkdtempSync(path.join(tmpdir(), 'setsuna-agent-loop-hook-'));
-
-export let hookScriptCounter = 0;
-
 export function nodeEvalHook(script: string): string {
-  const scriptPath = path.join(hookScriptDir, `hook-${hookScriptCounter}.cjs`);
-  hookScriptCounter += 1;
+  const scriptDirectory = createTestTempDirectorySync('setsuna-agent-loop-hook-');
+  const scriptPath = path.join(scriptDirectory, 'hook.cjs');
   writeFileSync(scriptPath, script, 'utf8');
   return `node ${JSON.stringify(scriptPath)}`;
 }
 
-export class PersonalizationConfigStore implements ConfigStore {
-  async getConfig() {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: 'Prefer crisp context before the answer.',
-      memory: {
-        useMemories: false,
-        generateMemories: false,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: false,
-      setsunaStyle: 'daily' as const,
-      approvalPolicy: 'on-request' as const,
-      permissionProfile: 'workspace-write' as const,
-    };
-  }
+const defaultTestMemory: RuntimeConfigState['memory'] = {
+  useMemories: true,
+  generateMemories: true,
+  disableOnExternalContext: true,
+};
 
-  async saveConfig() {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
+function testRuntimeConfig(overrides: Partial<RuntimeConfigState> = {}): RuntimeConfigState {
+  return {
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp',
+    storagePath: '/tmp/memories',
+    activeProviderId: 'test',
+    providers: [],
+    globalPrompt: '',
+    memory: defaultTestMemory,
+    memoryEnabled: true,
+    setsunaStyle: 'developer',
+    approvalPolicy: 'on-request',
+    permissionProfile: 'workspace-write',
+    ...overrides,
+  };
 }
 
-export class HooksConfigStore implements ConfigStore {
-  constructor(private readonly hooks: RuntimeConfigState['hooks']) {}
-
-  async getConfig(): Promise<RuntimeConfigState> {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: {
-        useMemories: true,
-        generateMemories: true,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: true,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'on-request' as const,
-      permissionProfile: 'workspace-write' as const,
-      hooks: this.hooks,
-      bypassHookTrust: true,
-    };
-  }
-
-  async saveConfig(): Promise<RuntimeConfigState> {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
-}
-
-export class ContextWindowConfigStore implements ConfigStore {
-  constructor(private readonly contextWindowTokens: number) {}
-
-  async getConfig(): Promise<RuntimeConfigState> {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [{
-        id: 'test',
-        name: 'Test provider',
-        provider: 'openai-compatible',
-        baseUrl: 'https://llm.test/v1',
-        enabled: true,
-        apiKeySet: true,
-        apiKeyPreview: 'secret',
-        models: [{
-          id: 'local-runtime-smoke',
-          name: 'Local runtime smoke',
-          code: 'local-runtime-smoke',
-          enabled: true,
-          contextWindowTokens: this.contextWindowTokens,
-          maxOutputTokens: 68_000,
-          thinkingEnabled: false,
-          thinkingEfforts: [],
-        }],
-      }],
-      globalPrompt: '',
-      memory: {
-        useMemories: false,
-        generateMemories: false,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: false,
-      setsunaStyle: 'developer',
-      approvalPolicy: 'on-request',
-      permissionProfile: 'workspace-write',
-    };
-  }
-
-  async saveConfig(): Promise<RuntimeConfigState> {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    const config = await this.getConfig();
-    const provider = config.providers[0];
-    return {
-      ...provider,
-      apiKey: 'secret',
-      activeModel: provider.models[0],
-    };
-  }
-}
-
-export class MemorySettingsConfigStore implements ConfigStore {
-  constructor(private readonly memory: RuntimeConfigState['memory']) {}
-
-  async getConfig(): Promise<RuntimeConfigState> {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: this.memory,
-      memoryEnabled: this.memory.useMemories || this.memory.generateMemories,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'on-request' as const,
-      permissionProfile: 'workspace-write' as const,
-    };
-  }
-
-  async saveConfig(): Promise<RuntimeConfigState> {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
-}
-
-export class StrictApprovalConfigStore implements ConfigStore {
-  async getConfig() {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: {
-        useMemories: true,
-        generateMemories: true,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: true,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'strict' as const,
-      permissionProfile: 'workspace-write' as const,
-    };
-  }
-
-  async saveConfig() {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
-}
-
-export class ReadOnlyConfigStore implements ConfigStore {
-  async getConfig() {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: {
-        useMemories: true,
-        generateMemories: true,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: true,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'on-request' as const,
-      permissionProfile: 'read-only' as const,
-    };
-  }
-
-  async saveConfig() {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
-}
-
-export class FullApprovalConfigStore implements ConfigStore {
+export class TestConfigStore implements ConfigStore {
   constructor(
-    private readonly permissionProfile: 'workspace-write' | 'danger-full-access' = 'workspace-write',
+    private readonly config: RuntimeConfigState = testRuntimeConfig(),
+    private readonly activeProvider: RuntimeProviderConfig | null = null,
   ) {}
 
-  async getConfig() {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '/tmp/memories',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: {
-        useMemories: true,
-        generateMemories: true,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: true,
-      setsunaStyle: 'developer' as const,
-      approvalPolicy: 'full' as const,
-      permissionProfile: this.permissionProfile,
-    };
+  async getConfig(): Promise<RuntimeConfigState> {
+    return structuredClone(this.config);
   }
 
-  async saveConfig() {
+  async saveConfig(): Promise<RuntimeConfigState> {
     return this.getConfig();
   }
 
   async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
+    return this.activeProvider ? structuredClone(this.activeProvider) : null;
+  }
+}
+
+export class PersonalizationConfigStore extends TestConfigStore {
+  constructor() {
+    super(testRuntimeConfig({
+      globalPrompt: 'Prefer crisp context before the answer.',
+      memory: { ...defaultTestMemory, useMemories: false, generateMemories: false },
+      memoryEnabled: false,
+      setsunaStyle: 'daily',
+    }));
+  }
+}
+
+export class HooksConfigStore extends TestConfigStore {
+  constructor(hooks: RuntimeConfigState['hooks']) {
+    super(testRuntimeConfig({ hooks, bypassHookTrust: true }));
+  }
+}
+
+export class ContextWindowConfigStore extends TestConfigStore {
+  constructor(contextWindowTokens: number) {
+    const model = {
+      id: 'local-runtime-smoke',
+      name: 'Local runtime smoke',
+      code: 'local-runtime-smoke',
+      enabled: true,
+      contextWindowTokens,
+      maxOutputTokens: 68_000,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    };
+    const provider = {
+      id: 'test',
+      name: 'Test provider',
+      provider: 'openai-compatible' as const,
+      baseUrl: 'https://llm.test/v1',
+      enabled: true,
+      apiKeySet: true,
+      apiKeyPreview: 'secret',
+      models: [model],
+    };
+    super(
+      testRuntimeConfig({
+        providers: [provider],
+        memory: { ...defaultTestMemory, useMemories: false, generateMemories: false },
+        memoryEnabled: false,
+      }),
+      { ...provider, apiKey: 'secret', activeModel: model },
+    );
+  }
+}
+
+export class MemorySettingsConfigStore extends TestConfigStore {
+  constructor(memory: RuntimeConfigState['memory']) {
+    super(testRuntimeConfig({
+      memory,
+      memoryEnabled: memory.useMemories || memory.generateMemories,
+    }));
+  }
+}
+
+export class StrictApprovalConfigStore extends TestConfigStore {
+  constructor() {
+    super(testRuntimeConfig({ approvalPolicy: 'strict' }));
+  }
+}
+
+export class ReadOnlyConfigStore extends TestConfigStore {
+  constructor() {
+    super(testRuntimeConfig({ permissionProfile: 'read-only' }));
+  }
+}
+
+export class FullApprovalConfigStore extends TestConfigStore {
+  constructor(permissionProfile: 'workspace-write' | 'danger-full-access' = 'workspace-write') {
+    super(testRuntimeConfig({ approvalPolicy: 'full', permissionProfile }));
   }
 }
 
 export async function mkDataDir(): Promise<string> {
-  const { mkdtemp } = await import('node:fs/promises');
-  const { tmpdir } = await import('node:os');
-  const path = await import('node:path');
-  return mkdtemp(path.join(tmpdir(), 'setsuna-agent-loop-tools-'));
+  return createTestTempDirectory('setsuna-agent-loop-tools-');
 }
 
 export async function waitForPendingApproval(approvalGate: InMemoryApprovalGate) {

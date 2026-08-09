@@ -8,6 +8,7 @@ import type {
   RuntimeThreadSummary,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import { isRuntimeActivityEvent } from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -21,7 +22,6 @@ import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGu
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
-import { isActivityEvent } from './runtimeEvents.js';
 import {
   reportRuntimeBackgroundFailure,
   runtimeClientErrorMessage,
@@ -279,7 +279,7 @@ export function useRuntimeThreadState({
           refreshThreadsSoon(true);
         }
 
-        const activityBatch = projection.acceptedEvents.filter(isActivityEvent);
+        const activityBatch = projection.acceptedEvents.filter(isRuntimeActivityEvent);
         if (activityBatch.length) {
           setActivityEvents((items) => mergeRecentActivityEvents(items, activityBatch));
         }

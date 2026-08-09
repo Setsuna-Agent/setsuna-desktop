@@ -1,9 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import type { RuntimeEvent } from '../src/events.js';
-import { applyRuntimeEventToThread } from '../src/thread-events.js';
+import { applyRuntimeEventToThread, isActiveToolRun } from '../src/thread-events.js';
 import type { RuntimeThread } from '../src/threads.js';
 
 describe('thread event tool-run projection', () => {
+  it.each([
+    ['running', undefined, true],
+    ['pending_approval', 'pending', true],
+    ['pending_approval', 'approved', false],
+    ['pending_approval', 'rejected', false],
+    ['pending_approval', 'cancelled', false],
+    ['success', undefined, false],
+  ] as const)('classifies %s/%s tool runs as active=%s', (status, approvalStatus, expected) => {
+    expect(isActiveToolRun({
+      id: 'call_1',
+      name: 'workspace_read_file',
+      status,
+      approvalStatus,
+    })).toBe(expected);
+  });
+
   it('separates streamed tool preparation from actual execution', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

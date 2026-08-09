@@ -136,3 +136,21 @@ export type RuntimeMcpServerInput = {
 };
 
 export type RuntimeMcpServerPatch = Omit<Partial<RuntimeMcpServerInput>, 'key'>;
+
+/** Preserve stored secret-bearing fields when an update omits them. */
+export function mergeRuntimeMcpServerInput(
+  existing: RuntimeMcpServerInput | undefined,
+  input: RuntimeMcpServerInput,
+): RuntimeMcpServerInput {
+  if (!existing) return input;
+  return {
+    ...existing,
+    ...input,
+    ...(input.env === undefined ? { env: existing.env } : {}),
+    ...(input.headers === undefined ? { headers: existing.headers } : {}),
+    ...(input.envHttpHeaders === undefined ? { envHttpHeaders: existing.envHttpHeaders } : {}),
+    ...(input.bearerTokenEnvVar === undefined
+      ? { bearerTokenEnvVar: existing.bearerTokenEnvVar }
+      : {}),
+  };
+}

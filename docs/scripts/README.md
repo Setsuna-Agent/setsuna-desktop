@@ -154,7 +154,7 @@ Publish job：
 | `pnpm check:architecture` | `check-architecture.mjs` + `generate-tree.mjs --check` |
 | `pnpm docs:tree` | `generate-tree.mjs` |
 | `pnpm package:*` | version validate + build + electron-builder pack hooks |
-| `pnpm test:release` | prepare ripgrep + release Vitest config |
+| `pnpm test:release` | prepare ripgrep + 跨平台边界 Release Gate |
 | `pnpm release:dry-run` | validate + build + `release-dry-run.mjs` |
 
 完整构建和 workflow 见 [构建与发布](../development/build-and-release.md)。

@@ -7,7 +7,7 @@ import type {
   RuntimeThreadSummary,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { applyRuntimeEvent } from './runtimeEvents.js';
+import { applyRuntimeEventToThread, isActiveToolRun } from '@setsuna-desktop/contracts';
 
 export function isThreadContextCompacting(
   compactingThreadId: string | null,
@@ -36,7 +36,7 @@ export function applyCurrentThreadEvent(
   event: RuntimeEvent,
 ): RuntimeThread | null {
   if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
-  return applyRuntimeEvent(thread, event);
+  return applyRuntimeEventToThread(thread, event);
 }
 
 export type CurrentThreadEventBatchProjection = {
@@ -161,17 +161,6 @@ export function updateThreadApprovalRun(
     };
   });
   return changed ? { ...thread, updatedAt: resolvedAt, messages } : thread;
-}
-
-function isActiveToolRun(
-  run: NonNullable<RuntimeThread['messages'][number]['toolRuns']>[number],
-): boolean {
-  return run.status === 'running' || (
-    run.status === 'pending_approval'
-    && run.approvalStatus !== 'approved'
-    && run.approvalStatus !== 'rejected'
-    && run.approvalStatus !== 'cancelled'
-  );
 }
 
 function approvalStatusForDecision(

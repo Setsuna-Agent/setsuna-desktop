@@ -1,4 +1,5 @@
 import {
+  isActiveToolRun,
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
   normalizeRuntimeMessageProviderMetadata,
@@ -65,7 +66,7 @@ function activeTurnIdsInThread(thread: RuntimeThread): string[] {
   }
   for (const message of thread.messages) {
     if (!message.turnId) continue;
-    if (message.status === 'streaming' || message.toolRuns?.some(isActiveRuntimeToolRun)) {
+    if (message.status === 'streaming' || message.toolRuns?.some(isActiveToolRun)) {
       turnIds.add(message.turnId);
     }
   }
@@ -74,15 +75,6 @@ function activeTurnIdsInThread(thread: RuntimeThread): string[] {
 
 function runtimeTurnAppearsActive(thread: RuntimeThread, turnId: string): boolean {
   return activeTurnIdsInThread(thread).includes(turnId);
-}
-
-function isActiveRuntimeToolRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return run.status === 'running' || (
-    run.status === 'pending_approval'
-    && run.approvalStatus !== 'approved'
-    && run.approvalStatus !== 'rejected'
-    && run.approvalStatus !== 'cancelled'
-  );
 }
 
 export async function runAppServerThreadShellCommand(

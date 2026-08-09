@@ -33,7 +33,7 @@ describe('PC local tool resource bounds', () => {
   });
 
   it('uses Windows taskkill process-tree arguments for graceful and forced termination', () => {
-    expect(windowsProcessTreeKillArgs(42, 'SIGTERM')).toEqual(['/pid', '42', '/t']);
+    expect(windowsProcessTreeKillArgs(42, 'SIGTERM')).toEqual(['/pid', '42', '/t', '/f']);
     expect(windowsProcessTreeKillArgs(42, 'SIGKILL')).toEqual(['/pid', '42', '/t', '/f']);
   });
 

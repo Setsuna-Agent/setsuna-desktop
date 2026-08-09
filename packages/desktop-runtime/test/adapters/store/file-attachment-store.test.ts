@@ -1,17 +1,11 @@
-import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { FileAttachmentStore } from '../../../src/adapters/store/file-attachment-store.js';
 import { RuntimeAttachmentValidationError } from '../../../src/ports/attachment-store.js';
 import type { Clock } from '../../../src/ports/clock.js';
 import type { IdGenerator } from '../../../src/ports/id-generator.js';
-
-const testDirectories: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(testDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
-});
+import { createTestTempDirectory } from '../../support/test-temp-directory.js';
 
 describe('file attachment store', () => {
   it('claims uploaded documents for a thread and keeps fork references until the last thread is released', async () => {
@@ -123,8 +117,7 @@ describe('file attachment store', () => {
 });
 
 async function attachmentStoreFixture(pendingTtlMs = 24 * 60 * 60 * 1_000) {
-  const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-attachment-store-test-'));
-  testDirectories.push(dataDir);
+  const dataDir = await createTestTempDirectory('setsuna-attachment-store-test-');
   const clock = new MutableClock(new Date('2026-07-17T00:00:00.000Z'));
   const ids = new SequentialIdGenerator();
   return {

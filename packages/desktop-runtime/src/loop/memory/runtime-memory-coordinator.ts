@@ -1,11 +1,8 @@
 import type {
   RuntimeConfigState,
   RuntimeMemoryCitation,
-  RuntimeMemoryKind,
   RuntimeMemoryRecord,
-  RuntimeMemoryScope,
   RuntimeMemorySourceLocation,
-  RuntimeMemoryStage1Status,
   RuntimeMessage,
   RuntimeThread,
   RuntimeThreadSummary,
@@ -20,14 +17,12 @@ import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolExecutionResult } from '../../ports/tool-host.js';
 import type { UsageStore } from '../../ports/usage-store.js';
+import { errorMessage } from '../../shared/node-errors.js';
 import {
   compactForPrompt,
   escapeSkillAttribute,
   neutralizeMemoryTags,
   neutralizePromptClosingTags,
-  parseJsonArrayFromText,
-  parseJsonObjectFromText,
-  stripMarkdownFence,
 } from '../context/prompt-utils.js';
 import { throwIfAborted } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
@@ -37,13 +32,19 @@ import {
   MEMORY_CONSOLIDATION_MODEL,
   runMemoryConsolidationAgent,
 } from './memory-consolidation-agent.js';
+import {
+  reportMemoryBestEffortFailure,
+  runMemoryBestEffort,
+} from './memory-best-effort.js';
+import {
+  memoryDedupeText,
+  PASSIVE_MEMORY_MAX_ITEMS,
+  passiveMemoryExtractionFromModelText,
+  stage1RolloutSummaryFromCandidates,
+} from './passive-memory-extraction.js';
 
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
-const PASSIVE_MEMORY_MAX_ITEMS = 5;
 const PASSIVE_MEMORY_MAX_OUTPUT_TOKENS = 900;
-const PASSIVE_MEMORY_STAGE1_RAW_MAX_CHARS = 60_000;
-const PASSIVE_MEMORY_STAGE1_SUMMARY_MAX_CHARS = 4_000;
-const PASSIVE_MEMORY_STAGE1_SLUG_MAX_CHARS = 80;
 const MEMORY_SUMMARY_PROMPT_MAX_CHARS = 12_000;
 const DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP = 2;
 const DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS = 10;
@@ -57,27 +58,6 @@ const HOURS_TO_MS = 60 * 60 * 1000;
 const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
 const SHARED_MEMORY_FILES_FEATURE = 'memory_unscoped_files';
-
-type PassiveMemoryStage1Result = {
-  status: RuntimeMemoryStage1Status;
-  rawMemory?: string;
-  rolloutSummary?: string;
-  rolloutSlug?: string;
-  failureReason?: string;
-};
-
-type PassiveMemoryCandidate = {
-  content: string;
-  scope: RuntimeMemoryScope;
-  kind?: RuntimeMemoryKind;
-  title?: string;
-  tags?: string[];
-};
-
-type PassiveMemoryExtraction = {
-  candidates: PassiveMemoryCandidate[];
-  stage1: PassiveMemoryStage1Result | null;
-};
 
 export type ExplicitMemoryInput = {
   alreadySaved: boolean;
@@ -104,6 +84,7 @@ type RuntimeMemoryCoordinatorOptions = {
 export class RuntimeMemoryCoordinator {
   private readonly backgroundTasks = new RuntimeBackgroundTaskQueue('memory');
   private readonly passiveTasks = new Map<string, Promise<void>>();
+  private shuttingDown = false;
 
   constructor(private readonly options: RuntimeMemoryCoordinatorOptions) {}
 
@@ -112,15 +93,27 @@ export class RuntimeMemoryCoordinator {
   }
 
   private async runStartupExtractionNow(signal: AbortSignal): Promise<{ claimed: number; extracted: number }> {
-    if (!this.options.memoryStore) return { claimed: 0, extracted: 0 };
+    const memoryStore = this.options.memoryStore;
+    if (!memoryStore) return { claimed: 0, extracted: 0 };
     throwIfAborted(signal);
-    const config = await this.options.configStore?.getConfig().catch(() => null);
+    const configStore = this.options.configStore;
+    const config = configStore
+      ? await runMemoryBestEffort('startup.read_config', null, () => configStore.getConfig())
+      : null;
     if (!canGenerateMemories(config)) return { claimed: 0, extracted: 0 };
 
     const now = this.options.clock.now();
     const summaries = await this.options.threadStore.listThreads({ includeArchived: true });
-    const existing = await this.options.memoryStore.listMemories({ limit: 500 }).catch(() => ({ memories: [] }));
-    const existingStage1 = await this.options.memoryStore.listStage1Outputs().catch(() => ({ outputs: [] }));
+    const existing = await runMemoryBestEffort(
+      'startup.list_memories',
+      { memories: [] },
+      () => memoryStore.listMemories({ limit: 500 }),
+    );
+    const existingStage1 = await runMemoryBestEffort(
+      'startup.list_stage1_outputs',
+      { outputs: [] },
+      () => memoryStore.listStage1Outputs(),
+    );
     const extractedKeys = new Set(existing.memories.map((memory) => memorySourceKey(memory.sourceThreadId, memory.sourceTurnId)).filter(Boolean));
     for (const output of existingStage1.outputs) {
       if (output.status === 'failed') continue;
@@ -143,14 +136,19 @@ export class RuntimeMemoryCoordinator {
       const key = memorySourceKey(thread.id, sourceTurnId);
       if (key && extractedKeys.has(key)) continue;
       claimed += 1;
-      const saved = await this.extractPassiveMemoriesFromMessages({
-        config,
-        sourceLabel: '历史线程内容：',
-        sourceTurnId,
-        thread,
-        messages,
-        signal,
-      }).catch(() => 0);
+      const saved = await runMemoryBestEffort(
+        'startup.extract_passive_memories',
+        0,
+        () => this.extractPassiveMemoriesFromMessages({
+          config,
+          sourceLabel: '历史线程内容：',
+          sourceTurnId,
+          thread,
+          messages,
+          signal,
+        }),
+        { threadId: thread.id, turnId: sourceTurnId },
+      );
       if (saved > 0) {
         extracted += 1;
         if (key) extractedKeys.add(key);
@@ -160,8 +158,13 @@ export class RuntimeMemoryCoordinator {
   }
 
   async recordCitationUsage(citation: RuntimeMemoryCitation | undefined): Promise<void> {
-    if (!citation) return;
-    await this.options.memoryStore?.recordMemoryCitationUsage(citation).catch(() => undefined);
+    const memoryStore = this.options.memoryStore;
+    if (!citation || !memoryStore) return;
+    await runMemoryBestEffort(
+      'citation.record_usage',
+      undefined,
+      () => memoryStore.recordMemoryCitationUsage(citation).then(() => undefined),
+    );
   }
 
   schedulePassiveMemoriesForTurn(threadId: string, turnId: string): void {
@@ -170,7 +173,14 @@ export class RuntimeMemoryCoordinator {
     const task = this.backgroundTasks
       .enqueue((signal) => this.extractPassiveMemoriesForTurn(threadId, turnId, signal))
       // 记忆可以改善后续轮次，但绝不能让已经完成的轮次转为失败。
-      .catch(() => undefined);
+      .catch((error) => {
+        if (this.shuttingDown) return;
+        reportMemoryBestEffortFailure(
+          'turn.extract_passive_memories',
+          error,
+          { threadId, turnId },
+        );
+      });
     this.passiveTasks.set(key, task);
     void task.finally(() => {
       if (this.passiveTasks.get(key) === task) this.passiveTasks.delete(key);
@@ -182,13 +192,22 @@ export class RuntimeMemoryCoordinator {
   }
 
   shutdown(timeoutMs: number): Promise<boolean> {
+    this.shuttingDown = true;
     return this.backgroundTasks.shutdown(timeoutMs);
   }
 
   private async extractPassiveMemoriesForTurn(threadId: string, turnId: string, signal: AbortSignal): Promise<void> {
     if (!this.options.memoryStore) return;
     throwIfAborted(signal);
-    const config = await this.options.configStore?.getConfig().catch(() => null);
+    const configStore = this.options.configStore;
+    const config = configStore
+      ? await runMemoryBestEffort(
+          'turn.read_config',
+          null,
+          () => configStore.getConfig(),
+          { threadId, turnId },
+        )
+      : null;
     if (!canGenerateMemories(config)) return;
 
     const thread = await this.options.threadStore.getThread(threadId);
@@ -226,16 +245,24 @@ export class RuntimeMemoryCoordinator {
   }
 
   async contextMessages(projectId: string | undefined, config: RuntimeConfigState | null | undefined): Promise<RuntimeMessage[]> {
-    if (!canUseMemories(config)) return [];
-    const memories = await this.options.memoryStore?.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 });
-    if (!memories?.memories.length) return [];
+    const memoryStore = this.options.memoryStore;
+    if (!canUseMemories(config) || !memoryStore) return [];
+    const memories = await runMemoryBestEffort(
+      'context.list_memories',
+      { memories: [] },
+      () => memoryStore.listMemories(projectId ? { projectId, limit: 8 } : { scope: 'global', limit: 8 }),
+    );
+    if (!memories.memories.length) return [];
     // 第二阶段摘要文件会合并所有项目，因此只能通过显式调试标志启用；普通全局线程和
     // 项目线程只接收经过结构化过滤的记录。
     const allowSharedMemoryFiles = !projectId && config?.features?.[SHARED_MEMORY_FILES_FEATURE] === true;
     const memorySummary = allowSharedMemoryFiles
-      ? await this.options.memoryStore?.readMemoryFile({ path: 'memory_summary.md' })
-        .then((file) => truncateMemorySummary(file.content))
-        .catch(() => '')
+      ? await runMemoryBestEffort(
+          'context.read_memory_summary',
+          '',
+          () => memoryStore.readMemoryFile({ path: 'memory_summary.md' })
+            .then((file) => truncateMemorySummary(file.content)),
+        )
       : '';
     // 记忆属于建议性用户上下文，可能已经过时，不能获得 runtime 策略级权限。
     return [{
@@ -306,7 +333,12 @@ export class RuntimeMemoryCoordinator {
     const memoryStore = this.options.memoryStore;
     if (!memoryStore || !messages.length) return 0;
     throwIfAborted(signal);
-    await memoryStore.preparePhase2Workspace().catch(() => undefined);
+    await runMemoryBestEffort(
+      'phase2.prepare_workspace',
+      undefined,
+      () => memoryStore.preparePhase2Workspace().then(() => undefined),
+      { threadId: thread.id, turnId: sourceTurnId },
+    );
     const extractionModel = runtimeTaskModelRequest(
       config,
       'memoryExtraction',
@@ -345,24 +377,40 @@ export class RuntimeMemoryCoordinator {
           rolloutSlug: thread.title,
         }
       : null);
-    if (stage1) await memoryStore.recordStage1Output({
-      threadId: thread.id,
-      turnId: sourceTurnId,
-      status: stage1.status,
-      sourceUpdatedAt: stage1SourceUpdatedAt(messages),
-      rawMemory: stage1.rawMemory,
-      rolloutSummary: stage1.rolloutSummary,
-      rolloutSlug: stage1.rolloutSlug,
-      failureReason: stage1.failureReason,
-      projectId: thread.projectId,
-    }).catch(() => undefined);
+    if (stage1) await runMemoryBestEffort(
+      'stage1.record_output',
+      undefined,
+      () => memoryStore.recordStage1Output({
+        threadId: thread.id,
+        turnId: sourceTurnId,
+        status: stage1.status,
+        sourceUpdatedAt: stage1SourceUpdatedAt(messages),
+        rawMemory: stage1.rawMemory,
+        rolloutSummary: stage1.rolloutSummary,
+        rolloutSlug: stage1.rolloutSlug,
+        failureReason: stage1.failureReason,
+        projectId: thread.projectId,
+      }).then(() => undefined),
+      { threadId: thread.id, turnId: sourceTurnId },
+    );
     if (stage1) {
-      await this.runPhase2Dispatch(config, thread.id, sourceTurnId, signal)
-        .catch(() => undefined);
+      await runMemoryBestEffort(
+        'phase2.dispatch',
+        undefined,
+        () => this.runPhase2Dispatch(config, thread.id, sourceTurnId, signal),
+        { threadId: thread.id, turnId: sourceTurnId },
+      );
     }
     if (!candidates.length) return 0;
 
-    const existing = await memoryStore.listMemories(thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 }).catch(() => ({ memories: [] }));
+    const existing = await runMemoryBestEffort(
+      'extraction.list_memories',
+      { memories: [] },
+      () => memoryStore.listMemories(
+        thread.projectId ? { projectId: thread.projectId, limit: 500 } : { limit: 500 },
+      ),
+      { threadId: thread.id, turnId: sourceTurnId },
+    );
     const seen = new Set(existing.memories.map((memory) => memoryDedupeText(memory.content)));
     let saved = 0;
     for (const candidate of candidates) {
@@ -395,27 +443,38 @@ export class RuntimeMemoryCoordinator {
   ): Promise<void> {
     const memoryStore = this.options.memoryStore;
     if (!memoryStore) return;
-    throwIfAborted(signal);
+    // Phase 2 is optional background work. A shutdown before the lease is
+    // claimed is an expected cancellation, not a failed memory operation.
+    if (signal.aborted) return;
     const claim = await memoryStore.claimPhase2Job({
       ownerId,
       leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
       retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
     });
     if (claim.status !== 'claimed' || !claim.ownershipToken) return;
+    const ownershipToken = claim.ownershipToken;
 
     try {
       const workspace = await memoryStore.syncPhase2Workspace();
       if (!workspace.hasChanges) {
         await memoryStore.markPhase2JobSucceeded({
-          ownershipToken: claim.ownershipToken,
+          ownershipToken,
           completionWatermark: claim.inputWatermark ?? 0,
         });
         return;
       }
-      const activeProvider = await this.options.configStore?.getActiveProviderConfig().catch(() => null);
+      const configStore = this.options.configStore;
+      const activeProvider = configStore
+        ? await runMemoryBestEffort(
+            'phase2.read_active_provider',
+            null,
+            () => configStore.getActiveProviderConfig(),
+            { threadId: ownerId, turnId: sourceTurnId },
+          )
+        : null;
       if (!activeProvider?.activeModel) {
         await memoryStore.markPhase2JobFailed({
-          ownershipToken: claim.ownershipToken,
+          ownershipToken,
           reason: 'consolidation_agent_unavailable',
           retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
         });
@@ -433,7 +492,7 @@ export class RuntimeMemoryCoordinator {
         now: () => this.options.clock.now(),
         signal,
         heartbeat: () => memoryStore.heartbeatPhase2Job({
-          ownershipToken: claim.ownershipToken!,
+          ownershipToken,
           leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
         }),
       });
@@ -447,21 +506,26 @@ export class RuntimeMemoryCoordinator {
       }
       throwIfAborted(signal);
       const stillOwnsLock = await memoryStore.heartbeatPhase2Job({
-        ownershipToken: claim.ownershipToken,
+        ownershipToken,
         leaseSeconds: MEMORY_PHASE2_JOB_LEASE_SECONDS,
       });
       if (!stillOwnsLock) throw new Error('lost memory phase-2 ownership before baseline reset');
       await memoryStore.resetPhase2WorkspaceBaseline();
       await memoryStore.markPhase2JobSucceeded({
-        ownershipToken: claim.ownershipToken,
+        ownershipToken,
         completionWatermark: claim.inputWatermark ?? 0,
       });
     } catch (error) {
-      await memoryStore.markPhase2JobFailed({
-        ownershipToken: claim.ownershipToken,
-        reason: `phase2_workspace_error:${error instanceof Error ? error.message : String(error)}`,
-        retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
-      }).catch(() => undefined);
+      await runMemoryBestEffort(
+        'phase2.mark_failed',
+        undefined,
+        () => memoryStore.markPhase2JobFailed({
+          ownershipToken,
+          reason: `phase2_workspace_error:${errorMessage(error)}`,
+          retryDelaySeconds: MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS,
+        }).then(() => undefined),
+        { threadId: ownerId, turnId: sourceTurnId },
+      );
     }
   }
 
@@ -725,101 +789,6 @@ function messagesAsPassiveMemorySource(messages: RuntimeMessage[]): string {
 function stage1SourceUpdatedAt(messages: RuntimeMessage[]): string {
   const latest = messages.map((message) => Date.parse(message.completedAt ?? message.createdAt)).filter(Number.isFinite).sort((left, right) => right - left)[0];
   return latest ? new Date(latest).toISOString() : new Date(0).toISOString();
-}
-
-function stage1RolloutSummaryFromCandidates(candidates: PassiveMemoryCandidate[]): string {
-  return candidates.map((candidate) => {
-    const kind = candidate.kind ?? 'note';
-    const scope = candidate.scope === 'project' ? 'project' : 'global';
-    return `- [${scope}/${kind}] ${candidate.content}`;
-  }).join('\n');
-}
-
-function passiveMemoryExtractionFromModelText(value: string, projectId: string | undefined): PassiveMemoryExtraction {
-  const parsed = parseJsonObjectFromText(value);
-  const rawMemories = Array.isArray(parsed?.memories) ? parsed.memories : parseJsonArrayFromText(value);
-  const candidates: PassiveMemoryCandidate[] = [];
-  const seen = new Set<string>();
-  for (const raw of rawMemories) {
-    const candidate = normalizePassiveMemoryCandidate(raw, projectId);
-    if (!candidate) continue;
-    const key = memoryDedupeText(candidate.content);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    candidates.push(candidate);
-    if (candidates.length >= PASSIVE_MEMORY_MAX_ITEMS) break;
-  }
-  return { candidates, stage1: passiveMemoryStage1FromModelText(value, parsed, candidates) };
-}
-
-function passiveMemoryStage1FromModelText(value: string, parsed: Record<string, unknown> | null, candidates: PassiveMemoryCandidate[]): PassiveMemoryStage1Result | null {
-  const text = stripMarkdownFence(value).trim();
-  if (!text) return { status: 'succeeded_no_output' };
-  if (parsed && hasStage1OutputFields(parsed)) {
-    const rawMemory = normalizeStage1ModelText(parsed.raw_memory, PASSIVE_MEMORY_STAGE1_RAW_MAX_CHARS);
-    const rolloutSummary = normalizeStage1ModelText(parsed.rollout_summary, PASSIVE_MEMORY_STAGE1_SUMMARY_MAX_CHARS);
-    const rolloutSlug = normalizeStage1Slug(parsed.rollout_slug);
-    if (!rawMemory || !rolloutSummary) return { status: 'succeeded_no_output' };
-    return { status: 'succeeded', rawMemory, rolloutSummary, rolloutSlug };
-  }
-  if (parsed || candidates.length || parseJsonArrayFromText(value).length) {
-    return candidates.length ? null : { status: 'succeeded_no_output' };
-  }
-  return { status: 'failed', failureReason: 'Model returned non-JSON memory extraction output.' };
-}
-
-function hasStage1OutputFields(value: Record<string, unknown>): boolean {
-  return Object.hasOwn(value, 'raw_memory') || Object.hasOwn(value, 'rollout_summary') || Object.hasOwn(value, 'rollout_slug');
-}
-
-function normalizeStage1ModelText(value: unknown, maxChars: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const text = value.replace(/\r\n/g, '\n').trim();
-  return text ? Array.from(text).slice(0, maxChars).join('').trimEnd() : undefined;
-}
-
-function normalizeStage1Slug(value: unknown): string | undefined {
-  const text = normalizeStage1ModelText(value, PASSIVE_MEMORY_STAGE1_SLUG_MAX_CHARS);
-  return text?.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || undefined;
-}
-
-function normalizePassiveMemoryCandidate(value: unknown, projectId: string | undefined): PassiveMemoryCandidate | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-  const content = normalizePassiveMemoryText(record.content, 2000);
-  if (!content) return null;
-  return {
-    content,
-    scope: passiveMemoryScope(record.scope, projectId),
-    kind: passiveMemoryKind(record.kind),
-    title: normalizePassiveMemoryText(record.title, 80),
-    tags: passiveMemoryTags(record.tags),
-  };
-}
-
-function passiveMemoryScope(value: unknown, projectId: string | undefined): RuntimeMemoryScope {
-  return value === 'project' && projectId ? 'project' : 'global';
-}
-
-function passiveMemoryKind(value: unknown): RuntimeMemoryKind | undefined {
-  if (value === 'preference' || value === 'project_rule' || value === 'fact' || value === 'workflow' || value === 'decision' || value === 'note') return value;
-  return undefined;
-}
-
-function passiveMemoryTags(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const tags = [...new Set(value.map((item) => normalizePassiveMemoryText(item, 24)).filter((tag): tag is string => Boolean(tag)))];
-  return tags.length ? tags.slice(0, 6) : undefined;
-}
-
-function normalizePassiveMemoryText(value: unknown, maxChars: number): string | undefined {
-  if (typeof value !== 'string') return undefined;
-  const text = value.replace(/\s+/g, ' ').trim();
-  return text ? Array.from(text).slice(0, maxChars).join('') : undefined;
-}
-
-function memoryDedupeText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
 function stripContextCompactionTags(value: string): string {
