@@ -1,4 +1,5 @@
 import {
+  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
@@ -254,6 +255,37 @@ describe('runtime host packaging paths', () => {
       '[runtime] GET /v1/threads transport failed; retrying once',
       transportError,
     );
+  });
+
+  it('keeps local plugin path installation on the main-only runtime route', async () => {
+    const bundlePath = path.resolve('/tmp/local-plugin');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      plugin: { id: 'local-plugin', name: 'Local Plugin' },
+      installedMcpServers: [],
+      reusedMcpServers: [],
+    }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+    });
+
+    await expect(host.request({ path: RUNTIME_LOCAL_PLUGIN_INSTALL_PATH }))
+      .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.request({ path: `/v1/..${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+      .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.request({ path: `/v1/%2e%2e${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+      .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.installLocalPluginBundle(bundlePath)).resolves.toMatchObject({
+      plugin: { id: 'local-plugin' },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://127.0.0.1:0${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}`);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ path: bundlePath }),
+    });
   });
 
   it('does not retry a mutating request and preserves transport diagnostics', async () => {

@@ -13,18 +13,29 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & { owned?: boolean };
 
 export type PluginMarketplaceSection = {
-  id: 'automation' | 'creation' | 'featured';
+  id: 'automation' | 'creation' | 'featured' | 'utilities';
   title: string;
   description: string;
   plugins: RuntimePluginMarketplaceItem[];
 };
 
+export function installedPluginsOutsideCatalog(
+  installedPlugins: RuntimePluginSummary[],
+  marketplacePlugins: RuntimePluginMarketplaceItem[],
+): RuntimePluginSummary[] {
+  const catalogIds = new Set(marketplacePlugins.map((plugin) => plugin.id));
+  return installedPlugins.filter((plugin) =>
+    plugin.installationSource !== 'marketplace' || !catalogIds.has(plugin.id));
+}
+
 export function pluginMarketplacePresentation(
   plugins: RuntimePluginMarketplaceItem[],
   t: Translate = defaultTranslate,
 ): { sections: PluginMarketplaceSection[] } {
-  const featured = plugins.filter((plugin) => plugin.featured);
-  const catalogPlugins = plugins.filter((plugin) => !plugin.featured);
+  const utilities = plugins.filter(isSetsunaUtility);
+  const regularPlugins = plugins.filter((plugin) => !isSetsunaUtility(plugin));
+  const featured = regularPlugins.filter((plugin) => plugin.featured);
+  const catalogPlugins = regularPlugins.filter((plugin) => !plugin.featured);
   const creation = catalogPlugins.filter((plugin) => !plugin.capabilities.hooks);
   const automation = catalogPlugins.filter((plugin) => plugin.capabilities.hooks > 0);
   const sections: PluginMarketplaceSection[] = [];
@@ -34,6 +45,14 @@ export function pluginMarketplacePresentation(
       title: t('capabilities.market.featured'),
       description: t('capabilities.market.featuredDescription'),
       plugins: featured,
+    });
+  }
+  if (utilities.length) {
+    sections.push({
+      id: 'utilities',
+      title: t('capabilities.market.utilities'),
+      description: t('capabilities.market.utilitiesDescription'),
+      plugins: utilities,
     });
   }
   if (creation.length) {
@@ -55,8 +74,13 @@ export function pluginMarketplacePresentation(
   return { sections };
 }
 
+function isSetsunaUtility(plugin: RuntimePluginMarketplaceItem): boolean {
+  return plugin.publisher === 'Setsuna' && Boolean(plugin.capabilities.extension);
+}
+
 export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem, t: Translate = defaultTranslate): string {
   const labels = [
+    plugin.capabilities.extension ? t('capabilities.market.extension') : null,
     plugin.capabilities.tools ? capabilityCountLabel('tool', plugin.capabilities.tools, t) : null,
     plugin.capabilities.skills ? capabilityCountLabel('skill', plugin.capabilities.skills, t) : null,
     plugin.capabilities.mcpServers ? capabilityCountLabel('service', plugin.capabilities.mcpServers, t) : null,
@@ -77,9 +101,13 @@ function capabilityCountLabel(
 export function mergePluginTools(
   marketplace: RuntimePluginTool[],
   installed: RuntimePluginTool[],
+  includeCatalogOnly = true,
 ): RuntimePluginTool[] {
   const installedByName = new Map(installed.map((tool) => [tool.name, tool]));
-  const merged = marketplace.map((tool) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((tool) => installedByName.has(tool.name));
+  const merged = catalog.map((tool) => {
     const active = installedByName.get(tool.name);
     installedByName.delete(tool.name);
     return active ? { ...tool, ...active, description: active.description ?? tool.description } : tool;
@@ -96,9 +124,13 @@ export function formatPluginFileSize(size: number): string {
 export function mergePluginHooks(
   marketplace: RuntimePluginHook[],
   installed: RuntimePluginHook[],
+  includeCatalogOnly = true,
 ): RuntimePluginHook[] {
   const installedById = new Map(installed.map((hook) => [hook.id, hook]));
-  const merged = marketplace.map((hook) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((hook) => installedById.has(hook.id));
+  const merged = catalog.map((hook) => {
     const active = installedById.get(hook.id);
     installedById.delete(hook.id);
     return active ? { ...hook, ...active, description: active.description ?? hook.description } : hook;
@@ -109,9 +141,13 @@ export function mergePluginHooks(
 export function mergePluginSkills(
   marketplace: RuntimePluginSkill[],
   installed: RuntimePluginSkill[],
+  includeCatalogOnly = true,
 ): RuntimePluginSkill[] {
   const installedById = new Map(installed.map((skill) => [skill.id, skill]));
-  const merged = marketplace.map((skill) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((skill) => installedById.has(skill.id));
+  const merged = catalog.map((skill) => {
     const active = installedById.get(skill.id);
     installedById.delete(skill.id);
     return active ? { ...skill, ...active, description: active.description ?? skill.description } : skill;
@@ -122,9 +158,13 @@ export function mergePluginSkills(
 export function mergePluginMcpServers(
   marketplace: RuntimePluginMcpServerDescriptor[],
   installed: RuntimePluginSummary['mcpServers'],
+  includeCatalogOnly = true,
 ): PluginMcpDetail[] {
   const installedByKey = new Map(installed.map((server) => [server.key, server]));
-  const merged = marketplace.map((server) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((server) => installedByKey.has(server.key));
+  const merged = catalog.map((server) => {
     const active = installedByKey.get(server.key);
     installedByKey.delete(server.key);
     return active ? { ...server, ...active, description: active.description ?? server.description } : server;

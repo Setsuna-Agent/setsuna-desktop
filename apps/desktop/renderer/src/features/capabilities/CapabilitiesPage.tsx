@@ -1,6 +1,6 @@
 import type {
   RuntimeConfigState,
-  RuntimeHookInput,
+  RuntimeExtensionStatus,
   RuntimeHookListResponse,
   RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
@@ -15,6 +15,7 @@ import type {
   RuntimeMcpToolInfo,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
+  RuntimePluginInstallResult,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
   RuntimeSkillDetail,
@@ -26,8 +27,6 @@ import {
   Info,
   MessageSquare,
   Plug,
-  Plus,
-  Puzzle,
   RefreshCw,
   Search,
 } from 'lucide-react';
@@ -35,24 +34,21 @@ import { useCallback, useState } from 'react';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { getDesktopPlatform } from '../../shared/lib/desktopPlatform.js';
 import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
-import { Button, IconButton } from '../../shared/ui/primitives.js';
+import { IconButton } from '../../shared/ui/primitives.js';
 import {
-  CapabilitiesHookCard,
-  CapabilitiesMcpCard,
-  CapabilitiesSkillCard,
-} from './CapabilitiesCatalogCards.js';
+  CapabilitiesMcpListItem,
+  CapabilitiesSkillListItem,
+} from './CapabilitiesCatalogItems.js';
 import {
-  CapabilitiesHookEditor,
-  emptyHookDraft,
-  hookConfigEventName,
-  hookDraftFromMetadata,
-  hookDraftToInput,
-  type HookDraft,
-} from './CapabilitiesHookEditor.js';
+  CapabilitiesCreateMenu,
+  CapabilitiesPluginCreateMenu,
+} from './CapabilitiesCreateMenu.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
+import { CapabilitiesLegacyHooksDetail } from './CapabilitiesLegacyHooksDetail.js';
 import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
+import { installedPluginsOutsideCatalog } from './pluginDisplay.js';
 import { CapabilitiesMcpEditor } from './mcp/CapabilitiesMcpEditor.js';
 import {
   emptyMcpDraft,
@@ -65,10 +61,21 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 const chatCreateSkillIds = {
   mcp: 'create-mcp-in-chat',
+  plugins: 'create-plugin-in-chat',
   skills: 'create-skill-in-chat',
 } as const;
 
-type CapabilityFilter = 'hooks' | 'mcp' | 'plugins' | 'skills';
+export const capabilityTabIds = ['plugins', 'skills', 'mcp'] as const;
+export type CapabilityFilter = (typeof capabilityTabIds)[number];
+
+export function capabilityCatalogTitle(
+  filter: CapabilityFilter,
+  t: Translate = defaultTranslate,
+): string {
+  if (filter === 'plugins') return t('capabilities.title.marketplace');
+  if (filter === 'skills') return t('capabilities.tab.skills');
+  return 'MCP';
+}
 
 export function CapabilitiesPage({
   config,
@@ -79,8 +86,8 @@ export function CapabilitiesPage({
   plugins,
   pluginMarketplace,
   pluginMarketplaceErrors,
+  extensionStatuses,
   selectedPluginId,
-  onCreateHook,
   onCreateSkill,
   onDeleteSkill,
   onGetPluginItemContent,
@@ -91,19 +98,19 @@ export function CapabilitiesPage({
   onRefresh,
   onUpdateSkill,
   onFetchMcpTools,
-  onRefreshHooks,
   onSaveMcpServer,
-  onTrustHook,
-  onUpdateHook,
-  onUpdateHookEnabled,
-  onDeleteHook,
   onUpdateMcpServer,
   onDeleteMcpServer,
   onLoginMcpServer,
   onLogoutMcpServer,
+  onInstallLocalPlugin,
   onInstallMarketplacePlugin,
   onUpdateMarketplacePlugin,
   onRemovePlugin,
+  onSetPluginExtensionTrust,
+  onDeleteStandaloneHook,
+  onSetHookEnabled,
+  onSetHookTrust,
   onSelectedPluginIdChange,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
@@ -118,8 +125,8 @@ export function CapabilitiesPage({
   plugins: RuntimePluginSummary[];
   pluginMarketplace: RuntimePluginMarketplaceItem[];
   pluginMarketplaceErrors: string[];
+  extensionStatuses: RuntimeExtensionStatus[];
   selectedPluginId: string | null;
-  onCreateHook: (input: RuntimeHookInput) => Promise<void>;
   onCreateSkill: (input: RuntimeSkillInput) => Promise<RuntimeSkillDetail>;
   onDeleteSkill: (skill: RuntimeSkillSummary) => Promise<void>;
   onGetPluginItemContent: (pluginId: string, kind: RuntimePluginItemKind, itemId: string, source: 'installed' | 'marketplace') => Promise<RuntimePluginItemContent>;
@@ -130,19 +137,19 @@ export function CapabilitiesPage({
   onRefresh: () => Promise<void>;
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<RuntimeSkillInput>) => Promise<RuntimeSkillDetail>;
   onFetchMcpTools: (input: RuntimeMcpServerInput) => Promise<{ tools: RuntimeMcpToolInfo[]; errors: string[] }>;
-  onRefreshHooks: () => Promise<RuntimeHookListResponse>;
   onSaveMcpServer: (input: RuntimeMcpServerInput) => Promise<void>;
-  onTrustHook: (hook: RuntimeHookMetadata) => Promise<void>;
-  onUpdateHook: (hook: RuntimeHookMetadata, input: RuntimeHookInput) => Promise<void>;
-  onUpdateHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
-  onDeleteHook: (hook: RuntimeHookMetadata) => Promise<void>;
   onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
   onDeleteMcpServer: (server: RuntimeMcpServer) => void;
   onLoginMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onLogoutMcpServer: (server: RuntimeMcpServer) => Promise<void>;
+  onInstallLocalPlugin: () => Promise<RuntimePluginInstallResult | null>;
   onInstallMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
+  onSetPluginExtensionTrust: (pluginId: string, trusted: boolean) => Promise<void>;
+  onDeleteStandaloneHook: (hook: RuntimeHookMetadata) => Promise<void>;
+  onSetHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
+  onSetHookTrust: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSelectedPluginIdChange: (pluginId: string | null) => void;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
@@ -151,21 +158,19 @@ export function CapabilitiesPage({
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
-  const [hookDraft, setHookDraft] = useState<HookDraft>(emptyHookDraft);
   const [saving, setSaving] = useState(false);
-  const [hookSaving, setHookSaving] = useState(false);
   const [capabilityFilter, setCapabilityFilter] = useState<CapabilityFilter>('plugins');
   const [capabilityQuery, setCapabilityQuery] = useState('');
-  const [updatingHookKeys, setUpdatingHookKeys] = useState<Set<string>>(new Set());
   const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
-  const [hookEditorOpen, setHookEditorOpen] = useState(false);
+  const [installingLocalPlugin, setInstallingLocalPlugin] = useState(false);
   const [installingPluginIds, setInstallingPluginIds] = useState<Set<string>>(new Set());
   const [removingPluginIds, setRemovingPluginIds] = useState<Set<string>>(new Set());
   const [pluginError, setPluginError] = useState<string | null>(null);
-  const [editingHook, setEditingHook] = useState<RuntimeHookMetadata | null>(null);
+  const [trustingExtensionIds, setTrustingExtensionIds] = useState<Set<string>>(new Set());
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [legacyHooksOpen, setLegacyHooksOpen] = useState(false);
   const skillDetails = useCapabilitySkillDetails({
     onCreateSkill,
     onDeleteSkill,
@@ -184,10 +189,8 @@ export function CapabilitiesPage({
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
-  const hookWarnings = hookEntries.flatMap((entry) => entry.warnings);
-  const hookErrors = hookEntries.flatMap((entry) => entry.errors.map((error) => error.message));
+  const standaloneHooks = hooks.filter((hook) => hook.source === 'user' && !hook.pluginId);
   const enabledSkillCount = skills.filter((skill) => skill.enabled).length;
-  const executableHookCount = hooks.filter((hook) => hook.enabled && (hook.trustStatus === 'trusted' || hook.trustStatus === 'managed')).length;
   const normalizedCapabilityQuery = capabilityQuery.trim().toLowerCase();
   const visibleServers = servers.filter((server) =>
     !normalizedCapabilityQuery ||
@@ -197,20 +200,31 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${skill.name} ${skill.description} ${skill.id}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
-  const visibleHooks = hooks.filter((hook) =>
-    !normalizedCapabilityQuery ||
-    `${hook.key} ${hook.eventName} ${hook.matcher ?? ''} ${hook.command ?? ''} ${hook.sourcePath}`.toLowerCase().includes(normalizedCapabilityQuery),
-  );
-  const marketplacePluginIds = new Set(pluginMarketplace.map((plugin) => plugin.id));
-  const localPlugins = plugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
-  const selectedMarketplacePlugin = selectedPluginId
-    ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
-    : undefined;
   const selectedInstalledPlugin = selectedPluginId
     ? plugins.find((plugin) => plugin.id === selectedPluginId)
     : undefined;
+  const localPlugins = installedPluginsOutsideCatalog(plugins, pluginMarketplace);
+  const selectedMarketplacePlugin = selectedInstalledPlugin && selectedInstalledPlugin.installationSource !== 'marketplace'
+    ? undefined
+    : selectedPluginId
+      ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
+      : undefined;
+  const legacyHooksPlugin: RuntimePluginSummary | undefined = standaloneHooks.length ? {
+    id: 'setsuna-legacy-hooks',
+    name: t('capabilities.legacyHooks.name'),
+    description: t('capabilities.legacyHooks.description'),
+    installedAt: '',
+    installationSource: 'local',
+    skills: [],
+    mcpServers: [],
+    hooks: [],
+    hookCount: standaloneHooks.length,
+    resources: [],
+  } : undefined;
   const selectedPluginItemSource = selectedInstalledPlugin ? 'installed' : 'marketplace';
-  const createCapabilityKind: 'mcp' | 'skills' = capabilityFilter === 'skills' ? 'skills' : 'mcp';
+  const createCapabilityKind: keyof typeof chatCreateSkillIds = capabilityFilter === 'plugins'
+    ? 'plugins'
+    : capabilityFilter === 'skills' ? 'skills' : 'mcp';
   const getSelectedPluginItemContent = useCallback((kind: RuntimePluginItemKind, itemId: string) => {
     if (!selectedPluginId) return Promise.reject(new Error('Plugin detail is no longer selected.'));
     return onGetPluginItemContent(selectedPluginId, kind, itemId, selectedPluginItemSource);
@@ -222,7 +236,7 @@ export function CapabilitiesPage({
     setMcpEditorOpen(false);
   }
 
-  function openConversationCreate(kind: 'mcp' | 'skills') {
+  function openConversationCreate(kind: keyof typeof chatCreateSkillIds) {
     setCreateMenuOpen(false);
     setCapabilityFilter(kind);
     onCreateInConversation(chatCreateSkillIds[kind]);
@@ -240,21 +254,6 @@ export function CapabilitiesPage({
     setCreateMenuOpen(false);
     setCapabilityFilter('skills');
     skillDetails.openCreate();
-  }
-
-  function openHookFormCreate() {
-    setCreateMenuOpen(false);
-    setCapabilityFilter('hooks');
-    setEditingHook(null);
-    setHookDraft(emptyHookDraft);
-    setHookEditorOpen(true);
-  }
-
-  function openHookEdit(hook: RuntimeHookMetadata) {
-    setCapabilityFilter('hooks');
-    setEditingHook(hook);
-    setHookDraft(hookDraftFromMetadata(hook));
-    setHookEditorOpen(true);
   }
 
   function editMcpServer(server: RuntimeMcpServer) {
@@ -301,28 +300,6 @@ export function CapabilitiesPage({
     }
   }
 
-  async function submitHook() {
-    const command = hookDraft.command.trim();
-    if (!command) return;
-    setHookSaving(true);
-    try {
-      const input = hookDraftToInput(hookDraft);
-      if (editingHook) await onUpdateHook(editingHook, input);
-      else await onCreateHook(input);
-      setHookDraft(emptyHookDraft);
-      setEditingHook(null);
-      setHookEditorOpen(false);
-    } finally {
-      setHookSaving(false);
-    }
-  }
-
-  async function deleteHook(hook: RuntimeHookMetadata) {
-    const confirmed = window.confirm(t('capabilities.page.confirmDeleteHook', { event: hookConfigEventName(hook) }));
-    if (!confirmed) return;
-    await updateHook(hook, () => onDeleteHook(hook));
-  }
-
   async function removePlugin(plugin: RuntimePluginSummary) {
     const confirmed = window.confirm(t('capabilities.page.confirmRemovePlugin', { name: plugin.name }));
     if (!confirmed) return;
@@ -334,6 +311,23 @@ export function CapabilitiesPage({
       setPluginError(pluginActionError(unknownError, t('capabilities.plugin.error.remove'), t));
     } finally {
       setRemovingPluginIds((items) => {
+        const next = new Set(items);
+        next.delete(plugin.id);
+        return next;
+      });
+    }
+  }
+
+  async function setPluginExtensionTrust(plugin: RuntimePluginSummary, trusted: boolean) {
+    if (trusted && !window.confirm(t('capabilities.extension.confirmTrust', { name: plugin.name }))) return;
+    setTrustingExtensionIds((items) => new Set(items).add(plugin.id));
+    setPluginError(null);
+    try {
+      await onSetPluginExtensionTrust(plugin.id, trusted);
+    } catch (unknownError) {
+      setPluginError(pluginActionError(unknownError, t('capabilities.plugin.error.update'), t));
+    } finally {
+      setTrustingExtensionIds((items) => {
         const next = new Set(items);
         next.delete(plugin.id);
         return next;
@@ -364,8 +358,23 @@ export function CapabilitiesPage({
     }
   }
 
+  async function installLocalPlugin() {
+    if (installingLocalPlugin) return;
+    setInstallingLocalPlugin(true);
+    setPluginError(null);
+    try {
+      const result = await onInstallLocalPlugin();
+      if (result) openPluginDetail(result.plugin);
+    } catch (unknownError) {
+      setPluginError(pluginActionError(unknownError, t('capabilities.plugin.error.install'), t));
+    } finally {
+      setInstallingLocalPlugin(false);
+    }
+  }
+
   function openPluginDetail(plugin: Pick<RuntimePluginSummary, 'id'>) {
     setCapabilityFilter('plugins');
+    setLegacyHooksOpen(false);
     onSelectedPluginIdChange(plugin.id);
     setPluginError(null);
   }
@@ -374,6 +383,7 @@ export function CapabilitiesPage({
     setCapabilityFilter(nextFilter);
     setCapabilityQuery('');
     setCreateMenuOpen(false);
+    setLegacyHooksOpen(false);
   }
 
   if (mcpEditorOpen) {
@@ -388,27 +398,6 @@ export function CapabilitiesPage({
             onBack={resetMcpDraft}
             onFetchTools={onFetchMcpTools}
             onSave={submitMcpServer}
-          />
-        </section>
-      </main>
-    );
-  }
-
-  if (hookEditorOpen) {
-    const closeHookEditor = () => {
-      setEditingHook(null);
-      setHookEditorOpen(false);
-    };
-    return (
-      <main className="capabilities-page desktop-capabilities-panel">
-        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
-          <CapabilitiesHookEditor
-            draft={hookDraft}
-            editingHook={editingHook}
-            saving={hookSaving}
-            setDraft={setHookDraft}
-            onBack={closeHookEditor}
-            onSave={() => void submitHook()}
           />
         </section>
       </main>
@@ -461,6 +450,22 @@ export function CapabilitiesPage({
     );
   }
 
+  if (legacyHooksOpen) {
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <CapabilitiesLegacyHooksDetail
+            hooks={standaloneHooks}
+            onBack={() => setLegacyHooksOpen(false)}
+            onDelete={onDeleteStandaloneHook}
+            onSetEnabled={onSetHookEnabled}
+            onSetTrust={onSetHookTrust}
+          />
+        </section>
+      </main>
+    );
+  }
+
   if (selectedPluginId && (selectedMarketplacePlugin || selectedInstalledPlugin)) {
     return (
       <main className="capabilities-page desktop-capabilities-panel">
@@ -473,6 +478,8 @@ export function CapabilitiesPage({
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
             runtimeMcpServers={servers}
+            extensionStatus={extensionStatuses.find((status) => status.pluginId === selectedPluginId)}
+            extensionTrusting={trustingExtensionIds.has(selectedPluginId)}
             removing={removingPluginIds.has(selectedPluginId)}
             runtimeHooks={hooks}
             onBack={() => {
@@ -482,6 +489,11 @@ export function CapabilitiesPage({
             onInstall={installOrUpdateMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
+            onSetExtensionTrust={selectedInstalledPlugin?.installationSource === 'marketplace'
+              ? undefined
+              : setPluginExtensionTrust}
+            onSetHookEnabled={onSetHookEnabled}
+            onSetHookTrust={onSetHookTrust}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
             onTestImageGeneration={onTestImageGeneration}
             onSaveVisionRecognitionConfig={onSaveVisionRecognitionConfig}
@@ -504,28 +516,16 @@ export function CapabilitiesPage({
   const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
   const marketplaceNoticeVisible = capabilityFilter === 'plugins' && Boolean(pluginError || pluginMarketplaceErrors.length);
   const capabilitySummary = capabilityFilter === 'plugins'
-    ? t('capabilities.market.count', { plugins: pluginMarketplace.length, installed: plugins.length })
+    ? t('capabilities.market.count', {
+        plugins: pluginMarketplace.length,
+        installed: plugins.length + Number(Boolean(legacyHooksPlugin)),
+      })
     : t('capabilities.summary', {
       mcp: servers.length,
       enabledSkills: enabledSkillCount,
       skills: skills.length,
       defaultSkills: selectedSkillCount,
-      executableHooks: executableHookCount,
-      hooks: hooks.length,
     });
-
-  async function updateHook(hook: RuntimeHookMetadata, action: () => Promise<void>) {
-    setUpdatingHookKeys((items) => new Set([...items, hook.key]));
-    try {
-      await action();
-    } finally {
-      setUpdatingHookKeys((items) => {
-        const next = new Set(items);
-        next.delete(hook.key);
-        return next;
-      });
-    }
-  }
 
   async function updateMcpAuth(server: RuntimeMcpServer, action: () => Promise<void>) {
     setMcpAuthPendingKeys((items) => new Set([...items, server.key]));
@@ -558,7 +558,7 @@ export function CapabilitiesPage({
           {tabsInPage ? capabilityTabs : null}
           <header className={`desktop-capabilities-header${capabilityFilter === 'plugins' ? ' desktop-capabilities-header--market' : ''}`}>
             <div className="desktop-capabilities-title">
-              <h2>{t(capabilityFilter === 'plugins' ? 'capabilities.title.marketplace' : 'capabilities.title.capabilities')}</h2>
+              <h2>{capabilityCatalogTitle(capabilityFilter, t)}</h2>
               {capabilityFilter === 'plugins' ? <span>{t('capabilities.market.subtitle')}</span> : null}
             </div>
             <div className="desktop-capabilities-actions">
@@ -573,37 +573,39 @@ export function CapabilitiesPage({
                   />
                 </div>
               ) : null}
-              <IconButton label={t('capabilities.refresh')} onClick={() => void (capabilityFilter === 'hooks' ? onRefreshHooks() : onRefresh())}>
+              <IconButton label={t('capabilities.refresh')} onClick={() => void onRefresh()}>
                 <RefreshCw size={15} />
               </IconButton>
-              {capabilityFilter === 'hooks' ? (
-                <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={openHookFormCreate}>
-                  {t('capabilities.create.action')}
-                </Button>
-              ) : capabilityFilter === 'plugins' ? null : (
-                <div className="desktop-capabilities-create">
-                  <Button type="button" variant="primary" icon={<Plus size={14} />} onClick={() => setCreateMenuOpen((value) => !value)}>
-                    {t('capabilities.create.action')}
-                  </Button>
-                  {createMenuOpen ? (
-                    <div className="desktop-capabilities-create-menu">
-                      <button className="desktop-capabilities-create-menu__item" type="button" onClick={() => openConversationCreate(createCapabilityKind)}>
-                        <span className="desktop-capabilities-create-menu__icon"><MessageSquare size={14} /></span>
-                        <span className="desktop-capabilities-create-menu__content">
-                          <strong>{createConversationTitle}</strong>
-                          <span>{createConversationDescription}</span>
-                        </span>
-                      </button>
-                      <button className="desktop-capabilities-create-menu__item" type="button" onClick={openFormCreate}>
-                        <span className="desktop-capabilities-create-menu__icon">{createFormIcon}</span>
-                        <span className="desktop-capabilities-create-menu__content">
-                          <strong>{createFormTitle}</strong>
-                          <span>{createFormDescription}</span>
-                        </span>
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
+              {capabilityFilter === 'plugins' ? (
+                <CapabilitiesPluginCreateMenu
+                  importing={installingLocalPlugin}
+                  open={createMenuOpen}
+                  onCreateInConversation={() => openConversationCreate('plugins')}
+                  onImport={() => void installLocalPlugin()}
+                  onOpenChange={setCreateMenuOpen}
+                />
+              ) : (
+                <CapabilitiesCreateMenu
+                  buttonLabel={t('capabilities.create.action')}
+                  items={[
+                    {
+                      id: `chat-${createCapabilityKind}`,
+                      title: createConversationTitle,
+                      description: createConversationDescription,
+                      icon: <MessageSquare size={14} />,
+                      onSelect: () => openConversationCreate(createCapabilityKind),
+                    },
+                    {
+                      id: `form-${createCapabilityKind}`,
+                      title: createFormTitle,
+                      description: createFormDescription,
+                      icon: createFormIcon,
+                      onSelect: openFormCreate,
+                    },
+                  ]}
+                  open={createMenuOpen}
+                  onOpenChange={setCreateMenuOpen}
+                />
               )}
             </div>
           </header>
@@ -629,17 +631,15 @@ export function CapabilitiesPage({
               <span>
                 {t(capabilityFilter === 'mcp'
                   ? 'capabilities.usage.mcp'
-                  : capabilityFilter === 'skills'
-                    ? 'capabilities.usage.skills'
-                    : 'capabilities.usage.hooks')}
+                  : 'capabilities.usage.skills')}
               </span>
             </div>
           ) : null}
 
-          <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ''}`}>
+          <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ' desktop-capability-list'}`}>
             {capabilityFilter === 'mcp'
               ? visibleServers.map((server) => (
-                <CapabilitiesMcpCard
+                <CapabilitiesMcpListItem
                   key={`mcp:${server.key}`}
                   authPending={mcpAuthPendingKeys.has(server.key)}
                   server={server}
@@ -673,7 +673,7 @@ export function CapabilitiesPage({
                   ),
                 );
                 return (
-                  <CapabilitiesSkillCard
+                  <CapabilitiesSkillListItem
                     key={`skill:${skill.id}`}
                     dependencyPending={dependencyPending}
                     skill={skill}
@@ -694,63 +694,31 @@ export function CapabilitiesPage({
                 );
               })
               : null}
-            {capabilityFilter === 'hooks'
-              ? visibleHooks.map((hook) => (
-                <CapabilitiesHookCard
-                  key={`hook:${hook.key}`}
-                  hook={hook}
-                  updating={updatingHookKeys.has(hook.key)}
-                  onDelete={() => void deleteHook(hook)}
-                  onEdit={() => openHookEdit(hook)}
-                  onSetEnabled={(enabled) => void updateHook(
-                    hook,
-                    () => onUpdateHookEnabled(hook, enabled),
-                  )}
-                  onTrust={() => void updateHook(
-                    hook,
-                    () => onTrustHook(hook),
-                  )}
-                />
-              ))
-              : null}
-            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length) ? (
+            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin) ? (
               <CapabilitiesPluginMarket
                 marketplacePlugins={pluginMarketplace}
                 localPlugins={localPlugins}
+                legacyHooksPlugin={legacyHooksPlugin}
                 installingPluginIds={installingPluginIds}
                 onInstall={installOrUpdateMarketplacePlugin}
+                onOpenLegacyHooks={() => {
+                  onSelectedPluginIdChange(null);
+                  setLegacyHooksOpen(true);
+                }}
                 onOpenMarketplace={openPluginDetail}
                 onOpenLocal={openPluginDetail}
               />
             ) : null}
             {((capabilityFilter === 'mcp' && visibleServers.length)
               || (capabilityFilter === 'skills' && visibleSkills.length)
-              || (capabilityFilter === 'hooks' && visibleHooks.length)
-              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length))) ? null : (
-              capabilityFilter === 'hooks' && !normalizedCapabilityQuery ? (
-                <div className="desktop-capabilities-empty desktop-capabilities-empty--hooks">
-                  <Puzzle size={24} />
-                  <strong>{t('capabilities.hook.emptyTitle')}</strong>
-                  <span>{t('capabilities.hook.emptyDescription')}</span>
-                  <Button type="button" variant="secondary" onClick={() => selectCapabilityFilter('plugins')}>{t('capabilities.hook.openMarketplace')}</Button>
-                </div>
-              ) : (
-                <div className="desktop-capabilities-empty">
-                  {capabilityFilter === 'plugins'
-                    ? t('capabilities.market.empty')
-                    : capabilityFilter === 'hooks' ? t('capabilities.hook.noMatch') : t('capabilities.empty')}
-                </div>
-              )
+              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin))) ? null : (
+              <div className="desktop-capabilities-empty">
+                {capabilityFilter === 'plugins'
+                  ? t('capabilities.market.empty')
+                  : t('capabilities.empty')}
+              </div>
             )}
           </div>
-
-          {capabilityFilter === 'hooks' && (hookWarnings.length || hookErrors.length) ? (
-            <div className="desktop-capabilities-errors">
-              {[...hookWarnings, ...hookErrors].map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          ) : null}
 
           {capabilityFilter === 'mcp' && mcpState?.errors.length ? (
             <div className="desktop-capabilities-errors">
@@ -780,23 +748,22 @@ function CapabilitiesTabs({
   summary: string;
   t: Translate;
 }) {
-  const tabs: Array<{ id: CapabilityFilter; label: string }> = [
-    { id: 'plugins', label: t('capabilities.tab.plugins') },
-    { id: 'mcp', label: 'MCP' },
-    { id: 'skills', label: t('capabilities.tab.skills') },
-    { id: 'hooks', label: 'Hooks' },
-  ];
+  const labels: Record<CapabilityFilter, string> = {
+    plugins: t('capabilities.tab.plugins'),
+    mcp: 'MCP',
+    skills: t('capabilities.tab.skills'),
+  };
 
   return (
     <nav className="desktop-capabilities-tabs" aria-label={t('capabilities.title.capabilities')}>
-      {tabs.map((tab) => (
+      {capabilityTabIds.map((tabId) => (
         <button
-          className={activeFilter === tab.id ? 'is-active' : ''}
-          key={tab.id}
+          className={activeFilter === tabId ? 'is-active' : ''}
+          key={tabId}
           type="button"
-          onClick={() => onChange(tab.id)}
+          onClick={() => onChange(tabId)}
         >
-          {tab.label}
+          {labels[tabId]}
         </button>
       ))}
       <span>{summary}</span>

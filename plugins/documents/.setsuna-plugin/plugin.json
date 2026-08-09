@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "documents",
   "name": "Word 文档处理",
   "icon": "documents",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "创建、编辑、检查并通过页面渲染验证 DOCX 文档，适用于报告、方案、备忘录和操作手册。",
   "publisher": "Setsuna",
   "tags": ["Word", "DOCX", "文档", "文件处理"],

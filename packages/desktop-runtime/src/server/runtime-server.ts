@@ -42,6 +42,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
     await settleStaleRuntimeTurns(runtime);
   } catch (error) {
+    await runtime.extensionManager.shutdown().catch(() => undefined);
     await runtime.mcpConnections.shutdown().catch(() => undefined);
     await runtime.networkProxyFetch.close().catch(() => undefined);
     await runtime.nativeBridge.close().catch(() => undefined);
@@ -173,21 +174,25 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           if (!drained) throw new Error('Runtime tasks did not drain before shutdown timeout.');
         } finally {
           try {
-            await runtime.backgroundShellProcesses.shutdown();
+            await runtime.extensionManager.shutdown();
           } finally {
             try {
-              await runtime.mcpConnections.shutdown();
+              await runtime.backgroundShellProcesses.shutdown();
             } finally {
               try {
-                await runtime.networkProxyFetch.close();
+                await runtime.mcpConnections.shutdown();
               } finally {
                 try {
-                  await runtime.nativeBridge.close();
+                  await runtime.networkProxyFetch.close();
                 } finally {
                   try {
-                    await runtime.threadStore.close();
+                    await runtime.nativeBridge.close();
                   } finally {
-                    await serverClosed;
+                    try {
+                      await runtime.threadStore.close();
+                    } finally {
+                      await serverClosed;
+                    }
                   }
                 }
               }

@@ -1,5 +1,6 @@
 import type {
   RuntimeConfigState,
+  RuntimeExtensionStatus,
   RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationConfigState,
@@ -18,7 +19,7 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, Check, Download, FileText, Loader2, Plug, Trash2, Workflow, Wrench } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader } from '../../shared/ui/primitives.js';
@@ -33,6 +34,8 @@ import { localizedPluginCopy } from './pluginLocalization.js';
 
 export function CapabilitiesPluginDetail({
   error,
+  extensionStatus,
+  extensionTrusting = false,
   imageGenerationConfig,
   runtimeConfig,
   installedPlugin,
@@ -43,6 +46,9 @@ export function CapabilitiesPluginDetail({
   onGetItemContent,
   onInstall,
   onRemove,
+  onSetExtensionTrust,
+  onSetHookEnabled,
+  onSetHookTrust,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
   onSaveVisionRecognitionConfig,
@@ -51,6 +57,8 @@ export function CapabilitiesPluginDetail({
   runtimeHooks,
 }: {
   error: string | null;
+  extensionStatus?: RuntimeExtensionStatus;
+  extensionTrusting?: boolean;
   imageGenerationConfig?: RuntimeImageGenerationConfigState;
   runtimeConfig?: RuntimeConfigState;
   installedPlugin?: RuntimePluginSummary;
@@ -61,6 +69,9 @@ export function CapabilitiesPluginDetail({
   onGetItemContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
+  onSetExtensionTrust?: (plugin: RuntimePluginSummary, trusted: boolean) => Promise<void>;
+  onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
+  onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
   onSaveVisionRecognitionConfig?: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
@@ -72,18 +83,57 @@ export function CapabilitiesPluginDetail({
   const [selectedItem, setSelectedItem] = useState<CapabilitiesPluginItem | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
-  const copy = localizedPluginCopy(plugin, t);
+  const marketplaceMetadata = marketplacePlugin
+    && (!installedPlugin || installedPlugin.installationSource === 'marketplace')
+    ? marketplacePlugin
+    : undefined;
+  const displayPlugin = marketplaceMetadata ?? plugin;
+  const copy = localizedPluginCopy(displayPlugin, t);
 
-  const tools = mergePluginTools(marketplacePlugin?.tools ?? [], installedPlugin?.tools ?? []);
-  const skills = mergePluginSkills(marketplacePlugin?.skills ?? [], installedPlugin?.skills ?? []);
-  const mcpServers = mergePluginMcpServers(marketplacePlugin?.mcpServers ?? [], installedPlugin?.mcpServers ?? []);
-  const hooks = mergePluginHooks(marketplacePlugin?.hooks ?? [], installedPlugin?.hooks ?? []);
-  const resources = installedPlugin?.resources.length ? installedPlugin.resources : marketplacePlugin?.resources ?? [];
-  const hookCount = Math.max(hooks.length, installedPlugin?.hookCount ?? marketplacePlugin?.capabilities.hooks ?? 0);
-  const resourceCount = Math.max(resources.length, marketplacePlugin?.capabilities.resources ?? 0);
-  const installed = Boolean(installedPlugin ?? marketplacePlugin?.installed);
-  const subtitle = [plugin.publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
-  const tags = plugin.tags ?? [];
+  const includeCatalogOnly = !installedPlugin;
+  const tools = mergePluginTools(marketplaceMetadata?.tools ?? [], installedPlugin?.tools ?? [], includeCatalogOnly);
+  const skills = mergePluginSkills(marketplaceMetadata?.skills ?? [], installedPlugin?.skills ?? [], includeCatalogOnly);
+  const mcpServers = mergePluginMcpServers(
+    marketplaceMetadata?.mcpServers ?? [],
+    installedPlugin?.mcpServers ?? [],
+    includeCatalogOnly,
+  );
+  const hooks = mergePluginHooks(marketplaceMetadata?.hooks ?? [], installedPlugin?.hooks ?? [], includeCatalogOnly);
+  const catalogResourceIds = new Set(marketplaceMetadata?.resources.map((resource) => resource.id) ?? []);
+  // Installed details must remain readable. The catalog may remove old bundled
+  // notices, but catalog-only additions are shown only after the user updates.
+  const resources = installedPlugin
+    ? installedPlugin.resources.filter((resource) => !marketplaceMetadata || catalogResourceIds.has(resource.id))
+    : marketplaceMetadata?.resources ?? [];
+  const hookCount = installedPlugin
+    ? Math.max(hooks.length, installedPlugin.hookCount)
+    : Math.max(hooks.length, marketplaceMetadata?.capabilities.hooks ?? 0);
+  const resourceCount = installedPlugin
+    ? resources.length
+    : Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
+  const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
+  const installedFromMarketplace = installedPlugin?.installationSource === 'marketplace';
+  const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
+  const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
+  const tags = displayPlugin.tags ?? [];
+  const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
+  const isBundledExtension = Boolean(marketplaceMetadata);
+  const installedExtensionTrust = installedPlugin?.extension?.trust;
+  const localExtensionTrusted = !isBundledExtension && installedExtensionTrust === 'trusted';
+  const bundledExtensionNeedsRepair = Boolean(
+    isBundledExtension
+      && installedPlugin?.extension
+      && installedExtensionTrust !== 'trusted',
+  );
+  const extensionVerified = isBundledExtension
+    ? !bundledExtensionNeedsRepair
+    : localExtensionTrusted;
+  const showExtensionStatus = Boolean(
+    extension
+      && (bundledExtensionNeedsRepair
+        || (!isBundledExtension && installedPlugin?.extension)
+        || extensionStatus?.state === 'failed'),
+  );
 
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
@@ -94,18 +144,18 @@ export function CapabilitiesPluginDetail({
         onBack={onBack}
         actions={installedPlugin ? (
           <>
-            {marketplacePlugin?.updateAvailable ? (
+            {marketplaceMetadata?.updateAvailable ? (
               <Button
                 type="button"
                 variant="primary"
                 icon={installing ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />}
                 disabled={installing || removing}
-                onClick={() => void onInstall(marketplacePlugin)}
+                onClick={() => void onInstall(marketplaceMetadata)}
               >
                 {installing
                   ? t('capabilities.market.updating')
-                  : marketplacePlugin.version
-                    ? t('capabilities.detail.updateTo', { version: marketplacePlugin.version })
+                  : marketplaceMetadata.version
+                    ? t('capabilities.detail.updateTo', { version: marketplaceMetadata.version })
                     : t('capabilities.detail.updatePlugin')}
               </Button>
             ) : null}
@@ -119,13 +169,13 @@ export function CapabilitiesPluginDetail({
               {t(removing ? 'capabilities.detail.uninstalling' : 'capabilities.detail.uninstall')}
             </Button>
           </>
-        ) : marketplacePlugin && !installed ? (
+        ) : marketplaceMetadata && !installed ? (
           <Button
             type="button"
             variant="primary"
             icon={installing ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />}
             disabled={installing}
-            onClick={() => void onInstall(marketplacePlugin)}
+            onClick={() => void onInstall(marketplaceMetadata)}
           >
             {t(installing ? 'capabilities.detail.installing' : 'capabilities.detail.install')}
           </Button>
@@ -139,11 +189,11 @@ export function CapabilitiesPluginDetail({
       {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
 
       <div className="desktop-capabilities-plugin-detail__hero">
-        <CapabilitiesPluginIcon name={marketplacePlugin?.icon ?? installedPlugin?.icon} variant="detail" />
+        <CapabilitiesPluginIcon name={marketplaceMetadata?.icon ?? installedPlugin?.icon} variant="detail" />
         <div className="desktop-capabilities-plugin-detail__intro">
           <div className="desktop-capabilities-plugin-detail__badges">
             <span className={installed ? 'is-installed' : ''}>{t(installed ? 'capabilities.market.installed' : 'capabilities.detail.available')}</span>
-            {marketplacePlugin?.featured ? <span>{t('capabilities.detail.featured')}</span> : null}
+            {marketplaceMetadata?.featured ? <span>{t('capabilities.detail.featured')}</span> : null}
             {tags.map((tag) => <span key={tag}>{tag}</span>)}
           </div>
           <p>{copy.description || t('capabilities.market.listFallback')}</p>
@@ -151,7 +201,58 @@ export function CapabilitiesPluginDetail({
         </div>
       </div>
 
-      {installed
+      {extension && showExtensionStatus ? (
+        <section className="desktop-capabilities-plugin-detail__extension" aria-label={t('capabilities.extension.title')}>
+          <div className="desktop-capabilities-plugin-detail__extension-copy">
+            <span className={`desktop-capabilities-plugin-detail__extension-icon${extensionVerified ? ' is-trusted' : ''}`}>
+              {extensionVerified
+                ? <ShieldCheck size={19} aria-hidden="true" />
+                : <AlertTriangle size={19} aria-hidden="true" />}
+            </span>
+            <div>
+              <strong>{t('capabilities.extension.title')}</strong>
+              <span>
+                {isBundledExtension
+                  ? t(bundledExtensionNeedsRepair
+                    ? 'capabilities.extension.builtin.needsRepair'
+                    : installedPlugin?.extension
+                      ? 'capabilities.extension.builtin.active'
+                      : 'capabilities.extension.builtin.available')
+                  : t(`capabilities.extension.trust.${installedExtensionTrust ?? 'available'}`)}
+              </span>
+              <p>{t(isBundledExtension
+                ? 'capabilities.extension.builtin.description'
+                : 'capabilities.extension.warning')}</p>
+              <small>
+                {t('capabilities.extension.capabilities', { capabilities: extension.capabilities.join(' · ') })}
+                {extensionStatus ? ` · ${t(`capabilities.extension.status.${extensionStatus.state}`)}` : ''}
+              </small>
+              {extensionStatus?.error ? <small className="is-error">{extensionStatus.error}</small> : null}
+            </div>
+          </div>
+          {!isBundledExtension
+            && installedPlugin?.extension
+            && onSetExtensionTrust ? (
+            <Button
+              type="button"
+              variant={localExtensionTrusted ? 'secondary' : 'primary'}
+              icon={extensionTrusting
+                ? <Loader2 className="is-spinning" size={14} />
+                : localExtensionTrusted ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
+              disabled={extensionTrusting || installing || removing}
+              onClick={() => void onSetExtensionTrust(installedPlugin, !localExtensionTrusted)}
+            >
+              {t(extensionTrusting
+                ? 'capabilities.extension.trusting'
+                : localExtensionTrusted
+                  ? 'capabilities.extension.revoke'
+                  : 'capabilities.extension.trust')}
+            </Button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {installedFromMarketplace
         && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID
         && onSaveImageGenerationConfig
         && onTestImageGeneration ? (
@@ -162,7 +263,7 @@ export function CapabilitiesPluginDetail({
         />
       ) : null}
 
-      {installed
+      {installedFromMarketplace
         && plugin.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID
         && onSaveVisionRecognitionConfig
         && onTestVisionRecognition ? (
@@ -238,7 +339,7 @@ export function CapabilitiesPluginDetail({
           <CapabilitiesPluginItemButton
             key={hook.id}
             title={hook.name}
-            description={hook.description || hook.statusMessage || (marketplacePlugin
+            description={hook.description || hook.statusMessage || (marketplaceMetadata
               ? t('capabilities.detail.managedHookFallback')
               : t('capabilities.detail.localHookFallback'))}
             icon={<Workflow size={16} />}
@@ -250,26 +351,28 @@ export function CapabilitiesPluginDetail({
         ) : null}
       </CapabilitiesPluginDetailSection>
 
-      <CapabilitiesPluginDetailSection
-        icon={<FileText size={15} />}
-        title={t('capabilities.detail.resources')}
-        count={resourceCount}
-        empty={t('capabilities.detail.resourcesEmpty')}
-      >
-        {resources.map((resource) => (
-          <CapabilitiesPluginItemButton
-            key={resource.id}
-            title={resource.label}
-            description={resource.path}
-            icon={<FileText size={16} />}
-            badges={[formatPluginFileSize(resource.size)]}
-            onClick={() => setSelectedItem({ kind: 'resource', value: resource })}
-          />
-        ))}
-        {resourceCount > resources.length ? (
-          <p className="desktop-capabilities-plugin-detail__empty">{t('capabilities.detail.resourcesAfterInstall', { count: resourceCount })}</p>
-        ) : null}
-      </CapabilitiesPluginDetailSection>
+      {resourceCount > 0 ? (
+        <CapabilitiesPluginDetailSection
+          icon={<FileText size={15} />}
+          title={t('capabilities.detail.resources')}
+          count={resourceCount}
+          empty={t('capabilities.detail.resourcesEmpty')}
+        >
+          {resources.map((resource) => (
+            <CapabilitiesPluginItemButton
+              key={resource.id}
+              title={resource.label}
+              description={resource.path}
+              icon={<FileText size={16} />}
+              badges={[formatPluginFileSize(resource.size)]}
+              onClick={() => setSelectedItem({ kind: 'resource', value: resource })}
+            />
+          ))}
+          {resourceCount > resources.length ? (
+            <p className="desktop-capabilities-plugin-detail__empty">{t('capabilities.detail.resourcesAfterInstall', { count: resourceCount })}</p>
+          ) : null}
+        </CapabilitiesPluginDetailSection>
+      ) : null}
 
       {selectedItem ? (
         <CapabilitiesPluginItemDialog
@@ -278,7 +381,9 @@ export function CapabilitiesPluginDetail({
           mcpServers={runtimeMcpServers ?? []}
           pluginId={plugin.id}
           runtimeHooks={runtimeHooks ?? []}
-          trustHooksOnInstall={Boolean(marketplacePlugin)}
+          trustHooksOnInstall={Boolean(marketplaceMetadata)}
+          onSetHookEnabled={installedPlugin ? onSetHookEnabled : undefined}
+          onSetHookTrust={installedPlugin && !marketplaceMetadata ? onSetHookTrust : undefined}
           onClose={() => setSelectedItem(null)}
           onGetContent={onGetItemContent}
         />

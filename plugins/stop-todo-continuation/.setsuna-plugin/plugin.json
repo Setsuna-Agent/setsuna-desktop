@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "stop-todo-continuation",
   "name": "结束前检查未完成 TODO",
   "icon": "stop-todo-continuation",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "助手最后一条回复仍包含 TODO、FIXME 或 XXX 时要求继续处理。",
   "publisher": "Setsuna",
   "tags": ["流程", "TODO", "完成度"],

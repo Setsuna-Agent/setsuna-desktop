@@ -204,8 +204,8 @@ export function AppRouteContent({
           plugins={runtime.plugins}
           pluginMarketplace={runtime.pluginMarketplace}
           pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
+          extensionStatuses={runtime.extensionStatuses}
           selectedPluginId={selectedCapabilitiesPluginId}
-          onCreateHook={runtime.createHook}
           onCreateSkill={runtime.createSkill}
           onDeleteSkill={runtime.deleteSkill}
           onGetPluginItemContent={runtime.getPluginItemContent}
@@ -216,19 +216,19 @@ export function AppRouteContent({
           onRefresh={runtime.refreshCapabilities}
           onUpdateSkill={runtime.updateSkill}
           onFetchMcpTools={runtime.fetchMcpServerTools}
-          onRefreshHooks={runtime.refreshHooks}
           onSaveMcpServer={runtime.saveMcpServer}
-          onTrustHook={runtime.trustHook}
-          onUpdateHook={runtime.updateHook}
-          onUpdateHookEnabled={runtime.updateHookEnabled}
-          onDeleteHook={runtime.deleteHook}
           onUpdateMcpServer={runtime.updateMcpServer}
           onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
           onLoginMcpServer={runtime.loginMcpServer}
           onLogoutMcpServer={runtime.logoutMcpServer}
+          onInstallLocalPlugin={runtime.installLocalPlugin}
           onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
           onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
           onRemovePlugin={runtime.removePlugin}
+          onSetPluginExtensionTrust={runtime.setPluginExtensionTrust}
+          onDeleteStandaloneHook={runtime.deleteStandaloneHook}
+          onSetHookEnabled={runtime.setHookEnabled}
+          onSetHookTrust={runtime.setHookTrust}
           onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
           onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
           onTestImageGeneration={runtime.testImageGeneration}

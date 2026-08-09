@@ -13,12 +13,14 @@ import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
+import type { ExtensionStateStore } from '../../ports/extension-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type {
   InstalledPluginRecord,
   PluginBundleInspection,
   PluginBundleMutationOptions,
   PluginBundleStore,
+  PluginRuntimeMutationCoordinator,
   PluginResourceRead,
 } from '../../ports/plugin-bundle-store.js';
 import type { PluginSkillRegistry } from '../../ports/skill-registry.js';
@@ -57,6 +59,9 @@ import {
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
   private readonly pluginsDir: string;
+  private runtimeMutation: PluginRuntimeMutationCoordinator = {
+    beginPluginMutation: async () => async () => undefined,
+  };
 
   constructor(
     dataDir: string,
@@ -65,18 +70,72 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
     private readonly clock: Clock,
+    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin'>,
+    private readonly bundledPluginsDir?: string,
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
     this.pluginsDir = path.join(dataDir, 'plugins');
   }
 
+  setRuntimeMutationCoordinator(coordinator: PluginRuntimeMutationCoordinator): void {
+    this.runtimeMutation = coordinator;
+  }
+
   async listPlugins(): Promise<RuntimePluginList> {
+    await this.migrateConfiguredLegacyMarketplaceInstallations();
     const index = await this.readIndex();
-    return { plugins: index.plugins.map(publicPluginSummary) };
+    return {
+      plugins: await Promise.all(index.plugins.map(async (plugin) => {
+        if (!plugin.extension) return publicPluginSummary(plugin);
+        const currentHash = await inspectBundleTree(plugin.installPath)
+          .then((result) => result.bundleHash)
+          .catch(() => '__invalid_bundle__');
+        return publicPluginSummary({
+          ...plugin,
+          extension: { ...plugin.extension, bundleHash: currentHash },
+        });
+      })),
+    };
   }
 
   async listInstalledRecords(): Promise<InstalledPluginRecord[]> {
+    await this.migrateConfiguredLegacyMarketplaceInstallations();
     return (await this.readIndex()).plugins.map(cloneInstalledRecord);
+  }
+
+  async migrateLegacyMarketplaceInstallations(
+    candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>>,
+  ): Promise<void> {
+    if (!candidates.length) return;
+    const sourceById = new Map(candidates.map((candidate) => [normalizePluginId(candidate.id), candidate.sourcePath]));
+    await withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      let changed = false;
+      const plugins = index.plugins.map((plugin) => {
+        const catalogSource = sourceById.get(plugin.id);
+        if (plugin.installationSource || !catalogSource || !sameLegacyMarketplaceSource(plugin.sourcePath, catalogSource)) {
+          return plugin;
+        }
+        changed = true;
+        return { ...plugin, installationSource: 'marketplace' as const };
+      });
+      if (changed) {
+        await writeJsonFile(this.indexPath, { version: 1, plugins } satisfies PluginIndexFile);
+      }
+    });
+  }
+
+  private async migrateConfiguredLegacyMarketplaceInstallations(): Promise<void> {
+    const bundledPluginsDir = this.bundledPluginsDir;
+    if (!bundledPluginsDir) return;
+    const index = await this.readIndex();
+    const candidates: Array<Pick<PluginBundleInspection, 'id' | 'sourcePath'>> = [];
+    for (const plugin of index.plugins) {
+      if (plugin.installationSource) continue;
+      const sourcePath = await requiredBundleDirectory(path.join(bundledPluginsDir, plugin.id)).catch(() => null);
+      if (sourcePath) candidates.push({ id: plugin.id, sourcePath });
+    }
+    await this.migrateLegacyMarketplaceInstallations(candidates);
   }
 
   async inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection> {
@@ -94,6 +153,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       featured: manifest.featured,
       ...(manifest.featuredOrder !== undefined ? { featuredOrder: manifest.featuredOrder } : {}),
       capabilities: {
+        ...(manifest.extension ? { extension: 1 } : {}),
         ...(manifest.tools.length ? { tools: manifest.tools.length } : {}),
         skills: manifest.skillEntries.length,
         mcpServers: manifest.mcpServers.length,
@@ -109,6 +169,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       mcpServers: manifest.mcpServers.map(pluginMcpServerDescriptor),
       hooks: manifest.hooks.map(pluginHookDescriptor),
       resources: manifest.resources.map((resource) => ({ ...resource })),
+      ...(manifest.extension ? { extension: publicManifestExtension(manifest.extension) } : {}),
       sourcePath,
     };
   }
@@ -123,7 +184,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         throw new Error('Plugin source and runtime plugin directory cannot contain one another.');
       }
       const manifest = await readPluginManifest(sourcePath);
-      await inspectBundleTree(sourcePath);
+      const sourceBundle = await inspectBundleTree(sourcePath);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
         throw new Error(`Plugin is already installed: ${manifest.id}`);
@@ -132,7 +193,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const conflictingSkill = manifest.skillEntries.find((skill) => existingSkillIds.has(skill.id));
       if (conflictingSkill) throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
 
-      const installPath = path.join(this.pluginsDir, manifest.id);
+      const installPath = strictPluginInstallPath(this.pluginsDir, manifest.id);
       const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
       const mcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
       const existingServers = await this.mcpStore.listServerInputs();
@@ -156,6 +217,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         sourcePath,
         installPath,
         installedAt: this.clock.now().toISOString(),
+        installationSource: options.installationSource ?? 'local',
         manifestPath: installedManifestPath,
         ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
         skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
@@ -172,16 +234,29 @@ export class FilePluginBundleStore implements PluginBundleStore {
         hooks: manifest.hooks.map(pluginHookDescriptor),
         hookCount: hooks.length,
         resources: manifest.resources.map((resource) => ({ ...resource })),
+        ...(manifest.extension ? {
+          extension: installedExtensionRecord(
+            manifest.extension,
+            sourceBundle.bundleHash,
+            options.trustExtension ? sourceBundle.bundleHash : undefined,
+          ),
+        } : {}),
       };
 
       const stagingPath = path.join(this.pluginsDir, `.${manifest.id}.${randomUUID()}.tmp`);
       const installedMcpServers: string[] = [];
       let hooksSaved = false;
+      let installActivated = false;
       const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(installPath);
       try {
         await mkdir(this.pluginsDir, { recursive: true });
         await copyBundleTree(sourcePath, stagingPath);
+        const stagedBundle = await inspectBundleTree(stagingPath);
+        if (stagedBundle.bundleHash !== sourceBundle.bundleHash) {
+          throw new Error('Plugin bundle changed while staging the install.');
+        }
         await renameWithRetry(stagingPath, installPath);
+        installActivated = true;
         for (const ownership of mcpOwnership) {
           if (!ownership.owned) continue;
           const server = mcpInputs.find((candidate) => candidate.key === ownership.key);
@@ -202,7 +277,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       } catch (error) {
         if (hooksSaved) await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} }).catch(() => undefined);
         await Promise.allSettled(installedMcpServers.map((key) => this.mcpStore.deleteServer(key)));
-        await Promise.allSettled([rm(stagingPath, { force: true, recursive: true }), rm(installPath, { force: true, recursive: true })]);
+        await Promise.allSettled([
+          rm(stagingPath, { force: true, recursive: true }),
+          ...(installActivated ? [rm(installPath, { force: true, recursive: true })] : []),
+        ]);
         throw error;
       } finally {
         await finishPluginDirectoryMutation();
@@ -234,8 +312,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const plugin = index.plugins.find((item) => item.id === sourceManifest.id);
       if (!plugin) throw new Error(`Plugin not found: ${sourceManifest.id}`);
 
-      const expectedInstallPath = path.join(this.pluginsDir, plugin.id);
-      if (path.resolve(plugin.installPath) !== path.resolve(expectedInstallPath)) {
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
         throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
       }
       const installStat = await stat(plugin.installPath).catch(() => null);
@@ -247,11 +325,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const backupPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.backup`);
       const failedPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.failed`);
       let staged = true;
-      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+      let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
 
       try {
+        finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
         await copyBundleTree(sourcePath, stagingPath);
-        await inspectBundleTree(stagingPath);
+        const stagedBundle = await inspectBundleTree(stagingPath);
         const manifest = await readPluginManifest(await realpath(stagingPath));
         if (manifest.id !== sourceManifest.id) {
           throw new Error('Plugin manifest id changed while staging the update.');
@@ -345,6 +425,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           sourcePath,
           installPath,
           installedAt: plugin.installedAt,
+          installationSource: options.installationSource ?? 'local',
           manifestPath: installedManifestPath,
           ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
           skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
@@ -361,6 +442,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
           hooks: manifest.hooks.map(pluginHookDescriptor),
           hookCount: hooks.length,
           resources: manifest.resources.map((resource) => ({ ...resource })),
+          ...(manifest.extension ? {
+            extension: installedExtensionRecord(
+              manifest.extension,
+              stagedBundle.bundleHash,
+              options.trustExtension ? stagedBundle.bundleHash : plugin.extension?.trustedHash,
+            ),
+          } : {}),
         };
 
         let oldDirectoryMoved = false;
@@ -454,7 +542,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
         };
       } finally {
         if (staged) await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
-        await finishPluginDirectoryMutation();
+        try {
+          await finishPluginDirectoryMutation?.();
+        } finally {
+          await finishRuntimeMutation();
+        }
       }
     });
   }
@@ -465,6 +557,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const index = await this.readIndex();
       const plugin = index.plugins.find((item) => item.id === id);
       if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
+        throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
+      }
       const currentServers = await this.mcpStore.listServerInputs();
       const preservedMcpServers: string[] = [];
       const serversToRemove: RuntimeMcpServerInput[] = [];
@@ -473,7 +569,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         const expected = plugin.mcpServerInputs.find((server) => server.key === ownership.key);
         const current = currentServers.find((server) => server.key === ownership.key);
         if (!current) continue;
-        if (!expected || !compatibleMcpServer(current, expected)) {
+        if (!expected || !pluginMcpServerUnmodified(current, expected)) {
           preservedMcpServers.push(ownership.key);
           continue;
         }
@@ -482,10 +578,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const configBefore = await this.configStore.getConfig();
       const removalPath = path.join(this.pluginsDir, `.${plugin.id}.${randomUUID()}.remove`);
       const installExists = await stat(plugin.installPath).then(() => true).catch(() => false);
-      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+      let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
       let directoryMoved = false;
+      let indexUpdated = false;
       const removedMcpServers: string[] = [];
       try {
+        finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
         if (installExists) {
           await renameWithRetry(plugin.installPath, removalPath);
           directoryMoved = true;
@@ -503,25 +602,96 @@ export class FilePluginBundleStore implements PluginBundleStore {
           version: 1,
           plugins: index.plugins.filter((item) => item.id !== plugin.id),
         } satisfies PluginIndexFile);
+        indexUpdated = true;
+        // State is keyed only by plugin ID, so it must not survive a successful
+        // uninstall and become visible to a different bundle reusing that ID.
+        await this.extensionState.deletePlugin(plugin.id);
       } catch (error) {
+        const rollbackErrors: unknown[] = [];
         if (plugin.hookCount) {
-          await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} }).catch(() => undefined);
+          await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} })
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
         }
-        await Promise.allSettled(
+        const mcpRollback = await Promise.allSettled(
           serversToRemove
             .filter((server) => removedMcpServers.includes(server.key))
             .map((server) => this.mcpStore.upsertServer(server)),
         );
-        if (directoryMoved) await renameWithRetry(removalPath, plugin.installPath).catch(() => undefined);
+        rollbackErrors.push(...mcpRollback
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason));
+        if (directoryMoved) {
+          await renameWithRetry(removalPath, plugin.installPath)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (indexUpdated) {
+          await writeJsonFile(this.indexPath, index)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
         await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
+        if (rollbackErrors.length) {
+          throw new AggregateError([error, ...rollbackErrors], 'Plugin removal failed and rollback was incomplete.');
+        }
         throw error;
       } finally {
-        await finishPluginDirectoryMutation();
+        try {
+          await finishPluginDirectoryMutation?.();
+        } finally {
+          await finishRuntimeMutation();
+        }
       }
       if (directoryMoved) await rm(removalPath, { recursive: true, force: true }).catch(() => undefined);
       await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
       return { pluginId: plugin.id, removedMcpServers, preservedMcpServers };
     });
+  }
+
+  async setExtensionTrust(pluginId: string, trusted: boolean): Promise<RuntimePluginList> {
+    await withFileStateUpdate(this.indexPath, async () => {
+      const id = normalizePluginId(pluginId);
+      const index = await this.readIndex();
+      const plugin = index.plugins.find((item) => item.id === id);
+      if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
+      if (!samePath(plugin.installPath, expectedInstallPath)) {
+        throw new Error(`Installed plugin path is invalid: ${plugin.id}`);
+      }
+      if (!plugin.extension) throw new Error(`Plugin does not provide an executable extension: ${id}`);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+
+      try {
+        let extension = { ...plugin.extension, capabilities: [...plugin.extension.capabilities] };
+        if (trusted) {
+          const manifest = await readPluginManifest(await realpath(plugin.installPath));
+          const bundle = await inspectBundleTree(plugin.installPath);
+          if (manifest.id !== plugin.id || !manifest.extension) {
+            throw new Error('Installed extension manifest no longer matches the plugin index.');
+          }
+          const current = publicManifestExtension(manifest.extension);
+          const expected = publicManifestExtension(plugin.extension);
+          if (JSON.stringify(current) !== JSON.stringify(expected) || manifest.extension.entry !== plugin.extension.entry) {
+            throw new Error('Installed extension manifest changed; reinstall or update the plugin before trusting it.');
+          }
+          extension = {
+            ...extension,
+            bundleHash: bundle.bundleHash,
+            trustedHash: bundle.bundleHash,
+          };
+        } else {
+          delete extension.trustedHash;
+        }
+
+        await writeJsonFile(this.indexPath, {
+          version: 1,
+          plugins: index.plugins.map((item) => item.id === id ? { ...item, extension } : item),
+        } satisfies PluginIndexFile);
+      } finally {
+        await finishRuntimeMutation();
+      }
+    });
+    // listPlugins may migrate legacy marketplace provenance and therefore take
+    // the same index lock. Project the result only after the mutation releases it.
+    return this.listPlugins();
   }
 
   async readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead> {
@@ -565,6 +735,88 @@ export class FilePluginBundleStore implements PluginBundleStore {
     const index = await readJsonFile<PluginIndexFile>(this.indexPath, { version: 1, plugins: [] });
     return { version: 1, plugins: Array.isArray(index.plugins) ? index.plugins : [] };
   }
+}
+
+function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['extension']>) {
+  return {
+    apiVersion: extension.apiVersion,
+    runtime: extension.runtime,
+    capabilities: [...extension.capabilities],
+  };
+}
+
+function installedExtensionRecord(
+  extension: NonNullable<ParsedPluginManifest['extension']>,
+  bundleHash: string,
+  trustedHash?: string,
+) {
+  return {
+    ...publicManifestExtension(extension),
+    entry: extension.entry,
+    bundleHash,
+    ...(trustedHash ? { trustedHash } : {}),
+  };
+}
+
+function samePath(left: string, right: string): boolean {
+  const normalizedLeft = path.resolve(left);
+  const normalizedRight = path.resolve(right);
+  return process.platform === 'win32'
+    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+    : normalizedLeft === normalizedRight;
+}
+
+function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
+  const resolvedRoot = path.resolve(pluginsDir);
+  const installPath = path.resolve(resolvedRoot, pluginId);
+  const relative = path.relative(resolvedRoot, installPath);
+  if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error(`Plugin install path must be inside the plugin directory: ${pluginId}`);
+  }
+  return installPath;
+}
+
+function sameLegacyMarketplaceSource(left: string, right: string): boolean {
+  if (samePath(left, right)) return true;
+  const leftLocation = appImageApplicationLocation(left);
+  const rightLocation = appImageApplicationLocation(right);
+  return Boolean(
+    leftLocation
+    && rightLocation
+    && leftLocation.mountIdentity === rightLocation.mountIdentity
+    && samePath(leftLocation.applicationSuffix, rightLocation.applicationSuffix),
+  );
+}
+
+function appImageApplicationLocation(value: string): {
+  applicationSuffix: string;
+  mountIdentity: string;
+} | null {
+  const segments = path.resolve(value).split(path.sep);
+  let mountIndex = -1;
+  let mountIdentity = '';
+  for (let index = 0; index < segments.length; index += 1) {
+    const match = /^\.mount_(.+)[a-z0-9]{6}$/iu.exec(segments[index]);
+    if (!match) continue;
+    mountIndex = index;
+    mountIdentity = match[1].toLowerCase();
+    break;
+  }
+  if (mountIndex < 0) return null;
+
+  let appAsarIndex = -1;
+  for (let index = mountIndex + 1; index < segments.length; index += 1) {
+    if (segments[index].toLowerCase() === 'app.asar') appAsarIndex = index;
+  }
+  if (appAsarIndex < 0) return null;
+
+  // AppImage mount directories preserve the application-derived prefix and
+  // replace only their six-character mkdtemp suffix between launches. Requiring
+  // that identity keeps an unrelated Electron app's app.asar out of migration.
+  return {
+    applicationSuffix: segments.slice(appAsarIndex).join(path.sep),
+    mountIdentity,
+  };
 }
 
 async function readManifestItemContent(

@@ -1,3 +1,4 @@
+import { RUNTIME_LOCAL_PLUGIN_INSTALL_PATH } from '@setsuna-desktop/contracts';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -23,6 +24,7 @@ describe('runtime server REST skills and capabilities', () => {
   it('lists and updates local skills', async () => {
       const list = await harness.runtimeFetch('/v1/skills');
       expect(list.skills.some((skill: { id: string }) => skill.id === 'create-skill-in-chat')).toBe(true);
+      expect(list.skills.some((skill: { id: string }) => skill.id === 'create-plugin-in-chat')).toBe(true);
   
       const updated = await harness.runtimeFetch('/v1/skills/create-skill-in-chat', {
         method: 'PATCH',
@@ -64,6 +66,37 @@ describe('runtime server REST skills and capabilities', () => {
             name: 'Context7 文档查询',
             icon: 'context7',
             featured: false,
+            installed: false,
+          }),
+          expect.objectContaining({
+            id: 'pi-question',
+            name: '结构化提问',
+            icon: 'pi-question',
+            publisher: 'Setsuna',
+            tags: expect.arrayContaining(['交互', '工具']),
+            tools: [expect.objectContaining({ name: 'question' })],
+            resources: [],
+            extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['tools', 'ui'] },
+            capabilities: { extension: 1, tools: 1, skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+            installed: false,
+          }),
+          expect.objectContaining({
+            id: 'pi-todo',
+            name: '任务清单',
+            icon: 'pi-todo',
+            publisher: 'Setsuna',
+            tags: expect.arrayContaining(['任务', '状态']),
+            tools: [expect.objectContaining({ name: 'todo' })],
+            extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['tools', 'state'] },
+            installed: false,
+          }),
+          expect.objectContaining({
+            id: 'pi-claude-rules',
+            name: 'Claude Rules 兼容',
+            icon: 'pi-claude-rules',
+            publisher: 'Setsuna',
+            tags: expect.arrayContaining(['Claude', '项目规则']),
+            extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['events'] },
             installed: false,
           }),
           expect.objectContaining({
@@ -145,6 +178,7 @@ describe('runtime server REST skills and capabilities', () => {
         'pdf',
         'openai-image-generation',
         'openai-vision-recognition',
+        'web-search',
       ]);
       expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
       expect(JSON.stringify(marketplace)).not.toContain('.mjs');
@@ -175,7 +209,6 @@ describe('runtime server REST skills and capabilities', () => {
           text: expect.stringContaining('process'),
         })],
       });
-  
       const installed = await harness.runtimeFetch('/v1/plugin-marketplace/context7-docs/install', {
         method: 'POST',
       });
@@ -252,6 +285,18 @@ describe('runtime server REST skills and capabilities', () => {
       await expect(harness.appServerRpc('hooks/list', { cwds: [] })).resolves.toMatchObject({
         data: [{ hooks: [] }],
       });
+
+      await expect(harness.runtimeFetch('/v1/plugin-marketplace/pi-question/install', {
+        method: 'POST',
+      })).resolves.toMatchObject({
+        plugin: {
+          id: 'pi-question',
+          extension: { trust: 'trusted' },
+        },
+      });
+      await expect(harness.runtimeFetch('/v1/plugins/pi-question', { method: 'DELETE' })).resolves.toMatchObject({
+        pluginId: 'pi-question',
+      });
     });
   
   it('updates an installed marketplace plugin through its id-only REST endpoint', async () => {
@@ -273,14 +318,50 @@ describe('runtime server REST skills and capabilities', () => {
         })]),
       });
       await expect(harness.runtimeFetch('/v1/plugin-marketplace/context7-docs/update', { method: 'POST' })).resolves.toMatchObject({
-        plugin: { id: 'context7-docs', version: '1.0.0' },
+        plugin: { id: 'context7-docs', version: '1.0.1' },
       });
       await expect(harness.runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
         plugins: expect.arrayContaining([expect.objectContaining({
           id: 'context7-docs',
-          installedVersion: '1.0.0',
+          installedVersion: '1.0.1',
           updateAvailable: false,
         })]),
+      });
+    });
+
+  it('installs a main-selected local extension through the internal runtime endpoint', async () => {
+      const bundleDir = path.join(harness.runtimeDataDir, 'local-extension-source');
+      await Promise.all([
+        mkdir(path.join(bundleDir, '.setsuna-plugin'), { recursive: true }),
+        mkdir(path.join(bundleDir, 'extension'), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(path.join(bundleDir, 'extension', 'entry.mjs'), 'export default () => {};\n'),
+        writeFile(path.join(bundleDir, '.setsuna-plugin', 'plugin.json'), JSON.stringify({
+          schemaVersion: 2,
+          id: 'local-extension',
+          name: 'Local Extension',
+          version: '1.0.0',
+          extension: {
+            apiVersion: 1,
+            runtime: 'node-worker',
+            entry: 'extension/entry.mjs',
+            capabilities: ['tools'],
+          },
+        }, null, 2)),
+      ]);
+
+      await expect(harness.runtimeFetch(RUNTIME_LOCAL_PLUGIN_INSTALL_PATH, {
+        method: 'POST',
+        body: JSON.stringify({ path: bundleDir }),
+      })).resolves.toMatchObject({
+        plugin: {
+          id: 'local-extension',
+          extension: { trust: 'untrusted' },
+        },
+      });
+      await expect(harness.runtimeFetch('/v1/plugins')).resolves.toMatchObject({
+        plugins: [expect.objectContaining({ id: 'local-extension' })],
       });
     });
   

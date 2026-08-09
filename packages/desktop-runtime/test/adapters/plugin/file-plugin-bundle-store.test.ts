@@ -6,6 +6,7 @@ import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
+import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -16,6 +17,125 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('file plugin bundle store', () => {
+  it('keeps executable extensions untrusted until the exact installed bundle hash is approved', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+
+    const installed = await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    expect(installed.plugin.installationSource).toBe('local');
+    expect(installed.plugin.extension).toEqual({
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['tools', 'events', 'state', 'ui'],
+      trust: 'untrusted',
+    });
+    expect(JSON.stringify(installed.plugin)).not.toContain('bundleHash');
+    expect(JSON.stringify(installed.plugin)).not.toContain('entry.mjs');
+
+    const trusted = await runtime.plugins.setExtensionTrust('demo', true);
+    expect(trusted.plugins[0].extension?.trust).toBe('trusted');
+
+    const [record] = await runtime.plugins.listInstalledRecords();
+    await writeFile(path.join(record.installPath, 'extension', 'entry.mjs'), 'export default () => { /* changed */ };\n');
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'demo', extension: { trust: 'modified' } }],
+    });
+
+    const retrusted = await runtime.plugins.setExtensionTrust('demo', true);
+    expect(retrusted.plugins[0].extension?.trust).toBe('trusted');
+  });
+
+  it('does not carry executable-extension trust across a changed local update', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await runtime.plugins.setExtensionTrust('demo', true);
+
+    await writeFile(path.join(fixture.bundleDir, 'extension', 'entry.mjs'), 'export default () => { /* v2 */ };\n');
+    await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+    const updated = await runtime.plugins.updatePlugin({ path: fixture.bundleDir });
+    expect(updated.plugin.extension?.trust).toBe('modified');
+
+    const trustedUpdate = await runtime.plugins.updatePlugin(
+      { path: fixture.bundleDir },
+      { trustExtension: true },
+    );
+    expect(trustedUpdate.plugin.extension?.trust).toBe('trusted');
+  });
+
+  it('purges every extension state scope after successful plugin removal', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await runtime.extensionState.set('demo', 'global', 'token', 'old secret');
+    await runtime.extensionState.set('demo', 'thread:thread_1', 'count', 3);
+    await runtime.extensionState.set('other-plugin', 'global', 'value', 'keep');
+
+    await runtime.plugins.removePlugin('demo');
+
+    await expect(runtime.extensionState.get('demo', 'global', 'token')).resolves.toBeUndefined();
+    await expect(runtime.extensionState.get('demo', 'thread:thread_1', 'count')).resolves.toBeUndefined();
+    await expect(runtime.extensionState.get('other-plugin', 'global', 'value')).resolves.toBe('keep');
+  });
+
+  it('rolls back plugin removal when extension state cannot be cleared', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const [installed] = await runtime.plugins.listInstalledRecords();
+    await runtime.extensionState.set('demo', 'global', 'value', 'keep after rollback');
+    vi.spyOn(runtime.extensionState, 'deletePlugin').mockRejectedValueOnce(new Error('state file is locked'));
+
+    await expect(runtime.plugins.removePlugin('demo')).rejects.toThrow('state file is locked');
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({ plugins: [{ id: 'demo' }] });
+    await expect(stat(installed.installPath)).resolves.toBeDefined();
+    await expect(runtime.extensionState.get('demo', 'global', 'value')).resolves.toBe('keep after rollback');
+  });
+
+  it('requires schemaVersion 2 and an existing mjs entry for executable extensions', async () => {
+    const fixture = await createPluginFixture();
+    await mkdir(path.join(fixture.bundleDir, 'extension'), { recursive: true });
+    await writeFile(path.join(fixture.bundleDir, 'extension', 'entry.js'), 'export default () => {};\n');
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        apiVersion: 1,
+        runtime: 'node-worker',
+        entry: 'extension/entry.js',
+        capabilities: ['tools'],
+      },
+    });
+    const runtime = await createPluginRuntime(fixture.root);
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('schemaVersion 2');
+
+    await patchPluginManifest(fixture.bundleDir, { schemaVersion: 2 });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('must be an .mjs file');
+  });
+
+  it('stops an extension worker before trust, update, and removal mutations', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const finishMutation = vi.fn(async () => undefined);
+    const beginPluginMutation = vi.fn(async () => finishMutation);
+    runtime.plugins.setRuntimeMutationCoordinator({ beginPluginMutation });
+
+    await runtime.plugins.setExtensionTrust('demo', true);
+    await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+    await runtime.plugins.updatePlugin({ path: fixture.bundleDir });
+    await runtime.plugins.removePlugin('demo');
+
+    expect(beginPluginMutation.mock.calls).toEqual([['demo'], ['demo'], ['demo']]);
+    expect(finishMutation).toHaveBeenCalledTimes(3);
+  });
+
   it('installs and removes bundled Skills, MCP, Hooks, and resources', async () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);
@@ -72,6 +192,7 @@ describe('file plugin bundle store', () => {
     expect(discoverRuntimeHooks(config).hooks).toEqual([
       expect.objectContaining({
         pluginId: 'demo',
+        pluginHookId: 'audit-read',
         source: 'plugin',
         trustStatus: 'untrusted',
         command: expect.stringContaining(path.join('plugins', 'demo', 'hooks', 'post.mjs')),
@@ -142,7 +263,7 @@ describe('file plugin bundle store', () => {
     }
   });
 
-  it('reuses compatible MCP servers and preserves plugin-owned servers modified after install', async () => {
+  it('reuses compatible MCP servers and preserves customized plugin-owned servers', async () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);
     await runtime.mcp.upsertServer({
@@ -164,13 +285,23 @@ describe('file plugin bundle store', () => {
     const secondRuntime = await createPluginRuntime(second.root);
     const installed = await secondRuntime.plugins.installPlugin({ path: second.bundleDir });
     expect(installed.installedMcpServers).toEqual(['plugin_docs']);
-    await secondRuntime.mcp.updateServer('plugin_docs', { url: 'https://user-modified.example/mcp' });
+    await secondRuntime.mcp.updateServer('plugin_docs', {
+      allowedTools: ['search'],
+      enabled: false,
+      toolTimeoutMs: 5_000,
+    });
     expect(await secondRuntime.plugins.removePlugin('demo')).toMatchObject({
       removedMcpServers: [],
       preservedMcpServers: ['plugin_docs'],
     });
     await expect(secondRuntime.mcp.listServerInputs()).resolves.toEqual([
-      expect.objectContaining({ key: 'plugin_docs', url: 'https://user-modified.example/mcp' }),
+      expect.objectContaining({
+        key: 'plugin_docs',
+        url: 'https://docs.example/mcp',
+        allowedTools: ['search'],
+        enabled: false,
+        toolTimeoutMs: 5_000,
+      }),
     ]);
   });
 
@@ -336,6 +467,33 @@ describe('file plugin bundle store', () => {
     await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
   });
 
+  it.each(['.', '..'])('rejects unsafe plugin id %s without touching runtime data', async (pluginId) => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    const sentinelPath = path.join(runtime.dataDir, 'sentinel.txt');
+    await mkdir(runtime.dataDir, { recursive: true });
+    await writeFile(sentinelPath, 'keep');
+    await patchPluginManifest(fixture.bundleDir, { id: pluginId });
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('Plugin id must be a safe path segment');
+    await expect(readFile(sentinelPath, 'utf8')).resolves.toBe('keep');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
+  it('does not delete an existing plugin directory when install activation fails', async () => {
+    const fixture = await createPluginFixture();
+    const runtime = await createPluginRuntime(fixture.root);
+    const existingInstallPath = path.join(runtime.dataDir, 'plugins', 'demo');
+    const sentinelPath = path.join(existingInstallPath, 'sentinel.txt');
+    await mkdir(existingInstallPath, { recursive: true });
+    await writeFile(sentinelPath, 'keep');
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir })).rejects.toThrow();
+    await expect(readFile(sentinelPath, 'utf8')).resolves.toBe('keep');
+    await expect(runtime.plugins.listPlugins()).resolves.toEqual({ plugins: [] });
+  });
+
   it('accepts only renderer-owned icon tokens, never bundle paths or markup', async () => {
     const fixture = await createPluginFixture();
     const manifestPath = path.join(fixture.bundleDir, '.setsuna-plugin', 'plugin.json');
@@ -367,9 +525,18 @@ async function createPluginRuntime(root: string) {
   const skills = new FileSkillRegistry(builtinDir, dataDir);
   const mcp = new FileMcpStore(dataDir, new InMemoryDesktopNativeBridge());
   const config = new FileConfigStore(dataDir);
+  const extensionState = new FileExtensionStateStore(dataDir);
   const invalidateServer = vi.fn(async () => undefined);
-  const plugins = new FilePluginBundleStore(dataDir, skills, mcp, { invalidateServer }, config, systemClock);
-  return { config, dataDir, invalidateServer, mcp, plugins, skills };
+  const plugins = new FilePluginBundleStore(
+    dataDir,
+    skills,
+    mcp,
+    { invalidateServer },
+    config,
+    systemClock,
+    extensionState,
+  );
+  return { config, dataDir, extensionState, invalidateServer, mcp, plugins, skills };
 }
 
 async function readPluginManifestFixture(bundleDir: string): Promise<Record<string, unknown>> {
@@ -382,6 +549,20 @@ async function writePluginManifestFixture(bundleDir: string, manifest: Record<st
 
 async function patchPluginManifest(bundleDir: string, patch: Record<string, unknown>): Promise<void> {
   await writePluginManifestFixture(bundleDir, { ...await readPluginManifestFixture(bundleDir), ...patch });
+}
+
+async function addExecutableExtension(bundleDir: string): Promise<void> {
+  await mkdir(path.join(bundleDir, 'extension'), { recursive: true });
+  await writeFile(path.join(bundleDir, 'extension', 'entry.mjs'), 'export default () => {};\n');
+  await patchPluginManifest(bundleDir, {
+    schemaVersion: 2,
+    extension: {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      entry: 'extension/entry.mjs',
+      capabilities: ['tools', 'events', 'state', 'ui'],
+    },
+  });
 }
 
 async function createPluginFixture(parent?: string): Promise<{ root: string; bundleDir: string }> {

@@ -22,6 +22,8 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeDebugTraceList,
+  RuntimeExtensionStatusList,
+  RuntimeExtensionTrustInput,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
@@ -375,6 +377,16 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<RuntimePluginRemoveResult>({
         path: `/v1/plugins/${encodeURIComponent(pluginId)}`,
         method: 'DELETE',
+      });
+    },
+    listExtensionStatuses() {
+      return request<RuntimeExtensionStatusList>({ path: '/v1/extensions/status' });
+    },
+    setPluginExtensionTrust(pluginId: string, input: RuntimeExtensionTrustInput) {
+      return request<RuntimePluginList>({
+        path: `/v1/plugins/${encodeURIComponent(pluginId)}/extension/trust`,
+        method: 'PUT',
+        body: input,
       });
     },
     testImageGeneration(input: RuntimeImageGenerationTestInput) {

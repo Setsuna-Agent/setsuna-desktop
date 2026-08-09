@@ -29,6 +29,7 @@ import { registerBrowserIpc } from './ipc/browser-ipc.js';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
+import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerReviewIpc } from './ipc/review-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerTerminalIpc } from './ipc/terminal-ipc.js';
@@ -274,6 +275,7 @@ async function createWindow(): Promise<void> {
     userDataPath: dataLayout.root,
   });
   registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
+  registerPluginIpc(currentRuntimeHost, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
   registerReviewIpc(currentRuntimeHost);
   registerWorkspaceIpc();

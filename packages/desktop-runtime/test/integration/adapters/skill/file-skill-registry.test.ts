@@ -187,6 +187,8 @@ describe('file skill registry', () => {
     await mkdir(path.join(dependencySkillDir, 'agents'), { recursive: true });
     await writeFile(path.join(dependencySkillDir, 'SKILL.md'), '# Docs Helper\n\nUse current docs.');
     await writeFile(path.join(dependencySkillDir, 'agents', 'openai.yaml'), [
+      'interface:',
+      '  display_name: Documentation Helper',
       'dependencies:',
       '  tools:',
       '    - type: mcp',
@@ -197,6 +199,7 @@ describe('file skill registry', () => {
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
     await expect(registry.getSkill('docs-helper')).resolves.toMatchObject({
+      name: 'Documentation Helper',
       mcpDependencies: [{
         type: 'mcp',
         value: 'openaideveloperdocs',

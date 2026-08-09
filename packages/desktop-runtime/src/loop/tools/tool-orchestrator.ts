@@ -13,6 +13,7 @@ import type {
 } from '../../hooks/runtime-hooks.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
+import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import {
@@ -83,6 +84,7 @@ export type ToolOrchestratorOptions = {
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   hookRunner?: RuntimeToolHookRunner | null;
+  extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   clock: Clock;
   events: ToolOrchestratorEvents;
 };
@@ -182,6 +184,33 @@ export class ToolOrchestrator {
         runArguments = applyHookUpdatedInput(runToolCall.name, runArguments, preHookOutcome.updatedInput);
         runToolCall = { ...runToolCall, arguments: JSON.stringify(runArguments) };
       }
+      const preExtensionOutcome = effective.rejectionReason
+        ? null
+        : await this.options.extensions?.dispatch('tool.before', {
+            threadId: stepContext.threadId,
+            turnId: stepContext.turnId,
+            projectId: stepContext.projectId,
+            toolCallId: runToolCall.id,
+            cwd: environment.cwd,
+            ...(stepContext.features ? { features: stepContext.features } : {}),
+            signal: stepContext.signal,
+            payload: {
+              tool: { id: runToolCall.id, name: runToolCall.name },
+              input: runArguments,
+              ...(runOptions.plugin ? { plugin: runOptions.plugin } : {}),
+            },
+          });
+      if (preExtensionOutcome?.block) {
+        throw new ToolPolicyRejectedError(preExtensionOutcome.reason || 'Extension blocked the tool call.');
+      }
+      if (preExtensionOutcome?.input !== undefined) {
+        runArguments = applyHookUpdatedInput(runToolCall.name, runArguments, preExtensionOutcome.input);
+        runToolCall = { ...runToolCall, arguments: JSON.stringify(runArguments) };
+      }
+      preHookAdditionalContexts.push(
+        ...(preExtensionOutcome?.context ?? []),
+        ...(preExtensionOutcome?.feedback ? [preExtensionOutcome.feedback] : []),
+      );
       const startPreview = effective.rejectionReason
         ? null
         : await this.options.toolHost.previewToolCall?.(runToolCall.name, runArguments, stepContext).catch(() => null);
@@ -505,7 +534,33 @@ export class ToolOrchestrator {
     const modelVisibleHookFeedback = postHookOutcome?.feedbackMessage
       ?? (postHookOutcome?.shouldBlock ? 'PostToolUse hook blocked the tool result.' : undefined);
     if (modelVisibleHookFeedback) content = modelVisibleHookFeedback;
-    const hookAdditionalContexts = [...preHookAdditionalContexts, ...(postHookOutcome?.additionalContexts ?? [])];
+    const postExtensionOutcome = await this.options.extensions?.dispatch('tool.after', {
+      threadId: context.threadId,
+      turnId: context.turnId,
+      projectId: context.projectId,
+      toolCallId: toolCall.id,
+      cwd: environment.cwd,
+      ...(context.features ? { features: context.features } : {}),
+      signal: context.signal,
+      payload: {
+        tool: { id: toolCall.id, name: toolCall.name },
+        input: parsedArguments,
+        result: {
+          content: result.content,
+          ...(result.preview ? { preview: result.preview } : {}),
+          ...(result.data !== undefined ? { data: result.data } : {}),
+        },
+        ...(runOptions.plugin ? { plugin: runOptions.plugin } : {}),
+      },
+    });
+    const extensionFeedback = postExtensionOutcome?.feedback
+      ?? (postExtensionOutcome?.block ? postExtensionOutcome.reason || 'Extension blocked the tool result.' : undefined);
+    if (extensionFeedback) content = extensionFeedback;
+    const hookAdditionalContexts = [
+      ...preHookAdditionalContexts,
+      ...(postHookOutcome?.additionalContexts ?? []),
+      ...(postExtensionOutcome?.context ?? []),
+    ];
     if (hookAdditionalContexts.length) {
       content = appendHookAdditionalContexts(content, hookAdditionalContexts);
     }

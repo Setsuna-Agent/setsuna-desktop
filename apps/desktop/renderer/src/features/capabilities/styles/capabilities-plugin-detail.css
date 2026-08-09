@@ -278,121 +278,6 @@
   animation: desktop-capabilities-spin 0.85s linear infinite;
 }
 
-.desktop-capability-card__command {
-  font-family: var(--app-code-font-family);
-}
-
-.desktop-capability-card--hook .desktop-capability-card__tool-policy {
-  align-items: stretch;
-}
-
-.desktop-capability-card--hook .desktop-capability-card__tool-policy span {
-  max-width: min(100%, 260px);
-  font-family: var(--app-code-font-family);
-}
-
-.desktop-capability-card__meta {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-capability-card__meta span {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 100%;
-  padding: 1px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-capability-card__tool-policy {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-capability-card__mcp-summary .desktop-capability-card__meta span,
-.desktop-capability-card__tool-policy span {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  min-width: 0;
-  padding: 1px 6px;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-border) 82%, transparent);
-  border-radius: var(--app-radius-xs);
-  background: color-mix(in srgb, var(--app-bg) 86%, var(--app-text) 4%);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-capability-card__actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-height: 26px;
-  margin-top: auto;
-}
-
-.desktop-capability-card__actions--mcp {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-  gap: 16px;
-  width: 100%;
-  margin-top: 0;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
-}
-
-.desktop-capability-card__mcp-setting {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.desktop-capability-card__mcp-setting-label {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-capability-card__mcp-switches {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 28px;
-}
-
-.desktop-capability-card__mcp-approval {
-  width: 100%;
-}
-
-.desktop-capability-card__actions .sd-field {
-  width: 112px;
-  height: 28px;
-  font-size: 12px;
-}
-
-.desktop-capability-card__mcp-approval .sd-field {
-  width: 100%;
-}
-
 .desktop-capabilities-empty {
   display: flex;
   grid-column: 1 / -1;
@@ -403,28 +288,6 @@
   border-radius: var(--app-radius-md);
   color: var(--app-text-muted);
   font-size: 13px;
-}
-
-.desktop-capabilities-empty--hooks {
-  flex-direction: column;
-  gap: 8px;
-  text-align: center;
-}
-
-.desktop-capabilities-empty--hooks > svg {
-  margin-bottom: 2px;
-  color: var(--app-primary);
-}
-
-.desktop-capabilities-empty--hooks strong {
-  color: var(--app-text);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.desktop-capabilities-empty--hooks > span {
-  max-width: 420px;
-  line-height: 20px;
 }
 
 .desktop-capabilities-errors {
@@ -576,23 +439,17 @@
 }
 
 .desktop-capabilities-skill-editor,
-.desktop-capabilities-mcp-editor,
-.desktop-capabilities-hook-editor {
+.desktop-capabilities-mcp-editor {
   width: min(940px, 100%);
   margin-right: auto;
   margin-left: auto;
 }
 
-.desktop-capabilities-hook-form,
 .desktop-capabilities-skill-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   min-width: 0;
-}
-
-.desktop-capabilities-hook-form__full {
-  grid-column: 1 / -1;
 }
 
 .desktop-capabilities-skill-form label {

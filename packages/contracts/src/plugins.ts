@@ -4,12 +4,48 @@ import type { RuntimeMcpTransport } from './mcp.js';
 
 export type { RuntimePluginReference } from './plugin-reference.js';
 
+export const RUNTIME_EXTENSION_API_VERSION = 1 as const;
+export const RUNTIME_LOCAL_PLUGIN_INSTALL_PATH = '/internal/plugins/install-local' as const;
+
+export const RUNTIME_EXTENSION_EVENT_NAMES = [
+  'session.start',
+  'prompt.before',
+  'tool.before',
+  'tool.after',
+  'compact.before',
+  'turn.settled',
+] as const;
+
+export type RuntimeExtensionEventName = typeof RUNTIME_EXTENSION_EVENT_NAMES[number];
+export type RuntimeExtensionCapability = 'tools' | 'events' | 'ui' | 'state';
+export type RuntimeExtensionManifest = {
+  apiVersion: typeof RUNTIME_EXTENSION_API_VERSION;
+  runtime: 'node-worker';
+  capabilities: RuntimeExtensionCapability[];
+};
+export type RuntimeExtensionTrustState = 'trusted' | 'untrusted' | 'modified';
+export type RuntimeInstalledExtension = RuntimeExtensionManifest & { trust: RuntimeExtensionTrustState };
+export type RuntimeExtensionProcessState = 'stopped' | 'starting' | 'running' | 'failed';
+export type RuntimeExtensionRegisteredTool = { name: string; description: string };
+export type RuntimeExtensionStatus = {
+  pluginId: string;
+  state: RuntimeExtensionProcessState;
+  tools: RuntimeExtensionRegisteredTool[];
+  events: RuntimeExtensionEventName[];
+  error?: string;
+};
+export type RuntimeExtensionStatusList = { extensions: RuntimeExtensionStatus[] };
+export type RuntimeExtensionTrustInput = { trusted: boolean };
+
 export const OPENAI_IMAGE_GENERATION_PLUGIN_ID = 'openai-image-generation';
 export const OPENAI_IMAGE_GENERATION_TOOL_NAME = 'generate_image';
 export const RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS = 4_000;
 export const OPENAI_VISION_RECOGNITION_PLUGIN_ID = 'openai-vision-recognition';
 export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
 export const RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS = 4_000;
+export const WEB_SEARCH_PLUGIN_ID = 'web-search';
+export const WEB_SEARCH_TOOL_NAME = 'web_search';
+export const RUNTIME_WEB_SEARCH_QUERY_MAX_CHARS = 2_000;
 
 export type RuntimeImageGenerationTestInput = {
   prompt: string;
@@ -101,12 +137,15 @@ export type RuntimePluginSummary = {
   publisher?: string;
   tags?: string[];
   installedAt: string;
+  /** Missing only on indexes written before installation provenance was recorded. */
+  installationSource?: 'local' | 'marketplace';
   tools?: RuntimePluginTool[];
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServer[];
   hooks: RuntimePluginHook[];
   hookCount: number;
   resources: RuntimePluginResource[];
+  extension?: RuntimeInstalledExtension;
 };
 
 export type RuntimePluginList = {
@@ -127,12 +166,14 @@ export type RuntimePluginMarketplaceItem = {
   mcpServers: RuntimePluginMcpServerDescriptor[];
   hooks: RuntimePluginHook[];
   resources: RuntimePluginResource[];
+  extension?: RuntimeExtensionManifest;
   capabilities: {
     skills: number;
     mcpServers: number;
     hooks: number;
     resources: number;
     tools?: number;
+    extension?: number;
   };
   installed: boolean;
   installedVersion?: string;

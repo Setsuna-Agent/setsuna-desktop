@@ -9,6 +9,7 @@
 | 目录 | 用途 |
 | --- | --- |
 | `create-mcp-in-chat/` | 在对话中收集结构化 MCP 配置并调用管理工具 |
+| `create-plugin-in-chat/` | 在对话中生成完整 Plugin Bundle 并调用受管创建工具 |
 | `create-skill-in-chat/` | 在对话中生成完整 Skill 内容并保存为用户 Skill |
 
 具体行为以各目录的 `SKILL.md` 为准。
@@ -41,6 +42,7 @@ main RuntimeHost
 `FileSkillRegistry` 负责：
 
 - 读取 YAML frontmatter 与正文。
+- 读取 `agents/openai.yaml` 的标准 `interface.display_name` 和 MCP dependencies。
 - 规范化 ID/name/description。
 - 读取 MCP dependency manifest。
 - 合并状态。

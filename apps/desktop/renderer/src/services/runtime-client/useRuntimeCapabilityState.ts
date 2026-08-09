@@ -1,9 +1,8 @@
 import type {
   DesktopRuntimeClient,
+  RuntimeExtensionStatus,
   RuntimeConfigState,
-  RuntimeHookInput,
   RuntimeHookListResponse,
-  RuntimeHookMetadata,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -21,12 +20,7 @@ import type {
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  deleteHookFromConfig,
-  hookConfigLocation,
-  hookInputToMatcherGroup,
-  updateHookInConfig,
-} from '../../features/capabilities/hooks/runtimeHookConfig.js';
+import { useRuntimeHookManagement } from '../../features/capabilities/hooks/useRuntimeHookManagement.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
@@ -59,6 +53,7 @@ export type RuntimeCapabilityClient = Pick<
   | 'installMarketplacePlugin'
   | 'installSkillMcpDependencies'
   | 'listHooks'
+  | 'listExtensionStatuses'
   | 'listMcpServers'
   | 'listPluginMarketplace'
   | 'listPlugins'
@@ -68,6 +63,7 @@ export type RuntimeCapabilityClient = Pick<
   | 'removePlugin'
   | 'saveConfig'
   | 'setSkillExtraRoots'
+  | 'setPluginExtensionTrust'
   | 'updateMarketplacePlugin'
   | 'updateMcpServer'
   | 'updateSkill'
@@ -117,10 +113,9 @@ export function reportOptionalRuntimeLoadFailures(
 }
 
 /**
- * Owns renderer state and commands for Skill, MCP, Hook, and Plugin capabilities.
- *
- * Runtime config remains owned by `useRuntimeConfigState` because Hook mutations share
- * the same persisted config document as model and runtime preferences.
+ * Owns renderer state and commands for Skill, MCP, and Plugin capabilities.
+ * Hook state is refreshed here and exposes narrow management actions for legacy
+ * standalone Hooks and side-loaded plugin Hooks.
  */
 export function useRuntimeCapabilityState({
   activeProjectPath,
@@ -136,6 +131,7 @@ export function useRuntimeCapabilityState({
   const [plugins, setPlugins] = useState<RuntimePluginSummary[]>([]);
   const [pluginMarketplace, setPluginMarketplace] = useState<RuntimePluginMarketplaceItem[]>([]);
   const [pluginMarketplaceErrors, setPluginMarketplaceErrors] = useState<string[]>([]);
+  const [extensionStatuses, setExtensionStatuses] = useState<RuntimeExtensionStatus[]>([]);
   const capabilityRequests = useLatestRequestGuard();
   const activeHookCwds = useMemo(
     () => (activeProjectPath ? [activeProjectPath] : []),
@@ -161,8 +157,9 @@ export function useRuntimeCapabilityState({
       client.listHooks(activeHookCwds),
       client.listPlugins(),
       client.listPluginMarketplace(),
+      client.listExtensionStatuses(),
     ]);
-    const [skillResult, mcpResult, hookResult, pluginResult, pluginMarketplaceResult] = results;
+    const [skillResult, mcpResult, hookResult, pluginResult, pluginMarketplaceResult, extensionStatusResult] = results;
     if (isLatestRequest()) {
       if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
       if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
@@ -172,6 +169,7 @@ export function useRuntimeCapabilityState({
         setPluginMarketplace(pluginMarketplaceResult.value.plugins);
         setPluginMarketplaceErrors(pluginMarketplaceResult.value.errors);
       }
+      if (extensionStatusResult.status === 'fulfilled') setExtensionStatuses(extensionStatusResult.value.extensions);
     }
     reportOptionalRuntimeLoadFailures([
       ['skills', skillResult],
@@ -179,6 +177,7 @@ export function useRuntimeCapabilityState({
       ['hooks', hookResult],
       ['plugins', pluginResult],
       ['plugin marketplace', pluginMarketplaceResult],
+      ['extensions', extensionStatusResult],
     ]);
     const firstFailure = results.find(
       (result): result is PromiseRejectedResult => result.status === 'rejected',
@@ -194,6 +193,7 @@ export function useRuntimeCapabilityState({
     if (isLatestRequest()) setHookState(hookList);
     return hookList;
   }, [activeHookCwds, capabilityRequests, client]);
+  const hookManagement = useRuntimeHookManagement({ client, config, onConfigChange, refreshHooks });
 
   useEffect(() => {
     if (!enabled) return;
@@ -201,6 +201,13 @@ export function useRuntimeCapabilityState({
       reportRuntimeBackgroundFailure('hook refresh', unknownError);
     });
   }, [enabled, refreshHooks]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    void client.listExtensionStatuses()
+      .then((result) => setExtensionStatuses(result.extensions))
+      .catch((unknownError) => reportRuntimeBackgroundFailure('extension status refresh', unknownError));
+  }, [client, enabled]);
 
   const updateSkill = useCallback(
     async (
@@ -301,97 +308,6 @@ export function useRuntimeCapabilityState({
     [client],
   );
 
-  const updateHookState = useCallback(
-    async (hook: RuntimeHookMetadata, patch: { enabled?: boolean; trustedHash?: string }) => {
-      if (!config) return;
-      const currentHooks = config.hooks ?? {};
-      const currentState = currentHooks.state ?? {};
-      const currentHookState = currentState[hook.key] ?? {};
-      const next = await client.saveConfig({
-        hooks: {
-          ...currentHooks,
-          state: {
-            ...currentState,
-            [hook.key]: {
-              ...currentHookState,
-              ...patch,
-            },
-          },
-        },
-      });
-      onConfigChange(next);
-      await refreshHooks();
-    },
-    [client, config, onConfigChange, refreshHooks],
-  );
-
-  const trustHook = useCallback(
-    async (hook: RuntimeHookMetadata) => updateHookState(
-      hook,
-      { trustedHash: hook.currentHash },
-    ),
-    [updateHookState],
-  );
-
-  const updateHookEnabled = useCallback(
-    async (hook: RuntimeHookMetadata, hookEnabled: boolean) => (
-      updateHookState(hook, { enabled: hookEnabled })
-    ),
-    [updateHookState],
-  );
-
-  const createHook = useCallback(
-    async (input: RuntimeHookInput) => {
-      if (!config) throw new Error('Runtime config is not loaded.');
-      const command = input.command.trim();
-      if (!command) throw new Error('Hook command is required.');
-      const currentHooks = config.hooks ?? {};
-      const groups = currentHooks[input.eventName] ?? [];
-      const next = await client.saveConfig({
-        hooks: {
-          ...currentHooks,
-          [input.eventName]: [
-            ...groups,
-            hookInputToMatcherGroup({ ...input, command }),
-          ],
-        },
-      });
-      onConfigChange(next);
-      await refreshHooks();
-    },
-    [client, config, onConfigChange, refreshHooks],
-  );
-
-  const updateHook = useCallback(
-    async (hook: RuntimeHookMetadata, input: RuntimeHookInput) => {
-      if (!config) throw new Error('Runtime config is not loaded.');
-      const command = input.command.trim();
-      if (!command) throw new Error('Hook command is required.');
-      const currentHooks = config.hooks ?? {};
-      const location = hookConfigLocation(hook);
-      if (!location) throw new Error('Hook location is invalid.');
-      const nextHooks = updateHookInConfig(currentHooks, location, { ...input, command });
-      const next = await client.saveConfig({ hooks: nextHooks });
-      onConfigChange(next);
-      await refreshHooks();
-    },
-    [client, config, onConfigChange, refreshHooks],
-  );
-
-  const deleteHook = useCallback(
-    async (hook: RuntimeHookMetadata) => {
-      if (!config) throw new Error('Runtime config is not loaded.');
-      const currentHooks = config.hooks ?? {};
-      const location = hookConfigLocation(hook);
-      if (!location) throw new Error('Hook location is invalid.');
-      const nextHooks = deleteHookFromConfig(currentHooks, location);
-      const next = await client.saveConfig({ hooks: nextHooks });
-      onConfigChange(next);
-      await refreshHooks();
-    },
-    [client, config, onConfigChange, refreshHooks],
-  );
-
   const deleteMcpServer = useCallback(
     async (server: RuntimeMcpServer) => {
       await client.deleteMcpServer(server.key);
@@ -410,7 +326,7 @@ export function useRuntimeCapabilityState({
   }, [client]);
 
   const refreshPluginCapabilities = useCallback(async () => {
-    const [pluginList, marketplace, skillList, nextMcpState, nextConfig, nextHookState] = (
+    const [pluginList, marketplace, skillList, nextMcpState, nextConfig, nextHookState, extensionStatusList] = (
       await Promise.all([
         client.listPlugins(),
         client.listPluginMarketplace(),
@@ -418,6 +334,7 @@ export function useRuntimeCapabilityState({
         client.listMcpServers(),
         client.getConfig(),
         client.listHooks(activeHookCwds),
+        client.listExtensionStatuses(),
       ])
     );
     setPlugins(pluginList.plugins);
@@ -427,6 +344,7 @@ export function useRuntimeCapabilityState({
     setMcpState(nextMcpState);
     onConfigChange(nextConfig);
     setHookState(nextHookState);
+    setExtensionStatuses(extensionStatusList.extensions);
   }, [activeHookCwds, client, onConfigChange]);
 
   const getPluginItemContent = useCallback((
@@ -463,18 +381,24 @@ export function useRuntimeCapabilityState({
     await refreshPluginCapabilities();
   }, [client, refreshPluginCapabilities]);
 
+  const setPluginExtensionTrust = useCallback(async (pluginId: string, trusted: boolean): Promise<void> => {
+    const next = await client.setPluginExtensionTrust(pluginId, { trusted });
+    setPlugins(next.plugins);
+    setExtensionStatuses((await client.listExtensionStatuses()).extensions);
+  }, [client]);
+
   return {
     applyBootstrapResults,
     authenticateSkillMcpDependency,
-    createHook,
     createSkill,
-    deleteHook,
     deleteMcpServer,
     deleteSkill,
     fetchMcpServerTools,
     getPluginItemContent,
     getSkillDetail,
+    extensionStatuses,
     hookState,
+    ...hookManagement,
     installMarketplacePlugin,
     installSkillMcpDependencies,
     loginMcpServer,
@@ -484,15 +408,12 @@ export function useRuntimeCapabilityState({
     pluginMarketplaceErrors,
     plugins,
     refreshCapabilities,
-    refreshHooks,
     removePlugin,
+    setPluginExtensionTrust,
     saveMcpServer,
     setSkillExtraRoots,
     skillExtraRoots,
     skills,
-    trustHook,
-    updateHook,
-    updateHookEnabled,
     updateMarketplacePlugin,
     updateMcpServer,
     updateSkill,

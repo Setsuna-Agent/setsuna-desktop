@@ -1,8 +1,11 @@
 import {
+  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_TOOL_NAME,
   PUBLISH_ARTIFACT_TOOL_NAME,
+  WEB_SEARCH_PLUGIN_ID,
+  WEB_SEARCH_TOOL_NAME,
   type DesktopResolveNetworkProxyInput,
 } from '@setsuna-desktop/contracts';
 import { mkdtemp } from 'node:fs/promises';
@@ -76,15 +79,84 @@ describe('runtime factory tool wiring', () => {
     });
   });
 
+  it('creates and updates a managed local Plugin through the chat tool', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-plugin-tool-test-'));
+    const runtime = createRuntimeFactory({ dataDir });
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const input = {
+      manifest: {
+        id: 'factory-plugin',
+        name: 'Factory Plugin',
+        description: 'Created through configure_plugin.',
+        extension: {
+          apiVersion: 1,
+          runtime: 'node-worker',
+          entry: 'extension/entry.mjs',
+          capabilities: ['state'],
+        },
+      },
+      files: [{
+        path: 'extension/entry.mjs',
+        content: 'export default function activate() {}\n',
+      }],
+    };
+
+    try {
+      await expect(runtime.toolHost.listTools(context)).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'configure_plugin' })]),
+      );
+      await expect(runtime.toolHost.approvalForTool?.('configure_plugin', input, context)).resolves.toMatchObject({
+        reason: expect.stringContaining('授权当前完整包哈希'),
+      });
+      const createPreview = await runtime.toolHost.previewToolCall?.('configure_plugin', input, context);
+      const created = await runtime.toolHost.runTool('configure_plugin', input, {
+        ...context,
+        expectedPreviewIntegrityToken: createPreview?.integrityToken,
+      });
+
+      expect(created).toMatchObject({ data: { action: 'create', plugin: { id: 'factory-plugin' } } });
+      await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
+        plugins: [expect.objectContaining({
+          id: 'factory-plugin',
+          extension: expect.objectContaining({ trust: 'trusted' }),
+        })],
+      });
+
+      const updateInput = {
+        ...input,
+        manifest: { ...input.manifest, version: '1.0.1', description: 'Updated through configure_plugin.' },
+        files: [{ ...input.files[0], content: 'export default function activate() { /* updated */ }\n' }],
+      };
+      const updatePreview = await runtime.toolHost.previewToolCall?.('configure_plugin', updateInput, context);
+      expect(updatePreview?.resultPreview).toContain('"action":"update"');
+      await runtime.toolHost.runTool('configure_plugin', updateInput, {
+        ...context,
+        expectedPreviewIntegrityToken: updatePreview?.integrityToken,
+      });
+      await expect(runtime.pluginStore.listPlugins()).resolves.toMatchObject({
+        plugins: [expect.objectContaining({
+          id: 'factory-plugin',
+          version: '1.0.1',
+          description: 'Updated through configure_plugin.',
+          extension: expect.objectContaining({ trust: 'trusted' }),
+        })],
+      });
+    } finally {
+      await runtime.extensionManager.shutdown();
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
   it('routes image generation requests through the runtime network proxy adapter', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-image-proxy-test-'));
     const nativeBridge = new RejectingProxyBridge();
     const runtime = createRuntimeFactory({ dataDir, nativeBridge });
 
     try {
-      await runtime.pluginStore.installPlugin({
-        path: path.join(process.cwd(), 'plugins', 'openai-image-generation'),
-      });
+      await runtime.pluginMarketplace.installPlugin(OPENAI_IMAGE_GENERATION_PLUGIN_ID);
       await runtime.configStore.saveConfig({
         imageGeneration: {
           apiKey: 'image-secret',
@@ -146,6 +218,40 @@ describe('runtime factory tool wiring', () => {
       await runtime.pluginStore.removePlugin(OPENAI_VISION_RECOGNITION_PLUGIN_ID);
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
+      );
+    } finally {
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
+  it('adds keyless web search through the marketplace and routes it through the runtime proxy', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-web-search-test-'));
+    const nativeBridge = new RejectingProxyBridge();
+    const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+
+    try {
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
+      );
+      await runtime.pluginMarketplace.installPlugin(WEB_SEARCH_PLUGIN_ID);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
+      );
+      await expect(runtime.webSearchToolHost.runTool(
+        WEB_SEARCH_TOOL_NAME,
+        { query: 'proxy wiring test' },
+        { threadId: 'thread_1' },
+      )).rejects.toThrow('proxy resolution reached');
+      expect(nativeBridge.proxyInputs).toEqual([{
+        scope: 'runtime',
+        override: undefined,
+      }]);
+
+      await runtime.pluginStore.removePlugin(WEB_SEARCH_PLUGIN_ID);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );
     } finally {
       await runtime.networkProxyFetch.close();

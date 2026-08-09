@@ -259,23 +259,27 @@ function configStore(value: RuntimeConfigState) {
   return { async getConfig() { return value; } };
 }
 
-function pluginStore(installed: boolean) {
+function pluginStore(installed: boolean, installationSource: 'local' | 'marketplace' = 'marketplace') {
   return {
-    async listPlugins() {
-      return {
-        plugins: installed ? [{
+    async listInstalledRecords() {
+      return installed ? [{
           id: OPENAI_VISION_RECOGNITION_PLUGIN_ID,
           name: '视觉识别',
           icon: 'vision-recognition',
           installedAt: '2026-08-08T00:00:00.000Z',
+          installationSource,
+          sourcePath: '/catalog/openai-vision-recognition',
+          installPath: '/runtime/plugins/openai-vision-recognition',
+          manifestPath: '/runtime/plugins/openai-vision-recognition/.setsuna-plugin/plugin.json',
           tools: [{ name: OPENAI_VISION_RECOGNITION_TOOL_NAME }],
           skills: [],
+          skillEntries: [],
           mcpServers: [],
+          mcpServerInputs: [],
           hooks: [],
           hookCount: 0,
           resources: [],
-        }] : [],
-      };
+        }] : [];
     },
   };
 }

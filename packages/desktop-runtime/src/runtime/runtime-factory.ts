@@ -12,7 +12,9 @@ import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-re
 import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-bridge.js';
 import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-fetch.js';
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
+import { FilePluginDraftStore } from '../adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
+import { TavilyWebSearchClient } from '../adapters/search/tavily-web-search-client.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
@@ -28,6 +30,7 @@ import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
+import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
 import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
 import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
@@ -37,12 +40,16 @@ import { PcLocalToolHost } from '../adapters/tool/pc-local/pc-local-tool-host.js
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { UserInputToolHost } from '../adapters/tool/user-input-tool-host.js';
+import { WebSearchToolHost } from '../adapters/tool/web-search-tool-host.js';
 import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
 import { ManagedWorkspaceDependencyManager } from '../adapters/workspace/managed-workspace-dependency-manager.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
+import { ExtensionManager } from '../extensions/extension-manager.js';
+import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
+import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../ports/clock.js';
@@ -106,9 +113,23 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
   const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpConnections);
-  const pluginStore = new FilePluginBundleStore(runtimeDataDir, fileSkillRegistry, mcpStore, mcpConnections, configStore, clock);
   const builtinPluginsDir =
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
+  const extensionState = new FileExtensionStateStore(runtimeDataDir);
+  const pluginStore = new FilePluginBundleStore(
+    runtimeDataDir,
+    fileSkillRegistry,
+    mcpStore,
+    mcpConnections,
+    configStore,
+    clock,
+    extensionState,
+    builtinPluginsDir,
+  );
+  const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
+  const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
+  const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi);
+  pluginStore.setRuntimeMutationCoordinator(extensionManager);
   const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
   const workspaceSearchEngine = createWorkspaceSearchEngine({
     ripgrepPath: options.ripgrepPath,
@@ -146,6 +167,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     configuredModelClient,
     { clock, usageStore },
   );
+  const webSearchClient = new TavilyWebSearchClient({
+    fetchImpl: networkProxyFetch.forRoute(),
+  });
+  const webSearchToolHost = new WebSearchToolHost(pluginStore, webSearchClient);
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
     policyAmendmentStore,
@@ -165,9 +190,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     new BrowserToolHost(browserControl),
+    webSearchToolHost,
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
-    new PluginBundleToolHost(pluginStore),
+    new PluginBundleToolHost(pluginStore, pluginDraftStore),
+    new ExtensionToolHost(extensionManager),
     imageGenerationToolHost,
     visionRecognitionToolHost,
     new WorkspaceImageToolHost(workspaceProjects),
@@ -182,6 +209,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     modelClient,
     eventBus,
     environmentResolver,
+    extensionManager,
     clock,
     ids,
     imageStore: generatedImageStore,
@@ -211,6 +239,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventBus,
     eventWriter,
     environmentResolver,
+    extensionManager,
     generatedImageStore,
     imageGenerationToolHost,
     visionRecognitionToolHost,
@@ -230,6 +259,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolHost,
     threadStore,
     usageStore,
+    webSearchClient,
+    webSearchToolHost,
     workspaceDependencies,
     workspaceProjects,
     workspaceSearchEngine,

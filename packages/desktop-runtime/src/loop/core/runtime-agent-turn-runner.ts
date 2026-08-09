@@ -7,6 +7,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
+import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
@@ -43,6 +44,7 @@ type RuntimeAgentTurnRunnerOptions = {
   turnInputs: Pick<RuntimeTurnInputCoordinator, 'drainMailboxMessages' | 'drainSteers'>;
   turnTasks: Pick<RuntimeTurnTaskRegistry, 'stopAcceptingSteers'>;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
+  extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
   completeMessage(
     threadId: string,
@@ -98,7 +100,7 @@ export class RuntimeAgentTurnRunner {
       createdAt,
       status: 'complete',
     };
-    const modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
+    let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     let activeSkillIds = [...skillIds];
@@ -123,6 +125,7 @@ export class RuntimeAgentTurnRunner {
         createdAt: this.options.clock.now().toISOString(),
         payload: { taskKind },
       });
+      await this.dispatchTurnSettled(thread, turnId, 'completed', undefined, undefined, runtimeConfig?.features);
       return;
     }
     if (publishUserMessage) {
@@ -131,51 +134,56 @@ export class RuntimeAgentTurnRunner {
       });
     }
     if (options.review) await this.options.turnFinalizer.publishReviewModeMessage(threadId, turnId, 'entered', options.review.displayText);
-    const turnStartHooks = await this.options.hooks.runTurnStartHooks({
-      prompt: options.modelInput ?? text,
-      runtimeConfig,
-      signal,
-      thread,
-      turnId,
-    });
-    if (turnStartHooks.stopped) {
-      this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
-      await this.options.publishMessage(threadId, turnId, {
-        id: this.options.ids.id('msg'),
-        turnId,
-        role: 'assistant',
-        content: turnStartHooks.reason,
-        createdAt: this.options.clock.now().toISOString(),
-        status: 'complete',
-      });
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'turn.completed',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { taskKind },
-      });
-      return;
-    }
-    const additionalContextMessages = [
-      ...(options.runtimeContextMessages ?? []),
-      ...turnStartHooks.contextMessages,
-      ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
-    ];
-    // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
-    const threadTitleGeneration = this.options.threadTitles.start({
-      attachments,
-      signal,
-      taskKind,
-      thread,
-      userContent: userMessage.content,
-    });
-
     let usage: RuntimeUsage | undefined;
     let cleanupStatus: ToolTurnCleanupOutcome['status'] = 'completed';
     let cleanupEnvironment: RuntimeEnvironment | undefined;
+    let settledContent: string | undefined;
     try {
+      const turnStartHooks = await this.options.hooks.runTurnStartHooks({
+        prompt: options.modelInput ?? text,
+        runtimeConfig,
+        signal,
+        thread,
+        turnId,
+      });
+      if (turnStartHooks.stopped) {
+        settledContent = turnStartHooks.reason;
+        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
+        await this.options.publishMessage(threadId, turnId, {
+          id: this.options.ids.id('msg'),
+          turnId,
+          role: 'assistant',
+          content: turnStartHooks.reason,
+          createdAt: this.options.clock.now().toISOString(),
+          status: 'complete',
+        });
+        await this.options.appendEvent(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId,
+          type: 'turn.completed',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: { taskKind },
+        });
+        return;
+      }
+      if (turnStartHooks.prompt !== undefined) {
+        modelUserMessage = { ...modelUserMessage, content: turnStartHooks.prompt };
+      }
+      const additionalContextMessages = [
+        ...(options.runtimeContextMessages ?? []),
+        ...turnStartHooks.contextMessages,
+        ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
+      ];
+      // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
+      const threadTitleGeneration = this.options.threadTitles.start({
+        attachments,
+        signal,
+        taskKind,
+        thread,
+        userContent: userMessage.content,
+      });
+
       throwIfAborted(signal);
       // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
       // 工具模式和输出预留空间。
@@ -354,6 +362,7 @@ export class RuntimeAgentTurnRunner {
         }
 
         this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
+        settledContent = roundText;
         await this.options.turnFinalizer.finish({
           threadId,
           turnId,
@@ -381,6 +390,7 @@ export class RuntimeAgentTurnRunner {
       }
     } catch (error) {
       if (error instanceof HookStoppedTurnError) {
+        settledContent = error.message;
         if (activeAssistantMessageId) {
           await this.options.completeMessage(threadId, turnId, activeAssistantMessageId);
         }
@@ -405,6 +415,7 @@ export class RuntimeAgentTurnRunner {
       }
       if (isAbortError(error)) {
         cleanupStatus = 'cancelled';
+        settledContent = error instanceof Error ? error.message : 'Turn cancelled.';
         if (activeAssistantMessageId) {
           await this.options.completeMessage(threadId, turnId, activeAssistantMessageId);
         }
@@ -418,6 +429,7 @@ export class RuntimeAgentTurnRunner {
         return;
       }
       cleanupStatus = 'failed';
+      settledContent = error instanceof Error ? error.message : String(error);
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
@@ -431,6 +443,14 @@ export class RuntimeAgentTurnRunner {
       });
       throw error;
     } finally {
+      await this.dispatchTurnSettled(
+        thread,
+        turnId,
+        cleanupStatus,
+        settledContent,
+        cleanupEnvironment?.cwd,
+        runtimeConfig?.features,
+      );
       try {
         await this.cleanupToolHostTurn({
           ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
@@ -442,6 +462,48 @@ export class RuntimeAgentTurnRunner {
         // 轮次级审批只在当前轮次活动期间有效。
         this.options.toolExecutor.cleanupTurn(turnId);
       }
+    }
+  }
+
+  private async dispatchTurnSettled(
+    thread: RuntimeTurnExecutionInput['thread'],
+    turnId: string,
+    status: ToolTurnCleanupOutcome['status'],
+    content?: string,
+    cwd?: string,
+    features?: Record<string, boolean>,
+  ): Promise<void> {
+    if (!this.options.extensions) return;
+    try {
+      const outcome = await this.options.extensions.dispatch('turn.settled', {
+        threadId: thread.id,
+        turnId,
+        projectId: thread.projectId,
+        cwd,
+        ...(features ? { features } : {}),
+        payload: { status, ...(content ? { content } : {}) },
+      });
+      if (!outcome.feedback) return;
+      await this.options.appendEvent(thread.id, {
+        id: this.options.ids.id('event'),
+        threadId: thread.id,
+        turnId,
+        type: 'runtime.warning',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { message: outcome.feedback, code: 'extension_turn_settled' },
+      });
+    } catch (error) {
+      await this.options.appendEvent(thread.id, {
+        id: this.options.ids.id('event'),
+        threadId: thread.id,
+        turnId,
+        type: 'runtime.warning',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {
+          message: error instanceof Error ? error.message : String(error),
+          code: 'extension_turn_settled_failed',
+        },
+      }).catch(() => undefined);
     }
   }
 

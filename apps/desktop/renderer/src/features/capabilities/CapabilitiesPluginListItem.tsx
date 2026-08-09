@@ -19,10 +19,10 @@ export function CapabilitiesPluginListItem({
   const { t } = useI18n();
   const copy = localizedPluginCopy(plugin, t);
   return (
-    <article className="desktop-plugin-list-item">
-      <button className="desktop-plugin-list-item__identity" type="button" onClick={() => onOpen(plugin)}>
+    <article className="desktop-capability-list-item">
+      <button className="desktop-capability-list-item__identity" type="button" onClick={() => onOpen(plugin)}>
         <CapabilitiesPluginIcon name={plugin.icon} variant="list" />
-        <span className="desktop-plugin-list-item__copy">
+        <span className="desktop-capability-list-item__copy">
           <strong>{copy.name}</strong>
           <span>{copy.description || t('capabilities.market.listFallback')}</span>
           <small>{plugin.publisher || 'Setsuna'} · {pluginCapabilitySummary(plugin, t)}</small>

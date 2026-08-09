@@ -26,6 +26,7 @@ import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { EventBus } from '../../ports/event-bus.js';
+import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { McpStore } from '../../ports/mcp-store.js';
@@ -92,6 +93,7 @@ export type AgentLoopOptions = {
   projectWorkflow?: ProjectWorkflowResolver;
   environmentResolver?: RuntimeEnvironmentResolver;
   eventWriter?: RuntimeEventWriter;
+  extensionManager?: Pick<ExtensionRuntime, 'dispatch'>;
 };
 
 export type { DeliverMailboxInput, DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
@@ -167,6 +169,7 @@ export class AgentLoop {
       memory: this.memory,
       policyAmendmentStore: options.policyAmendmentStore,
       persistentToolApprovalStore: options.persistentToolApprovalStore,
+      extensions: options.extensionManager,
       toolHost: options.toolHost,
       collaborationCoordinator: () => this.collaborationCoordinator,
       goalCoordinator: () => this.goals,
@@ -178,6 +181,7 @@ export class AgentLoop {
       environmentResolver,
       ids: options.ids,
       toolExecutor: this.toolExecutor,
+      extensions: options.extensionManager,
     });
     this.contextCompactor = new RuntimeContextCompactor({
       clock: options.clock,
@@ -284,6 +288,7 @@ export class AgentLoop {
       turnInputs: this.turnInputs,
       turnTasks: this.turnTasks,
       turnTermination: this.turnTermination,
+      extensions: options.extensionManager,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       completeMessage: (threadId, turnId, messageId, payload) => this.completeMessage(threadId, turnId, messageId, payload),
       publishAssistantDelta: (threadId, turnId, messageId, text) => this.publishAssistantDelta(threadId, turnId, messageId, text),

@@ -1,4 +1,4 @@
-import { build } from 'esbuild';
+import { build, type BuildOptions } from 'esbuild';
 import { mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,42 @@ export const electronMainExternals = [
   'undici',
 ];
 export const runtimeExternals = ['node-pty'];
+
+const runtimeImportMetaUrlIdentifier = '__setsunaRuntimeModuleUrl';
+
+export function createRuntimeBuildOptions(projectRoot: string): BuildOptions[] {
+  return [
+    {
+      entryPoints: [resolve(projectRoot, 'packages/desktop-runtime/src/cli.ts')],
+      outfile: resolve(projectRoot, 'dist/runtime/cli.cjs'),
+      bundle: true,
+      platform: 'node',
+      target: 'node22',
+      format: 'cjs',
+      sourcemap: true,
+      // The runtime bundle is CommonJS, so preserve a usable module URL for
+      // resolving the separately emitted extension worker beside cli.cjs.
+      banner: {
+        js: `const ${runtimeImportMetaUrlIdentifier} = require('node:url').pathToFileURL(__filename).href;`,
+      },
+      define: {
+        'import.meta.url': runtimeImportMetaUrlIdentifier,
+      },
+      // node-pty 会相对于包目录加载原生预构建文件。将其打包进 dist/runtime 会导致
+      // 打包应用无法启动，因为该目录不包含解包后的原生模块树。
+      external: runtimeExternals,
+    },
+    {
+      entryPoints: [resolve(projectRoot, 'packages/desktop-runtime/src/extensions/extension-worker-entry.ts')],
+      outfile: resolve(projectRoot, 'dist/runtime/extension-worker-entry.js'),
+      bundle: true,
+      platform: 'node',
+      target: 'node22',
+      format: 'esm',
+      sourcemap: true,
+    },
+  ];
+}
 
 export async function buildElectron(): Promise<void> {
   await mkdir(resolve(rootDir, 'dist/electron/main'), { recursive: true });
@@ -41,18 +77,7 @@ export async function buildElectron(): Promise<void> {
       sourcemap: true,
       external: ['electron'],
     }),
-    build({
-      entryPoints: [resolve(rootDir, 'packages/desktop-runtime/src/cli.ts')],
-      outfile: resolve(rootDir, 'dist/runtime/cli.cjs'),
-      bundle: true,
-      platform: 'node',
-      target: 'node22',
-      format: 'cjs',
-      sourcemap: true,
-      // node-pty 会相对于包目录加载原生预构建文件。将其打包进 dist/runtime 会导致
-      // 打包应用无法启动，因为该目录不包含解包后的原生模块树。
-      external: runtimeExternals,
-    }),
+    ...createRuntimeBuildOptions(rootDir).map((options) => build(options)),
   ]);
 }
 

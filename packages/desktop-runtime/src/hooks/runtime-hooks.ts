@@ -118,6 +118,7 @@ export function discoverRuntimeHooks(config: RuntimeConfigState): RuntimeHookDis
           sourcePath,
           source: handler.pluginId ? 'plugin' : 'user',
           pluginId: handler.pluginId ?? null,
+          ...(handler.pluginHookId ? { pluginHookId: handler.pluginHookId } : {}),
           displayOrder,
           enabled: state?.enabled !== false,
           isManaged: false,

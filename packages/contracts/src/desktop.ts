@@ -2,6 +2,7 @@ import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } fro
 import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
+import type { RuntimePluginInstallResult } from './plugins.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
   DesktopNetworkProxyRoutingInput,
@@ -256,6 +257,10 @@ export type SetsunaDesktopBridge = {
     deleteServer(proxyServerId: string): Promise<DesktopNetworkProxyState>;
     setRouting(input: DesktopNetworkProxyRoutingInput): Promise<DesktopNetworkProxyState>;
     onStateChange(callback: (state: DesktopNetworkProxyState) => void): () => void;
+  };
+  plugins: {
+    /** Opens the native directory picker and installs the selected local Plugin Bundle. */
+    installLocal(): Promise<RuntimePluginInstallResult | null>;
   };
   runtime: DesktopRuntimeBridge;
   terminal: {

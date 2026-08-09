@@ -36,6 +36,8 @@ import type {
 import type {
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
+  RuntimeExtensionStatusList,
+  RuntimeExtensionTrustInput,
   RuntimePluginInstallResult,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -168,6 +170,8 @@ export type DesktopRuntimeClient = {
   installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   updateMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
+  listExtensionStatuses(): Promise<RuntimeExtensionStatusList>;
+  setPluginExtensionTrust(pluginId: string, input: RuntimeExtensionTrustInput): Promise<RuntimePluginList>;
   testImageGeneration(input: RuntimeImageGenerationTestInput): Promise<RuntimeImageGenerationTestResult>;
   testVisionRecognition(input: RuntimeVisionRecognitionTestInput): Promise<RuntimeVisionRecognitionTestResult>;
   listProjects(): Promise<WorkspaceProjectList>;

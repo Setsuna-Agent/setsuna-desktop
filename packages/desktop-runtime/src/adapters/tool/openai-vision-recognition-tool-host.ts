@@ -20,7 +20,6 @@ import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
-import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import type {
@@ -31,6 +30,10 @@ import type {
 } from '../../ports/tool-host.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
+import {
+  installedMarketplacePlugin,
+  type MarketplacePluginStateStore,
+} from './marketplace-plugin-state.js';
 import { objectInput, requiredStringArg } from './tool-input.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -39,7 +42,6 @@ const MAX_OUTPUT_TOKENS = 4_096;
 const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 type VisionRecognitionConfigStore = Pick<ConfigStore, 'getConfig'>;
-type VisionRecognitionPluginStore = Pick<PluginBundleStore, 'listPlugins'>;
 type VisionRecognitionThreadStore = Pick<ThreadStore, 'getThread'>;
 type VisionRecognitionAttachmentStore = Pick<AttachmentStore, 'resolveForThread'>;
 type VisionRecognitionModelClient = Pick<ModelClient, 'stream'>;
@@ -89,7 +91,7 @@ const VISION_RECOGNITION_TOOL: RuntimeToolDefinition = {
 export class OpenAiVisionRecognitionToolHost implements ToolHost {
   constructor(
     private readonly configStore: VisionRecognitionConfigStore,
-    private readonly pluginStore: VisionRecognitionPluginStore,
+    private readonly pluginStore: MarketplacePluginStateStore,
     private readonly attachmentStore: VisionRecognitionAttachmentStore,
     private readonly threadStore: VisionRecognitionThreadStore,
     private readonly modelClient: VisionRecognitionModelClient,
@@ -103,8 +105,7 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
 
   async toolRuntimeProfile(name: string) {
     if (name !== OPENAI_VISION_RECOGNITION_TOOL_NAME) return null;
-    const plugin = (await this.pluginStore.listPlugins()).plugins
-      .find((item) => item.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID);
+    const plugin = await installedMarketplacePlugin(this.pluginStore, OPENAI_VISION_RECOGNITION_PLUGIN_ID);
     return {
       exposure: 'direct' as const,
       supportsParallel: false,
@@ -304,11 +305,11 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
   }
 
   private async availableModel(): Promise<SelectedVisionModel | null> {
-    const [{ plugins }, config] = await Promise.all([
-      this.pluginStore.listPlugins(),
+    const [plugin, config] = await Promise.all([
+      installedMarketplacePlugin(this.pluginStore, OPENAI_VISION_RECOGNITION_PLUGIN_ID),
       this.configStore.getConfig(),
     ]);
-    if (!plugins.some((plugin) => plugin.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID)) return null;
+    if (!plugin) return null;
     const reference = config.visionRecognition;
     if (!reference) return null;
     const provider = config.providers.find((item) => item.enabled && item.id === reference.providerId);

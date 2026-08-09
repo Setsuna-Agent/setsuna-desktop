@@ -1,5 +1,7 @@
 import type {
   RuntimeConfigState,
+  RuntimeExtensionCapability,
+  RuntimeExtensionManifest,
   RuntimeHookEventName,
   RuntimeHookInput,
   RuntimeHooksConfig,
@@ -11,12 +13,15 @@ import type {
   RuntimePluginSummary,
   RuntimePluginTool,
 } from '@setsuna-desktop/contracts';
+import { RUNTIME_EXTENSION_API_VERSION } from '@setsuna-desktop/contracts';
+import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
 import type {
-  InstalledPluginRecord
+  InstalledPluginExtensionRecord,
+  InstalledPluginRecord,
 } from '../../ports/plugin-bundle-store.js';
 import { detectSafeImageMimeType } from '../../utils/safe-image.js';
 import {
@@ -63,6 +68,7 @@ export type ParsedPluginManifest = {
   mcpServers: RuntimeMcpServerInput[];
   hooks: ParsedPluginHook[];
   resources: RuntimePluginResource[];
+  extension?: RuntimeExtensionManifest & { entry: string };
 };
 
 export type ParsedPluginHook = RuntimeHookInput & Pick<RuntimePluginHook, 'id' | 'name' | 'description'>;
@@ -73,6 +79,7 @@ export const MAX_PLUGIN_FILES = 1_000;
 export const MAX_PLUGIN_TOTAL_BYTES = 32 * 1024 * 1024;
 export const MAX_PLUGIN_RESOURCE_BYTES = 8 * 1024 * 1024;
 export const MAX_PLUGIN_TEXT_RESOURCE_BYTES = 512 * 1024;
+const EXTENSION_CAPABILITIES = new Set<RuntimeExtensionCapability>(['tools', 'events', 'ui', 'state']);
 export const HOOK_EVENTS = new Set<RuntimeHookEventName>([
   'PreToolUse',
   'PermissionRequest',
@@ -178,7 +185,8 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
   if (manifestStat.size > MAX_PLUGIN_MANIFEST_BYTES) throw new Error('Plugin manifest is too large.');
   const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as unknown;
   const record = objectRecord(raw, 'Plugin manifest must be a JSON object.');
-  if (record.schemaVersion !== 1 && record.schema_version !== 1) throw new Error('Plugin schemaVersion must be 1.');
+  const schemaVersion = record.schemaVersion ?? record.schema_version;
+  if (schemaVersion !== 1 && schemaVersion !== 2) throw new Error('Plugin schemaVersion must be 1 or 2.');
   const id = normalizePluginId(requiredString(record.id, 'Plugin id'));
   const name = requiredString(record.name, 'Plugin name');
   const skills = await normalizePluginSkills(sourcePath, id, record.skills);
@@ -195,6 +203,45 @@ export async function readPluginManifest(sourcePath: string): Promise<ParsedPlug
     mcpServers: normalizePluginMcpServers(record.mcpServers ?? record.mcp_servers),
     hooks: normalizePluginHooks(record.hooks),
     resources,
+    ...await normalizePluginExtension(sourcePath, schemaVersion, record.extension),
+  };
+}
+
+async function normalizePluginExtension(
+  sourcePath: string,
+  schemaVersion: 1 | 2,
+  value: unknown,
+): Promise<{ extension?: RuntimeExtensionManifest & { entry: string } }> {
+  if (value === undefined) return {};
+  if (schemaVersion !== 2) throw new Error('Executable extensions require plugin schemaVersion 2.');
+  const record = objectRecord(value, 'Plugin extension must be an object.');
+  if (record.apiVersion !== RUNTIME_EXTENSION_API_VERSION) {
+    throw new Error(`Plugin extension apiVersion must be ${RUNTIME_EXTENSION_API_VERSION}.`);
+  }
+  if (record.runtime !== 'node-worker') throw new Error('Plugin extension runtime must be node-worker.');
+  const entry = safeRelativePath(requiredString(record.entry, 'Plugin extension entry'), 'Plugin extension entry');
+  if (path.extname(entry).toLowerCase() !== '.mjs') throw new Error('Plugin extension entry must be an .mjs file.');
+  const entryPath = await safeExistingPath(sourcePath, entry);
+  if (!(await stat(entryPath)).isFile()) throw new Error('Plugin extension entry must be a file.');
+  if (!Array.isArray(record.capabilities) || !record.capabilities.length) {
+    throw new Error('Plugin extension capabilities must be a non-empty array.');
+  }
+  const capabilities: RuntimeExtensionCapability[] = [];
+  for (const [index, capability] of record.capabilities.entries()) {
+    if (typeof capability !== 'string' || !EXTENSION_CAPABILITIES.has(capability as RuntimeExtensionCapability)) {
+      throw new Error(`Plugin extension capabilities[${index}] is unsupported.`);
+    }
+    const normalized = capability as RuntimeExtensionCapability;
+    if (capabilities.includes(normalized)) throw new Error(`Duplicate plugin extension capability: ${normalized}`);
+    capabilities.push(normalized);
+  }
+  return {
+    extension: {
+      apiVersion: RUNTIME_EXTENSION_API_VERSION,
+      runtime: 'node-worker',
+      capabilities,
+      entry,
+    },
   };
 }
 
@@ -308,7 +355,7 @@ export function materializePluginHook(
   pluginId: string,
   installPath: string,
   manifestPath: string,
-): RuntimeHookInput & { pluginId: string; sourcePath: string } {
+): RuntimeHookInput & { pluginId: string; pluginHookId: string; sourcePath: string } {
   return {
     eventName: hook.eventName,
     ...(hook.matcher ? { matcher: hook.matcher } : {}),
@@ -317,13 +364,14 @@ export function materializePluginHook(
     ...(hook.timeoutSec ? { timeoutSec: hook.timeoutSec } : {}),
     ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
     pluginId,
+    pluginHookId: hook.id,
     sourcePath: manifestPath,
   };
 }
 
 export function addPluginHooks(
   existing: RuntimeHooksConfig,
-  hooks: Array<RuntimeHookInput & { pluginId: string; sourcePath: string }>,
+  hooks: Array<RuntimeHookInput & { pluginId: string; pluginHookId: string; sourcePath: string }>,
 ): RuntimeHooksConfig {
   const next = cloneHooks(existing);
   for (const hook of hooks) {
@@ -337,6 +385,7 @@ export function addPluginHooks(
         ...(hook.timeoutSec ? { timeoutSec: hook.timeoutSec } : {}),
         ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
         pluginId: hook.pluginId,
+        pluginHookId: hook.pluginHookId,
         sourcePath: hook.sourcePath,
       }],
     });
@@ -393,9 +442,10 @@ export function cloneHooks(hooks: RuntimeHooksConfig): RuntimeHooksConfig {
   };
 }
 
-export async function inspectBundleTree(root: string): Promise<void> {
+export async function inspectBundleTree(root: string): Promise<{ bundleHash: string }> {
   let fileCount = 0;
   let totalBytes = 0;
+  const files: Array<{ absolutePath: string; relativePath: string; size: number }> = [];
   const stack = [root];
   while (stack.length) {
     const directory = stack.pop()!;
@@ -412,8 +462,21 @@ export async function inspectBundleTree(root: string): Promise<void> {
       totalBytes += entryStat.size;
       if (fileCount > MAX_PLUGIN_FILES) throw new Error(`Plugin bundle exceeds ${MAX_PLUGIN_FILES} files.`);
       if (totalBytes > MAX_PLUGIN_TOTAL_BYTES) throw new Error(`Plugin bundle exceeds ${MAX_PLUGIN_TOTAL_BYTES} bytes.`);
+      files.push({
+        absolutePath: entryPath,
+        relativePath: path.relative(root, entryPath).split(path.sep).join('/'),
+        size: entryStat.size,
+      });
     }
   }
+  files.sort((left, right) => left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0);
+  const hash = createHash('sha256');
+  for (const file of files) {
+    const relativePathBytes = Buffer.byteLength(file.relativePath);
+    hash.update(`${relativePathBytes}:${file.relativePath}:${file.size}:`, 'utf8');
+    hash.update(await readFile(file.absolutePath));
+  }
+  return { bundleHash: hash.digest('hex') };
 }
 
 export async function copyBundleTree(sourceRoot: string, destinationRoot: string): Promise<void> {
@@ -476,10 +539,13 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
     mcpServerInputs,
     skillEntries: _skillEntries,
     sourcePath: _sourcePath,
+    extension,
     ...summary
   } = plugin;
   return {
     ...summary,
+    installationSource: plugin.installationSource ?? 'local',
+    ...(extension ? { extension: publicPluginExtension(extension) } : {}),
     ...(summary.tools?.length ? { tools: summary.tools.map((tool) => ({ ...tool })) } : {}),
     ...(summary.tags ? { tags: [...summary.tags] } : {}),
     skills: summary.skills.map((skill) => ({
@@ -525,5 +591,25 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
     mcpServerInputs: plugin.mcpServerInputs.map((server) => ({ ...server, args: [...(server.args ?? [])] })),
     hooks: (plugin.hooks ?? []).map((hook) => ({ ...hook })),
     resources: plugin.resources.map((resource) => ({ ...resource })),
+    ...(plugin.extension ? {
+      extension: {
+        ...plugin.extension,
+        capabilities: [...plugin.extension.capabilities],
+      },
+    } : {}),
+  };
+}
+
+export function publicPluginExtension(extension: InstalledPluginExtensionRecord) {
+  const trust = !extension.trustedHash
+    ? 'untrusted' as const
+    : extension.trustedHash === extension.bundleHash
+      ? 'trusted' as const
+      : 'modified' as const;
+  return {
+    apiVersion: extension.apiVersion,
+    runtime: extension.runtime,
+    capabilities: [...extension.capabilities],
+    trust,
   };
 }

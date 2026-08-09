@@ -750,6 +750,8 @@ function normalizeHookHandlers(value: unknown): RuntimeHookHandlerConfig[] {
       if (statusMessage) handler.statusMessage = statusMessage;
       const pluginId = nonEmpty(record.pluginId ?? record.plugin_id);
       if (pluginId) handler.pluginId = pluginId;
+      const pluginHookId = nonEmpty(record.pluginHookId ?? record.plugin_hook_id);
+      if (pluginHookId) handler.pluginHookId = pluginHookId;
       const sourcePath = nonEmpty(record.sourcePath ?? record.source_path);
       if (sourcePath) handler.sourcePath = sourcePath;
       return handler;

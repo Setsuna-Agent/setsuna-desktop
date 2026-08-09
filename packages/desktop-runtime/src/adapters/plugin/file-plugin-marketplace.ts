@@ -12,7 +12,12 @@ import type { PluginMarketplace } from '../../ports/plugin-marketplace.js';
 
 type MarketplaceBundleStore = Pick<
   PluginBundleStore,
-  'inspectPlugin' | 'installPlugin' | 'listPlugins' | 'readBundleItemContent' | 'updatePlugin'
+  | 'inspectPlugin'
+  | 'installPlugin'
+  | 'listPlugins'
+  | 'migrateLegacyMarketplaceInstallations'
+  | 'readBundleItemContent'
+  | 'updatePlugin'
 >;
 
 /** 暴露应用内置的精选插件，同时不向渲染进程泄露其文件系统位置。 */
@@ -23,16 +28,18 @@ export class FilePluginMarketplace implements PluginMarketplace {
   ) {}
 
   async listPlugins(): Promise<RuntimePluginMarketplaceList> {
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const installedById = new Map(installedPlugins.map((plugin) => [plugin.id, plugin]));
+    const errors = [...catalog.errors];
     const plugins = catalog.plugins
       .sort(compareMarketplacePlugins)
-      .map((plugin): RuntimePluginMarketplaceItem => {
+      .flatMap((plugin): RuntimePluginMarketplaceItem[] => {
         const installed = installedById.get(plugin.id);
-        return {
+        if (installed && installed.installationSource !== 'marketplace') {
+          errors.push(`${plugin.id}: bundled marketplace id conflicts with an installed local plugin`);
+          return [];
+        }
+        return [{
           id: plugin.id,
           name: plugin.name,
           ...(plugin.icon ? { icon: plugin.icon } : {}),
@@ -46,13 +53,14 @@ export class FilePluginMarketplace implements PluginMarketplace {
           mcpServers: plugin.mcpServers.map((server) => ({ ...server })),
           hooks: plugin.hooks.map((hook) => ({ ...hook })),
           resources: plugin.resources.map((resource) => ({ ...resource })),
+          ...(plugin.extension ? { extension: { ...plugin.extension, capabilities: [...plugin.extension.capabilities] } } : {}),
           capabilities: { ...plugin.capabilities },
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
           updateAvailable: isVersionGreater(plugin.version, installed?.version),
-        };
+        }];
       });
-    return { plugins, errors: catalog.errors };
+    return { plugins, errors };
   }
 
   async readItemContent(
@@ -61,35 +69,62 @@ export class FilePluginMarketplace implements PluginMarketplace {
     itemId: string,
   ): Promise<RuntimePluginItemContent> {
     const id = pluginId.trim().toLowerCase();
-    const catalog = await this.readCatalog();
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    const installed = installedPlugins.find((item) => item.id === id);
+    if (installed && installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     return this.bundles.readBundleItemContent({ path: plugin.sourcePath }, kind, itemId);
   }
 
   async installPlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const catalog = await this.readCatalog();
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    const installed = installedPlugins.find((item) => item.id === id);
+    if (installed && installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     // readCatalog 已把来源限制在应用内置目录；用户点击安装就是对这份随包插件的授权。
-    return this.bundles.installPlugin({ path: plugin.sourcePath }, { trustHooks: true });
+    return this.bundles.installPlugin(
+      { path: plugin.sourcePath },
+      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
+    );
   }
 
   async updatePlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
-      this.bundles.listPlugins(),
-      this.readCatalog(),
-    ]);
+    const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
     if (!installed) throw new Error(`Marketplace plugin is not installed: ${pluginId}`);
+    if (installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     if (!isVersionGreater(plugin.version, installed.version)) {
       throw new Error(`Marketplace plugin update is not available: ${pluginId}`);
     }
-    return this.bundles.updatePlugin({ path: plugin.sourcePath }, { trustHooks: true });
+    return this.bundles.updatePlugin(
+      { path: plugin.sourcePath },
+      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
+    );
+  }
+
+  private async readCatalogState(): Promise<{
+    catalog: { plugins: PluginBundleInspection[]; errors: string[] };
+    installedPlugins: Awaited<ReturnType<MarketplaceBundleStore['listPlugins']>>['plugins'];
+  }> {
+    const catalog = await this.readCatalog();
+    // Legacy records predate installationSource. Reclaim the exact controlled
+    // catalog source, including the same application's recognized AppImage
+    // remount, while preserving local bundles that merely reuse an id.
+    await this.bundles.migrateLegacyMarketplaceInstallations(catalog.plugins);
+    const { plugins: installedPlugins } = await this.bundles.listPlugins();
+    return { catalog, installedPlugins };
   }
 
   private async readCatalog(): Promise<{ plugins: PluginBundleInspection[]; errors: string[] }> {

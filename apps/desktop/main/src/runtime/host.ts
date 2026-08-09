@@ -1,5 +1,6 @@
 import {
   RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
+  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type DesktopImageDataResult,
   type DesktopRuntimeEventPayload,
@@ -7,6 +8,7 @@ import {
   type RuntimeAttachmentUploadInput,
   type RuntimeEvent,
   type RuntimeEventResync,
+  type RuntimePluginInstallResult,
   type RuntimeRequestInput,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
@@ -143,9 +145,23 @@ export class RuntimeHost {
    */
   async request<T = unknown>(input: RuntimeRequestInput): Promise<T> {
     const safePath = normalizeRuntimePath(input.path);
+    return this.sendRequest(input, safePath);
+  }
+
+  /** Installs a native-picker-selected bundle through a main-only runtime route. */
+  async installLocalPluginBundle(sourcePath: string): Promise<RuntimePluginInstallResult> {
+    if (!path.isAbsolute(sourcePath)) throw new Error('Plugin bundle path must be absolute.');
+    return this.sendRequest<RuntimePluginInstallResult>({
+      path: RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
+      method: 'POST',
+      body: { path: sourcePath },
+    }, RUNTIME_LOCAL_PLUGIN_INSTALL_PATH);
+  }
+
+  private async sendRequest<T>(input: RuntimeRequestInput, safePath: string): Promise<T> {
     const method = input.method ?? 'GET';
     const requestLabel = `${method} ${safePath}`;
-    // renderer 只能传入受限 path，真正的 token 和端口都留在 main 进程内。
+    // Main keeps the runtime token and port private for both renderer-proxied and internal requests.
     const response = await fetchRuntimeResponse(
       `http://127.0.0.1:${this.port}${safePath}`,
       {
@@ -533,8 +549,22 @@ function executableExists(candidate: string): boolean {
 function normalizeRuntimePath(value: string): string {
   // bridge 必须是窄白名单，避免 renderer 借 runtime host 代理任意 localhost 路径。
   if (!value.startsWith('/')) throw new Error('Runtime path must be absolute.');
-  if (!value.startsWith('/v1/') && value !== '/health') throw new Error('Runtime path is not allowed.');
-  return value;
+  const runtimeOrigin = new URL('http://setsuna-runtime.local');
+  let normalized: URL;
+  try {
+    normalized = new URL(value, runtimeOrigin);
+  } catch {
+    throw new Error('Runtime path is not allowed.');
+  }
+  // Validate the canonical URL. WHATWG URL parsing collapses literal and encoded
+  // dot segments, preventing an allowed /v1 path from reaching a main-only route.
+  if (normalized.origin !== runtimeOrigin.origin || normalized.hash) {
+    throw new Error('Runtime path is not allowed.');
+  }
+  if (!normalized.pathname.startsWith('/v1/') && normalized.pathname !== '/health') {
+    throw new Error('Runtime path is not allowed.');
+  }
+  return `${normalized.pathname}${normalized.search}`;
 }
 
 type RuntimeSseFrame =

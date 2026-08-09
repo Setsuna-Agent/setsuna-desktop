@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "protect-secret-paths",
   "name": "保护密钥文件路径",
   "icon": "protect-secret-paths",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "读取、写入或修改参数中出现密钥与凭证文件路径时直接拦截。",
   "publisher": "Setsuna",
   "tags": ["安全", "密钥", "文件"],

@@ -1,0 +1,192 @@
+.desktop-capability-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  column-gap: 32px;
+  row-gap: 2px;
+  min-width: 0;
+}
+
+.desktop-capability-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 76px;
+  padding: 9px 7px;
+  border-radius: var(--app-radius-md);
+  transition: background 140ms ease;
+}
+
+.desktop-capability-list-item:hover {
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+}
+
+.desktop-capability-list-item__identity {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+}
+
+button.desktop-capability-list-item__identity {
+  cursor: pointer;
+}
+
+.desktop-capability-list-item__identity:focus-visible {
+  outline: 0;
+  border-radius: var(--app-radius-sm);
+  box-shadow: var(--app-focus-ring);
+}
+
+.desktop-capability-list-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 74%, transparent);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-bg) 82%, var(--app-text) 3%);
+}
+
+.desktop-capability-list-item__icon[data-kind='mcp'] {
+  color: var(--app-primary);
+  border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-border));
+}
+
+.desktop-capability-list-item__icon[data-kind='skill'] {
+  color: #7b5bd6;
+  border-color: color-mix(in srgb, #7b5bd6 32%, var(--app-border));
+}
+
+.desktop-capability-list-item__copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.desktop-capability-list-item__copy strong,
+.desktop-capability-list-item__copy > span,
+.desktop-capability-list-item__copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capability-list-item__copy strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+  transition: color 140ms ease;
+}
+
+.desktop-capability-list-item__copy > span {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capability-list-item__copy small {
+  color: var(--app-text-subtle);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+button.desktop-capability-list-item__identity:hover .desktop-capability-list-item__copy strong {
+  color: var(--app-primary);
+}
+
+.desktop-capability-list-item__aside {
+  display: grid;
+  gap: 5px;
+  justify-items: end;
+  min-width: 0;
+  max-width: 230px;
+}
+
+.desktop-capability-list-item__actions,
+.desktop-capability-list-item__settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.desktop-capability-list-item__actions .sd-icon-button {
+  width: 26px;
+  height: 26px;
+}
+
+.desktop-capability-list-item__settings .sd-check {
+  font-size: 11px;
+}
+
+.desktop-capability-list-item__approval {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.desktop-capability-list-item__approval .sd-field {
+  width: 90px;
+  height: 26px;
+  font-size: 11px;
+}
+
+.desktop-capability-list-item__text-action {
+  max-width: 150px;
+  height: 26px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.desktop-capability-list-item__text-action .sd-button__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-capability-list-item__dependency-action {
+  max-width: 170px;
+}
+
+@media (max-width: 1000px) {
+  .desktop-capability-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .desktop-capability-list-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-capability-list-item__aside {
+    justify-items: start;
+    max-width: none;
+    padding-left: 52px;
+  }
+
+  .desktop-capability-list-item__actions,
+  .desktop-capability-list-item__settings {
+    justify-content: flex-start;
+  }
+}

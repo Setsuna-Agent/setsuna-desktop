@@ -9,9 +9,13 @@ import {
   FileText,
   FolderLock,
   FolderX,
+  Globe2,
+  ListTodo,
   ListX,
+  MessageCircleQuestion,
   Puzzle,
   ScanSearch,
+  ScrollText,
   ShieldAlert,
   Shrink,
   Sparkles,
@@ -24,6 +28,7 @@ const pluginIconNames = [
   'documents',
   'image-generation',
   'vision-recognition',
+  'web-search',
   'guard-dangerous-shell',
   'protect-secret-paths',
   'protect-generated-folders',
@@ -32,6 +37,9 @@ const pluginIconNames = [
   'prompt-secret-detector',
   'compact-warning',
   'stop-todo-continuation',
+  'pi-question',
+  'pi-todo',
+  'pi-claude-rules',
 ] as const;
 
 type PluginIconName = typeof pluginIconNames[number];
@@ -43,6 +51,7 @@ const pluginGlyphs: Record<PluginIconName, LucideIcon> = {
   documents: FilePenLine,
   'image-generation': Sparkles,
   'vision-recognition': Eye,
+  'web-search': Globe2,
   'guard-dangerous-shell': ShieldAlert,
   'protect-secret-paths': FolderLock,
   'protect-generated-folders': FolderX,
@@ -51,6 +60,9 @@ const pluginGlyphs: Record<PluginIconName, LucideIcon> = {
   'prompt-secret-detector': ScanSearch,
   'compact-warning': Shrink,
   'stop-todo-continuation': ListX,
+  'pi-question': MessageCircleQuestion,
+  'pi-todo': ListTodo,
+  'pi-claude-rules': ScrollText,
 };
 
 const knownPluginIcons = new Set<string>(pluginIconNames);

@@ -1,107 +1,122 @@
-import type { RuntimeConfigState, RuntimeHookMetadata } from '@setsuna-desktop/contracts';
+import type { RuntimeHookMetadata } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   deleteHookFromConfig,
   hookConfigLocation,
-  updateHookInConfig,
 } from '../../../../../src/features/capabilities/hooks/runtimeHookConfig.js';
 
-describe('runtimeHookConfig', () => {
-  it('parses hook locations without losing Windows drive prefixes', () => {
-    const location = hookConfigLocation(hookMetadata({
-      key: 'C:\\Users\\zy\\.setsuna\\config.json:pre_tool_use:2:3',
-    }));
+describe('runtime hook config helpers', () => {
+  it('parses Windows source paths and deletes the selected standalone Hook state', () => {
+    const hook = {
+      key: 'C:\\runtime\\config.json:pre_tool_use:0:0',
+      eventName: 'preToolUse',
+      handlerType: 'command',
+      matcher: 'shell',
+      command: 'echo checked',
+      timeoutSec: 30,
+      statusMessage: null,
+      sourcePath: 'C:\\runtime\\config.json',
+      source: 'user',
+      pluginId: null,
+      displayOrder: 0,
+      enabled: true,
+      isManaged: false,
+      currentHash: 'hash',
+      trustStatus: 'trusted',
+    } satisfies RuntimeHookMetadata;
+    const location = hookConfigLocation(hook);
 
-    expect(location).toMatchObject({
-      sourcePath: 'C:\\Users\\zy\\.setsuna\\config.json',
+    expect(location).toEqual({
       eventName: 'PreToolUse',
       eventKeyLabel: 'pre_tool_use',
-      groupIndex: 2,
-      handlerIndex: 3,
+      groupIndex: 0,
+      handlerIndex: 0,
+      sourcePath: hook.sourcePath,
     });
+    expect(deleteHookFromConfig({
+      PreToolUse: [{ matcher: 'shell', hooks: [{ type: 'command', command: 'echo checked' }] }],
+      state: { [hook.key]: { enabled: true, trustedHash: 'hash' } },
+    }, location!)).toEqual({});
   });
 
-  it('updates a hook in place and lets the trust hash become modified naturally', () => {
-    const hooks = baseHooksConfig();
-    const location = hookConfigLocation(hookMetadata())!;
-    const next = updateHookInConfig(hooks, location, {
+  it('preserves and rekeys sibling Hook state after deletion', () => {
+    const location = {
       eventName: 'PreToolUse',
-      matcher: 'run_shell_command',
-      command: 'node updated.js',
-      timeoutSec: 20,
-      statusMessage: 'Updated',
-    });
+      eventKeyLabel: 'pre_tool_use',
+      groupIndex: 0,
+      handlerIndex: 0,
+      sourcePath: 'C:\\runtime\\config.json',
+    } as const;
+    const prefix = `${location.sourcePath}:${location.eventKeyLabel}:`;
 
-    expect(next.PreToolUse?.[0]).toEqual({
-      matcher: 'run_shell_command',
-      hooks: [{
-        type: 'command',
-        command: 'node updated.js',
-        commandWindows: 'node original-win.js',
-        timeoutSec: 20,
-        statusMessage: 'Updated',
-      }],
+    expect(deleteHookFromConfig({
+      PreToolUse: [
+        {
+          matcher: 'shell',
+          hooks: [
+            { type: 'command', command: 'echo removed' },
+            { type: 'command', command: 'echo retained' },
+          ],
+        },
+        { matcher: 'read_file', hooks: [{ type: 'command', command: 'echo later group' }] },
+      ],
+      state: {
+        [`${prefix}0:0`]: { trustedHash: 'removed' },
+        [`${prefix}0:1`]: { enabled: false, trustedHash: 'retained' },
+        [`${prefix}1:0`]: { trustedHash: 'later' },
+      },
+    }, location)).toEqual({
+      PreToolUse: [
+        { matcher: 'shell', hooks: [{ type: 'command', command: 'echo retained' }] },
+        { matcher: 'read_file', hooks: [{ type: 'command', command: 'echo later group' }] },
+      ],
+      state: {
+        [`${prefix}0:0`]: { enabled: false, trustedHash: 'retained' },
+        [`${prefix}1:0`]: { trustedHash: 'later' },
+      },
     });
-    expect(next.state?.['/config.json:pre_tool_use:0:0']).toEqual({ enabled: true, trustedHash: 'old-hash' });
   });
 
-  it('deletes a hook and clears same-event trust state to avoid stale index trust', () => {
-    const hooks = baseHooksConfig();
-    const location = hookConfigLocation(hookMetadata())!;
-    const next = deleteHookFromConfig(hooks, location);
+  it('rekeys later Hook groups even when their source paths differ', () => {
+    const location = {
+      eventName: 'PreToolUse',
+      eventKeyLabel: 'pre_tool_use',
+      groupIndex: 0,
+      handlerIndex: 0,
+      sourcePath: 'C:\\runtime\\config.json',
+    } as const;
+    const pluginSourcePath = 'C:\\runtime\\plugins\\audit\\.setsuna-plugin\\plugin.json';
 
-    expect(next.PreToolUse).toBeUndefined();
-    expect(next.PostToolUse).toHaveLength(1);
-    expect(next.state).toEqual({
-      '/config.json:post_tool_use:0:0': { enabled: true, trustedHash: 'post-hash' },
+    expect(deleteHookFromConfig({
+      PreToolUse: [
+        { matcher: 'shell', hooks: [{ type: 'command', command: 'echo removed' }] },
+        {
+          matcher: 'read_file',
+          hooks: [{
+            type: 'command',
+            command: 'echo plugin',
+            sourcePath: pluginSourcePath,
+            pluginId: 'audit',
+          }],
+        },
+      ],
+      state: {
+        [`${location.sourcePath}:pre_tool_use:0:0`]: { trustedHash: 'removed' },
+        [`${pluginSourcePath}:pre_tool_use:1:0`]: { enabled: false, trustedHash: 'plugin' },
+      },
+    }, location)).toEqual({
+      PreToolUse: [{
+        matcher: 'read_file',
+        hooks: [{
+          type: 'command',
+          command: 'echo plugin',
+          sourcePath: pluginSourcePath,
+          pluginId: 'audit',
+        }],
+      }],
+      state: {
+        [`${pluginSourcePath}:pre_tool_use:0:0`]: { enabled: false, trustedHash: 'plugin' },
+      },
     });
   });
 });
-
-function baseHooksConfig(): NonNullable<RuntimeConfigState['hooks']> {
-  return {
-    PreToolUse: [{
-      matcher: 'run_shell_command',
-      hooks: [{
-        type: 'command',
-        command: 'node original.js',
-        commandWindows: 'node original-win.js',
-        timeoutSec: 10,
-        statusMessage: 'Original',
-      }],
-    }],
-    PostToolUse: [{
-      matcher: 'apply_patch',
-      hooks: [{
-        type: 'command',
-        command: 'node post.js',
-      }],
-    }],
-    state: {
-      '/config.json:pre_tool_use:0:0': { enabled: true, trustedHash: 'old-hash' },
-      '/config.json:pre_tool_use:1:0': { enabled: true, trustedHash: 'shifted-hash' },
-      '/config.json:post_tool_use:0:0': { enabled: true, trustedHash: 'post-hash' },
-    },
-  };
-}
-
-function hookMetadata(patch: Partial<RuntimeHookMetadata> = {}): RuntimeHookMetadata {
-  return {
-    key: '/config.json:pre_tool_use:0:0',
-    eventName: 'preToolUse',
-    handlerType: 'command',
-    matcher: 'run_shell_command',
-    command: 'node original.js',
-    timeoutSec: 10,
-    statusMessage: 'Original',
-    sourcePath: '/config.json',
-    source: 'user',
-    pluginId: null,
-    displayOrder: 0,
-    enabled: true,
-    isManaged: false,
-    currentHash: 'current-hash',
-    trustStatus: 'trusted',
-    ...patch,
-  };
-}

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -7,6 +7,7 @@ import { FilePluginMarketplace } from '../../../src/adapters/plugin/file-plugin-
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
+import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -58,10 +59,136 @@ describe('file plugin marketplace', () => {
     });
 
     const installed = await marketplace.installPlugin('docs');
-    expect(installed.plugin).toMatchObject({ id: 'docs', name: 'Docs Helper', publisher: 'Setsuna' });
+    expect(installed.plugin).toMatchObject({
+      id: 'docs',
+      name: 'Docs Helper',
+      publisher: 'Setsuna',
+      installationSource: 'marketplace',
+    });
     await expect(marketplace.listPlugins()).resolves.toMatchObject({
       plugins: [{ id: 'docs', installed: true, installedVersion: '1.0.0' }],
     });
+  });
+
+  it('migrates marketplace installs created before provenance was persisted', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.0.0' });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('docs');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      errors: [],
+      plugins: [{ id: 'docs', installed: true, installedVersion: '1.0.0' }],
+    });
+
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper', version: '1.1.0' });
+    await expect(marketplace.updatePlugin('docs')).resolves.toMatchObject({
+      plugin: { id: 'docs', version: '1.1.0', installationSource: 'marketplace' },
+    });
+  });
+
+  it('migrates legacy marketplace provenance across AppImage mount paths', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appimage-'));
+    const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper' });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('docs');
+    await removePersistedInstallationSource(
+      path.join(root, 'runtime', 'plugins.json'),
+      path.join(root, '.mount_SetsunaABC123', 'resources', 'app.asar', 'plugins', 'docs'),
+    );
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
+  it('does not migrate a local bundle imported from another Electron app', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-electron-'));
+    const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
+    const localDir = path.join(root, '.mount_OtherAppABC123', 'resources', 'app.asar', 'plugins');
+    await Promise.all([
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Other App Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
+    });
+  });
+
+  it('updates extension trust on a legacy marketplace record without re-entering the index lock', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-trust-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      extensionScript: 'export default function activate() {}\n',
+    });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('worker');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(runtime.plugins.setExtensionTrust('worker', false)).resolves.toMatchObject({
+      plugins: [{
+        id: 'worker',
+        installationSource: 'marketplace',
+        extension: { trust: 'untrusted' },
+      }],
+    });
+  });
+
+  it('does not migrate a legacy local bundle that only shares a marketplace id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-local-'));
+    const catalogDir = path.join(root, 'catalog');
+    const localDir = path.join(root, 'local');
+    await Promise.all([
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Local Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
+    });
+  });
+
+  it('does not conflate a local plugin with a bundled plugin that has the same id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-local-conflict-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    const installed = await runtime.plugins.installPlugin({ path: path.join(catalogDir, 'docs') });
+    expect(installed.plugin).toMatchObject({ id: 'docs', installationSource: 'local' });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(marketplace.installPlugin('docs')).rejects.toThrow('conflicts with an installed local plugin');
   });
 
   it('reports invalid bundled entries independently and rejects unknown ids', async () => {
@@ -154,6 +281,38 @@ describe('file plugin marketplace', () => {
     expect(updatedHook.currentHash).toBe(installedHook.currentHash);
   });
 
+  it('projects and trusts bundled executable extensions on install and update', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-extension-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      version: '1.0.0',
+      extensionScript: 'export default function activate() {}\n',
+    });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [{
+        id: 'worker',
+        extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['tools', 'events'] },
+        capabilities: { extension: 1 },
+      }],
+    });
+    await expect(marketplace.installPlugin('worker')).resolves.toMatchObject({
+      plugin: { id: 'worker', installationSource: 'marketplace', extension: { trust: 'trusted' } },
+    });
+
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      version: '1.1.0',
+      extensionScript: 'export default function activate() { /* updated */ }\n',
+    });
+    await expect(marketplace.updatePlugin('worker')).resolves.toMatchObject({
+      plugin: { id: 'worker', version: '1.1.0', extension: { trust: 'trusted' } },
+    });
+  });
+
   it('rejects updates for unknown or uninstalled marketplace plugins', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-update-errors-'));
     const catalogDir = path.join(root, 'catalog');
@@ -166,7 +325,7 @@ describe('file plugin marketplace', () => {
   });
 });
 
-async function createPluginRuntime(root: string) {
+async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
   const dataDir = path.join(root, 'runtime');
   const builtinDir = path.join(root, 'builtin-skills');
   await mkdir(builtinDir, { recursive: true });
@@ -180,6 +339,8 @@ async function createPluginRuntime(root: string) {
     { invalidateServer: vi.fn(async () => undefined) },
     config,
     systemClock,
+    new FileExtensionStateStore(dataDir),
+    bundledPluginsDir,
   );
   return { config, plugins };
 }
@@ -195,6 +356,7 @@ async function createCatalogPlugin(
     featured?: boolean;
     featuredOrder?: number;
     hookScript?: string;
+    extensionScript?: string;
   },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
@@ -205,6 +367,9 @@ async function createCatalogPlugin(
   ];
   if (metadata.hookScript !== undefined) {
     directories.push(mkdir(path.join(catalogDir, id, 'hooks'), { recursive: true }));
+  }
+  if (metadata.extensionScript !== undefined) {
+    directories.push(mkdir(path.join(catalogDir, id, 'extension'), { recursive: true }));
   }
   await Promise.all(directories);
   await writeFile(path.join(skillDir, 'SKILL.md'), [
@@ -218,8 +383,11 @@ async function createCatalogPlugin(
   if (metadata.hookScript !== undefined) {
     await writeFile(path.join(catalogDir, id, 'hooks', 'post.mjs'), metadata.hookScript);
   }
+  if (metadata.extensionScript !== undefined) {
+    await writeFile(path.join(catalogDir, id, 'extension', 'entry.mjs'), metadata.extensionScript);
+  }
   await writeFile(path.join(manifestDir, 'plugin.json'), JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
     name: metadata.name,
     icon: 'openai-docs',
@@ -244,5 +412,23 @@ async function createCatalogPlugin(
       command: 'node {{pluginRoot}}/hooks/post.mjs',
       commandWindows: 'node {{pluginRoot}}/hooks/post.mjs',
     }],
+    extension: metadata.extensionScript === undefined ? undefined : {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      entry: 'extension/entry.mjs',
+      capabilities: ['tools', 'events'],
+    },
   }, null, 2));
+}
+
+async function removePersistedInstallationSource(indexPath: string, sourcePath?: string): Promise<void> {
+  const index = JSON.parse(await readFile(indexPath, 'utf8')) as {
+    version: number;
+    plugins: Array<Record<string, unknown>>;
+  };
+  for (const plugin of index.plugins) {
+    delete plugin.installationSource;
+    if (sourcePath) plugin.sourcePath = sourcePath;
+  }
+  await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
 }

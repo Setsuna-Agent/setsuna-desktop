@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "compact-warning",
   "name": "压缩前状态提示",
   "icon": "compact-warning",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "上下文自动或手动压缩时，在 Hook 记录里标记触发来源。",
   "publisher": "Setsuna",
   "tags": ["上下文", "压缩", "调试"],
