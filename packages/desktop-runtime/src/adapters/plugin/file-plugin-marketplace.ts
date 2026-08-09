@@ -120,8 +120,8 @@ export class FilePluginMarketplace implements PluginMarketplace {
   }> {
     const catalog = await this.readCatalog();
     // Legacy records predate installationSource. Reclaim the exact controlled
-    // catalog source, including its stable app.asar suffix across AppImage
-    // remounts, while preserving local bundles that merely reuse an id.
+    // catalog source, including the same application's recognized AppImage
+    // remount, while preserving local bundles that merely reuse an id.
     await this.bundles.migrateLegacyMarketplaceInstallations(catalog.plugins);
     const { plugins: installedPlugins } = await this.bundles.listPlugins();
     return { catalog, installedPlugins };

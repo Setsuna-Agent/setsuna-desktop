@@ -733,21 +733,45 @@ function samePath(left: string, right: string): boolean {
 
 function sameLegacyMarketplaceSource(left: string, right: string): boolean {
   if (samePath(left, right)) return true;
-  const leftSuffix = packagedApplicationPathSuffix(left);
-  const rightSuffix = packagedApplicationPathSuffix(right);
-  return Boolean(leftSuffix && rightSuffix && samePath(leftSuffix, rightSuffix));
+  const leftLocation = appImageApplicationLocation(left);
+  const rightLocation = appImageApplicationLocation(right);
+  return Boolean(
+    leftLocation
+    && rightLocation
+    && leftLocation.mountIdentity === rightLocation.mountIdentity
+    && samePath(leftLocation.applicationSuffix, rightLocation.applicationSuffix),
+  );
 }
 
-function packagedApplicationPathSuffix(value: string): string | null {
+function appImageApplicationLocation(value: string): {
+  applicationSuffix: string;
+  mountIdentity: string;
+} | null {
   const segments = path.resolve(value).split(path.sep);
-  let appAsarIndex = -1;
+  let mountIndex = -1;
+  let mountIdentity = '';
   for (let index = 0; index < segments.length; index += 1) {
+    const match = /^\.mount_(.+)[a-z0-9]{6}$/iu.exec(segments[index]);
+    if (!match) continue;
+    mountIndex = index;
+    mountIdentity = match[1].toLowerCase();
+    break;
+  }
+  if (mountIndex < 0) return null;
+
+  let appAsarIndex = -1;
+  for (let index = mountIndex + 1; index < segments.length; index += 1) {
     if (segments[index].toLowerCase() === 'app.asar') appAsarIndex = index;
   }
-  // AppImage extracts each launch under a different temporary mount. The path
-  // within app.asar remains stable and is durable enough to identify the same
-  // controlled catalog bundle without claiming arbitrary local directories.
-  return appAsarIndex >= 0 ? segments.slice(appAsarIndex).join(path.sep) : null;
+  if (appAsarIndex < 0) return null;
+
+  // AppImage mount directories preserve the application-derived prefix and
+  // replace only their six-character mkdtemp suffix between launches. Requiring
+  // that identity keeps an unrelated Electron app's app.asar out of migration.
+  return {
+    applicationSuffix: segments.slice(appAsarIndex).join(path.sep),
+    mountIdentity,
+  };
 }
 
 async function readManifestItemContent(

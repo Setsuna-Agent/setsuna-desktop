@@ -122,6 +122,10 @@ export class ExtensionManager implements ExtensionRuntime {
       );
       return normalizeToolResult(result);
     } catch (error) {
+      if (context.signal?.aborted) {
+        await this.markStoppedAfterCancellation(active.plugin.id, active.client);
+        throw extensionCancellationError(context.signal);
+      }
       await this.markFailed(active.plugin.id, error, active.client);
       throw error;
     }
@@ -129,9 +133,11 @@ export class ExtensionManager implements ExtensionRuntime {
 
   async dispatch(eventName: RuntimeExtensionEventName, context: ExtensionEventContext): Promise<ExtensionEventOutcome> {
     if (this.shuttingDown || context.features?.plugins === false) return {};
+    throwIfExtensionCancelled(context.signal);
     const aggregate: ExtensionEventOutcome = {};
     const records = (await this.plugins.listInstalledRecords()).sort((left, right) => left.id.localeCompare(right.id));
     for (const plugin of records) {
+      throwIfExtensionCancelled(context.signal);
       if (!plugin.extension?.capabilities.includes('events')) continue;
       let active: ActiveExtension | null = null;
       try {
@@ -153,6 +159,10 @@ export class ExtensionManager implements ExtensionRuntime {
         mergeEventResults(aggregate, result);
         if (aggregate.block) break;
       } catch (error) {
+        if (context.signal?.aborted) {
+          if (active) await this.markStoppedAfterCancellation(plugin.id, active.client);
+          throw extensionCancellationError(context.signal);
+        }
         await this.markFailed(plugin.id, error, active?.client);
         const message = `Extension ${plugin.name} failed during ${eventName}: ${errorMessage(error)}`;
         if (isBeforeEvent(eventName)) {
@@ -354,6 +364,20 @@ export class ExtensionManager implements ExtensionRuntime {
     });
   }
 
+  private async markStoppedAfterCancellation(
+    pluginId: string,
+    expectedClient: ExtensionWorkerClient,
+  ): Promise<void> {
+    await this.withPluginLock(pluginId, async () => {
+      const current = this.active.get(pluginId);
+      // Cancellation terminates its worker. A concurrent request may already
+      // have activated a replacement, which must not be stopped by stale cleanup.
+      if (!current || current.client !== expectedClient) return;
+      await this.stopActiveLocked(pluginId).catch(() => undefined);
+      this.statuses.set(pluginId, { pluginId, state: 'stopped', tools: [], events: [] });
+    });
+  }
+
   private async withPluginLock<T>(pluginId: string, action: () => Promise<T>): Promise<T> {
     const release = await this.acquirePluginLock(pluginId);
     try {
@@ -449,6 +473,14 @@ function eventWorkerRequestContext(context: ExtensionEventContext): ExtensionWor
     ...(context.cwd ? { cwd: context.cwd } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
   };
+}
+
+function throwIfExtensionCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw extensionCancellationError(signal);
+}
+
+function extensionCancellationError(signal?: AbortSignal): Error {
+  return signal?.reason instanceof Error ? signal.reason : new Error('Extension request was cancelled.');
 }
 
 function normalizeToolResult(value: unknown): ToolExecutionResult {

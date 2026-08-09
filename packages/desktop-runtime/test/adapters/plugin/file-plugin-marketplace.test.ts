@@ -94,18 +94,40 @@ describe('file plugin marketplace', () => {
 
   it('migrates legacy marketplace provenance across AppImage mount paths', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appimage-'));
-    const catalogDir = path.join(root, 'new-mount', 'resources', 'app.asar', 'plugins');
+    const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
     await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper' });
     const runtime = await createPluginRuntime(root, catalogDir);
     const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
     await marketplace.installPlugin('docs');
     await removePersistedInstallationSource(
       path.join(root, 'runtime', 'plugins.json'),
-      path.join(root, 'old-mount', 'resources', 'app.asar', 'plugins', 'docs'),
+      path.join(root, '.mount_SetsunaABC123', 'resources', 'app.asar', 'plugins', 'docs'),
     );
 
     await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
       plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
+  it('does not migrate a local bundle imported from another Electron app', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-electron-'));
+    const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
+    const localDir = path.join(root, '.mount_OtherAppABC123', 'resources', 'app.asar', 'plugins');
+    await Promise.all([
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Other App Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
     });
   });
 

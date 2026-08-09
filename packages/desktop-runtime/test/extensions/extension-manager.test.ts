@@ -101,6 +101,9 @@ describe('extension manager', () => {
       });
       setTimeout(() => abort.abort(new Error('cancelled by test')), 30);
       await expect(execution).rejects.toThrow('cancelled by test');
+      await expect(manager.listStatuses()).resolves.toMatchObject({
+        extensions: [{ pluginId: 'worker-demo', state: 'stopped' }],
+      });
 
       const restartedTools = await manager.listTools({ threadId: 'thread_1' });
       const echo = restartedTools.find((tool) => tool.localName === 'echo')!;
@@ -110,6 +113,38 @@ describe('extension manager', () => {
         toolCallId: 'call_echo',
       })).resolves.toMatchObject({ content: 'thread_1:restarted:1' });
       expect((await readFile(fixture.activationPath, 'utf8')).trim().split('\n')).toHaveLength(2);
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('propagates lifecycle cancellation instead of converting it into a block', async () => {
+    const fixture = await extensionFixture({ includePendingEvent: true });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+
+    try {
+      const abort = new AbortController();
+      const dispatch = manager.dispatch('prompt.before', {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        signal: abort.signal,
+        payload: { input: 'cancel me' },
+      });
+      setTimeout(() => abort.abort(new Error('lifecycle cancelled by test')), 30);
+
+      await expect(dispatch).rejects.toThrow('lifecycle cancelled by test');
+      await expect(manager.listStatuses()).resolves.toMatchObject({
+        extensions: [{ pluginId: 'worker-demo', state: 'stopped' }],
+      });
     } finally {
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
@@ -310,6 +345,7 @@ async function extensionFixture(options: {
   exitAfterActivation?: boolean;
   failFirstActivation?: boolean;
   includeDelayedUiTool?: boolean;
+  includePendingEvent?: boolean;
 } = {}): Promise<{
   activationPath: string;
   entryPath: string;
@@ -378,6 +414,11 @@ export default function activate(api) {
       return { content: String(approved) };
     },
   });` : ''}
+  ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (
+    new Promise((_resolve, reject) => {
+      context.signal.addEventListener('abort', () => reject(context.signal.reason), { once: true });
+    })
+  ));` : ''}
   api.on('prompt.before', (payload) => ({
     input: String(payload.input).toUpperCase(),
     context: ['from extension'],
