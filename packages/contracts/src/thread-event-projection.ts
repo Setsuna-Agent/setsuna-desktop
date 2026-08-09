@@ -484,8 +484,15 @@ export function hasActiveToolRun(message: RuntimeMessage): boolean {
   return Boolean(message.toolRuns?.some(isActiveToolRun));
 }
 
+export function isPendingToolApproval(run: RuntimeToolRun): boolean {
+  return run.status === 'pending_approval'
+    && run.approvalStatus !== 'approved'
+    && run.approvalStatus !== 'rejected'
+    && run.approvalStatus !== 'cancelled';
+}
+
 export function isActiveToolRun(run: RuntimeToolRun): boolean {
-  return run.status === 'running' || (run.status === 'pending_approval' && run.approvalStatus !== 'approved' && run.approvalStatus !== 'rejected' && run.approvalStatus !== 'cancelled');
+  return run.status === 'running' || isPendingToolApproval(run);
 }
 
 /**

@@ -1,5 +1,4 @@
 import {
-  defaultModelMaxOutputTokens,
   type DesktopNetworkProxyServerState,
   type ProviderConfigState,
   type ProviderModelConfig,
@@ -8,11 +7,9 @@ import {
   type RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
-import { Brain, Globe2, Image as ImageIcon, Library, Pencil, Plus, RefreshCw, Trash2, X } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { Globe2, Library, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   resolveAutomaticModelBrand,
   resolveAutomaticProviderBrand,
@@ -22,36 +19,21 @@ import {
 import { Button, EmptyState, IconButton, SelectField, TextField } from '../../../shared/ui/primitives.js';
 import { formatTokens } from '../../workspace/model.js';
 import { BrandIconDialog } from '../BrandIconDialog.js';
-import { providerModelReplacementDecision } from '../providerModelReplacement.js';
 import { ProviderModelReplacementDialog } from '../ProviderModelReplacementDialog.js';
+import { ProviderModelSettingsDialog } from './ProviderModelSettingsDialog.js';
 import { ProviderProxyField } from './ProviderProxyField.js';
 import {
-  customThinkingEfforts,
-  defaultProviderConfig,
-  defaultProviderModel,
-  ensureProviderActiveModel,
-  hasProviderModel,
-  mergeFetchedModels,
-  modelWithIcon,
   normalizeProviderKind,
-  normalizeProviderModel,
-  normalizeSettingsProviders,
-  normalizeThinkingEfforts,
-  positiveInt,
-  prepareProviderForSave,
   providerBaseUrlPlaceholder,
   providerProtocolLabel,
   providerProtocolMeta,
   providerProtocolOptions,
-  providerWithIcon,
-  selectedProviderIdFromConfig,
-  selectedProviderIdFromProviders,
-  setCustomThinkingEfforts,
-  setThinkingEnabled,
-  thinkingPresetOptionsForModel,
-  toggleThinkingEffort,
-  updateModelCode,
 } from './provider-model.js';
+import type { SaveState } from './useProviderAutoSave.js';
+import { useProviderSettingsController } from './useProviderSettingsController.js';
+
+export { idleSaveState } from './useProviderAutoSave.js';
+export type { SaveState } from './useProviderAutoSave.js';
 
 export function LocalModelSettings({
   config,
@@ -67,308 +49,43 @@ export function LocalModelSettings({
   onSaveStateChange: (state: SaveState) => void;
 }) {
   const { t } = useI18n();
-  const createDefaultProvider = () => defaultProviderConfig(
-    t('settings.providers.newService'),
-    t('settings.providers.newModel'),
-  );
-  const providerFallbackNames = {
-    model: t('settings.providers.newModel'),
-    provider: t('settings.providers.newService'),
-  };
-  const [providers, setProviders] = useState<ProviderConfigState[]>(() => (
-    normalizeSettingsProviders(config.providers, createDefaultProvider, providerFallbackNames)
-  ));
-  const [selectedProviderId, setSelectedProviderId] = useState(() => selectedProviderIdFromConfig(config));
-  const [editingModel, setEditingModel] = useState<EditingModelState | null>(null);
-  const [editingModelIcon, setEditingModelIcon] = useState<ModelIconTarget | null>(null);
-  const [editingProviderIconId, setEditingProviderIconId] = useState<string | null>(null);
-  const [pendingModelReplacement, setPendingModelReplacement] = useState<PendingModelReplacement | null>(null);
-  const [apiKeysByProviderId, setApiKeysByProviderId] = useState<Record<string, string>>({});
-  const [fetchStateByProviderId, setFetchStateByProviderId] = useState<Record<string, ModelFetchState>>({});
-  const [saveState, setSaveState] = useState<SaveState>(() => idleSaveState());
-  const [dirtyRevision, setDirtyRevision] = useState(0);
-  const providersRef = useRef(providers);
-  const apiKeysByProviderIdRef = useRef(apiKeysByProviderId);
-  const latestDirtyRevisionRef = useRef(dirtyRevision);
-  const saveRequestIdRef = useRef(0);
-  const lastStartedRevisionRef = useRef(0);
-  const pendingSaveTimerRef = useRef<number | null>(null);
-  const mountedRef = useRef(true);
-  const onSaveRef = useRef(onSave);
-  providersRef.current = providers;
-  apiKeysByProviderIdRef.current = apiKeysByProviderId;
-  latestDirtyRevisionRef.current = dirtyRevision;
-  onSaveRef.current = onSave;
 
-  useEffect(() => {
-    const nextProviders = normalizeSettingsProviders(config.providers, createDefaultProvider, providerFallbackNames);
-    setProviders(nextProviders);
-    setSelectedProviderId((current) => (nextProviders.some((provider) => provider.id === current) ? current : selectedProviderIdFromProviders(config.activeProviderId, nextProviders)));
-    setApiKeysByProviderId((current) => {
-      const providerIds = new Set(nextProviders.map((provider) => provider.id));
-      return Object.fromEntries(Object.entries(current).filter(([providerId]) => providerIds.has(providerId)));
-    });
-    setEditingModel((current) => {
-      if (!current) return null;
-      const providerExists = nextProviders.some((provider) => provider.id === current.providerId);
-      if (!providerExists) return null;
-      if (current.mode === 'create') return current;
-      return hasProviderModel(nextProviders, current.providerId, current.modelId) ? current : null;
-    });
-    setEditingProviderIconId((current) => (current && nextProviders.some((provider) => provider.id === current) ? current : null));
-    setEditingModelIcon((current) => (
-      current && hasProviderModel(nextProviders, current.providerId, current.modelId) ? current : null
-    ));
-    setPendingModelReplacement((current) => (current && nextProviders.some((provider) => provider.id === current.providerId) ? current : null));
-    setFetchStateByProviderId({});
-  }, [config.activeProviderId, config.providers, t]);
-
-  useEffect(() => {
-    onSaveStateChange(saveState);
-  }, [onSaveStateChange, saveState]);
-
-  const saveRevision = useCallback((revision: number) => {
-    lastStartedRevisionRef.current = Math.max(lastStartedRevisionRef.current, revision);
-    const requestId = saveRequestIdRef.current + 1;
-    saveRequestIdRef.current = requestId;
-    if (mountedRef.current) setSaveState({ status: 'saving', message: t('settings.providers.applying') });
-    return onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
-      .then(() => {
-        if (mountedRef.current && saveRequestIdRef.current === requestId && latestDirtyRevisionRef.current === revision) {
-          setSaveState({ status: 'saved', message: t('settings.providers.applied') });
-        }
-      })
-      .catch((error) => {
-        if (mountedRef.current && saveRequestIdRef.current === requestId) {
-          setSaveState({ status: 'error', message: error instanceof Error ? error.message : String(error) });
-        }
-      });
-  }, [t]);
-
-  useEffect(() => {
-    if (!dirtyRevision) return undefined;
-    const revision = dirtyRevision;
-    pendingSaveTimerRef.current = window.setTimeout(() => {
-      pendingSaveTimerRef.current = null;
-      void saveRevision(revision);
-    }, SETTINGS_AUTO_SAVE_DELAY_MS);
-    return () => {
-      if (pendingSaveTimerRef.current !== null) {
-        window.clearTimeout(pendingSaveTimerRef.current);
-        pendingSaveTimerRef.current = null;
-      }
-    };
-  }, [dirtyRevision, saveRevision]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-      if (pendingSaveTimerRef.current !== null) {
-        window.clearTimeout(pendingSaveTimerRef.current);
-        pendingSaveTimerRef.current = null;
-      }
-      const revision = latestDirtyRevisionRef.current;
-      if (revision <= lastStartedRevisionRef.current) return;
-      // 离开设置页时必须立即保存最新草稿，而不是取消其防抖等待窗口。
-      lastStartedRevisionRef.current = revision;
-      void onSaveRef.current(providersRef.current.map(prepareProviderForSave), apiKeysByProviderIdRef.current)
-        .catch((error) => console.error('[settings] failed to flush provider settings during unmount', error));
-    };
-  }, []);
-
-  const markDirty = () => {
-    setSaveState({ status: 'saving', message: t('settings.providers.applying') });
-    setDirtyRevision((current) => current + 1);
-  };
-
-  const updateProvider = (providerId: string, updater: (provider: ProviderConfigState) => ProviderConfigState) => {
-    markDirty();
-    setProviders((current) => current.map((provider) => (provider.id === providerId ? updater(provider) : provider)));
-  };
-
-  const setProviderApiKey = (providerId: string, value: string) => {
-    markDirty();
-    setApiKeysByProviderId((current) => ({ ...current, [providerId]: value }));
-  };
-
-  const addProvider = () => {
-    const nextProvider = createDefaultProvider();
-    markDirty();
-    setProviders((current) => [...current, nextProvider]);
-    setSelectedProviderId(nextProvider.id);
-  };
-
-  const removeProvider = (providerId: string) => {
-    setEditingProviderIconId((current) => (current === providerId ? null : current));
-    setEditingModelIcon((current) => (current?.providerId === providerId ? null : current));
-    markDirty();
-    setProviders((current) => {
-      const removedIndex = Math.max(
-        0,
-        current.findIndex((provider) => provider.id === providerId)
-      );
-      const next = current.filter((provider) => provider.id !== providerId);
-      const normalizedNext = next.length ? next : [createDefaultProvider()];
-      setSelectedProviderId((selected) => (selected === providerId ? normalizedNext[Math.min(removedIndex, normalizedNext.length - 1)]?.id ?? normalizedNext[0]?.id ?? '' : selected));
-      return normalizedNext;
-    });
-    setApiKeysByProviderId((current) => {
-      const next = { ...current };
-      delete next[providerId];
-      return next;
-    });
-  };
-
-  const addModel = (providerId: string) => {
-    const provider = providers.find((item) => item.id === providerId);
-    setEditingModel({
-      mode: 'create',
-      providerId,
-      model: defaultProviderModel('', !provider?.models.length, provider?.provider, t('settings.providers.newModel')),
-    });
-  };
-
-  const removeModel = (providerId: string, modelId: string) => {
-    setEditingModel((current) => (current?.mode === 'edit' && current.providerId === providerId && current.modelId === modelId ? null : current));
-    setEditingModelIcon((current) => (current?.providerId === providerId && current.modelId === modelId ? null : current));
-    updateProvider(providerId, (provider) =>
-      ensureProviderActiveModel({
-        ...provider,
-        models: provider.models.filter((model) => model.id !== modelId),
-      }, t('settings.providers.newModel'))
-    );
-  };
-
-  const commitEditingModel = (nextModel: ProviderModelConfig) => {
-    const current = editingModel;
-    if (!current) return;
-    if (current.mode === 'create') {
-      updateProvider(current.providerId, (provider) =>
-        ensureProviderActiveModel({
-          ...provider,
-          models: [
-            ...provider.models,
-            normalizeProviderModel(
-              nextModel,
-              provider.models.length === 0,
-              provider.provider,
-              t('settings.providers.newModel'),
-            ),
-          ],
-        }, t('settings.providers.newModel'))
-      );
-    } else {
-      updateProvider(current.providerId, (provider) =>
-        ensureProviderActiveModel({
-          ...provider,
-          models: provider.models.map((model) => (
-            model.id === current.modelId
-              ? normalizeProviderModel(
-                  { ...nextModel, id: current.modelId },
-                  model.enabled,
-                  provider.provider,
-                  t('settings.providers.newModel'),
-                )
-              : model
-          )),
-        }, t('settings.providers.newModel'))
-      );
-    }
-    setEditingModel(null);
-  };
-
-  const fetchModels = (provider: ProviderConfigState) => {
-    setFetchStateByProviderId((current) => ({
-      ...current,
-      [provider.id]: { error: '', fetching: true, message: '' },
-    }));
-    void onFetchModels({
-      providerId: provider.id,
-      provider: provider.provider,
-      baseUrl: provider.baseUrl,
-      apiKey: apiKeysByProviderId[provider.id] || undefined,
-      proxyRoute: provider.proxyRoute,
-    })
-      .then((result) => {
-        const currentProvider = providersRef.current.find((item) => item.id === provider.id);
-        if (!currentProvider) return;
-        const nextModels = mergeFetchedModels(
-          currentProvider.models,
-          result.models,
-          currentProvider.provider,
-          t('settings.providers.newModel'),
-        );
-        const decision = providerModelReplacementDecision(currentProvider.models, nextModels);
-        if (decision === 'confirm') {
-          setPendingModelReplacement({
-            providerId: provider.id,
-            providerName: currentProvider.name,
-            currentModels: currentProvider.models,
-            nextModels,
-          });
-        } else if (decision === 'apply') {
-          updateProvider(provider.id, (item) => ({ ...item, models: nextModels }));
-        }
-        setFetchStateByProviderId((current) => ({
-          ...current,
-          [provider.id]: {
-            error: '',
-            fetching: false,
-            message: modelFetchSuccessMessage(decision, result.models.length, t),
-          },
-        }));
-      })
-      .catch((error) => {
-        setFetchStateByProviderId((current) => ({
-          ...current,
-          [provider.id]: {
-            ...(current[provider.id] ?? emptyModelFetchState()),
-            error: error instanceof Error ? error.message : String(error),
-            fetching: false,
-            message: '',
-          },
-        }));
-      });
-  };
-
-  const cancelModelReplacement = () => {
-    const pending = pendingModelReplacement;
-    if (!pending) return;
-    setPendingModelReplacement(null);
-    setFetchStateByProviderId((current) => ({
-      ...current,
-      [pending.providerId]: {
-        ...(current[pending.providerId] ?? emptyModelFetchState()),
-        message: t('settings.providers.replacementCanceled'),
-      },
-    }));
-  };
-
-  const confirmModelReplacement = () => {
-    const pending = pendingModelReplacement;
-    if (!pending) return;
-    setPendingModelReplacement(null);
-    updateProvider(pending.providerId, (provider) => ({ ...provider, models: pending.nextModels }));
-    setFetchStateByProviderId((current) => ({
-      ...current,
-      [pending.providerId]: {
-        ...(current[pending.providerId] ?? emptyModelFetchState()),
-        message: t('settings.providers.replacementConfirmed', { count: pending.nextModels.length }),
-      },
-    }));
-  };
-
-  const enabledProviderCount = providers.filter((provider) => provider.enabled).length;
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? providers[0];
-  const selectedProviderIndex = selectedProvider ? providers.findIndex((provider) => provider.id === selectedProvider.id) : -1;
+  const controller = useProviderSettingsController({ config, onFetchModels, onSave, onSaveStateChange, t });
+  const {
+    apiKeysByProviderId,
+    editingModelDialog,
+    editingModelIcon,
+    editingProviderIcon,
+    enabledProviderCount,
+    pendingModelReplacement,
+    providers,
+    selectedFetchState,
+    selectedProvider,
+    selectedProviderIndex,
+  } = controller;
+  const {
+    addModel,
+    addProvider,
+    cancelModelReplacement,
+    closeModelEditor,
+    closeModelIconEditor,
+    closeProviderIconEditor,
+    commitEditingModel,
+    confirmModelIcon,
+    confirmModelReplacement,
+    confirmProviderIcon,
+    editModel,
+    fetchModels,
+    openModelIconEditor,
+    openProviderIconEditor,
+    removeModel,
+    removeProvider,
+    resetModelFetchState,
+    selectProvider,
+    setProviderApiKey,
+    updateProvider,
+  } = controller.actions;
   const selectedProviderName = selectedProvider?.name || t('settings.providers.serviceIndex', { index: selectedProviderIndex + 1 });
-  const selectedFetchState = selectedProvider ? fetchStateByProviderId[selectedProvider.id] ?? emptyModelFetchState() : emptyModelFetchState();
-  const editingProvider = editingModel ? providers.find((provider) => provider.id === editingModel.providerId) : undefined;
-  const editingModelConfig = editingModel?.mode === 'create' ? editingModel.model : editingProvider?.models.find((model) => model.id === editingModel?.modelId);
-  const editingProviderIcon = editingProviderIconId ? providers.find((provider) => provider.id === editingProviderIconId) : undefined;
-  const editingModelIconProvider = editingModelIcon ? providers.find((provider) => provider.id === editingModelIcon.providerId) : undefined;
-  const editingModelIconConfig = editingModelIconProvider?.models.find((model) => model.id === editingModelIcon?.modelId);
 
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__local-llm-section chat-user-settings__local-provider-stack">
@@ -390,7 +107,7 @@ export function LocalModelSettings({
                 index={providerIndex}
                 provider={provider}
                 selected={provider.id === selectedProvider?.id}
-                onSelect={() => setSelectedProviderId(provider.id)}
+                onSelect={() => selectProvider(provider.id)}
               />
             ))}
           </nav>
@@ -404,7 +121,7 @@ export function LocalModelSettings({
                   type="button"
                   aria-label={t('settings.providers.configureIcon', { name: selectedProviderName })}
                   title={t('settings.providers.configureServiceIcon')}
-                  onClick={() => setEditingProviderIconId(selectedProvider.id)}
+                  onClick={() => openProviderIconEditor(selectedProvider.id)}
                 >
                   <BrandIconMark brand={resolveProviderBrand(selectedProvider)} fallbackName={selectedProvider.name} size="large" />
                   <span className="chat-user-settings__provider-brand-trigger-edit" aria-hidden="true"><Pencil size={8} /></span>
@@ -469,7 +186,7 @@ export function LocalModelSettings({
                       value={selectedProvider.provider}
                       onValueChange={(nextValue) => {
                         const provider = normalizeProviderKind(nextValue);
-                        setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
+                        resetModelFetchState(selectedProvider.id);
                         updateProvider(selectedProvider.id, (item) => ({ ...item, provider }));
                       }}
                     >
@@ -499,7 +216,7 @@ export function LocalModelSettings({
                       placeholder={providerBaseUrlPlaceholder(selectedProvider.provider)}
                       onChange={(event) => {
                         const baseUrl = event.target.value;
-                        setFetchStateByProviderId((current) => ({ ...current, [selectedProvider.id]: emptyModelFetchState() }));
+                        resetModelFetchState(selectedProvider.id);
                         updateProvider(selectedProvider.id, (item) => ({ ...item, baseUrl }));
                       }}
                     />
@@ -550,8 +267,8 @@ export function LocalModelSettings({
                           model={model}
                           provider={selectedProvider}
                           onDelete={() => removeModel(selectedProvider.id, model.id)}
-                          onEdit={() => setEditingModel({ mode: 'edit', providerId: selectedProvider.id, modelId: model.id })}
-                          onEditIcon={() => setEditingModelIcon({ providerId: selectedProvider.id, modelId: model.id })}
+                          onEdit={() => editModel(selectedProvider.id, model.id)}
+                          onEditIcon={() => openModelIconEditor(selectedProvider.id, model.id)}
                         />
                       ))}
                     </div>
@@ -561,7 +278,7 @@ export function LocalModelSettings({
                 </div>
               </section>
             </div>
-            {editingModel && editingProvider && editingModelConfig ? <ModelSettingsDialog key={`${editingModel.mode}-${editingProvider.id}-${editingModelConfig.id}`} defaultMaxOutputTokens={defaultModelMaxOutputTokens(editingProvider.provider)} model={editingModelConfig} onClose={() => setEditingModel(null)} onConfirm={commitEditingModel} /> : null}
+            {editingModelDialog ? <ProviderModelSettingsDialog key={editingModelDialog.key} defaultMaxOutputTokens={editingModelDialog.defaultMaxOutputTokens} model={editingModelDialog.model} onClose={closeModelEditor} onConfirm={commitEditingModel} /> : null}
           </div>
         ) : (
           <div className="chat-user-settings__local-provider-card">
@@ -585,30 +302,19 @@ export function LocalModelSettings({
           icon={editingProviderIcon.icon}
           name={editingProviderIcon.name}
           subject="provider"
-          onClose={() => setEditingProviderIconId(null)}
-          onConfirm={(icon) => {
-            updateProvider(editingProviderIcon.id, (provider) => providerWithIcon(provider, icon));
-            setEditingProviderIconId(null);
-          }}
+          onClose={closeProviderIconEditor}
+          onConfirm={confirmProviderIcon}
         />
       ) : null}
-      {editingModelIconProvider && editingModelIconConfig ? (
+      {editingModelIcon ? (
         <BrandIconDialog
-          key={`${editingModelIconProvider.id}:${editingModelIconConfig.id}`}
-          automaticBrand={resolveAutomaticModelBrand(editingModelIconConfig, editingModelIconProvider)}
-          icon={editingModelIconConfig.icon}
-          name={editingModelIconConfig.name || editingModelIconConfig.code}
+          key={`${editingModelIcon.provider.id}:${editingModelIcon.model.id}`}
+          automaticBrand={resolveAutomaticModelBrand(editingModelIcon.model, editingModelIcon.provider)}
+          icon={editingModelIcon.model.icon}
+          name={editingModelIcon.model.name || editingModelIcon.model.code}
           subject="model"
-          onClose={() => setEditingModelIcon(null)}
-          onConfirm={(icon) => {
-            updateProvider(editingModelIconProvider.id, (provider) => ({
-              ...provider,
-              models: provider.models.map((model) => (
-                model.id === editingModelIconConfig.id ? modelWithIcon(model, icon) : model
-              )),
-            }));
-            setEditingModelIcon(null);
-          }}
+          onClose={closeModelIconEditor}
+          onConfirm={confirmModelIcon}
         />
       ) : null}
     </div>
@@ -708,48 +414,7 @@ function ProviderModelRow({
   );
 }
 
-const SETTINGS_AUTO_SAVE_DELAY_MS = 300;
 const DANGER_CONFIRM_BUTTON_PROPS = { danger: true } as const;
-type ModelFetchState = {
-  error: string;
-  fetching: boolean;
-  message: string;
-};
-
-export type SaveState = {
-  status: 'idle' | 'saving' | 'saved' | 'error';
-  message: string;
-};
-
-type EditingModelState = {
-  providerId: string;
-} & ({ mode: 'edit'; modelId: string } | { mode: 'create'; model: ProviderModelConfig });
-
-type PendingModelReplacement = {
-  providerId: string;
-  providerName: string;
-  currentModels: ProviderModelConfig[];
-  nextModels: ProviderModelConfig[];
-};
-
-type ModelIconTarget = {
-  providerId: string;
-  modelId: string;
-};
-
-function emptyModelFetchState(): ModelFetchState {
-  return { error: '', fetching: false, message: '' };
-}
-
-function modelFetchSuccessMessage(decision: ReturnType<typeof providerModelReplacementDecision>, modelCount: number, t: Translate): string {
-  if (decision === 'confirm') return t('settings.providers.fetchConfirm', { count: modelCount });
-  if (decision === 'unchanged') return t('settings.providers.fetchUnchanged', { count: modelCount });
-  return t('settings.providers.fetchApplied', { count: modelCount });
-}
-
-export function idleSaveState(): SaveState {
-  return { status: 'idle', message: '' };
-}
 
 export function AutoSaveStatus({ state }: { state: SaveState }) {
   const visible = Boolean(state.message);
@@ -757,162 +422,5 @@ export function AutoSaveStatus({ state }: { state: SaveState }) {
     <span className={`settings-auto-save-status settings-auto-save-status--${state.status} ${visible ? 'is-visible' : ''}`} aria-live="polite" title={visible ? state.message : undefined}>
       {state.message}
     </span>
-  );
-}
-
-function ModelSettingsDialog({ defaultMaxOutputTokens, model, onClose, onConfirm }: { defaultMaxOutputTokens: number; model: ProviderModelConfig; onClose: () => void; onConfirm: (model: ProviderModelConfig) => void }) {
-  const { t } = useI18n();
-  const [draftModel, setDraftModel] = useState(model);
-  const thinkingEfforts = normalizeThinkingEfforts([...draftModel.thinkingEfforts, draftModel.defaultThinkingEffort]);
-  const customThinkingEffortsText = draftModel.thinkingEnabled ? customThinkingEfforts(thinkingEfforts).join(', ') : '';
-
-  const updateDraft = (updater: (model: ProviderModelConfig) => ProviderModelConfig) => {
-    setDraftModel((current) => updater(current));
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  return createPortal(
-    <div className="desktop-agent-modal-backdrop settings-model-modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="desktop-agent-modal settings-model-modal" role="dialog" aria-modal="true" aria-label={t('settings.providers.editModel')} onMouseDown={(event) => event.stopPropagation()}>
-        <header className="settings-model-modal__header">
-          <div>
-            <strong>{draftModel.name || draftModel.code || t('settings.providers.unnamedModel')}</strong>
-            <code>{draftModel.code || t('settings.providers.missingModelId')}</code>
-          </div>
-          <IconButton label={t('common.close')} onClick={onClose}>
-            <X size={15} />
-          </IconButton>
-        </header>
-        <div className="settings-model-modal__body">
-          <div className="settings-model-modal__grid">
-            <label className="settings-model-field">
-              <span className="settings-model-label">{t('settings.providers.displayName')}</span>
-              <TextField
-                autoFocus
-                className="settings-local-control"
-                value={draftModel.name}
-                placeholder={t('settings.providers.displayName')}
-                onChange={(event) => {
-                  const name = event.target.value;
-                  updateDraft((item) => ({ ...item, name }));
-                }}
-              />
-            </label>
-            <label className="settings-model-field">
-              <span className="settings-model-label">Model ID</span>
-              <TextField
-                className="settings-local-control settings-model-code-control"
-                value={draftModel.code}
-                placeholder="llama3.1"
-                onChange={(event) => {
-                  const code = event.target.value;
-                  updateDraft((item) => updateModelCode(item, code));
-                }}
-              />
-            </label>
-            <label className="settings-model-field">
-              <span className="settings-model-label">{t('settings.providers.output')}</span>
-              <TextField
-                className="settings-local-control settings-model-output-control"
-                type="number"
-                min={1}
-                value={draftModel.maxOutputTokens}
-                onChange={(event) => {
-                  const maxOutputTokens = positiveInt(Number(event.target.value), defaultMaxOutputTokens);
-                  updateDraft((item) => ({ ...item, maxOutputTokens }));
-                }}
-              />
-            </label>
-            <label className="settings-model-field">
-              <span className="settings-model-label">{t('settings.providers.contextWindow')}</span>
-              <TextField
-                className="settings-local-control settings-model-context-control"
-                type="number"
-                min={0}
-                placeholder={t('settings.providers.notSet')}
-                value={draftModel.contextWindowTokens ?? ''}
-                onChange={(event) => {
-                  const contextWindowTokens = positiveInt(Number(event.target.value), 0) || undefined;
-                  updateDraft((item) => ({ ...item, contextWindowTokens }));
-                }}
-              />
-            </label>
-          </div>
-          <div className="settings-model-modal__section">
-            <span className="settings-model-label">{t('settings.providers.capability')}</span>
-            <div className="settings-model-inline-checks">
-              <label className={`sd-check settings-model-check ${draftModel.thinkingEnabled ? 'is-active' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={draftModel.thinkingEnabled}
-                  onChange={(event) => {
-                    const thinkingEnabled = event.currentTarget.checked;
-                    updateDraft((item) => setThinkingEnabled(item, thinkingEnabled));
-                  }}
-                />
-                <Brain size={13} />
-                <span>{t('settings.providers.thinking')}</span>
-              </label>
-              <label className={`sd-check settings-model-check ${draftModel.supportsImages ? 'is-active' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={Boolean(draftModel.supportsImages)}
-                  onChange={(event) => {
-                    const supportsImages = event.currentTarget.checked;
-                    updateDraft((item) => ({ ...item, supportsImages }));
-                  }}
-                />
-                <ImageIcon size={13} />
-                <span>{t('settings.providers.images')}</span>
-              </label>
-            </div>
-          </div>
-          <div className="settings-model-modal__section">
-            <span className="settings-model-label">{t('settings.providers.thinkingLevels')}</span>
-            <div className="settings-thinking-levels__content">
-              <div className="settings-thinking-presets" aria-label={t('settings.providers.commonThinkingLevels')}>
-                {thinkingPresetOptionsForModel().map((effort) => {
-                  const selected = thinkingEfforts.includes(effort);
-                  return (
-                    <button key={effort} className={`settings-thinking-preset ${selected ? 'is-active' : ''}`} type="button" aria-pressed={selected} disabled={!draftModel.thinkingEnabled} onClick={() => updateDraft((item) => toggleThinkingEffort(item, effort))}>
-                      {effort}
-                    </button>
-                  );
-                })}
-              </div>
-              <TextField
-                aria-label={t('settings.providers.customThinkingLevel')}
-                className="settings-thinking-input"
-                disabled={!draftModel.thinkingEnabled}
-                placeholder={t('settings.providers.customLevelPlaceholder')}
-                value={customThinkingEffortsText}
-                onChange={(event) => {
-                  const efforts = event.target.value;
-                  updateDraft((item) => setCustomThinkingEfforts(item, efforts));
-                }}
-              />
-            </div>
-          </div>
-        </div>
-        <footer className="settings-model-modal__footer">
-          <div className="settings-model-modal__footer-actions">
-            <Button type="button" onClick={onClose}>
-              {t('common.cancel')}
-            </Button>
-            <Button type="button" variant="primary" onClick={() => onConfirm(draftModel)}>
-              {t('settings.providers.confirm')}
-            </Button>
-          </div>
-        </footer>
-      </section>
-    </div>,
-    document.body
   );
 }

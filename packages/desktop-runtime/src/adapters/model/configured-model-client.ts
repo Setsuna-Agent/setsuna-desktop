@@ -18,6 +18,7 @@ import {
 import { OpenAiChatModelClient } from './openai-chat-model-client.js';
 import { OpenAiResponsesModelClient } from './openai-responses-model-client.js';
 import type { FetchImpl } from './provider-http.js';
+import { providerErrorDetails } from './provider-request-error.js';
 import { providerReplayDebugPayloads } from './provider-replay-debug.js';
 import { providerReplayContext } from './provider-replay-context.js';
 import { thinkingRequestDefaults } from './provider-thinking.js';
@@ -162,19 +163,7 @@ function providerModelClient(provider: RuntimeProviderConfig, fetchImpl: FetchIm
 
 function shouldRetryWithoutTemperature(request: Pick<ModelRequest, 'temperature'>, error: unknown): boolean {
   if (typeof request.temperature !== 'number') return false;
-  const details = collectErrorDetails(error).toLowerCase();
+  const details = providerErrorDetails(error).toLowerCase();
   if (!details.includes('temperature')) return false;
   return /\b(?:invalid|unsupported|not supported|not allowed|only|must(?:\s+be)?|does not support|unknown|unrecognized)\b/.test(details);
-}
-
-function collectErrorDetails(value: unknown, seen = new Set<object>(), depth = 0): string {
-  if (depth > 4 || value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value !== 'object' || seen.has(value)) return '';
-  seen.add(value);
-  const record = value as Record<string, unknown>;
-  return ['name', 'message', 'responseBody', 'data', 'error', 'cause']
-    .map((key) => collectErrorDetails(record[key], seen, depth + 1))
-    .filter(Boolean)
-    .join(' ');
 }

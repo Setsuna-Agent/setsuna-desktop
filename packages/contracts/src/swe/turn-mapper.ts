@@ -6,6 +6,7 @@ import type {
 } from '../provider.js';
 import type { RuntimeMailboxDeliveryRecord, RuntimeMessage, RuntimeThreadTurn, RuntimeToolRun } from '../threads.js';
 import type { RuntimeUsage } from '../usage.js';
+import { isActiveToolRun } from '../thread-event-projection.js';
 import {
   agentMessageItem,
   agentMessageItemId,
@@ -345,7 +346,7 @@ export function completedLiveSweTurn(
 }
 
 export function messageInProgress(message: RuntimeMessage): boolean {
-  return message.status === 'streaming' || Boolean(message.toolRuns?.some((run) => run.status === 'running' || run.status === 'pending_approval'));
+  return message.status === 'streaming' || Boolean(message.toolRuns?.some(isActiveToolRun));
 }
 
 export function compareRuntimeSweTurnEntries(left: RuntimeSweTurnEntry, right: RuntimeSweTurnEntry): number {

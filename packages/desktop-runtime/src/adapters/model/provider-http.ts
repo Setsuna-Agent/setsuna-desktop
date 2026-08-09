@@ -1,3 +1,5 @@
+import { ProviderRequestError } from './provider-request-error.js';
+
 export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 export function requireFetch(fetchImpl: FetchImpl | undefined): FetchImpl {
@@ -22,5 +24,10 @@ export function bearerAuthHeader(apiKey: string): Record<string, string> {
 export async function assertOkResponse(response: Response, label: string): Promise<void> {
   if (response.ok) return;
   const text = await response.text().catch(() => '');
-  throw new Error(`${label}: HTTP ${response.status}${text ? ` ${text.slice(0, 500)}` : ''}`);
+  const responseBody = text.slice(0, 500);
+  throw new ProviderRequestError(
+    `${label}: HTTP ${response.status}${responseBody ? ` ${responseBody}` : ''}`,
+    response.status,
+    responseBody,
+  );
 }

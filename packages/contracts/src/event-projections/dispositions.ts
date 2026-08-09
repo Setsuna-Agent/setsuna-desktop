@@ -239,3 +239,9 @@ export function isRuntimeSweProjectionIgnoredEvent(
 ): event is RuntimeSweProjectionIgnoredEvent {
   return RUNTIME_SWE_EVENT_DISPOSITIONS[event.type].action === 'ignore';
 }
+
+export function isRuntimeActivityEvent(
+  event: RuntimeEvent,
+): event is RuntimeActivityEvent {
+  return RUNTIME_ACTIVITY_EVENT_DISPOSITIONS[event.type].action === 'include';
+}

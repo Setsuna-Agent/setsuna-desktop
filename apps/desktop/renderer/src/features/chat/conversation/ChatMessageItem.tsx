@@ -1,13 +1,11 @@
 import { Bubble } from '@ant-design/x';
 import type { RuntimeMessage, RuntimePlanDecision } from '@setsuna-desktop/contracts';
-import { BookOpen, Copy, ListTodo, Pencil, Target, Trash2 } from 'lucide-react';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useI18n, type AppLocale, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
-import { ActionTooltip } from '../../../shared/ui/primitives.js';
+import { BookOpen, ListTodo, Target } from 'lucide-react';
+import { useMemo, type FormEvent, type ReactNode } from 'react';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
 import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
-import { type RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
+import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { WorkspaceMentionText } from '../mentions/WorkspaceMentionText.js';
@@ -32,6 +30,7 @@ import {
 } from './chatAssistantTimeline.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
+import { ChatMessageFooter } from './ChatMessageFooter.js';
 import {
   assistantRunCopyText,
   assistantRunIsActive,
@@ -39,10 +38,18 @@ import {
   chatDisplayItemRenderKey,
   type ChatDisplayItem,
 } from './chatMessageDisplay.js';
-import { hasThinkingSegments } from './chatThinkingContent.js';
-import { shouldCollapseCompletedWorkHistory, workHistoryDisplayState } from './chatWorkHistoryState.js';
+import { workHistoryDisplayState } from './chatWorkHistoryState.js';
+import {
+  ActiveWorkPlaceholder,
+  AssistantLoadingIndicator,
+  inferWorkTiming,
+  WorkHistoryPanel,
+} from './ChatWorkHistory.js';
 import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
+
+export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
+export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
 
 export function MessageItem({
   activeAssistantItemId,
@@ -135,7 +142,7 @@ export function MessageItem({
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           placement="end"
           variant="filled"
         />
@@ -230,7 +237,7 @@ function AssistantRunItem({
       <Bubble
         className="chat-ai-bubble"
         content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
-        footer={belongsToActiveTurn ? undefined : <MessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
+        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
         variant="borderless"
@@ -285,52 +292,6 @@ function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
     <div className="chat-review-mode-marker" aria-label={label}>
       <span className="chat-review-mode-marker__line" />
       <span className="chat-review-mode-marker__text">{label}</span>
-    </div>
-  );
-}
-
-export function DeleteSelectionBar({
-  allChecked,
-  disabled,
-  indeterminate,
-  loading,
-  onCancel,
-  onConfirm,
-  onToggleAll,
-  selectedCount,
-  totalCount,
-}: {
-  allChecked: boolean;
-  disabled: boolean;
-  indeterminate: boolean;
-  loading: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-  onToggleAll: (checked: boolean) => void;
-  selectedCount: number;
-  totalCount: number;
-}) {
-  const { t } = useI18n();
-  const checkboxRef = useRef<HTMLInputElement | null>(null);
-  useLayoutEffect(() => {
-    if (checkboxRef.current) checkboxRef.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-
-  return (
-    <div className="chat-delete-bar">
-      <div className="chat-delete-bar__inner">
-        <label className="chat-delete-bar__select-all">
-          <input ref={checkboxRef} type="checkbox" checked={allChecked} disabled={loading || totalCount === 0} onChange={(event) => onToggleAll(event.currentTarget.checked)} />
-          <span>{t('chat.delete.selectAll')}</span>
-        </label>
-        <span className="chat-delete-bar__count">{t('chat.delete.selected', { count: selectedCount })}</span>
-        <button type="button" className="chat-delete-bar__cancel" disabled={loading} onClick={onCancel}>
-          {t('common.cancel')}
-        </button>
-        <button type="button" className="chat-delete-bar__confirm" disabled={disabled} onClick={onConfirm}>
-          {loading ? t('chat.delete.deleting') : t('common.delete')}
-        </button>
-      </div>
     </div>
   );
 }
@@ -535,7 +496,7 @@ function GuidanceMessage({ message }: { message: RuntimeMessage }) {
       <div className="chat-guidance-message__bubble">
         <UserMessageContent message={message} streaming={false} />
       </div>
-      <MessageFooter align="end" message={message} timePosition="none" />
+      <ChatMessageFooter align="end" message={message} timePosition="none" />
     </div>
   );
 }
@@ -706,292 +667,4 @@ function assistantWorkItemNodes(
       onAnswerApproval={onAnswerApproval}
     />,
   ] : [];
-}
-
-export function ActiveWorkPlaceholder({
-  children,
-  pluginUses = [],
-  segments,
-  showLoading = true,
-}: {
-  children?: ReactNode;
-  pluginUses?: RuntimePluginUse[];
-  segments: RuntimeMessage[];
-  showLoading?: boolean;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || pluginUses.length > 0 || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
-      <RuntimePluginUses active plugins={pluginUses} />
-      {children}
-      {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
-      {showLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
-    </WorkHistoryPanel>
-  );
-}
-
-function inferWorkTiming(segments: RuntimeMessage[]): { startedAtMs: number | null; completedAtMs: number | null } {
-  const startedAtMs: number[] = [];
-  const completedAtMs: number[] = [];
-  let hasWorkEvidence = false;
-
-  for (const segment of segments) {
-    const segmentStartedAtMs = parseDateMs(segment.createdAt);
-    const segmentCompletedAtMs = parseDateMs(segment.completedAt);
-    const hasThinking = hasThinkingSegments(segment.content);
-    if (hasThinking) {
-      hasWorkEvidence = true;
-      if (segmentStartedAtMs !== null) startedAtMs.push(segmentStartedAtMs);
-      if (segmentCompletedAtMs !== null) completedAtMs.push(segmentCompletedAtMs);
-    }
-
-    for (const run of segment.toolRuns ?? []) {
-      hasWorkEvidence = true;
-      const runStartedAtMs = parseDateMs(run.startedAt) ?? segmentStartedAtMs;
-      const runCompletedAtMs = parseDateMs(run.completedAt);
-      if (runStartedAtMs !== null) startedAtMs.push(runStartedAtMs);
-      if (runCompletedAtMs !== null) completedAtMs.push(runCompletedAtMs);
-    }
-  }
-
-  if (!startedAtMs.length && hasWorkEvidence) {
-    for (const segment of segments) {
-      const segmentStartedAtMs = parseDateMs(segment.createdAt);
-      if (segmentStartedAtMs !== null) {
-        startedAtMs.push(segmentStartedAtMs);
-        break;
-      }
-    }
-  }
-
-  return {
-    startedAtMs: startedAtMs.length ? Math.min(...startedAtMs) : null,
-    completedAtMs: completedAtMs.length ? Math.max(...completedAtMs) : null,
-  };
-}
-
-function inferActiveTurnStartedAtMs(segments: RuntimeMessage[]): number | null {
-  const startedAtMs: number[] = [];
-  for (const segment of segments) {
-    const segmentStartedAtMs = parseDateMs(segment.createdAt);
-    if (segmentStartedAtMs !== null) startedAtMs.push(segmentStartedAtMs);
-    for (const run of segment.toolRuns ?? []) {
-      const runStartedAtMs = parseDateMs(run.startedAt);
-      if (runStartedAtMs !== null) startedAtMs.push(runStartedAtMs);
-    }
-  }
-  return startedAtMs.length ? Math.min(...startedAtMs) : null;
-}
-
-function parseDateMs(value?: string | null): number | null {
-  if (!value) return null;
-  const time = Date.parse(value);
-  return Number.isFinite(time) ? time : null;
-}
-
-function WorkHistoryPanel({
-  active,
-  children,
-  completedAtMs,
-  defaultExpanded = active,
-  hasDetails,
-  onExpandedChange,
-  panelId,
-  startedAtMs,
-}: {
-  active: boolean;
-  children?: ReactNode;
-  completedAtMs?: number | null;
-  defaultExpanded?: boolean;
-  hasDetails: boolean;
-  onExpandedChange?: WorkHistoryExpandedChangeHandler;
-  panelId?: string;
-  startedAtMs?: number | null;
-}) {
-  const { t } = useI18n();
-  const wasActiveForTimingRef = useRef(active);
-  const wasActiveForExpansionRef = useRef(active);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
-  // 此属性只用于初始化一次面板；流式更新绝不会写入展开状态。
-  const [manualExpanded, setManualExpanded] = useState(() => hasDetails && defaultExpanded);
-  const canToggle = hasDetails;
-  const expanded = hasDetails && manualExpanded;
-
-  useEffect(() => {
-    if (completedAtMs !== null && completedAtMs !== undefined) {
-      setCapturedCompletedAtMs(completedAtMs);
-    } else if (active) {
-      setCapturedCompletedAtMs(null);
-    } else if (wasActiveForTimingRef.current) {
-      setCapturedCompletedAtMs((value) => value ?? Date.now());
-    }
-    wasActiveForTimingRef.current = active;
-  }, [active, completedAtMs]);
-
-  useLayoutEffect(() => {
-    if (shouldCollapseCompletedWorkHistory({
-      defaultExpanded,
-      runActive: active,
-      wasActive: wasActiveForExpansionRef.current,
-    })) {
-      // Final content replaces transient progress as the primary transcript surface.
-      setManualExpanded(false);
-    }
-    wasActiveForExpansionRef.current = active;
-  }, [active, defaultExpanded]);
-
-  useEffect(() => {
-    if (!active) return undefined;
-    const tick = () => setNowMs(Date.now());
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [active]);
-
-  useEffect(() => {
-    if (!panelId) return;
-    onExpandedChange?.(panelId, expanded);
-  }, [expanded, onExpandedChange, panelId]);
-
-  const title = active ? t('chat.work.active') : t('chat.work.completed');
-  const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
-  const durationLabel = formatDurationMs(
-    startedAtMs !== null && startedAtMs !== undefined && durationEndMs !== null
-      ? Math.max(0, durationEndMs - startedAtMs)
-      : null,
-    t,
-  );
-  const summaryContent = (
-    <>
-      <span className="chat-work-history__title">{title}</span>
-      {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
-    </>
-  );
-  const toggleExpanded = () => {
-    if (!canToggle) return;
-    setManualExpanded((value) => !value);
-  };
-
-  return (
-    <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${canToggle ? 'is-toggleable' : ''}`}>
-      {canToggle ? (
-        <button className="chat-work-history__summary" type="button" aria-expanded={expanded} title={expanded ? t('chat.work.collapse') : t('chat.work.expand')} onClick={toggleExpanded}>
-          {summaryContent}
-        </button>
-      ) : (
-        <div className="chat-work-history__summary">{summaryContent}</div>
-      )}
-      {expanded && hasDetails ? <div className="chat-work-history__body">{children}</div> : null}
-    </div>
-  );
-}
-
-function AssistantLoadingIndicator({ label, showLabel = true }: { label: string; showLabel?: boolean }) {
-  return (
-    <div className="chat-assistant-loading" aria-label={label} aria-live="polite">
-      <span className="chat-assistant-loading__dots" aria-hidden="true">
-        <span />
-        <span />
-        <span />
-      </span>
-      {showLabel ? <span>{label}</span> : null}
-    </div>
-  );
-}
-
-function MessageFooter({ actionsDisabled = false, message, align = 'start', onDelete, onEdit, timePosition = 'before-actions' }: { actionsDisabled?: boolean; message: RuntimeMessage; align?: 'start' | 'end'; onDelete?: () => void; onEdit?: () => void; timePosition?: 'before-actions' | 'after-actions' | 'none' }) {
-  const { locale, t } = useI18n();
-  const [copied, setCopied] = useState(false);
-  const formattedTime = useMemo(() => formatTime(message.createdAt, locale), [locale, message.createdAt]);
-  const copyMessage = async () => {
-    if (!message.content) return;
-    try {
-      await copyTextToClipboard(message.content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-    }
-  };
-  const timeNode = (
-    <time className="chat-message-footer__time" dateTime={message.createdAt} title={formattedTime}>
-      {formattedTime}
-    </time>
-  );
-  const actionNodes = (
-    <>
-      <MessageFooterAction active={copied} disabled={!message.content} label={copied ? t('chat.message.copied') : t('chat.message.copy')} onClick={() => void copyMessage()}>
-        <Copy size={14} strokeWidth={1.8} aria-hidden="true" />
-      </MessageFooterAction>
-      {onDelete ? (
-        <MessageFooterAction disabled={actionsDisabled} label={t('common.delete')} onClick={onDelete}>
-          <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
-        </MessageFooterAction>
-      ) : null}
-      {onEdit ? (
-        <MessageFooterAction disabled={actionsDisabled} label={t('chat.message.edit')} onClick={onEdit}>
-          <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
-        </MessageFooterAction>
-      ) : null}
-    </>
-  );
-  return (
-    <div className={`chat-message-footer chat-message-footer--${align}`}>
-      {timePosition === 'before-actions' ? timeNode : null}
-      {actionNodes}
-      {timePosition === 'after-actions' ? timeNode : null}
-    </div>
-  );
-}
-
-function MessageFooterAction({ active = false, children, disabled = false, label, onClick }: { active?: boolean; children: ReactNode; disabled?: boolean; label: string; onClick: () => void }) {
-  return (
-    <ActionTooltip placement="top" title={label}>
-      <button
-        className={active ? 'is-copied' : ''}
-        type="button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onClick();
-        }}
-      >
-        {children}
-      </button>
-    </ActionTooltip>
-  );
-}
-
-const timeFormatters = new Map<AppLocale, Intl.DateTimeFormat>();
-
-function formatTime(value: string, locale: AppLocale): string {
-  let formatter = timeFormatters.get(locale);
-  if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
-    timeFormatters.set(locale, formatter);
-  }
-  return formatter.format(new Date(value));
-}
-
-function formatDurationMs(value: number | null, t: Translate): string {
-  if (value === null || value < 0) return '';
-  const roundedSeconds = Math.round(value / 1000);
-  const totalSeconds = value > 0 && roundedSeconds === 0 ? 1 : Math.max(0, roundedSeconds);
-  if (totalSeconds < 60) return t('chat.duration.seconds', { seconds: totalSeconds });
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes < 60) {
-    return seconds
-      ? t('chat.duration.minutesSeconds', { minutes, seconds })
-      : t('chat.duration.minutes', { minutes });
-  }
-  const hours = Math.floor(minutes / 60);
-  const restMinutes = minutes % 60;
-  return restMinutes
-    ? t('chat.duration.hoursMinutes', { hours, minutes: restMinutes })
-    : t('chat.duration.hours', { hours });
 }

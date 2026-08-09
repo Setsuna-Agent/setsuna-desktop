@@ -47,7 +47,7 @@ corepack pnpm@7.33.7 <command>
 - `pnpm test:all`：用默认全量 Vitest 配置一次性跑全部测试，配置上仍保持串行重链路。
 - `pnpm test:unit`：排除重集成文件的 Vitest 测试层。
 - `pnpm test:integration`：agent loop、runtime server、真实 git/shell/PTY、文件 watcher 等重集成测试，串行执行。
-- `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行发版包矩阵的确定性测试门禁。
+- `pnpm test:release`：先下载并校验当前平台固定版本的 ripgrep，再运行需要在每个打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。
 - `pnpm lint`：ESLint；架构规则由 `pnpm typecheck` 前置执行。
 - `pnpm package:*`：按平台打包。
 - `pnpm release:dry-run`：生成 release manifest 和校验预览。
@@ -171,14 +171,13 @@ package job matrix：
 - Windows x64：`windows-2025`，`package:win:x64`。
 - Ubuntu x64：`ubuntu-24.04`，`package:linux:x64`。
 
-每个平台：
+发布先在 Ubuntu `quality-gate` job 中统一运行一次 typecheck 和完整 `test:unit`。门禁通过后，每个平台：
 
 1. 安装依赖。
-2. typecheck。
-3. `test:release`。
-4. package。
-5. collect release assets。
-6. upload artifact。
+2. `test:release`，只覆盖必须跨平台验证的边界。
+3. package。
+4. collect release assets。
+5. upload artifact。
 
 release 另有 `Integration diagnostics` job，在 Ubuntu 上跑 `test:integration` 并上传 `diagnostic-*` 日志 artifact。该 job 是诊断信号，不阻塞 package/publish；正式发布资产只从 `release-*` package artifacts 收集。
 

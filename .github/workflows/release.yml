@@ -47,6 +47,49 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag_name }}
         run: node scripts/validate-release-version.mjs
 
+  quality-gate:
+    name: Static and unit quality gate
+    needs: validate-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 7.33.7
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Configure node-gyp Python
+        run: node scripts/configure-node-gyp-python.mjs
+
+      - name: Install
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/install-quality.log pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
+        run: node scripts/run-with-log.mjs release-logs/typecheck-quality.log pnpm typecheck
+
+      - name: Unit tests
+        env:
+          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
+          RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
+        run: node scripts/run-with-log.mjs release-logs/test-unit.log pnpm test:unit
+
   integration-diagnostics:
     name: Integration diagnostics
     needs: validate-release
@@ -95,7 +138,7 @@ jobs:
 
   package:
     name: Package ${{ matrix.label }}
-    needs: validate-release
+    needs: [validate-release, quality-gate]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     strategy:
@@ -152,12 +195,6 @@ jobs:
           RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
           RUN_WITH_LOG_TIMEOUT_MINUTES: "20"
         run: node scripts/run-with-log.mjs release-logs/install-${{ matrix.artifact }}.log pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        env:
-          RUN_WITH_LOG_HEARTBEAT_SECONDS: "30"
-          RUN_WITH_LOG_TIMEOUT_MINUTES: "15"
-        run: node scripts/run-with-log.mjs release-logs/typecheck-${{ matrix.artifact }}.log pnpm typecheck
 
       - name: Release gate tests
         env:

@@ -18,6 +18,8 @@ import {
   completeActiveTurnItems,
   contextMessageForTurn,
   hasActiveToolRun,
+  isActiveToolRun,
+  isPendingToolApproval,
   isTerminalTurnStatus,
   isTranscriptVisibleMessage,
   mergeCompactedMessages,
@@ -40,6 +42,8 @@ import {
   type RuntimeMessage,
   type RuntimeThread,
 } from './threads.js';
+
+export { hasActiveToolRun, isActiveToolRun, isPendingToolApproval };
 
 /**
  * 将一条 append-only runtime event 投影到线程快照上，供 renderer state 和持久化测试共用。

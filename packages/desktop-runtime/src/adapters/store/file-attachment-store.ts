@@ -116,7 +116,7 @@ export class FileAttachmentStore implements AttachmentStore {
         await writeFile(this.filePath(record), validated.data, { flag: 'wx', mode: 0o400 });
         await this.writeIndex({ version: 1, attachments: [...index.attachments, record] });
       } catch (error) {
-        await rm(assetDirectory, { recursive: true, force: true }).catch(() => undefined);
+        await removeDirectory(assetDirectory).catch(() => undefined);
         throw error;
       }
       return storedAttachment(record);
@@ -235,15 +235,25 @@ export class FileAttachmentStore implements AttachmentStore {
   }
 
   private removeAssetDirectory(assetId: string): Promise<void> {
-    return rm(this.assetDirectory(assetId), { recursive: true, force: true });
+    return removeDirectory(this.assetDirectory(assetId));
   }
 
   private removeDiscoveredAssetDirectory(name: string): Promise<void> {
     // `name` 来自 readdir，但递归删除前仍需显式执行范围检查。
     const candidate = path.resolve(this.filesRoot, name);
     if (path.dirname(candidate) !== path.resolve(this.filesRoot)) return Promise.resolve();
-    return rm(candidate, { recursive: true, force: true });
+    return removeDirectory(candidate);
   }
+}
+
+function removeDirectory(directory: string): Promise<void> {
+  return rm(directory, {
+    recursive: true,
+    force: true,
+    // Windows may briefly retain a handle after validation or indexing.
+    maxRetries: 5,
+    retryDelay: 50,
+  });
 }
 
 function storedAttachment(record: StoredAttachmentRecord): RuntimeStoredMessageAttachment {

@@ -1,21 +1,36 @@
 import type {
   RuntimeMemoryFileList,
-  RuntimeMemoryFileSearchMatch,
   RuntimeMemoryKind,
   RuntimeMemoryPreviewItem,
   RuntimeMemoryRecord,
-  RuntimeMemorySearchMatchMode,
   RuntimeMemorySourceLocation,
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1Status
 } from '@setsuna-desktop/contracts';
-import type { Dirent } from 'node:fs';
-import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
 import { isNodeErrorCode } from '../../shared/node-errors.js';
+import type { RenderedMemoryArtifacts } from './file-memory-store-artifacts.js';
+import {
+  DEFAULT_MEMORY_LIMIT,
+  MAX_MEMORY_FILE_RESULTS,
+  MAX_MEMORY_LIMIT,
+  MAX_MEMORY_TAG_CHARS,
+  MAX_MEMORY_TAGS,
+  MAX_MEMORY_TITLE_CHARS,
+  MAX_PHASE2_FAILURE_REASON_CHARS,
+  MEMORY_KINDS,
+  MEMORY_MARKDOWN_FILE_NAME,
+  MEMORY_PREVIEW_SNIPPET_CHARS,
+  MEMORY_SUMMARY_FILE_NAME,
+  RAW_MEMORIES_FILE_NAME,
+  ROLLOUT_SUMMARIES_DIR_NAME,
+  SKILLS_DIR_NAME,
+} from './file-memory-store-constants.js';
 
 export { isNodeErrorCode };
+export * from './file-memory-store-artifacts.js';
+export * from './file-memory-store-constants.js';
+export * from './file-memory-store-search.js';
 
 export type StoredMemoryRecord = RuntimeMemoryRecord & {
   kind?: string;
@@ -45,31 +60,6 @@ export type MemoryIndex = {
   stage1Outputs?: StoredMemoryStage1Output[];
   phase2Job?: StoredMemoryPhase2Job;
 };
-
-export const DEFAULT_MEMORY_LIMIT = 50;
-export const MAX_MEMORY_LIMIT = 500;
-export const MEMORY_FILE_NAME = 'memories.json';
-export const MEMORY_MARKDOWN_FILE_NAME = 'MEMORY.md';
-export const MEMORY_SUMMARY_FILE_NAME = 'memory_summary.md';
-export const RAW_MEMORIES_FILE_NAME = 'raw_memories.md';
-export const ROLLOUT_SUMMARIES_DIR_NAME = 'rollout_summaries';
-export const SKILLS_DIR_NAME = 'skills';
-export const MEMORY_PREVIEW_MAX_ITEMS = 500;
-export const MEMORY_PREVIEW_SNIPPET_CHARS = 1200;
-export const DEFAULT_MEMORY_FILE_LIST_LIMIT = 50;
-export const DEFAULT_MEMORY_FILE_SEARCH_LIMIT = 50;
-export const MAX_MEMORY_FILE_RESULTS = 200;
-export const MAX_MEMORY_CONTENT_CHARS = 4000;
-export const MAX_MEMORY_TITLE_CHARS = 80;
-export const MAX_MEMORY_SOURCE_CHARS = 160;
-export const MAX_MEMORY_TAG_CHARS = 40;
-export const MAX_MEMORY_TAGS = 8;
-export const MAX_STAGE1_RAW_MEMORY_CHARS = 60_000;
-export const MAX_STAGE1_ROLLOUT_SUMMARY_CHARS = 4_000;
-export const MAX_STAGE1_ROLLOUT_SLUG_CHARS = 80;
-export const MAX_STAGE1_FAILURE_REASON_CHARS = 500;
-export const MAX_PHASE2_FAILURE_REASON_CHARS = 500;
-export const MEMORY_KINDS = new Set<RuntimeMemoryKind>(['preference', 'project_rule', 'fact', 'workflow', 'decision', 'note']);
 
 export type StorageRootResolver = () => Promise<string | null | undefined> | string | null | undefined;
 
@@ -151,63 +141,6 @@ export function normalizePhase2Job(value: unknown): StoredMemoryPhase2Job {
     createdAt: validIsoDate(record.createdAt),
     updatedAt: validIsoDate(record.updatedAt),
   };
-}
-
-export async function shouldPreserveExistingArtifact(root: string, relativePath: string): Promise<boolean> {
-  if (relativePath !== MEMORY_MARKDOWN_FILE_NAME && relativePath !== MEMORY_SUMMARY_FILE_NAME) return false;
-  const target = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), { label: 'Memory artifact' });
-  let content = '';
-  try {
-    content = await readFile(target, 'utf8');
-  } catch (error) {
-    if (isNodeErrorCode(error, 'ENOENT')) return false;
-    throw error;
-  }
-  // 第二阶段写入会成为持久化真源。生成的回退内容保留标记，并可在首次真正整合成功前
-  // 从 memories.json 刷新。
-  return !content.includes('Generated from memories.json.');
-}
-
-export async function overlayStoredMemoryArtifacts(artifacts: RenderedMemoryArtifacts, root: string): Promise<RenderedMemoryArtifacts> {
-  const files = new Map(artifacts.files);
-  await overlayStoredFile(files, root, MEMORY_MARKDOWN_FILE_NAME);
-  await overlayStoredFile(files, root, MEMORY_SUMMARY_FILE_NAME);
-  await overlayStoredDirectory(files, root, SKILLS_DIR_NAME);
-  return {
-    ...artifacts,
-    files,
-  };
-}
-
-export async function overlayStoredFile(files: Map<string, string>, root: string, relativePath: string): Promise<void> {
-  try {
-    const target = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativePath), { label: 'Memory artifact' });
-    files.set(relativePath, await readFile(target, 'utf8'));
-  } catch (error) {
-    if (!isNodeErrorCode(error, 'ENOENT')) throw error;
-  }
-}
-
-export async function overlayStoredDirectory(files: Map<string, string>, root: string, relativeDir: string): Promise<void> {
-  const dir = await resolveConfinedPathWithoutSymlinks(root, path.join(root, relativeDir), { label: 'Memory artifact' });
-  let entries: Dirent[];
-  try {
-    entries = await readdir(dir, { withFileTypes: true });
-  } catch (error) {
-    if (isNodeErrorCode(error, 'ENOENT')) return;
-    throw error;
-  }
-  await Promise.all(entries.map(async (entry) => {
-    if (entry.name.startsWith('.')) return;
-    const relativePath = path.posix.join(relativeDir, entry.name);
-    const absolutePath = path.join(root, relativePath);
-    if (entry.isDirectory()) {
-      await overlayStoredDirectory(files, root, relativePath);
-      return;
-    }
-    if (!entry.isFile()) return;
-    files.set(relativePath, await readFile(absolutePath, 'utf8'));
-  }));
 }
 
 export function optionalText(value: unknown, maxChars?: number): string | undefined {
@@ -399,11 +332,6 @@ export function memoryPreviewSnippet(value: string): string {
 export function memoryPreviewSortKey(item: RuntimeMemoryPreviewItem): string {
   return `${item.updatedAt}\0${item.title}\0${item.id}`;
 }
-
-export type RenderedMemoryArtifacts = {
-  files: Map<string, string>;
-  locations: Map<string, RuntimeMemorySourceLocation>;
-};
 
 export function renderMemoryArtifacts(index: MemoryIndex): RenderedMemoryArtifacts {
   const memoryMarkdown = renderMemoryMarkdown(index);
@@ -715,77 +643,4 @@ export function stage1RolloutSlugFilePart(value: unknown): string {
     slug += /[a-zA-Z0-9]/.test(char) ? char.toLowerCase() : '_';
   }
   return slug.replace(/_+$/g, '').replace(/^_+/g, '');
-}
-
-export function normalizeSearchMatchMode(value: RuntimeMemorySearchMatchMode | undefined): RuntimeMemorySearchMatchMode {
-  if (value === 'all_on_same_line' || value === 'any') return value;
-  if (value && typeof value === 'object' && value.type === 'all_within_lines') {
-    return { type: 'all_within_lines', lineCount: Math.max(1, Math.floor(value.lineCount)) };
-  }
-  return 'any';
-}
-
-export function searchMemoryLines(input: {
-  caseSensitive: boolean;
-  contextLines: number;
-  lines: string[];
-  mode: RuntimeMemorySearchMatchMode;
-  path: string;
-  queries: string[];
-}): RuntimeMemoryFileSearchMatch[] {
-  const haystackLines = input.caseSensitive ? input.lines : input.lines.map((line) => line.toLowerCase());
-  const queries = input.caseSensitive ? input.queries : input.queries.map((query) => query.toLowerCase());
-  const matchedFlags = haystackLines.map((line) => queries.map((query) => line.includes(query)));
-  const matches: RuntimeMemoryFileSearchMatch[] = [];
-  if (input.mode === 'any') {
-    for (let index = 0; index < input.lines.length; index += 1) {
-      const flags = matchedFlags[index];
-      if (flags.some(Boolean)) matches.push(memorySearchMatch(input, index, index, matchedQueries(input.queries, flags)));
-    }
-    return matches;
-  }
-  if (input.mode === 'all_on_same_line') {
-    for (let index = 0; index < input.lines.length; index += 1) {
-      const flags = matchedFlags[index];
-      if (flags.every(Boolean)) matches.push(memorySearchMatch(input, index, index, matchedQueries(input.queries, flags)));
-    }
-    return matches;
-  }
-
-  const lineCount = input.mode.lineCount;
-  for (let start = 0; start < input.lines.length; start += 1) {
-    const aggregate = queries.map(() => false);
-    const endLimit = Math.min(input.lines.length - 1, start + lineCount - 1);
-    for (let end = start; end <= endLimit; end += 1) {
-      matchedFlags[end].forEach((flag, index) => {
-        aggregate[index] ||= flag;
-      });
-      if (aggregate.every(Boolean)) {
-        matches.push(memorySearchMatch(input, start, end, matchedQueries(input.queries, aggregate)));
-        break;
-      }
-    }
-  }
-  return matches;
-}
-
-export function memorySearchMatch(
-  input: { contextLines: number; lines: string[]; path: string },
-  matchStartIndex: number,
-  matchEndIndex: number,
-  matchedQueries: string[],
-): RuntimeMemoryFileSearchMatch {
-  const contentStartIndex = Math.max(0, matchStartIndex - input.contextLines);
-  const contentEndIndex = Math.min(input.lines.length - 1, matchEndIndex + input.contextLines);
-  return {
-    path: input.path,
-    matchLineNumber: matchStartIndex + 1,
-    contentStartLineNumber: contentStartIndex + 1,
-    content: input.lines.slice(contentStartIndex, contentEndIndex + 1).join('\n'),
-    matchedQueries,
-  };
-}
-
-export function matchedQueries(queries: string[], flags: boolean[]): string[] {
-  return queries.filter((_query, index) => flags[index]);
 }

@@ -41,7 +41,7 @@ pnpm test:integration
 pnpm test:release
 ```
 
-先准备固定版本 bundled ripgrep，再运行跨平台打包相关的确定性门禁。
+先准备固定版本 bundled ripgrep，再运行必须在各打包平台验证的 Main、Git、路径、Shell、Store、workspace 和构建脚本门禁。完整 unit 套件由 release workflow 的单独 quality-gate job 运行一次，不在四个平台重复执行纯 Contract/Renderer 测试。
 
 ### All
 
