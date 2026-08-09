@@ -767,6 +767,19 @@ export function testRuntimeEnvironment(id: string, workspaceRoot: string): Runti
 
 export function stepSnapshotSkillRegistry(): SkillRegistry {
   return {
+    resolvePromptContext: async (skillIds?: string[]) => ({
+      availableSkills: [{
+        id: 'skill_step',
+        name: 'Step Skill',
+        description: 'Use the step snapshot fixture.',
+        kind: 'user',
+        enabled: true,
+        selected: false,
+      }],
+      selectedInjections: skillIds?.includes('skill_step')
+        ? [{ id: 'skill_step', name: 'Step Skill', content: 'Use the step snapshot fixture.' }]
+        : [],
+    }),
     selectedSkillInjections: async (skillIds?: string[]) => (skillIds?.includes('skill_step')
       ? [{ id: 'skill_step', name: 'Step Skill', content: 'Use the step snapshot fixture.' }]
       : []),

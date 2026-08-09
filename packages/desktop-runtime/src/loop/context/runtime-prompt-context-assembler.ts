@@ -7,7 +7,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflow, ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
-import type { SkillRegistry } from '../../ports/skill-registry.js';
+import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
 import type {
   RuntimeToolExecutionContext,
   ToolExecutionEnvironment,
@@ -28,6 +28,7 @@ import { RUNTIME_BASE_INSTRUCTIONS } from './runtime-base-instructions.js';
 import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import { runtimeProjectWorkflowPrompt } from './runtime-project-workflow-prompt.js';
+import { runtimeSkillCatalogPrompt } from './runtime-skill-catalog-prompt.js';
 
 const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 const DEFAULT_TOOL_EXTERNAL_CONTEXT_MAX_BYTES = 64 * 1024;
@@ -36,7 +37,7 @@ type RuntimePromptContextAssemblerOptions = {
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
-  skillRegistry?: Pick<SkillRegistry, 'selectedSkillInjections'>;
+  skillRegistry?: Pick<SkillRegistry, 'resolvePromptContext'>;
   toolHost?: ToolHost;
 };
 
@@ -52,6 +53,7 @@ export class RuntimePromptContextAssembler {
   async build({
     config,
     hookContextMessages,
+    skillCatalogContextWindowTokens,
     skillActivationText = '',
     skillIds,
     thread,
@@ -61,6 +63,7 @@ export class RuntimePromptContextAssembler {
   }: {
     config: RuntimeConfigState | null | undefined;
     hookContextMessages: RuntimeMessage[];
+    skillCatalogContextWindowTokens?: number;
     skillActivationText?: string;
     skillIds: string[];
     thread: RuntimeThread;
@@ -70,7 +73,13 @@ export class RuntimePromptContextAssembler {
   }): Promise<RuntimePromptContext> {
     const environment = toolContext.environment;
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
-      this.skillContext(skillIds, config, skillActivationText),
+      this.skillContext(
+        skillIds,
+        config,
+        skillActivationText,
+        skillCatalogContextWindowTokens,
+        tools.some((tool) => tool.name === 'read_skill'),
+      ),
       this.options.memory.contextMessages(thread.projectId, config),
       this.options.projectInstructions?.load({
         environment,
@@ -106,16 +115,23 @@ export class RuntimePromptContextAssembler {
     skillIds: string[],
     config: RuntimeConfigState | null | undefined,
     skillActivationText: string,
+    skillCatalogContextWindowTokens: number | undefined,
+    readSkillAvailable: boolean,
   ): Promise<RuntimePromptContext> {
-    const injections = await this.options.skillRegistry?.selectedSkillInjections(skillIds, { text: skillActivationText });
-    if (!injections?.length) return { fragments: [], selectedSkills: [] };
+    const snapshot = await this.options.skillRegistry?.resolvePromptContext(skillIds, { text: skillActivationText });
+    if (!snapshot) return { fragments: [], selectedSkills: [] };
+    const injections = snapshot.selectedInjections;
+    const catalog = runtimeSkillCatalogPrompt(snapshot.availableSkills, {
+      contextWindowTokens: skillCatalogContextWindowTokens,
+      readSkillAvailable,
+    });
     const explicitSkillIds = new Set(skillIds);
     const orderedInjections = injections
       .map((skill, index) => ({ index, skill }))
       .sort((left, right) => Number(explicitSkillIds.has(right.skill.id)) - Number(explicitSkillIds.has(left.skill.id)) || left.index - right.index)
       .map(({ skill }) => skill);
     let remainingBytes = positiveSetting(config?.desktopSettings?.skillPromptMaxBytes) ?? DEFAULT_SKILL_PROMPT_MAX_BYTES;
-    const fragments = orderedInjections.map((skill): RuntimePromptFragment => {
+    const selectedSkillFragments = orderedInjections.map((skill): RuntimePromptFragment => {
       const content = skill.content.trim();
       const contentBytes = Buffer.byteLength(content, 'utf8');
       const includeContent = contentBytes <= remainingBytes;
@@ -134,15 +150,27 @@ export class RuntimePromptContextAssembler {
           ...(dependencyGuidance ? [dependencyGuidance] : []),
           includeContent
             ? neutralizeSkillTags(content)
-            : skill.path
-              ? `Skill content was omitted because the selected-skill budget was exhausted. Read ${JSON.stringify(skill.path)} before applying this skill.`
-              : 'Skill content was omitted because the selected-skill budget was exhausted.',
+            : readSkillAvailable
+              ? `Skill content was omitted because the selected-skill budget was exhausted. Call read_skill with skill_id ${JSON.stringify(skill.id)} before applying this skill.`
+              : skill.path
+                ? `Skill content was omitted because the selected-skill budget was exhausted. Read ${JSON.stringify(skill.path)} before applying this skill.`
+                : 'Skill content was omitted because the selected-skill budget was exhausted.',
           '</skill>',
         ].join('\n'),
       };
     });
     return {
-      fragments,
+      fragments: [
+        ...(catalog ? [{
+          id: 'desktop_available_skills',
+          role: 'developer' as const,
+          source: 'skill' as const,
+          trust: 'user' as const,
+          lifecycle: 'turn' as const,
+          content: catalog.content,
+        }] : []),
+        ...selectedSkillFragments,
+      ],
       selectedSkills: orderedInjections.map((skill) => ({
         id: skill.id,
         name: skill.name,
@@ -172,7 +200,7 @@ export class RuntimePromptContextAssembler {
   }
 }
 
-function skillMcpDependencyGuidance(skill: Awaited<ReturnType<NonNullable<RuntimePromptContextAssemblerOptions['skillRegistry']>['selectedSkillInjections']>>[number]): string {
+function skillMcpDependencyGuidance(skill: SkillInjection): string {
   const dependencies = skill.mcpDependencies ?? [];
   const errors = skill.dependencyErrors ?? [];
   if (!dependencies.length && !errors.length) return '';

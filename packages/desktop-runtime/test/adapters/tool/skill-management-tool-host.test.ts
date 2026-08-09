@@ -6,6 +6,21 @@ import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-regist
 import { SkillManagementToolHost } from '../../../src/adapters/tool/skill-management-tool-host.js';
 
 describe('skill management tool host', () => {
+  it('reads complete instructions only for enabled Skills without approval', async () => {
+    const { host, registry } = await createSkillHostFixture();
+
+    const tools = await host.listTools({ threadId: 'thread_1' });
+    expect(tools.map((tool) => tool.name)).toContain('read_skill');
+    await expect(host.approvalForTool('read_skill', { skill_id: 'builtin-guide' })).resolves.toBeNull();
+    await expect(host.runTool('read_skill', { skill_id: 'builtin-guide' })).resolves.toMatchObject({
+      content: expect.stringContaining('Use this built-in guide.'),
+      preview: expect.stringContaining('"skillId":"builtin-guide"'),
+    });
+
+    await registry.updateSkill('builtin-guide', { enabled: false });
+    await expect(host.runTool('read_skill', { skill_id: 'builtin-guide' })).rejects.toThrow('Skill is disabled');
+  });
+
   it('creates and updates local skills through configure_skill', async () => {
     const { host, registry } = await createSkillHostFixture();
 

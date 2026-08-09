@@ -24,6 +24,7 @@ const REVIEW_READ_ONLY_TOOL_NAMES = new Set([
   'find_files',
   'search_text',
   'read_file',
+  'read_skill',
   'git_status',
   'git_log',
   'git_show',

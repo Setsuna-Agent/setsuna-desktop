@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveShellSidebarState } from '../../../../src/app/controller/useDesktopAppController.js';
+import {
+  createChatSkillSelectionRequest,
+  resolveShellSidebarState,
+} from '../../../../src/app/controller/useDesktopAppController.js';
 
 describe('resolveShellSidebarState', () => {
   it('keeps the settings navigation in the shared sidebar track', () => {
@@ -17,6 +20,15 @@ describe('resolveShellSidebarState', () => {
     expect(resolveShellSidebarState('capabilities', false)).toEqual({
       collapsed: false,
       reservesLayout: true,
+    });
+  });
+});
+
+describe('createChatSkillSelectionRequest', () => {
+  it('targets the next active main composer without an ephemeral composer identity', () => {
+    expect(createChatSkillSelectionRequest('skill-creator', 3)).toEqual({
+      skillId: 'skill-creator',
+      requestId: 3,
     });
   });
 });

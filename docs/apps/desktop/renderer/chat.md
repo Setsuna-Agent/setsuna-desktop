@@ -93,6 +93,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Pl
 
 Command controller 只拥有输入菜单交互，不负责发送、附件、Plan/Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
+裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。
+
 Mode controller 只拥有本地模式选择和发送参数快照。Plan 与本地 Goal 原子互斥；切换 thread 只重置 thread-scoped Goal 和 usage panel，成功发送后重置 Plan/Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
 
 Footer 和 overlays 不拥有 state、ref 或异步生命周期。它们通过分组控制面接收 controller 状态和回调；主操作保持 `queue > stop > attachment-only send > Sender default action` 的既有优先级。组件级 characterization test 固化该矩阵及模式徽标、菜单和 usage thread gate。

@@ -192,8 +192,8 @@ packages/contracts/ — 4 direct / 72 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 515 total files
-├── src/ — 2 direct / 298 total files
+packages/desktop-runtime/ — 4 direct / 517 total files
+├── src/ — 2 direct / 299 total files
 │   ├── adapters/ — 134 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
@@ -213,8 +213,8 @@ packages/desktop-runtime/ — 4 direct / 515 total files
 │   │   └── workspace/ — 10 direct / 10 total files
 │   ├── extensions/ — 6 direct / 6 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 56 files
-│   │   ├── context/ — 13 direct / 13 total files
+│   ├── loop/ — 57 files
+│   │   ├── context/ — 14 direct / 14 total files
 │   │   ├── core/ — 14 direct / 14 total files
 │   │   ├── lifecycle/ — 14 direct / 14 total files
 │   │   ├── memory/ — 5 direct / 5 total files
@@ -227,7 +227,7 @@ packages/desktop-runtime/ — 4 direct / 515 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 2 direct / 2 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 213 files
+└── test/ — 214 files
     ├── adapters/ — 68 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
@@ -256,8 +256,8 @@ packages/desktop-runtime/ — 4 direct / 515 total files
     │   │   └── tool/ — 6 direct / 6 total files
     │   ├── agent-loop/ — 21 direct / 21 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 27 files
-    │   ├── context/ — 10 direct / 10 total files
+    ├── loop/ — 28 files
+    │   ├── context/ — 11 direct / 11 total files
     │   ├── core/ — 5 direct / 5 total files
     │   ├── lifecycle/ — 7 direct / 7 total files
     │   ├── memory/ — 2 direct / 2 total files

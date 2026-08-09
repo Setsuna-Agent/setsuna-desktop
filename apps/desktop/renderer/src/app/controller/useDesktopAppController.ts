@@ -211,12 +211,11 @@ export function useDesktopAppController() {
   const selectSkillForChat = useCallback((skillId: string) => {
     skillSelectionRequestIdRef.current += 1;
     setActiveView('chat');
-    setSkillSelectionRequest({
-      composerKey,
+    setSkillSelectionRequest(createChatSkillSelectionRequest(
       skillId,
-      requestId: skillSelectionRequestIdRef.current,
-    });
-  }, [composerKey]);
+      skillSelectionRequestIdRef.current,
+    ));
+  }, []);
 
   const clearSkillSelectionRequest = useCallback((requestId: number) => {
     setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
@@ -306,6 +305,15 @@ export function resolveShellSidebarState(activeView: MainView, sidebarCollapsed:
     collapsed: !settingsOpen && sidebarCollapsed,
     reservesLayout: settingsOpen || !sidebarCollapsed,
   };
+}
+
+export function createChatSkillSelectionRequest(
+  skillId: string,
+  requestId: number,
+): ChatSkillSelectionRequest {
+  // Capability navigation can remount the composer, so the request belongs to
+  // the next active main composer instead of one ephemeral composer identity.
+  return { skillId, requestId };
 }
 
 export type DesktopAppController = ReturnType<typeof useDesktopAppController>;

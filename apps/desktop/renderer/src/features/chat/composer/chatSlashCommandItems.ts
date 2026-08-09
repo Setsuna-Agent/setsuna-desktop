@@ -8,6 +8,8 @@ import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
 
 type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 
+const MAX_VISIBLE_SKILLS = 8;
+
 export type ChatSlashCommandItemsOptions = {
   activeGoal: RuntimeThreadGoal | null;
   activeModelName: string | null;
@@ -204,7 +206,7 @@ export function createChatSlashCommandItems({
         .toLowerCase()
         .includes(normalizedQuery)
     ))
-    .slice(0, Math.max(0, 8 - visibleActions.length))
+    .slice(0, MAX_VISIBLE_SKILLS)
     .map<SlashCommandMenuItem>((skill) => ({
       key: `skill:${skill.id}`,
       kind: 'skill',

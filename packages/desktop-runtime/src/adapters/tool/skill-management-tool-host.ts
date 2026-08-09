@@ -14,6 +14,7 @@ import type {
 import { recordInput } from '../../shared/unknown.js';
 
 const configureSkillToolName = 'configure_skill';
+const readSkillToolName = 'read_skill';
 const installSkillMcpDependenciesToolName = 'install_skill_mcp_dependencies';
 const authenticateSkillMcpDependencyToolName = 'authenticate_skill_mcp_dependency';
 
@@ -73,6 +74,19 @@ const configureSkillTool: RuntimeToolDefinition = {
   },
 };
 
+const readSkillTool: RuntimeToolDefinition = {
+  name: readSkillToolName,
+  description: 'Read the complete instructions for an enabled Skill discovered in the Skills metadata catalog. Call this before applying an unselected Skill.',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      skill_id: { type: 'string', description: 'Stable id from the enabled Skills metadata catalog.' },
+    },
+    required: ['skill_id'],
+    additionalProperties: false,
+  },
+};
+
 const installSkillMcpDependenciesTool: RuntimeToolDefinition = {
   name: installSkillMcpDependenciesToolName,
   description: 'Install or enable the MCP servers declared by a local Skill agents/openai.yaml manifest.',
@@ -108,6 +122,7 @@ export class SkillManagementToolHost implements ToolHost {
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
+      readSkillTool,
       configureSkillTool,
       ...(this.dependencyManager && context.features?.skill_mcp_dependency_install !== false
         ? [installSkillMcpDependenciesTool, authenticateSkillMcpDependencyTool]
@@ -117,6 +132,8 @@ export class SkillManagementToolHost implements ToolHost {
 
   systemPrompt(): string {
     return [
+      'Every enabled Skill is advertised separately as routing metadata. Metadata visibility does not mean the full Skill instructions have been loaded.',
+      'When a request matches an unselected Skill, call read_skill with its skill_id and follow the returned complete instructions before acting.',
       'When the user asks to create, update, or save a Setsuna Desktop Skill from chat, use configure_skill.',
       'Do not write directly into runtime user-skills directories.',
       'Pass SKILL.md body content without YAML frontmatter; the runtime stores name and description metadata separately.',
@@ -150,6 +167,9 @@ export class SkillManagementToolHost implements ToolHost {
   }
 
   async previewToolCall(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
+    if (name === readSkillToolName) {
+      return { resultPreview: JSON.stringify(dependencyToolInput(input)) };
+    }
     if (name === installSkillMcpDependenciesToolName || name === authenticateSkillMcpDependencyToolName) {
       const preview = name === authenticateSkillMcpDependencyToolName
         ? requiredDependencyToolInput(input)
@@ -163,6 +183,26 @@ export class SkillManagementToolHost implements ToolHost {
   }
 
   async runTool(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionResult> {
+    if (name === readSkillToolName) {
+      const { skillId } = dependencyToolInput(input);
+      const skill = await this.skillRegistry.getSkill(skillId);
+      if (!skill) throw new Error(`Skill not found: ${skillId}`);
+      if (!skill.enabled) throw new Error(`Skill is disabled: ${skillId}`);
+      const dependencySummary = [
+        ...(skill.mcpDependencies ?? []).map((dependency) => `${dependency.value}=${dependency.status}`),
+        ...(skill.dependencyErrors ?? []).map((error) => `invalid=${error}`),
+      ];
+      const header = [
+        `Skill instructions: ${skill.name}`,
+        `ID: ${skill.id}`,
+        skill.path ? `Path: ${skill.path}` : '',
+        dependencySummary.length ? `MCP dependencies: ${dependencySummary.join(', ')}` : '',
+      ].filter(Boolean).join('\n');
+      return {
+        content: `${header}\n\n${skill.content.trim()}`,
+        preview: JSON.stringify({ skillId: skill.id, name: skill.name, path: skill.path }),
+      };
+    }
     if (name === installSkillMcpDependenciesToolName) {
       if (!this.dependencyManager) throw new Error('Skill MCP dependency installation is unavailable.');
       const { skillId } = dependencyToolInput(input);

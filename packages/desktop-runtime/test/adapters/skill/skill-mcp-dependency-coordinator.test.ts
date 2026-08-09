@@ -23,6 +23,10 @@ describe('SkillMcpDependencyCoordinator', () => {
     };
     const coordinator = new SkillMcpDependencyCoordinator(skills, mcp.store, client);
 
+    await expect(coordinator.resolvePromptContext([skill.id])).resolves.toMatchObject({
+      availableSkills: [{ mcpDependencies: [{ value: 'sentry', status: 'unchecked' }] }],
+      selectedInjections: [{ mcpDependencies: [{ value: 'sentry', status: 'missing' }] }],
+    });
     await expect(coordinator.getSkill(skill.id)).resolves.toMatchObject({
       mcpDependencies: [{ value: 'sentry', status: 'missing' }],
     });
@@ -141,6 +145,16 @@ function memorySkillRegistry(skill: RuntimeSkillDetail): SkillRegistry {
     getSkill: async (skillId) => skillId === skill.id ? { ...skill } : null,
     updateSkill: async () => ({ ...skill }),
     deleteSkill: async () => undefined,
+    resolvePromptContext: async () => ({
+      availableSkills: [{ ...skill }],
+      selectedInjections: [{
+        id: skill.id,
+        name: skill.name,
+        content: skill.content,
+        mcpDependencies: skill.mcpDependencies,
+        dependencyErrors: skill.dependencyErrors,
+      }],
+    }),
     selectedSkillInjections: async () => [{
       id: skill.id,
       name: skill.name,

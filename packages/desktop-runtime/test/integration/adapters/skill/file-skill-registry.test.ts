@@ -52,6 +52,30 @@ describe('file skill registry', () => {
     ]);
   });
 
+  it('resolves enabled metadata and selected full content from one prompt snapshot', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    await registry.createSkill({
+      name: 'Available Helper',
+      description: 'Routes available helper work',
+      content: '# Available Helper\n\nComplete instructions.',
+    });
+    await registry.createSkill({ name: 'Disabled Helper', content: '# Disabled', enabled: false });
+
+    const unselected = await registry.resolvePromptContext();
+    expect(unselected.availableSkills).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'available-helper', description: 'Routes available helper work' }),
+      expect.objectContaining({ id: 'builtin-demo' }),
+    ]));
+    expect(unselected.availableSkills.map((skill) => skill.id)).not.toContain('disabled-helper');
+    expect(unselected.selectedInjections).toEqual([]);
+
+    const explicit = await registry.resolvePromptContext(['available-helper']);
+    expect(explicit.selectedInjections).toEqual([
+      expect.objectContaining({ id: 'available-helper', content: expect.stringContaining('Complete instructions.') }),
+    ]);
+  });
+
   it('parses Skill frontmatter checked out with CRLF line endings', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const skillDir = path.join(builtinDir, 'windows-skill');
@@ -353,6 +377,31 @@ describe('file skill registry', () => {
 
     await expect(registry.updateSkill('builtin-demo', { content: 'changed' })).rejects.toThrow('Built-in skill is read-only');
     await expect(registry.deleteSkill('builtin-demo')).rejects.toThrow('Built-in skill is read-only');
+  });
+
+  it('advertises enabled unselected Skill metadata without injecting its full body', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    const thread = await threadStore.createThread({ title: 'Skill discovery' });
+    const modelClient = new CapturingModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids: new RandomIdGenerator(),
+      skillRegistry: registry,
+    });
+
+    await loop.sendTurn(thread.id, { input: 'which workflows are available?' });
+
+    const catalog = modelClient.messages.find((message) => message.id === 'desktop_available_skills');
+    expect(catalog?.content).toContain('"id":"builtin-demo"');
+    expect(catalog?.content).toContain('"description":"Exercise built-in skill behavior"');
+    expect(catalog?.content).toContain('SKILL.md');
+    expect(catalog?.content).not.toContain('Use the built-in demo workflow.');
+    expect(modelClient.messages.find((message) => message.id === 'skill_builtin-demo')).toBeUndefined();
   });
 
   it('injects selected skills into agent loop model messages', async () => {

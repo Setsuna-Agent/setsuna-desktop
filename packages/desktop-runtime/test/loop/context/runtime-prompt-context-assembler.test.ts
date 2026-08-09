@@ -14,23 +14,31 @@ describe('RuntimePromptContextAssembler', () => {
         },
       },
       skillRegistry: {
-        selectedSkillInjections: async () => [
-          { id: 'default', name: 'Default Skill', content: '12345', path: '/skills/default/SKILL.md' },
-          {
-            id: 'explicit',
-            name: 'Explicit Skill',
-            content: 'abcde',
-            path: '/skills/explicit/SKILL.md',
-            plugin: { id: 'documents', name: 'Documents', icon: 'documents' },
-            mcpDependencies: [{
-              type: 'mcp',
-              value: 'docs',
-              transport: 'streamableHttp',
-              url: 'https://developers.openai.com/mcp',
-              status: 'missing',
-            }],
-          },
-        ],
+        resolvePromptContext: async () => ({
+          availableSkills: [
+            { id: 'default', name: 'Default Skill', description: 'Always-on guidance', kind: 'user', enabled: true, selected: true, path: '/skills/default/SKILL.md' },
+            { id: 'explicit', name: 'Explicit Skill', description: 'Explicit workflow', kind: 'plugin', enabled: true, selected: false, path: '/skills/explicit/SKILL.md' },
+            { id: 'available', name: 'Available Skill', description: 'Use for deployment checks', kind: 'user', enabled: true, selected: false, path: '/skills/available/SKILL.md' },
+            { id: 'disabled', name: 'Disabled Skill', kind: 'user', enabled: false, selected: false },
+          ],
+          selectedInjections: [
+            { id: 'default', name: 'Default Skill', content: '12345', path: '/skills/default/SKILL.md' },
+            {
+              id: 'explicit',
+              name: 'Explicit Skill',
+              content: 'abcde',
+              path: '/skills/explicit/SKILL.md',
+              plugin: { id: 'documents', name: 'Documents', icon: 'documents' },
+              mcpDependencies: [{
+                type: 'mcp',
+                value: 'docs',
+                transport: 'streamableHttp',
+                url: 'https://developers.openai.com/mcp',
+                status: 'missing',
+              }],
+            },
+          ],
+        }),
       },
     });
     const environment = {
@@ -55,15 +63,21 @@ describe('RuntimePromptContextAssembler', () => {
         signal: new AbortController().signal,
       },
       toolRouter: null,
-      tools: [],
+      tools: [{ name: 'read_skill', description: 'Read a Skill', inputSchema: { type: 'object' } }],
     });
 
+    const catalog = result.fragments.find((fragment) => fragment.id === 'desktop_available_skills');
     const explicit = result.fragments.find((fragment) => fragment.id === 'skill_explicit');
     const defaultSkill = result.fragments.find((fragment) => fragment.id === 'skill_default');
     expect(explicit?.content).toContain('abcde');
     expect(explicit?.content).toContain('install_skill_mcp_dependencies');
     expect(explicit?.content).toContain('- docs: missing');
     expect(defaultSkill?.content).toContain('budget was exhausted');
+    expect(defaultSkill?.content).toContain('read_skill');
+    expect(catalog).toMatchObject({ role: 'developer', source: 'skill', trust: 'user' });
+    expect(catalog?.content).toContain('"id":"available"');
+    expect(catalog?.content).toContain('Use for deployment checks');
+    expect(catalog?.content).not.toContain('"id":"disabled"');
     expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'default']);
     expect(result.selectedSkills[0]?.plugin).toEqual({ id: 'documents', name: 'Documents', icon: 'documents' });
     expect(instructionEnvironment).toBe(environment);

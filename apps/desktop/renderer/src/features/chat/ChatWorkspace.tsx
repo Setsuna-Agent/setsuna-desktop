@@ -404,7 +404,7 @@ export function ChatWorkspace({
       focusRequest={focusComposerRequest}
       onFocusRequestConsumed={onFocusComposerRequestConsumed}
       imageAttachmentRequest={imageAttachmentRequest}
-      skillSelectionRequest={skillSelectionRequest?.composerKey === composerKey ? skillSelectionRequest : null}
+      skillSelectionRequest={skillSelectionRequest}
       workspaceMentionRequest={workspaceMentionRequest}
       skills={skills}
       threadUsage={displayedThreadUsage}

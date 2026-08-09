@@ -54,6 +54,32 @@ describe('chat slash command items', () => {
     );
   });
 
+  it('keeps enabled Skill slots visible alongside the bare slash quick actions', () => {
+    const skills = Array.from({ length: 10 }, (_, index) => skill(index));
+    skills[1] = { ...skills[1], enabled: false };
+
+    const items = createChatSlashCommandItems(options({
+      selectedSkills: [skills[0]],
+      skills,
+    }));
+
+    expect(items.slice(0, 10).map((item) => item.key)).toEqual([
+      'model',
+      'plan',
+      'collaboration',
+      'goal',
+      'usage',
+      'side-chat',
+      'review',
+      'memory-mode',
+      'compact-context',
+      'clear-context',
+    ]);
+    expect(items.slice(10).map((item) => item.key)).toEqual(
+      skills.slice(2).map((item) => `skill:${item.id}`),
+    );
+  });
+
   it('matches quick actions through their translated display text', () => {
     const items = createChatSlashCommandItems(options({ query: 'review' }));
 
