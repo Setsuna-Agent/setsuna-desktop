@@ -25,6 +25,7 @@ export type ExtensionWorkerReady = {
 
 type PendingRequest = {
   context: ExtensionWorkerRequestContext;
+  abort(error: Error): void;
   resolve(value: unknown): void;
   reject(error: Error): void;
   cleanup(): void;
@@ -129,8 +130,14 @@ export class ExtensionWorkerClient {
     const id = `request_${++this.sequence}`;
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
+      const requestAbort = new AbortController();
+      const abortRequestScope = (error: Error) => {
+        if (!requestAbort.signal.aborted) requestAbort.abort(error);
+      };
       const abort = () => {
-        this.cancelAndTerminate(id, abortError(context.signal));
+        const error = abortError(context.signal);
+        abortRequestScope(error);
+        this.cancelAndTerminate(id, error);
       };
       const settle = (operation: () => void) => {
         const pending = this.pending.get(id);
@@ -140,11 +147,16 @@ export class ExtensionWorkerClient {
         operation();
       };
       timer = setTimeout(() => {
-        this.cancelAndTerminate(id, new Error(`Extension request timed out after ${timeoutMs}ms.`));
+        const error = new Error(`Extension request timed out after ${timeoutMs}ms.`);
+        abortRequestScope(error);
+        this.cancelAndTerminate(id, error);
       }, timeoutMs);
       context.signal?.addEventListener('abort', abort, { once: true });
       this.pending.set(id, {
-        context,
+        // Host subrequests belong to the worker request, not just the outer turn.
+        // This derived signal also ends UI approvals on timeout or worker failure.
+        context: { ...context, signal: requestAbort.signal },
+        abort: abortRequestScope,
         resolve: (value) => settle(() => resolve(value)),
         reject: (error) => settle(() => reject(error)),
         cleanup: () => {
@@ -155,7 +167,9 @@ export class ExtensionWorkerClient {
       try {
         this.send({ type: 'request', id, method, params });
       } catch (error) {
-        settle(() => reject(asError(error)));
+        const failure = asError(error);
+        abortRequestScope(failure);
+        settle(() => reject(failure));
       }
     });
   }
@@ -300,7 +314,10 @@ export class ExtensionWorkerClient {
   }
 
   private rejectPending(error: Error): void {
-    for (const pending of [...this.pending.values()]) pending.reject(error);
+    for (const pending of [...this.pending.values()]) {
+      pending.abort(error);
+      pending.reject(error);
+    }
   }
 }
 

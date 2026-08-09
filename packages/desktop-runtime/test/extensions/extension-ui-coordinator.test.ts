@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { InMemoryApprovalGate } from '../../src/adapters/approval/in-memory-approval-gate.js';
 import { ExtensionUiCoordinator } from '../../src/extensions/extension-ui-coordinator.js';
 import type { ApprovalGate, CreateApprovalInput } from '../../src/ports/approval-gate.js';
 
@@ -74,5 +75,34 @@ describe('extension UI coordinator', () => {
       { id: 'demo', name: 'Demo extension' },
     )).rejects.toThrow('interactive extension UI is available only while a tool is running');
     expect(createApproval).not.toHaveBeenCalled();
+  });
+
+  it('resolves and removes an interactive approval when its parent request is cancelled', async () => {
+    const clock = { now: () => new Date('2026-08-09T00:00:00.000Z') };
+    const approvals = new InMemoryApprovalGate(clock, { id: (prefix) => `${prefix}_1` });
+    const append = vi.fn(async (_threadId: string, _event: { type: string }) => null);
+    const coordinator = new ExtensionUiCoordinator(
+      approvals,
+      { append },
+      clock,
+      { id: (prefix) => `${prefix}_1` },
+    );
+    const abort = new AbortController();
+    const execution = coordinator.handle(
+      'ui.confirm',
+      { message: 'Continue?' },
+      { threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call_1', signal: abort.signal },
+      { id: 'demo', name: 'Demo extension' },
+    );
+    await approvals.waitForPendingApproval();
+
+    abort.abort(new Error('Extension request timed out after 50ms.'));
+
+    await expect(execution).rejects.toThrow('timed out after 50ms');
+    await expect(approvals.listApprovals()).resolves.toEqual({ approvals: [] });
+    expect(append.mock.calls.map(([, event]) => event.type)).toEqual([
+      'approval.requested',
+      'approval.resolved',
+    ]);
   });
 });

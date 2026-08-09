@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { inspectBundleTree } from '../../src/adapters/plugin/file-plugin-bundle-model.js';
 import { ExtensionManager } from '../../src/extensions/extension-manager.js';
+import type { ExtensionUiContext, ExtensionUiCoordinator } from '../../src/extensions/extension-ui-coordinator.js';
 import { sanitizedExtensionEnvironment } from '../../src/extensions/extension-worker-client.js';
 import type { InstalledPluginRecord } from '../../src/ports/plugin-bundle-store.js';
 
@@ -190,6 +191,54 @@ describe('extension manager', () => {
       })).resolves.toMatchObject({ content: 'thread_1:still-alive:1' });
     } finally {
       resolveUi?.(false);
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels a host UI request when its parent worker request times out', async () => {
+    const fixture = await extensionFixture({ includeDelayedUiTool: true });
+    let notifyUiStarted!: (signal: AbortSignal) => void;
+    const uiStarted = new Promise<AbortSignal>((resolve) => {
+      notifyUiStarted = resolve;
+    });
+    const ui = {
+      handle: vi.fn(async (_method: string, _params: unknown, context: ExtensionUiContext) => {
+        const signal = context.signal;
+        if (!signal) throw new Error('Expected a request-scoped signal.');
+        notifyUiStarted(signal);
+        return new Promise<never>((_resolve, reject) => {
+          const cancel = () => reject(signal.reason);
+          if (signal.aborted) cancel();
+          else signal.addEventListener('abort', cancel, { once: true });
+        });
+      }),
+    };
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      ui,
+      { toolTimeoutMs: 75 },
+    );
+
+    try {
+      const tools = await manager.listTools({ threadId: 'thread_1' });
+      const delayed = tools.find((tool) => tool.localName === 'delayed-ui')!;
+      const execution = manager.runTool(delayed.name, {}, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        toolCallId: 'call_delayed_ui',
+      });
+      const signal = await uiStarted;
+
+      await expect(execution).rejects.toThrow('timed out after 75ms');
+      expect(signal.aborted).toBe(true);
+      expect(signal.reason).toEqual(expect.objectContaining({ message: 'Extension request timed out after 75ms.' }));
+    } finally {
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
     }
@@ -466,7 +515,8 @@ function testManager(
     set(pluginId: string, scope: string, key: string, value: unknown): Promise<void>;
     delete(pluginId: string, scope: string, key: string): Promise<void>;
   },
-  ui: { handle(...args: never[]): Promise<unknown> },
+  ui: Pick<ExtensionUiCoordinator, 'handle'>,
+  options: { eventTimeoutMs?: number; toolTimeoutMs?: number } = {},
 ): ExtensionManager {
   return new ExtensionManager(
     { listInstalledRecords: async () => [structuredClone(record)] },
@@ -475,8 +525,8 @@ function testManager(
     {
       workerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
       workerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
-      eventTimeoutMs: 2_000,
-      toolTimeoutMs: 2_000,
+      eventTimeoutMs: options.eventTimeoutMs ?? 2_000,
+      toolTimeoutMs: options.toolTimeoutMs ?? 2_000,
     },
   );
 }

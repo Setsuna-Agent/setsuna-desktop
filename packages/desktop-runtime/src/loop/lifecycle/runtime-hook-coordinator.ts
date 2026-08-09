@@ -32,6 +32,7 @@ type RuntimeHookCoordinatorOptions = {
 export class RuntimeHookCoordinator {
   private readonly initializedThreadIds = new Set<string>();
   private readonly pendingSessionStartSources = new Map<string, RuntimeSessionStartSource[]>();
+  private readonly pendingExtensionSessionStartSources = new Map<string, RuntimeSessionStartSource[]>();
 
   constructor(private readonly options: RuntimeHookCoordinatorOptions) {}
 
@@ -56,6 +57,9 @@ export class RuntimeHookCoordinator {
   }): Promise<RuntimeTurnStartHookResult> {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
     const sessionStartSource = this.takeSessionStartSource(thread);
+    if (sessionStartSource && this.options.extensions) {
+      this.queueExtensionSessionStartSource(thread.id, sessionStartSource);
+    }
     if (!runner && !this.options.extensions) return { stopped: false, contextMessages: [] };
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
@@ -85,7 +89,11 @@ export class RuntimeHookCoordinator {
     if (sessionStartOutcome?.shouldStop) {
       return { stopped: true, reason: sessionStartOutcome.stopReason || 'SessionStart hook stopped this turn.' };
     }
-    const sessionExtensionOutcome = sessionStartSource
+    const extensionsEnabled = runtimeConfig?.features?.plugins !== false;
+    const extensionSessionStartSource = extensionsEnabled
+      ? this.peekExtensionSessionStartSource(thread.id)
+      : null;
+    const sessionExtensionOutcome = extensionSessionStartSource
       ? await this.options.extensions?.dispatch('session.start', {
           threadId: thread.id,
           turnId,
@@ -93,9 +101,12 @@ export class RuntimeHookCoordinator {
           cwd: environment.cwd,
           ...(context.features ? { features: context.features } : {}),
           signal,
-          payload: { source: sessionStartSource },
+          payload: { source: extensionSessionStartSource },
         })
       : undefined;
+    // A disabled extension runtime must not consume the one-shot event. Likewise,
+    // retain it when dispatch throws so cancellation can retry on the next turn.
+    if (extensionSessionStartSource) this.takeExtensionSessionStartSource(thread.id);
     if (sessionExtensionOutcome?.block) {
       return { stopped: true, reason: sessionExtensionOutcome.reason || 'Session extension stopped this turn.' };
     }
@@ -110,15 +121,17 @@ export class RuntimeHookCoordinator {
     if (userPromptOutcome?.shouldStop) {
       return { stopped: true, reason: userPromptOutcome.stopReason || 'UserPromptSubmit hook stopped this turn.' };
     }
-    const promptExtensionOutcome = await this.options.extensions?.dispatch('prompt.before', {
-      threadId: thread.id,
-      turnId,
-      projectId: thread.projectId,
-      cwd: environment.cwd,
-      ...(context.features ? { features: context.features } : {}),
-      signal,
-      payload: { input: prompt, prompt },
-    });
+    const promptExtensionOutcome = extensionsEnabled
+      ? await this.options.extensions?.dispatch('prompt.before', {
+          threadId: thread.id,
+          turnId,
+          projectId: thread.projectId,
+          cwd: environment.cwd,
+          ...(context.features ? { features: context.features } : {}),
+          signal,
+          payload: { input: prompt, prompt },
+        })
+      : undefined;
     if (promptExtensionOutcome?.block) {
       return { stopped: true, reason: promptExtensionOutcome.reason || 'Prompt extension stopped this turn.' };
     }
@@ -272,6 +285,23 @@ export class RuntimeHookCoordinator {
     this.initializedThreadIds.add(thread.id);
     if (thread.forkedFromId) return 'startup';
     return thread.messages.length ? 'resume' : 'startup';
+  }
+
+  private queueExtensionSessionStartSource(threadId: string, source: RuntimeSessionStartSource): void {
+    const pending = this.pendingExtensionSessionStartSources.get(threadId) ?? [];
+    pending.push(source);
+    this.pendingExtensionSessionStartSources.set(threadId, pending);
+  }
+
+  private peekExtensionSessionStartSource(threadId: string): RuntimeSessionStartSource | null {
+    return this.pendingExtensionSessionStartSources.get(threadId)?.[0] ?? null;
+  }
+
+  private takeExtensionSessionStartSource(threadId: string): RuntimeSessionStartSource | null {
+    const pending = this.pendingExtensionSessionStartSources.get(threadId);
+    const next = pending?.shift() ?? null;
+    if (pending && !pending.length) this.pendingExtensionSessionStartSources.delete(threadId);
+    return next;
   }
 
   private additionalContextMessages(contexts: string[], turnId: string): RuntimeMessage[] {
