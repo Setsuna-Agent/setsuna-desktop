@@ -22,6 +22,7 @@ import type {
   SkillRegistry,
 } from '../../ports/skill-registry.js';
 import { errorMessage } from '../../shared/node-errors.js';
+import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 
@@ -33,6 +34,7 @@ type SkillStateFile = {
 type ParsedSkill = {
   id: string;
   name: string;
+  contentVersion: string;
   kind: RuntimeSkillKind;
   description?: string;
   content: string;
@@ -185,6 +187,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         .map(({ parsed, detail }) => ({
           id: detail.id,
           name: detail.name,
+          contentVersion: detail.contentVersion,
           content: detail.content,
           path: detail.path,
           ...(parsed.plugin ? { plugin: { ...parsed.plugin } } : {}),
@@ -402,6 +405,7 @@ function parseSkill(
   return {
     id,
     name,
+    contentVersion: skillContentVersion(content),
     kind,
     description,
     content,
@@ -548,6 +552,7 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
   return {
     id: skill.id,
     name: skill.name,
+    contentVersion: skill.contentVersion,
     kind: skill.kind,
     enabled: skillState?.enabled ?? true,
     selected: skillState?.selected ?? false,

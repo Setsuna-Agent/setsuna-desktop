@@ -249,12 +249,12 @@ MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/reso
 - 管理 `runtime/user-skills/<id>/SKILL.md`。
 - `skills.json` 保存 enabled/selected。
 - Builtin/Plugin 只读，user 可 CRUD。
-- 每轮从同一 registry 快照暴露所有 enabled Skill 的 `id/name/description/path` 路由元数据。
+- 每轮从同一 registry 快照暴露所有 enabled Skill 的 `id/name/description/path/contentVersion` 路由元数据；`contentVersion` 由当前 SKILL.md 正文摘要生成。
 - 显式 Skill 优先；default、显式选择和 auto-activation 只决定哪些 Skill 额外注入完整正文。
 
 `SkillMcpDependencyCoordinator` 管理 Skill 声明的 MCP dependency 安装、状态和认证。
 
-`SkillManagementToolHost` 提供只读 `read_skill` 按需加载未选择 Skill 的完整正文，以及 Agent 创建/更新用户 Skill 的工具。元数据目录受模型上下文预算约束，会先公平缩短 description，再在必要时省略条目并明确报告数量。
+`SkillManagementToolHost` 提供只读 `read_skill`，按 `contentVersion` 分页加载未选择 Skill 的正文，并将单次结果限制在 16 KiB；版本变化时必须从 offset 0 重读，防止线程历史继续使用旧正文或混合两个版本。它也提供 Agent 创建/更新用户 Skill 的工具。Host system prompt 只描述当前采样实际暴露的工具。元数据目录受模型上下文预算约束，会先公平缩短 description，再在必要时省略条目并明确报告数量。
 
 仓库内置 Skill 见 [Skills 文档](../../skills/README.md)。
 

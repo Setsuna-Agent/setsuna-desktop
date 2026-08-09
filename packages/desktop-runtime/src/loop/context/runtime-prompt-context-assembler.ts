@@ -137,6 +137,8 @@ export class RuntimePromptContextAssembler {
       const includeContent = contentBytes <= remainingBytes;
       if (includeContent) remainingBytes -= contentBytes;
       const pathAttribute = skill.path ? ` path="${escapeSkillAttribute(skill.path)}"` : '';
+      const contentVersion = skill.contentVersion ?? 'unversioned';
+      const contentVersionAttribute = ` content_version="${escapeSkillAttribute(contentVersion)}"`;
       const dependencyGuidance = skillMcpDependencyGuidance(skill);
       return {
         id: `skill_${skill.id}`,
@@ -146,12 +148,12 @@ export class RuntimePromptContextAssembler {
         lifecycle: 'turn',
         ...(skill.path ? { sourcePath: skill.path } : {}),
         content: [
-          `<skill name="${escapeSkillAttribute(skill.name)}" id="${escapeSkillAttribute(skill.id)}"${pathAttribute}>`,
+          `<skill name="${escapeSkillAttribute(skill.name)}" id="${escapeSkillAttribute(skill.id)}"${pathAttribute}${contentVersionAttribute}>`,
           ...(dependencyGuidance ? [dependencyGuidance] : []),
           includeContent
             ? neutralizeSkillTags(content)
             : readSkillAvailable
-              ? `Skill content was omitted because the selected-skill budget was exhausted. Call read_skill with skill_id ${JSON.stringify(skill.id)} before applying this skill.`
+              ? `Skill content was omitted because the selected-skill budget was exhausted. Call read_skill with skill_id ${JSON.stringify(skill.id)} and content_version ${JSON.stringify(contentVersion)} before applying this skill.`
               : skill.path
                 ? `Skill content was omitted because the selected-skill budget was exhausted. Read ${JSON.stringify(skill.path)} before applying this skill.`
                 : 'Skill content was omitted because the selected-skill budget was exhausted.',

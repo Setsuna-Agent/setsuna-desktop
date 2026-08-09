@@ -66,7 +66,7 @@ Workspace、shell、artifact 和内置图片生成共享该环境。Generated im
 4. 运行必要 compaction。
 5. 构建 portable model history。
 6. 加载 memory。
-7. 从同一快照加载所有已启用 Skill 的路由元数据，并选择显式/default/auto-activated Skill 正文。
+7. 从同一快照加载所有已启用 Skill 的路由元数据与正文版本，并选择显式/default/auto-activated Skill 正文。
 8. 获取 tool definitions/system prompt。
 9. 加载 project workflow 和 instructions。
 10. 生成 provider replay context。

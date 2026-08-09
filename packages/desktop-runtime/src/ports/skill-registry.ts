@@ -12,6 +12,7 @@ import type {
 export type SkillInjection = {
   id: string;
   name: string;
+  contentVersion?: string;
   content: string;
   path?: string;
   plugin?: RuntimePluginReference;

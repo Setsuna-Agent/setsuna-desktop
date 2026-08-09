@@ -35,7 +35,7 @@ export function runtimeSkillCatalogPrompt(
       : DEFAULT_SKILL_METADATA_MAX_CHARS);
   const rendered = renderSkillRecords(enabledSkills, Math.max(1, metadataBudget));
   const readInstruction = readSkillAvailable
-    ? 'For any matching Skill whose full body is not already present, call read_skill with its id and read the complete instructions before acting.'
+    ? 'For any matching Skill whose current full body is not already present, call read_skill with its id and content_version and read every returned chunk before acting. A previously read body is current only while its Content version matches the catalog; restart at offset 0 whenever the version changes.'
     : 'If a matching Skill body is not already present, ask the user to select that Skill before applying it.';
 
   return {
@@ -61,6 +61,7 @@ export function runtimeSkillCatalogPrompt(
 type CatalogSkill = {
   id: string;
   name: string;
+  contentVersion: string;
   description?: string;
   descriptionWasTruncated: boolean;
   path?: string;
@@ -139,6 +140,7 @@ function skillRecordLine(skill: CatalogSkill, descriptionLimit: number): string 
   return `- ${JSON.stringify({
     id: skill.id,
     name: skill.name,
+    content_version: skill.contentVersion,
     ...(description ? { description } : {}),
     ...(skill.path ? { path: skill.path } : {}),
   })}`;
@@ -151,6 +153,9 @@ function normalizeCatalogSkill(skill: RuntimeSkillSummary): CatalogSkill {
   return {
     id: promptMetadataField(skill.id, 160),
     name: promptMetadataField(skill.name, 240),
+    // Keep the catalog tolerant of a summary produced by an older runtime or a
+    // third-party registry while the built-in FileSkillRegistry always hashes it.
+    contentVersion: promptMetadataField(skill.contentVersion ?? 'unversioned', 80),
     ...(normalizedDescription
       ? { description: truncateWithEllipsis(normalizedDescription, MAX_SKILL_DESCRIPTION_CHARS) }
       : {}),
@@ -164,8 +169,10 @@ function promptMetadataField(value: string, maxChars: number): string {
 }
 
 function normalizePromptMetadataField(value: string): string {
-  return neutralizePromptClosingTags(value, ['available_skills', 'skills_instructions'])
-    .normalize('NFKC')
+  return neutralizePromptClosingTags(
+    value.normalize('NFKC'),
+    ['available_skills', 'skills_instructions'],
+  )
     .replace(/\s+/gu, ' ')
     .trim();
 }
