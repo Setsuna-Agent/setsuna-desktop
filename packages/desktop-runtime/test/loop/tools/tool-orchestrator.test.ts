@@ -5,6 +5,7 @@ import {
   ToolApprovalStore,
   ToolOrchestrator,
   type ToolOrchestratorEvents,
+  type ToolOrchestratorOptions,
 } from '../../../src/loop/tools/tool-orchestrator.js';
 import type { ApprovalGate, CreateApprovalInput } from '../../../src/ports/approval-gate.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -575,6 +576,75 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       .filter((input) => input.reason.toLowerCase().includes('network access'));
     expect(networkApprovals).toHaveLength(2);
   });
+
+  it('pipelines extension input rewrites and model-visible context around a tool call', async () => {
+    const runTool = vi.fn(async (_name: string, input: unknown) => ({
+      content: `raw:${JSON.stringify(input)}`,
+    }));
+    const dispatch = vi.fn(async (eventName: string) => eventName === 'tool.before'
+      ? { input: { value: 2 }, context: ['before extension context'] }
+      : { feedback: 'after extension feedback', context: ['after extension context'] });
+    const fixture = createOrchestratorFixture(
+      stubToolHost(runTool),
+      undefined,
+      undefined,
+      undefined,
+      {},
+      { dispatch } as NonNullable<ToolOrchestratorOptions['extensions']>,
+    );
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_extension_pipeline', name: 'local_tool', arguments: '{"value":1}' },
+      { value: 1 },
+      executionContext(),
+      'full',
+    );
+
+    expect(runTool).toHaveBeenCalledWith(
+      'local_tool',
+      { value: 2 },
+      expect.any(Object),
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, 'tool.before', expect.objectContaining({
+      toolCallId: 'call_extension_pipeline',
+      payload: expect.objectContaining({ input: { value: 1 } }),
+    }));
+    expect(dispatch).toHaveBeenNthCalledWith(2, 'tool.after', expect.objectContaining({
+      toolCallId: 'call_extension_pipeline',
+      payload: expect.objectContaining({ input: { value: 2 } }),
+    }));
+    expect(execution).toMatchObject({ status: 'success' });
+    expect(execution.content).toContain('after extension feedback');
+    expect(execution.content).toContain('before extension context');
+    expect(execution.content).toContain('after extension context');
+  });
+
+  it('rejects a tool before side effects when a tool.before extension blocks it', async () => {
+    const runTool = vi.fn(async () => ({ content: 'must not run' }));
+    const fixture = createOrchestratorFixture(
+      stubToolHost(runTool),
+      undefined,
+      undefined,
+      undefined,
+      {},
+      {
+        dispatch: vi.fn(async () => ({ block: true, reason: 'blocked by extension policy' })),
+      },
+    );
+
+    const execution = await fixture.orchestrator.runToolCall(
+      { id: 'call_extension_block', name: 'local_tool', arguments: '{}' },
+      {},
+      executionContext(),
+      'full',
+    );
+
+    expect(execution).toMatchObject({
+      status: 'rejected',
+      content: expect.stringContaining('blocked by extension policy'),
+    });
+    expect(runTool).not.toHaveBeenCalled();
+  });
 });
 
 function stubToolHost(runTool: ToolHost['runTool'], overrides: Partial<ToolHost> = {}): ToolHost {
@@ -609,6 +679,7 @@ function createOrchestratorFixture(
   approvalGate?: ApprovalGate,
   approvalStore?: ToolApprovalStore,
   eventOverrides: Partial<ToolOrchestratorEvents> = {},
+  extensions?: ToolOrchestratorOptions['extensions'],
 ) {
   const completions: Array<{ status: 'success' | 'error' | 'rejected'; content: string }> = [];
   const approvalRequests: string[] = [];
@@ -627,6 +698,7 @@ function createOrchestratorFixture(
     toolHost,
     approvalGate,
     approvalStore,
+    extensions,
     hookRunner,
     clock: systemClock,
     events: {

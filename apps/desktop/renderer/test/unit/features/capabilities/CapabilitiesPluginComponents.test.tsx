@@ -79,6 +79,121 @@ describe('capabilities plugin components', () => {
     expect(html).toMatch(/aria-label="[^"]*Docs Guide[^"]*"/u);
   });
 
+  it('shows local executable extension trust, process state, and the unsandboxed warning', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        extensionStatus={{
+          pluginId: 'worker-demo',
+          state: 'failed',
+          tools: [],
+          events: [],
+          error: 'worker exited',
+        }}
+        installedPlugin={{
+          id: 'worker-demo',
+          name: 'Worker Demo',
+          installedAt: '2026-08-09T00:00:00.000Z',
+          skills: [],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+          extension: {
+            apiVersion: 1,
+            runtime: 'node-worker',
+            capabilities: ['tools', 'events', 'ui', 'state'],
+            trust: 'modified',
+          },
+        }}
+        installing={false}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetExtensionTrust={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('可执行扩展');
+    expect(html).toContain('包内容已变更');
+    expect(html).toContain('不是操作系统沙箱');
+    expect(html).toContain('运行失败');
+    expect(html).toContain('worker exited');
+    expect(html).toContain('信任并允许运行');
+  });
+
+  it('treats bundled executable extensions as app-managed without trust controls', () => {
+    const marketplacePlugin = {
+      id: 'question',
+      name: '澄清问题',
+      version: '1.0.1',
+      description: '在执行前向用户提出结构化问题。',
+      publisher: 'Setsuna',
+      tags: ['交互'],
+      featured: true,
+      skills: [],
+      mcpServers: [],
+      hooks: [],
+      resources: [],
+      extension: {
+        apiVersion: 1,
+        runtime: 'node-worker',
+        capabilities: ['tools', 'ui'],
+      },
+      capabilities: { skills: 0, mcpServers: 0, hooks: 0, resources: 0, extension: 1 },
+      installed: true,
+      updateAvailable: false,
+    } satisfies RuntimePluginMarketplaceItem;
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        extensionStatus={{
+          pluginId: marketplacePlugin.id,
+          state: 'running',
+          tools: [],
+          events: [],
+        }}
+        installedPlugin={{
+          id: marketplacePlugin.id,
+          name: marketplacePlugin.name,
+          version: marketplacePlugin.version,
+          installedAt: '2026-08-09T00:00:00.000Z',
+          skills: [],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [{
+            id: 'upstream-notice',
+            label: '上游来源与兼容说明',
+            path: 'resources/UPSTREAM.md',
+            size: 1_638,
+          }],
+          extension: {
+            ...marketplacePlugin.extension,
+            trust: 'trusted',
+          },
+        }}
+        installing={false}
+        marketplacePlugin={marketplacePlugin}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetExtensionTrust={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('由应用管理，已自动启用');
+    expect(html).toContain('无需手动信任');
+    expect(html).toContain('运行中');
+    expect(html).not.toContain('已信任当前包');
+    expect(html).not.toContain('撤销运行信任');
+    expect(html).not.toContain('信任并允许运行');
+    expect(html).not.toContain('上游来源与兼容说明');
+    expect(html).not.toContain('resources/UPSTREAM.md');
+  });
+
   it('offers an update for an installed marketplace plugin with a newer bundled version', () => {
     const marketplacePlugin = {
       id: 'openai-image-generation',
@@ -176,9 +291,11 @@ describe('capabilities plugin components', () => {
     );
 
     expect(html).toContain('desktop-plugin-market__installed');
-    expect(html).toContain('desktop-plugin-list-item');
+    expect(html).toContain('desktop-capability-list-item');
     expect(html).toContain('Demo Plugin');
     expect(html).toContain('aria-label="查看已安装插件：Demo Plugin"');
+    expect(html).not.toContain('开发者选项');
+    expect(html).not.toContain('导入本地插件');
   });
 
   it('keeps Hook cards user-facing without exposing runtime identifiers', () => {

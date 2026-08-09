@@ -154,6 +154,38 @@ describe('file plugin marketplace', () => {
     expect(updatedHook.currentHash).toBe(installedHook.currentHash);
   });
 
+  it('projects and trusts bundled executable extensions on install and update', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-extension-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      version: '1.0.0',
+      extensionScript: 'export default function activate() {}\n',
+    });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [{
+        id: 'worker',
+        extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['tools', 'events'] },
+        capabilities: { extension: 1 },
+      }],
+    });
+    await expect(marketplace.installPlugin('worker')).resolves.toMatchObject({
+      plugin: { id: 'worker', extension: { trust: 'trusted' } },
+    });
+
+    await createCatalogPlugin(catalogDir, 'worker', {
+      name: 'Worker Plugin',
+      version: '1.1.0',
+      extensionScript: 'export default function activate() { /* updated */ }\n',
+    });
+    await expect(marketplace.updatePlugin('worker')).resolves.toMatchObject({
+      plugin: { id: 'worker', version: '1.1.0', extension: { trust: 'trusted' } },
+    });
+  });
+
   it('rejects updates for unknown or uninstalled marketplace plugins', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-update-errors-'));
     const catalogDir = path.join(root, 'catalog');
@@ -195,6 +227,7 @@ async function createCatalogPlugin(
     featured?: boolean;
     featuredOrder?: number;
     hookScript?: string;
+    extensionScript?: string;
   },
 ): Promise<void> {
   const manifestDir = path.join(catalogDir, id, '.setsuna-plugin');
@@ -205,6 +238,9 @@ async function createCatalogPlugin(
   ];
   if (metadata.hookScript !== undefined) {
     directories.push(mkdir(path.join(catalogDir, id, 'hooks'), { recursive: true }));
+  }
+  if (metadata.extensionScript !== undefined) {
+    directories.push(mkdir(path.join(catalogDir, id, 'extension'), { recursive: true }));
   }
   await Promise.all(directories);
   await writeFile(path.join(skillDir, 'SKILL.md'), [
@@ -218,8 +254,11 @@ async function createCatalogPlugin(
   if (metadata.hookScript !== undefined) {
     await writeFile(path.join(catalogDir, id, 'hooks', 'post.mjs'), metadata.hookScript);
   }
+  if (metadata.extensionScript !== undefined) {
+    await writeFile(path.join(catalogDir, id, 'extension', 'entry.mjs'), metadata.extensionScript);
+  }
   await writeFile(path.join(manifestDir, 'plugin.json'), JSON.stringify({
-    schemaVersion: 1,
+    schemaVersion: 2,
     id,
     name: metadata.name,
     icon: 'openai-docs',
@@ -244,5 +283,11 @@ async function createCatalogPlugin(
       command: 'node {{pluginRoot}}/hooks/post.mjs',
       commandWindows: 'node {{pluginRoot}}/hooks/post.mjs',
     }],
+    extension: metadata.extensionScript === undefined ? undefined : {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      entry: 'extension/entry.mjs',
+      capabilities: ['tools', 'events'],
+    },
   }, null, 2));
 }

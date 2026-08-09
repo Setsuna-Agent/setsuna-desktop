@@ -1,9 +1,11 @@
 import type {
   AnswerRuntimeApprovalInput,
+  RuntimeExtensionTrustInput,
   RuntimeImageGenerationTestInput,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
+  RuntimePluginInstallInput,
   RuntimePluginItemKind,
   RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
@@ -12,6 +14,7 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
+  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -37,8 +40,22 @@ export async function handleRuntimeExtensionRequest(
     return true;
   }
 
+  if (request.method === 'GET' && url.pathname === '/v1/extensions/status') {
+    sendJson(response, 200, await runtime.extensionManager.listStatuses());
+    return true;
+  }
+
   if (request.method === 'GET' && url.pathname === '/v1/plugin-marketplace') {
     sendJson(response, 200, await runtime.pluginMarketplace.listPlugins());
+    return true;
+  }
+
+  if (request.method === 'POST' && url.pathname === RUNTIME_LOCAL_PLUGIN_INSTALL_PATH) {
+    const input = await readBody<RuntimePluginInstallInput | null>(request, null);
+    if (!input || typeof input !== 'object' || typeof input.path !== 'string' || !input.path) {
+      throw new RuntimeHttpError(400, 'path must be a non-empty string.');
+    }
+    sendJson(response, 201, await runtime.pluginStore.installPlugin({ path: input.path }));
     return true;
   }
 
@@ -149,6 +166,19 @@ export async function handleRuntimeExtensionRequest(
         decodeURIComponent(pluginItemMatch[3]),
         'plugin item id',
       ),
+    ));
+    return true;
+  }
+
+  const extensionTrustMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)\/extension\/trust$/u);
+  if (extensionTrustMatch && request.method === 'PUT') {
+    const input = await readBody<RuntimeExtensionTrustInput | null>(request, null);
+    if (!input || typeof input !== 'object' || typeof input.trusted !== 'boolean') {
+      throw new RuntimeHttpError(400, 'trusted must be a boolean.');
+    }
+    sendJson(response, 200, await runtime.pluginStore.setExtensionTrust(
+      assertSafeRuntimeId(decodeURIComponent(extensionTrustMatch[1]), 'plugin id'),
+      input.trusted,
     ));
     return true;
   }

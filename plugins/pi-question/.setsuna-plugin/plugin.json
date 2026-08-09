@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "id": "pi-question",
+  "name": "结构化提问",
+  "icon": "pi-question",
+  "version": "1.0.1",
+  "description": "让模型通过选项和自由输入向用户提出单个结构化问题。",
+  "publisher": "Setsuna",
+  "tags": ["交互", "工具"],
+  "featured": false,
+  "tools": [
+    {
+      "name": "question",
+      "description": "Ask the user one structured question with choices and an optional free-form answer."
+    }
+  ],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "ui"]
+  }
+}

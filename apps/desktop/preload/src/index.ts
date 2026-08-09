@@ -106,6 +106,10 @@ const dataRoot: SetsunaDesktopBridge['dataRoot'] = {
   },
 };
 
+const plugins: SetsunaDesktopBridge['plugins'] = {
+  installLocal: () => ipcRenderer.invoke('desktop-plugin:install-local'),
+};
+
 const windowControls: SetsunaDesktopBridge['windowControls'] = {
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
@@ -226,6 +230,7 @@ const bridge: SetsunaDesktopBridge = {
   desktopReview,
   links,
   networkProxy,
+  plugins,
   runtime,
   terminal,
   updater,

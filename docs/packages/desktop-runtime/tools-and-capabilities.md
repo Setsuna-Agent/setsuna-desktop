@@ -4,7 +4,7 @@
 
 - `packages/desktop-runtime/src/loop/tools/`
 - `packages/desktop-runtime/src/adapters/tool/`
-- `packages/desktop-runtime/src/adapters/{mcp,skill,plugin}/`
+- `packages/desktop-runtime/src/adapters/{mcp,skill,plugin,search}/`
 - `packages/desktop-runtime/src/hooks/`
 - `packages/desktop-runtime/src/security/`
 
@@ -33,15 +33,18 @@ Factory 当前按顺序组合：
 
 1. `UserInputToolHost`
 2. `BrowserToolHost`
-3. `McpManagementToolHost`
-4. `McpRuntimeToolHost`
-5. `PluginBundleToolHost`
-6. `OpenAiImageGenerationToolHost`
-7. `WorkspaceImageToolHost`
-8. `ArtifactToolHost`
-9. `PcLocalToolHost`
-10. `SkillManagementToolHost`
-11. `MemoryToolHost`
+3. `WebSearchToolHost`
+4. `McpManagementToolHost`
+5. `McpRuntimeToolHost`
+6. `PluginBundleToolHost`
+7. `ExtensionToolHost`
+8. `OpenAiImageGenerationToolHost`
+9. `OpenAiVisionRecognitionToolHost`
+10. `WorkspaceImageToolHost`
+11. `ArtifactToolHost`
+12. `PcLocalToolHost`
+13. `SkillManagementToolHost`
+14. `MemoryToolHost`
 
 顺序影响模型看到的定义和 system prompt。新增 host 时检查：
 
@@ -209,6 +212,16 @@ Renderer 通过 runtime REST 查看后台进程；运行中心只读取生命周
 
 详见 [main 浏览器](../../apps/desktop/main/browser.md)。
 
+## Web search
+
+`WebSearchToolHost` 提供随应用发布的 `web_search`：
+
+- 已安装 `web-search` Plugin 是能力开关，卸载后工具立即从模型能力面消失。
+- `TavilyWebSearchClient` 使用 Tavily keyless 请求模式，不读取或保存 API key；匿名额度由外部服务限流，不保证无限调用。
+- HTTP 请求复用 runtime 的系统代理链路，并支持 turn cancel 与 30 秒超时。
+- 只接收有界的 HTTP(S) 标题、URL、摘要和发布时间，去重后最多返回 10 条。
+- 查询和结果都会发送或来自外部搜索服务；返回内容统一标记为 external context，模型必须把标题和摘要视为不可信输入，并引用来源 URL。
+
 ## MCP
 
 ### Connection
@@ -257,7 +270,7 @@ MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/reso
 
 `FilePluginMarketplace` 扫描应用内置只读 `plugins/`，只返回无路径摘要。
 
-`PluginBundleToolHost` 提供内部侧载/卸载/resource 工具，模型发起 mutation 需要审批。普通 renderer 只按 marketplace plugin ID 安装。
+`PluginBundleToolHost` 提供 `configure_plugin`、内部目录侧载、卸载和 resource 工具，模型发起 mutation 需要审批。`configure_plugin` 接收完整 Bundle v2 manifest 与 UTF-8 文本文件快照，由 `FilePluginDraftStore` 原子写入 runtime 受管草稿，再复用标准安装事务。审批预览与完整性 token 绑定本次内容；批准后当前版本直接安装并启用，后续修改需要重新审批。普通 renderer 只按 marketplace plugin ID 安装，开发者目录导入通过 Electron 窄桥接完成。
 
 详情见 [Plugin Bundle](../../plugins/bundles.md)。
 
@@ -276,6 +289,8 @@ MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/reso
 - 支持 `b64_json` 和 URL 响应。
 - 保存 managed image 和 workspace 可见文件。
 - 卸载/停用后不再出现在工具面。
+
+`WebSearchToolHost` 也使用同一模式：`web-search` Bundle 只提供市场元数据和安装开关，runtime 通过 Tavily keyless 协议执行无需 API key 的公开网络搜索，并把匿名限流错误直接返回给模型。
 
 ## Memory 与 artifacts
 

@@ -13,7 +13,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & { owned?: boolean };
 
 export type PluginMarketplaceSection = {
-  id: 'automation' | 'creation' | 'featured';
+  id: 'automation' | 'creation' | 'featured' | 'utilities';
   title: string;
   description: string;
   plugins: RuntimePluginMarketplaceItem[];
@@ -23,8 +23,10 @@ export function pluginMarketplacePresentation(
   plugins: RuntimePluginMarketplaceItem[],
   t: Translate = defaultTranslate,
 ): { sections: PluginMarketplaceSection[] } {
-  const featured = plugins.filter((plugin) => plugin.featured);
-  const catalogPlugins = plugins.filter((plugin) => !plugin.featured);
+  const utilities = plugins.filter(isSetsunaUtility);
+  const regularPlugins = plugins.filter((plugin) => !isSetsunaUtility(plugin));
+  const featured = regularPlugins.filter((plugin) => plugin.featured);
+  const catalogPlugins = regularPlugins.filter((plugin) => !plugin.featured);
   const creation = catalogPlugins.filter((plugin) => !plugin.capabilities.hooks);
   const automation = catalogPlugins.filter((plugin) => plugin.capabilities.hooks > 0);
   const sections: PluginMarketplaceSection[] = [];
@@ -34,6 +36,14 @@ export function pluginMarketplacePresentation(
       title: t('capabilities.market.featured'),
       description: t('capabilities.market.featuredDescription'),
       plugins: featured,
+    });
+  }
+  if (utilities.length) {
+    sections.push({
+      id: 'utilities',
+      title: t('capabilities.market.utilities'),
+      description: t('capabilities.market.utilitiesDescription'),
+      plugins: utilities,
     });
   }
   if (creation.length) {
@@ -55,8 +65,13 @@ export function pluginMarketplacePresentation(
   return { sections };
 }
 
+function isSetsunaUtility(plugin: RuntimePluginMarketplaceItem): boolean {
+  return plugin.publisher === 'Setsuna' && Boolean(plugin.capabilities.extension);
+}
+
 export function pluginCapabilitySummary(plugin: RuntimePluginMarketplaceItem, t: Translate = defaultTranslate): string {
   const labels = [
+    plugin.capabilities.extension ? t('capabilities.market.extension') : null,
     plugin.capabilities.tools ? capabilityCountLabel('tool', plugin.capabilities.tools, t) : null,
     plugin.capabilities.skills ? capabilityCountLabel('skill', plugin.capabilities.skills, t) : null,
     plugin.capabilities.mcpServers ? capabilityCountLabel('service', plugin.capabilities.mcpServers, t) : null,

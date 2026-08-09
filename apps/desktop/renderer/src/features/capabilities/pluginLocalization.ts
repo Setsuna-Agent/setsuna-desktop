@@ -45,6 +45,10 @@ const builtInPluginCopyKeys = {
     name: 'capabilities.plugin.openai-vision-recognition.name',
     description: 'capabilities.plugin.openai-vision-recognition.description',
   },
+  'web-search': {
+    name: 'capabilities.plugin.web-search.name',
+    description: 'capabilities.plugin.web-search.description',
+  },
   pdf: {
     name: 'capabilities.plugin.pdf.name',
     description: 'capabilities.plugin.pdf.description',
@@ -68,6 +72,18 @@ const builtInPluginCopyKeys = {
   'stop-todo-continuation': {
     name: 'capabilities.plugin.stop-todo-continuation.name',
     description: 'capabilities.plugin.stop-todo-continuation.description',
+  },
+  'pi-question': {
+    name: 'capabilities.plugin.pi-question.name',
+    description: 'capabilities.plugin.pi-question.description',
+  },
+  'pi-todo': {
+    name: 'capabilities.plugin.pi-todo.name',
+    description: 'capabilities.plugin.pi-todo.description',
+  },
+  'pi-claude-rules': {
+    name: 'capabilities.plugin.pi-claude-rules.name',
+    description: 'capabilities.plugin.pi-claude-rules.description',
   },
 } satisfies Record<string, PluginCopyKeys>;
 

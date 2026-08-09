@@ -35,8 +35,10 @@ Renderer 看不到：
 仓库内 Bundle 主要分为：
 
 - Skill 插件：OpenAI docs、Context7、PDF、Documents 等。
-- 第一方能力插件：图片生成和视觉识别，用 Skill + runtime 内置 ToolHost 配对，并由用户从市场按需安装。
+- 第一方能力插件：网络搜索、图片生成和视觉识别，用市场 Bundle + runtime 内置 ToolHost 配对，并由用户从市场按需安装。
 - Hook 插件：危险 shell、secret/path/generated folder 防护、审计和流程提示。
+- 可执行扩展：Bundle v2 在受管 Node worker 中注册动态工具和 Agent 生命周期中间件。
+- Setsuna 原生工具：结构化提问、会话任务清单和 Claude Rules 兼容；设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。
 
 目录内容以 `plugins/` 实际文件和各 Bundle manifest 为准，生成索引见根 [Tree.md](../../Tree.md)。
 
@@ -55,8 +57,11 @@ Renderer 看不到：
 - `skills/`
 - `hooks/`
 - `resources/`
+- `extension/`
 
-完整 manifest、限制、安装和卸载规则见 [Plugin Bundles](bundles.md)。
+完整 manifest、限制、安装和卸载规则见 [Plugin Bundles](bundles.md)；动态代码的作者 API、信任模型和限制见 [可执行扩展 API v1](extensions.md)。
+
+用户也可以直接在对话中让 Agent 创建或修改插件。Agent 通过 `configure_plugin` 提交完整的 Bundle v2 manifest 和 UTF-8 文本文件快照，runtime 将内容写入自己的受管草稿目录并完成安装；用户不需要先创建、下载或选择一个本地目录。包含 Hook 或可执行扩展时，审批卡片会展示本次完整内容摘要和文件哈希，批准只信任这一版内容，后续修改必须重新审批。
 
 ## 添加精选 Plugin
 
@@ -76,7 +81,8 @@ Renderer 看不到：
 - Hook 默认按 command hash 单独信任。
 - MCP 默认审批。
 - Resource 作为外部不可信上下文。
-- 普通 Bundle 不能加载任意 TypeScript 到 runtime 进程。
+- 内置 Plugin 全部使用 Bundle v2；没有 `extension` 的 Bundle 保持纯声明式。内置扩展在安装和升级时自动校验并启用，本地侧载扩展才需要用户信任完整包哈希；扩展代码始终只在独立 worker 中运行。
+- Agent 创建的 Plugin 必须先通过内容绑定审批；批准后该版本会直接安装并启用，Hook 命令与可执行扩展的信任仅覆盖审批时展示的内容哈希。
 
 ## 测试
 

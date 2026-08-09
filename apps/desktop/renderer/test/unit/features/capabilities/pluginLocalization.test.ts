@@ -15,6 +15,7 @@ describe('built-in plugin localization', () => {
       'openai-docs',
       'openai-image-generation',
       'openai-vision-recognition',
+      'web-search',
       'pdf',
       'prompt-secret-detector',
       'protect-generated-folders',

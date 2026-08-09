@@ -16,6 +16,92 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 
 describe('file plugin bundle store', () => {
+  it('keeps executable extensions untrusted until the exact installed bundle hash is approved', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+
+    const installed = await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    expect(installed.plugin.extension).toEqual({
+      apiVersion: 1,
+      runtime: 'node-worker',
+      capabilities: ['tools', 'events', 'state', 'ui'],
+      trust: 'untrusted',
+    });
+    expect(JSON.stringify(installed.plugin)).not.toContain('bundleHash');
+    expect(JSON.stringify(installed.plugin)).not.toContain('entry.mjs');
+
+    const trusted = await runtime.plugins.setExtensionTrust('demo', true);
+    expect(trusted.plugins[0].extension?.trust).toBe('trusted');
+
+    const [record] = await runtime.plugins.listInstalledRecords();
+    await writeFile(path.join(record.installPath, 'extension', 'entry.mjs'), 'export default () => { /* changed */ };\n');
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'demo', extension: { trust: 'modified' } }],
+    });
+
+    const retrusted = await runtime.plugins.setExtensionTrust('demo', true);
+    expect(retrusted.plugins[0].extension?.trust).toBe('trusted');
+  });
+
+  it('does not carry executable-extension trust across a changed local update', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await runtime.plugins.setExtensionTrust('demo', true);
+
+    await writeFile(path.join(fixture.bundleDir, 'extension', 'entry.mjs'), 'export default () => { /* v2 */ };\n');
+    await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+    const updated = await runtime.plugins.updatePlugin({ path: fixture.bundleDir });
+    expect(updated.plugin.extension?.trust).toBe('modified');
+
+    const trustedUpdate = await runtime.plugins.updatePlugin(
+      { path: fixture.bundleDir },
+      { trustExtension: true },
+    );
+    expect(trustedUpdate.plugin.extension?.trust).toBe('trusted');
+  });
+
+  it('requires schemaVersion 2 and an existing mjs entry for executable extensions', async () => {
+    const fixture = await createPluginFixture();
+    await mkdir(path.join(fixture.bundleDir, 'extension'), { recursive: true });
+    await writeFile(path.join(fixture.bundleDir, 'extension', 'entry.js'), 'export default () => {};\n');
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        apiVersion: 1,
+        runtime: 'node-worker',
+        entry: 'extension/entry.js',
+        capabilities: ['tools'],
+      },
+    });
+    const runtime = await createPluginRuntime(fixture.root);
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('schemaVersion 2');
+
+    await patchPluginManifest(fixture.bundleDir, { schemaVersion: 2 });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('must be an .mjs file');
+  });
+
+  it('stops an extension worker before trust, update, and removal mutations', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const finishMutation = vi.fn(async () => undefined);
+    const beginPluginMutation = vi.fn(async () => finishMutation);
+    runtime.plugins.setRuntimeMutationCoordinator({ beginPluginMutation });
+
+    await runtime.plugins.setExtensionTrust('demo', true);
+    await patchPluginManifest(fixture.bundleDir, { version: '2.0.0' });
+    await runtime.plugins.updatePlugin({ path: fixture.bundleDir });
+    await runtime.plugins.removePlugin('demo');
+
+    expect(beginPluginMutation.mock.calls).toEqual([['demo'], ['demo'], ['demo']]);
+    expect(finishMutation).toHaveBeenCalledTimes(3);
+  });
+
   it('installs and removes bundled Skills, MCP, Hooks, and resources', async () => {
     const fixture = await createPluginFixture();
     const runtime = await createPluginRuntime(fixture.root);
@@ -382,6 +468,20 @@ async function writePluginManifestFixture(bundleDir: string, manifest: Record<st
 
 async function patchPluginManifest(bundleDir: string, patch: Record<string, unknown>): Promise<void> {
   await writePluginManifestFixture(bundleDir, { ...await readPluginManifestFixture(bundleDir), ...patch });
+}
+
+async function addExecutableExtension(bundleDir: string): Promise<void> {
+  await mkdir(path.join(bundleDir, 'extension'), { recursive: true });
+  await writeFile(path.join(bundleDir, 'extension', 'entry.mjs'), 'export default () => {};\n');
+  await patchPluginManifest(bundleDir, {
+    schemaVersion: 2,
+    extension: {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      entry: 'extension/entry.mjs',
+      capabilities: ['tools', 'events', 'state', 'ui'],
+    },
+  });
 }
 
 async function createPluginFixture(parent?: string): Promise<{ root: string; bundleDir: string }> {

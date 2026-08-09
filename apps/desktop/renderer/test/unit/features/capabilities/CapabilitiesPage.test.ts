@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  capabilityCatalogTitle,
+  capabilityTabIds,
   pluginActionError,
   shouldRenderCapabilitiesTabsInPage,
 } from '../../../../src/features/capabilities/CapabilitiesPage.js';
@@ -10,6 +12,16 @@ describe('capabilities tabs placement', () => {
     expect(shouldRenderCapabilitiesTabsInPage('darwin')).toBe(false);
     expect(shouldRenderCapabilitiesTabsInPage('linux')).toBe(false);
     expect(shouldRenderCapabilitiesTabsInPage('browser')).toBe(false);
+  });
+
+  it('keeps hooks inside plugins instead of exposing a standalone directory', () => {
+    expect(capabilityTabIds).toEqual(['plugins', 'skills', 'mcp']);
+  });
+
+  it('uses the active catalog name as the page title', () => {
+    expect(capabilityCatalogTitle('plugins')).toBe('插件市场');
+    expect(capabilityCatalogTitle('mcp')).toBe('MCP');
+    expect(capabilityCatalogTitle('skills')).toBe('技能');
   });
 });
 

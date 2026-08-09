@@ -19,6 +19,7 @@ import type {
   PluginBundleInspection,
   PluginBundleMutationOptions,
   PluginBundleStore,
+  PluginRuntimeMutationCoordinator,
   PluginResourceRead,
 } from '../../ports/plugin-bundle-store.js';
 import type { PluginSkillRegistry } from '../../ports/skill-registry.js';
@@ -57,6 +58,9 @@ import {
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
   private readonly pluginsDir: string;
+  private runtimeMutation: PluginRuntimeMutationCoordinator = {
+    beginPluginMutation: async () => async () => undefined,
+  };
 
   constructor(
     dataDir: string,
@@ -70,9 +74,24 @@ export class FilePluginBundleStore implements PluginBundleStore {
     this.pluginsDir = path.join(dataDir, 'plugins');
   }
 
+  setRuntimeMutationCoordinator(coordinator: PluginRuntimeMutationCoordinator): void {
+    this.runtimeMutation = coordinator;
+  }
+
   async listPlugins(): Promise<RuntimePluginList> {
     const index = await this.readIndex();
-    return { plugins: index.plugins.map(publicPluginSummary) };
+    return {
+      plugins: await Promise.all(index.plugins.map(async (plugin) => {
+        if (!plugin.extension) return publicPluginSummary(plugin);
+        const currentHash = await inspectBundleTree(plugin.installPath)
+          .then((result) => result.bundleHash)
+          .catch(() => '__invalid_bundle__');
+        return publicPluginSummary({
+          ...plugin,
+          extension: { ...plugin.extension, bundleHash: currentHash },
+        });
+      })),
+    };
   }
 
   async listInstalledRecords(): Promise<InstalledPluginRecord[]> {
@@ -94,6 +113,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       featured: manifest.featured,
       ...(manifest.featuredOrder !== undefined ? { featuredOrder: manifest.featuredOrder } : {}),
       capabilities: {
+        ...(manifest.extension ? { extension: 1 } : {}),
         ...(manifest.tools.length ? { tools: manifest.tools.length } : {}),
         skills: manifest.skillEntries.length,
         mcpServers: manifest.mcpServers.length,
@@ -109,6 +129,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       mcpServers: manifest.mcpServers.map(pluginMcpServerDescriptor),
       hooks: manifest.hooks.map(pluginHookDescriptor),
       resources: manifest.resources.map((resource) => ({ ...resource })),
+      ...(manifest.extension ? { extension: publicManifestExtension(manifest.extension) } : {}),
       sourcePath,
     };
   }
@@ -123,7 +144,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         throw new Error('Plugin source and runtime plugin directory cannot contain one another.');
       }
       const manifest = await readPluginManifest(sourcePath);
-      await inspectBundleTree(sourcePath);
+      const sourceBundle = await inspectBundleTree(sourcePath);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
         throw new Error(`Plugin is already installed: ${manifest.id}`);
@@ -172,6 +193,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
         hooks: manifest.hooks.map(pluginHookDescriptor),
         hookCount: hooks.length,
         resources: manifest.resources.map((resource) => ({ ...resource })),
+        ...(manifest.extension ? {
+          extension: installedExtensionRecord(
+            manifest.extension,
+            sourceBundle.bundleHash,
+            options.trustExtension ? sourceBundle.bundleHash : undefined,
+          ),
+        } : {}),
       };
 
       const stagingPath = path.join(this.pluginsDir, `.${manifest.id}.${randomUUID()}.tmp`);
@@ -181,6 +209,10 @@ export class FilePluginBundleStore implements PluginBundleStore {
       try {
         await mkdir(this.pluginsDir, { recursive: true });
         await copyBundleTree(sourcePath, stagingPath);
+        const stagedBundle = await inspectBundleTree(stagingPath);
+        if (stagedBundle.bundleHash !== sourceBundle.bundleHash) {
+          throw new Error('Plugin bundle changed while staging the install.');
+        }
         await renameWithRetry(stagingPath, installPath);
         for (const ownership of mcpOwnership) {
           if (!ownership.owned) continue;
@@ -247,11 +279,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const backupPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.backup`);
       const failedPath = path.join(this.pluginsDir, `.${plugin.id}.${operationId}.failed`);
       let staged = true;
-      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+      let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
 
       try {
+        finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
         await copyBundleTree(sourcePath, stagingPath);
-        await inspectBundleTree(stagingPath);
+        const stagedBundle = await inspectBundleTree(stagingPath);
         const manifest = await readPluginManifest(await realpath(stagingPath));
         if (manifest.id !== sourceManifest.id) {
           throw new Error('Plugin manifest id changed while staging the update.');
@@ -361,6 +395,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
           hooks: manifest.hooks.map(pluginHookDescriptor),
           hookCount: hooks.length,
           resources: manifest.resources.map((resource) => ({ ...resource })),
+          ...(manifest.extension ? {
+            extension: installedExtensionRecord(
+              manifest.extension,
+              stagedBundle.bundleHash,
+              options.trustExtension ? stagedBundle.bundleHash : plugin.extension?.trustedHash,
+            ),
+          } : {}),
         };
 
         let oldDirectoryMoved = false;
@@ -454,7 +495,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
         };
       } finally {
         if (staged) await rm(stagingPath, { recursive: true, force: true }).catch(() => undefined);
-        await finishPluginDirectoryMutation();
+        try {
+          await finishPluginDirectoryMutation?.();
+        } finally {
+          await finishRuntimeMutation();
+        }
       }
     });
   }
@@ -482,10 +527,12 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const configBefore = await this.configStore.getConfig();
       const removalPath = path.join(this.pluginsDir, `.${plugin.id}.${randomUUID()}.remove`);
       const installExists = await stat(plugin.installPath).then(() => true).catch(() => false);
-      const finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+      let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
       let directoryMoved = false;
       const removedMcpServers: string[] = [];
       try {
+        finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
         if (installExists) {
           await renameWithRetry(plugin.installPath, removalPath);
           directoryMoved = true;
@@ -516,11 +563,57 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
         throw error;
       } finally {
-        await finishPluginDirectoryMutation();
+        try {
+          await finishPluginDirectoryMutation?.();
+        } finally {
+          await finishRuntimeMutation();
+        }
       }
       if (directoryMoved) await rm(removalPath, { recursive: true, force: true }).catch(() => undefined);
       await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
       return { pluginId: plugin.id, removedMcpServers, preservedMcpServers };
+    });
+  }
+
+  async setExtensionTrust(pluginId: string, trusted: boolean): Promise<RuntimePluginList> {
+    return withFileStateUpdate(this.indexPath, async () => {
+      const id = normalizePluginId(pluginId);
+      const index = await this.readIndex();
+      const plugin = index.plugins.find((item) => item.id === id);
+      if (!plugin) throw new Error(`Plugin not found: ${id}`);
+      if (!plugin.extension) throw new Error(`Plugin does not provide an executable extension: ${id}`);
+      const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
+
+      try {
+        let extension = { ...plugin.extension, capabilities: [...plugin.extension.capabilities] };
+        if (trusted) {
+          const manifest = await readPluginManifest(await realpath(plugin.installPath));
+          const bundle = await inspectBundleTree(plugin.installPath);
+          if (manifest.id !== plugin.id || !manifest.extension) {
+            throw new Error('Installed extension manifest no longer matches the plugin index.');
+          }
+          const current = publicManifestExtension(manifest.extension);
+          const expected = publicManifestExtension(plugin.extension);
+          if (JSON.stringify(current) !== JSON.stringify(expected) || manifest.extension.entry !== plugin.extension.entry) {
+            throw new Error('Installed extension manifest changed; reinstall or update the plugin before trusting it.');
+          }
+          extension = {
+            ...extension,
+            bundleHash: bundle.bundleHash,
+            trustedHash: bundle.bundleHash,
+          };
+        } else {
+          delete extension.trustedHash;
+        }
+
+        await writeJsonFile(this.indexPath, {
+          version: 1,
+          plugins: index.plugins.map((item) => item.id === id ? { ...item, extension } : item),
+        } satisfies PluginIndexFile);
+        return this.listPlugins();
+      } finally {
+        await finishRuntimeMutation();
+      }
     });
   }
 
@@ -565,6 +658,27 @@ export class FilePluginBundleStore implements PluginBundleStore {
     const index = await readJsonFile<PluginIndexFile>(this.indexPath, { version: 1, plugins: [] });
     return { version: 1, plugins: Array.isArray(index.plugins) ? index.plugins : [] };
   }
+}
+
+function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['extension']>) {
+  return {
+    apiVersion: extension.apiVersion,
+    runtime: extension.runtime,
+    capabilities: [...extension.capabilities],
+  };
+}
+
+function installedExtensionRecord(
+  extension: NonNullable<ParsedPluginManifest['extension']>,
+  bundleHash: string,
+  trustedHash?: string,
+) {
+  return {
+    ...publicManifestExtension(extension),
+    entry: extension.entry,
+    bundleHash,
+    ...(trustedHash ? { trustedHash } : {}),
+  };
 }
 
 async function readManifestItemContent(

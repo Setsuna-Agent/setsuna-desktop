@@ -58,7 +58,7 @@ export function CapabilitiesPluginMarket({
               <h3>{section.title}</h3>
               <p>{section.description}</p>
             </header>
-            <div className="desktop-plugin-market__list">
+            <div className="desktop-plugin-market__list desktop-capability-list">
               {section.plugins.map((plugin) => (
                 <CapabilitiesPluginListItem
                   key={`marketplace:${plugin.id}`}

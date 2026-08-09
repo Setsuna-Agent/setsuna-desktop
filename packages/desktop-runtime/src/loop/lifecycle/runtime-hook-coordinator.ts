@@ -6,6 +6,7 @@ import {
   type RuntimeStopHookOutcome,
 } from '../../hooks/runtime-hooks.js';
 import type { Clock } from '../../ports/clock.js';
+import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
 import type { RuntimeToolExecutionContext, ToolExecutionContext } from '../../ports/tool-host.js';
@@ -14,13 +15,14 @@ import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executo
 
 export type RuntimeTurnStartHookResult =
   | { stopped: true; reason: string }
-  | { stopped: false; contextMessages: RuntimeMessage[] };
+  | { stopped: false; contextMessages: RuntimeMessage[]; prompt?: string };
 
 type RuntimeHookCoordinatorOptions = {
   clock: Clock;
   environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
   toolExecutor: Pick<RuntimeToolCallExecutor, 'publishHookStarted' | 'publishHookCompleted'>;
+  extensions?: Pick<ExtensionRuntime, 'dispatch'>;
 };
 
 /**
@@ -53,10 +55,8 @@ export class RuntimeHookCoordinator {
     turnId: string;
   }): Promise<RuntimeTurnStartHookResult> {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
-    if (!runner) {
-      this.takeSessionStartSource(thread);
-      return { stopped: false, contextMessages: [] };
-    }
+    const sessionStartSource = this.takeSessionStartSource(thread);
+    if (!runner && !this.options.extensions) return { stopped: false, contextMessages: [] };
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId: thread.id,
@@ -73,7 +73,6 @@ export class RuntimeHookCoordinator {
       signal,
     };
     const events = this.hookEvents(thread.id, turnId);
-    const sessionStartSource = this.takeSessionStartSource(thread);
     const sessionStartOutcome = sessionStartSource
       ? await runner?.runSessionStart({
           approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
@@ -86,6 +85,19 @@ export class RuntimeHookCoordinator {
     if (sessionStartOutcome?.shouldStop) {
       return { stopped: true, reason: sessionStartOutcome.stopReason || 'SessionStart hook stopped this turn.' };
     }
+    const sessionExtensionOutcome = sessionStartSource
+      ? await this.options.extensions?.dispatch('session.start', {
+          threadId: thread.id,
+          turnId,
+          projectId: thread.projectId,
+          cwd: environment.cwd,
+          signal,
+          payload: { source: sessionStartSource },
+        })
+      : undefined;
+    if (sessionExtensionOutcome?.block) {
+      return { stopped: true, reason: sessionExtensionOutcome.reason || 'Session extension stopped this turn.' };
+    }
 
     const userPromptOutcome = await runner?.runUserPromptSubmit({
       approvalPolicy: runtimeConfig?.approvalPolicy ?? 'on-request',
@@ -97,12 +109,34 @@ export class RuntimeHookCoordinator {
     if (userPromptOutcome?.shouldStop) {
       return { stopped: true, reason: userPromptOutcome.stopReason || 'UserPromptSubmit hook stopped this turn.' };
     }
+    const promptExtensionOutcome = await this.options.extensions?.dispatch('prompt.before', {
+      threadId: thread.id,
+      turnId,
+      projectId: thread.projectId,
+      cwd: environment.cwd,
+      signal,
+      payload: { input: prompt, prompt },
+    });
+    if (promptExtensionOutcome?.block) {
+      return { stopped: true, reason: promptExtensionOutcome.reason || 'Prompt extension stopped this turn.' };
+    }
+    if (promptExtensionOutcome?.input !== undefined && typeof promptExtensionOutcome.input !== 'string') {
+      return { stopped: true, reason: 'Prompt extension returned a non-string input.' };
+    }
+    const nextPrompt = typeof promptExtensionOutcome?.input === 'string'
+      ? promptExtensionOutcome.input
+      : prompt;
     return {
       stopped: false,
       contextMessages: this.additionalContextMessages([
         ...(sessionStartOutcome?.additionalContexts ?? []),
         ...(userPromptOutcome?.additionalContexts ?? []),
+        ...(sessionExtensionOutcome?.context ?? []),
+        ...(sessionExtensionOutcome?.feedback ? [sessionExtensionOutcome.feedback] : []),
+        ...(promptExtensionOutcome?.context ?? []),
+        ...(promptExtensionOutcome?.feedback ? [promptExtensionOutcome.feedback] : []),
       ], turnId),
+      ...(nextPrompt !== prompt ? { prompt: nextPrompt } : {}),
     };
   }
 
@@ -160,7 +194,7 @@ export class RuntimeHookCoordinator {
     turnId: string;
   }) {
     const runner = createRuntimeToolHookRunner(runtimeConfig);
-    if (!runner) return { shouldStop: false };
+    if (!runner && !this.options.extensions) return { shouldStop: false };
     const environment = await this.options.environmentResolver.resolve({
       projectId: thread.projectId,
       threadId: thread.id,
@@ -183,7 +217,21 @@ export class RuntimeHookCoordinator {
       events: this.hookEvents(thread.id, turnId),
       trigger,
     };
-    return eventName === 'PreCompact' ? runner.runPreCompact(input) : runner.runPostCompact(input);
+    const hookOutcome = runner
+      ? eventName === 'PreCompact' ? await runner.runPreCompact(input) : await runner.runPostCompact(input)
+      : { shouldStop: false };
+    if (hookOutcome.shouldStop || eventName !== 'PreCompact') return hookOutcome;
+    const extensionOutcome = await this.options.extensions?.dispatch('compact.before', {
+      threadId: thread.id,
+      turnId,
+      projectId: thread.projectId,
+      cwd: environment.cwd,
+      signal,
+      payload: { trigger },
+    });
+    return extensionOutcome?.block
+      ? { shouldStop: true, stopReason: extensionOutcome.reason || 'Extension stopped context compaction.' }
+      : hookOutcome;
   }
 
   async runStopHooks({

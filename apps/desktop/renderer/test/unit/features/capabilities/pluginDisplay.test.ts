@@ -53,22 +53,37 @@ describe('plugin display helpers', () => {
     const pdf = marketplacePlugin({ id: 'pdf', name: 'PDF', featured: true });
     const openAi = marketplacePlugin({ id: 'openai-docs', name: 'OpenAI Docs' });
     const context = marketplacePlugin({ id: 'context7', name: 'Context7' });
+    const question = marketplacePlugin({
+      id: 'pi-question',
+      name: 'Structured Question',
+      publisher: 'Setsuna',
+      capabilities: { extension: 1, skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+    });
     const guard = marketplacePlugin({
       id: 'guard',
       name: 'Guard',
       capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
     });
 
-    const presentation = pluginMarketplacePresentation([documents, pdf, openAi, context, guard]);
+    const presentation = pluginMarketplacePresentation([documents, pdf, question, openAi, context, guard]);
 
     expect(presentation.sections).toMatchObject([
       { id: 'featured', plugins: [{ id: 'documents' }, { id: 'pdf' }] },
+      { id: 'utilities', plugins: [{ id: 'pi-question' }] },
       { id: 'creation', plugins: [{ id: 'openai-docs' }, { id: 'context7' }] },
       { id: 'automation', plugins: [{ id: 'guard' }] },
     ]);
     expect(pluginCapabilitySummary(guard)).toBe('1 项自动化');
     expect(pluginMarketplacePresentation([documents, guard], en).sections[0]?.title).toBe('Featured');
+    expect(pluginMarketplacePresentation([question], en).sections[0]?.title).toBe('Tools & workflows');
     expect(pluginCapabilitySummary(guard, en)).toBe('1 automation');
+
+    const worker = marketplacePlugin({
+      id: 'worker',
+      name: 'Worker',
+      capabilities: { extension: 1, skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
+    });
+    expect(pluginCapabilitySummary(worker, en)).toBe('Executable extension');
   });
 });
 

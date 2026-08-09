@@ -1,4 +1,5 @@
 import type {
+  RuntimeExtensionManifest,
   RuntimeMcpServerInput,
   RuntimePluginInstallInput,
   RuntimePluginInstallResult,
@@ -10,12 +11,19 @@ import type {
   RuntimePluginSummary,
 } from '@setsuna-desktop/contracts';
 
-export type InstalledPluginRecord = RuntimePluginSummary & {
+export type InstalledPluginExtensionRecord = RuntimeExtensionManifest & {
+  entry: string;
+  bundleHash: string;
+  trustedHash?: string;
+};
+
+export type InstalledPluginRecord = Omit<RuntimePluginSummary, 'extension'> & {
   sourcePath: string;
   installPath: string;
   manifestPath: string;
   skillEntries: Array<{ id: string; relativePath: string }>;
   mcpServerInputs: RuntimeMcpServerInput[];
+  extension?: InstalledPluginExtensionRecord;
 };
 
 export type PluginResourceRead = {
@@ -40,10 +48,16 @@ export type PluginBundleInspection = Omit<
 
 export type PluginBundleMutationOptions = {
   /**
-   * 仅供已经校验过应用内置目录的调用方使用。普通本地插件必须保留手动信任，
-   * 避免把“选择一个目录安装”隐式升级为执行其中任意 Hook 命令的授权。
+   * 仅供已经校验过应用内置目录，或把完整生成内容绑定到显式用户审批的调用方使用。
+   * 普通“选择目录安装”不能隐式升级为执行其中任意 Hook 命令的授权。
    */
   trustHooks?: boolean;
+  /** Trust the exact staged bundle hash after a controlled-source check or content-bound approval. */
+  trustExtension?: boolean;
+};
+
+export type PluginRuntimeMutationCoordinator = {
+  beginPluginMutation(pluginId: string): Promise<() => Promise<void>>;
 };
 
 export type PluginBundleStore = {
@@ -52,6 +66,7 @@ export type PluginBundleStore = {
   installPlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
   updatePlugin(input: RuntimePluginInstallInput, options?: PluginBundleMutationOptions): Promise<RuntimePluginInstallResult>;
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
+  setExtensionTrust(pluginId: string, trusted: boolean): Promise<RuntimePluginList>;
   listInstalledRecords(): Promise<InstalledPluginRecord[]>;
   readResource(pluginId: string, resourceId: string): Promise<PluginResourceRead>;
   readItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;

@@ -1,5 +1,6 @@
 import type {
   DesktopRuntimeClient,
+  RuntimePluginInstallResult,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import {
@@ -71,7 +72,6 @@ export function useRuntimeClientState({
     replaceConfig,
     ...configState
   } = useRuntimeConfigState({ client });
-  const { config } = configState;
   const {
     applyBootstrapResults: applyCapabilityBootstrapResults,
     refreshCapabilities,
@@ -79,10 +79,17 @@ export function useRuntimeClientState({
   } = useRuntimeCapabilityState({
     activeProjectPath,
     client,
-    config,
     enabled: loadState === 'ready',
     onConfigChange: replaceConfig,
   });
+  const installLocalPlugin = useCallback(async (): Promise<RuntimePluginInstallResult | null> => {
+    const install = window.setsunaDesktop?.plugins?.installLocal;
+    if (!install) throw new Error('Local plugin installation is unavailable in this build.');
+    const result = await install();
+    if (!result) return null;
+    await refreshCapabilities();
+    return result;
+  }, [refreshCapabilities]);
   const {
     applyBootstrapThreads,
     ...threadState
@@ -194,6 +201,7 @@ export function useRuntimeClientState({
     ...threadState,
     client,
     error,
+    installLocalPlugin,
     loadState,
     projects,
     refresh,

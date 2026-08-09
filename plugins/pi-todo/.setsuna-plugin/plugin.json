@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "id": "pi-todo",
+  "name": "任务清单",
+  "icon": "pi-todo",
+  "version": "1.0.1",
+  "description": "让模型在当前会话中添加、查看、完成和清空任务。",
+  "publisher": "Setsuna",
+  "tags": ["任务", "状态"],
+  "featured": false,
+  "tools": [
+    {
+      "name": "todo",
+      "description": "Manage a conversation todo list: list, add, toggle, or clear tasks."
+    }
+  ],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "state"]
+  }
+}

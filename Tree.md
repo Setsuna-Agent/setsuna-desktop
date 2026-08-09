@@ -35,13 +35,13 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 105 total files
-├── src/ — 2 direct / 65 total files
+apps/desktop/main/ — 0 direct / 106 total files
+├── src/ — 2 direct / 66 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
-│   ├── ipc/ — 11 direct / 11 total files
+│   ├── ipc/ — 12 direct / 12 total files
 │   ├── network-proxy/ — 5 direct / 5 total files
 │   ├── review/ — 1 direct / 1 total files
 │   ├── runtime/ — 7 direct / 7 total files
@@ -89,9 +89,8 @@ apps/desktop/renderer/ — 0 direct / 571 total files
 │   │   └── styles/ — 4 direct / 4 total files
 │   ├── features/ — 306 files
 │   │   ├── capabilities/ — 22 direct / 29 total files
-│   │   │   ├── hooks/ — 1 direct / 1 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
-│   │   │   └── styles/ — 4 direct / 4 total files
+│   │   │   └── styles/ — 5 direct / 5 total files
 │   │   ├── chat/ — 5 direct / 119 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
 │   │   │   ├── composer/ — 26 direct / 26 total files
@@ -143,8 +142,7 @@ apps/desktop/renderer/ — 0 direct / 571 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── features/ — 112 files
-        │   ├── capabilities/ — 5 direct / 6 total files
-        │   │   └── hooks/ — 1 direct / 1 total files
+        │   ├── capabilities/ — 6 direct / 6 total files
         │   ├── chat/ — 2 direct / 60 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 15 direct / 15 total files
@@ -192,9 +190,9 @@ packages/contracts/ — 4 direct / 72 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 489 total files
-├── src/ — 2 direct / 283 total files
-│   ├── adapters/ — 128 files
+packages/desktop-runtime/ — 4 direct / 514 total files
+├── src/ — 2 direct / 297 total files
+│   ├── adapters/ — 133 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -204,13 +202,14 @@ packages/desktop-runtime/ — 4 direct / 489 total files
 │   │   ├── model/ — 28 direct / 28 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 1 direct / 1 total files
-│   │   ├── plugin/ — 5 direct / 5 total files
-│   │   ├── search/ — 5 direct / 5 total files
+│   │   ├── plugin/ — 6 direct / 6 total files
+│   │   ├── search/ — 6 direct / 6 total files
 │   │   ├── skill/ — 2 direct / 2 total files
 │   │   ├── store/ — 27 direct / 27 total files
-│   │   ├── tool/ — 15 direct / 37 total files
+│   │   ├── tool/ — 18 direct / 40 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
+│   ├── extensions/ — 6 direct / 6 total files
 │   ├── hooks/ — 3 direct / 3 total files
 │   ├── loop/ — 56 files
 │   │   ├── context/ — 13 direct / 13 total files
@@ -218,7 +217,7 @@ packages/desktop-runtime/ — 4 direct / 489 total files
 │   │   ├── lifecycle/ — 14 direct / 14 total files
 │   │   ├── memory/ — 5 direct / 5 total files
 │   │   └── tools/ — 10 direct / 10 total files
-│   ├── ports/ — 31 direct / 31 total files
+│   ├── ports/ — 34 direct / 34 total files
 │   ├── runtime/ — 3 direct / 9 total files
 │   │   └── use-cases/ — 6 direct / 6 total files
 │   ├── security/ — 5 direct / 5 total files
@@ -226,8 +225,8 @@ packages/desktop-runtime/ — 4 direct / 489 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 2 direct / 2 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 202 files
-    ├── adapters/ — 63 files
+└── test/ — 213 files
+    ├── adapters/ — 68 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -235,29 +234,30 @@ packages/desktop-runtime/ — 4 direct / 489 total files
     │   ├── model/ — 10 direct / 10 total files
     │   ├── native/ — 1 direct / 1 total files
     │   ├── network/ — 1 direct / 1 total files
-    │   ├── plugin/ — 3 direct / 3 total files
-    │   ├── search/ — 4 direct / 4 total files
+    │   ├── plugin/ — 5 direct / 5 total files
+    │   ├── search/ — 5 direct / 5 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 13 direct / 13 total files
-    │   ├── tool/ — 12 direct / 16 total files
+    │   ├── tool/ — 14 direct / 18 total files
     │   │   └── pc-local/ — 4 direct / 4 total files
     │   └── workspace/ — 6 direct / 6 total files
+    ├── extensions/ — 4 direct / 4 total files
     ├── fixtures/ — 7 files
     │   ├── history/ — 2 direct / 2 total files
     │   ├── legacy-thread-store/ — 3 files
     │   │   └── threads/ — 3 direct / 3 total files
     │   └── mcp/ — 2 direct / 2 total files
-    ├── integration/ — 43 files
+    ├── integration/ — 44 files
     │   ├── adapters/ — 8 files
     │   │   ├── skill/ — 1 direct / 1 total files
     │   │   ├── store/ — 1 direct / 1 total files
     │   │   └── tool/ — 6 direct / 6 total files
-    │   ├── agent-loop/ — 20 direct / 20 total files
+    │   ├── agent-loop/ — 21 direct / 21 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 26 files
+    ├── loop/ — 27 files
     │   ├── context/ — 10 direct / 10 total files
     │   ├── core/ — 5 direct / 5 total files
-    │   ├── lifecycle/ — 6 direct / 6 total files
+    │   ├── lifecycle/ — 7 direct / 7 total files
     │   ├── memory/ — 2 direct / 2 total files
     │   └── tools/ — 3 direct / 3 total files
     ├── runtime/ — 2 direct / 5 total files
@@ -284,15 +284,17 @@ scripts/ — 19 direct / 26 total files
 ### `skills/`
 
 ```text
-skills/ — 0 direct / 2 total files
+skills/ — 0 direct / 4 total files
 ├── create-mcp-in-chat/ — 1 direct / 1 total files
+├── create-plugin-in-chat/ — 1 direct / 2 total files
+│   └── agents/ — 1 direct / 1 total files
 └── create-skill-in-chat/ — 1 direct / 1 total files
 ```
 
 ### `plugins/`
 
 ```text
-plugins/ — 0 direct / 46 total files
+plugins/ — 0 direct / 56 total files
 ├── audit-file-mutations/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -333,6 +335,18 @@ plugins/ — 0 direct / 46 total files
 │   └── skills/ — 2 files
 │       └── pdf/ — 1 direct / 2 total files
 │           └── agents/ — 1 direct / 1 total files
+├── pi-claude-rules/ — 3 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   ├── extension/ — 1 direct / 1 total files
+│   └── resources/ — 1 direct / 1 total files
+├── pi-question/ — 3 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   ├── extension/ — 1 direct / 1 total files
+│   └── resources/ — 1 direct / 1 total files
+├── pi-todo/ — 3 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   ├── extension/ — 1 direct / 1 total files
+│   └── resources/ — 1 direct / 1 total files
 ├── prompt-secret-detector/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -345,15 +359,17 @@ plugins/ — 0 direct / 46 total files
 ├── session-start-project-guidance/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
-└── stop-todo-continuation/ — 2 files
-    ├── .setsuna-plugin/ — 1 direct / 1 total files
-    └── hooks/ — 1 direct / 1 total files
+├── stop-todo-continuation/ — 2 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   └── hooks/ — 1 direct / 1 total files
+└── web-search/ — 1 files
+    └── .setsuna-plugin/ — 1 direct / 1 total files
 ```
 
 ### `docs/`
 
 ```text
-docs/ — 1 direct / 41 total files
+docs/ — 1 direct / 42 total files
 ├── apps/ — 13 files
 │   └── desktop/ — 1 direct / 13 total files
 │       ├── main/ — 5 direct / 5 total files
@@ -365,7 +381,7 @@ docs/ — 1 direct / 41 total files
 ├── packages/ — 12 files
 │   ├── contracts/ — 4 direct / 4 total files
 │   └── desktop-runtime/ — 8 direct / 8 total files
-├── plugins/ — 2 direct / 2 total files
+├── plugins/ — 3 direct / 3 total files
 ├── scripts/ — 1 direct / 1 total files
 └── skills/ — 1 direct / 1 total files
 ```

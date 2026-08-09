@@ -16,6 +16,7 @@ import { createRuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
+import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
@@ -82,6 +83,7 @@ type RuntimeToolCallExecutorOptions = {
   memory: RuntimeMemoryCoordinator;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
+  extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   toolHost?: ToolHost;
   collaborationCoordinator(): RuntimeCollaborationCoordinator;
   goalCoordinator(): RuntimeGoalCoordinator;
@@ -608,6 +610,7 @@ export class RuntimeToolCallExecutor {
       approvalStore: this.toolApprovalStore,
       policyAmendmentStore: this.options.policyAmendmentStore,
       persistentToolApprovalStore: this.options.persistentToolApprovalStore,
+      extensions: this.options.extensions,
       hookRunner: createRuntimeToolHookRunner(runtimeConfig),
       clock: this.options.clock,
       events: {

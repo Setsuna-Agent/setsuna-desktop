@@ -84,11 +84,10 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 `CapabilitiesPage.tsx` 只编排筛选、mutation 和跨能力状态：
 
-- `CapabilitiesCatalogCards.tsx`：MCP、Skill、Hook 列表卡片。
-- `CapabilitiesHookEditor.tsx`：Hook draft、metadata 映射和 editor UI。
+- `CapabilitiesCatalogItems.tsx`：MCP、Skill 的双列目录项。
 - Plugin market/editor 继续位于各自子模块。
 
-Hook editor 的 draft/metadata 转换是可独立测试的纯边界；页面不再同时维护表单字段渲染和 catalog card 细节。
+Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的一项能力，由插件创建、导入和安装流程统一管理。
 
 ### Plugin market
 
@@ -102,9 +101,9 @@ Hook editor 的 draft/metadata 转换是可独立测试的纯边界；页面不�
 
 默认市场来自随应用打包的 `plugins/`，renderer 只接收无路径摘要。市场首页由已安装快捷区、精选区和按能力分类的紧凑列表组成。详情页展示声明的 Tool/Skill/MCP/Hook/resource 元数据，并负责 install/update/uninstall 动作。
 
-Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部，分类与数量分别对齐该行两端，并使用一致的顶部/左右页边距。插件、MCP、Skill 与 Hook 的详情或编辑页沿用同一顶部基线。插件市场首页不提供搜索框，其他能力分类仍保留各自的目录搜索。
+Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `ShellFrame` 的 route topbar slot；Windows 下改为放在能力页内容顶部，分类与数量分别对齐该行两端，并使用一致的顶部/左右页边距。插件、MCP 与 Skill 的详情或编辑页沿用同一顶部基线。插件市场首页不提供搜索框，其他能力分类仍保留各自的目录搜索。
 
-本地侧载不从普通 UI 暴露；不属于默认市场的已安装 Plugin 单独标识。
+本地 Plugin Bundle 通过右上角“创建”菜单导入；不属于默认市场的已安装 Plugin 单独标识。
 
 图片生成和视觉识别第一方 Plugin 还有：
 
@@ -139,9 +138,9 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
 ### Hooks
 
-`hooks/runtimeHookConfig.ts` 把 UI Hook 表单转换到 runtime config，并处理 user/project matcher scope。
+能力页不提供独立 Hooks 标签、目录或手动编辑器。用户通过“用对话创建插件”让 AI 生成包含 Hook 的 Plugin Bundle，或导入已有 Bundle；插件详情继续展示 Hook 的声明和运行状态。renderer 只读取无路径的 Hook 投影，不接收或展示私有安装目录。
 
-Hooks 页面只展示实际配置内容。Plugin Hook 默认不可信，必须按当前命令 hash 单独信任；renderer 不接收或展示私有安装目录。
+随应用发布的内置插件由应用控制的可信来源规则启用 Hook；Agent 创建插件时，Hook 内容和信任包含在同一次 `configure_plugin` 审批中。开发者本地导入仍按侧载边界处理，不因选中目录而自动取得信任。
 
 ## State 与 refresh
 

@@ -103,10 +103,22 @@
   --desktop-plugin-icon-color: #dc6d32;
 }
 
+.desktop-plugin-icon[data-plugin-icon='pi-question'] {
+  --desktop-plugin-icon-color: #7b5bd6;
+}
+
+.desktop-plugin-icon[data-plugin-icon='pi-todo'] {
+  --desktop-plugin-icon-color: #318b68;
+}
+
+.desktop-plugin-icon[data-plugin-icon='pi-claude-rules'] {
+  --desktop-plugin-icon-color: #c16b2f;
+}
+
 .desktop-plugin-market {
   display: grid;
   gap: 28px;
-  width: min(940px, 100%);
+  width: min(var(--desktop-capabilities-content-width), 100%);
   margin: 0 auto;
 }
 
@@ -304,88 +316,6 @@
   white-space: nowrap;
 }
 
-.desktop-plugin-market__list {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 2px;
-  min-width: 0;
-}
-
-.desktop-plugin-list-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  min-height: 76px;
-  padding: 9px 7px;
-  border-radius: var(--app-radius-md);
-  transition: background 140ms ease;
-}
-
-.desktop-plugin-list-item:hover {
-  background: color-mix(in srgb, var(--app-text) 4%, transparent);
-}
-
-.desktop-plugin-list-item__identity {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  color: inherit;
-  background: transparent;
-  text-align: left;
-}
-
-.desktop-plugin-list-item__identity:focus-visible {
-  outline: 0;
-  border-radius: var(--app-radius-sm);
-  box-shadow: var(--app-focus-ring);
-}
-
-.desktop-plugin-list-item__copy {
-  display: grid;
-  gap: 1px;
-  min-width: 0;
-}
-
-.desktop-plugin-list-item__copy strong,
-.desktop-plugin-list-item__copy > span,
-.desktop-plugin-list-item__copy small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-plugin-list-item__copy strong {
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 19px;
-  transition: color 140ms ease;
-}
-
-.desktop-plugin-list-item__copy > span {
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-plugin-list-item__copy small {
-  color: var(--app-text-subtle);
-  font-size: 10px;
-  line-height: 16px;
-}
-
-.desktop-plugin-list-item__identity:hover .desktop-plugin-list-item__copy strong {
-  color: var(--app-primary);
-}
-
 .desktop-capabilities-plugin-detail {
   align-self: start;
   width: min(960px, 100%);
@@ -464,6 +394,78 @@
 .desktop-capabilities-plugin-detail__intro small {
   font-size: 12px;
   line-height: 18px;
+}
+
+.desktop-capabilities-plugin-detail__extension {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
+  border-radius: var(--app-radius-md);
+  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-warning) 4%);
+}
+
+.desktop-capabilities-plugin-detail__extension-copy {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  min-width: 0;
+}
+
+.desktop-capabilities-plugin-detail__extension-copy > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.desktop-capabilities-plugin-detail__extension-copy strong,
+.desktop-capabilities-plugin-detail__extension-copy span,
+.desktop-capabilities-plugin-detail__extension-copy p,
+.desktop-capabilities-plugin-detail__extension-copy small {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.desktop-capabilities-plugin-detail__extension-copy > div > span,
+.desktop-capabilities-plugin-detail__extension-copy small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.desktop-capabilities-plugin-detail__extension-copy p {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capabilities-plugin-detail__extension-copy small.is-error {
+  color: var(--app-danger);
+}
+
+.desktop-capabilities-plugin-detail__extension-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 12%, transparent);
+}
+
+.desktop-capabilities-plugin-detail__extension-icon.is-trusted {
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 12%, transparent);
+}
+
+@media (max-width: 700px) {
+  .desktop-capabilities-plugin-detail__extension {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .desktop-image-generation-settings {

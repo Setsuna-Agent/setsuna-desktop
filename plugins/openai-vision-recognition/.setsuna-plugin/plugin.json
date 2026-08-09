@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "openai-vision-recognition",
   "name": "视觉识别",
   "icon": "vision-recognition",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "复用模型服务中已配置且支持图片的模型分析会话图片，让非视觉主模型也能获得识图结果。",
   "publisher": "Setsuna",
   "tags": ["图片", "视觉模型", "模型服务"],

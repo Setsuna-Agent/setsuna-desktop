@@ -80,7 +80,7 @@
 | `app-server/pagination.ts` | 27 | Model、feature、permission、MCP 共用 offset cursor 校验 | 只拥有无状态协议分页，不接管目录业务 |
 | `app-server/command-exec.ts` | 513 | command/exec session facade；复用 process manager 与共享 process runtime | 保持兼容导出，command 与 process 状态机不再共居 |
 | `app-server/process-manager.ts` | 573 | process/* session、background terminal 与连接生命周期 | 单一 process session owner；共享 PTY/stdin/output seam 不拥有协议状态 |
-| `CapabilitiesPage.tsx` | 845 | 页面筛选、mutation 和跨能力编排 | MCP/Skill/Hook 卡片与 Hook editor 已有独立展示 owner |
+| `CapabilitiesPage.tsx` | 721 | 页面筛选、mutation 和跨能力编排 | MCP/Skill 目录项与 Plugin market/detail 已有独立展示 owner |
 | `RuntimeToolRuns.tsx` | 672 | tool run 分组和 disclosure 编排 | 文件摘要、Hook、审批/elicitation、shell 展示均已下沉 |
 | `RuntimeToolRunPresentation.tsx` | 877 | tool run 展示映射 facade | shell、change counts 与无状态解析已拆；保持旧导出兼容 |
 | `ReviewDiffView.tsx` | 404 | review 文件卡、展开与 context menu 编排 | diff 变换和虚拟滚动不再与页面状态共居 |
@@ -323,9 +323,9 @@ RuntimeEvent log
 
 `CapabilitiesPage.tsx`：
 
-- [x] 把 MCP、Skill、Hook catalog cards 下沉到 `CapabilitiesCatalogCards.tsx`。
-- [x] 把 Hook draft、metadata 映射和 editor UI 下沉到 `CapabilitiesHookEditor.tsx`，并增加映射特征测试。
-- [x] 页面从 1,185 行降至 845 行，只保留筛选、mutation 和跨能力编排。
+- [x] 把 MCP、Skill 双列目录项下沉到 `CapabilitiesCatalogItems.tsx`。
+- [x] 把 Hook 创建和管理统一收敛到 Plugin Bundle 流程，移除独立目录与 editor。
+- [x] 页面只保留筛选、mutation 和跨能力编排。
 
 Tool run presentation：
 

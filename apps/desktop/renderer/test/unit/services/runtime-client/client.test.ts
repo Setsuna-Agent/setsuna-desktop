@@ -353,6 +353,23 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
+  it('lists extension process status and updates exact-bundle trust through narrow endpoints', async () => {
+    const request = installRuntimeBridge(() => ({ extensions: [] }));
+    const client = createDesktopRuntimeClient();
+
+    await client.listExtensionStatuses();
+    await client.setPluginExtensionTrust('local extension', { trusted: true });
+
+    expect(request.mock.calls.map(([input]) => input)).toEqual([
+      { path: '/v1/extensions/status' },
+      {
+        path: '/v1/plugins/local%20extension/extension/trust',
+        method: 'PUT',
+        body: { trusted: true },
+      },
+    ]);
+  });
+
   it('routes installed and marketplace plugin item previews through encoded, read-only paths', async () => {
     const request = installRuntimeBridge(() => ({ pluginId: 'documents', itemId: 'documents.documents', kind: 'skill', files: [] }));
     const client = createDesktopRuntimeClient();

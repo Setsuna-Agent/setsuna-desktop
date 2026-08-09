@@ -378,7 +378,7 @@ function parseSkill(
 ): ParsedSkill {
   const frontmatter = parseFrontmatter(rawContent);
   const content = frontmatter.body.trim();
-  const name = frontmatter.name ?? id;
+  const name = dependencyManifest.displayName ?? frontmatter.name ?? id;
   const description = frontmatter.description;
   // 显式短语是 Skill 作者声明的路由边界；元数据推导只兼容尚未声明该字段的旧 Bundle。
   const autoActivate = pluginOrigin
@@ -547,6 +547,7 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
 }
 
 type SkillDependencyManifest = {
+  displayName?: string;
   mcpDependencies: RuntimeSkillMcpDependency[];
   errors: string[];
 };
@@ -561,10 +562,17 @@ async function readSkillDependencyManifest(skillPath: string): Promise<SkillDepe
   try {
     const parsed = parseYaml(raw, { maxAliasCount: 0, uniqueKeys: true });
     const root = recordValue(parsed);
+    const displayName = optionalString(recordValue(root.interface).display_name);
     const dependencies = recordValue(root.dependencies);
     const tools = dependencies.tools;
-    if (tools === undefined) return emptyDependencyManifest();
-    if (!Array.isArray(tools)) return { mcpDependencies: [], errors: [`${manifestPath}: dependencies.tools must be an array.`] };
+    if (tools === undefined) return emptyDependencyManifest(displayName);
+    if (!Array.isArray(tools)) {
+      return {
+        ...(displayName ? { displayName } : {}),
+        mcpDependencies: [],
+        errors: [`${manifestPath}: dependencies.tools must be an array.`],
+      };
+    }
     const mcpDependencies: RuntimeSkillMcpDependency[] = [];
     const errors: string[] = [];
     tools.forEach((value, index) => {
@@ -576,7 +584,7 @@ async function readSkillDependencyManifest(skillPath: string): Promise<SkillDepe
         errors.push(`${manifestPath}: dependencies.tools[${index}] ${errorMessage(error)}`);
       }
     });
-    return { mcpDependencies, errors };
+    return { ...(displayName ? { displayName } : {}), mcpDependencies, errors };
   } catch (error) {
     return { mcpDependencies: [], errors: [`${manifestPath}: ${errorMessage(error)}`] };
   }
@@ -711,8 +719,8 @@ function stringArray(value: unknown, name: string): string[] {
   return value.map((item) => item.trim()).filter(Boolean);
 }
 
-function emptyDependencyManifest(): SkillDependencyManifest {
-  return { mcpDependencies: [], errors: [] };
+function emptyDependencyManifest(displayName?: string): SkillDependencyManifest {
+  return { ...(displayName ? { displayName } : {}), mcpDependencies: [], errors: [] };
 }
 
 function pathIsInside(root: string, target: string): boolean {
