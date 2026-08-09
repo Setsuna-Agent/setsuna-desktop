@@ -19,7 +19,7 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
 } from '@setsuna-desktop/contracts';
-import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, Plug, ShieldCheck, Trash2, Workflow, Wrench } from 'lucide-react';
+import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader } from '../../shared/ui/primitives.js';
@@ -119,6 +119,7 @@ export function CapabilitiesPluginDetail({
   const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
   const isBundledExtension = Boolean(marketplaceMetadata);
   const installedExtensionTrust = installedPlugin?.extension?.trust;
+  const localExtensionTrusted = !isBundledExtension && installedExtensionTrust === 'trusted';
   const bundledExtensionNeedsRepair = Boolean(
     isBundledExtension
       && installedPlugin?.extension
@@ -126,13 +127,11 @@ export function CapabilitiesPluginDetail({
   );
   const extensionVerified = isBundledExtension
     ? !bundledExtensionNeedsRepair
-    : installedExtensionTrust === 'trusted';
-  const extensionNeedsAttention = Boolean(
+    : localExtensionTrusted;
+  const showExtensionStatus = Boolean(
     extension
       && (bundledExtensionNeedsRepair
-        || (!isBundledExtension
-          && installedPlugin?.extension
-          && installedExtensionTrust !== 'trusted')
+        || (!isBundledExtension && installedPlugin?.extension)
         || extensionStatus?.state === 'failed'),
   );
 
@@ -202,7 +201,7 @@ export function CapabilitiesPluginDetail({
         </div>
       </div>
 
-      {extension && extensionNeedsAttention ? (
+      {extension && showExtensionStatus ? (
         <section className="desktop-capabilities-plugin-detail__extension" aria-label={t('capabilities.extension.title')}>
           <div className="desktop-capabilities-plugin-detail__extension-copy">
             <span className={`desktop-capabilities-plugin-detail__extension-icon${extensionVerified ? ' is-trusted' : ''}`}>
@@ -233,20 +232,21 @@ export function CapabilitiesPluginDetail({
           </div>
           {!isBundledExtension
             && installedPlugin?.extension
-            && installedPlugin.extension.trust !== 'trusted'
             && onSetExtensionTrust ? (
             <Button
               type="button"
-              variant="primary"
+              variant={localExtensionTrusted ? 'secondary' : 'primary'}
               icon={extensionTrusting
                 ? <Loader2 className="is-spinning" size={14} />
-                : <ShieldCheck size={14} />}
+                : localExtensionTrusted ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
               disabled={extensionTrusting || installing || removing}
-              onClick={() => void onSetExtensionTrust(installedPlugin, true)}
+              onClick={() => void onSetExtensionTrust(installedPlugin, !localExtensionTrusted)}
             >
               {t(extensionTrusting
                 ? 'capabilities.extension.trusting'
-                : 'capabilities.extension.trust')}
+                : localExtensionTrusted
+                  ? 'capabilities.extension.revoke'
+                  : 'capabilities.extension.trust')}
             </Button>
           ) : null}
         </section>

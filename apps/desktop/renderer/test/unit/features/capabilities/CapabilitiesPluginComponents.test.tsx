@@ -133,8 +133,10 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('信任并允许运行');
   });
 
-  it('hides healthy trusted local executable extension status', () => {
-    const html = renderToStaticMarkup(
+  it('keeps the revoke action visible for a healthy trusted local extension', async () => {
+    const onSetExtensionTrust = vi.fn(async () => undefined);
+    const user = userEvent.setup();
+    render(
       <CapabilitiesPluginDetail
         error={null}
         extensionStatus={{
@@ -165,13 +167,16 @@ describe('capabilities plugin components', () => {
         onBack={() => undefined}
         onInstall={async () => undefined}
         onRemove={async () => undefined}
-        onSetExtensionTrust={async () => undefined}
+        onSetExtensionTrust={onSetExtensionTrust}
       />,
     );
 
-    expect(html).not.toContain('desktop-capabilities-plugin-detail__extension');
-    expect(html).not.toContain('已信任当前包');
-    expect(html).not.toContain('撤销运行信任');
+    expect(screen.getByText('已信任当前包')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '撤销运行信任' }));
+    expect(onSetExtensionTrust).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'worker-demo' }),
+      false,
+    );
   });
 
   it('hides healthy bundled executable extension status', () => {
