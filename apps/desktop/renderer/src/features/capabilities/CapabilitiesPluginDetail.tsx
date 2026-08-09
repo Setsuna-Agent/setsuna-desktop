@@ -112,6 +112,7 @@ export function CapabilitiesPluginDetail({
     ? resources.length
     : Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
+  const installedFromMarketplace = installedPlugin?.installationSource === 'marketplace';
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
   const tags = displayPlugin.tags ?? [];
@@ -251,7 +252,7 @@ export function CapabilitiesPluginDetail({
         </section>
       ) : null}
 
-      {installed
+      {installedFromMarketplace
         && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID
         && onSaveImageGenerationConfig
         && onTestImageGeneration ? (
@@ -262,7 +263,7 @@ export function CapabilitiesPluginDetail({
         />
       ) : null}
 
-      {installed
+      {installedFromMarketplace
         && plugin.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID
         && onSaveVisionRecognitionConfig
         && onTestVisionRecognition ? (

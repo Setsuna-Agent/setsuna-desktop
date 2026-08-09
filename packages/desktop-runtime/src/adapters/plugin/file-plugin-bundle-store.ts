@@ -111,7 +111,9 @@ export class FilePluginBundleStore implements PluginBundleStore {
       let changed = false;
       const plugins = index.plugins.map((plugin) => {
         const catalogSource = sourceById.get(plugin.id);
-        if (plugin.installationSource || !catalogSource || !samePath(plugin.sourcePath, catalogSource)) return plugin;
+        if (plugin.installationSource || !catalogSource || !sameLegacyMarketplaceSource(plugin.sourcePath, catalogSource)) {
+          return plugin;
+        }
         changed = true;
         return { ...plugin, installationSource: 'marketplace' as const };
       });
@@ -727,6 +729,25 @@ function samePath(left: string, right: string): boolean {
   return process.platform === 'win32'
     ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
     : normalizedLeft === normalizedRight;
+}
+
+function sameLegacyMarketplaceSource(left: string, right: string): boolean {
+  if (samePath(left, right)) return true;
+  const leftSuffix = packagedApplicationPathSuffix(left);
+  const rightSuffix = packagedApplicationPathSuffix(right);
+  return Boolean(leftSuffix && rightSuffix && samePath(leftSuffix, rightSuffix));
+}
+
+function packagedApplicationPathSuffix(value: string): string | null {
+  const segments = path.resolve(value).split(path.sep);
+  let appAsarIndex = -1;
+  for (let index = 0; index < segments.length; index += 1) {
+    if (segments[index].toLowerCase() === 'app.asar') appAsarIndex = index;
+  }
+  // AppImage extracts each launch under a different temporary mount. The path
+  // within app.asar remains stable and is durable enough to identify the same
+  // controlled catalog bundle without claiming arbitrary local directories.
+  return appAsarIndex >= 0 ? segments.slice(appAsarIndex).join(path.sep) : null;
 }
 
 async function readManifestItemContent(

@@ -92,6 +92,23 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('migrates legacy marketplace provenance across AppImage mount paths', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appimage-'));
+    const catalogDir = path.join(root, 'new-mount', 'resources', 'app.asar', 'plugins');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Docs Helper' });
+    const runtime = await createPluginRuntime(root, catalogDir);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+    await marketplace.installPlugin('docs');
+    await removePersistedInstallationSource(
+      path.join(root, 'runtime', 'plugins.json'),
+      path.join(root, 'old-mount', 'resources', 'app.asar', 'plugins', 'docs'),
+    );
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
   it('updates extension trust on a legacy marketplace record without re-entering the index lock', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-legacy-trust-'));
     const catalogDir = path.join(root, 'catalog');
@@ -380,11 +397,14 @@ async function createCatalogPlugin(
   }, null, 2));
 }
 
-async function removePersistedInstallationSource(indexPath: string): Promise<void> {
+async function removePersistedInstallationSource(indexPath: string, sourcePath?: string): Promise<void> {
   const index = JSON.parse(await readFile(indexPath, 'utf8')) as {
     version: number;
     plugins: Array<Record<string, unknown>>;
   };
-  for (const plugin of index.plugins) delete plugin.installationSource;
+  for (const plugin of index.plugins) {
+    delete plugin.installationSource;
+    if (sourcePath) plugin.sourcePath = sourcePath;
+  }
   await writeFile(indexPath, `${JSON.stringify(index, null, 2)}\n`, 'utf8');
 }

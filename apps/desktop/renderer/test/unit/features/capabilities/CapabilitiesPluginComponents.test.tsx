@@ -622,6 +622,7 @@ describe('capabilities plugin components', () => {
           name: '图片生成',
           icon: 'image-generation',
           installedAt: '2026-07-17T00:00:00.000Z',
+          installationSource: 'marketplace',
           skills: [{ id: 'openai-image-generation.image-generation', name: '图片生成' }],
           mcpServers: [],
           hooks: [],
@@ -694,6 +695,7 @@ describe('capabilities plugin components', () => {
           name: '视觉识别',
           icon: 'vision-recognition',
           installedAt: '2026-08-08T00:00:00.000Z',
+          installationSource: 'marketplace',
           tools: [{
             name: 'analyze_image',
             description: '使用已配置视觉模型分析当前会话中的图片附件。',
@@ -724,6 +726,58 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('http://127.0.0.1:9000/v1');
     expect(html).not.toContain('type="password"');
     expect(html).not.toContain('vision-secret');
+  });
+
+  it('hides built-in settings for local bundles that reuse reserved plugin ids', () => {
+    const imageHtml = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installing={false}
+        installedPlugin={{
+          id: 'openai-image-generation',
+          name: 'Local Image Bundle',
+          installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'local',
+          skills: [],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSaveImageGenerationConfig={async () => undefined}
+        onTestImageGeneration={async () => ({ images: [], durationMs: 0 })}
+      />,
+    );
+    const visionHtml = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installing={false}
+        installedPlugin={{
+          id: 'openai-vision-recognition',
+          name: 'Local Vision Bundle',
+          installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'local',
+          skills: [],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSaveVisionRecognitionConfig={async () => undefined}
+        onTestVisionRecognition={async () => ({ content: '', durationMs: 0 })}
+      />,
+    );
+
+    expect(imageHtml).not.toContain('desktop-image-generation-settings');
+    expect(visionHtml).not.toContain('desktop-vision-recognition-settings');
   });
 
   it('renders Markdown files by default while keeping a source view available', () => {
