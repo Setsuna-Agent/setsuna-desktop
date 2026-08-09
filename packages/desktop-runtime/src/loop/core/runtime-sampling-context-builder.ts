@@ -203,12 +203,14 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
     const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
+    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages: [
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
       ],
+      skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
       skillActivationText: currentTurnSkillActivationText(orderedConversationMessages, turnId),
       skillIds,
       thread,
@@ -266,7 +268,7 @@ export class RuntimeSamplingContextBuilder {
         messages: modelRequestMessages(messages),
         tools,
         reservedOutputTokens,
-        budget: contextCompactionBudgetForConfig(stepRuntimeConfig),
+        budget: contextBudget,
       }),
       promptManifest: compiledPrompt.manifest,
       featureKeys: Object.keys(toolContext.features ?? {})

@@ -6,6 +6,95 @@ import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-regist
 import { SkillManagementToolHost } from '../../../src/adapters/tool/skill-management-tool-host.js';
 
 describe('skill management tool host', () => {
+  it('reads complete instructions only for enabled Skills without approval', async () => {
+    const { host, registry } = await createSkillHostFixture();
+    const builtin = await registry.getSkill('builtin-guide');
+    expect(builtin?.contentVersion).toMatch(/^sha256-/);
+
+    const tools = await host.listTools({ threadId: 'thread_1' });
+    expect(tools.map((tool) => tool.name)).toContain('read_skill');
+    expect(tools.find((tool) => tool.name === 'read_skill')?.inputSchema).toMatchObject({
+      required: ['skill_id', 'content_version'],
+    });
+    await expect(host.approvalForTool('read_skill', { skill_id: 'builtin-guide' })).resolves.toBeNull();
+    await expect(host.runTool('read_skill', { skill_id: 'builtin-guide' })).rejects.toThrow('content_version is required');
+    await expect(host.runTool('read_skill', {
+      skill_id: 'builtin-guide',
+      content_version: builtin?.contentVersion,
+    })).resolves.toMatchObject({
+      content: expect.stringContaining('Use this built-in guide.'),
+      preview: expect.stringContaining('"skillId":"builtin-guide"'),
+      data: expect.objectContaining({ complete: true, contentVersion: expect.stringMatching(/^sha256-/) }),
+    });
+
+    await registry.updateSkill('builtin-guide', { enabled: false });
+    await expect(host.runTool('read_skill', {
+      skill_id: 'builtin-guide',
+      content_version: builtin?.contentVersion,
+    })).rejects.toThrow('Skill is disabled');
+  });
+
+  it('limits read_skill to version-bound chunks and rejects stale continuation versions', async () => {
+    const { host, registry } = await createSkillHostFixture();
+    const created = await registry.createSkill({
+      name: 'Large Guide',
+      content: `# Large Guide\n\n${'🙂'.repeat(12_000)}`,
+    });
+
+    const first = await host.runTool('read_skill', {
+      skill_id: created.id,
+      content_version: created.contentVersion,
+    });
+    const firstData = first.data as {
+      complete: boolean;
+      contentVersion: string;
+      nextOffset: number | null;
+    };
+    expect(Buffer.byteLength(first.content, 'utf8')).toBeLessThanOrEqual(16 * 1024);
+    expect(first.content).not.toContain('�');
+    expect(firstData).toMatchObject({ complete: false, contentVersion: created.contentVersion });
+    expect(firstData.nextOffset).toBeTypeOf('number');
+
+    const second = await host.runTool('read_skill', {
+      skill_id: created.id,
+      content_version: created.contentVersion,
+      offset: firstData.nextOffset,
+    });
+    expect(second.content).toContain(`Content version: ${created.contentVersion}`);
+    expect(second.content).toContain(`Chunk: ${firstData.nextOffset}-`);
+
+    const updated = await registry.updateSkill(created.id, { content: '# Large Guide\n\nUpdated.' });
+    expect(updated.contentVersion).not.toBe(created.contentVersion);
+    await expect(host.runTool('read_skill', {
+      skill_id: created.id,
+      content_version: created.contentVersion,
+      offset: firstData.nextOffset,
+    })).resolves.toMatchObject({
+      content: expect.stringContaining('Discard chunks from the older version'),
+      data: expect.objectContaining({
+        requestedContentVersion: created.contentVersion,
+        contentVersion: updated.contentVersion,
+        versionMismatch: true,
+      }),
+    });
+  });
+
+  it('describes only Skill tools advertised for the current request', async () => {
+    const { host } = await createSkillHostFixture();
+    const tools = await host.listTools({ threadId: 'thread_1' });
+    const readTool = tools.find((tool) => tool.name === 'read_skill');
+    expect(readTool).toBeDefined();
+
+    const prompt = host.systemPrompt(
+      { threadId: 'thread_1' },
+      { tools: [readTool!] },
+    );
+    expect(prompt).toContain('call read_skill');
+    expect(prompt).not.toContain('configure_skill');
+    expect(prompt).not.toContain('install_skill_mcp_dependencies');
+    expect(prompt).not.toContain('authenticate_skill_mcp_dependency');
+  });
+
   it('creates and updates local skills through configure_skill', async () => {
     const { host, registry } = await createSkillHostFixture();
 

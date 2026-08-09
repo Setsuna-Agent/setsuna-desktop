@@ -15,6 +15,7 @@ import type {
   SkillActivationContext,
   SkillInjection,
   SkillMcpDependencyManager,
+  SkillPromptContextSnapshot,
   SkillRegistry,
 } from '../../ports/skill-registry.js';
 import { errorMessage } from '../../shared/node-errors.js';
@@ -51,15 +52,21 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     return this.skills.deleteSkill(skillId);
   }
 
+  async resolvePromptContext(
+    skillIds?: string[],
+    activation?: SkillActivationContext,
+  ): Promise<SkillPromptContextSnapshot> {
+    const snapshot = await this.skills.resolvePromptContext(skillIds, activation);
+    if (!snapshot.selectedInjections.length) return snapshot;
+    const servers = await this.mcpStore.listServerInputs();
+    return {
+      availableSkills: snapshot.availableSkills,
+      selectedInjections: await this.enrichInjections(snapshot.selectedInjections, servers),
+    };
+  }
+
   async selectedSkillInjections(skillIds?: string[], activation?: SkillActivationContext): Promise<SkillInjection[]> {
-    const [injections, servers] = await Promise.all([
-      this.skills.selectedSkillInjections(skillIds, activation),
-      this.mcpStore.listServerInputs(),
-    ]);
-    return Promise.all(injections.map(async (skill) => ({
-      ...skill,
-      mcpDependencies: await this.resolveDependencies(skill.mcpDependencies ?? [], servers),
-    })));
+    return (await this.resolvePromptContext(skillIds, activation)).selectedInjections;
   }
 
   setExtraRoots(extraRoots: string[]): Promise<void> {
@@ -138,6 +145,17 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
       mcpDependencies: await this.resolveDependencies(skill.mcpDependencies ?? [], liveServers),
       dependencyErrors: [...(skill.dependencyErrors ?? [])],
     };
+  }
+
+  private enrichInjections(
+    injections: SkillInjection[],
+    servers: RuntimeMcpServerInput[],
+  ): Promise<SkillInjection[]> {
+    return Promise.all(injections.map(async (skill) => ({
+      ...skill,
+      mcpDependencies: await this.resolveDependencies(skill.mcpDependencies ?? [], servers),
+      dependencyErrors: [...(skill.dependencyErrors ?? [])],
+    })));
   }
 
   private resolveDependencies(

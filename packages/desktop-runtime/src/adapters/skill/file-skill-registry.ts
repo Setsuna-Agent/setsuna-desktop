@@ -18,9 +18,11 @@ import type {
   PluginSkillRegistry,
   SkillActivationContext,
   SkillInjection,
+  SkillPromptContextSnapshot,
   SkillRegistry,
 } from '../../ports/skill-registry.js';
 import { errorMessage } from '../../shared/node-errors.js';
+import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 
@@ -32,6 +34,7 @@ type SkillStateFile = {
 type ParsedSkill = {
   id: string;
   name: string;
+  contentVersion: string;
   kind: RuntimeSkillKind;
   description?: string;
   content: string;
@@ -163,26 +166,39 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     });
   }
 
-  async selectedSkillInjections(skillIds: string[] = [], activation?: SkillActivationContext): Promise<SkillInjection[]> {
+  async resolvePromptContext(
+    skillIds: string[] = [],
+    activation?: SkillActivationContext,
+  ): Promise<SkillPromptContextSnapshot> {
     const [skills, state] = await Promise.all([this.readSkills(), this.readState()]);
     const explicitSkillIds = new Set(skillIds.filter(Boolean));
     const allowAutomaticPluginActivation = explicitSkillIds.size === 0 && Boolean(activation?.text.trim());
-    return skills
-      .map((parsed) => ({ parsed, detail: toDetail(parsed, state) }))
-      .filter(({ parsed, detail }) => detail.enabled && (
-        detail.selected
-        || explicitSkillIds.has(detail.id)
-        || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
-      ))
-      .map(({ parsed, detail }) => ({
-        id: detail.id,
-        name: detail.name,
-        content: detail.content,
-        path: detail.path,
-        ...(parsed.plugin ? { plugin: { ...parsed.plugin } } : {}),
-        mcpDependencies: detail.mcpDependencies,
-        dependencyErrors: detail.dependencyErrors,
-      }));
+    const resolvedSkills = skills.map((parsed) => ({ parsed, detail: toDetail(parsed, state) }));
+    return {
+      availableSkills: resolvedSkills
+        .filter(({ detail }) => detail.enabled)
+        .map(({ parsed }) => toSummary(parsed, state)),
+      selectedInjections: resolvedSkills
+        .filter(({ parsed, detail }) => detail.enabled && (
+          detail.selected
+          || explicitSkillIds.has(detail.id)
+          || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
+        ))
+        .map(({ parsed, detail }) => ({
+          id: detail.id,
+          name: detail.name,
+          contentVersion: detail.contentVersion,
+          content: detail.content,
+          path: detail.path,
+          ...(parsed.plugin ? { plugin: { ...parsed.plugin } } : {}),
+          mcpDependencies: detail.mcpDependencies,
+          dependencyErrors: detail.dependencyErrors,
+        })),
+    };
+  }
+
+  async selectedSkillInjections(skillIds: string[] = [], activation?: SkillActivationContext): Promise<SkillInjection[]> {
+    return (await this.resolvePromptContext(skillIds, activation)).selectedInjections;
   }
 
   async setExtraRoots(extraRoots: string[]): Promise<void> {
@@ -389,6 +405,7 @@ function parseSkill(
   return {
     id,
     name,
+    contentVersion: skillContentVersion(content),
     kind,
     description,
     content,
@@ -535,6 +552,7 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
   return {
     id: skill.id,
     name: skill.name,
+    contentVersion: skill.contentVersion,
     kind: skill.kind,
     enabled: skillState?.enabled ?? true,
     selected: skillState?.selected ?? false,

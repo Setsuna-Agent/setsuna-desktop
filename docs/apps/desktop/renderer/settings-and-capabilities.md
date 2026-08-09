@@ -136,6 +136,8 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
 内置和 Plugin Skill 只读；用户 Skill 才能修改正文。MCP dependency 的安装与认证通过 runtime coordinator。
 
+“用对话创建 Skill”发出面向下一次主聊天 composer 的待消费请求，不绑定短生命周期 `composerKey`；切换到聊天或 composer 重建后，请求仍会插入对应 Skill slot 并聚焦输入框。
+
 ### Hooks
 
 能力页不提供独立 Hooks 标签、目录或手动编辑器。用户通过“用对话创建插件”让 AI 生成包含 Hook 的 Plugin Bundle，或导入已有 Bundle；插件详情继续展示 Hook 的声明和运行状态。renderer 只读取无路径的 Hook 投影，不接收或展示私有安装目录。

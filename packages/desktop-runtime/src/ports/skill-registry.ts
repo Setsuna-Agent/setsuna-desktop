@@ -6,11 +6,13 @@ import type {
   RuntimeSkillMcpDependency,
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
+  RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 
 export type SkillInjection = {
   id: string;
   name: string;
+  contentVersion?: string;
   content: string;
   path?: string;
   plugin?: RuntimePluginReference;
@@ -21,6 +23,11 @@ export type SkillInjection = {
 export type SkillActivationContext = {
   /** 当前轮次用户文本及附件名称和类型，用于声明式插件 Skill 路由。 */
   text: string;
+};
+
+export type SkillPromptContextSnapshot = {
+  availableSkills: RuntimeSkillSummary[];
+  selectedInjections: SkillInjection[];
 };
 
 export type SkillMcpDependencyManager = {
@@ -34,6 +41,7 @@ export type SkillRegistry = {
   getSkill(skillId: string): Promise<RuntimeSkillDetail | null>;
   updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail>;
   deleteSkill(skillId: string): Promise<void>;
+  resolvePromptContext(skillIds?: string[], activation?: SkillActivationContext): Promise<SkillPromptContextSnapshot>;
   selectedSkillInjections(skillIds?: string[], activation?: SkillActivationContext): Promise<SkillInjection[]>;
   setExtraRoots(extraRoots: string[]): Promise<void>;
   subscribeChanges(listener: () => void): () => void;

@@ -66,7 +66,7 @@ Workspace、shell、artifact 和内置图片生成共享该环境。Generated im
 4. 运行必要 compaction。
 5. 构建 portable model history。
 6. 加载 memory。
-7. 选择显式/default/auto-activated Skills。
+7. 从同一快照加载所有已启用 Skill 的路由元数据与正文版本，并选择显式/default/auto-activated Skill 正文。
 8. 获取 tool definitions/system prompt。
 9. 加载 project workflow 和 instructions。
 10. 生成 provider replay context。
@@ -86,6 +86,7 @@ Workspace、shell、artifact 和内置图片生成共享该环境。Generated im
 - `runtime-permissions-prompt.ts`
 - `runtime-project-workflow-prompt.ts`
 - `runtime-review-profile.ts`
+- `runtime-skill-catalog-prompt.ts`
 
 典型顺序：
 
@@ -97,7 +98,7 @@ Workspace、shell、artifact 和内置图片生成共享该环境。Generated im
 6. Project workflow（外部数据）。
 7. Project instructions。
 8. Memory context。
-9. Skill instructions。
+9. Skill metadata catalog 与 selected Skill instructions。
 10. Conversation history。
 
 优先级必须显式，不靠字符串偶然拼接。

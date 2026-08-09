@@ -34,6 +34,8 @@ export type RuntimeSkillMcpDependency = RuntimeSkillMcpDependencyInput & {
 export type RuntimeSkillSummary = {
   id: string;
   name: string;
+  /** Stable digest of the current SKILL.md instruction body when supplied by the runtime. */
+  contentVersion?: string;
   kind: RuntimeSkillKind;
   enabled: boolean;
   selected: boolean;
