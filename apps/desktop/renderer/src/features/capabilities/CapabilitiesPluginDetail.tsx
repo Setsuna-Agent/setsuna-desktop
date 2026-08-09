@@ -47,6 +47,7 @@ export function CapabilitiesPluginDetail({
   onInstall,
   onRemove,
   onSetExtensionTrust,
+  onSetHookEnabled,
   onSetHookTrust,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
@@ -69,6 +70,7 @@ export function CapabilitiesPluginDetail({
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   onSetExtensionTrust?: (plugin: RuntimePluginSummary, trusted: boolean) => Promise<void>;
+  onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
   onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
@@ -88,14 +90,27 @@ export function CapabilitiesPluginDetail({
   const displayPlugin = marketplaceMetadata ?? plugin;
   const copy = localizedPluginCopy(displayPlugin, t);
 
-  const tools = mergePluginTools(marketplaceMetadata?.tools ?? [], installedPlugin?.tools ?? []);
-  const skills = mergePluginSkills(marketplaceMetadata?.skills ?? [], installedPlugin?.skills ?? []);
-  const mcpServers = mergePluginMcpServers(marketplaceMetadata?.mcpServers ?? [], installedPlugin?.mcpServers ?? []);
-  const hooks = mergePluginHooks(marketplaceMetadata?.hooks ?? [], installedPlugin?.hooks ?? []);
-  // Bundled catalog metadata is authoritative; installed snapshots can retain resources removed by a newer app build.
-  const resources = marketplaceMetadata ? marketplaceMetadata.resources : installedPlugin?.resources ?? [];
-  const hookCount = Math.max(hooks.length, installedPlugin?.hookCount ?? marketplaceMetadata?.capabilities.hooks ?? 0);
-  const resourceCount = Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
+  const includeCatalogOnly = !installedPlugin;
+  const tools = mergePluginTools(marketplaceMetadata?.tools ?? [], installedPlugin?.tools ?? [], includeCatalogOnly);
+  const skills = mergePluginSkills(marketplaceMetadata?.skills ?? [], installedPlugin?.skills ?? [], includeCatalogOnly);
+  const mcpServers = mergePluginMcpServers(
+    marketplaceMetadata?.mcpServers ?? [],
+    installedPlugin?.mcpServers ?? [],
+    includeCatalogOnly,
+  );
+  const hooks = mergePluginHooks(marketplaceMetadata?.hooks ?? [], installedPlugin?.hooks ?? [], includeCatalogOnly);
+  const catalogResourceIds = new Set(marketplaceMetadata?.resources.map((resource) => resource.id) ?? []);
+  // Installed details must remain readable. The catalog may remove old bundled
+  // notices, but catalog-only additions are shown only after the user updates.
+  const resources = installedPlugin
+    ? installedPlugin.resources.filter((resource) => !marketplaceMetadata || catalogResourceIds.has(resource.id))
+    : marketplaceMetadata?.resources ?? [];
+  const hookCount = installedPlugin
+    ? Math.max(hooks.length, installedPlugin.hookCount)
+    : Math.max(hooks.length, marketplaceMetadata?.capabilities.hooks ?? 0);
+  const resourceCount = installedPlugin
+    ? resources.length
+    : Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
@@ -366,6 +381,7 @@ export function CapabilitiesPluginDetail({
           pluginId={plugin.id}
           runtimeHooks={runtimeHooks ?? []}
           trustHooksOnInstall={Boolean(marketplaceMetadata)}
+          onSetHookEnabled={installedPlugin ? onSetHookEnabled : undefined}
           onSetHookTrust={installedPlugin && !marketplaceMetadata ? onSetHookTrust : undefined}
           onClose={() => setSelectedItem(null)}
           onGetContent={onGetItemContent}

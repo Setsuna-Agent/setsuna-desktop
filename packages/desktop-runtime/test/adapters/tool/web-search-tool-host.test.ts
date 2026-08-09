@@ -16,6 +16,7 @@ describe('WebSearchToolHost', () => {
     ]);
     await expect(host.listTools({ threadId: 'thread_1', features: { plugins: false } })).resolves.toEqual([]);
     await expect(toolHost(false).listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
+    await expect(toolHost(true, undefined, 'local').listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
     await expect(host.toolRuntimeProfile(WEB_SEARCH_TOOL_NAME)).resolves.toEqual({
       exposure: 'direct',
       supportsParallel: true,
@@ -111,23 +112,28 @@ function toolHost(
       publishedDate?: string;
     }>;
   }> = async (request) => ({ provider: 'tavily-keyless', query: request.query, results: [] }),
+  installationSource: 'local' | 'marketplace' = 'marketplace',
 ) {
   return new WebSearchToolHost({
-    async listPlugins() {
-      return {
-        plugins: installed ? [{
+    async listInstalledRecords() {
+      return installed ? [{
           id: WEB_SEARCH_PLUGIN_ID,
           name: '网络搜索',
           icon: 'web-search',
           installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource,
+          sourcePath: '/catalog/web-search',
+          installPath: '/runtime/plugins/web-search',
+          manifestPath: '/runtime/plugins/web-search/.setsuna-plugin/plugin.json',
           tools: [{ name: WEB_SEARCH_TOOL_NAME }],
           skills: [],
+          skillEntries: [],
           mcpServers: [],
+          mcpServerInputs: [],
           hooks: [],
           hookCount: 0,
           resources: [],
-        }] : [],
-      };
+        }] : [];
     },
   }, { search });
 }

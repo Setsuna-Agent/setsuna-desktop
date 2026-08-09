@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { PluginBundleToolHost } from '../../../src/adapters/tool/plugin-bundle-tool-host.js';
 import type { InstalledPluginRecord, PluginBundleStore } from '../../../src/ports/plugin-bundle-store.js';
@@ -134,6 +137,32 @@ describe('plugin bundle tool host', () => {
       expectedPreviewIntegrityToken: 'configure-plugin:stale',
     })).rejects.toMatchObject({ failureKind: 'preview_changed', failureStage: 'preflight' });
     expect(drafts.writeDraft).not.toHaveBeenCalled();
+  });
+
+  it('recognizes an AI-managed draft through a symlinked runtime data root', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-draft-link-'));
+    try {
+      const realDraftRoot = path.join(root, 'real-drafts');
+      const linkedDraftRoot = path.join(root, 'linked-drafts');
+      await mkdir(path.join(realDraftRoot, 'demo'), { recursive: true });
+      await symlink(realDraftRoot, linkedDraftRoot, process.platform === 'win32' ? 'junction' : 'dir');
+
+      const store = pluginStoreFixture();
+      const canonicalSource = await realpath(path.join(linkedDraftRoot, 'demo'));
+      vi.mocked(store.listInstalledRecords).mockResolvedValue([installedRecordFixture(canonicalSource)]);
+      const drafts: PluginDraftStore = {
+        pathFor: (pluginId) => path.join(linkedDraftRoot, pluginId),
+        writeDraft: vi.fn(async (input) => ({ pluginId: input.pluginId, path: path.join(linkedDraftRoot, input.pluginId) })),
+      };
+      const host = new PluginBundleToolHost(store, drafts);
+
+      await expect(host.approvalForTool(
+        'configure_plugin',
+        configurePluginInput('export default function activate() {}\n'),
+      )).resolves.toMatchObject({ reason: expect.any(String) });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
 

@@ -491,6 +491,7 @@ export function CapabilitiesPage({
             onSetExtensionTrust={selectedInstalledPlugin?.installationSource === 'marketplace'
               ? undefined
               : setPluginExtensionTrust}
+            onSetHookEnabled={onSetHookEnabled}
             onSetHookTrust={onSetHookTrust}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
             onTestImageGeneration={onTestImageGeneration}

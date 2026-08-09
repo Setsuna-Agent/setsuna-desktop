@@ -499,21 +499,25 @@ function configStore(value: RuntimeImageGenerationProviderConfig) {
   return { async getImageGenerationConfig() { return value; } };
 }
 
-function pluginStore(installed: boolean) {
+function pluginStore(installed: boolean, installationSource: 'local' | 'marketplace' = 'marketplace') {
   return {
-    async listPlugins() {
-      return {
-        plugins: installed ? [{
+    async listInstalledRecords() {
+      return installed ? [{
           id: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
           name: '图片生成',
           installedAt: '2026-07-17T00:00:00.000Z',
+          installationSource,
+          sourcePath: '/catalog/openai-image-generation',
+          installPath: '/runtime/plugins/openai-image-generation',
+          manifestPath: '/runtime/plugins/openai-image-generation/.setsuna-plugin/plugin.json',
           skills: [],
+          skillEntries: [],
           mcpServers: [],
+          mcpServerInputs: [],
           hooks: [],
           hookCount: 0,
           resources: [],
-        }] : [],
-      };
+        }] : [];
     },
   };
 }

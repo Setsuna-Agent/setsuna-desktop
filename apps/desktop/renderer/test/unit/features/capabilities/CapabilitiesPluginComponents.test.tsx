@@ -318,6 +318,62 @@ describe('capabilities plugin components', () => {
     expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
   });
 
+  it('keeps installed capabilities readable until a marketplace update is applied', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        installedPlugin={{
+          id: 'versioned-plugin',
+          name: 'Versioned Plugin',
+          version: '1.0.0',
+          installedAt: '2026-08-01T00:00:00.000Z',
+          installationSource: 'marketplace',
+          skills: [],
+          mcpServers: [],
+          hooks: [{ id: 'installed-hook', name: 'Installed Hook', eventName: 'PostToolUse' }],
+          hookCount: 1,
+          resources: [
+            { id: 'shared-guide', label: 'Installed Guide', path: 'resources/guide.md', size: 12 },
+            { id: 'removed-notice', label: 'Removed Notice', path: 'resources/old.md', size: 8 },
+          ],
+        }}
+        marketplacePlugin={{
+          id: 'versioned-plugin',
+          name: 'Versioned Plugin',
+          version: '2.0.0',
+          publisher: 'Setsuna',
+          tags: [],
+          featured: false,
+          skills: [],
+          mcpServers: [],
+          hooks: [
+            { id: 'installed-hook', name: 'Updated Hook Copy', eventName: 'PostToolUse' },
+            { id: 'catalog-only-hook', name: 'Catalog-only Hook', eventName: 'PreToolUse' },
+          ],
+          resources: [
+            { id: 'shared-guide', label: 'Catalog Guide', path: 'resources/guide.md', size: 14 },
+            { id: 'catalog-only-guide', label: 'Catalog-only Guide', path: 'resources/new.md', size: 16 },
+          ],
+          capabilities: { skills: 0, mcpServers: 0, hooks: 2, resources: 2 },
+          installed: true,
+          installedVersion: '1.0.0',
+          updateAvailable: true,
+        }}
+        installing={false}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('Installed Hook');
+    expect(html).toContain('Installed Guide');
+    expect(html).not.toContain('Catalog-only Hook');
+    expect(html).not.toContain('Catalog-only Guide');
+    expect(html).not.toContain('Removed Notice');
+  });
+
   it('composes installed shortcuts with the featured plugin catalog', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginMarket
@@ -484,6 +540,70 @@ describe('capabilities plugin components', () => {
     await userEvent.click(screen.getByRole('button', { name: /Audit writes/u }));
     await userEvent.click(screen.getByRole('button', { name: '信任当前命令' }));
     expect(onSetHookTrust).toHaveBeenCalledWith(runtimeHook, true);
+  });
+
+  it('lets users disable an installed marketplace Hook', async () => {
+    const onSetHookEnabled = vi.fn(async () => undefined);
+    const runtimeHook = {
+      key: 'C:\\runtime\\plugins\\guard\\hooks\\guard.mjs:pre_tool_use:0:0',
+      eventName: 'preToolUse' as const,
+      handlerType: 'command' as const,
+      matcher: 'shell',
+      command: 'node guard.mjs',
+      timeoutSec: 30,
+      statusMessage: null,
+      sourcePath: 'C:\\runtime\\plugins\\guard\\hooks\\guard.mjs',
+      source: 'plugin' as const,
+      pluginId: 'guard',
+      pluginHookId: 'guard-shell',
+      displayOrder: 0,
+      enabled: true,
+      isManaged: true,
+      currentHash: 'managed-hash',
+      trustStatus: 'managed' as const,
+    };
+    const marketplacePlugin = {
+      id: 'guard',
+      name: 'Guard',
+      publisher: 'Setsuna',
+      tags: [],
+      featured: false,
+      skills: [],
+      mcpServers: [],
+      hooks: [{ id: 'guard-shell', name: 'Guard Shell', eventName: 'PreToolUse' as const }],
+      resources: [],
+      capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
+      installed: true,
+      updateAvailable: false,
+    } satisfies RuntimePluginMarketplaceItem;
+    render(
+      <CapabilitiesPluginDetail
+        error={null}
+        installedPlugin={{
+          id: marketplacePlugin.id,
+          name: marketplacePlugin.name,
+          installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'marketplace',
+          skills: [],
+          mcpServers: [],
+          hooks: marketplacePlugin.hooks,
+          hookCount: 1,
+          resources: [],
+        }}
+        marketplacePlugin={marketplacePlugin}
+        installing={false}
+        removing={false}
+        runtimeHooks={[runtimeHook]}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetHookEnabled={onSetHookEnabled}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Guard Shell/u }));
+    await userEvent.click(screen.getByRole('button', { name: '停用 Hook' }));
+    expect(onSetHookEnabled).toHaveBeenCalledWith(runtimeHook, false);
   });
 
   it('renders private Images API settings only for the installed image plugin', () => {

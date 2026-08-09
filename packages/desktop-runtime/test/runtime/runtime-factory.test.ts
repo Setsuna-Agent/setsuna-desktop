@@ -1,4 +1,5 @@
 import {
+  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_TOOL_NAME,
@@ -155,9 +156,7 @@ describe('runtime factory tool wiring', () => {
     const runtime = createRuntimeFactory({ dataDir, nativeBridge });
 
     try {
-      await runtime.pluginStore.installPlugin({
-        path: path.join(process.cwd(), 'plugins', 'openai-image-generation'),
-      });
+      await runtime.pluginMarketplace.installPlugin(OPENAI_IMAGE_GENERATION_PLUGIN_ID);
       await runtime.configStore.saveConfig({
         imageGeneration: {
           apiKey: 'image-secret',

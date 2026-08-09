@@ -1,4 +1,5 @@
 import type { RuntimePluginSummary, RuntimeToolDefinition } from '@setsuna-desktop/contracts';
+import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { PluginBundleStore, InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import type { PluginDraftStore } from '../../ports/plugin-draft-store.js';
@@ -234,7 +235,7 @@ export class PluginBundleToolHost implements ToolHost {
   }> {
     const normalized = normalizeConfigurePluginInput(input);
     const installed = (await this.plugins.listInstalledRecords()).find((plugin) => plugin.id === normalized.pluginId);
-    if (installed && !isManagedPluginSource(installed, this.drafts.pathFor(normalized.pluginId))) {
+    if (installed && !await isManagedPluginSource(installed, this.drafts.pathFor(normalized.pluginId))) {
       throw new Error(`Plugin id is already installed from another source and cannot be managed by configure_plugin: ${normalized.pluginId}`);
     }
     return { action: installed ? 'update' : 'create', input: normalized };
@@ -265,12 +266,18 @@ function configuredPluginSummary(
   ].filter(Boolean).join('\n');
 }
 
-function isManagedPluginSource(plugin: InstalledPluginRecord, managedPath: string): boolean {
-  const normalize = (value: string) => {
-    const resolved = path.resolve(value);
-    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
-  };
-  return normalize(plugin.sourcePath) === normalize(managedPath);
+async function isManagedPluginSource(plugin: InstalledPluginRecord, managedPath: string): Promise<boolean> {
+  const [source, managed] = await Promise.all([
+    canonicalPluginPath(plugin.sourcePath),
+    canonicalPluginPath(managedPath),
+  ]);
+  return source === managed;
+}
+
+async function canonicalPluginPath(value: string): Promise<string> {
+  const resolved = path.resolve(value);
+  const canonical = await realpath(resolved).catch(() => resolved);
+  return process.platform === 'win32' ? canonical.toLowerCase() : canonical;
 }
 
 function resourceMetadata(resource: Awaited<ReturnType<PluginBundleStore['readResource']>>) {

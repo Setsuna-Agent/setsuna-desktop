@@ -92,9 +92,13 @@ function capabilityCountLabel(
 export function mergePluginTools(
   marketplace: RuntimePluginTool[],
   installed: RuntimePluginTool[],
+  includeCatalogOnly = true,
 ): RuntimePluginTool[] {
   const installedByName = new Map(installed.map((tool) => [tool.name, tool]));
-  const merged = marketplace.map((tool) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((tool) => installedByName.has(tool.name));
+  const merged = catalog.map((tool) => {
     const active = installedByName.get(tool.name);
     installedByName.delete(tool.name);
     return active ? { ...tool, ...active, description: active.description ?? tool.description } : tool;
@@ -111,9 +115,13 @@ export function formatPluginFileSize(size: number): string {
 export function mergePluginHooks(
   marketplace: RuntimePluginHook[],
   installed: RuntimePluginHook[],
+  includeCatalogOnly = true,
 ): RuntimePluginHook[] {
   const installedById = new Map(installed.map((hook) => [hook.id, hook]));
-  const merged = marketplace.map((hook) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((hook) => installedById.has(hook.id));
+  const merged = catalog.map((hook) => {
     const active = installedById.get(hook.id);
     installedById.delete(hook.id);
     return active ? { ...hook, ...active, description: active.description ?? hook.description } : hook;
@@ -124,9 +132,13 @@ export function mergePluginHooks(
 export function mergePluginSkills(
   marketplace: RuntimePluginSkill[],
   installed: RuntimePluginSkill[],
+  includeCatalogOnly = true,
 ): RuntimePluginSkill[] {
   const installedById = new Map(installed.map((skill) => [skill.id, skill]));
-  const merged = marketplace.map((skill) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((skill) => installedById.has(skill.id));
+  const merged = catalog.map((skill) => {
     const active = installedById.get(skill.id);
     installedById.delete(skill.id);
     return active ? { ...skill, ...active, description: active.description ?? skill.description } : skill;
@@ -137,9 +149,13 @@ export function mergePluginSkills(
 export function mergePluginMcpServers(
   marketplace: RuntimePluginMcpServerDescriptor[],
   installed: RuntimePluginSummary['mcpServers'],
+  includeCatalogOnly = true,
 ): PluginMcpDetail[] {
   const installedByKey = new Map(installed.map((server) => [server.key, server]));
-  const merged = marketplace.map((server) => {
+  const catalog = includeCatalogOnly
+    ? marketplace
+    : marketplace.filter((server) => installedByKey.has(server.key));
+  const merged = catalog.map((server) => {
     const active = installedByKey.get(server.key);
     installedByKey.delete(server.key);
     return active ? { ...server, ...active, description: active.description ?? server.description } : server;

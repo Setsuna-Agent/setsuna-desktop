@@ -97,6 +97,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
   }
 
   async listInstalledRecords(): Promise<InstalledPluginRecord[]> {
+    await this.migrateConfiguredLegacyMarketplaceInstallations();
     return (await this.readIndex()).plugins.map(cloneInstalledRecord);
   }
 

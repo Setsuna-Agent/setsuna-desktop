@@ -4,7 +4,6 @@ import {
   WEB_SEARCH_TOOL_NAME,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type {
   WebSearchClient,
   WebSearchRequest,
@@ -18,13 +17,15 @@ import type {
   ToolExecutionResult,
   ToolHost,
 } from '../../ports/tool-host.js';
+import {
+  installedMarketplacePlugin,
+  type MarketplacePluginStateStore,
+} from './marketplace-plugin-state.js';
 import { boundedIntegerArg, objectInput, requiredStringArg } from './tool-input.js';
 
 const MAX_DOMAIN_FILTERS = 20;
 const WEB_SEARCH_TOPICS = new Set<WebSearchTopic>(['general', 'news', 'finance']);
 const WEB_SEARCH_TIME_RANGES = new Set<WebSearchTimeRange>(['day', 'week', 'month', 'year']);
-
-type WebSearchPluginStore = Pick<PluginBundleStore, 'listPlugins'>;
 
 const WEB_SEARCH_TOOL: RuntimeToolDefinition = {
   name: WEB_SEARCH_TOOL_NAME,
@@ -74,7 +75,7 @@ const WEB_SEARCH_TOOL: RuntimeToolDefinition = {
 /** Bundled Plugin metadata is the enable switch; all network and parsing work stays in the runtime. */
 export class WebSearchToolHost implements ToolHost {
   constructor(
-    private readonly pluginStore: WebSearchPluginStore,
+    private readonly pluginStore: MarketplacePluginStateStore,
     private readonly client: WebSearchClient,
   ) {}
 
@@ -85,8 +86,7 @@ export class WebSearchToolHost implements ToolHost {
 
   async toolRuntimeProfile(name: string) {
     if (name !== WEB_SEARCH_TOOL_NAME) return null;
-    const plugin = (await this.pluginStore.listPlugins()).plugins
-      .find((item) => item.id === WEB_SEARCH_PLUGIN_ID);
+    const plugin = await installedMarketplacePlugin(this.pluginStore, WEB_SEARCH_PLUGIN_ID);
     return {
       exposure: 'direct' as const,
       supportsParallel: true,
@@ -148,8 +148,7 @@ export class WebSearchToolHost implements ToolHost {
   }
 
   private async isInstalled(): Promise<boolean> {
-    return (await this.pluginStore.listPlugins()).plugins
-      .some((plugin) => plugin.id === WEB_SEARCH_PLUGIN_ID);
+    return Boolean(await installedMarketplacePlugin(this.pluginStore, WEB_SEARCH_PLUGIN_ID));
   }
 }
 

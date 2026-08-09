@@ -11,7 +11,6 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
-import type { PluginBundleStore } from '../../ports/plugin-bundle-store.js';
 import type {
   ToolExecutionContext,
   ToolExecutionPreview,
@@ -23,6 +22,10 @@ import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.
 import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
 import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import type { FetchImpl } from '../model/provider-http.js';
+import {
+  installedMarketplacePlugin,
+  type MarketplacePluginStateStore,
+} from './marketplace-plugin-state.js';
 import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
 import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
 
@@ -36,8 +39,6 @@ const MAX_RETAINED_QUICK_TEST_ASSETS = 12;
 type ImageGenerationConfigStore = {
   getImageGenerationConfig(): Promise<RuntimeImageGenerationProviderConfig>;
 };
-
-type ImageGenerationPluginStore = Pick<PluginBundleStore, 'listPlugins'>;
 
 type GeneratedImageReferenceStore = {
   listThreads(query?: { includeArchived?: boolean }): Promise<Array<{ id: string }>>;
@@ -98,7 +99,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
-    private readonly pluginStore: ImageGenerationPluginStore,
+    private readonly pluginStore: MarketplacePluginStateStore,
     private readonly generatedImageStore: GeneratedImageStore,
     options: OpenAiImageGenerationToolHostOptions = {},
   ) {
@@ -114,8 +115,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
   async toolRuntimeProfile(name: string) {
     if (name !== OPENAI_IMAGE_GENERATION_TOOL_NAME) return null;
-    const plugin = (await this.pluginStore.listPlugins()).plugins
-      .find((item) => item.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID);
+    const plugin = await installedMarketplacePlugin(this.pluginStore, OPENAI_IMAGE_GENERATION_PLUGIN_ID);
     return {
       exposure: 'direct' as const,
       supportsParallel: false,
@@ -294,12 +294,11 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
   }
 
   private async availableConfig(): Promise<RuntimeImageGenerationProviderConfig | null> {
-    const [{ plugins }, config] = await Promise.all([
-      this.pluginStore.listPlugins(),
+    const [plugin, config] = await Promise.all([
+      installedMarketplacePlugin(this.pluginStore, OPENAI_IMAGE_GENERATION_PLUGIN_ID),
       this.configStore.getImageGenerationConfig(),
     ]);
-    const installed = plugins.some((plugin) => plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID);
-    return installed && Boolean(config.baseUrl.trim()) && Boolean(config.apiKey.trim())
+    return plugin && Boolean(config.baseUrl.trim()) && Boolean(config.apiKey.trim())
       ? config
       : null;
   }
