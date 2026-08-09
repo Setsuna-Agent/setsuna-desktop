@@ -41,7 +41,12 @@ const eventNames = new Set<RuntimeExtensionEventName>(RUNTIME_EXTENSION_EVENT_NA
 const tools = new Map<string, { definition: ExtensionWorkerTool; execute: ToolHandler }>();
 const handlers = new Map<RuntimeExtensionEventName, EventHandler[]>();
 const activeRequests = new Map<string, AbortController>();
-const pendingHostCalls = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
+const pendingHostCalls = new Map<string, {
+  parentId: string;
+  method: string;
+  resolve(value: unknown): void;
+  reject(error: Error): void;
+}>();
 let hostCallSequence = 0;
 let inputBuffer = '';
 
@@ -142,6 +147,11 @@ async function handleHostMessage(message: HostToExtensionWorkerMessage): Promise
   }
   if (message.type === 'cancel') {
     activeRequests.get(message.requestId)?.abort(new Error('Extension request was cancelled.'));
+    settleCancelledHostCalls(message.requestId);
+    return;
+  }
+  if (message.type === 'host.cancel') {
+    settleCancelledHostCalls(message.parentId);
     return;
   }
   if (message.type === 'host.response') {
@@ -225,9 +235,21 @@ function handlerContext(requestId: string, value: unknown, signal: AbortSignal):
 function hostCall(parentId: string, method: string, params: unknown): Promise<unknown> {
   const id = `host_${++hostCallSequence}`;
   return new Promise((resolve, reject) => {
-    pendingHostCalls.set(id, { resolve, reject });
+    pendingHostCalls.set(id, { parentId, method, resolve, reject });
     send({ type: 'host.request', id, parentId, method, params });
   });
+}
+
+function settleCancelledHostCalls(parentId: string): void {
+  for (const [id, pending] of pendingHostCalls) {
+    if (pending.parentId !== parentId) continue;
+    pendingHostCalls.delete(id);
+    // Interactive cancellation has a documented non-throwing result. Resolving
+    // detached calls also avoids an unhandled rejection in third-party code.
+    if (pending.method === 'ui.confirm') pending.resolve(false);
+    else if (pending.method === 'ui.select' || pending.method === 'ui.input') pending.resolve(null);
+    else pending.resolve(undefined);
+  }
 }
 
 function requireCapability(capability: RuntimeExtensionCapability): void {

@@ -293,6 +293,13 @@ describe('extension manager', () => {
         message: 'Extension parent request completed.',
       }));
       expect(signal.aborted).toBe(true);
+
+      const status = tools.find((tool) => tool.localName === 'detached-ui-status')!;
+      await expect(manager.runTool(status.name, {}, {
+        threadId: 'thread_1',
+        turnId: 'turn_2',
+        toolCallId: 'call_detached_ui_status',
+      })).resolves.toMatchObject({ content: 'settled:false' });
     } finally {
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
@@ -519,13 +526,29 @@ export default function activate(api) {
       return { content: String(approved) };
     },
   });` : ''}
-  ${options.includeDetachedUiTool ? `api.registerTool({
+  ${options.includeDetachedUiTool ? `let detachedUi;
+  api.registerTool({
     name: 'detached-ui',
     description: 'Start host UI without awaiting its response.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     execute(_input, context) {
-      void context.ui.confirm({ title: 'Detached?' });
+      detachedUi = context.ui.confirm({ title: 'Detached?' });
       return { content: 'parent complete' };
+    },
+  });
+  api.registerTool({
+    name: 'detached-ui-status',
+    description: 'Report whether the detached host call settled.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    async execute() {
+      const status = await Promise.race([
+        detachedUi.then(
+          (value) => 'settled:' + String(value),
+          () => 'rejected',
+        ),
+        new Promise((resolve) => setTimeout(() => resolve('pending'), 100)),
+      ]);
+      return { content: status };
     },
   });` : ''}
   ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (

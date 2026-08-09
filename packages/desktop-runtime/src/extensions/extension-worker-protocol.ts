@@ -9,6 +9,7 @@ export type ExtensionWorkerTool = {
 export type HostToExtensionWorkerMessage =
   | { type: 'request'; id: string; method: 'tool.execute' | 'event.dispatch'; params: unknown }
   | { type: 'cancel'; requestId: string }
+  | { type: 'host.cancel'; parentId: string }
   | { type: 'host.response'; id: string; ok: true; result: unknown }
   | { type: 'host.response'; id: string; ok: false; error: string }
   | { type: 'shutdown' };

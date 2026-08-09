@@ -159,10 +159,12 @@ export class ExtensionWorkerClient {
         abort: abortRequestScope,
         resolve: (value) => {
           abortRequestScope(new Error('Extension parent request completed.'));
+          this.cancelWorkerHostCalls(id);
           settle(() => resolve(value));
         },
         reject: (error) => {
           abortRequestScope(error);
+          this.cancelWorkerHostCalls(id);
           settle(() => reject(error));
         },
         cleanup: () => {
@@ -304,6 +306,14 @@ export class ExtensionWorkerClient {
       // The failure below rejects every pending request with the original reason.
     }
     this.fail(error);
+  }
+
+  private cancelWorkerHostCalls(parentId: string): void {
+    try {
+      this.send({ type: 'host.cancel', parentId });
+    } catch {
+      // If the worker pipe is already gone, its in-memory child calls are gone too.
+    }
   }
 
   private fail(error: Error, terminate = true): void {
