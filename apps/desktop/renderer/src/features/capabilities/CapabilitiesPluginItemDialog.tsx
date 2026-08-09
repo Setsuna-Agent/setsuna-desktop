@@ -9,7 +9,7 @@ import type {
   RuntimePluginResource,
   RuntimePluginSkill,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, FileText, Loader2, Plug, Workflow, X } from 'lucide-react';
+import { BookOpen, FileText, Loader2, Plug, ShieldCheck, ShieldOff, Workflow, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
@@ -30,6 +30,7 @@ export function CapabilitiesPluginItemDialog({
   mcpServers,
   onClose,
   onGetContent,
+  onSetHookTrust,
   pluginId,
   runtimeHooks,
   trustHooksOnInstall,
@@ -38,6 +39,7 @@ export function CapabilitiesPluginItemDialog({
   mcpServers: RuntimeMcpServer[];
   onClose: () => void;
   onGetContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
+  onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   pluginId: string;
   runtimeHooks: RuntimeHookMetadata[];
   trustHooksOnInstall: boolean;
@@ -46,6 +48,7 @@ export function CapabilitiesPluginItemDialog({
   const [content, setContent] = useState<RuntimePluginItemContent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(Boolean(onGetContent));
+  const [hookTrustPending, setHookTrustPending] = useState(false);
   const previousFocusRef = useRef<HTMLElement | null>(typeof document === 'undefined' ? null : document.activeElement as HTMLElement | null);
   const itemId = pluginItemId(item);
   const title = pluginItemTitle(item);
@@ -57,6 +60,22 @@ export function CapabilitiesPluginItemDialog({
     ? matchingRuntimeHook(runtimeHooks, pluginId, item.value)
     : undefined;
   const configPreview = pluginItemConfig(item, activeMcpServer, activeHook);
+  const hookTrusted = activeHook?.trustStatus === 'trusted' || activeHook?.trustStatus === 'managed';
+  const hookTrustManageable = Boolean(item.kind === 'hook' && activeHook && !activeHook.isManaged && onSetHookTrust);
+
+  async function updateHookTrust() {
+    if (!activeHook || !onSetHookTrust) return;
+    if (!hookTrusted && !window.confirm(t('capabilities.hookAction.confirmTrust'))) return;
+    setHookTrustPending(true);
+    setError(null);
+    try {
+      await onSetHookTrust(activeHook, !hookTrusted);
+    } catch (unknownError) {
+      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+    } finally {
+      setHookTrustPending(false);
+    }
+  }
 
   useEffect(() => {
     if (!onGetContent) {
@@ -146,7 +165,22 @@ export function CapabilitiesPluginItemDialog({
           </section>
         </div>
 
-        <footer><Button type="button" variant="secondary" onClick={onClose}>{t('common.close')}</Button></footer>
+        <footer>
+          {hookTrustManageable ? (
+            <Button
+              type="button"
+              variant={hookTrusted ? 'secondary' : 'primary'}
+              icon={hookTrustPending
+                ? <Loader2 className="is-spinning" size={14} />
+                : hookTrusted ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
+              disabled={hookTrustPending}
+              onClick={() => void updateHookTrust()}
+            >
+              {t(hookTrusted ? 'capabilities.hookAction.revoke' : 'capabilities.hookAction.trust')}
+            </Button>
+          ) : null}
+          <Button type="button" variant="secondary" onClick={onClose}>{t('common.close')}</Button>
+        </footer>
       </section>
     </div>
   );
@@ -324,10 +358,16 @@ function matchingRuntimeHook(
   pluginId: string,
   item: RuntimePluginHook,
 ): RuntimeHookMetadata | undefined {
+  const exact = hooks.find((hook) => hook.pluginId === pluginId && hook.pluginHookId === item.id);
+  if (exact) return exact;
   const eventName = `${item.eventName[0].toLowerCase()}${item.eventName.slice(1)}`;
-  return hooks.find((hook) => hook.pluginId === pluginId
+  const legacyCandidates = hooks.filter((hook) => hook.pluginId === pluginId
+    && !hook.pluginHookId
     && hook.eventName === eventName
     && (hook.matcher ?? '') === (item.matcher ?? ''));
+  // Older installed configs predate pluginHookId. Only expose a trust action when
+  // their event/matcher tuple still identifies exactly one Hook.
+  return legacyCandidates.length === 1 ? legacyCandidates[0] : undefined;
 }
 
 function hookTrustLabel(status: RuntimeHookMetadata['trustStatus'], t: Translate): string {

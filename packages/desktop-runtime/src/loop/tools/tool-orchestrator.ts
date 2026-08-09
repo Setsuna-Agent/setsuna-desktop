@@ -192,6 +192,7 @@ export class ToolOrchestrator {
             projectId: stepContext.projectId,
             toolCallId: runToolCall.id,
             cwd: environment.cwd,
+            ...(stepContext.features ? { features: stepContext.features } : {}),
             signal: stepContext.signal,
             payload: {
               tool: { id: runToolCall.id, name: runToolCall.name },
@@ -539,6 +540,7 @@ export class ToolOrchestrator {
       projectId: context.projectId,
       toolCallId: toolCall.id,
       cwd: environment.cwd,
+      ...(context.features ? { features: context.features } : {}),
       signal: context.signal,
       payload: {
         tool: { id: toolCall.id, name: toolCall.name },

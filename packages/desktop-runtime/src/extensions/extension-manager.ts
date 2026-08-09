@@ -47,11 +47,13 @@ const eventNames = new Set<string>(RUNTIME_EXTENSION_EVENT_NAMES);
 
 export class ExtensionManager implements ExtensionRuntime {
   private readonly active = new Map<string, ActiveExtension>();
+  private readonly pluginLocks = new Map<string, Promise<void>>();
   private readonly statuses = new Map<string, RuntimeExtensionStatus>();
   private readonly workerEntryPath: string;
   private readonly workerExecArgv: string[];
   private readonly toolTimeoutMs: number;
   private readonly eventTimeoutMs: number;
+  private shuttingDown = false;
 
   constructor(
     private readonly plugins: Pick<PluginBundleStore, 'listInstalledRecords'>,
@@ -66,7 +68,8 @@ export class ExtensionManager implements ExtensionRuntime {
     this.eventTimeoutMs = options.eventTimeoutMs ?? 10_000;
   }
 
-  async listTools(_context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {
+  async listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {
+    if (this.shuttingDown || context.features?.plugins === false) return [];
     const tools: ExtensionRegisteredTool[] = [];
     const records = (await this.plugins.listInstalledRecords()).sort((left, right) => left.id.localeCompare(right.id));
     for (const plugin of records) {
@@ -83,6 +86,7 @@ export class ExtensionManager implements ExtensionRuntime {
   }
 
   async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+    if (context.features?.plugins === false) throw new Error('Plugin extensions are disabled for this turn.');
     let active = [...this.active.values()].find((candidate) => candidate.tools.some((tool) => tool.name === name));
     if (active) {
       const current = (await this.plugins.listInstalledRecords()).find((plugin) => plugin.id === active?.plugin.id);
@@ -105,26 +109,33 @@ export class ExtensionManager implements ExtensionRuntime {
     }
     const tool = active?.tools.find((candidate) => candidate.name === name);
     if (!active || !tool) throw new Error(`Unknown extension tool: ${name}`);
-    const result = await active.client.request(
-      'tool.execute',
-      {
-        name: tool.localName,
-        input,
-        context: safeWorkerContext(context),
-      },
-      workerRequestContext(context),
-      this.toolTimeoutMs,
-    );
-    return normalizeToolResult(result);
+    try {
+      const result = await active.client.request(
+        'tool.execute',
+        {
+          name: tool.localName,
+          input,
+          context: safeWorkerContext(context),
+        },
+        workerRequestContext(context),
+        this.toolTimeoutMs,
+      );
+      return normalizeToolResult(result);
+    } catch (error) {
+      await this.markFailed(active.plugin.id, error, active.client);
+      throw error;
+    }
   }
 
   async dispatch(eventName: RuntimeExtensionEventName, context: ExtensionEventContext): Promise<ExtensionEventOutcome> {
+    if (this.shuttingDown || context.features?.plugins === false) return {};
     const aggregate: ExtensionEventOutcome = {};
     const records = (await this.plugins.listInstalledRecords()).sort((left, right) => left.id.localeCompare(right.id));
     for (const plugin of records) {
       if (!plugin.extension?.capabilities.includes('events')) continue;
+      let active: ActiveExtension | null = null;
       try {
-        const active = await this.ensureActive(plugin);
+        active = await this.ensureActive(plugin);
         if (!active || !active.ready.events.includes(eventName)) continue;
         const result = await active.client.request(
           'event.dispatch',
@@ -142,7 +153,7 @@ export class ExtensionManager implements ExtensionRuntime {
         mergeEventResults(aggregate, result);
         if (aggregate.block) break;
       } catch (error) {
-        await this.markFailed(plugin.id, error);
+        await this.markFailed(plugin.id, error, active?.client);
         const message = `Extension ${plugin.name} failed during ${eventName}: ${errorMessage(error)}`;
         if (isBeforeEvent(eventName)) {
           aggregate.block = true;
@@ -158,7 +169,8 @@ export class ExtensionManager implements ExtensionRuntime {
   async listStatuses(): Promise<RuntimeExtensionStatusList> {
     const records = (await this.plugins.listInstalledRecords()).filter((plugin) => plugin.extension);
     for (const plugin of records) {
-      if (!this.active.has(plugin.id)) continue;
+      const active = this.active.get(plugin.id);
+      if (!active) continue;
       try {
         const bundle = await inspectBundleTree(plugin.installPath);
         if (!plugin.extension?.trustedHash || plugin.extension.trustedHash !== bundle.bundleHash) {
@@ -166,7 +178,7 @@ export class ExtensionManager implements ExtensionRuntime {
           this.statuses.set(plugin.id, { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
         }
       } catch (error) {
-        await this.markFailed(plugin.id, error);
+        await this.markFailed(plugin.id, error, active.client);
       }
     }
     return {
@@ -180,25 +192,44 @@ export class ExtensionManager implements ExtensionRuntime {
   }
 
   async beginPluginMutation(pluginId: string): Promise<() => Promise<void>> {
-    const active = this.active.get(pluginId);
-    this.active.delete(pluginId);
-    this.statuses.set(pluginId, { pluginId, state: 'stopped', tools: [], events: [] });
-    await active?.client.stop();
-    return async () => undefined;
+    const release = await this.acquirePluginLock(pluginId);
+    try {
+      await this.stopActiveLocked(pluginId);
+      this.statuses.set(pluginId, { pluginId, state: 'stopped', tools: [], events: [] });
+      return async () => release();
+    } catch (error) {
+      release();
+      throw error;
+    }
   }
 
   async shutdown(): Promise<void> {
-    const workers = [...this.active.values()].map((extension) => extension.client.stop());
-    this.active.clear();
-    await Promise.allSettled(workers);
+    this.shuttingDown = true;
+    const pluginIds = new Set([...this.active.keys(), ...this.pluginLocks.keys()]);
+    await Promise.all([...pluginIds].map(async (pluginId) => {
+      const release = await this.acquirePluginLock(pluginId);
+      try {
+        await this.stopActiveLocked(pluginId);
+      } finally {
+        release();
+      }
+    }));
   }
 
   private async ensureActive(plugin: InstalledPluginRecord): Promise<ActiveExtension | null> {
+    if (this.shuttingDown) return null;
+    return this.withPluginLock(plugin.id, async () => {
+      if (this.shuttingDown) return null;
+      return this.ensureActiveLocked(plugin);
+    });
+  }
+
+  private async ensureActiveLocked(plugin: InstalledPluginRecord): Promise<ActiveExtension | null> {
     const extension = plugin.extension;
     if (!extension) return null;
     const bundle = await inspectBundleTree(plugin.installPath);
     if (!extension.trustedHash || extension.trustedHash !== bundle.bundleHash) {
-      await this.stopActive(plugin.id);
+      await this.stopActiveLocked(plugin.id);
       this.statuses.set(plugin.id, { pluginId: plugin.id, state: 'stopped', tools: [], events: [] });
       return null;
     }
@@ -208,8 +239,8 @@ export class ExtensionManager implements ExtensionRuntime {
       capabilities: extension.capabilities,
     });
     const existing = this.active.get(plugin.id);
-    if (existing?.signature === signature) return existing;
-    await this.stopActive(plugin.id);
+    if (existing?.signature === signature && existing.client.isRunning()) return existing;
+    await this.stopActiveLocked(plugin.id);
 
     const pluginRoot = await realpath(plugin.installPath);
     const entryPath = await realpath(path.resolve(pluginRoot, extension.entry));
@@ -231,24 +262,29 @@ export class ExtensionManager implements ExtensionRuntime {
         extension.capabilities,
       ),
     });
-    const ready = await client.start();
-    const tools = ready.tools.map((tool): ExtensionRegisteredTool => ({
-      name: extensionToolName(plugin.id, tool.name),
-      localName: tool.name,
-      description: `${plugin.name}: ${tool.description}`,
-      inputSchema: { ...tool.inputSchema },
-      plugin: reference,
-    }));
-    assertUniqueToolNames(tools);
-    const active = { client, plugin, ready, signature, tools };
-    this.active.set(plugin.id, active);
-    this.statuses.set(plugin.id, {
-      pluginId: plugin.id,
-      state: 'running',
-      tools: tools.map((tool) => ({ name: tool.name, description: tool.description })),
-      events: ready.events.filter((event): event is RuntimeExtensionEventName => eventNames.has(event)),
-    });
-    return active;
+    try {
+      const ready = await client.start();
+      const tools = ready.tools.map((tool): ExtensionRegisteredTool => ({
+        name: extensionToolName(plugin.id, tool.name),
+        localName: tool.name,
+        description: `${plugin.name}: ${tool.description}`,
+        inputSchema: { ...tool.inputSchema },
+        plugin: reference,
+      }));
+      assertUniqueToolNames(tools);
+      const active = { client, plugin, ready, signature, tools };
+      this.active.set(plugin.id, active);
+      this.statuses.set(plugin.id, {
+        pluginId: plugin.id,
+        state: 'running',
+        tools: tools.map((tool) => ({ name: tool.name, description: tool.description })),
+        events: ready.events.filter((event): event is RuntimeExtensionEventName => eventNames.has(event)),
+      });
+      return active;
+    } catch (error) {
+      await client.stop().catch(() => undefined);
+      throw error;
+    }
   }
 
   private async handleHostRequest(
@@ -284,20 +320,61 @@ export class ExtensionManager implements ExtensionRuntime {
   }
 
   private async stopActive(pluginId: string): Promise<void> {
+    await this.withPluginLock(pluginId, () => this.stopActiveLocked(pluginId));
+  }
+
+  private async stopActiveLocked(pluginId: string): Promise<void> {
     const current = this.active.get(pluginId);
     this.active.delete(pluginId);
     await current?.client.stop();
   }
 
-  private async markFailed(pluginId: string, error: unknown): Promise<void> {
-    await this.stopActive(pluginId).catch(() => undefined);
-    this.statuses.set(pluginId, {
-      pluginId,
-      state: 'failed',
-      tools: [],
-      events: [],
-      error: errorMessage(error),
+  private async markFailed(
+    pluginId: string,
+    error: unknown,
+    expectedClient?: ExtensionWorkerClient,
+  ): Promise<void> {
+    await this.withPluginLock(pluginId, async () => {
+      const current = this.active.get(pluginId);
+      // A failed request may wait behind a newer activation. Never let that stale
+      // failure tear down the healthy replacement that acquired the lock first.
+      if (current && (!expectedClient || current.client !== expectedClient)) return;
+      await this.stopActiveLocked(pluginId).catch(() => undefined);
+      this.statuses.set(pluginId, {
+        pluginId,
+        state: 'failed',
+        tools: [],
+        events: [],
+        error: errorMessage(error),
+      });
     });
+  }
+
+  private async withPluginLock<T>(pluginId: string, action: () => Promise<T>): Promise<T> {
+    const release = await this.acquirePluginLock(pluginId);
+    try {
+      return await action();
+    } finally {
+      release();
+    }
+  }
+
+  private async acquirePluginLock(pluginId: string): Promise<() => void> {
+    const previous = this.pluginLocks.get(pluginId) ?? Promise.resolve();
+    let releaseSignal!: () => void;
+    const signal = new Promise<void>((resolve) => {
+      releaseSignal = resolve;
+    });
+    const tail = previous.catch(() => undefined).then(() => signal);
+    this.pluginLocks.set(pluginId, tail);
+    await previous.catch(() => undefined);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      releaseSignal();
+      if (this.pluginLocks.get(pluginId) === tail) this.pluginLocks.delete(pluginId);
+    };
   }
 }
 

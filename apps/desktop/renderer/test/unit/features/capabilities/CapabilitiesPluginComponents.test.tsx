@@ -1,7 +1,12 @@
+// @vitest-environment happy-dom
+
 import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CapabilitiesPluginDetail } from '../../../../src/features/capabilities/CapabilitiesPluginDetail.js';
+import { CapabilitiesLegacyHooksDetail } from '../../../../src/features/capabilities/CapabilitiesLegacyHooksDetail.js';
 import {
   CapabilitiesPluginFilePreview,
   markdownPreviewBody,
@@ -10,6 +15,10 @@ import { CapabilitiesPluginListItem } from '../../../../src/features/capabilitie
 import { CapabilitiesPluginMarket } from '../../../../src/features/capabilities/CapabilitiesPluginMarket.js';
 
 describe('capabilities plugin components', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
   it('renders a one-click marketplace row without card chrome or local paths', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginListItem
@@ -94,6 +103,7 @@ describe('capabilities plugin components', () => {
           id: 'worker-demo',
           name: 'Worker Demo',
           installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'local',
           skills: [],
           mcpServers: [],
           hooks: [],
@@ -159,6 +169,7 @@ describe('capabilities plugin components', () => {
           name: marketplacePlugin.name,
           version: marketplacePlugin.version,
           installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'marketplace',
           skills: [],
           mcpServers: [],
           hooks: [],
@@ -238,6 +249,7 @@ describe('capabilities plugin components', () => {
           icon: marketplacePlugin.icon,
           version: '1.0.0',
           installedAt: '2026-07-17T00:00:00.000Z',
+          installationSource: 'marketplace',
           skills: marketplacePlugin.skills,
           mcpServers: [],
           hooks: [],
@@ -298,6 +310,40 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('导入本地插件');
   });
 
+  it('keeps legacy standalone Hooks manageable from the plugin surface', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesLegacyHooksDetail
+        hooks={[{
+          key: 'C:\\runtime\\config.json:pre_tool_use:0:0',
+          eventName: 'preToolUse',
+          handlerType: 'command',
+          matcher: 'shell',
+          command: 'echo checked',
+          timeoutSec: 30,
+          statusMessage: null,
+          sourcePath: 'C:\\runtime\\config.json',
+          source: 'user',
+          pluginId: null,
+          displayOrder: 0,
+          enabled: true,
+          isManaged: false,
+          currentHash: 'hash',
+          trustStatus: 'trusted',
+        }]}
+        onBack={() => undefined}
+        onDelete={async () => undefined}
+        onSetEnabled={async () => undefined}
+        onSetTrust={async () => undefined}
+      />,
+    );
+
+    expect(html).toContain('旧版独立 Hooks');
+    expect(html).toContain('echo checked');
+    expect(html).toContain('aria-label="撤销命令信任"');
+    expect(html).toContain('aria-label="停用 Hook"');
+    expect(html).toContain('aria-label="删除 Hook"');
+  });
+
   it('keeps Hook cards user-facing without exposing runtime identifiers', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginDetail
@@ -337,6 +383,64 @@ describe('capabilities plugin components', () => {
     expect(html).not.toContain('run_shell_command|exec_command');
     expect(html).not.toContain('{{pluginRoot}}');
     expect(html).not.toContain('.mjs');
+  });
+
+  it('lets users trust the current command hash for a side-loaded plugin Hook', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onSetHookTrust = vi.fn(async () => undefined);
+    const runtimeHook = {
+      key: 'C:\\runtime\\plugins\\local-audit\\hooks\\audit.mjs:post_tool_use:0:0',
+      eventName: 'postToolUse' as const,
+      handlerType: 'command' as const,
+      matcher: 'write_file',
+      command: 'node audit.mjs',
+      timeoutSec: 30,
+      statusMessage: null,
+      sourcePath: 'C:\\runtime\\plugins\\local-audit\\hooks\\audit.mjs',
+      source: 'plugin' as const,
+      pluginId: 'local-audit',
+      pluginHookId: 'audit',
+      displayOrder: 0,
+      enabled: true,
+      isManaged: false,
+      currentHash: 'current-hash',
+      trustStatus: 'untrusted' as const,
+    };
+    render(
+      <CapabilitiesPluginDetail
+        error={null}
+        installedPlugin={{
+          id: 'local-audit',
+          name: 'Local Audit',
+          installationSource: 'local',
+          installedAt: '2026-08-09T00:00:00.000Z',
+          skills: [],
+          mcpServers: [],
+          hooks: [{
+            id: 'audit',
+            name: 'Audit writes',
+            eventName: 'PostToolUse',
+            matcher: 'write_file',
+          }],
+          hookCount: 1,
+          resources: [],
+        }}
+        installing={false}
+        removing={false}
+        runtimeHooks={[
+          { ...runtimeHook, key: `${runtimeHook.key}:other`, pluginHookId: 'other', currentHash: 'other-hash' },
+          runtimeHook,
+        ]}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetHookTrust={onSetHookTrust}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Audit writes/u }));
+    await userEvent.click(screen.getByRole('button', { name: '信任当前命令' }));
+    expect(onSetHookTrust).toHaveBeenCalledWith(runtimeHook, true);
   });
 
   it('renders private Images API settings only for the installed image plugin', () => {

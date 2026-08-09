@@ -177,6 +177,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         sourcePath,
         installPath,
         installedAt: this.clock.now().toISOString(),
+        installationSource: options.installationSource ?? 'local',
         manifestPath: installedManifestPath,
         ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
         skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({
@@ -379,6 +380,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           sourcePath,
           installPath,
           installedAt: plugin.installedAt,
+          installationSource: options.installationSource ?? 'local',
           manifestPath: installedManifestPath,
           ...(manifest.tools.length ? { tools: manifest.tools.map((tool) => ({ ...tool })) } : {}),
           skills: manifest.skillEntries.map((skill): RuntimePluginSkill => ({

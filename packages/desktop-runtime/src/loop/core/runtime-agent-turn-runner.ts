@@ -125,7 +125,7 @@ export class RuntimeAgentTurnRunner {
         createdAt: this.options.clock.now().toISOString(),
         payload: { taskKind },
       });
-      await this.dispatchTurnSettled(thread, turnId, 'completed');
+      await this.dispatchTurnSettled(thread, turnId, 'completed', undefined, undefined, runtimeConfig?.features);
       return;
     }
     if (publishUserMessage) {
@@ -159,7 +159,14 @@ export class RuntimeAgentTurnRunner {
         createdAt: this.options.clock.now().toISOString(),
         payload: { taskKind },
       });
-      await this.dispatchTurnSettled(thread, turnId, 'completed', turnStartHooks.reason);
+      await this.dispatchTurnSettled(
+        thread,
+        turnId,
+        'completed',
+        turnStartHooks.reason,
+        undefined,
+        runtimeConfig?.features,
+      );
       return;
     }
     if (turnStartHooks.prompt !== undefined) {
@@ -443,7 +450,14 @@ export class RuntimeAgentTurnRunner {
       });
       throw error;
     } finally {
-      await this.dispatchTurnSettled(thread, turnId, cleanupStatus, settledContent, cleanupEnvironment?.cwd);
+      await this.dispatchTurnSettled(
+        thread,
+        turnId,
+        cleanupStatus,
+        settledContent,
+        cleanupEnvironment?.cwd,
+        runtimeConfig?.features,
+      );
       try {
         await this.cleanupToolHostTurn({
           ...(cleanupEnvironment ? { environment: cleanupEnvironment } : {}),
@@ -464,6 +478,7 @@ export class RuntimeAgentTurnRunner {
     status: ToolTurnCleanupOutcome['status'],
     content?: string,
     cwd?: string,
+    features?: Record<string, boolean>,
   ): Promise<void> {
     if (!this.options.extensions) return;
     try {
@@ -472,6 +487,7 @@ export class RuntimeAgentTurnRunner {
         turnId,
         projectId: thread.projectId,
         cwd,
+        ...(features ? { features } : {}),
         payload: { status, ...(content ? { content } : {}) },
       });
       if (!outcome.feedback) return;

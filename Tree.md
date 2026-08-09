@@ -79,16 +79,17 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 571 total files
-├── src/ — 2 direct / 422 total files
+apps/desktop/renderer/ — 0 direct / 575 total files
+├── src/ — 2 direct / 425 total files
 │   ├── app/ — 2 direct / 34 total files
 │   │   ├── controller/ — 7 direct / 7 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 306 files
-│   │   ├── capabilities/ — 22 direct / 29 total files
+│   ├── features/ — 309 files
+│   │   ├── capabilities/ — 23 direct / 32 total files
+│   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 5 direct / 5 total files
 │   │   ├── chat/ — 5 direct / 119 total files
@@ -134,15 +135,16 @@ apps/desktop/renderer/ — 0 direct / 571 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 149 files
-    └── unit/ — 149 files
+└── test/ — 150 files
+    └── unit/ — 150 files
         ├── app/ — 1 direct / 12 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 112 files
-        │   ├── capabilities/ — 6 direct / 6 total files
+        ├── features/ — 113 files
+        │   ├── capabilities/ — 6 direct / 7 total files
+        │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 60 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 15 direct / 15 total files

@@ -58,10 +58,31 @@ describe('file plugin marketplace', () => {
     });
 
     const installed = await marketplace.installPlugin('docs');
-    expect(installed.plugin).toMatchObject({ id: 'docs', name: 'Docs Helper', publisher: 'Setsuna' });
+    expect(installed.plugin).toMatchObject({
+      id: 'docs',
+      name: 'Docs Helper',
+      publisher: 'Setsuna',
+      installationSource: 'marketplace',
+    });
     await expect(marketplace.listPlugins()).resolves.toMatchObject({
       plugins: [{ id: 'docs', installed: true, installedVersion: '1.0.0' }],
     });
+  });
+
+  it('does not conflate a local plugin with a bundled plugin that has the same id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-local-conflict-'));
+    const catalogDir = path.join(root, 'catalog');
+    await createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' });
+    const runtime = await createPluginRuntime(root);
+    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
+
+    const installed = await runtime.plugins.installPlugin({ path: path.join(catalogDir, 'docs') });
+    expect(installed.plugin).toMatchObject({ id: 'docs', installationSource: 'local' });
+    await expect(marketplace.listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(marketplace.installPlugin('docs')).rejects.toThrow('conflicts with an installed local plugin');
   });
 
   it('reports invalid bundled entries independently and rejects unknown ids', async () => {
@@ -173,7 +194,7 @@ describe('file plugin marketplace', () => {
       }],
     });
     await expect(marketplace.installPlugin('worker')).resolves.toMatchObject({
-      plugin: { id: 'worker', extension: { trust: 'trusted' } },
+      plugin: { id: 'worker', installationSource: 'marketplace', extension: { trust: 'trusted' } },
     });
 
     await createCatalogPlugin(catalogDir, 'worker', {

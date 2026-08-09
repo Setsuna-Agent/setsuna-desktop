@@ -17,6 +17,7 @@ export type ExtensionEventContext = {
   projectId?: string;
   toolCallId?: string;
   cwd?: string;
+  features?: Record<string, boolean>;
   signal?: AbortSignal;
   payload: Record<string, unknown>;
 };

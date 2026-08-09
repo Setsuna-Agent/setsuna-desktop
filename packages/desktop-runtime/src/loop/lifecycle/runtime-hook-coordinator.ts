@@ -91,6 +91,7 @@ export class RuntimeHookCoordinator {
           turnId,
           projectId: thread.projectId,
           cwd: environment.cwd,
+          ...(context.features ? { features: context.features } : {}),
           signal,
           payload: { source: sessionStartSource },
         })
@@ -114,6 +115,7 @@ export class RuntimeHookCoordinator {
       turnId,
       projectId: thread.projectId,
       cwd: environment.cwd,
+      ...(context.features ? { features: context.features } : {}),
       signal,
       payload: { input: prompt, prompt },
     });
@@ -226,6 +228,7 @@ export class RuntimeHookCoordinator {
       turnId,
       projectId: thread.projectId,
       cwd: environment.cwd,
+      ...(context.features ? { features: context.features } : {}),
       signal,
       payload: { trigger },
     });

@@ -22,6 +22,7 @@ describe('file plugin bundle store', () => {
     const runtime = await createPluginRuntime(fixture.root);
 
     const installed = await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    expect(installed.plugin.installationSource).toBe('local');
     expect(installed.plugin.extension).toEqual({
       apiVersion: 1,
       runtime: 'node-worker',
@@ -158,6 +159,7 @@ describe('file plugin bundle store', () => {
     expect(discoverRuntimeHooks(config).hooks).toEqual([
       expect.objectContaining({
         pluginId: 'demo',
+        pluginHookId: 'audit-read',
         source: 'plugin',
         trustStatus: 'untrusted',
         command: expect.stringContaining(path.join('plugins', 'demo', 'hooks', 'post.mjs')),

@@ -6,23 +6,27 @@ import { pluginMarketplacePresentation } from './pluginDisplay.js';
 
 export function CapabilitiesPluginMarket({
   installingPluginIds,
+  legacyHooksPlugin,
   localPlugins,
   marketplacePlugins,
   onInstall,
+  onOpenLegacyHooks,
   onOpenLocal,
   onOpenMarketplace,
 }: {
   installingPluginIds: Set<string>;
+  legacyHooksPlugin?: RuntimePluginSummary;
   localPlugins: RuntimePluginSummary[];
   marketplacePlugins: RuntimePluginMarketplaceItem[];
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
+  onOpenLegacyHooks?: () => void;
   onOpenLocal: (plugin: RuntimePluginSummary) => void;
   onOpenMarketplace: (plugin: RuntimePluginMarketplaceItem) => void;
 }) {
   const { t } = useI18n();
   const presentation = pluginMarketplacePresentation(marketplacePlugins, t);
   const installedMarketplacePlugins = marketplacePlugins.filter((plugin) => plugin.installed);
-  const installedCount = installedMarketplacePlugins.length + localPlugins.length;
+  const installedCount = installedMarketplacePlugins.length + localPlugins.length + Number(Boolean(legacyHooksPlugin));
 
   return (
     <div className="desktop-plugin-market">
@@ -47,6 +51,13 @@ export function CapabilitiesPluginMarket({
                 onOpen={() => onOpenLocal(plugin)}
               />
             ))}
+            {legacyHooksPlugin && onOpenLegacyHooks ? (
+              <CapabilitiesInstalledPluginShortcut
+                key="installed-legacy-hooks"
+                plugin={legacyHooksPlugin}
+                onOpen={onOpenLegacyHooks}
+              />
+            ) : null}
           </div>
         </section>
       ) : null}

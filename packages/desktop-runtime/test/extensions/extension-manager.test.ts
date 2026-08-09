@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -28,6 +28,7 @@ describe('extension manager', () => {
       const tools = await manager.listTools({ threadId: 'thread_1', projectId: 'project_1' });
       expect(tools.map((tool) => tool.name)).toEqual([
         'extension__worker-demo__echo',
+        'extension__worker-demo__blocked',
         'extension__worker-demo__slow',
       ]);
       expect(tools[0].plugin).toEqual({ id: 'worker-demo', name: 'Worker Demo' });
@@ -71,7 +72,7 @@ describe('extension manager', () => {
     }
   });
 
-  it('does not start untrusted bundles and propagates tool cancellation to the worker', async () => {
+  it('does not start untrusted bundles and replaces a worker that ignores cancellation', async () => {
     const fixture = await extensionFixture();
     const state = {
       get: vi.fn(async () => undefined),
@@ -90,16 +91,97 @@ describe('extension manager', () => {
     const manager = testManager(fixture.record, state, ui);
     try {
       const tools = await manager.listTools({ threadId: 'thread_1' });
-      const slow = tools.find((tool) => tool.localName === 'slow')!;
+      const blocked = tools.find((tool) => tool.localName === 'blocked')!;
       const abort = new AbortController();
-      const execution = manager.runTool(slow.name, {}, {
+      const execution = manager.runTool(blocked.name, {}, {
         threadId: 'thread_1',
         turnId: 'turn_1',
-        toolCallId: 'call_slow',
+        toolCallId: 'call_blocked',
         signal: abort.signal,
       });
-      abort.abort(new Error('cancelled by test'));
+      setTimeout(() => abort.abort(new Error('cancelled by test')), 30);
       await expect(execution).rejects.toThrow('cancelled by test');
+
+      const restartedTools = await manager.listTools({ threadId: 'thread_1' });
+      const echo = restartedTools.find((tool) => tool.localName === 'echo')!;
+      await expect(manager.runTool(echo.name, { text: 'restarted' }, {
+        threadId: 'thread_1',
+        turnId: 'turn_2',
+        toolCallId: 'call_echo',
+      })).resolves.toMatchObject({ content: 'thread_1:restarted:1' });
+      expect((await readFile(fixture.activationPath, 'utf8')).trim().split('\n')).toHaveLength(2);
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('honors the plugin feature flag for tool and lifecycle execution', async () => {
+    const fixture = await extensionFixture();
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+    try {
+      const context = { threadId: 'thread_1', features: { plugins: false } };
+      await expect(manager.listTools(context)).resolves.toEqual([]);
+      await expect(manager.runTool('extension__worker-demo__echo', {}, context))
+        .rejects.toThrow('disabled');
+      await expect(manager.dispatch('prompt.before', { ...context, payload: { input: 'hello' } }))
+        .resolves.toEqual({});
+      await expect(readFile(fixture.activationPath, 'utf8')).rejects.toThrow();
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('serializes concurrent activation attempts for the same plugin', async () => {
+    const fixture = await extensionFixture();
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+    try {
+      await Promise.all(Array.from({ length: 6 }, () => manager.listTools({ threadId: 'thread_1' })));
+      expect((await readFile(fixture.activationPath, 'utf8')).trim().split('\n')).toHaveLength(1);
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not let a stale activation failure stop a newer worker', async () => {
+    const fixture = await extensionFixture({ failFirstActivation: true });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+    try {
+      const results = await Promise.all([
+        manager.listTools({ threadId: 'thread_1' }),
+        manager.listTools({ threadId: 'thread_2' }),
+      ]);
+      expect(results.some((tools) => tools.some((tool) => tool.localName === 'echo'))).toBe(true);
+      await expect(manager.listStatuses()).resolves.toMatchObject({
+        extensions: [{ pluginId: 'worker-demo', state: 'running' }],
+      });
+      expect((await readFile(fixture.activationPath, 'utf8')).trim().split('\n')).toHaveLength(2);
     } finally {
       await manager.shutdown();
       await rm(fixture.root, { recursive: true, force: true });
@@ -151,12 +233,28 @@ describe('extension manager', () => {
   });
 });
 
-async function extensionFixture(): Promise<{ entryPath: string; record: InstalledPluginRecord; root: string }> {
+async function extensionFixture(options: { failFirstActivation?: boolean } = {}): Promise<{
+  activationPath: string;
+  entryPath: string;
+  record: InstalledPluginRecord;
+  root: string;
+}> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-test-'));
-  const entryDirectory = path.join(root, 'extension');
+  const pluginRoot = path.join(root, 'plugin');
+  const entryDirectory = path.join(pluginRoot, 'extension');
   const entryPath = path.join(entryDirectory, 'entry.mjs');
+  const activationPath = path.join(root, 'activations.log');
+  const failOncePath = path.join(root, 'fail-once');
   await mkdir(entryDirectory, { recursive: true });
+  if (options.failFirstActivation) await writeFile(failOncePath, '1', 'utf8');
   await writeFile(entryPath, `
+import { appendFileSync, existsSync, unlinkSync } from 'node:fs';
+appendFileSync(${JSON.stringify(activationPath)}, 'activated\\n');
+if (existsSync(${JSON.stringify(failOncePath)})) {
+  unlinkSync(${JSON.stringify(failOncePath)});
+  throw new Error('deliberate first activation failure');
+}
+
 export default function activate(api) {
   console.log('extension activated');
   api.registerTool({
@@ -173,6 +271,14 @@ export default function activate(api) {
       await context.state.set('count', count, 'thread');
       await context.ui.notify({ message: 'ran ' + count });
       return { content: context.threadId + ':' + input.text + ':' + count, data: { count } };
+    },
+  });
+  api.registerTool({
+    name: 'blocked',
+    description: 'Ignore cancellation while blocking the worker event loop.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    execute() {
+      for (;;) { /* deliberately CPU-bound for cancellation recovery coverage */ }
     },
   });
   api.registerTool({
@@ -194,17 +300,18 @@ export default function activate(api) {
   }));
 }
 `, 'utf8');
-  const { bundleHash } = await inspectBundleTree(root);
+  const { bundleHash } = await inspectBundleTree(pluginRoot);
   return {
+    activationPath,
     entryPath,
     root,
     record: {
       id: 'worker-demo',
       name: 'Worker Demo',
       installedAt: '2026-08-09T00:00:00.000Z',
-      sourcePath: root,
-      installPath: root,
-      manifestPath: path.join(root, '.setsuna-plugin', 'plugin.json'),
+      sourcePath: pluginRoot,
+      installPath: pluginRoot,
+      manifestPath: path.join(pluginRoot, '.setsuna-plugin', 'plugin.json'),
       skills: [],
       skillEntries: [],
       mcpServers: [],

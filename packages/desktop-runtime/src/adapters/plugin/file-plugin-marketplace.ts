@@ -28,11 +28,16 @@ export class FilePluginMarketplace implements PluginMarketplace {
       this.readCatalog(),
     ]);
     const installedById = new Map(installedPlugins.map((plugin) => [plugin.id, plugin]));
+    const errors = [...catalog.errors];
     const plugins = catalog.plugins
       .sort(compareMarketplacePlugins)
-      .map((plugin): RuntimePluginMarketplaceItem => {
+      .flatMap((plugin): RuntimePluginMarketplaceItem[] => {
         const installed = installedById.get(plugin.id);
-        return {
+        if (installed && installed.installationSource !== 'marketplace') {
+          errors.push(`${plugin.id}: bundled marketplace id conflicts with an installed local plugin`);
+          return [];
+        }
+        return [{
           id: plugin.id,
           name: plugin.name,
           ...(plugin.icon ? { icon: plugin.icon } : {}),
@@ -51,9 +56,9 @@ export class FilePluginMarketplace implements PluginMarketplace {
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
           updateAvailable: isVersionGreater(plugin.version, installed?.version),
-        };
+        }];
       });
-    return { plugins, errors: catalog.errors };
+    return { plugins, errors };
   }
 
   async readItemContent(
@@ -62,21 +67,35 @@ export class FilePluginMarketplace implements PluginMarketplace {
     itemId: string,
   ): Promise<RuntimePluginItemContent> {
     const id = pluginId.trim().toLowerCase();
-    const catalog = await this.readCatalog();
+    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
+      this.bundles.listPlugins(),
+      this.readCatalog(),
+    ]);
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    const installed = installedPlugins.find((item) => item.id === id);
+    if (installed && installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     return this.bundles.readBundleItemContent({ path: plugin.sourcePath }, kind, itemId);
   }
 
   async installPlugin(pluginId: string): Promise<RuntimePluginInstallResult> {
     const id = pluginId.trim().toLowerCase();
-    const catalog = await this.readCatalog();
+    const [{ plugins: installedPlugins }, catalog] = await Promise.all([
+      this.bundles.listPlugins(),
+      this.readCatalog(),
+    ]);
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
+    const installed = installedPlugins.find((item) => item.id === id);
+    if (installed && installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     // readCatalog 已把来源限制在应用内置目录；用户点击安装就是对这份随包插件的授权。
     return this.bundles.installPlugin(
       { path: plugin.sourcePath },
-      { trustHooks: true, trustExtension: true },
+      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
     );
   }
 
@@ -90,12 +109,15 @@ export class FilePluginMarketplace implements PluginMarketplace {
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
     const installed = installedPlugins.find((item) => item.id === id);
     if (!installed) throw new Error(`Marketplace plugin is not installed: ${pluginId}`);
+    if (installed.installationSource !== 'marketplace') {
+      throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
+    }
     if (!isVersionGreater(plugin.version, installed.version)) {
       throw new Error(`Marketplace plugin update is not available: ${pluginId}`);
     }
     return this.bundles.updatePlugin(
       { path: plugin.sourcePath },
-      { trustHooks: true, trustExtension: true },
+      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
     );
   }
 

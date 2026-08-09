@@ -137,6 +137,8 @@ export type RuntimePluginSummary = {
   publisher?: string;
   tags?: string[];
   installedAt: string;
+  /** Missing only on indexes written before installation provenance was recorded. */
+  installationSource?: 'local' | 'marketplace';
   tools?: RuntimePluginTool[];
   skills: RuntimePluginSkill[];
   mcpServers: RuntimePluginMcpServer[];

@@ -355,7 +355,7 @@ export function materializePluginHook(
   pluginId: string,
   installPath: string,
   manifestPath: string,
-): RuntimeHookInput & { pluginId: string; sourcePath: string } {
+): RuntimeHookInput & { pluginId: string; pluginHookId: string; sourcePath: string } {
   return {
     eventName: hook.eventName,
     ...(hook.matcher ? { matcher: hook.matcher } : {}),
@@ -364,13 +364,14 @@ export function materializePluginHook(
     ...(hook.timeoutSec ? { timeoutSec: hook.timeoutSec } : {}),
     ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
     pluginId,
+    pluginHookId: hook.id,
     sourcePath: manifestPath,
   };
 }
 
 export function addPluginHooks(
   existing: RuntimeHooksConfig,
-  hooks: Array<RuntimeHookInput & { pluginId: string; sourcePath: string }>,
+  hooks: Array<RuntimeHookInput & { pluginId: string; pluginHookId: string; sourcePath: string }>,
 ): RuntimeHooksConfig {
   const next = cloneHooks(existing);
   for (const hook of hooks) {
@@ -384,6 +385,7 @@ export function addPluginHooks(
         ...(hook.timeoutSec ? { timeoutSec: hook.timeoutSec } : {}),
         ...(hook.statusMessage ? { statusMessage: hook.statusMessage } : {}),
         pluginId: hook.pluginId,
+        pluginHookId: hook.pluginHookId,
         sourcePath: hook.sourcePath,
       }],
     });
@@ -542,6 +544,7 @@ export function publicPluginSummary(plugin: InstalledPluginRecord): RuntimePlugi
   } = plugin;
   return {
     ...summary,
+    installationSource: plugin.installationSource ?? 'local',
     ...(extension ? { extension: publicPluginExtension(extension) } : {}),
     ...(summary.tools?.length ? { tools: summary.tools.map((tool) => ({ ...tool })) } : {}),
     ...(summary.tags ? { tags: [...summary.tags] } : {}),

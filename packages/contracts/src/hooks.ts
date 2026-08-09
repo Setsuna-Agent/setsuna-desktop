@@ -19,6 +19,8 @@ export type RuntimeHookHandlerConfig = {
   statusMessage?: string;
   /** 由本地插件 runtime 设置；插件 Hook 在获批前始终不受信任。 */
   pluginId?: string;
+  /** Stable manifest id used to bind management actions to the exact plugin Hook. */
+  pluginHookId?: string;
   sourcePath?: string;
 };
 
@@ -83,6 +85,7 @@ export type RuntimeHookMetadata = {
   sourcePath: string;
   source: RuntimeHookSource;
   pluginId: string | null;
+  pluginHookId?: string;
   displayOrder: number;
   enabled: boolean;
   isManaged: boolean;

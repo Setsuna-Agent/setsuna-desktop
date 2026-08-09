@@ -8,7 +8,7 @@ type ExtensionStateFile = {
 };
 
 const MAX_VALUE_BYTES = 64 * 1024;
-const MAX_PLUGIN_STATE_BYTES = 1024 * 1024;
+const MAX_SCOPE_STATE_BYTES = 1024 * 1024;
 
 export class FileExtensionStateStore {
   private readonly statePath: string;
@@ -34,10 +34,11 @@ export class FileExtensionStateStore {
       const state = await this.read();
       const plugin = state.plugins[pluginId] ?? {};
       const scoped = plugin[scope] ?? {};
-      const nextPlugin = { ...plugin, [scope]: { ...scoped, [key]: cloned } };
-      if (Buffer.byteLength(JSON.stringify(nextPlugin), 'utf8') > MAX_PLUGIN_STATE_BYTES) {
-        throw new Error(`Extension state exceeds ${MAX_PLUGIN_STATE_BYTES} bytes for ${pluginId}.`);
+      const nextScoped = { ...scoped, [key]: cloned };
+      if (Buffer.byteLength(JSON.stringify(nextScoped), 'utf8') > MAX_SCOPE_STATE_BYTES) {
+        throw new Error(`Extension state exceeds ${MAX_SCOPE_STATE_BYTES} bytes for ${pluginId} in ${scope}.`);
       }
+      const nextPlugin = { ...plugin, [scope]: nextScoped };
       await writeJsonFile(this.statePath, {
         version: 1,
         plugins: { ...state.plugins, [pluginId]: nextPlugin },

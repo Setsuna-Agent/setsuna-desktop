@@ -79,6 +79,7 @@ export function useRuntimeClientState({
   } = useRuntimeCapabilityState({
     activeProjectPath,
     client,
+    config: configState.config,
     enabled: loadState === 'ready',
     onConfigChange: replaceConfig,
   });

@@ -958,6 +958,19 @@
   min-width: 0;
 }
 
+.desktop-capabilities-legacy-hooks__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 96px;
+}
+
+.desktop-capabilities-legacy-hooks__actions > .is-spinning {
+  margin-inline: auto;
+  color: var(--app-text-muted);
+}
+
 .desktop-capabilities-plugin-detail__item-chevron {
   flex: 0 0 auto;
   color: var(--app-text-subtle);

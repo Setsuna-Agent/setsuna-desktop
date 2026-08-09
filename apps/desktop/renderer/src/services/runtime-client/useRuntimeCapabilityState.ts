@@ -20,6 +20,7 @@ import type {
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRuntimeHookManagement } from '../../features/capabilities/hooks/useRuntimeHookManagement.js';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
@@ -60,6 +61,7 @@ export type RuntimeCapabilityClient = Pick<
   | 'loginMcpServer'
   | 'logoutMcpServer'
   | 'removePlugin'
+  | 'saveConfig'
   | 'setSkillExtraRoots'
   | 'setPluginExtensionTrust'
   | 'updateMarketplacePlugin'
@@ -71,6 +73,7 @@ export type RuntimeCapabilityClient = Pick<
 type RuntimeCapabilityStateOptions = {
   activeProjectPath?: string;
   client: RuntimeCapabilityClient;
+  config: RuntimeConfigState | null;
   enabled: boolean;
   onConfigChange: (config: RuntimeConfigState) => void;
 };
@@ -111,11 +114,13 @@ export function reportOptionalRuntimeLoadFailures(
 
 /**
  * Owns renderer state and commands for Skill, MCP, and Plugin capabilities.
- * Hook state is read only here so installed plugins can expose their runtime status.
+ * Hook state is refreshed here and exposes narrow management actions for legacy
+ * standalone Hooks and side-loaded plugin Hooks.
  */
 export function useRuntimeCapabilityState({
   activeProjectPath,
   client,
+  config,
   enabled,
   onConfigChange,
 }: RuntimeCapabilityStateOptions) {
@@ -188,6 +193,7 @@ export function useRuntimeCapabilityState({
     if (isLatestRequest()) setHookState(hookList);
     return hookList;
   }, [activeHookCwds, capabilityRequests, client]);
+  const hookManagement = useRuntimeHookManagement({ client, config, onConfigChange, refreshHooks });
 
   useEffect(() => {
     if (!enabled) return;
@@ -392,6 +398,7 @@ export function useRuntimeCapabilityState({
     getSkillDetail,
     extensionStatuses,
     hookState,
+    ...hookManagement,
     installMarketplacePlugin,
     installSkillMcpDependencies,
     loginMcpServer,

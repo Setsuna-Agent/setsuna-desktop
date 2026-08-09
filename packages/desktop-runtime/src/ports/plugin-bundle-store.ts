@@ -47,6 +47,8 @@ export type PluginBundleInspection = Omit<
 };
 
 export type PluginBundleMutationOptions = {
+  /** Records whether the installed snapshot came from the bundled catalog or a local bundle. */
+  installationSource?: 'local' | 'marketplace';
   /**
    * 仅供已经校验过应用内置目录，或把完整生成内容绑定到显式用户审批的调用方使用。
    * 普通“选择目录安装”不能隐式升级为执行其中任意 Hook 命令的授权。

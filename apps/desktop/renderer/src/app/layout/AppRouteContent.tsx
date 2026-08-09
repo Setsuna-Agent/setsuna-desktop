@@ -226,6 +226,9 @@ export function AppRouteContent({
           onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
           onRemovePlugin={runtime.removePlugin}
           onSetPluginExtensionTrust={runtime.setPluginExtensionTrust}
+          onDeleteStandaloneHook={runtime.deleteStandaloneHook}
+          onSetHookEnabled={runtime.setHookEnabled}
+          onSetHookTrust={runtime.setHookTrust}
           onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
           onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
           onTestImageGeneration={runtime.testImageGeneration}

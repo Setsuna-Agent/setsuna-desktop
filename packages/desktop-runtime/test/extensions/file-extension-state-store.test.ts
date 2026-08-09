@@ -34,4 +34,23 @@ describe('file extension state store', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it('applies the aggregate quota per scope so old threads cannot block new state', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-state-'));
+    const store = new FileExtensionStateStore(root);
+    const value = 'x'.repeat(60 * 1024);
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        await store.set('plugin_a', `thread:thread_${index}`, 'value', value);
+      }
+      await expect(store.get('plugin_a', 'thread:thread_19', 'value')).resolves.toBe(value);
+
+      for (let index = 0; index < 17; index += 1) {
+        await store.set('plugin_a', 'global', `value_${index}`, value);
+      }
+      await expect(store.set('plugin_a', 'global', 'value_17', value)).rejects.toThrow('in global');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

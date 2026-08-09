@@ -2,6 +2,7 @@ import type {
   RuntimeConfigState,
   RuntimeExtensionStatus,
   RuntimeHookListResponse,
+  RuntimeHookMetadata,
   RuntimeImageGenerationConfigInput,
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
@@ -43,6 +44,7 @@ import {
   CapabilitiesPluginCreateMenu,
 } from './CapabilitiesCreateMenu.js';
 import { CapabilitiesPluginDetail } from './CapabilitiesPluginDetail.js';
+import { CapabilitiesLegacyHooksDetail } from './CapabilitiesLegacyHooksDetail.js';
 import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
@@ -105,6 +107,9 @@ export function CapabilitiesPage({
   onUpdateMarketplacePlugin,
   onRemovePlugin,
   onSetPluginExtensionTrust,
+  onDeleteStandaloneHook,
+  onSetHookEnabled,
+  onSetHookTrust,
   onSelectedPluginIdChange,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
@@ -141,6 +146,9 @@ export function CapabilitiesPage({
   onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
   onSetPluginExtensionTrust: (pluginId: string, trusted: boolean) => Promise<void>;
+  onDeleteStandaloneHook: (hook: RuntimeHookMetadata) => Promise<void>;
+  onSetHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
+  onSetHookTrust: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSelectedPluginIdChange: (pluginId: string | null) => void;
   onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
@@ -161,6 +169,7 @@ export function CapabilitiesPage({
   const [trustingExtensionIds, setTrustingExtensionIds] = useState<Set<string>>(new Set());
   const [editingMcpServer, setEditingMcpServer] = useState<RuntimeMcpServer | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [legacyHooksOpen, setLegacyHooksOpen] = useState(false);
   const skillDetails = useCapabilitySkillDetails({
     onCreateSkill,
     onDeleteSkill,
@@ -179,6 +188,7 @@ export function CapabilitiesPage({
   const servers = mcpState?.servers ?? [];
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
+  const standaloneHooks = hooks.filter((hook) => hook.source === 'user' && !hook.pluginId);
   const enabledSkillCount = skills.filter((skill) => skill.enabled).length;
   const normalizedCapabilityQuery = capabilityQuery.trim().toLowerCase();
   const visibleServers = servers.filter((server) =>
@@ -189,14 +199,27 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${skill.name} ${skill.description} ${skill.id}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
-  const marketplacePluginIds = new Set(pluginMarketplace.map((plugin) => plugin.id));
-  const localPlugins = plugins.filter((plugin) => !marketplacePluginIds.has(plugin.id));
-  const selectedMarketplacePlugin = selectedPluginId
-    ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
-    : undefined;
   const selectedInstalledPlugin = selectedPluginId
     ? plugins.find((plugin) => plugin.id === selectedPluginId)
     : undefined;
+  const localPlugins = plugins.filter((plugin) => plugin.installationSource !== 'marketplace');
+  const selectedMarketplacePlugin = selectedInstalledPlugin && selectedInstalledPlugin.installationSource !== 'marketplace'
+    ? undefined
+    : selectedPluginId
+      ? pluginMarketplace.find((plugin) => plugin.id === selectedPluginId)
+      : undefined;
+  const legacyHooksPlugin: RuntimePluginSummary | undefined = standaloneHooks.length ? {
+    id: 'setsuna-legacy-hooks',
+    name: t('capabilities.legacyHooks.name'),
+    description: t('capabilities.legacyHooks.description'),
+    installedAt: '',
+    installationSource: 'local',
+    skills: [],
+    mcpServers: [],
+    hooks: [],
+    hookCount: standaloneHooks.length,
+    resources: [],
+  } : undefined;
   const selectedPluginItemSource = selectedInstalledPlugin ? 'installed' : 'marketplace';
   const createCapabilityKind: keyof typeof chatCreateSkillIds = capabilityFilter === 'plugins'
     ? 'plugins'
@@ -350,6 +373,7 @@ export function CapabilitiesPage({
 
   function openPluginDetail(plugin: Pick<RuntimePluginSummary, 'id'>) {
     setCapabilityFilter('plugins');
+    setLegacyHooksOpen(false);
     onSelectedPluginIdChange(plugin.id);
     setPluginError(null);
   }
@@ -358,6 +382,7 @@ export function CapabilitiesPage({
     setCapabilityFilter(nextFilter);
     setCapabilityQuery('');
     setCreateMenuOpen(false);
+    setLegacyHooksOpen(false);
   }
 
   if (mcpEditorOpen) {
@@ -424,6 +449,22 @@ export function CapabilitiesPage({
     );
   }
 
+  if (legacyHooksOpen) {
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <CapabilitiesLegacyHooksDetail
+            hooks={standaloneHooks}
+            onBack={() => setLegacyHooksOpen(false)}
+            onDelete={onDeleteStandaloneHook}
+            onSetEnabled={onSetHookEnabled}
+            onSetTrust={onSetHookTrust}
+          />
+        </section>
+      </main>
+    );
+  }
+
   if (selectedPluginId && (selectedMarketplacePlugin || selectedInstalledPlugin)) {
     return (
       <main className="capabilities-page desktop-capabilities-panel">
@@ -447,7 +488,10 @@ export function CapabilitiesPage({
             onInstall={installOrUpdateMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
             onRemove={removePlugin}
-            onSetExtensionTrust={selectedMarketplacePlugin ? undefined : setPluginExtensionTrust}
+            onSetExtensionTrust={selectedInstalledPlugin?.installationSource === 'marketplace'
+              ? undefined
+              : setPluginExtensionTrust}
+            onSetHookTrust={onSetHookTrust}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
             onTestImageGeneration={onTestImageGeneration}
             onSaveVisionRecognitionConfig={onSaveVisionRecognitionConfig}
@@ -470,7 +514,10 @@ export function CapabilitiesPage({
   const openFormCreate = createCapabilityKind === 'mcp' ? openMcpFormCreate : openSkillFormCreate;
   const marketplaceNoticeVisible = capabilityFilter === 'plugins' && Boolean(pluginError || pluginMarketplaceErrors.length);
   const capabilitySummary = capabilityFilter === 'plugins'
-    ? t('capabilities.market.count', { plugins: pluginMarketplace.length, installed: plugins.length })
+    ? t('capabilities.market.count', {
+        plugins: pluginMarketplace.length,
+        installed: plugins.length + Number(Boolean(legacyHooksPlugin)),
+      })
     : t('capabilities.summary', {
       mcp: servers.length,
       enabledSkills: enabledSkillCount,
@@ -645,19 +692,24 @@ export function CapabilitiesPage({
                 );
               })
               : null}
-            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length) ? (
+            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin) ? (
               <CapabilitiesPluginMarket
                 marketplacePlugins={pluginMarketplace}
                 localPlugins={localPlugins}
+                legacyHooksPlugin={legacyHooksPlugin}
                 installingPluginIds={installingPluginIds}
                 onInstall={installOrUpdateMarketplacePlugin}
+                onOpenLegacyHooks={() => {
+                  onSelectedPluginIdChange(null);
+                  setLegacyHooksOpen(true);
+                }}
                 onOpenMarketplace={openPluginDetail}
                 onOpenLocal={openPluginDetail}
               />
             ) : null}
             {((capabilityFilter === 'mcp' && visibleServers.length)
               || (capabilityFilter === 'skills' && visibleSkills.length)
-              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length))) ? null : (
+              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin))) ? null : (
               <div className="desktop-capabilities-empty">
                 {capabilityFilter === 'plugins'
                   ? t('capabilities.market.empty')

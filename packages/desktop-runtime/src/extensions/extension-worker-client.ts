@@ -57,6 +57,15 @@ export class ExtensionWorkerClient {
 
   constructor(private readonly options: ExtensionWorkerClientOptions) {}
 
+  isRunning(): boolean {
+    return Boolean(
+      this.child
+      && !this.stopping
+      && this.child.exitCode === null
+      && this.child.signalCode === null,
+    );
+  }
+
   start(): Promise<ExtensionWorkerReady> {
     if (this.readyPromise) return this.readyPromise;
     this.readyPromise = new Promise<ExtensionWorkerReady>((resolve, reject) => {
@@ -115,8 +124,7 @@ export class ExtensionWorkerClient {
     return new Promise((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       const abort = () => {
-        this.send({ type: 'cancel', requestId: id });
-        settle(() => reject(abortError(context.signal)));
+        this.cancelAndTerminate(id, abortError(context.signal));
       };
       const settle = (operation: () => void) => {
         const pending = this.pending.get(id);
@@ -126,8 +134,7 @@ export class ExtensionWorkerClient {
         operation();
       };
       timer = setTimeout(() => {
-        this.send({ type: 'cancel', requestId: id });
-        settle(() => reject(new Error(`Extension request timed out after ${timeoutMs}ms.`)));
+        this.cancelAndTerminate(id, new Error(`Extension request timed out after ${timeoutMs}ms.`));
       }, timeoutMs);
       context.signal?.addEventListener('abort', abort, { once: true });
       this.pending.set(id, {
@@ -151,8 +158,12 @@ export class ExtensionWorkerClient {
     if (!this.child) return;
     this.stopping = true;
     const child = this.child;
-    this.send({ type: 'shutdown' });
     const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    try {
+      this.send({ type: 'shutdown' });
+    } catch {
+      if (child.exitCode === null && child.signalCode === null) child.kill();
+    }
     const graceful = await Promise.race([exited.then(() => true), delay(1_000).then(() => false)]);
     if (!graceful && child.exitCode === null && child.signalCode === null) child.kill();
     await Promise.race([exited, delay(1_000)]);
@@ -236,6 +247,18 @@ export class ExtensionWorkerClient {
     const line = `${JSON.stringify(message)}\n`;
     if (Buffer.byteLength(line, 'utf8') > MAX_PROTOCOL_LINE_BYTES) throw new Error('Extension host protocol message is too large.');
     this.child.stdin.write(line);
+  }
+
+  private cancelAndTerminate(requestId: string, error: Error): void {
+    // Cancellation is cooperative only while the worker event loop is responsive.
+    // Terminating the process guarantees that a CPU-bound handler cannot poison all
+    // later calls; ExtensionManager will activate a fresh worker on the next request.
+    try {
+      this.send({ type: 'cancel', requestId });
+    } catch {
+      // The failure below rejects every pending request with the original reason.
+    }
+    this.fail(error);
   }
 
   private fail(error: Error, terminate = true): void {
