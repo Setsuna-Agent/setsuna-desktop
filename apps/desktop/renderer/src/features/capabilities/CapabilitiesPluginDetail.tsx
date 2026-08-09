@@ -110,6 +110,14 @@ export function CapabilitiesPluginDetail({
   const extensionVerified = isBundledExtension
     ? !bundledExtensionNeedsRepair
     : installedExtensionTrust === 'trusted';
+  const extensionNeedsAttention = Boolean(
+    extension
+      && (bundledExtensionNeedsRepair
+        || (!isBundledExtension
+          && installedPlugin?.extension
+          && installedExtensionTrust !== 'trusted')
+        || extensionStatus?.state === 'failed'),
+  );
 
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
@@ -177,7 +185,7 @@ export function CapabilitiesPluginDetail({
         </div>
       </div>
 
-      {extension ? (
+      {extension && extensionNeedsAttention ? (
         <section className="desktop-capabilities-plugin-detail__extension" aria-label={t('capabilities.extension.title')}>
           <div className="desktop-capabilities-plugin-detail__extension-copy">
             <span className={`desktop-capabilities-plugin-detail__extension-icon${extensionVerified ? ' is-trusted' : ''}`}>
@@ -206,26 +214,22 @@ export function CapabilitiesPluginDetail({
               {extensionStatus?.error ? <small className="is-error">{extensionStatus.error}</small> : null}
             </div>
           </div>
-          {!isBundledExtension && installedPlugin?.extension && onSetExtensionTrust ? (
+          {!isBundledExtension
+            && installedPlugin?.extension
+            && installedPlugin.extension.trust !== 'trusted'
+            && onSetExtensionTrust ? (
             <Button
               type="button"
-              variant={installedPlugin.extension.trust === 'trusted' ? 'secondary' : 'primary'}
+              variant="primary"
               icon={extensionTrusting
                 ? <Loader2 className="is-spinning" size={14} />
-                : installedPlugin.extension.trust === 'trusted'
-                  ? <AlertTriangle size={14} />
-                  : <ShieldCheck size={14} />}
+                : <ShieldCheck size={14} />}
               disabled={extensionTrusting || installing || removing}
-              onClick={() => void onSetExtensionTrust(
-                installedPlugin,
-                installedPlugin.extension?.trust !== 'trusted',
-              )}
+              onClick={() => void onSetExtensionTrust(installedPlugin, true)}
             >
-              {t(installedPlugin.extension.trust === 'trusted'
-                ? 'capabilities.extension.revoke'
-                : extensionTrusting
-                  ? 'capabilities.extension.trusting'
-                  : 'capabilities.extension.trust')}
+              {t(extensionTrusting
+                ? 'capabilities.extension.trusting'
+                : 'capabilities.extension.trust')}
             </Button>
           ) : null}
         </section>

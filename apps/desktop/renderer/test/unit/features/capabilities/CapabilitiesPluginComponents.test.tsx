@@ -133,7 +133,48 @@ describe('capabilities plugin components', () => {
     expect(html).toContain('信任并允许运行');
   });
 
-  it('treats bundled executable extensions as app-managed without trust controls', () => {
+  it('hides healthy trusted local executable extension status', () => {
+    const html = renderToStaticMarkup(
+      <CapabilitiesPluginDetail
+        error={null}
+        extensionStatus={{
+          pluginId: 'worker-demo',
+          state: 'running',
+          tools: [],
+          events: [],
+        }}
+        installedPlugin={{
+          id: 'worker-demo',
+          name: 'Worker Demo',
+          installedAt: '2026-08-09T00:00:00.000Z',
+          installationSource: 'local',
+          skills: [],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+          extension: {
+            apiVersion: 1,
+            runtime: 'node-worker',
+            capabilities: ['tools', 'ui'],
+            trust: 'trusted',
+          },
+        }}
+        installing={false}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetExtensionTrust={async () => undefined}
+      />,
+    );
+
+    expect(html).not.toContain('desktop-capabilities-plugin-detail__extension');
+    expect(html).not.toContain('已信任当前包');
+    expect(html).not.toContain('撤销运行信任');
+  });
+
+  it('hides healthy bundled executable extension status', () => {
     const marketplacePlugin = {
       id: 'question',
       name: '澄清问题',
@@ -195,9 +236,7 @@ describe('capabilities plugin components', () => {
       />,
     );
 
-    expect(html).toContain('由应用管理，已自动启用');
-    expect(html).toContain('无需手动信任');
-    expect(html).toContain('运行中');
+    expect(html).not.toContain('desktop-capabilities-plugin-detail__extension');
     expect(html).not.toContain('已信任当前包');
     expect(html).not.toContain('撤销运行信任');
     expect(html).not.toContain('信任并允许运行');
