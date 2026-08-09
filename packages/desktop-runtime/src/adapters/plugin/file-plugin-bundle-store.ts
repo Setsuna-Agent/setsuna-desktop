@@ -13,6 +13,7 @@ import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
+import type { ExtensionStateStore } from '../../ports/extension-runtime.js';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type {
   InstalledPluginRecord,
@@ -69,6 +70,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
     private readonly clock: Clock,
+    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin'>,
     private readonly bundledPluginsDir?: string,
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
@@ -579,6 +581,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
       let finishPluginDirectoryMutation: (() => Promise<void>) | undefined;
       let directoryMoved = false;
+      let indexUpdated = false;
       const removedMcpServers: string[] = [];
       try {
         finishPluginDirectoryMutation = this.skills.beginPluginDirectoryMutation(plugin.installPath);
@@ -599,17 +602,36 @@ export class FilePluginBundleStore implements PluginBundleStore {
           version: 1,
           plugins: index.plugins.filter((item) => item.id !== plugin.id),
         } satisfies PluginIndexFile);
+        indexUpdated = true;
+        // State is keyed only by plugin ID, so it must not survive a successful
+        // uninstall and become visible to a different bundle reusing that ID.
+        await this.extensionState.deletePlugin(plugin.id);
       } catch (error) {
+        const rollbackErrors: unknown[] = [];
         if (plugin.hookCount) {
-          await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} }).catch(() => undefined);
+          await this.configStore.saveConfig({ hooks: configBefore.hooks ?? {} })
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
         }
-        await Promise.allSettled(
+        const mcpRollback = await Promise.allSettled(
           serversToRemove
             .filter((server) => removedMcpServers.includes(server.key))
             .map((server) => this.mcpStore.upsertServer(server)),
         );
-        if (directoryMoved) await renameWithRetry(removalPath, plugin.installPath).catch(() => undefined);
+        rollbackErrors.push(...mcpRollback
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map((result) => result.reason));
+        if (directoryMoved) {
+          await renameWithRetry(removalPath, plugin.installPath)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
+        if (indexUpdated) {
+          await writeJsonFile(this.indexPath, index)
+            .catch((rollbackError) => rollbackErrors.push(rollbackError));
+        }
         await Promise.allSettled(plugin.mcpServers.map(({ key }) => this.mcpClient.invalidateServer(key)));
+        if (rollbackErrors.length) {
+          throw new AggregateError([error, ...rollbackErrors], 'Plugin removal failed and rollback was incomplete.');
+        }
         throw error;
       } finally {
         try {

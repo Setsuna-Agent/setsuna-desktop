@@ -30,6 +30,13 @@ export type ExtensionEventOutcome = {
   feedback?: string;
 };
 
+export type ExtensionStateStore = {
+  get(pluginId: string, scope: string, key: string): Promise<unknown>;
+  set(pluginId: string, scope: string, key: string, value: unknown): Promise<void>;
+  delete(pluginId: string, scope: string, key: string): Promise<void>;
+  deletePlugin(pluginId: string): Promise<void>;
+};
+
 export type ExtensionRuntime = {
   listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;

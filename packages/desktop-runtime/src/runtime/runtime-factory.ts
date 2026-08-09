@@ -115,6 +115,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpConnections);
   const builtinPluginsDir =
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
+  const extensionState = new FileExtensionStateStore(runtimeDataDir);
   const pluginStore = new FilePluginBundleStore(
     runtimeDataDir,
     fileSkillRegistry,
@@ -122,10 +123,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     mcpConnections,
     configStore,
     clock,
+    extensionState,
     builtinPluginsDir,
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
-  const extensionState = new FileExtensionStateStore(runtimeDataDir);
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi);
   pluginStore.setRuntimeMutationCoordinator(extensionManager);

@@ -244,6 +244,61 @@ describe('extension manager', () => {
     }
   });
 
+  it('cancels a detached host UI request when its parent completes', async () => {
+    const fixture = await extensionFixture({ includeDetachedUiTool: true });
+    let notifyUiStarted!: (signal: AbortSignal) => void;
+    let notifyUiCancelled!: (reason: unknown) => void;
+    const uiStarted = new Promise<AbortSignal>((resolve) => {
+      notifyUiStarted = resolve;
+    });
+    const uiCancelled = new Promise<unknown>((resolve) => {
+      notifyUiCancelled = resolve;
+    });
+    const manager = testManager(
+      fixture.record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      {
+        handle: vi.fn(async (_method: string, _params: unknown, context: ExtensionUiContext) => {
+          const signal = context.signal;
+          if (!signal) throw new Error('Expected a request-scoped signal.');
+          notifyUiStarted(signal);
+          return new Promise<never>((_resolve, reject) => {
+            const cancel = () => {
+              notifyUiCancelled(signal.reason);
+              reject(signal.reason);
+            };
+            if (signal.aborted) cancel();
+            else signal.addEventListener('abort', cancel, { once: true });
+          });
+        }),
+      },
+    );
+
+    try {
+      const tools = await manager.listTools({ threadId: 'thread_1' });
+      const detached = tools.find((tool) => tool.localName === 'detached-ui')!;
+      const execution = manager.runTool(detached.name, {}, {
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        toolCallId: 'call_detached_ui',
+      });
+      const signal = await uiStarted;
+
+      await expect(execution).resolves.toMatchObject({ content: 'parent complete' });
+      await expect(uiCancelled).resolves.toEqual(expect.objectContaining({
+        message: 'Extension parent request completed.',
+      }));
+      expect(signal.aborted).toBe(true);
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('honors the plugin feature flag for tool and lifecycle execution', async () => {
     const fixture = await extensionFixture();
     const manager = testManager(
@@ -393,6 +448,7 @@ describe('extension manager', () => {
 async function extensionFixture(options: {
   exitAfterActivation?: boolean;
   failFirstActivation?: boolean;
+  includeDetachedUiTool?: boolean;
   includeDelayedUiTool?: boolean;
   includePendingEvent?: boolean;
 } = {}): Promise<{
@@ -461,6 +517,15 @@ export default function activate(api) {
     async execute(_input, context) {
       const approved = await context.ui.confirm({ title: 'Continue?' });
       return { content: String(approved) };
+    },
+  });` : ''}
+  ${options.includeDetachedUiTool ? `api.registerTool({
+    name: 'detached-ui',
+    description: 'Start host UI without awaiting its response.',
+    inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+    execute(_input, context) {
+      void context.ui.confirm({ title: 'Detached?' });
+      return { content: 'parent complete' };
     },
   });` : ''}
   ${options.includePendingEvent ? `api.on('prompt.before', (_payload, context) => (

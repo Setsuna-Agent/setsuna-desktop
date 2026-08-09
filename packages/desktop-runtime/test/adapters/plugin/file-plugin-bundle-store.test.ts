@@ -6,6 +6,7 @@ import { FilePluginBundleStore } from '../../../src/adapters/plugin/file-plugin-
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
+import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -62,6 +63,38 @@ describe('file plugin bundle store', () => {
       { trustExtension: true },
     );
     expect(trustedUpdate.plugin.extension?.trust).toBe('trusted');
+  });
+
+  it('purges every extension state scope after successful plugin removal', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    await runtime.extensionState.set('demo', 'global', 'token', 'old secret');
+    await runtime.extensionState.set('demo', 'thread:thread_1', 'count', 3);
+    await runtime.extensionState.set('other-plugin', 'global', 'value', 'keep');
+
+    await runtime.plugins.removePlugin('demo');
+
+    await expect(runtime.extensionState.get('demo', 'global', 'token')).resolves.toBeUndefined();
+    await expect(runtime.extensionState.get('demo', 'thread:thread_1', 'count')).resolves.toBeUndefined();
+    await expect(runtime.extensionState.get('other-plugin', 'global', 'value')).resolves.toBe('keep');
+  });
+
+  it('rolls back plugin removal when extension state cannot be cleared', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    await runtime.plugins.installPlugin({ path: fixture.bundleDir });
+    const [installed] = await runtime.plugins.listInstalledRecords();
+    await runtime.extensionState.set('demo', 'global', 'value', 'keep after rollback');
+    vi.spyOn(runtime.extensionState, 'deletePlugin').mockRejectedValueOnce(new Error('state file is locked'));
+
+    await expect(runtime.plugins.removePlugin('demo')).rejects.toThrow('state file is locked');
+
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({ plugins: [{ id: 'demo' }] });
+    await expect(stat(installed.installPath)).resolves.toBeDefined();
+    await expect(runtime.extensionState.get('demo', 'global', 'value')).resolves.toBe('keep after rollback');
   });
 
   it('requires schemaVersion 2 and an existing mjs entry for executable extensions', async () => {
@@ -492,9 +525,18 @@ async function createPluginRuntime(root: string) {
   const skills = new FileSkillRegistry(builtinDir, dataDir);
   const mcp = new FileMcpStore(dataDir, new InMemoryDesktopNativeBridge());
   const config = new FileConfigStore(dataDir);
+  const extensionState = new FileExtensionStateStore(dataDir);
   const invalidateServer = vi.fn(async () => undefined);
-  const plugins = new FilePluginBundleStore(dataDir, skills, mcp, { invalidateServer }, config, systemClock);
-  return { config, dataDir, invalidateServer, mcp, plugins, skills };
+  const plugins = new FilePluginBundleStore(
+    dataDir,
+    skills,
+    mcp,
+    { invalidateServer },
+    config,
+    systemClock,
+    extensionState,
+  );
+  return { config, dataDir, extensionState, invalidateServer, mcp, plugins, skills };
 }
 
 async function readPluginManifestFixture(bundleDir: string): Promise<Record<string, unknown>> {

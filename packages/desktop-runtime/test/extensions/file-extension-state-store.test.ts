@@ -11,6 +11,7 @@ describe('file extension state store', () => {
     try {
       await store.set('plugin_a', 'thread:thread_1', 'value', { count: 1 });
       await store.set('plugin_a', 'global', 'toString', 'safe own value');
+      await store.set('plugin_b', 'global', 'value', 'keep');
 
       await expect(store.get('plugin_a', 'thread:thread_1', 'value')).resolves.toEqual({ count: 1 });
       await expect(store.get('plugin_a', 'thread:thread_2', 'value')).resolves.toBeUndefined();
@@ -19,6 +20,10 @@ describe('file extension state store', () => {
 
       await store.delete('plugin_a', 'global', 'toString');
       await expect(store.get('plugin_a', 'global', 'toString')).resolves.toBeUndefined();
+
+      await store.deletePlugin('plugin_a');
+      await expect(store.get('plugin_a', 'thread:thread_1', 'value')).resolves.toBeUndefined();
+      await expect(store.get('plugin_b', 'global', 'value')).resolves.toBe('keep');
     } finally {
       await rm(root, { recursive: true, force: true });
     }

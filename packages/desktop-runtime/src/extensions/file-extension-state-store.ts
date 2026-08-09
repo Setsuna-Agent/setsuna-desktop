@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { withFileStateUpdate } from '../adapters/store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from '../adapters/store/json-file.js';
+import type { ExtensionStateStore } from '../ports/extension-runtime.js';
 
 type ExtensionStateFile = {
   version: 1;
@@ -10,7 +11,7 @@ type ExtensionStateFile = {
 const MAX_VALUE_BYTES = 64 * 1024;
 const MAX_SCOPE_STATE_BYTES = 1024 * 1024;
 
-export class FileExtensionStateStore {
+export class FileExtensionStateStore implements ExtensionStateStore {
   private readonly statePath: string;
 
   constructor(dataDir: string) {
@@ -61,6 +62,16 @@ export class FileExtensionStateStore {
       const plugins = { ...state.plugins };
       if (Object.keys(nextPlugin).length) plugins[pluginId] = nextPlugin;
       else delete plugins[pluginId];
+      await writeJsonFile(this.statePath, { version: 1, plugins } satisfies ExtensionStateFile);
+    });
+  }
+
+  async deletePlugin(pluginId: string): Promise<void> {
+    await withFileStateUpdate(this.statePath, async () => {
+      const state = await this.read();
+      if (!Object.hasOwn(state.plugins, pluginId)) return;
+      const plugins = { ...state.plugins };
+      delete plugins[pluginId];
       await writeJsonFile(this.statePath, { version: 1, plugins } satisfies ExtensionStateFile);
     });
   }

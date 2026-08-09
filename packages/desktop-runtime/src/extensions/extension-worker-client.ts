@@ -157,8 +157,14 @@ export class ExtensionWorkerClient {
         // This derived signal also ends UI approvals on timeout or worker failure.
         context: { ...context, signal: requestAbort.signal },
         abort: abortRequestScope,
-        resolve: (value) => settle(() => resolve(value)),
-        reject: (error) => settle(() => reject(error)),
+        resolve: (value) => {
+          abortRequestScope(new Error('Extension parent request completed.'));
+          settle(() => resolve(value));
+        },
+        reject: (error) => {
+          abortRequestScope(error);
+          settle(() => reject(error));
+        },
         cleanup: () => {
           if (timer) clearTimeout(timer);
           context.signal?.removeEventListener('abort', abort);

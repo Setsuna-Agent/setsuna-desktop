@@ -7,6 +7,7 @@ import { FilePluginMarketplace } from '../../../src/adapters/plugin/file-plugin-
 import { FileSkillRegistry } from '../../../src/adapters/skill/file-skill-registry.js';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
+import { FileExtensionStateStore } from '../../../src/extensions/file-extension-state-store.js';
 import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
 import { discoverRuntimeHooks } from '../../../src/hooks/runtime-hooks.js';
 import { systemClock } from '../../../src/ports/clock.js';
@@ -338,6 +339,7 @@ async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
     { invalidateServer: vi.fn(async () => undefined) },
     config,
     systemClock,
+    new FileExtensionStateStore(dataDir),
     bundledPluginsDir,
   );
   return { config, plugins };

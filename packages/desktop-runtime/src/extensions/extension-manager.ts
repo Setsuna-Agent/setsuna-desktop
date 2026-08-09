@@ -16,11 +16,11 @@ import type {
   ExtensionEventOutcome,
   ExtensionRegisteredTool,
   ExtensionRuntime,
+  ExtensionStateStore,
 } from '../ports/extension-runtime.js';
 import type { InstalledPluginRecord, PluginBundleStore } from '../ports/plugin-bundle-store.js';
 import type { ToolExecutionContext, ToolExecutionResult } from '../ports/tool-host.js';
 import { ExtensionUiCoordinator } from './extension-ui-coordinator.js';
-import { FileExtensionStateStore } from './file-extension-state-store.js';
 import {
   ExtensionWorkerClient,
   type ExtensionWorkerReady,
@@ -57,7 +57,7 @@ export class ExtensionManager implements ExtensionRuntime {
 
   constructor(
     private readonly plugins: Pick<PluginBundleStore, 'listInstalledRecords'>,
-    private readonly state: Pick<FileExtensionStateStore, 'delete' | 'get' | 'set'>,
+    private readonly state: Pick<ExtensionStateStore, 'delete' | 'get' | 'set'>,
     private readonly ui: Pick<ExtensionUiCoordinator, 'handle'>,
     options: ExtensionManagerOptions = {},
   ) {
