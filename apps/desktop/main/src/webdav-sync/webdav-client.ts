@@ -6,11 +6,15 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { NormalizedWebDavLocation } from './normalization.js';
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 const MAX_METADATA_BYTES = 10 * 1024 * 1024;
 const MAX_PROPFIND_BYTES = 2 * 1024 * 1024;
 
 type WebDavFetch = typeof globalThis.fetch;
+type WebDavResponseConsumer<T> = (
+  response: Response,
+  reportActivity: () => void,
+) => Promise<T>;
 
 export type WebDavListEntry = {
   name: string;
@@ -128,14 +132,19 @@ export class WebDavClient {
     parts: readonly string[],
     options: { maxBytes?: number; signal?: AbortSignal } = {},
   ): Promise<Buffer> {
-    return this.request(parts, { method: 'GET' }, async (response) => {
+    return this.request(parts, { method: 'GET' }, async (response, reportActivity) => {
       await assertWebDavStatus(response, [200], '无法下载 WebDAV 远端文件。');
       const maxBytes = options.maxBytes ?? MAX_METADATA_BYTES;
       const contentLength = Number(response.headers.get('content-length'));
       if (Number.isFinite(contentLength) && contentLength > maxBytes) {
         throw new Error('WebDAV 远端元数据超过安全大小限制。');
       }
-      return boundedResponseBuffer(response, maxBytes, 'WebDAV 远端元数据超过安全大小限制。');
+      return boundedResponseBuffer(
+        response,
+        maxBytes,
+        'WebDAV 远端元数据超过安全大小限制。',
+        reportActivity,
+      );
     }, options.signal, true);
   }
 
@@ -148,7 +157,7 @@ export class WebDavClient {
       onProgress?: (receivedBytes: number) => void;
     },
   ): Promise<void> {
-    await this.request(parts, { method: 'GET' }, async (response) => {
+    await this.request(parts, { method: 'GET' }, async (response, reportActivity) => {
       await assertWebDavStatus(response, [200], '无法下载 WebDAV 备份对象。');
       if (!response.body) throw new Error('WebDAV 服务器返回了空响应。');
       const contentLength = Number(response.headers.get('content-length'));
@@ -158,6 +167,7 @@ export class WebDavClient {
       let received = 0;
       const limiter = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
+          reportActivity();
           received += chunk.byteLength;
           if (received > options.maxBytes) {
             callback(new Error('WebDAV 备份对象超过清单声明的大小。'));
@@ -191,10 +201,10 @@ export class WebDavClient {
       method: 'PROPFIND',
       headers: { Depth: '1', 'Content-Type': 'application/xml; charset=utf-8' },
       body: propertyRequestBody,
-    }, async (response) => {
+    }, async (response, reportActivity) => {
       if (response.status === 404) return [];
       await assertWebDavStatus(response, [200, 207], '无法列出 WebDAV 远端目录。');
-      const body = await boundedResponseText(response, MAX_PROPFIND_BYTES);
+      const body = await boundedResponseText(response, MAX_PROPFIND_BYTES, reportActivity);
       return parseWebDavList(body, this.url(parts, true));
     }, signal, true);
   }
@@ -212,7 +222,7 @@ export class WebDavClient {
   private request<T>(
     parts: readonly string[],
     init: RequestInit,
-    consume: (response: Response) => Promise<T>,
+    consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
     collection = false,
   ): Promise<T> {
@@ -222,7 +232,7 @@ export class WebDavClient {
   private requestAbsoluteParts<T>(
     parts: readonly string[],
     init: RequestInit,
-    consume: (response: Response) => Promise<T>,
+    consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
     collection = false,
     skipRemoteRoot = false,
@@ -234,18 +244,28 @@ export class WebDavClient {
   private async requestUrl<T>(
     url: URL,
     init: RequestInit,
-    consume: (response: Response) => Promise<T>,
+    consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
   ): Promise<T> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(new Error('WebDAV 请求超时。')), DEFAULT_TIMEOUT_MS);
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const reportActivity = () => {
+      if (controller.signal.aborted) return;
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(
+        () => controller.abort(new Error('WebDAV 请求超时。')),
+        DEFAULT_IDLE_TIMEOUT_MS,
+      );
+    };
     const abort = () => controller.abort(signal?.reason);
     if (signal?.aborted) abort();
     else signal?.addEventListener('abort', abort, { once: true });
     let headersReceived = false;
+    reportActivity();
     try {
       const response = await this.fetchImpl(url, {
         ...init,
+        body: activityTrackedRequestBody(init.body, reportActivity),
         redirect: 'manual',
         signal: controller.signal,
         headers: {
@@ -255,14 +275,15 @@ export class WebDavClient {
         },
       });
       headersReceived = true;
-      return await consume(response);
+      reportActivity();
+      return await consume(response, reportActivity);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? new Error('同步操作已取消。');
       if (controller.signal.aborted) throw new Error('WebDAV 请求超时。', { cause: error });
       if (headersReceived) throw error;
       throw webDavTransportError(error);
     } finally {
-      clearTimeout(timeout);
+      if (timeout) clearTimeout(timeout);
       signal?.removeEventListener('abort', abort);
     }
   }
@@ -299,7 +320,11 @@ async function assertWebDavStatus(
   throw new Error(`${fallbackMessage}（HTTP ${response.status}）`);
 }
 
-async function boundedResponseText(response: Response, maxBytes: number): Promise<string> {
+async function boundedResponseText(
+  response: Response,
+  maxBytes: number,
+  reportActivity?: () => void,
+): Promise<string> {
   const contentLength = Number(response.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     throw new Error('WebDAV 目录响应超过安全大小限制。');
@@ -308,6 +333,7 @@ async function boundedResponseText(response: Response, maxBytes: number): Promis
     response,
     maxBytes,
     'WebDAV 目录响应超过安全大小限制。',
+    reportActivity,
   )).toString('utf8');
 }
 
@@ -315,6 +341,7 @@ async function boundedResponseBuffer(
   response: Response,
   maxBytes: number,
   limitMessage: string,
+  reportActivity?: () => void,
 ): Promise<Buffer> {
   if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader();
@@ -324,6 +351,7 @@ async function boundedResponseBuffer(
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      reportActivity?.();
       received += value.byteLength;
       if (received > maxBytes) {
         await reader.cancel(limitMessage).catch(() => undefined);
@@ -335,6 +363,28 @@ async function boundedResponseBuffer(
     reader.releaseLock();
   }
   return Buffer.concat(chunks, received);
+}
+
+function activityTrackedRequestBody(
+  body: RequestInit['body'],
+  reportActivity: () => void,
+): RequestInit['body'] {
+  if (!isAsyncIterable(body)) return body;
+  return trackAsyncIterableActivity(body, reportActivity) as unknown as RequestInit['body'];
+}
+
+async function* trackAsyncIterableActivity(
+  body: AsyncIterable<unknown>,
+  reportActivity: () => void,
+): AsyncGenerator<unknown> {
+  for await (const chunk of body) {
+    reportActivity();
+    yield chunk;
+  }
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return Boolean(value && typeof value === 'object' && Symbol.asyncIterator in value);
 }
 
 function parseWebDavList(xml: string, requestedUrl: URL): WebDavListEntry[] {

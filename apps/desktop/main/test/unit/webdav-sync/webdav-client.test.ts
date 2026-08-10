@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { normalizeWebDavLocation } from '../../../src/webdav-sync/normalization.js';
 import { WebDavClient } from '../../../src/webdav-sync/webdav-client.js';
 
@@ -77,6 +77,77 @@ describe('WebDavClient', () => {
     await expect(pending).rejects.toThrow('同步操作已取消');
   });
 
+  it('uses an idle timeout instead of aborting an active long response', async () => {
+    vi.useFakeTimers();
+    try {
+      const client = new WebDavClient(
+        normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+        { username: 'alice', password: 'secret' },
+        async (_input, init) => {
+          const requestSignal = init?.signal;
+          return new Response(new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array([1]));
+              const nextChunk = setTimeout(() => {
+                controller.enqueue(new Uint8Array([2]));
+              }, 20_000);
+              const finalChunk = setTimeout(() => {
+                controller.enqueue(new Uint8Array([3]));
+                controller.close();
+              }, 40_000);
+              requestSignal?.addEventListener('abort', () => {
+                clearTimeout(nextChunk);
+                clearTimeout(finalChunk);
+                controller.error(requestSignal.reason);
+              }, { once: true });
+            },
+          }), { status: 200 });
+        },
+      );
+
+      const pending = client.getBuffer(['metadata']);
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      await expect(pending).resolves.toEqual(Buffer.from([1, 2, 3]));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('refreshes the idle timeout while a large request body is uploading', async () => {
+    vi.useFakeTimers();
+    try {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-upload-'));
+      temporaryRoots.push(root);
+      const sourcePath = path.join(root, 'object.enc');
+      await writeFile(sourcePath, Buffer.alloc(128 * 1024, 1));
+      let markFirstChunk: (() => void) | undefined;
+      const firstChunk = new Promise<void>((resolve) => { markFirstChunk = resolve; });
+      const client = new WebDavClient(
+        normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+        { username: 'alice', password: 'secret' },
+        async (_input, init) => {
+          const body = init?.body as unknown as AsyncIterable<Uint8Array>;
+          for await (const _chunk of body) {
+            markFirstChunk?.();
+            await abortableDelay(20_000, init?.signal);
+          }
+          return new Response(null, { status: 201 });
+        },
+      );
+
+      const pending = client.putFile(['object.enc'], sourcePath);
+      await firstChunk;
+      await vi.advanceTimersByTimeAsync(20_000);
+      await vi.advanceTimersByTimeAsync(20_000);
+
+      await expect(pending).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('turns nested transport failures into actionable diagnostics', async () => {
     const cause = Object.assign(new Error('getaddrinfo ENOTFOUND dav.invalid'), {
       code: 'ENOTFOUND',
@@ -117,3 +188,17 @@ describe('WebDavClient', () => {
     expect(await readFile(destinationPath)).toEqual(Buffer.from([1, 2, 3, 4, 5, 6]));
   });
 });
+
+function abortableDelay(milliseconds: number, signal?: AbortSignal | null): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error('aborted'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}

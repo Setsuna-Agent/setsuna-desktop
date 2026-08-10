@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { WebDavSnapshotManifest } from '../../../src/webdav-sync/model.js';
 import { snapshotSummary } from '../../../src/webdav-sync/repository.js';
@@ -247,6 +248,18 @@ describe('WebDAV restore planning and commit', () => {
         message_json TEXT NOT NULL,
         PRIMARY KEY (thread_id, message_index)
       );
+      CREATE TABLE runtime_events (
+        thread_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        event_json TEXT NOT NULL,
+        PRIMARY KEY (thread_id, seq)
+      );
+      CREATE TABLE runtime_event_archives (
+        thread_id TEXT NOT NULL,
+        start_seq INTEGER NOT NULL,
+        events_gzip BLOB NOT NULL,
+        PRIMARY KEY (thread_id, start_seq)
+      );
     `);
     database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
       'thread_alpha',
@@ -268,6 +281,48 @@ describe('WebDAV restore planning and commit', () => {
           workspaceRoot: '/source-device/alpha',
         },
       }),
+    );
+    database.prepare('INSERT INTO runtime_events VALUES (?, ?, ?)').run(
+      'thread_alpha',
+      1,
+      JSON.stringify({
+        id: 'event_live',
+        seq: 1,
+        threadId: 'thread_alpha',
+        type: 'tool.completed',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        payload: {
+          data: {
+            artifact: {
+              projectId: 'project_remote_alpha',
+              workspaceRoot: '/source-device/alpha',
+            },
+          },
+        },
+      }),
+    );
+    database.prepare('INSERT INTO runtime_event_archives VALUES (?, ?, ?)').run(
+      'thread_alpha',
+      2,
+      gzipSync(JSON.stringify([{
+        id: 'event_archived',
+        seq: 2,
+        threadId: 'thread_alpha',
+        type: 'turn.step_snapshot',
+        createdAt: '2026-08-01T00:00:01.000Z',
+        payload: {
+          snapshot: {
+            projectId: 'project_remote_alpha',
+            toolEnvironment: {
+              id: 'project_remote_alpha',
+              workspaceProjectId: 'temporary_workspace.source-device.thread_alpha',
+              cwd: '/source-device/alpha',
+              workspaceRoot: '/source-device/alpha',
+              workspaceRoots: ['/source-device/alpha'],
+            },
+          },
+        },
+      }])),
     );
     database.close();
 
@@ -306,6 +361,35 @@ describe('WebDAV restore planning and commit', () => {
       expect(JSON.parse(message.message_json)).toMatchObject({
         artifact: { projectId: 'project_local_alpha', workspaceRoot: localProjectPath },
       });
+      const liveEvent = restored.prepare('SELECT event_json FROM runtime_events').get() as {
+        event_json: string;
+      };
+      expect(JSON.parse(liveEvent.event_json)).toMatchObject({
+        payload: {
+          data: {
+            artifact: { projectId: 'project_local_alpha', workspaceRoot: localProjectPath },
+          },
+        },
+      });
+      const archive = restored.prepare('SELECT events_gzip FROM runtime_event_archives').get() as {
+        events_gzip: Uint8Array;
+      };
+      const archivedEvents = JSON.parse(gunzipSync(archive.events_gzip).toString('utf8')) as unknown[];
+      expect(archivedEvents).toEqual([
+        expect.objectContaining({
+          payload: {
+            snapshot: expect.objectContaining({
+              projectId: 'project_local_alpha',
+              toolEnvironment: {
+                id: 'project_local_alpha',
+                cwd: localProjectPath,
+                workspaceRoot: localProjectPath,
+                workspaceRoots: [localProjectPath],
+              },
+            }),
+          },
+        }),
+      ]);
     } finally {
       restored.close();
     }

@@ -11,12 +11,14 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
   async resolve({ projectId, threadCreatedAt, threadId }: Parameters<RuntimeEnvironmentResolver['resolve']>[0]): Promise<RuntimeEnvironment> {
     const resolvedProjectId = projectId
       ?? (await this.projects.ensureTemporaryWorkspace({ threadId, createdAt: threadCreatedAt })).id;
+    let workspaceProjectId = resolvedProjectId;
     let status = await this.projects.getStatus(resolvedProjectId);
     if (projectId && status.project && !status.project.path) {
       const temporaryWorkspace = await this.projects.ensureTemporaryWorkspace({
         threadId,
         createdAt: threadCreatedAt,
       });
+      workspaceProjectId = temporaryWorkspace.id;
       status = await this.projects.getStatus(temporaryWorkspace.id);
     }
     const workspacePathValue = status.project?.path;
@@ -35,6 +37,7 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
       // An unbound portable project keeps its logical identity while using a
       // managed per-thread workspace until the user associates a local folder.
       id: resolvedProjectId,
+      ...(workspaceProjectId !== resolvedProjectId ? { workspaceProjectId } : {}),
       cwd: workspaceRoot,
       workspaceRoot,
       workspaceRoots: [workspaceRoot],

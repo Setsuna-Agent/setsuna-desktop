@@ -1,6 +1,7 @@
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { gunzipSync, gzipSync } from 'node:zlib';
 
 type SqliteRow = Record<string, string | number | bigint | Uint8Array | null>;
 
@@ -68,6 +69,12 @@ function remapConversationDatabase(
           numberColumn(row, 'message_index'),
         );
       }
+      if (sqliteTableExists(database, 'runtime_events')) {
+        remapRuntimeEvents(database, projectIdMap, targetPaths);
+      }
+      if (sqliteTableExists(database, 'runtime_event_archives')) {
+        remapRuntimeEventArchives(database, projectIdMap, targetPaths);
+      }
       database.exec('COMMIT');
     } catch (error) {
       database.exec('ROLLBACK');
@@ -75,6 +82,54 @@ function remapConversationDatabase(
     }
   } finally {
     database.close();
+  }
+}
+
+function remapRuntimeEvents(
+  database: DatabaseSync,
+  projectIdMap: ReadonlyMap<string, string>,
+  targetPaths: ReadonlyMap<string, string>,
+): void {
+  const updateEvent = database.prepare(`
+    UPDATE runtime_events SET event_json = ? WHERE thread_id = ? AND seq = ?
+  `);
+  for (const row of database.prepare(`
+    SELECT thread_id, seq, event_json FROM runtime_events
+  `).all() as SqliteRow[]) {
+    const threadId = stringColumn(row, 'thread_id');
+    const seq = numberColumn(row, 'seq');
+    const event = parseJsonColumn(row, 'event_json', `event ${threadId}:${seq}`);
+    const remapped = remapStructuredValue(event, projectIdMap, targetPaths);
+    if (remapped.changed) updateEvent.run(JSON.stringify(remapped.value), threadId, seq);
+  }
+}
+
+function remapRuntimeEventArchives(
+  database: DatabaseSync,
+  projectIdMap: ReadonlyMap<string, string>,
+  targetPaths: ReadonlyMap<string, string>,
+): void {
+  const updateArchive = database.prepare(`
+    UPDATE runtime_event_archives SET events_gzip = ? WHERE thread_id = ? AND start_seq = ?
+  `);
+  for (const row of database.prepare(`
+    SELECT thread_id, start_seq, events_gzip FROM runtime_event_archives
+  `).all() as SqliteRow[]) {
+    const threadId = stringColumn(row, 'thread_id');
+    const startSeq = numberColumn(row, 'start_seq');
+    let events: unknown;
+    try {
+      events = JSON.parse(gunzipSync(blobColumn(row, 'events_gzip')).toString('utf8')) as unknown;
+    } catch (error) {
+      throw new Error(`备份数据库中的事件归档 ${threadId}:${startSeq} 无效。`, { cause: error });
+    }
+    if (!Array.isArray(events)) {
+      throw new Error(`备份数据库中的事件归档 ${threadId}:${startSeq} 无效。`);
+    }
+    const remapped = remapStructuredValue(events, projectIdMap, targetPaths);
+    if (remapped.changed) {
+      updateArchive.run(gzipSync(JSON.stringify(remapped.value)), threadId, startSeq);
+    }
   }
 }
 
@@ -120,24 +175,70 @@ function remapStructuredValue(
     output[key] = remapped.value;
   }
   const sourceProjectId = typeof value.projectId === 'string' ? value.projectId : undefined;
-  const targetProjectId = sourceProjectId ? projectIdMap.get(sourceProjectId) : undefined;
+  const sourceEnvironmentId = typeof value.environmentId === 'string'
+    ? value.environmentId
+    : undefined;
+  const sourceToolEnvironmentId = typeof value.id === 'string' && isToolEnvironment(value)
+    ? value.id
+    : undefined;
+  const sourceWorkspaceProjectId = typeof value.workspaceProjectId === 'string'
+    ? value.workspaceProjectId
+    : undefined;
+  const mappedProjectId = sourceProjectId ? projectIdMap.get(sourceProjectId) : undefined;
+  const mappedEnvironmentId = sourceEnvironmentId ? projectIdMap.get(sourceEnvironmentId) : undefined;
+  const mappedToolEnvironmentId = sourceToolEnvironmentId
+    ? projectIdMap.get(sourceToolEnvironmentId)
+    : undefined;
+  const mappedWorkspaceProjectId = sourceWorkspaceProjectId
+    ? projectIdMap.get(sourceWorkspaceProjectId)
+    : undefined;
+  if (mappedProjectId) {
+    output.projectId = mappedProjectId;
+    changed ||= mappedProjectId !== sourceProjectId;
+  }
+  if (mappedEnvironmentId) {
+    output.environmentId = mappedEnvironmentId;
+    changed ||= mappedEnvironmentId !== sourceEnvironmentId;
+  }
+  if (mappedToolEnvironmentId) {
+    output.id = mappedToolEnvironmentId;
+    changed ||= mappedToolEnvironmentId !== sourceToolEnvironmentId;
+  }
+  const targetProjectId = mappedProjectId ?? mappedEnvironmentId ?? mappedToolEnvironmentId;
+  if (mappedWorkspaceProjectId) {
+    output.workspaceProjectId = mappedWorkspaceProjectId;
+    changed ||= mappedWorkspaceProjectId !== sourceWorkspaceProjectId;
+  } else if (sourceWorkspaceProjectId && targetProjectId) {
+    // Managed workspace IDs are device-local. If they are not part of the
+    // portable project map, let the target device allocate a fresh one.
+    delete output.workspaceProjectId;
+    changed = true;
+  }
   if (targetProjectId) {
-    output.projectId = targetProjectId;
-    changed ||= targetProjectId !== sourceProjectId;
-    if (Object.hasOwn(value, 'workspaceRoot')) {
-      const targetPath = targetPaths.get(targetProjectId);
-      if (targetPath) output.workspaceRoot = targetPath;
-      else delete output.workspaceRoot;
+    const targetPath = targetPaths.get(targetProjectId);
+    for (const key of ['workspaceRoot', 'cwd'] as const) {
+      if (!Object.hasOwn(value, key)) continue;
+      if (targetPath) output[key] = targetPath;
+      else delete output[key];
       changed = true;
     }
-    if (Object.hasOwn(value, 'cwd')) {
-      const targetPath = targetPaths.get(targetProjectId);
-      if (targetPath) output.cwd = targetPath;
-      else delete output.cwd;
+    if (Object.hasOwn(value, 'workspaceRoots')) {
+      if (targetPath) output.workspaceRoots = [targetPath];
+      else delete output.workspaceRoots;
+      changed = true;
+    }
+    if (sourceToolEnvironmentId && Object.hasOwn(value, 'repository')) {
+      delete output.repository;
       changed = true;
     }
   }
   return changed ? { value: output, changed: true } : { value, changed: false };
+}
+
+function isToolEnvironment(value: Record<string, unknown>): boolean {
+  return Object.hasOwn(value, 'cwd')
+    || Object.hasOwn(value, 'workspaceRoot')
+    || Object.hasOwn(value, 'workspaceRoots');
 }
 
 function parseJsonColumn(row: SqliteRow, column: string, label: string): unknown {
@@ -159,6 +260,18 @@ function numberColumn(row: SqliteRow, column: string): number {
   if (typeof value === 'number') return value;
   if (typeof value === 'bigint') return Number(value);
   throw new Error(`备份数据库字段 ${column} 无效。`);
+}
+
+function blobColumn(row: SqliteRow, column: string): Uint8Array {
+  const value = row[column];
+  if (!(value instanceof Uint8Array)) throw new Error(`备份数据库字段 ${column} 无效。`);
+  return value;
+}
+
+function sqliteTableExists(database: DatabaseSync, tableName: string): boolean {
+  return Boolean(database.prepare(`
+    SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?
+  `).get(tableName));
 }
 
 async function isRegularFile(filePath: string): Promise<boolean> {

@@ -98,6 +98,7 @@ describe('WorkspaceRuntimeEnvironmentResolver', () => {
     });
 
     expect(environment.id).toBe(project.id);
+    expect(environment.workspaceProjectId).toBe('temporary_workspace.2026-07-18.thread_restored');
     expect(environment.cwd).toBe(await realpath(path.join(
       dataDir,
       'temporary-workspace',
