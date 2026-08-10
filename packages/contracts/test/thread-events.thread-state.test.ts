@@ -645,7 +645,19 @@ describe('thread event lifecycle and metadata projection', () => {
       threadId: 'thread_1',
       type: 'thread.goal_cleared',
       createdAt: '2026-06-26T00:00:03.000Z',
-      payload: { cleared: true },
+      payload: {
+        cleared: true,
+        lifecycleMessage: {
+          id: 'message_goal_cleared',
+          role: 'developer',
+          promptSource: 'goal',
+          visibility: 'transcript',
+          content: 'The user cleared this goal.',
+          createdAt: '2026-06-26T00:00:03.000Z',
+          status: 'complete',
+          goalMode: { kind: 'cleared', goal: updatedEvent.payload.goal },
+        },
+      },
     };
 
     const withGoal = applyRuntimeEventToThread(thread, updatedEvent);
@@ -668,6 +680,11 @@ describe('thread event lifecycle and metadata projection', () => {
       execution: updatedEvent.payload.goal.execution,
     });
     expect(cleared.goal).toBeUndefined();
+    expect(cleared.messages).toContainEqual(expect.objectContaining({
+      id: 'message_goal_cleared',
+      goalMode: expect.objectContaining({ kind: 'cleared' }),
+    }));
+    expect(cleared.messageCount).toBe(2);
   });
 
   it('stores and clears thread git metadata from metadata events', () => {

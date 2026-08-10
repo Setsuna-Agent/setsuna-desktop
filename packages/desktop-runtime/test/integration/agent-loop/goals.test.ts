@@ -202,6 +202,14 @@ describe('agent loop persistent goals', () => {
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
       const goalTurns = events.filter((event) => event.type === 'turn.started' && event.payload.taskKind === 'goal');
+      const completionMarkers = saved?.messages.filter((message) => message.goalMode?.kind === 'complete') ?? [];
+      const completionMarkerEvent = events.find((event) => (
+        event.type === 'message.created'
+        && event.payload.message.goalMode?.kind === 'complete'
+      ));
+      const finalUsageEvents = events
+        .filter((event) => event.type === 'token.count' && event.turnId === completionMarkers[0]?.turnId)
+      const finalUsageSeq = Math.max(...finalUsageEvents.map((event) => event.seq));
   
       expect(goalTurns).toHaveLength(2);
       expect(modelClient.requests).toHaveLength(4);
@@ -221,6 +229,13 @@ describe('agent loop persistent goals', () => {
       ]));
       expect(completedGoal).toMatchObject({ status: 'complete' });
       expect(saved?.goal).toMatchObject({ status: 'complete', tokensUsed: 15 });
+      expect(completionMarkers).toHaveLength(1);
+      expect(completionMarkers[0]).toMatchObject({
+        turnId: expect.stringMatching(/^turn_/u),
+        goalMode: { kind: 'complete', goal: { status: 'complete', tokensUsed: 15 } },
+      });
+      expect(finalUsageEvents).not.toHaveLength(0);
+      expect(completionMarkerEvent?.seq).toBeGreaterThan(finalUsageSeq);
       expect(loop.activeTurnId(thread.id)).toBeNull();
     });
 
@@ -370,11 +385,88 @@ describe('agent loop persistent goals', () => {
         (snapshot) => snapshot?.goal === undefined && loop.activeTurnId(thread.id) === null,
         (snapshot) => `Timed out waiting for cleared Goal; snapshot=${JSON.stringify(snapshot)}`,
       );
+      const events = await threadStore.listEvents(thread.id, 0);
+      const clearedEvent = events.find((event) => event.type === 'thread.goal_cleared');
 
       expect(cleared?.goal).toBeUndefined();
       expect(cleared?.messages).toContainEqual(expect.objectContaining({
         goalMode: expect.objectContaining({ kind: 'cleared' }),
       }));
+      expect(clearedEvent).toMatchObject({
+        payload: {
+          cleared: true,
+          lifecycleMessage: expect.objectContaining({
+            goalMode: expect.objectContaining({ kind: 'cleared' }),
+          }),
+        },
+      });
+      if (clearedEvent?.type === 'thread.goal_cleared') {
+        expect(clearedEvent.payload.lifecycleMessage).not.toHaveProperty('turnId');
+      }
+      expect(events.filter((event) => (
+        event.type === 'message.created'
+        && event.payload.message.goalMode?.kind === 'cleared'
+      ))).toHaveLength(0);
+    });
+
+  it('does not resurrect a Goal cleared while settlement is reading its turn events', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Settlement race goal' });
+      const modelClient = new GoalSteerModelClient();
+      const originalListEvents = threadStore.listEvents.bind(threadStore);
+      let blockedTurnId: string | null = null;
+      let releaseLookup: () => void = () => undefined;
+      let notifyLookupStarted: () => void = () => undefined;
+      const lookupReleased = new Promise<void>((resolve) => {
+        releaseLookup = resolve;
+      });
+      const lookupStarted = new Promise<void>((resolve) => {
+        notifyLookupStarted = resolve;
+      });
+      threadStore.listEvents = async (threadId, sinceSeq) => {
+        const events = await originalListEvents(threadId, sinceSeq);
+        if (
+          blockedTurnId
+          && events.some((event) => (
+            event.turnId === blockedTurnId
+            && (event.type === 'turn.completed' || event.type === 'turn.cancelled')
+          ))
+        ) {
+          blockedTurnId = null;
+          notifyLookupStarted();
+          await lookupReleased;
+        }
+        return events;
+      };
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.setThreadGoal(thread.id, { objective: 'Clear during settlement', status: 'active' });
+      await waitForModelRequestCount(modelClient, 1);
+      blockedTurnId = loop.activeTurnId(thread.id);
+      expect(blockedTurnId).toEqual(expect.any(String));
+      modelClient.releaseFirstResponse();
+      await lookupStarted;
+
+      await loop.clearThreadGoal(thread.id);
+      expect((await threadStore.getThread(thread.id))?.goal).toBeUndefined();
+      releaseLookup();
+
+      const settled = await waitForTestState(
+        async () => ({
+          activeTurnId: loop.activeTurnId(thread.id),
+          goal: (await threadStore.getThread(thread.id))?.goal,
+        }),
+        (state) => state.activeTurnId === null,
+        (state) => `Timed out waiting for Goal settlement race; state=${JSON.stringify(state)}`,
+      );
+      expect(settled.goal).toBeUndefined();
     });
   
   it('accepts visible user guidance during an active goal turn and samples it next', async () => {
@@ -418,6 +510,8 @@ describe('agent loop persistent goals', () => {
         role: 'user',
         content: 'Use the more detailed approach.',
       });
-      expect((await threadStore.getThread(thread.id))?.messages.at(-1)?.content).toBe('Goal completed with the guidance.');
+      const messages = (await threadStore.getThread(thread.id))?.messages ?? [];
+      expect(messages.filter((message) => message.role === 'assistant').at(-1)?.content)
+        .toBe('Goal completed with the guidance.');
     });
 });

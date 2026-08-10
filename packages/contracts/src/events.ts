@@ -108,7 +108,11 @@ export type RuntimeEvent =
       /** 计量/状态更新可复用既有执行选项，避免在每轮事件中重复内联附件数据。 */
       preserveExecution?: boolean;
     }>
-  | RuntimeEventBase<'thread.goal_cleared', { cleared: boolean }>
+  | RuntimeEventBase<'thread.goal_cleared', {
+      cleared: boolean;
+      /** 与 Goal 清除状态原子提交，避免只留下生命周期标记或只清掉状态。 */
+      lifecycleMessage?: RuntimeMessage;
+    }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
   | RuntimeEventBase<
       'thread.context_compacting',

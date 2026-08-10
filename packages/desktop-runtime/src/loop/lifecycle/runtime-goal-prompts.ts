@@ -17,7 +17,7 @@ export function goalLifecycleMessage(
   const snapshot = lifecycleGoalSnapshot(goal);
   return {
     id: ids.id('msg_goal'),
-    turnId: turnId ?? `goal:${goal.id}`,
+    ...(turnId ? { turnId } : {}),
     role: 'developer',
     promptSource: 'goal',
     visibility: 'transcript',

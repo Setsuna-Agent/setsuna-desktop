@@ -79,6 +79,7 @@ type SetGoalOptions = {
   cancelActiveGoalTurn?: boolean;
   forceNew?: boolean;
   lifecycleTurnId?: string;
+  publishLifecycle?: boolean;
 };
 
 /** 管理持久化目标状态、计量、模型工具、恢复安全和空闲轮次续接。 */
@@ -89,8 +90,10 @@ export class RuntimeGoalCoordinator {
   private readonly observedRuns = new WeakSet<object>();
   private readonly goalIdByTurnId = new Map<string, string>();
   private readonly goalObjectiveByTurnId = new Map<string, string>();
+  private readonly pendingCompletionGoalIdByTurnId = new Map<string, string>();
   private readonly retiredGoalIds = new Set<string>();
   private readonly suppressCancellationPauseThreads = new Set<string>();
+  private readonly mutationTails = new Map<string, Promise<void>>();
   private stopped = false;
 
   constructor(private readonly options: RuntimeGoalCoordinatorOptions) {}
@@ -100,6 +103,7 @@ export class RuntimeGoalCoordinator {
     this.scheduling.clear();
     this.goalIdByTurnId.clear();
     this.goalObjectiveByTurnId.clear();
+    this.pendingCompletionGoalIdByTurnId.clear();
     this.retiredGoalIds.clear();
   }
 
@@ -112,18 +116,20 @@ export class RuntimeGoalCoordinator {
   async reconcileRestoredGoals(): Promise<void> {
     const summaries = await this.options.threadStore.listThreads({ includeArchived: true });
     for (const summary of summaries) {
-      const thread = await this.options.threadStore.getThread(summary.id);
-      if (!thread?.goal) continue;
-      const normalized = normalizeRestoredGoal(thread.goal, this.options.ids);
-      const restored = normalized.status === 'active'
-        ? withGoalStatus(normalized, 'paused', this.options.clock.now(), {
-            code: 'runtimeReloaded',
-            message: 'Goal paused because the runtime restarted.',
-          })
-        : normalized;
-      if (sameGoalState(thread.goal, restored)) continue;
-      await this.publishGoal(restored, { preserveExecution: Boolean(restored.execution) });
-      if (thread.goal.status === 'active') await this.publishLifecycle(restored, 'paused');
+      await this.withGoalMutation(summary.id, async () => {
+        const thread = await this.options.threadStore.getThread(summary.id);
+        if (!thread?.goal) return;
+        const normalized = normalizeRestoredGoal(thread.goal, this.options.ids);
+        const restored = normalized.status === 'active'
+          ? withGoalStatus(normalized, 'paused', this.options.clock.now(), {
+              code: 'runtimeReloaded',
+              message: 'Goal paused because the runtime restarted.',
+            })
+          : normalized;
+        if (sameGoalState(thread.goal, restored)) return;
+        await this.publishGoal(restored, { preserveExecution: Boolean(restored.execution) });
+        if (thread.goal.status === 'active') await this.publishLifecycle(restored, 'paused');
+      });
     }
   }
 
@@ -137,6 +143,17 @@ export class RuntimeGoalCoordinator {
     threadId: string,
     patch: RuntimeThreadGoalPatch,
     options: SetGoalOptions = {},
+  ): Promise<RuntimeThreadGoal> {
+    return this.withGoalMutation(
+      threadId,
+      () => this.setGoalUnlocked(threadId, patch, options),
+    );
+  }
+
+  private async setGoalUnlocked(
+    threadId: string,
+    patch: RuntimeThreadGoalPatch,
+    options: SetGoalOptions,
   ): Promise<RuntimeThreadGoal> {
     const thread = await this.requireThread(threadId);
     if (
@@ -165,12 +182,7 @@ export class RuntimeGoalCoordinator {
     );
     if (replacingActiveGoal && options.cancelActiveGoalTurn !== false && active) {
       this.retiredGoalIds.add(previous!.id);
-      this.suppressCancellationPauseThreads.add(threadId);
-      try {
-        await this.options.cancelTurn(threadId, active.turnId);
-      } finally {
-        this.suppressCancellationPauseThreads.delete(threadId);
-      }
+      await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
     }
 
     await this.publishGoal(goal, {
@@ -179,7 +191,7 @@ export class RuntimeGoalCoordinator {
     if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
 
     const lifecycleKind = goalLifecycleTransition(previous, goal);
-    if (lifecycleKind) {
+    if (lifecycleKind && options.publishLifecycle !== false) {
       await this.publishLifecycle(goal, lifecycleKind, options.lifecycleTurnId);
     }
 
@@ -189,7 +201,7 @@ export class RuntimeGoalCoordinator {
       && options.cancelActiveGoalTurn !== false
       && currentActive?.taskKind === 'goal'
     ) {
-      await this.options.cancelTurn(threadId, currentActive.turnId);
+      await this.cancelGoalTurnWithoutPausing(threadId, currentActive.turnId);
     }
     if (goal.status === 'active') await this.continueIfIdle(threadId, false);
     return goal;
@@ -197,6 +209,16 @@ export class RuntimeGoalCoordinator {
 
   /** 将队列 Goal 原子转换为状态、可见用户消息和首轮执行。 */
   async startQueuedGoal(
+    threadId: string,
+    input: RuntimeQueuedTurnInput,
+  ): Promise<GoalContinuationRun> {
+    return this.withGoalMutation(
+      threadId,
+      () => this.startQueuedGoalUnlocked(threadId, input),
+    );
+  }
+
+  private async startQueuedGoalUnlocked(
     threadId: string,
     input: RuntimeQueuedTurnInput,
   ): Promise<GoalContinuationRun> {
@@ -265,50 +287,69 @@ export class RuntimeGoalCoordinator {
   }
 
   async clearGoal(threadId: string): Promise<void> {
-    const goal = await this.getGoal(threadId);
+    return this.withGoalMutation(threadId, () => this.clearGoalUnlocked(threadId));
+  }
+
+  private async clearGoalUnlocked(threadId: string): Promise<void> {
+    const thread = await this.requireThread(threadId);
+    const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
     if (!goal) return;
     const active = this.options.activeTask(threadId);
+    const retiredActiveGoal = active?.taskKind === 'goal';
     if (active?.taskKind === 'goal') {
       // The cancelled turn may settle after goal_cleared; retire its ID before aborting so a
       // late accounting write cannot resurrect the cleared Goal.
       this.retiredGoalIds.add(goal.id);
-      this.suppressCancellationPauseThreads.add(threadId);
-      try {
-        await this.options.cancelTurn(threadId, active.turnId);
-      } finally {
-        this.suppressCancellationPauseThreads.delete(threadId);
-      }
+      await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
     }
-    await this.publishLifecycle(goal, 'cleared');
-    await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      type: 'thread.goal_cleared',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: { cleared: true },
-    });
+    const lifecycleMessage = goalLifecycleMessage(
+      goal,
+      'cleared',
+      this.options.ids,
+      this.options.clock,
+    );
+    try {
+      await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        type: 'thread.goal_cleared',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: { cleared: true, lifecycleMessage },
+      });
+    } catch (error) {
+      // If the atomic clear fails, allow the cancelled turn to settle and pause the still-active Goal.
+      if (retiredActiveGoal) this.retiredGoalIds.delete(goal.id);
+      throw error;
+    }
   }
 
   async resumeGoal(threadId: string): Promise<void> {
-    const goal = await this.getGoal(threadId);
-    if (!goal) return;
-    if (goal.status === 'active') {
-      await this.continueIfIdle(threadId);
-      return;
-    }
-    if (goal.status === 'complete') throw new Error('A completed goal cannot be resumed. Create a new goal instead.');
-    await this.setGoal(threadId, { status: 'active' });
+    return this.withGoalMutation(threadId, async () => {
+      const thread = await this.requireThread(threadId);
+      const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+      if (!goal) return;
+      if (goal.status === 'active') {
+        await this.continueIfIdle(threadId);
+        return;
+      }
+      if (goal.status === 'complete') throw new Error('A completed goal cannot be resumed. Create a new goal instead.');
+      await this.setGoalUnlocked(threadId, { status: 'active' }, {});
+    });
   }
 
   async pauseForCancellation(threadId: string): Promise<void> {
     if (this.suppressCancellationPauseThreads.has(threadId)) return;
-    const goal = await this.getGoal(threadId);
-    if (goal?.status === 'active') {
-      await this.updateStatus(goal, 'paused', {
-        code: 'turnCancelled',
-        message: 'Goal paused because its active turn was cancelled.',
-      }, 'paused');
-    }
+    await this.withGoalMutation(threadId, async () => {
+      if (this.suppressCancellationPauseThreads.has(threadId)) return;
+      const thread = await this.requireThread(threadId);
+      const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+      if (goal?.status === 'active') {
+        await this.updateStatus(goal, 'paused', {
+          code: 'turnCancelled',
+          message: 'Goal paused because its active turn was cancelled.',
+        }, 'paused');
+      }
+    });
   }
 
   observeRun(
@@ -346,6 +387,7 @@ export class RuntimeGoalCoordinator {
       const settledGoalId = this.goalIdByTurnId.get(turnId);
       this.goalIdByTurnId.delete(turnId);
       this.goalObjectiveByTurnId.delete(turnId);
+      this.pendingCompletionGoalIdByTurnId.delete(turnId);
       if (settledGoalId) this.retiredGoalIds.delete(settledGoalId);
       pending.delete(settlement);
       if (!pending.size && this.pendingSettlements.get(threadId) === pending) {
@@ -386,35 +428,49 @@ export class RuntimeGoalCoordinator {
       return goalToolResult(name, { goal }, goal ? `Goal is ${goal.status}.` : 'No goal is set.');
     }
     if (name === 'create_goal') {
-      const currentGoal = await this.getGoal(context.threadId);
-      this.assertCurrentGoalRevision(context.turnId, currentGoal);
       const objective = normalizeGoalObjective(input.objective);
-      const goal = await this.setGoal(
-        context.threadId,
-        { objective, status: 'active', tokenBudget: null },
-        {
-          cancelActiveGoalTurn: false,
-          forceNew: true,
-          lifecycleTurnId: context.turnId,
-        },
-      );
-      if (context.turnId) {
-        this.goalIdByTurnId.set(context.turnId, goal.id);
-        this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
-      }
-      return goalToolResult(name, { goal }, 'Goal created.');
+      return this.withGoalMutation(context.threadId, async () => {
+        const thread = await this.requireThread(context.threadId);
+        const currentGoal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+        this.assertCurrentGoalRevision(context.turnId, currentGoal);
+        const goal = await this.setGoalUnlocked(
+          context.threadId,
+          { objective, status: 'active', tokenBudget: null },
+          {
+            cancelActiveGoalTurn: false,
+            forceNew: true,
+            lifecycleTurnId: context.turnId,
+          },
+        );
+        if (context.turnId) {
+          this.goalIdByTurnId.set(context.turnId, goal.id);
+          this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
+        }
+        return goalToolResult(name, { goal }, 'Goal created.');
+      });
     }
     if (name === 'update_goal') {
       normalizeCompletionStatus(input.status);
-      const goal = await this.getGoal(context.threadId);
-      if (!goal || goal.status !== 'active') throw new Error('No active goal is available to complete.');
-      this.assertCurrentGoalRevision(context.turnId, goal);
-      const completed = await this.setGoal(
-        context.threadId,
-        { status: 'complete' },
-        { cancelActiveGoalTurn: false, lifecycleTurnId: context.turnId },
-      );
-      return goalToolResult(name, { goal: completed }, 'Goal marked complete.');
+      return this.withGoalMutation(context.threadId, async () => {
+        const thread = await this.requireThread(context.threadId);
+        const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+        if (!goal || goal.status !== 'active') throw new Error('No active goal is available to complete.');
+        this.assertCurrentGoalRevision(context.turnId, goal);
+        const deferCompletionMarker = Boolean(context.turnId);
+        const completed = await this.setGoalUnlocked(
+          context.threadId,
+          { status: 'complete' },
+          {
+            cancelActiveGoalTurn: false,
+            lifecycleTurnId: context.turnId,
+            publishLifecycle: !deferCompletionMarker,
+          },
+        );
+        if (context.turnId) {
+          this.pendingCompletionGoalIdByTurnId.set(context.turnId, completed.id);
+        }
+        return goalToolResult(name, { goal: completed }, 'Goal marked complete.');
+      });
     }
     throw new Error(`Unknown goal tool: ${name}`);
   }
@@ -459,20 +515,44 @@ export class RuntimeGoalCoordinator {
     observedGoalId?: string,
     observedGoalObjective?: string,
   ): Promise<void> {
-    if (this.deletionPausedThreads.has(threadId)) return;
-    if (observedGoalId && this.retiredGoalIds.has(observedGoalId)) return;
-    const goal = await this.getGoal(threadId);
-    if (!goal) return;
     // A regular turn can create a Goal through create_goal. Once that turn is bound to the new
     // Goal, its final usage and outcome belong to the Goal just like a runtime-created Goal turn.
     if (taskKind !== 'goal' && !observedGoalId) {
-      if (goal.status === 'active') await this.continueIfIdle(threadId);
+      await this.withGoalMutation(threadId, async () => {
+        if (this.deletionPausedThreads.has(threadId)) return;
+        const goal = (await this.requireThread(threadId)).goal;
+        if (goal?.status === 'active') await this.continueIfIdle(threadId);
+      });
       return;
     }
-    if (observedGoalId && observedGoalId !== goal.id) return;
 
     const events = (await this.options.threadStore.listEvents(threadId))
       .filter((event) => event.turnId === turnId);
+    await this.withGoalMutation(threadId, () => this.settleGoalTurn(
+      threadId,
+      turnId,
+      observedGoalId,
+      observedGoalObjective,
+      events,
+    ));
+  }
+
+  private async settleGoalTurn(
+    threadId: string,
+    turnId: string,
+    observedGoalId: string | undefined,
+    observedGoalObjective: string | undefined,
+    events: Awaited<ReturnType<ThreadStore['listEvents']>>,
+  ): Promise<void> {
+    if (this.deletionPausedThreads.has(threadId)) return;
+    if (observedGoalId && this.retiredGoalIds.has(observedGoalId)) return;
+    // Re-read only after the awaited event lookup and inside the per-thread Goal mutation queue.
+    // This prevents a stale settlement from overwriting an edit, replacement, or clear.
+    const thread = await this.requireThread(threadId);
+    const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+    if (!goal) return;
+    if (observedGoalId && observedGoalId !== goal.id) return;
+
     const accounted = accountGoalTurn(goal, events, this.options.clock.now());
     if (observedGoalObjective && observedGoalObjective !== goal.objective) {
       // An edit keeps Goal identity but changes the work contract. Preserve time/usage from the
@@ -529,8 +609,12 @@ export class RuntimeGoalCoordinator {
       updatedAt: epochSeconds(this.options.clock.now()),
     };
     await this.publishGoal(updated, { preserveExecution: Boolean(updated.execution) });
-    if (updated.status !== goal.status && updated.status !== 'active') {
-      await this.publishLifecycle(updated, lifecycleKindForStatus(updated.status));
+    const pendingCompletionGoalId = this.pendingCompletionGoalIdByTurnId.get(turnId);
+    if (updated.status === 'complete' && pendingCompletionGoalId === updated.id) {
+      // The lifecycle snapshot must include the final response's token/time accounting.
+      await this.publishLifecycle(updated, 'complete', turnId);
+    } else if (updated.status !== goal.status && updated.status !== 'active') {
+      await this.publishLifecycle(updated, lifecycleKindForStatus(updated.status), turnId);
     }
     if (updated.status === 'active') {
       await this.continueIfIdle(threadId);
@@ -554,7 +638,17 @@ export class RuntimeGoalCoordinator {
     turnId?: string,
   ): Promise<void> {
     const message = goalLifecycleMessage(goal, kind, this.options.ids, this.options.clock, turnId);
-    await this.options.publishMessage(goal.threadId, message.turnId!, message);
+    if (message.turnId) {
+      await this.options.publishMessage(goal.threadId, message.turnId, message);
+      return;
+    }
+    await this.options.appendEvent(goal.threadId, {
+      id: this.options.ids.id('event'),
+      threadId: goal.threadId,
+      type: 'message.created',
+      createdAt: message.createdAt,
+      payload: { message },
+    });
   }
 
   private async publishGoal(
@@ -595,6 +689,26 @@ export class RuntimeGoalCoordinator {
       type: 'thread.updated',
       createdAt: this.options.clock.now().toISOString(),
       payload: { title: fallbackThreadTitle(objective) },
+    });
+  }
+
+  private async cancelGoalTurnWithoutPausing(threadId: string, turnId: string): Promise<boolean> {
+    this.suppressCancellationPauseThreads.add(threadId);
+    try {
+      return await this.options.cancelTurn(threadId, turnId);
+    } finally {
+      this.suppressCancellationPauseThreads.delete(threadId);
+    }
+  }
+
+  /** Serializes read-modify-append Goal transactions so late turn settlement cannot win a race. */
+  private withGoalMutation<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.mutationTails.get(threadId) ?? Promise.resolve();
+    const result = previous.then(operation, operation);
+    const tail = result.then(() => undefined, () => undefined);
+    this.mutationTails.set(threadId, tail);
+    return result.finally(() => {
+      if (this.mutationTails.get(threadId) === tail) this.mutationTails.delete(threadId);
     });
   }
 

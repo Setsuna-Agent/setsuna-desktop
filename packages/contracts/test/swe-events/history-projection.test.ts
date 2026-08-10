@@ -706,4 +706,44 @@ describe('runtime AppServer SWE persisted history projection', () => {
         ],
       }]);
     });
+
+  it('does not project thread-level Goal lifecycle markers as synthetic turns', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_goal',
+      title: 'Goal lifecycle thread',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      updatedAt: '2026-06-27T00:00:01.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: 'Goal paused.',
+      lastSeq: 1,
+      messages: [{
+        id: 'msg_goal_paused',
+        turnId: 'goal:goal_1',
+        role: 'developer',
+        promptSource: 'goal',
+        visibility: 'transcript',
+        content: 'Goal paused.',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        status: 'complete',
+        goalMode: {
+          kind: 'paused',
+          goal: {
+            version: 1,
+            id: 'goal_1',
+            threadId: 'thread_goal',
+            objective: 'Ship the change.',
+            status: 'paused',
+            tokenBudget: null,
+            tokensUsed: 0,
+            timeUsedSeconds: 1,
+            createdAt: 1782518400,
+            updatedAt: 1782518401,
+          },
+        },
+      }],
+    };
+
+    expect(runtimeThreadToSweTurns(thread)).toEqual([]);
+  });
 });

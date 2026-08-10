@@ -104,6 +104,8 @@ export function runtimeThreadToSweTurns(thread: RuntimeThread): SweTurn[] {
   const groups = new Map<string, RuntimeSweTurnEntry[]>();
   for (const [index, message] of thread.messages.entries()) {
     if (message.visibility === 'model') continue;
+    // Goal lifecycle markers describe thread-level state; they must never manufacture AppServer turns.
+    if (message.goalMode) continue;
     if (!message.turnId) continue;
     groups.set(message.turnId, [...(groups.get(message.turnId) ?? []), { createdAt: message.createdAt, index, message }]);
   }

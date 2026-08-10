@@ -52,12 +52,13 @@ export function nextGoalSafety(
 ): NonNullable<RuntimeThreadGoal['safety']> {
   const fingerprint = progressFingerprint(events);
   const repeatedOrMissing = !fingerprint || fingerprint === previous?.lastProgressFingerprint;
+  const lastProgressFingerprint = fingerprint ?? previous?.lastProgressFingerprint;
   return {
     automaticTurns: (previous?.automaticTurns ?? 0) + 1,
     consecutiveNoProgressTurns: repeatedOrMissing
       ? (previous?.consecutiveNoProgressTurns ?? 0) + 1
       : 0,
-    ...(fingerprint ? { lastProgressFingerprint: fingerprint } : {}),
+    ...(lastProgressFingerprint ? { lastProgressFingerprint } : {}),
   };
 }
 
