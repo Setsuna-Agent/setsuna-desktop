@@ -6,6 +6,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebDavRestorePanel } from '../../../../src/features/settings/webdav-sync/WebDavRestorePanel.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
@@ -13,21 +14,19 @@ import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 afterEach(cleanup);
 
 describe('WebDavRestorePanel', () => {
+  it('shows backup sizes without presenting internal files as domain item counts', () => {
+    renderRestorePanel();
+
+    expect(screen.getByText('3 类数据 · 896 B')).toBeTruthy();
+    expect(screen.getByText('备份大小 512 B')).toBeTruthy();
+    expect(screen.queryByText(/6 项/u)).toBeNull();
+  });
+
   it('shows exact overwritten and removed items before enabling restore', async () => {
     const user = userEvent.setup();
     const onInspect = vi.fn(async () => restorePlan);
     const onRestore = vi.fn(async () => undefined);
-    render(
-      <I18nProvider initialLocale="zh-CN">
-        <WebDavRestorePanel
-          backup={snapshot}
-          busy={false}
-          onInspect={onInspect}
-          onRefresh={async () => undefined}
-          onRestore={onRestore}
-        />
-      </I18nProvider>,
-    );
+    renderRestorePanel({ onInspect, onRestore });
 
     await user.click(screen.getByRole('button', { name: '检查会覆盖什么' }));
 
@@ -50,6 +49,23 @@ describe('WebDavRestorePanel', () => {
     expect(onRestore).toHaveBeenCalledWith(restorePlan.id);
   });
 });
+
+type RestorePanelProps = ComponentProps<typeof WebDavRestorePanel>;
+
+function renderRestorePanel(overrides: Partial<RestorePanelProps> = {}) {
+  return render(
+    <I18nProvider initialLocale="zh-CN">
+      <WebDavRestorePanel
+        backup={snapshot}
+        busy={false}
+        onInspect={async () => restorePlan}
+        onRefresh={async () => undefined}
+        onRestore={async () => undefined}
+        {...overrides}
+      />
+    </I18nProvider>,
+  );
+}
 
 const snapshot: DesktopWebDavSyncSnapshotSummary = {
   id: '20260810T102030123Z-1234abcd',

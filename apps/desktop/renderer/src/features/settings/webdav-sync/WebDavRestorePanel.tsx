@@ -83,8 +83,8 @@ export function WebDavRestorePanel({
                   <strong>{new Date(backup.createdAt).toLocaleString(locale)}</strong>
                   <small>{t('settings.sync.restore.fromDevice', { device: backup.deviceName })}</small>
                 </span>
-                <small>{t('settings.sync.restore.itemSummary', {
-                  items: backup.categories.reduce((sum, category) => sum + category.itemCount, 0),
+                <small>{t('settings.sync.restore.backupSummary', {
+                  categories: backup.categories.length,
                   size: formatSyncBytes(backup.totalBytes, locale),
                 })}</small>
               </article>
@@ -108,8 +108,7 @@ export function WebDavRestorePanel({
                   />
                   <span>
                     <strong>{t(webDavCategoryCopy[category.id].labelKey)}</strong>
-                    <small>{t('settings.sync.restore.itemSummary', {
-                      items: category.itemCount,
+                    <small>{t('settings.sync.restore.categorySummary', {
                       size: formatSyncBytes(category.totalBytes, locale),
                     })}</small>
                   </span>
