@@ -3,17 +3,26 @@ export class RuntimeBackgroundTaskQueue {
   private readonly controller = new AbortController();
   private tail: Promise<void> = Promise.resolve();
   private closed = false;
+  private pendingTasks = 0;
 
   constructor(private readonly name: string) {}
 
   enqueue<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T> {
     if (this.closed) return Promise.reject(new Error(`${this.name} task queue is closed`));
+    this.pendingTasks += 1;
     const result = this.tail.then(async () => {
       throwIfAborted(this.controller.signal);
       return task(this.controller.signal);
     });
-    this.tail = result.then(() => undefined, () => undefined);
+    this.tail = result.then(
+      () => this.finishTask(),
+      () => this.finishTask(),
+    );
     return result;
+  }
+
+  pendingTaskCount(): number {
+    return this.pendingTasks;
   }
 
   async shutdown(timeoutMs: number): Promise<boolean> {
@@ -30,6 +39,10 @@ export class RuntimeBackgroundTaskQueue {
     const result = await Promise.race([drained, timedOut]);
     if (timeout) clearTimeout(timeout);
     return result;
+  }
+
+  private finishTask(): void {
+    this.pendingTasks -= 1;
   }
 }
 

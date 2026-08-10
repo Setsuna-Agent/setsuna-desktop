@@ -93,6 +93,7 @@ export class WebDavSyncService {
   private nextAutomaticBackupAt: string | undefined;
   private lastError: string | undefined;
   private initializationError: Error | undefined;
+  private plaintextCleanupBlocked = false;
   private configurationMutation = false;
   private closed = false;
 
@@ -101,19 +102,30 @@ export class WebDavSyncService {
   }
 
   async initialize(): Promise<void> {
-    // Cleanup must not depend on a readable config: a damaged metadata file
-    // must never leave plaintext staging data behind across restarts.
     try {
-      await rm(this.workBaseRoot(), { recursive: true, force: true });
+      // Cleanup must not depend on a readable config: a damaged metadata file
+      // must never leave plaintext staging data behind across restarts.
+      try {
+        await rm(this.workBaseRoot(), { recursive: true, force: true });
+        this.plaintextCleanupBlocked = false;
+      } catch (error) {
+        this.plaintextCleanupBlocked = true;
+        throw new Error('无法清理 WebDAV 同步的本地明文暂存目录；同步功能已停用。', {
+          cause: error,
+        });
+      }
+      await this.options.configStore.initialize();
+      // A retry must be able to schedule and publish state after repairing the
+      // underlying initialization failure.
+      this.initializationError = undefined;
+      await this.scheduleAutomaticBackup();
     } catch (error) {
-      this.initializationError = new Error('无法清理 WebDAV 同步的本地明文暂存目录；同步功能已停用。', {
-        cause: error,
-      });
+      this.clearAutomaticTimer();
+      this.initializationError = error instanceof Error
+        ? error
+        : new Error('无法初始化 WebDAV 同步。', { cause: error });
       throw this.initializationError;
     }
-    this.initializationError = undefined;
-    await this.options.configStore.initialize();
-    await this.scheduleAutomaticBackup();
   }
 
   async getState(): Promise<DesktopWebDavSyncState> {
@@ -132,7 +144,7 @@ export class WebDavSyncService {
       await this.options.configStore.resetDamagedConfig();
       this.restorePlans.clear();
       this.lastError = undefined;
-    });
+    }, { recoverInitialization: true });
   }
 
   async getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]> {
@@ -627,8 +639,8 @@ export class WebDavSyncService {
     });
   }
 
-  private assertIdle(): void {
-    this.assertAvailable();
+  private assertIdle(recoverInitialization = false): void {
+    if (!recoverInitialization || this.plaintextCleanupBlocked) this.assertAvailable();
     if (this.operation || this.configurationMutation) {
       throw new Error('另一项 WebDAV 同步操作正在进行，请稍候。');
     }
@@ -638,19 +650,31 @@ export class WebDavSyncService {
     if (this.initializationError) throw this.initializationError;
   }
 
-  private async mutateConfiguration(action: () => Promise<void>): Promise<DesktopWebDavSyncState> {
-    this.assertIdle();
+  private async mutateConfiguration(
+    action: () => Promise<void>,
+    options: { recoverInitialization?: boolean } = {},
+  ): Promise<DesktopWebDavSyncState> {
+    const recoverInitialization = options.recoverInitialization === true;
+    this.assertIdle(recoverInitialization);
     this.configurationMutation = true;
     this.clearAutomaticTimer();
     let automaticScheduled = false;
     try {
       await action();
+      if (recoverInitialization) this.initializationError = undefined;
       await this.scheduleAutomaticBackup();
       automaticScheduled = true;
       await this.publishState();
       return await this.getState();
+    } catch (error) {
+      if (recoverInitialization && !this.initializationError) {
+        this.initializationError = error instanceof Error
+          ? error
+          : new Error('无法恢复 WebDAV 同步配置。', { cause: error });
+      }
+      throw error;
     } finally {
-      if (!automaticScheduled) {
+      if (!automaticScheduled && !recoverInitialization) {
         await this.scheduleAutomaticBackup().catch(() => undefined);
       }
       this.configurationMutation = false;

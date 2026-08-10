@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
@@ -101,6 +101,56 @@ describe('agent loop memory policy', () => {
           }),
         ],
       });
+    });
+
+  it('keeps data migration blocked while startup memory work can still write stores', async () => {
+      const ids = new RandomIdGenerator();
+      const dataDir = await mkDataDir();
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+      const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+      const listThreads = threadStore.listThreads.bind(threadStore);
+      let markListStarted: () => void = () => undefined;
+      let releaseList: () => void = () => undefined;
+      const listStarted = new Promise<void>((resolve) => {
+        markListStarted = resolve;
+      });
+      const listReleased = new Promise<void>((resolve) => {
+        releaseList = resolve;
+      });
+      vi.spyOn(threadStore, 'listThreads').mockImplementationOnce(async (options) => {
+        markListStarted();
+        await listReleased;
+        return listThreads(options);
+      });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient: new PassiveMemoryModelClient(),
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        memoryStore,
+        configStore: new MemorySettingsConfigStore({
+          useMemories: true,
+          generateMemories: true,
+          disableOnExternalContext: false,
+          minRolloutIdleHours: 1,
+          maxRolloutAgeDays: 10,
+          maxRolloutsPerStartup: 2,
+        }),
+      });
+
+      const extraction = loop.runMemoryStartupExtraction();
+      await listStarted;
+      expect(loop.prepareDataMigration()).toMatchObject({
+        ready: false,
+        registeredTasks: 0,
+        pendingMutations: 1,
+      });
+
+      releaseList();
+      await extraction;
+      expect(loop.prepareDataMigration()).toMatchObject({ ready: true, pendingMutations: 0 });
+      loop.cancelDataMigrationPreparation();
     });
   
   it('limits startup memory extraction to eligible idle rollout candidates', async () => {

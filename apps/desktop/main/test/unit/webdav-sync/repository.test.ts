@@ -355,6 +355,32 @@ describe('EncryptedWebDavRepository', () => {
     );
     await expect(redirectingClient.test()).rejects.toThrow('不会自动跟随');
   });
+
+  it.each(['GET', 'DELETE'] as const)(
+    'does not create repository metadata without %s access',
+    async (deniedMethod) => {
+      const server = new MemoryWebDavServer('/dav');
+      const restrictedFetch = (async (
+        input: Parameters<typeof globalThis.fetch>[0],
+        init?: Parameters<typeof globalThis.fetch>[1],
+      ) => {
+        if ((init?.method ?? 'GET').toUpperCase() === deniedMethod) {
+          return new Response(null, { status: 403 });
+        }
+        return server.fetch(input, init);
+      }) as typeof globalThis.fetch;
+      const client = new WebDavClient(
+        normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+        { username: 'alice', password: 'secret' },
+        restrictedFetch,
+      );
+
+      await expect(EncryptedWebDavRepository.create(client, generateWebDavRecoveryKey()))
+        .rejects.toThrow('目录权限');
+      expect([...server.files.keys()].some((remotePath) => remotePath.endsWith('/repository.json')))
+        .toBe(false);
+    },
+  );
 });
 
 async function publishEmptySnapshot(

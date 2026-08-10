@@ -85,6 +85,37 @@ describe('WebDavSyncService', () => {
     }
   });
 
+  it('keeps sync unavailable when automatic backup scheduling fails during initialization', async () => {
+    const dataRoot = await createDataRoot();
+    const configStore = new WebDavSyncConfigStore(
+      path.join(dataRoot, 'webdav-sync.json'),
+      new MemoryCredentialVault(),
+    );
+    const getConfig = vi.spyOn(configStore, 'getConfig')
+      .mockRejectedValueOnce(new Error('automatic schedule unavailable'));
+    const service = new WebDavSyncService({
+      dataRoot,
+      appVersion: '0.2.1',
+      configStore,
+      fetch: new MemoryWebDavServer('/dav').fetch,
+      runtime: {
+        prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+        release: async () => undefined,
+        stop: async () => undefined,
+        start: async () => undefined,
+      },
+      requestRelaunch: async () => undefined,
+    });
+
+    await expect(service.initialize()).rejects.toThrow('automatic schedule unavailable');
+    await expect(service.getState()).rejects.toThrow('automatic schedule unavailable');
+    expect(getConfig).toHaveBeenCalledOnce();
+
+    await expect(service.initialize()).resolves.toBeUndefined();
+    await expect(service.getState()).resolves.toMatchObject({ configured: false });
+    service.close();
+  });
+
   it('backs up and manually restores portable config plus independently encrypted model API keys', async () => {
     const dataRoot = await createDataRoot();
     const server = new MemoryWebDavServer('/dav');

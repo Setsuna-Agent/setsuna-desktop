@@ -32,6 +32,8 @@ import {
   type PortableProjectRecord,
 } from './portable-projects.js';
 
+const MANIFEST_SHA256_PLACEHOLDER = '0'.repeat(64);
+
 export type WebDavTransferProgress = {
   phase: 'snapshotting' | 'encrypting' | 'uploading' | 'downloading' | 'inspecting';
   completedBytes?: number;
@@ -74,15 +76,36 @@ export async function createAndUploadSnapshot(input: {
   let initialized = false;
   let published = false;
   try {
+    const sourceSizes = await snapshotSourceSizes(sources);
+    let manifest = input.repository.validateSnapshotManifest({
+      formatVersion: WEB_DAV_SNAPSHOT_FORMAT_VERSION,
+      repositoryId: input.repository.metadata.repositoryId,
+      id: snapshotId,
+      deviceId: input.deviceId,
+      deviceName: input.deviceName,
+      createdAt: new Date().toISOString(),
+      appVersion: input.appVersion,
+      sourceDataRoot: input.sourceDataRoot,
+      categories: [...input.categories],
+      items: sources.map((source, index) => manifestItem(
+        source,
+        `${String(index + 1).padStart(6, '0')}.enc`,
+        { sha256: MANIFEST_SHA256_PLACEHOLDER, size: sourceSizes[index]! },
+      )),
+    });
+    const totalBytes = sourceSizes.reduce((total, size) => total + size, 0);
+
+    // Validate item count, declared size and serialized manifest size before
+    // creating any remote snapshot directories or uploading encrypted objects.
     await input.repository.initializeSnapshot(input.deviceId, snapshotId, input.signal);
     initialized = true;
-    const totalBytes = await sourceTotalBytes(sources);
     let completedBytes = 0;
     const items: WebDavSnapshotManifestItem[] = [];
     for (let index = 0; index < sources.length; index += 1) {
       throwIfAborted(input.signal);
       const source = sources[index]!;
-      const objectName = `${String(index + 1).padStart(6, '0')}.enc`;
+      const preflightItem = manifest.items[index]!;
+      const objectName = preflightItem.objectName;
       input.onProgress?.({
         phase: 'encrypting',
         completedBytes,
@@ -137,19 +160,14 @@ export async function createAndUploadSnapshot(input: {
           input.signal,
         );
       }
+      if (measured.size !== sourceSizes[index]) {
+        throw new Error(`备份源在暂存后发生了变化：${preflightItem.label}`);
+      }
       completedBytes += measured.size;
-      items.push(manifestItem(source, objectName, measured));
+      items.push({ ...preflightItem, sha256: measured.sha256 });
     }
-    const manifest: WebDavSnapshotManifest = {
-      formatVersion: WEB_DAV_SNAPSHOT_FORMAT_VERSION,
-      repositoryId: input.repository.metadata.repositoryId,
-      id: snapshotId,
-      deviceId: input.deviceId,
-      deviceName: input.deviceName,
-      createdAt: new Date().toISOString(),
-      appVersion: input.appVersion,
-      sourceDataRoot: input.sourceDataRoot,
-      categories: [...input.categories],
+    manifest = {
+      ...manifest,
       items,
     };
     await input.repository.publishSnapshot(manifest, input.signal);
@@ -341,16 +359,16 @@ function manifestItem(
   };
 }
 
-async function sourceTotalBytes(sources: readonly LocalSnapshotSource[]): Promise<number> {
-  let total = 0;
+async function snapshotSourceSizes(sources: readonly LocalSnapshotSource[]): Promise<number[]> {
+  const sizes: number[] = [];
   for (const source of sources) {
-    if (source.data) total += source.data.byteLength;
+    if (source.data) sizes.push(source.data.byteLength);
     else {
       const file = await stat(source.sourcePath!);
-      total += file.size;
+      sizes.push(file.size);
     }
   }
-  return total;
+  return sizes;
 }
 
 function assertItemIntegrity(

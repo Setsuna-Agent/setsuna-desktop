@@ -66,7 +66,9 @@ export class EncryptedWebDavRepository {
     recoveryKey: string,
     signal?: AbortSignal,
   ): Promise<EncryptedWebDavRepository> {
-    await client.test(signal);
+    // Creation is only useful when later backups can read and remove objects too.
+    // Probe the complete permission set before writing durable repository metadata.
+    await client.testReadWrite(signal);
     await client.ensureCollection(REPOSITORY_PARTS, signal);
     const repositoryPath = [...REPOSITORY_PARTS, REPOSITORY_FILE];
     if (await client.exists(repositoryPath, signal)) {
@@ -162,9 +164,8 @@ export class EncryptedWebDavRepository {
   }
 
   async publishSnapshot(manifest: WebDavSnapshotManifest, signal?: AbortSignal): Promise<void> {
-    const validated = parseSnapshotManifest(manifest, this.metadata.repositoryId);
+    const validated = this.validateSnapshotManifest(manifest);
     const manifestData = jsonBuffer(validated);
-    if (manifestData.byteLength > MAX_MANIFEST_BYTES) throw new Error('备份清单超过安全大小限制。');
     const encryptedManifest = encryptWebDavBuffer(
       manifestData,
       this.recoveryKey,
@@ -185,6 +186,15 @@ export class EncryptedWebDavRepository {
       jsonBuffer(marker),
       { contentType: 'application/json; charset=utf-8', ifNoneMatch: true, signal },
     );
+  }
+
+  /** Applies the same safety limits used by readers without touching the server. */
+  validateSnapshotManifest(manifest: WebDavSnapshotManifest): WebDavSnapshotManifest {
+    const validated = parseSnapshotManifest(manifest, this.metadata.repositoryId);
+    if (jsonBuffer(validated).byteLength > MAX_MANIFEST_BYTES) {
+      throw new Error('备份清单超过安全大小限制。');
+    }
+    return validated;
   }
 
   async listSnapshots(signal?: AbortSignal): Promise<WebDavSnapshotRecord[]> {

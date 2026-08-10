@@ -1,6 +1,7 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
+  type RuntimeDataMigrationReadiness,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
@@ -25,9 +26,7 @@ describe('runtime server REST runtime state', () => {
       method: 'POST',
       body: JSON.stringify({ name: 'Before snapshot' }),
     });
-    const readiness = await harness.runtimeFetch('/internal/webdav-sync/prepare', {
-      method: 'POST',
-    });
+    const readiness = await waitForWebDavPreparation(harness);
 
     expect(readiness).toEqual({ ready: true, registeredTasks: 0, pendingMutations: 0 });
     const blocked = await fetch(`${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}`, {
@@ -297,3 +296,16 @@ describe('runtime server REST runtime state', () => {
       });
     });
 });
+
+async function waitForWebDavPreparation(
+  harness: RuntimeServerTestHarness,
+): Promise<RuntimeDataMigrationReadiness> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const readiness = await harness.runtimeFetch('/internal/webdav-sync/prepare', {
+      method: 'POST',
+    }) as RuntimeDataMigrationReadiness;
+    if (readiness.ready) return readiness;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Runtime did not become ready for a WebDAV snapshot.');
+}

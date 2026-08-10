@@ -384,7 +384,8 @@ export class AgentLoop {
     const registeredTasks = this.turnTasks.registeredTaskCount();
     const pendingMutations = Math.max(0, additionalPendingMutations)
       + [...this.threadMutationAdmissions.values()]
-        .reduce((total, admissions) => total + admissions.size, 0);
+        .reduce((total, admissions) => total + admissions.size, 0)
+      + this.memory.pendingBackgroundTaskCount();
     const ready = !this.shuttingDown
       && !this.dataMigrationPreparing
       && registeredTasks === 0
