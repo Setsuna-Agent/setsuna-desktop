@@ -1,8 +1,9 @@
-import type { RuntimeMessage, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+import type { RuntimePluginUse } from '../../../../../src/features/chat/artifacts/runtimePluginUsage.js';
 import { SkillReferenceCatalogProvider } from '../../../../../src/features/chat/skills/SkillReference.js';
 
 function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'user' }> {
@@ -31,7 +32,7 @@ function renderUserMessage(
   inputKind: RuntimeMessage['inputKind'],
   editing = false,
   content = 'Inspect the queue.',
-  options: { skillIds?: string[]; skills?: RuntimeSkillSummary[] } = {},
+  options: { skillReferences?: RuntimeSkillReference[]; skills?: RuntimeSkillSummary[] } = {},
 ): string {
   const message: RuntimeMessage = {
     id: `message_${inputKind}`,
@@ -39,7 +40,7 @@ function renderUserMessage(
     role: 'user',
     inputKind,
     content,
-    skillIds: options.skillIds,
+    skillReferences: options.skillReferences,
     createdAt: '2026-07-27T00:00:00.000Z',
     status: 'complete',
   };
@@ -68,6 +69,50 @@ function renderUserMessage(
         selectedForDelete={false}
       />
     </SkillReferenceCatalogProvider>,
+  );
+}
+
+function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
+  const message: RuntimeMessage = {
+    id: 'assistant_plan',
+    turnId: 'turn_plan',
+    role: 'assistant',
+    content: '1. Inspect the current implementation.',
+    createdAt: '2026-07-27T00:00:00.000Z',
+    status: 'complete',
+    planMode: { mode: 'plan', status: 'awaiting_confirmation' },
+  };
+  return renderToStaticMarkup(
+    <MessageItem
+      activeAssistantItemId={null}
+      activeTurnId={null}
+      assistantItemIdByTurnId={new Map()}
+      deleteMode={false}
+      editingDraft=""
+      editingMessageId={null}
+      editingSubmitting={false}
+      expandedWorkHistoryItemIds={new Set()}
+      item={{
+        type: 'assistant',
+        id: message.id,
+        handledSteerMessageIds: [],
+        messageIds: [message.id],
+        segments: [message],
+        steerMessages: [],
+        turnId: message.turnId,
+      }}
+      onAnswerApproval={async () => undefined}
+      onCancelEdit={() => undefined}
+      onEditDraftChange={() => undefined}
+      onPlanDecision={() => undefined}
+      onStartEdit={() => undefined}
+      onStartDelete={() => undefined}
+      onSubmitEdit={() => undefined}
+      onToggleDelete={() => undefined}
+      onWorkHistoryExpandedChange={() => undefined}
+      pluginUses={pluginUses}
+      selectedForDelete={false}
+    />,
   );
 }
 
@@ -102,7 +147,10 @@ describe('MessageItem user messages', () => {
       'message',
       false,
       '对话创建Skill 你看下这个 skill',
-      { skillIds: [skillCreator.id], skills: [skillCreator] },
+      {
+        skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
+        skills: [skillCreator],
+      },
     );
     const plainHtml = renderUserMessage(
       'message',
@@ -115,5 +163,17 @@ describe('MessageItem user messages', () => {
     expect(selectedHtml).toContain('chat-capability-reference-icon');
     expect(selectedHtml).toMatch(/chat-user-message-content__body"><span class="chat-skill-reference"[^>]*>.*对话创建Skill<\/span><\/span> 你看下这个 skill<\/span>/u);
     expect(plainHtml).not.toContain('chat-skill-reference');
+  });
+
+  it('keeps Plugin attribution in the assistant body for Plan turns', () => {
+    const html = renderPlanMessage([{
+      id: 'vision-recognition',
+      installed: true,
+      name: '视觉识别',
+    }]);
+
+    expect(html).toContain('已使用插件');
+    expect(html).toContain('视觉识别');
+    expect(html).toContain('chat-plan-card');
   });
 });

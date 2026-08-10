@@ -24,6 +24,7 @@ import { isSuccessfulRememberMemoryMessage } from '../memory/runtime-memory-coor
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { assertNewToolCallBatchInvariants } from './runtime-model-message-order.js';
+import { normalizeRuntimeSkillReferences } from './runtime-skill-references.js';
 import type { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';
@@ -78,6 +79,7 @@ export class RuntimeAgentTurnRunner {
     options = {},
     signal,
     skillIds,
+    skillReferences,
     text,
     thinkingOptions = {},
     thread,
@@ -90,6 +92,11 @@ export class RuntimeAgentTurnRunner {
     const taskKind = options.taskKind ?? 'regular';
     const planOnly = options.planOnly === true;
     const selectedSkillIds = [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
+    const selectedSkillReferences = normalizeRuntimeSkillReferences({
+      content: text,
+      references: skillReferences,
+      skillIds: selectedSkillIds,
+    });
     const userMessage: RuntimeMessage = options.userMessage ?? {
       id: this.options.ids.id('msg'),
       clientId: options.clientId,
@@ -98,6 +105,7 @@ export class RuntimeAgentTurnRunner {
       inputKind: options.inputKind,
       content: text,
       skillIds: selectedSkillIds.length ? selectedSkillIds : undefined,
+      skillReferences: selectedSkillReferences.length ? selectedSkillReferences : undefined,
       attachments,
       createdAt,
       status: 'complete',

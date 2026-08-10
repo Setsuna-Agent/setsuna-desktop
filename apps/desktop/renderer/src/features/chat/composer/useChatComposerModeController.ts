@@ -1,6 +1,7 @@
 import type {
   RuntimeConfigState,
   RuntimeMessageAttachment,
+  RuntimeSkillReference,
   RuntimeThreadGoal,
 } from '@setsuna-desktop/contracts';
 import {
@@ -111,14 +112,17 @@ export function useChatComposerModeController({
   const createSendOptions = useCallback(({
     attachments,
     selectedSkillIds,
+    selectedSkillReferences,
   }: {
     attachments: RuntimeMessageAttachment[];
     selectedSkillIds: string[];
+    selectedSkillReferences: RuntimeSkillReference[];
   }): ChatComposerSendOptions => createChatComposerSendOptions({
     attachments,
     goalModeEnabled: localModes.goalModeEnabled,
     planModeEnabled: localModes.planModeEnabled,
     selectedSkillIds,
+    selectedSkillReferences,
     supportsImageInput: modelCapabilities.supportsImageInput,
     thinkingEffort: thinkingSelection.effort,
     thinkingEnabled: thinkingSelection.enabled,

@@ -1,12 +1,13 @@
-import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 
 export type SkillReferenceTextPart =
   | { start: number; type: 'text'; value: string }
   | { skill: RuntimeSkillSummary; start: number; type: 'skill'; value: string };
 
 type SkillReferenceCandidate = {
-  order: number;
+  end: number;
   skill: RuntimeSkillSummary;
+  start: number;
   value: string;
 };
 
@@ -15,50 +16,33 @@ export function skillDisplayText(skill: RuntimeSkillSummary): string {
 }
 
 /**
- * Rebuild selected Skill references from durable IDs and their serialized labels.
- * IDs gate highlighting so ordinary text that happens to match a Skill name stays plain.
+ * Rebuild selected Skill references from durable slot offsets. Exact ranges are required
+ * because a Skill label can also occur as ordinary prose or belong to multiple Skill IDs.
  */
 export function parseSkillReferenceText(
   content: string,
-  skillIds: string[] | undefined,
+  skillReferences: RuntimeSkillReference[] | undefined,
   skills: RuntimeSkillSummary[],
 ): SkillReferenceTextPart[] {
-  const candidates = selectedSkillCandidates(skillIds, skills);
+  const candidates = selectedSkillCandidates(content, skillReferences, skills);
   if (!content || !candidates.length) {
     return content ? [{ start: 0, type: 'text', value: content }] : [];
   }
 
   const parts: SkillReferenceTextPart[] = [];
-  const usedSkillIds = new Set<string>();
   let textStart = 0;
-  let cursor = 0;
 
-  while (cursor < content.length) {
-    const candidate = candidates
-      .filter(({ skill, value }) => (
-        !usedSkillIds.has(skill.id)
-        && content.startsWith(value, cursor)
-        && isReferenceBoundary(content, cursor, cursor + value.length)
-      ))
-      .sort((left, right) => right.value.length - left.value.length || left.order - right.order)[0];
-
-    if (!candidate) {
-      cursor += 1;
-      continue;
-    }
-
-    if (cursor > textStart) {
-      parts.push({ start: textStart, type: 'text', value: content.slice(textStart, cursor) });
+  for (const candidate of candidates) {
+    if (candidate.start > textStart) {
+      parts.push({ start: textStart, type: 'text', value: content.slice(textStart, candidate.start) });
     }
     parts.push({
       skill: candidate.skill,
-      start: cursor,
+      start: candidate.start,
       type: 'skill',
       value: candidate.value,
     });
-    usedSkillIds.add(candidate.skill.id);
-    cursor += candidate.value.length;
-    textStart = cursor;
+    textStart = candidate.end;
   }
 
   if (textStart < content.length) {
@@ -68,31 +52,37 @@ export function parseSkillReferenceText(
 }
 
 function selectedSkillCandidates(
-  skillIds: string[] | undefined,
+  content: string,
+  references: RuntimeSkillReference[] | undefined,
   skills: RuntimeSkillSummary[],
 ): SkillReferenceCandidate[] {
   const skillsById = new Map(skills.map((skill) => [skill.id, skill]));
-  const seenIds = new Set<string>();
-  const seenValues = new Set<string>();
   const candidates: SkillReferenceCandidate[] = [];
+  let previousEnd = 0;
 
-  for (const [order, skillId] of (skillIds ?? []).entries()) {
-    if (seenIds.has(skillId)) continue;
-    seenIds.add(skillId);
-    const skill = skillsById.get(skillId);
+  for (const reference of [...(references ?? [])].sort((left, right) => left.start - right.start || left.end - right.end)) {
+    const skill = skillsById.get(reference.skillId);
     if (!skill) continue;
     const value = skillDisplayText(skill);
-    if (!value || seenValues.has(value)) continue;
-    seenValues.add(value);
-    candidates.push({ order, skill, value });
+    if (
+      !value
+      || !Number.isInteger(reference.start)
+      || !Number.isInteger(reference.end)
+      || reference.start < 0
+      || reference.start < previousEnd
+      || reference.end !== reference.start + value.length
+      || reference.end > content.length
+      || content.slice(reference.start, reference.end) !== value
+    ) {
+      continue;
+    }
+    candidates.push({
+      end: reference.end,
+      skill,
+      start: reference.start,
+      value,
+    });
+    previousEnd = reference.end;
   }
   return candidates;
-}
-
-function isReferenceBoundary(content: string, start: number, end: number): boolean {
-  return isBoundaryCharacter(content.charAt(start - 1)) && isBoundaryCharacter(content.charAt(end));
-}
-
-function isBoundaryCharacter(character: string): boolean {
-  return !character || /[\s\p{P}\p{S}]/u.test(character);
 }

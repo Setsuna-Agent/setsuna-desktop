@@ -14,6 +14,7 @@ import { runtimeDeveloperFeaturesEnabled } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import { stringInput } from './app-server/input.js';
+import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
   decodeRuntimeId,
   optionalNumber,
@@ -231,7 +232,8 @@ export async function handleRuntimeThreadRequest(
             ? input.skillIds.filter(
               (item): item is string => typeof item === 'string',
             )
-            : [],
+            : undefined,
+          skillReferences: runtimeSkillReferenceList(input.skillReferences),
           thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
           thinkingEffort: stringInput(
             (input as { thinking_effort?: unknown }).thinking_effort

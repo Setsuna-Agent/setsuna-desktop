@@ -22,6 +22,7 @@ import {
   runtimeEventStreamFormat,
 } from './sse.js';
 import type { RuntimeFactory } from './types.js';
+import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 
 type RuntimeTurnInputBody = {
   attachments?: unknown;
@@ -33,6 +34,7 @@ type RuntimeTurnInputBody = {
   planDecision?: unknown;
   plan_decision?: unknown;
   skillIds?: unknown;
+  skillReferences?: unknown;
   thinking?: unknown;
   thinkingEffort?: unknown;
   thinking_effort?: unknown;
@@ -60,6 +62,7 @@ export async function handleRuntimeTurnRequest(
       input: typeof input.input === 'string' ? input.input : '',
       planDecision: planDecisionInput(input.planDecision ?? input.plan_decision),
       skillIds: runtimeStringList(input.skillIds),
+      skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     } satisfies SendTurnInput));
@@ -82,6 +85,7 @@ export async function handleRuntimeTurnRequest(
       expectedTurnId: stringInput(input.expectedTurnId) ?? turnId,
       input: typeof input.input === 'string' ? input.input : '',
       skillIds: runtimeStringList(input.skillIds),
+      skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     }));
@@ -106,6 +110,7 @@ export async function handleRuntimeTurnRequest(
       input: typeof input.input === 'string' ? input.input : '',
       kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
       skillIds: runtimeStringList(input.skillIds),
+      skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
       thinkingEffort: stringInput(input.thinking_effort ?? input.thinkingEffort),
     }));

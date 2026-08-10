@@ -177,7 +177,7 @@ describe('runtime server reviews and message mutations', () => {
       });
       await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
         method: 'POST',
-        body: JSON.stringify({ input: 'Original prompt.' }),
+        body: JSON.stringify({ input: 'Original prompt.', skillIds: ['skill_http'] }),
       });
       const populated = await harness.waitForThread(thread.id, (item) => item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
       const userMessage = populated.messages.find((message) => message.role === 'user');
@@ -206,7 +206,9 @@ describe('runtime server reviews and message mutations', () => {
         (item) => item.messages.some((message) => message.turnId === regenerated.turnId && message.role === 'assistant' && message.status === 'complete'),
       );
   
-      expect(rerun.messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual(['Regenerated prompt.']);
+      expect(rerun.messages.filter((message) => message.role === 'user')).toEqual([
+        expect.objectContaining({ content: 'Regenerated prompt.', skillIds: ['skill_http'] }),
+      ]);
       expect(rerun.messages.some((message) => message.id === assistantMessage.id)).toBe(false);
     });
 });

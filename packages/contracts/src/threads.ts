@@ -28,6 +28,19 @@ import type { RuntimeUsage } from './usage.js';
 
 export type * from './message-metadata.js';
 
+/** UTF-16 offsets into RuntimeMessage.content for one serialized Skill slot. */
+export type RuntimeSkillReference = {
+  skillId: string;
+  start: number;
+  end: number;
+};
+
+export function cloneRuntimeSkillReferences(
+  references: RuntimeSkillReference[] | undefined,
+): RuntimeSkillReference[] | undefined {
+  return references?.map((reference) => ({ ...reference }));
+}
+
 export type RuntimeMessage = {
   id: string;
   clientId?: string;
@@ -39,6 +52,8 @@ export type RuntimeMessage = {
   content: string;
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
   skillIds?: string[];
+  /** 精确记录序列化 Skill 词槽的位置，避免把同名普通正文误渲染成引用。 */
+  skillReferences?: RuntimeSkillReference[];
   createdAt: string;
   completedAt?: string;
   status?: 'streaming' | 'complete' | 'error';
@@ -159,6 +174,7 @@ export type RuntimeThreadGoalExecutionOptions = {
   /** 首轮 Goal 对应的可见用户消息，用于避免重复向模型附加同一批附件。 */
   sourceMessageId?: string;
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
 };
@@ -182,6 +198,7 @@ export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGo
       ...goal.execution,
       attachments: goal.execution.attachments?.map((attachment) => ({ ...attachment })),
       skillIds: goal.execution.skillIds ? [...goal.execution.skillIds] : undefined,
+      skillReferences: cloneRuntimeSkillReferences(goal.execution.skillReferences),
     } : undefined,
   };
 }
@@ -212,6 +229,7 @@ export type RuntimeQueuedTurnInput = {
   clientId?: string;
   attachments?: RuntimeInputMessageAttachment[];
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
   createdAt: string;
@@ -381,6 +399,7 @@ export type SendTurnInput = {
   collaborationMode?: RuntimeCollaborationMode;
   planDecision?: RuntimePlanDecision;
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
 };
@@ -391,6 +410,7 @@ export type SteerTurnInput = {
   clientId?: string;
   attachments?: RuntimeInputMessageAttachment[];
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
 };
@@ -460,6 +480,7 @@ export type MessageDeleteInput = {
 export type RegenerateMessageInput = {
   content?: string;
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
 };

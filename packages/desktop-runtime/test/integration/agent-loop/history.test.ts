@@ -21,6 +21,7 @@ import {
   CapturingUsageStore,
   MemoryCapturingModelClient,
   mkDataDir,
+  stepSnapshotSkillRegistry,
   waitForTurnCompleted
 } from '../../support/agent-loop/shared.js';
 
@@ -232,9 +233,10 @@ describe('agent loop stream history and regeneration', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
+        skillRegistry: stepSnapshotSkillRegistry(),
       });
   
-      await loop.sendTurn(thread.id, { input: 'original prompt' });
+      await loop.sendTurn(thread.id, { input: 'original prompt', skillIds: ['skill_step'] });
       const firstSaved = await threadStore.getThread(thread.id);
       const userMessageId = firstSaved?.messages.find((message) => message.role === 'user')?.id;
       if (!userMessageId) throw new Error('Expected a user message to regenerate.');
@@ -245,7 +247,11 @@ describe('agent loop stream history and regeneration', () => {
       const events = await threadStore.listEvents(thread.id, 0);
   
       expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-      expect(saved?.messages[0]).toMatchObject({ id: userMessageId, content: 'edited prompt' });
+      expect(saved?.messages[0]).toMatchObject({
+        id: userMessageId,
+        content: 'edited prompt',
+        skillIds: ['skill_step'],
+      });
       expect(saved?.messages[1]?.content).toBe('answer 2');
       expect(saved?.messages[1]?.providerMetadata?.openAiResponses).toMatchObject({
         responseId: 'resp_2',
@@ -253,8 +259,13 @@ describe('agent loop stream history and regeneration', () => {
       });
       expect(saved?.messages[1]?.providerMetadata?.semanticFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
       expect(JSON.stringify(saved?.messages)).not.toContain('resp_1');
-      expect(modelClient.requests[1].messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([
-        'edited prompt',
+      const regeneratedUserContents = modelClient.requests[1].messages
+        .filter((message) => message.role === 'user')
+        .map((message) => message.content);
+      expect(regeneratedUserContents.at(-1)).toBe('edited prompt');
+      expect(regeneratedUserContents.some((content) => content.includes('id="skill_step"'))).toBe(true);
+      expect(modelClient.requests[1].stepSnapshot?.selectedSkills).toEqual([
+        { id: 'skill_step', name: 'Step Skill' },
       ]);
       expect(events.some((event) => event.type === 'message.updated')).toBe(true);
       expect(events.some((event) => event.type === 'messages.truncated')).toBe(true);

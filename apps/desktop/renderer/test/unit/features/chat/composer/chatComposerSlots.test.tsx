@@ -3,7 +3,9 @@ import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
+  createSelectedSkillReferences,
   createSelectedSkillSlot,
+  createTextSlot,
   createWorkspaceMentionInsertion,
   createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
@@ -103,5 +105,29 @@ describe('workspace mention slots', () => {
     const unchangedSkills = [firstSkill];
     expect(filterSelectedSkillsBySlots(unchangedSkills, [slot])).toBe(unchangedSkills);
     expect(filterSelectedSkillsBySlots([firstSkill], undefined)).toEqual([]);
+  });
+
+  it('records exact trimmed offsets for Skills with identical labels', () => {
+    const firstSkill = {
+      id: 'review-builtin',
+      name: 'Review',
+      kind: 'builtin' as const,
+      enabled: true,
+      selected: false,
+    };
+    const secondSkill = { ...firstSkill, id: 'review-user', kind: 'user' as const };
+    const trimmedContent = 'Use Review then Review';
+    const secondStart = trimmedContent.lastIndexOf('Review');
+
+    expect(createSelectedSkillReferences([
+      createTextSlot('  Use '),
+      createSelectedSkillSlot(firstSkill),
+      createTextSlot(' then '),
+      createSelectedSkillSlot(secondSkill),
+      createTextSlot('  '),
+    ])).toEqual([
+      { skillId: firstSkill.id, start: 'Use '.length, end: 'Use Review'.length },
+      { skillId: secondSkill.id, start: secondStart, end: secondStart + 'Review'.length },
+    ]);
   });
 });

@@ -174,7 +174,7 @@ function UserMessageContent({
                 <span className="chat-user-message-content__body">
                   <SkillReferenceText
                     content={message.content || '...'}
-                    skillIds={message.skillIds}
+                    skillReferences={message.skillReferences}
                   />
                 </span>
               )
@@ -380,6 +380,7 @@ function AssistantRunContent({
   if (planSegment) {
     return (
       <div className="chat-assistant-run">
+        {pluginUses.length ? <RuntimePluginUses plugins={pluginUses} /> : null}
         <PlanCard message={planSegment} active={active} onPlanDecision={onPlanDecision} />
       </div>
     );

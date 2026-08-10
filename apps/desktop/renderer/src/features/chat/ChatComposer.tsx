@@ -40,6 +40,7 @@ import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
 import { startChatComposerSkillSelection } from './composer/chatComposerSkillSelection.js';
 import {
+  createSelectedSkillReferences,
   createSelectedSkillSlot,
   createTextSlot,
   createWorkspaceMentionInsertion,
@@ -505,9 +506,13 @@ export function ChatComposer({
       await queuedTurnEdit.submit(value ?? draft);
       return;
     }
+    const skillReferences = createSelectedSkillReferences(senderRef.current?.getValue().slotConfig);
     const sendOptions = modeController.createSendOptions({
       attachments: sendableAttachments,
-      selectedSkillIds: selectedSkills.map((skill) => skill.id),
+      selectedSkillIds: skillReferences.length
+        ? [...new Set(skillReferences.map((reference) => reference.skillId))]
+        : selectedSkills.map((skill) => skill.id),
+      selectedSkillReferences: skillReferences,
     });
     const submittedAttachments = sendOptions.attachments ?? [];
     beginAttachmentSend(submittedAttachments);

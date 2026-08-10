@@ -1,5 +1,6 @@
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import type {
+  RuntimeSkillReference,
   RuntimeSkillSummary,
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
@@ -56,6 +57,29 @@ export function hasSelectedSkillSlot(
   return (slotConfig ?? []).some((slot) => slot.key === slotKey);
 }
 
+/** Serialize exact Skill slot offsets after the same outer whitespace trim used by sendTurn. */
+export function createSelectedSkillReferences(
+  slotConfig: SlotConfigType[] | undefined,
+): RuntimeSkillReference[] {
+  const slots = slotConfig ?? [];
+  const serializedContent = slots.map(serializedSlotValue).join('');
+  const leadingTrim = serializedContent.length - serializedContent.trimStart().length;
+  const trimmedEnd = serializedContent.trimEnd().length;
+  const references: RuntimeSkillReference[] = [];
+  let offset = 0;
+
+  for (const slot of slots) {
+    const value = serializedSlotValue(slot);
+    const skillId = selectedSkillIdForSlot(slot);
+    const end = offset + value.length;
+    if (skillId && value && offset >= leadingTrim && end <= trimmedEnd) {
+      references.push({ skillId, start: offset - leadingTrim, end: end - leadingTrim });
+    }
+    offset = end;
+  }
+  return references;
+}
+
 export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {
   return [
     ...(leadingText ? [createTextSlot(leadingText)] : []),
@@ -83,6 +107,26 @@ export function createWorkspaceMentionInsertion(
 
 function selectedSkillSlotKey(skillId: string): string {
   return `${selectedSkillSlotKeyPrefix}${skillId}`;
+}
+
+function selectedSkillIdForSlot(slot: SlotConfigType): string | null {
+  if (
+    slot.type !== 'tag'
+    || typeof slot.key !== 'string'
+    || !slot.key.startsWith(selectedSkillSlotKeyPrefix)
+  ) return null;
+  return slot.key.slice(selectedSkillSlotKeyPrefix.length).trim() || null;
+}
+
+function serializedSlotValue(slot: SlotConfigType): string {
+  if (slot.type === 'text') return slot.value ?? '';
+  if (
+    slot.type === 'tag'
+    && slot.props
+    && 'value' in slot.props
+    && typeof slot.props.value === 'string'
+  ) return slot.props.value;
+  return '';
 }
 
 function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {

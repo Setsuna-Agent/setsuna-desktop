@@ -4,6 +4,7 @@ import {
   type RuntimeCollaborationMode,
   type RuntimeMessageAttachment,
   type RuntimePlanDecision,
+  type RuntimeSkillReference,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
@@ -22,6 +23,7 @@ type ChatTurnSendOptions = {
   goalMode?: boolean;
   planDecision?: RuntimePlanDecision;
   skillIds?: string[];
+  skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
   thinkingEffort?: string;
 };
@@ -104,6 +106,7 @@ export function useChatTurnActions({
           clientId,
           input,
           skillIds: options.skillIds,
+          skillReferences: options.skillReferences,
           thinking: options.thinking === true,
           ...(options.thinking === true && options.thinkingEffort ? { thinkingEffort: options.thinkingEffort } : {}),
           ...(options.collaborationMode ? { collaborationMode: options.collaborationMode } : {}),
@@ -123,6 +126,7 @@ export function useChatTurnActions({
                   ? 'plan'
                   : 'message',
               skillIds: options.skillIds,
+              skillReferences: options.skillReferences,
               thinking: options.thinking,
               thinkingEffort: options.thinkingEffort,
             })

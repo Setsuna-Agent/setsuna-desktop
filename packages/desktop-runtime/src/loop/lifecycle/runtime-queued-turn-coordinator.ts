@@ -12,6 +12,7 @@ import type {
   SendTurnResponse,
 } from '@setsuna-desktop/contracts';
 import {
+  cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
   normalizeRuntimeQueuedTurnInputKind,
 } from '@setsuna-desktop/contracts';
@@ -19,6 +20,7 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
+import { normalizeRuntimeSkillReferences } from '../core/runtime-skill-references.js';
 import type { RuntimeTurnTask, RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 
 type QueuedTurnRun = {
@@ -120,13 +122,19 @@ export class RuntimeQueuedTurnCoordinator {
       attachments = (await this.options.claimAttachments(threadId, attachments))
         .filter(isRuntimeInputMessageAttachment);
       const createdAt = this.options.clock.now().toISOString();
+      const skillIds = normalizeSkillIds(input.skillIds);
       const queuedInput: RuntimeQueuedTurnInput = {
         id: this.options.ids.id('queued_input'),
         kind,
         input: text,
         clientId: input.clientId,
         attachments,
-        skillIds: normalizeSkillIds(input.skillIds),
+        skillIds,
+        skillReferences: normalizeRuntimeSkillReferences({
+          content: text,
+          references: input.skillReferences,
+          skillIds,
+        }),
         thinking: input.thinking,
         thinkingEffort: normalizeThinkingEffort(input.thinking, input.thinkingEffort),
         createdAt,
@@ -264,6 +272,7 @@ export class RuntimeQueuedTurnCoordinator {
             ...cloneQueuedInput(queuedInput),
             input: text,
             attachments,
+            skillReferences: undefined,
             updatedAt,
           },
         },
@@ -506,6 +515,7 @@ function queuedInputAsTurnInput(input: RuntimeQueuedTurnInput): SendTurnInput {
     clientId: input.clientId,
     attachments: input.attachments,
     skillIds: input.skillIds,
+    skillReferences: input.skillReferences,
     thinking: input.thinking,
     thinkingEffort: input.thinkingEffort,
     ...(normalizeRuntimeQueuedTurnInputKind(input.kind) === 'plan'
@@ -520,6 +530,7 @@ function cloneQueuedInput(input: RuntimeQueuedTurnInput): RuntimeQueuedTurnInput
     kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
     attachments: input.attachments?.map((attachment) => ({ ...attachment })),
     skillIds: input.skillIds ? [...input.skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(input.skillReferences),
   };
 }
 

@@ -1,5 +1,6 @@
 import type {
   ModelRequest,
+  RegenerateMessageInput,
   RuntimeMessage,
   RuntimePlanDecision,
   RuntimeTaskKind,
@@ -42,6 +43,7 @@ export type RuntimeTurnExecutionInput = {
   options?: RuntimeTurnExecutionOptions;
   signal: AbortSignal;
   skillIds: string[];
+  skillReferences?: RuntimeMessage['skillReferences'];
   text: string;
   thinkingOptions?: RuntimeTurnThinkingOptions;
   thread: RuntimeThread;
@@ -94,6 +96,7 @@ export class RuntimeTurnRunFactory {
       attachments,
       signal: task.controller.signal,
       skillIds: input.skillIds ?? [],
+      skillReferences: input.skillReferences,
       text,
       thinkingOptions: turnThinkingOptions(input),
       thread: threadForRun,
@@ -221,7 +224,7 @@ export class RuntimeTurnRunFactory {
   async createRegenerate(
     threadId: string,
     messageId: string,
-    input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string },
+    input: RegenerateMessageInput,
   ): Promise<{ turnId: string; done: Promise<void> }> {
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
     await this.options.eventWriter.flushThread(threadId);
@@ -236,6 +239,7 @@ export class RuntimeTurnRunFactory {
     }
 
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();
+    const skillIds = input.skillIds ?? originalMessage.skillIds ?? [];
     if (!text) throw new Error('Message content is required.');
     await this.options.inputGuard.assertAttachmentsSupported(this.options.normalizeAttachments(originalMessage.attachments));
     if (text !== originalMessage.content) {
@@ -260,7 +264,8 @@ export class RuntimeTurnRunFactory {
     }, (task) => this.options.runTurn({
       attachments,
       signal: task.controller.signal,
-      skillIds: input.skillIds ?? [],
+      skillIds,
+      skillReferences: input.skillReferences ?? originalMessage.skillReferences,
       text,
       thinkingOptions: turnThinkingOptions(input),
       thread,

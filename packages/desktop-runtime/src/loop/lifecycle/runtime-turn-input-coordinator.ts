@@ -11,6 +11,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from '../context/prompt-utils.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
+import { normalizeRuntimeSkillReferences } from '../core/runtime-skill-references.js';
 import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
 
@@ -74,6 +75,7 @@ export class RuntimeTurnInputCoordinator {
       expectedTurnId: activeTurnId,
       input: input.input,
       skillIds: input.skillIds,
+      skillReferences: input.skillReferences,
       thinking: input.thinking,
       thinkingEffort: input.thinkingEffort,
     }, input.id);
@@ -103,6 +105,11 @@ export class RuntimeTurnInputCoordinator {
       if (active.controller.signal.aborted) throw new Error('no active turn to steer');
       const claimedAttachments = await this.options.claimAttachments(threadId, attachments);
       const skillIds = [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))];
+      const skillReferences = normalizeRuntimeSkillReferences({
+        content: text,
+        references: input.skillReferences,
+        skillIds,
+      });
       const message: RuntimeMessage = {
         id: this.options.ids.id('msg'),
         clientId: input.clientId,
@@ -110,6 +117,7 @@ export class RuntimeTurnInputCoordinator {
         role: 'user',
         content: text,
         skillIds: skillIds.length ? skillIds : undefined,
+        skillReferences: skillReferences.length ? skillReferences : undefined,
         attachments: claimedAttachments,
         createdAt: this.options.clock.now().toISOString(),
         status: 'complete',
