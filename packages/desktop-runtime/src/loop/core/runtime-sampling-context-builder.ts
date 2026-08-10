@@ -1,11 +1,14 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
+  cloneRuntimeSkillReferences,
+  isRuntimeInputMessageAttachment,
   runtimeDeveloperFeaturesEnabled,
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeMessage,
   type RuntimeModelRequestStepSnapshot,
   type RuntimeThread,
+  type RuntimeThreadGoalExecutionOptions,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
@@ -106,6 +109,7 @@ export class RuntimeSamplingContextBuilder {
     runtimeConfig,
     signal,
     skillIds,
+    thinkingOptions,
     thread,
     threadId,
     turnId,
@@ -116,6 +120,7 @@ export class RuntimeSamplingContextBuilder {
     runtimeConfig: RuntimeConfigState | null | undefined;
     signal: AbortSignal;
     skillIds: string[];
+    thinkingOptions?: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
     thread: RuntimeThread;
     threadId: string;
     turnId: string;
@@ -170,8 +175,15 @@ export class RuntimeSamplingContextBuilder {
           ])],
         }
       : configuredSandbox;
+    const goalExecution = goalExecutionForTurn({
+      messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
+      skillIds,
+      thinkingOptions,
+      turnId,
+    });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
+      ...(goalExecution ? { goalExecution } : {}),
       threadId,
       projectId: thread.projectId,
       turnId,
@@ -310,6 +322,36 @@ export class RuntimeSamplingContextBuilder {
       .filter(Boolean)
       .sort();
   }
+}
+
+function goalExecutionForTurn({
+  messages,
+  skillIds,
+  thinkingOptions,
+  turnId,
+}: {
+  messages: RuntimeMessage[];
+  skillIds: string[];
+  thinkingOptions: Pick<ModelRequest, 'thinking' | 'reasoningEffort'> | undefined;
+  turnId: string;
+}): RuntimeThreadGoalExecutionOptions | undefined {
+  const sourceMessage = messages.find((message) => (
+    message.turnId === turnId
+    && message.role === 'user'
+    && message.visibility !== 'model'
+  ));
+  if (!sourceMessage) return undefined;
+  const thinking = thinkingOptions?.thinking === true;
+  return {
+    attachments: sourceMessage.attachments
+      ?.filter(isRuntimeInputMessageAttachment)
+      .map((attachment) => ({ ...attachment })),
+    sourceMessageId: sourceMessage.id,
+    skillIds: skillIds.length ? [...skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(sourceMessage.skillReferences),
+    thinking,
+    thinkingEffort: thinking ? thinkingOptions?.reasoningEffort : undefined,
+  };
 }
 
 function runtimeToolFeatureFlags(

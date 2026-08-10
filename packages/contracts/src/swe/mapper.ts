@@ -195,14 +195,26 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'thread.goal_updated') {
-    return [{
+    const notifications = event.payload.sourceMessage
+      ? runtimeEventToSweNotifications({
+          id: event.id,
+          seq: event.seq,
+          threadId: event.threadId,
+          turnId: event.payload.sourceMessage.turnId ?? event.turnId,
+          type: 'message.created',
+          createdAt: event.payload.sourceMessage.createdAt,
+          payload: { message: event.payload.sourceMessage },
+        }, state)
+      : [];
+    notifications.push({
       method: 'thread/goal/updated',
       params: {
         threadId: event.threadId,
         turnId: event.turnId ?? null,
         goal: cloneRuntimeThreadGoal(event.payload.goal),
       },
-    }];
+    });
+    return notifications;
   }
 
   if (event.type === 'thread.goal_cleared') {

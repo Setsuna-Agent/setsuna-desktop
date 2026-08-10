@@ -108,6 +108,23 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: '2026-06-27T00:00:00.000Z',
         payload: { goal },
       };
+      const queuedUpdated: RuntimeEvent = {
+        ...updated,
+        id: 'event_goal_queued',
+        payload: {
+          goal,
+          sourceMessage: {
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            turnId: 'turn_1',
+            role: 'user',
+            inputKind: 'goal',
+            content: 'Ship alignment.',
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+          },
+        },
+      };
       const cleared: RuntimeEvent = {
         id: 'event_goal_2',
         seq: 2,
@@ -129,6 +146,26 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         method: 'thread/goal/updated',
         params: { threadId: 'thread_1', turnId: 'turn_1', goal },
       }]);
+      expect(runtimeEventToSweNotifications(queuedUpdated)).toEqual([
+        {
+          method: 'item/started',
+          params: {
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+            item: {
+              type: 'userMessage',
+              id: 'message_goal_source',
+              clientId: 'client_goal',
+              content: [{ type: 'text', text: 'Ship alignment.' }],
+            },
+            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+          },
+        },
+        {
+          method: 'thread/goal/updated',
+          params: { threadId: 'thread_1', turnId: 'turn_1', goal },
+        },
+      ]);
       expect(runtimeEventToSweNotifications(cleared)).toEqual([{
         method: 'thread/goal/cleared',
         params: { threadId: 'thread_1' },

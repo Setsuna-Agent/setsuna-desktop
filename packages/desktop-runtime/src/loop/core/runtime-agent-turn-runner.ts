@@ -244,6 +244,7 @@ export class RuntimeAgentTurnRunner {
           runtimeConfig,
           signal,
           skillIds: activeSkillIds,
+          thinkingOptions: activeThinkingOptions,
           thread,
           threadId,
           turnId,

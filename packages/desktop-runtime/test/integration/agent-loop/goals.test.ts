@@ -4,17 +4,20 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import {
   EditedGoalModelClient,
   GoalSteerModelClient,
   NoProgressGoalModelClient,
   PersistentGoalModelClient,
+  RegularTurnCreatesPersistentGoalModelClient,
   ReplacingGoalModelClient,
 } from '../../support/agent-loop/goals.js';
 import {
   CancellableModelClient,
   CapturingToolHost,
   mkDataDir,
+  stepSnapshotSkillRegistry,
   waitForModelAbort,
   waitForModelRequestCount,
   waitForTestState
@@ -148,6 +151,31 @@ describe('agent loop persistent goals', () => {
           },
         },
       });
+      const staleTurnId = 'turn_restored_goal';
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: staleTurnId,
+        type: 'turn.started',
+        createdAt: '2026-08-10T00:00:00.000Z',
+        payload: { input: 'Continue the active goal.', taskKind: 'goal' },
+      });
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: staleTurnId,
+        type: 'token.count',
+        createdAt: '2026-08-10T00:00:01.000Z',
+        payload: { usage: { inputTokens: 3, outputTokens: 2, totalTokens: 5 } },
+      });
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: staleTurnId,
+        type: 'turn.cancelled',
+        createdAt: '2026-08-10T00:00:02.000Z',
+        payload: { reason: 'Turn cancelled because the desktop runtime restarted.', taskKind: 'goal' },
+      });
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -157,11 +185,14 @@ describe('agent loop persistent goals', () => {
       });
 
       await loop.reconcileRestoredGoals();
+      await loop.reconcileRestoredGoals();
       const restored = await threadStore.getThread(thread.id);
 
       expect(restored?.goal).toMatchObject({
         id: 'goal_restored',
         status: 'paused',
+        tokensUsed: 17,
+        timeUsedSeconds: 10,
         stopReason: { code: 'runtimeReloaded' },
       });
       expect(restored?.messages).toContainEqual(expect.objectContaining({
@@ -340,6 +371,56 @@ describe('agent loop persistent goals', () => {
       ]);
       expect(modelClient.requests[2].tools?.map((tool) => tool.name)).toEqual(['create_goal']);
     });
+
+  it('retains regular-turn Skills, attachments, and thinking for Goal continuations', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Goal execution inheritance' });
+      const modelClient = new RegularTurnCreatesPersistentGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        configStore: new ImageCapabilityConfigStore(true),
+        ids,
+        skillRegistry: stepSnapshotSkillRegistry(),
+      });
+      const input = 'Step Skill create a persistent Goal with this image.';
+
+      await loop.sendTurn(thread.id, {
+        attachments: [inlineAttachment('attachment_regular_goal', 'goal.png')],
+        input,
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+        thinking: true,
+        thinkingEffort: 'high',
+      });
+      const completed = await waitForTestState(
+        () => threadStore.getThread(thread.id),
+        (snapshot) => snapshot?.goal?.status === 'complete' && snapshot.goal.tokensUsed === 5,
+        (snapshot) => `Timed out waiting for inherited Goal execution; snapshot=${JSON.stringify(snapshot)}`,
+      );
+
+      expect(completed?.goal).toMatchObject({
+        objective: 'Persistent objective from regular turn',
+        status: 'complete',
+        execution: {
+          attachments: [expect.objectContaining({ id: 'attachment_regular_goal' })],
+          sourceMessageId: expect.any(String),
+          skillIds: ['skill_step'],
+          skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+          thinking: true,
+          thinkingEffort: 'high',
+        },
+      });
+      expect(modelClient.requests).toHaveLength(4);
+      expect(modelClient.requests[2]).toMatchObject({ thinking: true, reasoningEffort: 'high' });
+      expect(modelClient.requests[2]?.stepSnapshot?.messageIds).toContain('skill_skill_step');
+      expect(modelClient.requests[2]?.messages.filter((message) => (
+        message.attachments?.some((attachment) => attachment.id === 'attachment_regular_goal')
+      ))).toHaveLength(1);
+    });
   
   it('pauses a persistent goal when its active turn is cancelled', async () => {
       const ids = new RandomIdGenerator();
@@ -426,6 +507,58 @@ describe('agent loop persistent goals', () => {
         event.type === 'message.created'
         && event.payload.message.goalMode?.kind === 'cleared'
       ))).toHaveLength(0);
+    });
+
+  it('accounts an already-cancelled registered Goal turn before clearing it', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Cancelled then cleared goal' });
+      let releaseProvider: () => void = () => undefined;
+      const settleAfterAbort = new Promise<void>((resolve) => {
+        releaseProvider = resolve;
+      });
+      const modelClient = new CancellableModelClient({
+        inputTokens: 3,
+        outputTokens: 2,
+        totalTokens: 5,
+      }, settleAfterAbort);
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.setThreadGoal(thread.id, { objective: 'Cancel and clear safely', status: 'active' });
+      await modelClient.waitUntilAbortListenerReady();
+      await waitForTestState(
+        () => threadStore.listEvents(thread.id, 0),
+        (events) => events.some((event) => event.type === 'token.count'),
+        (events) => `Timed out waiting for pre-cancel usage; events=${JSON.stringify(events)}`,
+      );
+      const turnId = loop.activeTurnId(thread.id);
+      expect(turnId).toEqual(expect.any(String));
+      await loop.cancelTurn(thread.id, turnId!);
+      await waitForModelAbort(modelClient);
+      expect(loop.activeTurnId(thread.id)).toBeNull();
+
+      await loop.clearThreadGoal(thread.id);
+      const clearedEvent = (await threadStore.listEvents(thread.id, 0))
+        .find((event) => event.type === 'thread.goal_cleared');
+
+      expect(clearedEvent).toMatchObject({
+        payload: {
+          lifecycleMessage: expect.objectContaining({
+            goalMode: expect.objectContaining({
+              kind: 'cleared',
+              goal: expect.objectContaining({ tokensUsed: 5 }),
+            }),
+          }),
+        },
+      });
+      releaseProvider();
+      await loop.shutdown();
     });
 
   it('does not resurrect a Goal cleared while settlement is reading its turn events', async () => {
@@ -534,3 +667,13 @@ describe('agent loop persistent goals', () => {
         .toBe('Goal completed with the guidance.');
     });
 });
+
+function inlineAttachment(id: string, name: string) {
+  return {
+    id,
+    name,
+    type: 'image/png',
+    size: 1,
+    url: 'data:image/png;base64,AA==',
+  };
+}

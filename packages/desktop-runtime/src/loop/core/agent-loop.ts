@@ -342,6 +342,7 @@ export class AgentLoop {
       ids: options.ids,
       threadStore: options.threadStore,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      registeredTask: (threadId) => this.turnTasks.registeredForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
       createContinuation: (threadId, goal, contextMessages, execution) => this.withThreadMutation(
         threadId,
@@ -357,6 +358,7 @@ export class AgentLoop {
         },
       ),
       hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
+      waitForCancellationWrites: (threadId) => this.turnTermination.waitForThread(threadId),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       publishMessage: (threadId, turnId, message) =>
         this.publishMessage(threadId, turnId, message),

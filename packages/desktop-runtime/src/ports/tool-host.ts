@@ -4,6 +4,7 @@ import type {
   RuntimePermissionProfile,
   RuntimePluginReference,
   RuntimeSandboxWorkspaceWrite,
+  RuntimeThreadGoalExecutionOptions,
   RuntimeToolChoice,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
@@ -36,6 +37,8 @@ export type ToolExecutionContext = {
  */
 export type RuntimeToolExecutionContext = ToolExecutionContext & {
   environment: ToolExecutionEnvironment;
+  /** Input resources/options that a Goal created during this turn must retain for continuations. */
+  goalExecution?: RuntimeThreadGoalExecutionOptions;
   turnId: string;
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite: RuntimeSandboxWorkspaceWrite | undefined;

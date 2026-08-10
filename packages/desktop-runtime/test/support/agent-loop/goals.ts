@@ -111,6 +111,43 @@ export class ReplacingGoalModelClient implements ModelClient {
   }
 }
 
+export class RegularTurnCreatesPersistentGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'goal_create_regular',
+          name: 'create_goal',
+          arguments: '{"objective":"Persistent objective from regular turn"}',
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield { type: 'text_delta', text: 'The persistent goal is ready to continue.' };
+      yield { type: 'usage', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 3) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_complete_continuation', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The persistent goal is complete.' };
+    yield { type: 'usage', usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 export class EditedGoalModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   private releaseFirst: () => void = () => undefined;
