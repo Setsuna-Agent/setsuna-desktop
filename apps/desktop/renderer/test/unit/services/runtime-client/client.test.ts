@@ -212,7 +212,7 @@ describe('desktop runtime client advanced thread methods', () => {
       threadId: 'thread / 1',
       objective: 'Ship it',
       status: 'active' as const,
-      tokenBudget: 1000,
+      tokenBudget: null,
       tokensUsed: 0,
       timeUsedSeconds: 0,
       createdAt: 1,
@@ -254,9 +254,8 @@ describe('desktop runtime client advanced thread methods', () => {
     await client.deleteThread('thread / 1');
     await expect(client.setThreadGoal('thread / 1', {
       objective: 'Ship it',
-      tokenBudget: 1000,
     })).resolves.toMatchObject({
-      goal: { objective: 'Ship it', tokenBudget: 1000 },
+      goal: { objective: 'Ship it', tokenBudget: null },
       thread: { id: 'thread / 1', lastSeq: 1 },
     });
     await expect(client.clearThreadGoal('thread / 1')).resolves.toMatchObject({
@@ -276,7 +275,7 @@ describe('desktop runtime client advanced thread methods', () => {
       {
         path: '/v1/threads/thread%20%2F%201/goal',
         method: 'PUT',
-        body: { objective: 'Ship it', tokenBudget: 1000 },
+        body: { objective: 'Ship it' },
       },
       {
         path: '/v1/threads/thread%20%2F%201/goal',

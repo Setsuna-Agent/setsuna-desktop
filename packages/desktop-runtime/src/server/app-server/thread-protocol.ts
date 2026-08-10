@@ -343,13 +343,12 @@ export function sweSetThreadGoal(thread: RuntimeThread, input: Record<string, un
   const status = hasOwn(input, 'status') && input.status !== null
     ? sweGoalStatus(input.status)
     : thread.goal?.status ?? 'active';
-  const tokenBudget = hasOwn(input, 'tokenBudget')
-    ? sweGoalTokenBudget(input.tokenBudget)
-    : thread.goal?.tokenBudget ?? null;
+  if (hasOwn(input, 'tokenBudget') && input.tokenBudget !== null) {
+    throw new AppServerRpcError(-32602, 'goal token budgets are no longer supported');
+  }
   return {
     objective,
     status,
-    tokenBudget,
   };
 }
 
@@ -373,14 +372,6 @@ function sweGoalStatus(value: unknown): RuntimeThreadGoalStatus {
     return value;
   }
   throw new AppServerRpcError(-32602, `Unsupported goal status: ${String(value)}`);
-}
-
-function sweGoalTokenBudget(value: unknown): number | null {
-  if (value === null) return null;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    throw new AppServerRpcError(-32602, 'goal budgets must be positive when provided');
-  }
-  return value;
 }
 
 export function swePatchThreadGitInfo(thread: RuntimeThread, input: Record<string, unknown>): RuntimeGitInfo | null {

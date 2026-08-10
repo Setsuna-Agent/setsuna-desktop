@@ -608,6 +608,7 @@ export function ChatComposer({
       />
       {currentGoal ? (
         <ChatGoalStatusBar
+          key={`${currentGoal.threadId}:${currentGoal.id}`}
           activeTurnStartedAt={activeGoalTurnStartedAt}
           goal={currentGoal}
           onClearGoal={onClearThreadGoal}

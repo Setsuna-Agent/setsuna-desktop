@@ -89,12 +89,9 @@ export function nextGoalState(
     ? previous?.objective
     : normalizeGoalObjective(patch.objective);
   if (!objective) throw new Error(`cannot update goal for thread ${threadId}: no goal exists`);
-  // UI edits update the same durable Goal; only create_goal / a new queued Goal replaces it.
-  const replacesGoal = forceNew || !previous;
-  const status = normalizeGoalStatus(patch.status ?? (replacesGoal ? 'active' : previous.status));
-  const tokenBudget = patch.tokenBudget === undefined
-    ? replacesGoal ? null : previous.tokenBudget
-    : normalizeLegacyTokenBudget(patch.tokenBudget);
+  const status = normalizeGoalStatus(patch.status ?? (forceNew || !previous ? 'active' : previous.status));
+  // Explicit creation and restarting a completed Goal are new work; ordinary edits keep identity.
+  const replacesGoal = forceNew || !previous || (previous.status === 'complete' && status === 'active');
   const now = epochSeconds(nowDate);
   const resumesGoal = Boolean(previous && previous.status !== 'active' && status === 'active');
   const objectiveChanged = Boolean(previous && previous.objective !== objective);
@@ -104,7 +101,7 @@ export function nextGoalState(
     threadId,
     objective,
     status,
-    tokenBudget,
+    tokenBudget: null,
     tokensUsed: replacesGoal ? 0 : previous.tokensUsed,
     timeUsedSeconds: replacesGoal ? 0 : previous.timeUsedSeconds,
     createdAt: replacesGoal ? now : previous.createdAt,
@@ -242,14 +239,6 @@ function finiteNonNegative(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.floor(value))
     : 0;
-}
-
-function normalizeLegacyTokenBudget(value: unknown): number | null {
-  if (value === null) return null;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    throw new Error('goal token budget must be a positive number or null');
-  }
-  return Math.floor(value);
 }
 
 function normalizeGoalStatus(value: unknown): RuntimeThreadGoalStatus {

@@ -182,11 +182,15 @@ export class RuntimeGoalCoordinator {
     const goal = options.execution
       ? cloneRuntimeThreadGoal({ ...nextGoal, execution: options.execution })
       : nextGoal;
+    if (previous && previous.id === goal.id && previous.status !== 'active' && goal.status === 'active') {
+      this.supersedePendingGoalTurns(goal.id);
+    }
     const active = this.options.activeTask(threadId);
     const replacingActiveGoal = Boolean(
       previous
       && previous.id !== goal.id
-      && active?.taskKind === 'goal',
+      && active
+      && this.taskBelongsToGoal(active, previous.id),
     );
     if (replacingActiveGoal && options.cancelActiveGoalTurn !== false && active) {
       this.retiredGoalIds.add(previous!.id);
@@ -211,7 +215,8 @@ export class RuntimeGoalCoordinator {
     if (
       goal.status !== 'active'
       && options.cancelActiveGoalTurn !== false
-      && currentActive?.taskKind === 'goal'
+      && currentActive
+      && this.taskBelongsToGoal(currentActive, goal.id)
     ) {
       await this.cancelGoalTurnWithoutPausing(threadId, currentActive.turnId);
     }
@@ -269,7 +274,6 @@ export class RuntimeGoalCoordinator {
           {
             objective,
             status: 'active',
-            tokenBudget: null,
           },
           this.options.clock.now(),
           this.options.ids,
@@ -307,10 +311,7 @@ export class RuntimeGoalCoordinator {
     const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
     if (!goal) return;
     const task = this.options.registeredTask(threadId) ?? this.options.activeTask(threadId);
-    const goalTask = task && (
-      task.taskKind === 'goal'
-      || this.goalIdByTurnId.get(task.turnId) === goal.id
-    ) ? task : null;
+    const goalTask = task && this.taskBelongsToGoal(task, goal.id) ? task : null;
     const retiredGoalTurn = Boolean(goalTask);
     try {
       if (goalTask) {
@@ -354,9 +355,6 @@ export class RuntimeGoalCoordinator {
         return;
       }
       if (goal.status === 'complete') throw new Error('A completed goal cannot be resumed. Create a new goal instead.');
-      for (const [turnId, goalId] of this.goalIdByTurnId) {
-        if (goalId === goal.id) this.supersededGoalTurnIds.add(turnId);
-      }
       await this.setGoalUnlocked(threadId, { status: 'active' }, {});
     });
   }
@@ -473,7 +471,7 @@ export class RuntimeGoalCoordinator {
         );
         const goal = await this.setGoalUnlocked(
           context.threadId,
-          { objective, status: 'active', tokenBudget: null },
+          { objective, status: 'active' },
           {
             cancelActiveGoalTurn: false,
             execution: boundToCurrentGoal ? currentGoal?.execution : context.goalExecution,
@@ -815,6 +813,17 @@ export class RuntimeGoalCoordinator {
     if (boundObjective && boundObjective !== goal?.objective) {
       throw new Error('This turn belongs to an earlier goal revision and cannot modify the edited goal.');
     }
+  }
+
+  private supersedePendingGoalTurns(goalId: string): void {
+    for (const [turnId, boundGoalId] of this.goalIdByTurnId) {
+      if (boundGoalId === goalId) this.supersededGoalTurnIds.add(turnId);
+    }
+  }
+
+  private taskBelongsToGoal(task: ActiveGoalTask, goalId: string): boolean {
+    const boundGoalId = this.goalIdByTurnId.get(task.turnId);
+    return boundGoalId ? boundGoalId === goalId : task.taskKind === 'goal';
   }
 }
 

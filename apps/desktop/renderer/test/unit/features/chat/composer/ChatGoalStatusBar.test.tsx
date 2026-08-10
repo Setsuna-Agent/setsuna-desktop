@@ -65,6 +65,28 @@ describe('ChatGoalStatusBar', () => {
     await userEvent.click(screen.getByRole('button', { name: '删除目标' }));
     await waitFor(() => expect(onClearGoal).toHaveBeenCalledOnce());
   });
+
+  it('closes an open editor when the displayed Goal identity changes', async () => {
+    const view = renderGoalBar(goal({ objective: 'First objective' }));
+    await userEvent.click(screen.getByRole('button', { name: '编辑目标' }));
+    await userEvent.clear(screen.getByRole('textbox', { name: '' }));
+    await userEvent.type(screen.getByRole('textbox', { name: '' }), 'Unsaved draft');
+
+    view.rerender(
+      <I18nProvider initialLocale="zh-CN">
+        <ChatGoalStatusBar
+          key="thread_2:goal_2"
+          goal={goal({ id: 'goal_2', threadId: 'thread_2', objective: 'Second objective' })}
+          onClearGoal={async () => undefined}
+          onUpdateGoal={async () => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: '' })).toBeNull());
+    await userEvent.click(screen.getByRole('button', { name: '编辑目标' }));
+    expect((screen.getByRole('textbox', { name: '' }) as HTMLTextAreaElement).value).toBe('Second objective');
+  });
 });
 
 function renderGoalBar(
@@ -78,6 +100,7 @@ function renderGoalBar(
   return render(
     <I18nProvider initialLocale="zh-CN">
       <ChatGoalStatusBar
+        key={`${value.threadId}:${value.id}`}
         activeTurnStartedAt={handlers.activeTurnStartedAt}
         goal={value}
         onClearGoal={handlers.onClearGoal ?? (async () => undefined)}

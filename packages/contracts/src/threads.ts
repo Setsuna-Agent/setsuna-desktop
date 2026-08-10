@@ -249,6 +249,7 @@ export type RuntimeThreadGoal = {
   threadId: string;
   objective: string;
   status: RuntimeThreadGoalStatus;
+  /** Legacy persisted field. New Goal writes always normalize this to null. */
   tokenBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
@@ -292,7 +293,6 @@ export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGo
 export type RuntimeThreadGoalPatch = {
   objective?: string;
   status?: RuntimeThreadGoalStatus;
-  tokenBudget?: number | null;
 };
 
 export type RuntimeQueuedTurnInputKind = 'message' | 'plan' | 'goal';

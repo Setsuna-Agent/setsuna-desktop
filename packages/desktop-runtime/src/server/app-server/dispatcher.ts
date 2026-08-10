@@ -482,7 +482,6 @@ export async function dispatchAppServerRpcRequest(
     const { goal } = await setRuntimeThreadGoal(runtime, threadId, {
       objective: requested.objective,
       status: requested.status,
-      tokenBudget: requested.tokenBudget,
     });
     return { goal };
   }

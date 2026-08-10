@@ -347,7 +347,6 @@ describe('runtime server REST threads and attachments', () => {
         body: JSON.stringify({
           objective: 'Keep the first-party runtime boundary small.',
           status: 'paused',
-          tokenBudget: 1_000,
         }),
       });
       expect(goalResult).toMatchObject({
@@ -355,7 +354,7 @@ describe('runtime server REST threads and attachments', () => {
           threadId: created.id,
           objective: 'Keep the first-party runtime boundary small.',
           status: 'paused',
-          tokenBudget: 1_000,
+          tokenBudget: null,
         },
         thread: {
           id: created.id,
@@ -366,6 +365,10 @@ describe('runtime server REST threads and attachments', () => {
         id: created.id,
         goal: expect.objectContaining({ objective: goalResult.goal.objective }),
       });
+      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
+        method: 'PUT',
+        body: JSON.stringify({ objective: 'Unsupported budget', tokenBudget: 1_000 }),
+      })).rejects.toThrow('Goal token budgets are no longer supported');
 
       const clearedResult = await harness.runtimeFetch(`${threadPath}/goal`, {
         method: 'DELETE',

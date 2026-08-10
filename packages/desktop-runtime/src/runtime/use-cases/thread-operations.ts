@@ -146,21 +146,12 @@ export function runtimeThreadGoalPatchFromInput(
   }
 
   if (hasOwn(input, 'tokenBudget')) {
-    const tokenBudget = input.tokenBudget;
-    if (
-      tokenBudget !== null
-      && (
-        typeof tokenBudget !== 'number'
-        || !Number.isFinite(tokenBudget)
-        || tokenBudget <= 0
-      )
-    ) {
+    if (input.tokenBudget !== null) {
       throw new RuntimeUseCaseError(
         'invalid_input',
-        'Goal token budget must be a positive number or null.',
+        'Goal token budgets are no longer supported; omit tokenBudget or pass null.',
       );
     }
-    patch.tokenBudget = tokenBudget;
   }
 
   return patch;

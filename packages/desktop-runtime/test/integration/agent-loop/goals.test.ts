@@ -10,6 +10,7 @@ import {
   GoalSteerModelClient,
   NoProgressGoalModelClient,
   PersistentGoalModelClient,
+  RegularTurnCreatesCancellableGoalModelClient,
   RegularTurnCreatesPersistentGoalModelClient,
   ReplacingGoalModelClient,
 } from '../../support/agent-loop/goals.js';
@@ -509,7 +510,7 @@ describe('agent loop persistent goals', () => {
       expect(cancelledTurnId).toEqual(expect.any(String));
       await loop.cancelTurn(thread.id, cancelledTurnId!);
       await waitForModelAbort(modelClient);
-      await loop.resumeThreadGoal(thread.id);
+      await loop.setThreadGoal(thread.id, { status: 'active' });
 
       expect(modelClient.requests).toHaveLength(1);
       expect((await threadStore.getThread(thread.id))?.goal).toMatchObject({ status: 'active' });
@@ -524,6 +525,38 @@ describe('agent loop persistent goals', () => {
 
       expect(resumed?.goal).toMatchObject({ status: 'active', tokensUsed: 5 });
       await loop.shutdown();
+    });
+
+  it('pauses a regular turn after that turn creates its Goal', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Pause founding turn' });
+      const modelClient = new RegularTurnCreatesCancellableGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.startTurn(thread.id, { input: 'Create a Goal and keep working on it.' });
+      await modelClient.waitUntilAbortListenerReady();
+      expect((await threadStore.getThread(thread.id))?.goal).toMatchObject({
+        objective: 'Pause the founding regular turn',
+        status: 'active',
+      });
+
+      await loop.setThreadGoal(thread.id, { status: 'paused' });
+      await waitForModelAbort(modelClient);
+      await loop.shutdown();
+
+      expect(modelClient.requests).toHaveLength(2);
+      expect((await threadStore.getThread(thread.id))?.goal).toMatchObject({
+        objective: 'Pause the founding regular turn',
+        status: 'paused',
+        stopReason: { code: 'userPaused' },
+      });
     });
 
   it('retains Goal revision bindings while shutdown drains an edited turn', async () => {

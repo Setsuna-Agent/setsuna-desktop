@@ -3,6 +3,7 @@ import type {
   ModelStreamEvent
 } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../../../src/ports/model-client.js';
+import { CancellableModelClient } from './shared.js';
 
 
 export class PersistentGoalModelClient implements ModelClient {
@@ -145,6 +146,38 @@ export class RegularTurnCreatesPersistentGoalModelClient implements ModelClient 
     yield { type: 'text_delta', text: 'The persistent goal is complete.' };
     yield { type: 'usage', usage: { inputTokens: 2, outputTokens: 1, totalTokens: 3 } };
     yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+/** Holds the founding regular turn open after create_goal so pause semantics can be exercised. */
+export class RegularTurnCreatesCancellableGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private readonly cancellable = new CancellableModelClient();
+
+  get aborted(): boolean {
+    return this.cancellable.aborted;
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'goal_create_then_pause',
+          name: 'create_goal',
+          arguments: '{"objective":"Pause the founding regular turn"}',
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+
+    yield* this.cancellable.stream(request);
+  }
+
+  async waitUntilAbortListenerReady(): Promise<void> {
+    await this.cancellable.waitUntilAbortListenerReady();
   }
 }
 
