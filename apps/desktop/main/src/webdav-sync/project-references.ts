@@ -1,3 +1,4 @@
+import { isTemporaryWorkspaceProjectId } from '@setsuna-desktop/contracts';
 import { lstat, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -12,7 +13,6 @@ export async function remapStagedProjectReferences(input: {
   conversations: boolean;
   memories: boolean;
 }): Promise<void> {
-  if (!input.projectIdMap.size) return;
   if (input.conversations) {
     const databasePath = path.join(input.stagingRoot, 'runtime', 'threads.sqlite');
     if (await isRegularFile(databasePath)) {
@@ -40,14 +40,23 @@ function remapConversationDatabase(
         UPDATE threads SET project_id = ?, snapshot_json = ? WHERE id = ?
       `);
       for (const row of database.prepare(`
-        SELECT id, project_id, snapshot_json FROM threads WHERE project_id IS NOT NULL
+        SELECT id, project_id, snapshot_json FROM threads
       `).all() as SqliteRow[]) {
-        const sourceProjectId = stringColumn(row, 'project_id');
-        const targetProjectId = projectIdMap.get(sourceProjectId);
-        if (!targetProjectId) continue;
+        const sourceProjectId = nullableStringColumn(row, 'project_id');
+        const targetProjectId = sourceProjectId
+          ? projectIdMap.get(sourceProjectId)
+          : undefined;
+        const sourceProjectIsTemporary = Boolean(
+          sourceProjectId && isTemporaryWorkspaceProjectId(sourceProjectId),
+        );
         const snapshot = parseJsonColumn(row, 'snapshot_json', `thread ${stringColumn(row, 'id')}`);
         const remapped = remapStructuredValue(snapshot, projectIdMap, targetPaths);
-        updateThread.run(targetProjectId, JSON.stringify(remapped.value), stringColumn(row, 'id'));
+        if (!targetProjectId && !sourceProjectIsTemporary && !remapped.changed) continue;
+        updateThread.run(
+          targetProjectId ?? (sourceProjectIsTemporary ? null : sourceProjectId),
+          JSON.stringify(remapped.value),
+          stringColumn(row, 'id'),
+        );
       }
 
       const updateMessage = database.prepare(`
@@ -192,30 +201,58 @@ function remapStructuredValue(
   const mappedWorkspaceProjectId = sourceWorkspaceProjectId
     ? projectIdMap.get(sourceWorkspaceProjectId)
     : undefined;
+  const temporaryProjectId = Boolean(
+    sourceProjectId && isTemporaryWorkspaceProjectId(sourceProjectId),
+  );
+  const temporaryEnvironmentId = Boolean(
+    sourceEnvironmentId && isTemporaryWorkspaceProjectId(sourceEnvironmentId),
+  );
+  const temporaryToolEnvironmentId = Boolean(
+    sourceToolEnvironmentId && isTemporaryWorkspaceProjectId(sourceToolEnvironmentId),
+  );
+  const temporaryWorkspaceProjectId = Boolean(
+    sourceWorkspaceProjectId && isTemporaryWorkspaceProjectId(sourceWorkspaceProjectId),
+  );
+  const hasDeviceLocalEnvironment = temporaryProjectId
+    || temporaryEnvironmentId
+    || temporaryToolEnvironmentId
+    || temporaryWorkspaceProjectId;
   if (mappedProjectId) {
     output.projectId = mappedProjectId;
     changed ||= mappedProjectId !== sourceProjectId;
+  } else if (temporaryProjectId) {
+    delete output.projectId;
+    changed = true;
   }
   if (mappedEnvironmentId) {
     output.environmentId = mappedEnvironmentId;
     changed ||= mappedEnvironmentId !== sourceEnvironmentId;
+  } else if (temporaryEnvironmentId) {
+    delete output.environmentId;
+    changed = true;
   }
   if (mappedToolEnvironmentId) {
     output.id = mappedToolEnvironmentId;
     changed ||= mappedToolEnvironmentId !== sourceToolEnvironmentId;
+  } else if (temporaryToolEnvironmentId) {
+    delete output.id;
+    changed = true;
   }
-  const targetProjectId = mappedProjectId ?? mappedEnvironmentId ?? mappedToolEnvironmentId;
+  const targetProjectId = mappedProjectId
+    ?? mappedEnvironmentId
+    ?? mappedToolEnvironmentId
+    ?? mappedWorkspaceProjectId;
   if (mappedWorkspaceProjectId) {
     output.workspaceProjectId = mappedWorkspaceProjectId;
     changed ||= mappedWorkspaceProjectId !== sourceWorkspaceProjectId;
-  } else if (sourceWorkspaceProjectId && targetProjectId) {
+  } else if (sourceWorkspaceProjectId && (targetProjectId || temporaryWorkspaceProjectId)) {
     // Managed workspace IDs are device-local. If they are not part of the
     // portable project map, let the target device allocate a fresh one.
     delete output.workspaceProjectId;
     changed = true;
   }
-  if (targetProjectId) {
-    const targetPath = targetPaths.get(targetProjectId);
+  if (targetProjectId || hasDeviceLocalEnvironment) {
+    const targetPath = targetProjectId ? targetPaths.get(targetProjectId) : undefined;
     for (const key of ['workspaceRoot', 'cwd'] as const) {
       if (!Object.hasOwn(value, key)) continue;
       if (targetPath) output[key] = targetPath;
@@ -253,6 +290,12 @@ function stringColumn(row: SqliteRow, column: string): string {
   const value = row[column];
   if (typeof value !== 'string') throw new Error(`备份数据库字段 ${column} 无效。`);
   return value;
+}
+
+function nullableStringColumn(row: SqliteRow, column: string): string | null {
+  const value = row[column];
+  if (value === null || typeof value === 'string') return value;
+  throw new Error(`备份数据库字段 ${column} 无效。`);
 }
 
 function numberColumn(row: SqliteRow, column: string): number {

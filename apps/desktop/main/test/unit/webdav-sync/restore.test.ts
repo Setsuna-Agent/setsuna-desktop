@@ -429,6 +429,91 @@ describe('WebDAV restore planning and commit', () => {
       restored.close();
     }
   });
+
+  it('removes source-device temporary workspace references from global conversations', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-global-restore-'));
+    temporaryRoots.push(dataRoot);
+    const runtimeRoot = path.join(dataRoot, 'runtime');
+    const stagingRoot = path.join(dataRoot, '.webdav-sync-work', 'restored-global');
+    await Promise.all([
+      mkdir(runtimeRoot, { recursive: true }),
+      mkdir(path.join(stagingRoot, 'runtime'), { recursive: true }),
+    ]);
+    const temporaryProjectId = 'temporary_workspace.2026-08-10.thread_global';
+    const database = new DatabaseSync(path.join(stagingRoot, 'runtime', 'threads.sqlite'));
+    database.exec(`
+      CREATE TABLE threads (id TEXT PRIMARY KEY, project_id TEXT, snapshot_json TEXT NOT NULL);
+      CREATE TABLE thread_messages (
+        thread_id TEXT NOT NULL,
+        message_index INTEGER NOT NULL,
+        message_json TEXT NOT NULL,
+        PRIMARY KEY (thread_id, message_index)
+      );
+      CREATE TABLE runtime_events (
+        thread_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        event_json TEXT NOT NULL,
+        PRIMARY KEY (thread_id, seq)
+      );
+      CREATE TABLE runtime_event_archives (
+        thread_id TEXT NOT NULL,
+        start_seq INTEGER NOT NULL,
+        events_gzip BLOB NOT NULL,
+        PRIMARY KEY (thread_id, start_seq)
+      );
+    `);
+    database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'thread_global',
+      null,
+      JSON.stringify({
+        id: 'thread_global',
+        projectId: temporaryProjectId,
+        environmentId: temporaryProjectId,
+        toolEnvironment: {
+          id: temporaryProjectId,
+          workspaceProjectId: temporaryProjectId,
+          cwd: '/source-device/temporary',
+          workspaceRoot: '/source-device/temporary',
+          workspaceRoots: ['/source-device/temporary'],
+          repository: { root: '/source-device/temporary' },
+        },
+      }),
+    );
+    database.prepare('INSERT INTO thread_messages VALUES (?, ?, ?)').run(
+      'thread_global',
+      0,
+      JSON.stringify({
+        id: 'message_global',
+        environmentId: temporaryProjectId,
+        cwd: '/source-device/temporary',
+      }),
+    );
+    database.close();
+
+    await applyRestoredSnapshot({
+      dataRoot,
+      stagingRoot,
+      sourceDataRoot: dataRoot,
+      categories: ['conversations'],
+      portableProjects: [],
+    });
+
+    const restored = new DatabaseSync(path.join(runtimeRoot, 'threads.sqlite'), { readOnly: true });
+    try {
+      const thread = restored.prepare('SELECT project_id, snapshot_json FROM threads').get() as {
+        project_id: null;
+        snapshot_json: string;
+      };
+      expect(thread.project_id).toBeNull();
+      expect(JSON.parse(thread.snapshot_json)).toEqual({ id: 'thread_global', toolEnvironment: {} });
+      const message = restored.prepare('SELECT message_json FROM thread_messages').get() as {
+        message_json: string;
+      };
+      expect(JSON.parse(message.message_json)).toEqual({ id: 'message_global' });
+    } finally {
+      restored.close();
+    }
+  });
 });
 
 function projectRecord(id: string, name: string, projectPath?: string) {

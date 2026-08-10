@@ -92,6 +92,7 @@ export class WebDavSyncService {
   private automaticTimer: ReturnType<typeof setTimeout> | null = null;
   private nextAutomaticBackupAt: string | undefined;
   private lastError: string | undefined;
+  private initializationError: Error | undefined;
   private configurationMutation = false;
   private closed = false;
 
@@ -102,12 +103,21 @@ export class WebDavSyncService {
   async initialize(): Promise<void> {
     // Cleanup must not depend on a readable config: a damaged metadata file
     // must never leave plaintext staging data behind across restarts.
-    await rm(this.workBaseRoot(), { recursive: true, force: true }).catch(() => undefined);
+    try {
+      await rm(this.workBaseRoot(), { recursive: true, force: true });
+    } catch (error) {
+      this.initializationError = new Error('无法清理 WebDAV 同步的本地明文暂存目录；同步功能已停用。', {
+        cause: error,
+      });
+      throw this.initializationError;
+    }
+    this.initializationError = undefined;
     await this.options.configStore.initialize();
     await this.scheduleAutomaticBackup();
   }
 
   async getState(): Promise<DesktopWebDavSyncState> {
+    this.assertAvailable();
     const config = await this.options.configStore.getConfig();
     return this.stateFromConfig(config);
   }
@@ -126,6 +136,7 @@ export class WebDavSyncService {
   }
 
   async getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]> {
+    this.assertAvailable();
     const workRoot = await this.createWorkRoot('summary');
     try {
       return await summarizeLocalSnapshotCategories({
@@ -617,9 +628,14 @@ export class WebDavSyncService {
   }
 
   private assertIdle(): void {
+    this.assertAvailable();
     if (this.operation || this.configurationMutation) {
       throw new Error('另一项 WebDAV 同步操作正在进行，请稍候。');
     }
+  }
+
+  private assertAvailable(): void {
+    if (this.initializationError) throw this.initializationError;
   }
 
   private async mutateConfiguration(action: () => Promise<void>): Promise<DesktopWebDavSyncState> {

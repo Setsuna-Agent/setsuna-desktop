@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,6 +45,44 @@ describe('WebDavSyncService', () => {
       .rejects.toMatchObject({ code: 'ENOENT' });
     await expect(service.resetLocalConfiguration()).resolves.toMatchObject({ configured: false });
     service.close();
+  });
+
+  it('disables sync when stale plaintext staging data cannot be removed', async () => {
+    if (process.platform === 'win32') return;
+    const dataRoot = await createDataRoot();
+    const workRoot = path.join(dataRoot, '.webdav-sync-work');
+    const stalePath = path.join(workRoot, 'stale', 'local-data.json');
+    const staleRoot = path.dirname(stalePath);
+    await mkdir(staleRoot, { recursive: true });
+    await writeFile(stalePath, '{"secret":true}\n');
+    await chmod(staleRoot, 0o500);
+    await chmod(workRoot, 0o500);
+    const service = new WebDavSyncService({
+      dataRoot,
+      appVersion: '0.2.1',
+      configStore: new WebDavSyncConfigStore(
+        path.join(dataRoot, 'webdav-sync.json'),
+        new MemoryCredentialVault(),
+      ),
+      fetch: new MemoryWebDavServer('/dav').fetch,
+      runtime: {
+        prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+        release: async () => undefined,
+        stop: async () => undefined,
+        start: async () => undefined,
+      },
+      requestRelaunch: async () => undefined,
+    });
+
+    try {
+      await expect(service.initialize()).rejects.toThrow('本地明文暂存目录');
+      await expect(readFile(stalePath, 'utf8')).resolves.toContain('secret');
+      await expect(service.getState()).rejects.toThrow('同步功能已停用');
+    } finally {
+      await chmod(staleRoot, 0o700).catch(() => undefined);
+      await chmod(workRoot, 0o700);
+      service.close();
+    }
   });
 
   it('backs up and manually restores portable config plus independently encrypted model API keys', async () => {

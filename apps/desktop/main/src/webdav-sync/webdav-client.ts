@@ -7,6 +7,7 @@ import { pipeline } from 'node:stream/promises';
 import type { NormalizedWebDavLocation } from './normalization.js';
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
+const BUFFER_UPLOAD_CHUNK_BYTES = 64 * 1024;
 const MAX_METADATA_BYTES = 10 * 1024 * 1024;
 const MAX_PROPFIND_BYTES = 2 * 1024 * 1024;
 
@@ -99,8 +100,9 @@ export class WebDavClient {
         'Content-Type': options.contentType ?? 'application/octet-stream',
         ...(options.ifNoneMatch ? { 'If-None-Match': '*' } : {}),
       },
-      body: data,
-    }, async (response) => {
+      body: bufferUploadBody(data) as unknown as RequestInit['body'],
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' }, async (response) => {
       await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
         ? '远端备份仓库已存在。'
         : '无法写入 WebDAV 远端文件。');
@@ -300,6 +302,12 @@ export class WebDavClient {
     const encoded = parts.map((part) => encodeURIComponent(requireSafeRemoteSegment(part))).join('/');
     url.pathname = `${endpointPath}/${encoded}${collection ? '/' : ''}`.replace(/\/{2,}/gu, '/');
     return url;
+  }
+}
+
+async function* bufferUploadBody(data: Buffer): AsyncGenerator<Buffer> {
+  for (let offset = 0; offset < data.byteLength; offset += BUFFER_UPLOAD_CHUNK_BYTES) {
+    yield data.subarray(offset, Math.min(offset + BUFFER_UPLOAD_CHUNK_BYTES, data.byteLength));
   }
 }
 

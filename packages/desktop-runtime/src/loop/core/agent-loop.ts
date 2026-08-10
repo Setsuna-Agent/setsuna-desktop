@@ -380,10 +380,11 @@ export class AgentLoop {
    * Atomically closes turn/mutation admission when the runtime is already quiescent.
    * Cancelled tasks remain registered until their terminal writes finish, so they block too.
    */
-  prepareDataMigration(): RuntimeDataMigrationReadiness {
+  prepareDataMigration(additionalPendingMutations = 0): RuntimeDataMigrationReadiness {
     const registeredTasks = this.turnTasks.registeredTaskCount();
-    const pendingMutations = [...this.threadMutationAdmissions.values()]
-      .reduce((total, admissions) => total + admissions.size, 0);
+    const pendingMutations = Math.max(0, additionalPendingMutations)
+      + [...this.threadMutationAdmissions.values()]
+        .reduce((total, admissions) => total + admissions.size, 0);
     const ready = !this.shuttingDown
       && !this.dataMigrationPreparing
       && registeredTasks === 0

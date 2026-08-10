@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  createSqliteSnapshot,
   inventorySnapshotSources,
   prepareLocalSnapshotSources,
   summarizeLocalSnapshotCategories,
@@ -127,6 +128,26 @@ describe('WebDAV portable snapshot data', () => {
       stagingRoot: path.join(root, '.webdav-sync-work', 'unsafe'),
       categories: ['conversations'],
     })).rejects.toThrow('符号链接');
+  });
+
+  it('interrupts an in-progress SQLite backup when snapshot creation is cancelled', async () => {
+    const root = await createDataRoot();
+    const sourcePath = path.join(root, 'runtime', 'threads.sqlite');
+    const source = new DatabaseSync(sourcePath);
+    source.exec('CREATE TABLE cancellation_payload (data BLOB); INSERT INTO cancellation_payload VALUES (zeroblob(2097152));');
+    source.close();
+    const destinationPath = path.join(root, '.webdav-sync-work', 'cancelled.sqlite');
+    const abort = new AbortController();
+
+    await expect(createSqliteSnapshot(
+      sourcePath,
+      destinationPath,
+      {
+        signal: abort.signal,
+        onProgress: () => abort.abort(new Error('cancel sqlite snapshot')),
+      },
+    )).rejects.toThrow('cancel sqlite snapshot');
+    await expect(stat(destinationPath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('summarizes the current local size of every sync category', async () => {

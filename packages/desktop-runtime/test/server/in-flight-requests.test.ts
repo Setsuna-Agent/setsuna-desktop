@@ -6,16 +6,19 @@ describe('in-flight request tracker', () => {
     const tracker = new InFlightRequestTracker();
     const finishFirst = tracker.begin();
     const finishSecond = tracker.begin();
+    expect(tracker.count).toBe(2);
     const becameIdle = vi.fn();
     const waiting = tracker.waitForIdle().then(becameIdle);
 
     finishFirst();
     finishFirst();
+    expect(tracker.count).toBe(1);
     await Promise.resolve();
     expect(becameIdle).not.toHaveBeenCalled();
 
     finishSecond();
     await waiting;
+    expect(tracker.count).toBe(0);
     expect(becameIdle).toHaveBeenCalledOnce();
     await expect(tracker.waitForIdle()).resolves.toBeUndefined();
   });

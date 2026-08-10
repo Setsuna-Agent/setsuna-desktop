@@ -4,10 +4,11 @@ import {
   type DesktopWebDavSyncCategorySummary,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { constants, createReadStream, createWriteStream } from 'node:fs';
 import {
   lstat,
   mkdir,
+  open,
   readFile,
   readdir,
   rm,
@@ -99,7 +100,9 @@ async function collectLocalSnapshotSources(
         ? path.join(input.stagingRoot, 'runtime', 'threads.sqlite')
         : layout.runtimeDatabasePath;
       if (snapshotDatabase) {
-        await createSqliteSnapshot(layout.runtimeDatabasePath, databaseSourcePath);
+        await createSqliteSnapshot(layout.runtimeDatabasePath, databaseSourcePath, {
+          signal: input.signal,
+        });
       }
       sources.push(fileSource('conversations', databaseSourcePath, 'runtime/threads.sqlite', '会话数据库'));
     }
@@ -334,14 +337,35 @@ export function categoryTargetPaths(
   return targets;
 }
 
-async function createSqliteSnapshot(sourcePath: string, destinationPath: string): Promise<void> {
+export async function createSqliteSnapshot(
+  sourcePath: string,
+  destinationPath: string,
+  options: {
+    signal?: AbortSignal;
+    onProgress?: (progress: { totalPages: number; remainingPages: number }) => void;
+  } = {},
+): Promise<void> {
+  assertNotAborted(options.signal);
   await mkdir(path.dirname(destinationPath), { recursive: true });
   await rm(destinationPath, { force: true });
-  const database = new DatabaseSync(sourcePath, { readOnly: true });
   try {
-    await backup(database, destinationPath);
-  } finally {
-    database.close();
+    assertNotAborted(options.signal);
+    const database = new DatabaseSync(sourcePath, { readOnly: true });
+    try {
+      await backup(database, destinationPath, {
+        rate: 64,
+        progress: (progress) => {
+          assertNotAborted(options.signal);
+          options.onProgress?.(progress);
+          assertNotAborted(options.signal);
+        },
+      });
+    } finally {
+      database.close();
+    }
+  } catch (error) {
+    await rm(destinationPath, { force: true }).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -436,15 +460,32 @@ async function copySnapshotFile(
   signal?: AbortSignal,
 ): Promise<void> {
   await mkdir(path.dirname(destinationPath), { recursive: true });
+  let sourceHandle: Awaited<ReturnType<typeof open>> | undefined;
   try {
+    sourceHandle = await open(sourcePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const [openedStats, currentStats] = await Promise.all([
+      sourceHandle.stat(),
+      lstat(sourcePath),
+    ]);
+    if (
+      !openedStats.isFile()
+      || currentStats.isSymbolicLink()
+      || !currentStats.isFile()
+      || openedStats.dev !== currentStats.dev
+      || openedStats.ino !== currentStats.ino
+    ) {
+      throw new Error('同步源文件在复制前发生变化或不是普通文件。');
+    }
     await pipeline(
-      createReadStream(sourcePath),
+      sourceHandle.createReadStream({ autoClose: false }),
       createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }),
       signal ? { signal } : {},
     );
   } catch (error) {
     await rm(destinationPath, { force: true }).catch(() => undefined);
     throw error;
+  } finally {
+    await sourceHandle?.close().catch(() => undefined);
   }
 }
 
@@ -591,6 +632,10 @@ function credentialPathToken(providerId: string): string {
 }
 
 async function throwIfAborted(signal?: AbortSignal): Promise<void> {
+  assertNotAborted(signal);
+}
+
+function assertNotAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw signal.reason ?? new Error('同步操作已取消。');
 }
 

@@ -20,6 +20,35 @@ describe('runtime server REST runtime state', () => {
     await harness.close();
   });
 
+  it('freezes every REST mutation while a WebDAV snapshot is being staged', async () => {
+    const project = await harness.runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Before snapshot' }),
+    });
+    const readiness = await harness.runtimeFetch('/internal/webdav-sync/prepare', {
+      method: 'POST',
+    });
+
+    expect(readiness).toEqual({ ready: true, registeredTasks: 0, pendingMutations: 0 });
+    const blocked = await fetch(`${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${harness.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Must not be persisted' }),
+    });
+    expect(blocked.status).toBe(409);
+    await expect(blocked.json()).resolves.toMatchObject({ code: 'data_migration_preparing' });
+
+    await harness.runtimeFetch('/internal/webdav-sync/prepare', { method: 'DELETE' });
+    const updated = await harness.runtimeFetch(
+      `/v1/projects/${encodeURIComponent(project.id)}`,
+      { method: 'PATCH', body: JSON.stringify({ name: 'After snapshot' }) },
+    );
+    expect(updated).toMatchObject({ id: project.id, name: 'After snapshot' });
+  });
+
   it('exposes local project status and revision-protected text-file APIs', async () => {
       const projectDir = await mkdtemp(path.join(tmpdir(), 'setsuna-server-project-'));
       await mkdir(path.join(projectDir, 'src'), { recursive: true });

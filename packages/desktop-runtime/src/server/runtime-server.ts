@@ -16,6 +16,7 @@ import { settleStaleRuntimeTurns } from './runtime-thread-events.js';
 import { handleAppServerNotificationSse, runtimeEventStreamExperimentalApi } from './sse.js';
 import type { RuntimeServer, RuntimeServerOptions } from './types.js';
 import { InFlightRequestTracker } from './in-flight-requests.js';
+import { RuntimeMaintenanceGate } from './runtime-maintenance-gate.js';
 
 export type { RuntimeServer, RuntimeServerOptions } from './types.js';
 
@@ -58,6 +59,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   const appServerConnections = createAppServerConnectionRegistry();
   const sseResponses = new Set<http.ServerResponse>();
   const inFlightRequests = new InFlightRequestTracker();
+  const maintenanceGate = new RuntimeMaintenanceGate(runtime, inFlightRequests);
   let shuttingDown = false;
   let closingPromise: Promise<void> | null = null;
   const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
@@ -85,6 +87,9 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         sendJson(response, 401, { error: 'Unauthorized' });
         return;
       }
+
+      if (await maintenanceGate.handle(request, response, url)) return;
+      maintenanceGate.assertAcceptingRequests();
 
       if (request.method === 'GET' && url.pathname === '/v1/swe/app-server/events') {
         trackSseResponse(response, sseResponses);

@@ -199,8 +199,8 @@ packages/contracts/ — 4 direct / 73 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 521 total files
-├── src/ — 2 direct / 302 total files
+packages/desktop-runtime/ — 4 direct / 522 total files
+├── src/ — 2 direct / 303 total files
 │   ├── adapters/ — 135 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
@@ -230,7 +230,7 @@ packages/desktop-runtime/ — 4 direct / 521 total files
 │   ├── runtime/ — 3 direct / 9 total files
 │   │   └── use-cases/ — 6 direct / 6 total files
 │   ├── security/ — 5 direct / 5 total files
-│   ├── server/ — 21 direct / 42 total files
+│   ├── server/ — 22 direct / 43 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
