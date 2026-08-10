@@ -11,6 +11,7 @@ import type {
   RuntimeHookRun,
   RuntimeMessage,
   RuntimeQueuedTurnInput,
+  RuntimeSkillReference,
   RuntimeThread,
   RuntimeThreadGoal,
   RuntimeThreadMemoryMode,
@@ -128,7 +129,15 @@ export type RuntimeEvent =
   | RuntimeEventBase<'mailbox.delivered', RuntimeMailboxDelivery>
   | RuntimeEventBase<'message.created', { message: RuntimeMessage; queuedInputId?: string }>
   | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
-  | RuntimeEventBase<'message.updated', { messageId: string; content: string }>
+  | RuntimeEventBase<
+      'message.updated',
+      {
+        messageId: string;
+        content: string;
+        skillIds?: string[];
+        skillReferences?: RuntimeSkillReference[];
+      }
+    >
   | RuntimeEventBase<'message.plan_mode_updated', { messageId: string; content?: string; planMode: NonNullable<RuntimeMessage['planMode']> }>
   | RuntimeEventBase<'message.completed', { messageId: string; content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeMessage['toolCalls']; memoryCitation?: RuntimeMessage['memoryCitation']; planMode?: RuntimeMessage['planMode']; providerMetadata?: RuntimeMessage['providerMetadata'] }>
   | RuntimeEventBase<'item.started', { item: RuntimeStreamItem }>

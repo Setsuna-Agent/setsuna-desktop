@@ -255,6 +255,49 @@ describe('agent loop queued turn inputs', () => {
     });
   });
 
+  it('preserves Skill references when only queued attachments change', async () => {
+    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
+    await loop.startTurn(threadId, { input: 'Initial prompt' });
+    await waitForModelRequestCount(modelClient, 1);
+    const input = 'Step Skill inspect the attachment';
+    const skillReferences = [{
+      skillId: 'skill_step',
+      start: 0,
+      end: 'Step Skill'.length,
+    }];
+    const queued = await loop.queueTurnInput(threadId, {
+      clientId: 'client-skill-attachment-edit',
+      input,
+      attachments: [inlineAttachment('attachment_old', 'old.png')],
+      skillIds: ['skill_step'],
+      skillReferences,
+    });
+    const session = await loop.retrieveQueuedTurnInput(threadId, queued.queuedInputId);
+
+    await expect(loop.updateQueuedTurnInput(threadId, queued.queuedInputId, {
+      attachments: [inlineAttachment('attachment_new', 'new.png')],
+      editToken: session.editToken,
+      input,
+    })).resolves.toMatchObject({
+      disposition: 'queued',
+      queuedInputId: queued.queuedInputId,
+    });
+    expect((await threadStore.getThread(threadId))?.queuedTurnInputs?.[0]).toMatchObject({
+      skillIds: ['skill_step'],
+      skillReferences,
+    });
+
+    modelClient.releaseFirstResponse();
+    const completed = await waitForQueueDrain(threadStore, threadId, 2);
+    expect(completed.messages.find(
+      (message) => message.clientId === 'client-skill-attachment-edit',
+    )).toMatchObject({
+      skillIds: ['skill_step'],
+      skillReferences,
+    });
+    expect(modelClient.requests[1]?.stepSnapshot?.messageIds).toContain('skill_skill_step');
+  });
+
   it('restores Plan mode when a typed queued item starts', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     await loop.startTurn(threadId, { input: 'Initial prompt' });
@@ -351,6 +394,7 @@ describe('agent loop queued turn inputs', () => {
     expect(visibleGoalMessage).toMatchObject({
       id: completed?.goal?.execution?.sourceMessageId,
       inputKind: 'goal',
+      skillIds: ['skill_step'],
       attachments: [expect.objectContaining({ id: 'attachment_goal' })],
     });
     expect(visibleGoalMessage?.turnId).toBeTruthy();

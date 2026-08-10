@@ -37,6 +37,7 @@ import {
 import { RuntimeThreadEventDraft } from './event-projections/thread-event-draft.js';
 import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
 import {
+  cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   normalizeRuntimeQueuedTurnInputKind,
   type RuntimeMessage,
@@ -162,6 +163,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         kind: normalizeRuntimeQueuedTurnInputKind(event.payload.input.kind),
         attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
         skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
+        skillReferences: cloneRuntimeSkillReferences(event.payload.input.skillReferences),
       },
     ];
     return next;
@@ -175,6 +177,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
             kind: normalizeRuntimeQueuedTurnInputKind(event.payload.input.kind),
             attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
             skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
+            skillReferences: cloneRuntimeSkillReferences(event.payload.input.skillReferences),
           }
         : input
     ));
@@ -248,6 +251,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       message.content = event.payload.content;
+      if (event.payload.skillIds !== undefined) {
+        message.skillIds = event.payload.skillIds.length ? [...event.payload.skillIds] : undefined;
+      }
+      if (event.payload.skillReferences !== undefined) {
+        const references = cloneRuntimeSkillReferences(event.payload.skillReferences);
+        message.skillReferences = references?.length ? references : undefined;
+      }
       message.status = 'complete';
       refreshThreadSummary(next);
       if (next.title === DEFAULT_THREAD_TITLE && message.role === 'user') {

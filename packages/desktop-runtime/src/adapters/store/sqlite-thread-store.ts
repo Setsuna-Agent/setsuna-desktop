@@ -27,6 +27,7 @@ import {
   readEventArchiveState,
   readRawEvents,
 } from './sqlite-thread-event-archive.js';
+import { normalizeRuntimeMessagePatch } from './runtime-message-patch.js';
 import {
   insertRuntimeEvent,
   insertThreadProjection,
@@ -321,14 +322,13 @@ export class SqliteThreadStore implements ThreadStore {
     const message = thread.messages.find((item) => item.id === messageId);
     if (!message) throw new Error(`Message not found: ${messageId}`);
     if (message.role !== 'user' || message.contextCompaction) throw new Error('Only user messages can be edited.');
-    const content = patch.content.trim();
-    if (!content) throw new Error('Message content is required.');
+    const normalizedPatch = normalizeRuntimeMessagePatch(message, patch);
     return this.enqueueThreadMutation(threadId, {
       id: this.ids.id('event'),
       threadId,
       type: 'message.updated',
       createdAt: this.clock.now().toISOString(),
-      payload: { messageId, content },
+      payload: { messageId, ...normalizedPatch },
     });
   }
 

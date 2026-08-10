@@ -107,7 +107,7 @@ function createWorkHistoryPlan({
           entries: block.items.map((item): GuidanceTimelineEntry<AssistantWorkItem> => ({ type: 'item', item })),
         };
     consumedGuidanceIds = interleaved.consumedGuidanceIds;
-    entries.push(...interleaved.entries.map((entry) => workHistoryPlanEntry(block, entry, active)));
+    entries.push(...interleaved.entries.map((entry) => workHistoryPlanEntry(block, entry)));
 
     const originalBlockIndex = blockIndexById.get(block.id) ?? -1;
     const inlineGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(originalBlockIndex) ?? [], consumedGuidanceIds) : [];
@@ -135,15 +135,11 @@ function createWorkHistoryPlan({
 function workHistoryPlanEntry(
   block: AssistantWorkTimelineBlock,
   entry: GuidanceTimelineEntry<AssistantWorkItem>,
-  turnActive: boolean,
 ): AssistantWorkHistoryPlanEntry {
   if (entry.type === 'guidance') return guidancePlanEntry(`guidance-before-${entry.messages.map((message) => message.id).join('-')}`, entry.messages);
-  // 插件能力归属于整个 turn；模型在多个采样步骤间会完成并新建消息，不能让单个
-  // work block 的瞬时状态把插件文案反复切换成“已使用”。
-  const active = block.active || (turnActive && entry.item.type === 'pluginUses');
   return {
     type: 'workItem',
-    active,
+    active: block.active,
     item: entry.item,
   };
 }

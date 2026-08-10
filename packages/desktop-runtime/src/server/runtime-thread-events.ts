@@ -1,4 +1,5 @@
 import {
+  cloneRuntimeSkillReferences,
   isActiveToolRun,
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
@@ -232,6 +233,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
     providerMetadata: message.providerMetadata

@@ -1,10 +1,11 @@
-import type {
-  RuntimeMailboxDelivery,
-  RuntimeMessage,
-  RuntimeQueuedTurnInput,
-  RuntimeThread,
-  SendTurnResponse,
-  SteerTurnInput,
+import {
+  normalizeRuntimeSkillReferences,
+  type RuntimeMailboxDelivery,
+  type RuntimeMessage,
+  type RuntimeQueuedTurnInput,
+  type RuntimeThread,
+  type SendTurnResponse,
+  type SteerTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -74,6 +75,7 @@ export class RuntimeTurnInputCoordinator {
       expectedTurnId: activeTurnId,
       input: input.input,
       skillIds: input.skillIds,
+      skillReferences: input.skillReferences,
       thinking: input.thinking,
       thinkingEffort: input.thinkingEffort,
     }, input.id);
@@ -102,12 +104,20 @@ export class RuntimeTurnInputCoordinator {
       if (!thread) throw new Error(`Thread not found: ${threadId}`);
       if (active.controller.signal.aborted) throw new Error('no active turn to steer');
       const claimedAttachments = await this.options.claimAttachments(threadId, attachments);
+      const skillIds = [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))];
+      const skillReferences = normalizeRuntimeSkillReferences({
+        content: text,
+        references: input.skillReferences,
+        skillIds,
+      });
       const message: RuntimeMessage = {
         id: this.options.ids.id('msg'),
         clientId: input.clientId,
         turnId: active.turnId,
         role: 'user',
         content: text,
+        skillIds: skillIds.length ? skillIds : undefined,
+        skillReferences: skillReferences.length ? skillReferences : undefined,
         attachments: claimedAttachments,
         createdAt: this.options.clock.now().toISOString(),
         status: 'complete',
@@ -115,7 +125,7 @@ export class RuntimeTurnInputCoordinator {
       await this.options.publishMessage(threadId, active.turnId, message, { queuedInputId });
       active.inputQueue.enqueueSteer({
         message,
-        skillIds: [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))],
+        skillIds,
         ...(typeof input.thinking === 'boolean' ? { thinking: input.thinking } : {}),
         ...(input.thinking === true && input.thinkingEffort?.trim() ? { thinkingEffort: input.thinkingEffort.trim() } : {}),
       });

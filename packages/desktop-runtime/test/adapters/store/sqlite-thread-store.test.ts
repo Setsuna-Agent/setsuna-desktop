@@ -66,6 +66,50 @@ describe('sqlite thread store', () => {
     await reopened.close();
   });
 
+  it('replays cleared and replacement Skill metadata across reopen', async () => {
+    const dataDir = await temporaryDirectory();
+    const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await first.recover();
+    const thread = await first.createThread({ title: 'Skill metadata' });
+    await first.appendEvent(thread.id, messageCreatedEvent(
+      thread.id,
+      'msg_skill',
+      'Old Skill prompt',
+      {
+        skillIds: ['skill_old'],
+        skillReferences: [{ skillId: 'skill_old', start: 0, end: 9 }],
+      },
+    ));
+    await first.updateMessage(thread.id, 'msg_skill', { content: 'Plain edited prompt' });
+    await first.close();
+
+    const second = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await second.recover();
+    const cleared = await second.getThread(thread.id);
+    expect(cleared?.messages[0]).toMatchObject({
+      content: 'Plain edited prompt',
+      skillIds: ['skill_old'],
+    });
+    expect(cleared?.messages[0]?.skillReferences).toBeUndefined();
+    await second.updateMessage(thread.id, 'msg_skill', {
+      content: 'New Skill prompt',
+      skillIds: ['skill_new'],
+      skillReferences: [{ skillId: 'skill_new', start: 0, end: 9 }],
+    });
+    await second.close();
+
+    const third = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
+    await third.recover();
+    await expect(third.getThread(thread.id)).resolves.toMatchObject({
+      messages: [expect.objectContaining({
+        content: 'New Skill prompt',
+        skillIds: ['skill_new'],
+        skillReferences: [{ skillId: 'skill_new', start: 0, end: 9 }],
+      })],
+    });
+    await third.close();
+  });
+
   it('searches indexed message history and returns only a matching preview', async () => {
     const dataDir = await temporaryDirectory();
     const store = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

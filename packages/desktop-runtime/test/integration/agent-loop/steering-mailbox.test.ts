@@ -155,6 +155,7 @@ describe('agent loop turn steering and mailbox input', () => {
       expect(steeredBeforeRelease?.messages.find((message) => message.clientId === 'client-steer-1')).toMatchObject({
         content: 'Prefer the shorter path.',
         role: 'user',
+        skillIds: ['skill_step'],
         turnId: started.turnId,
       });
   

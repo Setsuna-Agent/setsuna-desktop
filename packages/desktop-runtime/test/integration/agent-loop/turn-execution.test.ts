@@ -212,7 +212,11 @@ describe('agent loop turn execution', () => {
         toolHost,
       });
   
-      await loop.sendTurn(thread.id, { input: 'use the current tool snapshot', skillIds: ['skill_step'] });
+      await loop.sendTurn(thread.id, {
+        input: 'Step Skill use the current tool snapshot',
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+      });
   
       const events = await threadStore.listEvents(thread.id, 0);
       const saved = await threadStore.getThread(thread.id);
@@ -232,6 +236,10 @@ describe('agent loop turn execution', () => {
         ['step_tool_1'],
         ['step_tool_2'],
       ]);
+      expect(saved?.messages.find((message) => message.role === 'user')).toMatchObject({
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+      });
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['step_tool_1']);
       expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['step_tool_2']);
       expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('step_tool_1 result'))).toBe(true);

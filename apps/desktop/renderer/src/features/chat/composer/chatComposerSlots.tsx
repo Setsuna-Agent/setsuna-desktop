@@ -1,10 +1,11 @@
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import type {
+  RuntimeSkillReference,
   RuntimeSkillSummary,
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
-import { Boxes } from 'lucide-react';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
+import { SkillReferenceLabel } from '../skills/SkillReference.js';
 import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
@@ -25,12 +26,7 @@ export function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigT
     type: 'tag',
     key: selectedSkillSlotKey(skill.id),
     props: {
-      label: (
-        <span className="chat-skill-slot" title={skill.description || skill.id}>
-          <Boxes size={13} />
-          <span className="chat-skill-slot__name">{tokenText}</span>
-        </span>
-      ),
+      label: <SkillReferenceLabel skill={skill} />,
       value: tokenText,
     },
     formatResult: () => tokenText,
@@ -51,6 +47,37 @@ export function filterSelectedSkillsBySlots(
   );
   const filteredSkills = skills.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id)));
   return filteredSkills.length === skills.length ? skills : filteredSkills;
+}
+
+export function hasSelectedSkillSlot(
+  skillId: string,
+  slotConfig: SlotConfigType[] | undefined,
+): boolean {
+  const slotKey = selectedSkillSlotKey(skillId);
+  return (slotConfig ?? []).some((slot) => slot.key === slotKey);
+}
+
+/** Serialize exact Skill slot offsets after the same outer whitespace trim used by sendTurn. */
+export function createSelectedSkillReferences(
+  slotConfig: SlotConfigType[] | undefined,
+): RuntimeSkillReference[] {
+  const slots = slotConfig ?? [];
+  const serializedContent = slots.map(serializedSlotValue).join('');
+  const leadingTrim = serializedContent.length - serializedContent.trimStart().length;
+  const trimmedEnd = serializedContent.trimEnd().length;
+  const references: RuntimeSkillReference[] = [];
+  let offset = 0;
+
+  for (const slot of slots) {
+    const value = serializedSlotValue(slot);
+    const skillId = selectedSkillIdForSlot(slot);
+    const end = offset + value.length;
+    if (skillId && value && offset >= leadingTrim && end <= trimmedEnd) {
+      references.push({ skillId, start: offset - leadingTrim, end: end - leadingTrim });
+    }
+    offset = end;
+  }
+  return references;
 }
 
 export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {
@@ -80,6 +107,26 @@ export function createWorkspaceMentionInsertion(
 
 function selectedSkillSlotKey(skillId: string): string {
   return `${selectedSkillSlotKeyPrefix}${skillId}`;
+}
+
+function selectedSkillIdForSlot(slot: SlotConfigType): string | null {
+  if (
+    slot.type !== 'tag'
+    || typeof slot.key !== 'string'
+    || !slot.key.startsWith(selectedSkillSlotKeyPrefix)
+  ) return null;
+  return slot.key.slice(selectedSkillSlotKeyPrefix.length).trim() || null;
+}
+
+function serializedSlotValue(slot: SlotConfigType): string {
+  if (slot.type === 'text') return slot.value ?? '';
+  if (
+    slot.type === 'tag'
+    && slot.props
+    && 'value' in slot.props
+    && typeof slot.props.value === 'string'
+  ) return slot.props.value;
+  return '';
 }
 
 function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {

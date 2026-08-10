@@ -84,7 +84,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     expect(plan.placeholderGuidance).toEqual([expect.objectContaining({ id: 'user_steer' })]);
   });
 
-  it('keeps Plugin attribution active until the full turn completes', () => {
+  it('keeps Plugin attribution as a completed body record while the turn continues', () => {
     const message = assistantMessage('assistant_plugin', 'working');
     const pluginBlock: Extract<AssistantRunTimelineBlock, { type: 'work' }> = {
       ...workBlock('work_plugin', [message]),
@@ -107,7 +107,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       type: 'workHistory',
       entries: [{
         type: 'workItem',
-        active: true,
+        active: false,
         item: { type: 'pluginUses' },
       }],
     });

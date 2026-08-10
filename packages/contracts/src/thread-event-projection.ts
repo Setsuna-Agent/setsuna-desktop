@@ -1,10 +1,11 @@
-import type {
-  RuntimeHookRun,
-  RuntimeMessage,
-  RuntimeThread,
-  RuntimeThreadTurn,
-  RuntimeToolRun,
-  RuntimeToolRunStatus,
+import {
+  cloneRuntimeSkillReferences,
+  type RuntimeHookRun,
+  type RuntimeMessage,
+  type RuntimeThread,
+  type RuntimeThreadTurn,
+  type RuntimeToolRun,
+  type RuntimeToolRunStatus,
 } from './threads.js';
 import { normalizeRuntimeMessageProviderMetadata } from './message-metadata.js';
 
@@ -21,6 +22,8 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    skillIds: message.skillIds ? [...message.skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,

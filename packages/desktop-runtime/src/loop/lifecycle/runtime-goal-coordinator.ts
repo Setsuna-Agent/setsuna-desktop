@@ -1,4 +1,5 @@
 import {
+  cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   DEFAULT_THREAD_TITLE,
   fallbackThreadTitle,
@@ -186,6 +187,8 @@ export class RuntimeGoalCoordinator {
         role: 'user',
         inputKind: 'goal',
         content: objective,
+        skillIds: input.skillIds?.length ? [...input.skillIds] : undefined,
+        skillReferences: cloneRuntimeSkillReferences(input.skillReferences),
         attachments: input.attachments?.map((attachment) => ({ ...attachment })),
         createdAt,
         status: 'complete',
@@ -541,6 +544,7 @@ function goalExecutionState(
     attachments: input.attachments?.map((attachment) => ({ ...attachment })),
     sourceMessageId,
     skillIds: input.skillIds ? [...input.skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(input.skillReferences),
     thinking: input.thinking === true,
     thinkingEffort: input.thinking === true ? input.thinkingEffort : undefined,
   };

@@ -9,6 +9,7 @@ describe('createChatComposerSendOptions', () => {
       goalModeEnabled: false,
       planModeEnabled: true,
       selectedSkillIds: ['skill_review'],
+      selectedSkillReferences: [{ skillId: 'skill_review', start: 0, end: 6 }],
       supportsImageInput: true,
       thinkingEffort: 'high',
       thinkingEnabled: true,
@@ -17,6 +18,7 @@ describe('createChatComposerSendOptions', () => {
       attachments: [imageAttachment],
       collaborationMode: 'plan',
       skillIds: ['skill_review'],
+      skillReferences: [{ skillId: 'skill_review', start: 0, end: 6 }],
       thinking: true,
       thinkingEffort: 'high',
     });

@@ -38,7 +38,9 @@ import { chatAttachmentAccept } from './composer/chatAttachments.js';
 import { parseMentionCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
 import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
+import { startChatComposerSkillSelection } from './composer/chatComposerSkillSelection.js';
 import {
+  createSelectedSkillReferences,
   createSelectedSkillSlot,
   createTextSlot,
   createWorkspaceMentionInsertion,
@@ -58,6 +60,7 @@ import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js
 
 const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
+const SKILL_SELECTION_MAX_INSERT_ATTEMPTS = 8;
 
 type ComposerFocusTarget = {
   focus?: (options: { cursor?: 'start' | 'end' | 'all'; preventScroll?: boolean }) => void;
@@ -157,6 +160,7 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
   const lastEditorDraftRef = useRef(draft);
+  const previousExternalDraftRef = useRef(draft);
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
@@ -322,18 +326,27 @@ export function ChatComposer({
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
     if (!skill || !skill.enabled) return;
-    consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
-    const alreadySelected = selectedSkills.some((item) => item.id === skill.id);
-    if (!alreadySelected) {
-      setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
-      senderRef.current?.insert?.([createSelectedSkillSlot(skill), createTextSlot(' ')], 'start', undefined, true);
-    }
-    commandController.focusComposer();
-    onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+
+    return startChatComposerSkillSelection({
+      getEditor: () => senderRef.current,
+      maxAttempts: SKILL_SELECTION_MAX_INSERT_ATTEMPTS,
+      scheduler: {
+        cancelFrame: window.cancelAnimationFrame.bind(window),
+        requestFrame: window.requestAnimationFrame.bind(window),
+      },
+      skill,
+      onConfirmed: () => {
+        if (consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
+        // Consume only after the tag survives Sender initialization and a full frame.
+        consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
+        setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
+        commandController.focusComposer();
+        onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+      },
+    });
   }, [
     commandController.focusComposer,
     onSkillSelectionRequestConsumed,
-    selectedSkills,
     skillSelectionRequest,
     skills,
   ]);
@@ -390,7 +403,15 @@ export function ChatComposer({
   useEffect(() => {
     const editor = senderRef.current;
     if (!editor) return;
-    const syncPlan = createComposerDraftSyncPlan(draft, lastEditorDraftRef.current, editor.getValue().value);
+    const currentEditorValue = editor.getValue();
+    const previousExternalDraft = previousExternalDraftRef.current;
+    previousExternalDraftRef.current = draft;
+    const syncPlan = createComposerDraftSyncPlan(
+      draft,
+      previousExternalDraft,
+      lastEditorDraftRef.current,
+      currentEditorValue.value,
+    );
     if (syncPlan.type === 'none') return;
     if (syncPlan.type === 'adopt') {
       lastEditorDraftRef.current = draft;
@@ -485,9 +506,13 @@ export function ChatComposer({
       await queuedTurnEdit.submit(value ?? draft);
       return;
     }
+    const skillReferences = createSelectedSkillReferences(senderRef.current?.getValue().slotConfig);
     const sendOptions = modeController.createSendOptions({
       attachments: sendableAttachments,
-      selectedSkillIds: selectedSkills.map((skill) => skill.id),
+      selectedSkillIds: skillReferences.length
+        ? [...new Set(skillReferences.map((reference) => reference.skillId))]
+        : selectedSkills.map((skill) => skill.id),
+      selectedSkillReferences: skillReferences,
     });
     const submittedAttachments = sendOptions.attachments ?? [];
     beginAttachmentSend(submittedAttachments);

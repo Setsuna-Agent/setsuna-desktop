@@ -1,9 +1,10 @@
-import type {
-  RuntimeEnvironment,
-  RuntimeMemoryCitation,
-  RuntimeMessage,
-  RuntimeToolCall,
-  RuntimeUsage,
+import {
+  normalizeRuntimeSkillReferences,
+  type RuntimeEnvironment,
+  type RuntimeMemoryCitation,
+  type RuntimeMessage,
+  type RuntimeToolCall,
+  type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
@@ -78,6 +79,7 @@ export class RuntimeAgentTurnRunner {
     options = {},
     signal,
     skillIds,
+    skillReferences,
     text,
     thinkingOptions = {},
     thread,
@@ -89,6 +91,12 @@ export class RuntimeAgentTurnRunner {
     const publishUserMessage = options.publishUserMessage !== false;
     const taskKind = options.taskKind ?? 'regular';
     const planOnly = options.planOnly === true;
+    const selectedSkillIds = [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
+    const selectedSkillReferences = normalizeRuntimeSkillReferences({
+      content: text,
+      references: skillReferences,
+      skillIds: selectedSkillIds,
+    });
     const userMessage: RuntimeMessage = options.userMessage ?? {
       id: this.options.ids.id('msg'),
       clientId: options.clientId,
@@ -96,6 +104,8 @@ export class RuntimeAgentTurnRunner {
       role: 'user',
       inputKind: options.inputKind,
       content: text,
+      skillIds: selectedSkillIds.length ? selectedSkillIds : undefined,
+      skillReferences: selectedSkillReferences.length ? selectedSkillReferences : undefined,
       attachments,
       createdAt,
       status: 'complete',
@@ -103,7 +113,7 @@ export class RuntimeAgentTurnRunner {
     let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
-    let activeSkillIds = [...skillIds];
+    let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
 
     await this.options.appendEvent(threadId, {

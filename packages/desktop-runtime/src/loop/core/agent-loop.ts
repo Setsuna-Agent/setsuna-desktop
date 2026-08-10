@@ -6,6 +6,7 @@ import type {
   QueuedTurnInputEditSession,
   QueuedTurnInputPatch,
   QueuedTurnInputResponse,
+  RegenerateMessageInput,
   RuntimeDynamicToolDefinition,
   RuntimeMemoryCitation,
   RuntimeDataMigrationReadiness,
@@ -440,6 +441,7 @@ export class AgentLoop {
           input: input.input,
           kind: input.collaborationMode === 'plan' ? 'plan' : 'message',
           skillIds: input.skillIds,
+          skillReferences: input.skillReferences,
           thinking: input.thinking,
           thinkingEffort: input.thinkingEffort,
         });
@@ -460,7 +462,7 @@ export class AgentLoop {
    * @param messageId 要作为重新生成起点的用户消息 ID。
    * @param input 可选的新内容、skill 选择和思考参数。
    */
-  async regenerateFromMessage(threadId: string, messageId: string, input: { content?: string; skillIds?: string[]; thinking?: boolean; thinkingEffort?: string } = {}): Promise<SendTurnResponse> {
+  async regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput = {}): Promise<SendTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const run = await this.turnRuns.createRegenerate(threadId, messageId, input);
       this.observeRun(threadId, run.turnId, 'regular', run.done);

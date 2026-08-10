@@ -21,6 +21,7 @@ import {
   CapturingUsageStore,
   MemoryCapturingModelClient,
   mkDataDir,
+  stepSnapshotSkillRegistry,
   waitForTurnCompleted
 } from '../../support/agent-loop/shared.js';
 
@@ -232,29 +233,63 @@ describe('agent loop stream history and regeneration', () => {
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
         ids,
+        skillRegistry: stepSnapshotSkillRegistry(),
       });
   
-      await loop.sendTurn(thread.id, { input: 'original prompt' });
+      await loop.sendTurn(thread.id, {
+        input: 'Step Skill original prompt',
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+      });
       const firstSaved = await threadStore.getThread(thread.id);
       const userMessageId = firstSaved?.messages.find((message) => message.role === 'user')?.id;
       if (!userMessageId) throw new Error('Expected a user message to regenerate.');
   
       const regenerated = await loop.regenerateFromMessage(thread.id, userMessageId, { content: 'edited prompt' });
       await waitForTurnCompleted(threadStore, thread.id, regenerated.turnId);
+      const cleared = await threadStore.getThread(thread.id);
+
+      expect(cleared?.messages[0]).toMatchObject({
+        id: userMessageId,
+        content: 'edited prompt',
+        skillIds: ['skill_step'],
+      });
+      expect(cleared?.messages[0]?.skillReferences).toBeUndefined();
+      expect(modelClient.requests[1].messages
+        .filter((message) => message.role === 'user')
+        .some((message) => message.content.includes('id="skill_step"'))).toBe(true);
+
+      const explicitReference = await loop.regenerateFromMessage(thread.id, userMessageId, {
+        content: 'Step Skill edited prompt',
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+      });
+      await waitForTurnCompleted(threadStore, thread.id, explicitReference.turnId);
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
   
       expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-      expect(saved?.messages[0]).toMatchObject({ id: userMessageId, content: 'edited prompt' });
-      expect(saved?.messages[1]?.content).toBe('answer 2');
+      expect(saved?.messages[0]).toMatchObject({
+        id: userMessageId,
+        content: 'Step Skill edited prompt',
+        skillIds: ['skill_step'],
+        skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
+      });
+      expect(saved?.messages[1]?.content).toBe('answer 3');
       expect(saved?.messages[1]?.providerMetadata?.openAiResponses).toMatchObject({
-        responseId: 'resp_2',
-        items: [expect.objectContaining({ id: 'native_answer_2', phase: 'final_answer' })],
+        responseId: 'resp_3',
+        items: [expect.objectContaining({ id: 'native_answer_3', phase: 'final_answer' })],
       });
       expect(saved?.messages[1]?.providerMetadata?.semanticFingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
       expect(JSON.stringify(saved?.messages)).not.toContain('resp_1');
-      expect(modelClient.requests[1].messages.filter((message) => message.role === 'user').map((message) => message.content)).toEqual([
-        'edited prompt',
+      expect(JSON.stringify(saved?.messages)).not.toContain('resp_2');
+      const regeneratedUserContents = modelClient.requests[2].messages
+        .filter((message) => message.role === 'user')
+        .map((message) => message.content);
+      expect(regeneratedUserContents.at(-1)).toBe('Step Skill edited prompt');
+      expect(regeneratedUserContents.some((content) => content.includes('id="skill_step"'))).toBe(true);
+      expect(modelClient.requests[2].stepSnapshot?.selectedSkills).toEqual([
+        { id: 'skill_step', name: 'Step Skill' },
       ]);
       expect(events.some((event) => event.type === 'message.updated')).toBe(true);
       expect(events.some((event) => event.type === 'messages.truncated')).toBe(true);

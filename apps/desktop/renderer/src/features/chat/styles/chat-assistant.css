@@ -383,11 +383,17 @@
 }
 
 .chat-plugin-uses {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px 8px;
+  display: grid;
+  gap: 4px;
   min-width: 0;
+}
+
+.chat-plugin-use-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
   min-height: 24px;
   color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
   font-size: 13px;
@@ -396,14 +402,6 @@
 
 .chat-plugin-uses__status {
   flex: 0 0 auto;
-}
-
-.chat-plugin-uses__list {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  min-width: 0;
 }
 
 .chat-plugin-use {
@@ -442,29 +440,6 @@ button.chat-plugin-use:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-plugin-uses.is-active .desktop-plugin-icon--inline {
-  animation: chat-plugin-use-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes chat-plugin-use-pulse {
-  0%,
-  100% {
-    box-shadow: 0 1px 2px color-mix(in srgb, var(--desktop-plugin-icon-color) 24%, transparent);
-    transform: scale(1);
-  }
-
-  50% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--desktop-plugin-icon-color) 12%, transparent);
-    transform: scale(1.04);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .chat-plugin-uses.is-active .desktop-plugin-icon--inline {
-    animation: none;
-  }
 }
 
 .chat-assistant-loading {

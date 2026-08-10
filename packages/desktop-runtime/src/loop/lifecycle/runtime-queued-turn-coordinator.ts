@@ -12,8 +12,10 @@ import type {
   SendTurnResponse,
 } from '@setsuna-desktop/contracts';
 import {
+  cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
   normalizeRuntimeQueuedTurnInputKind,
+  normalizeRuntimeSkillReferences,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -120,13 +122,19 @@ export class RuntimeQueuedTurnCoordinator {
       attachments = (await this.options.claimAttachments(threadId, attachments))
         .filter(isRuntimeInputMessageAttachment);
       const createdAt = this.options.clock.now().toISOString();
+      const skillIds = normalizeSkillIds(input.skillIds);
       const queuedInput: RuntimeQueuedTurnInput = {
         id: this.options.ids.id('queued_input'),
         kind,
         input: text,
         clientId: input.clientId,
         attachments,
-        skillIds: normalizeSkillIds(input.skillIds),
+        skillIds,
+        skillReferences: normalizeRuntimeSkillReferences({
+          content: text,
+          references: input.skillReferences,
+          skillIds,
+        }),
         thinking: input.thinking,
         thinkingEffort: normalizeThinkingEffort(input.thinking, input.thinkingEffort),
         createdAt,
@@ -253,6 +261,9 @@ export class RuntimeQueuedTurnCoordinator {
         attachments = (await this.options.claimAttachments(threadId, attachments))
           .filter(isRuntimeInputMessageAttachment);
       }
+      const skillReferences = text === queuedInput.input
+        ? cloneRuntimeSkillReferences(queuedInput.skillReferences)
+        : undefined;
       const updatedAt = this.options.clock.now().toISOString();
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
@@ -264,6 +275,7 @@ export class RuntimeQueuedTurnCoordinator {
             ...cloneQueuedInput(queuedInput),
             input: text,
             attachments,
+            skillReferences,
             updatedAt,
           },
         },
@@ -506,6 +518,7 @@ function queuedInputAsTurnInput(input: RuntimeQueuedTurnInput): SendTurnInput {
     clientId: input.clientId,
     attachments: input.attachments,
     skillIds: input.skillIds,
+    skillReferences: input.skillReferences,
     thinking: input.thinking,
     thinkingEffort: input.thinkingEffort,
     ...(normalizeRuntimeQueuedTurnInputKind(input.kind) === 'plan'
@@ -520,6 +533,7 @@ function cloneQueuedInput(input: RuntimeQueuedTurnInput): RuntimeQueuedTurnInput
     kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
     attachments: input.attachments?.map((attachment) => ({ ...attachment })),
     skillIds: input.skillIds ? [...input.skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(input.skillReferences),
   };
 }
 

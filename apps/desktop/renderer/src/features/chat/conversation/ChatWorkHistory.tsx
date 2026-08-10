@@ -1,28 +1,23 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
-import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import type { WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
 import { hasThinkingSegments } from './chatThinkingContent.js';
 import { shouldCollapseCompletedWorkHistory } from './chatWorkHistoryState.js';
 
 export function ActiveWorkPlaceholder({
   children,
-  pluginUses = [],
   segments,
   showLoading = true,
 }: {
   children?: ReactNode;
-  pluginUses?: RuntimePluginUse[];
   segments: RuntimeMessage[];
   showLoading?: boolean;
 }) {
   const { t } = useI18n();
 
   return (
-    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || pluginUses.length > 0 || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
-      <RuntimePluginUses active plugins={pluginUses} />
+    <WorkHistoryPanel active completedAtMs={null} hasDetails={Boolean(children) || showLoading} startedAtMs={inferActiveTurnStartedAtMs(segments)}>
       {children}
       {/* runtime 尚未产出内容时，在工作区内保留明确的进行中反馈。 */}
       {showLoading ? <AssistantLoadingIndicator label={t('chat.assistant.processing')} showLabel={false} /> : null}
