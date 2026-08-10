@@ -668,9 +668,7 @@
 .settings-webdav-restore-projects__list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: hidden;
-  border: 1px solid var(--chat-settings-divider);
-  border-radius: 9px;
+  gap: 8px;
 }
 
 .settings-webdav-restore-project {
@@ -679,15 +677,9 @@
   min-width: 0;
   gap: 9px;
   padding: 10px 11px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
   background: var(--app-surface-subtle);
-}
-
-.settings-webdav-restore-project:nth-child(even) {
-  border-left: 1px solid var(--chat-settings-divider);
-}
-
-.settings-webdav-restore-project:nth-child(n + 3) {
-  border-top: 1px solid var(--chat-settings-divider);
 }
 
 .settings-webdav-restore-project > span {
@@ -1133,14 +1125,6 @@
 
   .settings-webdav-restore-projects__list {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settings-webdav-restore-project:nth-child(even) {
-    border-left: 0;
-  }
-
-  .settings-webdav-restore-project + .settings-webdav-restore-project {
-    border-top: 1px solid var(--chat-settings-divider);
   }
 
   .settings-webdav-restore-dialog__actions .sd-button {
