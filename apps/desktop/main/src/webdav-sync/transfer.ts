@@ -40,11 +40,28 @@ export type WebDavTransferProgress = {
   totalItems?: number;
 };
 
+export async function materializeSnapshotForUpload(input: {
+  dataRoot: string;
+  categories: DesktopWebDavSyncCategoryId[];
+  workRoot: string;
+  signal?: AbortSignal;
+  onProgress?: (progress: WebDavTransferProgress) => void;
+}): Promise<LocalSnapshotSource[]> {
+  input.onProgress?.({ phase: 'snapshotting' });
+  return prepareLocalSnapshotSources({
+    dataRoot: input.dataRoot,
+    categories: input.categories,
+    stagingRoot: path.join(input.workRoot, 'local-snapshot'),
+    signal: input.signal,
+  });
+}
+
 export async function createAndUploadSnapshot(input: {
   repository: EncryptedWebDavRepository;
   recoveryKey: string;
-  dataRoot: string;
+  sourceDataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
+  sources: LocalSnapshotSource[];
   deviceId: string;
   deviceName: string;
   appVersion: string;
@@ -52,13 +69,7 @@ export async function createAndUploadSnapshot(input: {
   signal?: AbortSignal;
   onProgress?: (progress: WebDavTransferProgress) => void;
 }): Promise<{ manifest: WebDavSnapshotManifest; summary: DesktopWebDavSyncSnapshotSummary }> {
-  input.onProgress?.({ phase: 'snapshotting' });
-  const sources = await prepareLocalSnapshotSources({
-    dataRoot: input.dataRoot,
-    categories: input.categories,
-    stagingRoot: path.join(input.workRoot, 'local-snapshot'),
-    signal: input.signal,
-  });
+  const sources = input.sources;
   const snapshotId = createSnapshotId();
   let initialized = false;
   let published = false;
@@ -137,7 +148,7 @@ export async function createAndUploadSnapshot(input: {
       deviceName: input.deviceName,
       createdAt: new Date().toISOString(),
       appVersion: input.appVersion,
-      sourceDataRoot: input.dataRoot,
+      sourceDataRoot: input.sourceDataRoot,
       categories: [...input.categories],
       items,
     };
@@ -246,6 +257,7 @@ export async function downloadSnapshotForRestore(input: {
           destinationPath,
           recoveryKey: input.recoveryKey,
           aad: input.repository.objectAad(input.manifest.id, item.objectName),
+          mode: item.category === 'user_skills' && item.executable ? 0o700 : 0o600,
           signal: input.signal,
         });
         assertItemIntegrity(item, measured);
@@ -323,6 +335,7 @@ function manifestItem(
     label: source.label,
     ...(source.detail ? { detail: source.detail } : {}),
     ...(source.credentialId ? { credentialId: source.credentialId } : {}),
+    ...(source.executable ? { executable: true } : {}),
     objectName,
     ...measured,
   };

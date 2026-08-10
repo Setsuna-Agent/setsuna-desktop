@@ -4,7 +4,10 @@ import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CredentialVault } from '../../../src/security/credential-vault.js';
 import { WebDavSyncConfigStore } from '../../../src/webdav-sync/config-store.js';
-import { WebDavSyncService } from '../../../src/webdav-sync/service.js';
+import {
+  WebDavSyncService,
+  type WebDavSyncRuntimeCoordinator,
+} from '../../../src/webdav-sync/service.js';
 import { MemoryWebDavServer } from '../../support/memory-webdav.js';
 
 const temporaryRoots: string[] = [];
@@ -207,6 +210,102 @@ describe('WebDavSyncService', () => {
     }
   });
 
+  it('releases the runtime gate before starting the network upload', async () => {
+    const releaseGate = deferred();
+    const release = vi.fn(() => releaseGate.promise);
+    const fixture = await createConfiguredService({
+      prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+      release,
+      stop: async () => undefined,
+      start: async () => undefined,
+    });
+    try {
+      await fixture.service.updatePreferences({ categories: ['preferences'] });
+      const backup = fixture.service.backupNow();
+      await vi.waitFor(() => expect(release).toHaveBeenCalledOnce());
+
+      expect([...fixture.server.files.keys()].some((remotePath) => (
+        remotePath.includes('/snapshots/')
+      ))).toBe(false);
+
+      await writeRuntimeConfig(fixture.dataRoot, 'changed after snapshot');
+      releaseGate.resolve();
+      const completed = await backup;
+      expect(completed.snapshot).toMatchObject({ categories: [{ id: 'preferences' }] });
+      expect([...fixture.server.files.keys()].some((remotePath) => (
+        remotePath.includes('/snapshots/')
+      ))).toBe(true);
+
+      const plan = await fixture.service.inspectRestore({
+        snapshotId: completed.snapshot.id,
+        categories: ['preferences'],
+      });
+      await fixture.service.restore(plan.id);
+      expect(await readFile(path.join(fixture.dataRoot, 'runtime', 'config.json'), 'utf8'))
+        .toContain('backed up');
+    } finally {
+      releaseGate.resolve();
+      fixture.service.close();
+    }
+  });
+
+  it('reports a runtime gate release failure instead of claiming backup success', async () => {
+    const release = vi.fn(async () => {
+      throw new Error('runtime bridge unavailable');
+    });
+    const fixture = await createConfiguredService({
+      prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+      release,
+      stop: async () => undefined,
+      start: async () => undefined,
+    });
+    try {
+      await fixture.service.updatePreferences({ categories: ['preferences'] });
+      await expect(fixture.service.backupNow()).rejects.toThrow('无法解除本地 Runtime');
+      expect(release).toHaveBeenCalledTimes(3);
+      expect([...fixture.server.files.keys()].some((remotePath) => (
+        remotePath.includes('/snapshots/')
+      ))).toBe(false);
+      expect((await fixture.service.getState()).operation).toBeUndefined();
+    } finally {
+      fixture.service.close();
+    }
+  });
+
+  it('does not admit a backup while category preferences are being persisted', async () => {
+    const fixture = await createConfiguredService({
+      prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+      release: async () => undefined,
+      stop: async () => undefined,
+      start: async () => undefined,
+    });
+    try {
+      await fixture.service.updatePreferences({
+        categories: ['preferences', 'model_credentials'],
+      });
+      const updateGate = deferred();
+      const updatePreferences = fixture.configStore.updatePreferences.bind(fixture.configStore);
+      const updateSpy = vi.spyOn(fixture.configStore, 'updatePreferences').mockImplementation(
+        async (input) => {
+          await updateGate.promise;
+          return updatePreferences(input);
+        },
+      );
+
+      const update = fixture.service.updatePreferences({ categories: ['preferences'] });
+      await vi.waitFor(() => expect(updateSpy).toHaveBeenCalledOnce());
+      await expect(fixture.service.backupNow()).rejects.toThrow('另一项 WebDAV 同步操作');
+
+      updateGate.resolve();
+      await update;
+      await expect(fixture.service.backupNow()).resolves.toMatchObject({
+        snapshot: { categories: [{ id: 'preferences' }] },
+      });
+    } finally {
+      fixture.service.close();
+    }
+  });
+
   it('stops the runtime before validating the final restore inventory', async () => {
     const dataRoot = await createDataRoot();
     const server = new MemoryWebDavServer('/dav');
@@ -300,4 +399,40 @@ class RejectingCredentialVault extends MemoryCredentialVault {
   override async set(): Promise<void> {
     throw new Error('安全存储不可用');
   }
+}
+
+async function createConfiguredService(runtime: WebDavSyncRuntimeCoordinator) {
+  const dataRoot = await createDataRoot();
+  const server = new MemoryWebDavServer('/dav');
+  const configStore = new WebDavSyncConfigStore(
+    path.join(dataRoot, 'webdav-sync.json'),
+    new MemoryCredentialVault(),
+  );
+  const service = new WebDavSyncService({
+    dataRoot,
+    appVersion: '0.2.1',
+    configStore,
+    fetch: server.fetch,
+    runtime,
+    requestRelaunch: async () => undefined,
+  });
+  await service.initialize();
+  await service.configure({
+    endpoint: 'https://dav.test/dav',
+    remoteRoot: '/Backups',
+    username: 'alice',
+    password: 'secret',
+    repositoryMode: 'create',
+  });
+  return { configStore, dataRoot, server, service };
+}
+
+function deferred() {
+  let resolve!: () => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<void>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }

@@ -105,6 +105,41 @@ describe('WebDAV restore planning and commit', () => {
     )).toThrow('会被覆盖或删除的本地内容发生了变化');
   });
 
+  it('includes a user Skill executable-bit change in the reviewed overwrite set', () => {
+    const manifest: WebDavSnapshotManifest = {
+      ...fixtureManifest(),
+      categories: ['user_skills'],
+      items: [{
+        ...manifestItem(
+          'user_skills',
+          'file',
+          'runtime/user-skills/demo/scripts/run.sh',
+          'same-content',
+          'run.sh',
+          '000001.enc',
+        ),
+        executable: true,
+      }],
+    };
+    const localItems = [inventory(
+      'user_skills',
+      'runtime/user-skills/demo/scripts/run.sh',
+      'same-content',
+      'run.sh',
+    )];
+    const plan = buildWebDavRestorePlan({
+      snapshot: { manifest, summary: snapshotSummary(manifest) },
+      categories: ['user_skills'],
+      localItems,
+    });
+
+    expect(plan.publicPlan.diffs[0]?.overwrittenCount).toBe(1);
+    expect(() => assertRestorePlanCurrent(plan, localItems.map((item) => ({
+      ...item,
+      executable: true,
+    })))).toThrow('会被覆盖或删除的本地内容发生了变化');
+  });
+
   it('merges portable config and API keys while preserving device-local security state', async () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-restore-'));
     temporaryRoots.push(dataRoot);

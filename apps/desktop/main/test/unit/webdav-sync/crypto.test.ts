@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -56,10 +56,14 @@ describe('WebDAV sync encryption', () => {
       destinationPath: restoredPath,
       recoveryKey: key,
       aad: 'file-aad',
+      mode: 0o700,
     });
 
     expect(restored).toEqual(encrypted);
     expect(await readFile(restoredPath)).toEqual(payload);
+    if (process.platform !== 'win32') {
+      expect((await stat(restoredPath)).mode & 0o777).toBe(0o700);
+    }
     expect(await readFile(encryptedPath)).not.toContain(Buffer.from('model-api-key-value'));
     const verifier = webDavRepositoryKeyVerifier(key, 'repo-id');
     expect(verifyWebDavRepositoryKey(key, 'repo-id', verifier)).toBe(true);

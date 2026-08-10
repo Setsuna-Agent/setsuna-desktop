@@ -4,7 +4,11 @@ import {
 } from '@setsuna-desktop/contracts';
 import { lstat, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { writeJsonAtomically } from '../data-root/atomic-json.js';
+import {
+  removeFileDurably,
+  syncDirectoryDurably,
+  writeJsonAtomically,
+} from '../data-root/atomic-json.js';
 import { categoryTargetPaths } from './snapshot-data.js';
 
 const JOURNAL_FILE = '.webdav-sync-restore.json';
@@ -40,7 +44,30 @@ export async function assertNoPendingWebDavRestore(dataRoot: string): Promise<vo
 }
 
 export async function clearWebDavRestoreJournal(dataRoot: string): Promise<void> {
-  await rm(webDavRestoreJournalPath(dataRoot), { force: true });
+  await removeFileDurably(webDavRestoreJournalPath(dataRoot));
+}
+
+/** Makes rename/remove directory entries durable before the journal advances. */
+export async function syncWebDavRestorePathParents(
+  dataRoot: string,
+  changedPaths: readonly string[],
+): Promise<void> {
+  const resolvedRoot = path.resolve(dataRoot);
+  const directories = new Set<string>();
+  for (const changedPath of changedPaths) {
+    const resolvedPath = path.resolve(changedPath);
+    if (resolvedPath !== resolvedRoot && !resolvedPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+      throw new Error('WebDAV 还原持久化路径超出 Setsuna 数据目录。');
+    }
+    let directory = resolvedPath === resolvedRoot ? resolvedRoot : path.dirname(resolvedPath);
+    for (;;) {
+      directories.add(directory);
+      if (directory === resolvedRoot) break;
+      directory = path.dirname(directory);
+    }
+  }
+  const ordered = [...directories].sort((left, right) => pathDepth(right) - pathDepth(left));
+  for (const directory of ordered) await syncDirectoryDurably(directory);
 }
 
 /** Runs before Runtime opens SQLite and always rolls an interrupted commit back. */
@@ -91,6 +118,7 @@ async function rollbackJournal(dataRoot: string, journal: WebDavRestoreJournal):
   }
   const rollbackRoot = path.join(dataRoot, journal.rollbackDirectory);
   const existing = new Set(journal.existingTargets);
+  const changedPaths: string[] = [];
   // Commit moves every old target before installing any new target. During an
   // interrupted `committing` phase, a missing backup is safe only when the old
   // target still exists and therefore was never moved.
@@ -106,13 +134,16 @@ async function rollbackJournal(dataRoot: string, journal: WebDavRestoreJournal):
     const backup = safeTarget(rollbackRoot, relative);
     if (!existing.has(relative)) {
       await rm(target, { recursive: true, force: true });
+      changedPaths.push(target);
       continue;
     }
     if (!await pathExists(backup)) continue;
     await rm(target, { recursive: true, force: true });
     await mkdir(path.dirname(target), { recursive: true });
     await rename(backup, target);
+    changedPaths.push(backup, target);
   }
+  await syncWebDavRestorePathParents(dataRoot, changedPaths);
   await rm(rollbackRoot, { recursive: true, force: true });
   await clearWebDavRestoreJournal(dataRoot);
 }
@@ -209,6 +240,10 @@ function invalidJournal(): Error {
 
 function isMissingFileError(error: unknown): boolean {
   return isRecord(error) && error.code === 'ENOENT';
+}
+
+function pathDepth(value: string): number {
+  return path.resolve(value).split(path.sep).length;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

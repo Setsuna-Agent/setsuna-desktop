@@ -22,6 +22,10 @@ import {
   type WebDavSnapshotManifestItem,
   type WebDavSnapshotRecord,
 } from './model.js';
+import {
+  isPortablePathComponent,
+  portablePathComparisonKey,
+} from './portable-path.js';
 import type { WebDavClient } from './webdav-client.js';
 
 const REPOSITORY_PARTS = ['setsuna-backup', 'v1'] as const;
@@ -445,8 +449,15 @@ function parseSnapshotManifest(value: unknown, repositoryId: string): WebDavSnap
     throw new Error('WebDAV 快照条目不属于清单声明的数据类别。');
   }
   const logicalPaths = new Set(items.map((item) => item.logicalPath));
+  const portableLogicalPaths = new Set(items.map((item) => (
+    portablePathComparisonKey(item.logicalPath)
+  )));
   const objectNames = new Set(items.map((item) => item.objectName));
-  if (logicalPaths.size !== items.length || objectNames.size !== items.length) {
+  if (
+    logicalPaths.size !== items.length
+    || portableLogicalPaths.size !== items.length
+    || objectNames.size !== items.length
+  ) {
     throw new Error('WebDAV 快照清单包含重复条目。');
   }
   const totalBytes = items.reduce((sum, item) => sum + item.size, 0);
@@ -492,6 +503,13 @@ function parseSnapshotItem(value: unknown): WebDavSnapshotManifestItem {
   if ((kind === 'provider-key') !== Boolean(credentialId) || (credentialId?.length ?? 0) > 256) {
     throw new Error('WebDAV 模型密钥标识无效。');
   }
+  if (value.executable !== undefined && typeof value.executable !== 'boolean') {
+    throw new Error('WebDAV 快照文件权限无效。');
+  }
+  const executable = value.executable === true;
+  if (executable && (kind !== 'file' || category !== 'user_skills')) {
+    throw new Error('WebDAV 快照文件权限无效。');
+  }
   return {
     category,
     kind,
@@ -501,6 +519,7 @@ function parseSnapshotItem(value: unknown): WebDavSnapshotManifestItem {
       ? { detail: limitedText(value.detail, 1_024, '条目说明') }
       : {}),
     ...(credentialId ? { credentialId } : {}),
+    ...(executable ? { executable: true } : {}),
     objectName: requireObjectName(value.objectName),
     sha256,
     size,
@@ -513,12 +532,13 @@ function requireLogicalPath(
   kind: WebDavSnapshotManifestItem['kind'],
 ): string {
   const logicalPath = stringValue(value);
+  const components = logicalPath.split('/');
   if (
     !logicalPath
     || logicalPath.length > 2_048
     || logicalPath.startsWith('/')
     || logicalPath.includes('\\')
-    || logicalPath.split('/').some((segment) => !segment || segment === '.' || segment === '..')
+    || components.some((segment) => !isPortablePathComponent(segment))
   ) throw new Error('WebDAV 快照条目路径无效。');
   if (kind !== 'file') {
     if (kind === 'project-catalog') {

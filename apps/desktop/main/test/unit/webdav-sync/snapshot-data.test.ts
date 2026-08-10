@@ -1,5 +1,14 @@
 import { DatabaseSync } from 'node:sqlite';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,6 +38,9 @@ describe('WebDAV portable snapshot data', () => {
     const imageKey = sources.find((source) => source.kind === 'image-generation-key');
     const config = sources.find((source) => source.logicalPath === 'runtime/config.json');
     const skillState = sources.find((source) => source.logicalPath === 'runtime/skills.json');
+    const skillFile = sources.find((source) => (
+      source.logicalPath === 'runtime/user-skills/demo/SKILL.md'
+    ));
 
     expect(providerKey).toMatchObject({
       category: 'model_credentials',
@@ -53,6 +65,9 @@ describe('WebDAV portable snapshot data', () => {
       version: 1,
       states: { demo: { enabled: true, selected: true } },
     });
+    expect(skillFile?.sourcePath).not.toBe(path.join(root, 'runtime', 'user-skills', 'demo', 'SKILL.md'));
+    await writeFile(path.join(root, 'runtime', 'user-skills', 'demo', 'SKILL.md'), '# Changed', 'utf8');
+    expect(await readFile(skillFile!.sourcePath!, 'utf8')).toBe('# Demo');
     const inventory = await inventorySnapshotSources(sources);
     expect(inventory.find((item) => item.credentialId === 'provider-openai')).toMatchObject({
       size: Buffer.byteLength('sk-provider-secret'),
@@ -60,6 +75,27 @@ describe('WebDAV portable snapshot data', () => {
     });
     expect(providerKey?.data?.every((byte) => byte === 0)).toBe(true);
     expect(imageKey?.data?.every((byte) => byte === 0)).toBe(true);
+  });
+
+  it('records user Skill executables while keeping the plaintext staging copy private', async () => {
+    if (process.platform === 'win32') return;
+    const root = await createDataRoot();
+    const scriptPath = path.join(root, 'runtime', 'user-skills', 'demo', 'scripts', 'run.sh');
+    await mkdir(path.dirname(scriptPath), { recursive: true });
+    await writeFile(scriptPath, '#!/bin/sh\nexit 0\n', 'utf8');
+    await chmod(scriptPath, 0o755);
+
+    const sources = await prepareLocalSnapshotSources({
+      dataRoot: root,
+      stagingRoot: path.join(root, '.webdav-sync-work', 'executable'),
+      categories: ['user_skills'],
+    });
+    const script = sources.find((source) => (
+      source.logicalPath === 'runtime/user-skills/demo/scripts/run.sh'
+    ));
+
+    expect(script).toMatchObject({ executable: true });
+    expect((await stat(script!.sourcePath!)).mode & 0o111).toBe(0);
   });
 
   it('creates a consistent SQLite copy and rejects symlinks in managed directories', async () => {

@@ -143,6 +143,7 @@ export async function decryptWebDavFile(input: {
   destinationPath: string;
   recoveryKey: string;
   aad: string;
+  mode?: number;
   signal?: AbortSignal;
 }): Promise<{ sha256: string; size: number }> {
   const sourceStat = await stat(input.sourcePath);
@@ -186,7 +187,7 @@ export async function decryptWebDavFile(input: {
   if (encryptedBytes === 0) {
     try {
       const decrypted = decipher.final();
-      await writeFile(input.destinationPath, decrypted, { flag: 'wx', mode: 0o600 });
+      await writeFile(input.destinationPath, decrypted, { flag: 'wx', mode: input.mode ?? 0o600 });
       return { sha256: sha256Buffer(decrypted), size: decrypted.byteLength };
     } catch (error) {
       await rm(input.destinationPath, { force: true }).catch(() => undefined);
@@ -201,7 +202,7 @@ export async function decryptWebDavFile(input: {
       }),
       decipher,
       meter,
-      createWriteStream(input.destinationPath, { flags: 'wx', mode: 0o600 }),
+      createWriteStream(input.destinationPath, { flags: 'wx', mode: input.mode ?? 0o600 }),
       input.signal ? { signal: input.signal } : {},
     );
     return { sha256: hash.digest('hex'), size };

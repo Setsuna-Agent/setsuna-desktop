@@ -54,6 +54,8 @@ export type WebDavSnapshotManifestItem = {
   label: string;
   detail?: string;
   credentialId?: string;
+  /** Only owner execution is restored, and only for user Skill files. */
+  executable?: boolean;
   objectName: string;
   sha256: string;
   size: number;
@@ -89,6 +91,7 @@ export type LocalSnapshotSource = {
   label: string;
   detail?: string;
   credentialId?: string;
+  executable?: boolean;
   sourcePath?: string;
   data?: Buffer;
 };

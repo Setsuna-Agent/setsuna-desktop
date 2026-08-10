@@ -24,7 +24,11 @@ import {
   normalizeWebDavRecoveryKey,
 } from './crypto.js';
 import { WebDavSyncConfigStore, normalizeCategories } from './config-store.js';
-import type { ResolvedWebDavSyncConnection, StoredWebDavSyncConfig } from './model.js';
+import type {
+  LocalSnapshotSource,
+  ResolvedWebDavSyncConnection,
+  StoredWebDavSyncConfig,
+} from './model.js';
 import {
   normalizeWebDavLocation,
   normalizeWebDavPassword,
@@ -48,6 +52,7 @@ import {
   createLocalInventory,
   downloadSnapshotForRestore,
   downloadSnapshotProjectCatalog,
+  materializeSnapshotForUpload,
   type WebDavTransferProgress,
 } from './transfer.js';
 import { WebDavClient } from './webdav-client.js';
@@ -57,6 +62,7 @@ const INITIAL_AUTOMATIC_BACKUP_DELAY_MS = 5 * 60 * 1_000;
 const BUSY_AUTOMATIC_RETRY_MS = 15 * 60 * 1_000;
 const MANUAL_IDLE_WAIT_MS = 30_000;
 const IDLE_RETRY_MS = 500;
+const RUNTIME_RELEASE_RETRY_DELAYS_MS = [50, 150] as const;
 const MAX_RESTORE_PLANS = 5;
 
 export type WebDavSyncRuntimeCoordinator = {
@@ -86,6 +92,7 @@ export class WebDavSyncService {
   private automaticTimer: ReturnType<typeof setTimeout> | null = null;
   private nextAutomaticBackupAt: string | undefined;
   private lastError: string | undefined;
+  private configurationMutation = false;
   private closed = false;
 
   constructor(private readonly options: WebDavSyncServiceOptions) {
@@ -111,13 +118,11 @@ export class WebDavSyncService {
   }
 
   async resetLocalConfiguration(): Promise<DesktopWebDavSyncState> {
-    this.assertIdle();
-    await this.options.configStore.resetDamagedConfig();
-    this.restorePlans.clear();
-    this.lastError = undefined;
-    await this.scheduleAutomaticBackup();
-    await this.publishState();
-    return this.getState();
+    return this.mutateConfiguration(async () => {
+      await this.options.configStore.resetDamagedConfig();
+      this.restorePlans.clear();
+      this.lastError = undefined;
+    });
   }
 
   async getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]> {
@@ -200,11 +205,9 @@ export class WebDavSyncService {
   }
 
   async updatePreferences(input: DesktopWebDavSyncPreferencesInput): Promise<DesktopWebDavSyncState> {
-    this.assertIdle();
-    await this.options.configStore.updatePreferences(input);
-    await this.scheduleAutomaticBackup();
-    await this.publishState();
-    return this.getState();
+    return this.mutateConfiguration(async () => {
+      await this.options.configStore.updatePreferences(input);
+    });
   }
 
   async testConnection(
@@ -291,8 +294,11 @@ export class WebDavSyncService {
         this.rememberRestorePlan(plan);
         return plan.publicPlan;
       } finally {
-        if (runtimePrepared) await this.options.runtime.release().catch(() => undefined);
-        await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
+        try {
+          if (runtimePrepared) await this.releaseRuntimeGate();
+        } finally {
+          await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
+        }
       }
     });
   }
@@ -387,8 +393,11 @@ export class WebDavSyncService {
         throw error;
       } finally {
         secretsBuffer?.fill(0);
-        if (runtimePrepared) await this.options.runtime.release().catch(() => undefined);
-        await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
+        try {
+          if (runtimePrepared) await this.releaseRuntimeGate();
+        } finally {
+          await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
+        }
       }
     });
   }
@@ -401,13 +410,11 @@ export class WebDavSyncService {
   }
 
   async disconnect(): Promise<DesktopWebDavSyncState> {
-    this.assertIdle();
-    await this.options.configStore.disconnect();
-    this.restorePlans.clear();
-    this.lastError = undefined;
-    await this.scheduleAutomaticBackup();
-    await this.publishState();
-    return this.getState();
+    return this.mutateConfiguration(async () => {
+      await this.options.configStore.disconnect();
+      this.restorePlans.clear();
+      this.lastError = undefined;
+    });
   }
 
   close(): void {
@@ -418,22 +425,38 @@ export class WebDavSyncService {
 
   private async performBackup(automatic: boolean): Promise<DesktopWebDavSyncBackupResult> {
     let succeeded = false;
+    let operationStarted = false;
     let snapshot: DesktopWebDavSyncBackupResult['snapshot'];
     try {
       snapshot = await this.runOperation('backup', 'connecting', true, async (signal) => {
+        operationStarted = true;
         const config = await this.options.configStore.getConfig();
         const connection = await this.requireConnection();
         const repository = await this.repositoryFor(connection, signal);
         const workRoot = await this.createWorkRoot('backup');
-        let runtimePrepared = false;
+        let sources: LocalSnapshotSource[] | undefined;
         try {
           const replaceableSnapshots = await repository.listSnapshots(signal);
-          runtimePrepared = await this.prepareRuntime(automatic, signal);
+          await this.prepareRuntime(automatic, signal);
+          try {
+            sources = await materializeSnapshotForUpload({
+              dataRoot: this.options.dataRoot,
+              categories: config.categories,
+              workRoot,
+              signal,
+              onProgress: (progress) => this.applyTransferProgress(progress),
+            });
+          } finally {
+            // The network phase only reads this immutable staging copy, so new
+            // turns can resume without changing the backup being uploaded.
+            await this.releaseRuntimeGate();
+          }
           const published = await createAndUploadSnapshot({
             repository,
             recoveryKey: connection.recoveryKey,
-            dataRoot: this.options.dataRoot,
+            sourceDataRoot: this.options.dataRoot,
             categories: config.categories,
+            sources,
             deviceId: config.deviceId,
             deviceName: config.deviceName,
             appVersion: this.options.appVersion,
@@ -456,13 +479,15 @@ export class WebDavSyncService {
           this.lastError = undefined;
           return retained.summary;
         } finally {
-          if (runtimePrepared) await this.options.runtime.release().catch(() => undefined);
+          for (const source of sources ?? []) source.data?.fill(0);
           await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
         }
       });
       succeeded = true;
     } finally {
-      await this.scheduleAutomaticBackup(automatic && !succeeded ? BUSY_AUTOMATIC_RETRY_MS : undefined);
+      if (operationStarted) {
+        await this.scheduleAutomaticBackup(automatic && !succeeded ? BUSY_AUTOMATIC_RETRY_MS : undefined);
+      }
     }
     return { state: await this.getState(), snapshot };
   }
@@ -509,6 +534,24 @@ export class WebDavSyncService {
       }
       await delay(IDLE_RETRY_MS, undefined, signal ? { signal } : undefined);
     }
+  }
+
+  private async releaseRuntimeGate(): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= RUNTIME_RELEASE_RETRY_DELAYS_MS.length; attempt += 1) {
+      try {
+        await this.options.runtime.release();
+        return;
+      } catch (error) {
+        lastError = error;
+        const retryDelay = RUNTIME_RELEASE_RETRY_DELAYS_MS[attempt];
+        if (retryDelay === undefined) break;
+        await delay(retryDelay);
+      }
+    }
+    throw new Error('无法解除本地 Runtime 的数据一致性锁，请重启 Setsuna 后重试。', {
+      cause: lastError,
+    });
   }
 
   private async runOperation<T>(
@@ -574,7 +617,28 @@ export class WebDavSyncService {
   }
 
   private assertIdle(): void {
-    if (this.operation) throw new Error('另一项 WebDAV 同步操作正在进行，请稍候。');
+    if (this.operation || this.configurationMutation) {
+      throw new Error('另一项 WebDAV 同步操作正在进行，请稍候。');
+    }
+  }
+
+  private async mutateConfiguration(action: () => Promise<void>): Promise<DesktopWebDavSyncState> {
+    this.assertIdle();
+    this.configurationMutation = true;
+    this.clearAutomaticTimer();
+    let automaticScheduled = false;
+    try {
+      await action();
+      await this.scheduleAutomaticBackup();
+      automaticScheduled = true;
+      await this.publishState();
+      return await this.getState();
+    } finally {
+      if (!automaticScheduled) {
+        await this.scheduleAutomaticBackup().catch(() => undefined);
+      }
+      this.configurationMutation = false;
+    }
   }
 
   private rememberRestorePlan(plan: StoredWebDavRestorePlan): void {

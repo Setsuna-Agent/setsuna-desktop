@@ -4,7 +4,7 @@ import {
   type DesktopWebDavSyncCategorySummary,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import {
   lstat,
   mkdir,
@@ -14,6 +14,7 @@ import {
 } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
+import { pipeline } from 'node:stream/promises';
 import { desktopDataLayout } from '../data-root/layout.js';
 import { sha256Buffer } from './crypto.js';
 import { createPortableConfigSnapshot } from './portable-config.js';
@@ -24,6 +25,10 @@ import type {
   LocalSnapshotSource,
   WebDavSnapshotItemKind,
 } from './model.js';
+import {
+  isPortablePathComponent,
+  portablePathComparisonKey,
+} from './portable-path.js';
 
 const MAX_SECRETS_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_MODEL_CREDENTIALS = 256;
@@ -44,7 +49,13 @@ type StoredModelSecrets = {
 export async function prepareLocalSnapshotSources(
   input: SnapshotSourceInput,
 ): Promise<LocalSnapshotSource[]> {
-  return collectLocalSnapshotSources(input, true);
+  const sources = await collectLocalSnapshotSources(input, true);
+  try {
+    return await materializeFileSources(sources, input.stagingRoot, input.signal);
+  } catch (error) {
+    for (const source of sources) source.data?.fill(0);
+    throw error;
+  }
 }
 
 export async function summarizeLocalSnapshotCategories(
@@ -357,12 +368,18 @@ async function appendDirectorySources(
     await throwIfAborted(input.signal);
     const entries = await readdir(currentRoot, { withFileTypes: true });
     entries.sort((left, right) => left.name.localeCompare(right.name));
+    const portableNames = new Set<string>();
     for (const entry of entries) {
       await throwIfAborted(input.signal);
       const relativePath = relativeRoot ? `${relativeRoot}/${entry.name}` : entry.name;
-      if (entry.name.includes('\\')) {
+      if (!isPortablePathComponent(entry.name)) {
         throw new Error(`同步数据包含无法跨平台还原的文件名：${input.logicalRoot}/${relativePath}`);
       }
+      const portableName = portablePathComparisonKey(entry.name);
+      if (portableNames.has(portableName)) {
+        throw new Error(`同步数据包含跨平台名称冲突：${input.logicalRoot}/${relativeRoot || '.'}`);
+      }
+      portableNames.add(portableName);
       const sourcePath = path.join(currentRoot, entry.name);
       if (entry.isSymbolicLink()) {
         throw new Error(`同步数据中包含不受支持的符号链接：${input.logicalRoot}/${relativePath}`);
@@ -374,13 +391,59 @@ async function appendDirectorySources(
       if (!entry.isFile()) {
         throw new Error(`同步数据中包含不受支持的文件类型：${input.logicalRoot}/${relativePath}`);
       }
+      const executable = input.category === 'user_skills'
+        && Boolean((await lstat(sourcePath)).mode & 0o111);
       output.push(fileSource(
         input.category,
         sourcePath,
         `${input.logicalRoot}/${relativePath}`,
         `${input.labelPrefix}：${entry.name}`,
+        executable,
       ));
     }
+  }
+}
+
+async function materializeFileSources(
+  sources: readonly LocalSnapshotSource[],
+  stagingRoot: string,
+  signal?: AbortSignal,
+): Promise<LocalSnapshotSource[]> {
+  const resolvedRoot = path.resolve(stagingRoot);
+  const materialized: LocalSnapshotSource[] = [];
+  for (const source of sources) {
+    await throwIfAborted(signal);
+    if (!source.sourcePath) {
+      materialized.push(source);
+      continue;
+    }
+    const destinationPath = path.resolve(resolvedRoot, ...source.logicalPath.split('/'));
+    if (!destinationPath.startsWith(`${resolvedRoot}${path.sep}`)) {
+      throw new Error('同步数据路径越过了本地快照目录。');
+    }
+    if (path.resolve(source.sourcePath) !== destinationPath) {
+      await copySnapshotFile(source.sourcePath, destinationPath, signal);
+    }
+    materialized.push({ ...source, sourcePath: destinationPath });
+  }
+  return materialized;
+}
+
+async function copySnapshotFile(
+  sourcePath: string,
+  destinationPath: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  await mkdir(path.dirname(destinationPath), { recursive: true });
+  try {
+    await pipeline(
+      createReadStream(sourcePath),
+      createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }),
+      signal ? { signal } : {},
+    );
+  } catch (error) {
+    await rm(destinationPath, { force: true }).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -481,8 +544,17 @@ function fileSource(
   sourcePath: string,
   logicalPath: string,
   label: string,
+  executable = false,
 ): LocalSnapshotSource {
-  return { category, kind: 'file', sourcePath, logicalPath, label, detail: logicalPath };
+  return {
+    category,
+    kind: 'file',
+    sourcePath,
+    logicalPath,
+    label,
+    detail: logicalPath,
+    ...(executable ? { executable: true } : {}),
+  };
 }
 
 async function hashFile(filePath: string): Promise<{ sha256: string; size: number }> {

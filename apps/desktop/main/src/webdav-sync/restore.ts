@@ -22,6 +22,7 @@ import {
   assertNoPendingWebDavRestore,
   clearWebDavRestoreJournal,
   safeRelativePath,
+  syncWebDavRestorePathParents,
   writeWebDavRestoreJournal,
   type WebDavRestoreJournal,
 } from './restore-journal.js';
@@ -196,6 +197,10 @@ export async function applyRestoredSnapshot(input: {
       await rename(target, backupPath);
       movedToRollback.push({ target, backup: backupPath });
     }
+    await syncWebDavRestorePathParents(
+      input.dataRoot,
+      movedToRollback.flatMap((item) => [item.target, item.backup]),
+    );
 
     // Once this phase is durable, every previously existing target must have a
     // rollback copy. Recovery can then distinguish new installs from untouched data.
@@ -209,13 +214,22 @@ export async function applyRestoredSnapshot(input: {
       await rename(staged, target);
       installedTargets.push(target);
     }
+    await syncWebDavRestorePathParents(
+      input.dataRoot,
+      installedTargets.flatMap((target) => {
+        const relative = safeRelativePath(input.dataRoot, target);
+        return [path.join(input.stagingRoot, relative), target];
+      }),
+    );
 
     await writeWebDavRestoreJournal(input.dataRoot, { ...journal, phase: 'committed' });
   } catch (error) {
     let rollbackError: unknown;
+    const rollbackChangedPaths: string[] = [];
     for (const target of [...installedTargets].reverse()) {
       try {
         await rm(target, { recursive: true, force: true });
+        rollbackChangedPaths.push(target);
       } catch (currentError) {
         rollbackError ??= currentError;
       }
@@ -224,9 +238,15 @@ export async function applyRestoredSnapshot(input: {
       try {
         await mkdir(path.dirname(item.target), { recursive: true });
         await rename(item.backup, item.target);
+        rollbackChangedPaths.push(item.backup, item.target);
       } catch (currentError) {
         rollbackError ??= currentError;
       }
+    }
+    try {
+      await syncWebDavRestorePathParents(input.dataRoot, rollbackChangedPaths);
+    } catch (currentError) {
+      rollbackError ??= currentError;
     }
     rollbackComplete = rollbackError === undefined;
     if (rollbackComplete && journalWritten) {
@@ -264,7 +284,10 @@ function categoryDiff(
     const local = localByPath.get(backup.logicalPath);
     const item = diffItem(backup);
     if (!local) added.push(item);
-    else if (local.sha256 === backup.sha256) preserved.push(item);
+    else if (
+      local.sha256 === backup.sha256
+      && Boolean(local.executable) === Boolean(backup.executable)
+    ) preserved.push(item);
     else overwritten.push(item);
   }
   for (const local of localItems) {
@@ -321,7 +344,13 @@ function restoreImpactFingerprint(
 
   for (const [key, backup] of backupByCategoryAndPath) {
     const local = localByCategoryAndPath.get(key);
-    if (local && local.sha256 !== backup.sha256) {
+    if (
+      local
+      && (
+        local.sha256 !== backup.sha256
+        || Boolean(local.executable) !== Boolean(backup.executable)
+      )
+    ) {
       impacts.push(`${backup.category}\0overwrite\0${backup.logicalPath}`);
     }
   }
