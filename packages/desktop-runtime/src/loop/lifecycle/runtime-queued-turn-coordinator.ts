@@ -261,6 +261,9 @@ export class RuntimeQueuedTurnCoordinator {
         attachments = (await this.options.claimAttachments(threadId, attachments))
           .filter(isRuntimeInputMessageAttachment);
       }
+      const skillReferences = text === queuedInput.input
+        ? cloneRuntimeSkillReferences(queuedInput.skillReferences)
+        : undefined;
       const updatedAt = this.options.clock.now().toISOString();
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
@@ -272,7 +275,7 @@ export class RuntimeQueuedTurnCoordinator {
             ...cloneQueuedInput(queuedInput),
             input: text,
             attachments,
-            skillReferences: undefined,
+            skillReferences,
             updatedAt,
           },
         },
