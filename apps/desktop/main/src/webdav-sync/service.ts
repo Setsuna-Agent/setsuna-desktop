@@ -29,6 +29,7 @@ import {
   normalizeWebDavUsername,
 } from './normalization.js';
 import { EncryptedWebDavRepository } from './repository.js';
+import { readLocalProjects } from './portable-projects.js';
 import {
   applyRestoredSnapshot,
   assertRestorePlanCurrent,
@@ -43,6 +44,7 @@ import {
   createAndUploadSnapshot,
   createLocalInventory,
   downloadSnapshotForRestore,
+  downloadSnapshotProjectCatalog,
   type WebDavTransferProgress,
 } from './transfer.js';
 import { WebDavClient } from './webdav-client.js';
@@ -216,7 +218,26 @@ export class WebDavSyncService {
           signal,
           onProgress: (progress) => this.applyTransferProgress(progress),
         });
-        const plan = buildWebDavRestorePlan({ snapshot, categories, localItems, now: this.now() });
+        const includesProjects = categories.includes('conversations') || categories.includes('memories');
+        const [portableProjects, localProjects] = includesProjects
+          ? await Promise.all([
+              downloadSnapshotProjectCatalog({
+                repository,
+                manifest: snapshot.manifest,
+                workRoot,
+                signal,
+              }),
+              readLocalProjects(this.options.dataRoot),
+            ])
+          : [[], []];
+        const plan = buildWebDavRestorePlan({
+          snapshot,
+          categories,
+          localItems,
+          portableProjects,
+          localProjects,
+          now: this.now(),
+        });
         this.rememberRestorePlan(plan);
         return plan.publicPlan;
       } finally {
@@ -262,7 +283,10 @@ export class WebDavSyncService {
           signal,
           onProgress: (progress) => this.applyTransferProgress(progress),
         });
-        assertRestorePlanCurrent(plan, localItems, this.now());
+        const localProjects = plan.portableProjects.length
+          ? await readLocalProjects(this.options.dataRoot)
+          : [];
+        assertRestorePlanCurrent(plan, localItems, this.now(), localProjects);
         this.updateOperation('preparing-restore', { cancellable: false });
         await this.options.runtime.stop();
         runtimeStopped = true;
@@ -273,6 +297,7 @@ export class WebDavSyncService {
           stagingRoot,
           sourceDataRoot: remote.manifest.sourceDataRoot,
           categories: plan.publicPlan.categories,
+          portableProjects: downloaded.portableProjects,
           ...(secretsBuffer ? { secretsBuffer } : {}),
         });
         restoreCommitted = true;

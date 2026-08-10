@@ -112,12 +112,12 @@ export class ArtifactToolHost implements ToolHost {
     };
   }
 
-  private async projectFor(projectId?: string): Promise<WorkspaceProject> {
+  private async projectFor(projectId?: string): Promise<WorkspaceProject & { path: string }> {
     const status = await this.projects.getStatus(projectId);
-    if (!status.project || !status.exists || !status.readable) {
+    if (!status.project?.path || !status.exists || !status.readable) {
       throw new Error('No readable workspace is available for publish_artifact.');
     }
-    return status.project;
+    return status.project as WorkspaceProject & { path: string };
   }
 }
 

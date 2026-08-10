@@ -44,7 +44,7 @@ export async function createHost(options: {
   });
   // Most cases intentionally omit projectId, so fixture files must live in the same
   // per-thread workspace that the runtime resolver selects for thread_1.
-  const projectDir = (await store.ensureTemporaryWorkspace({ threadId: 'thread_1' })).path;
+  const projectDir = (await store.ensureTemporaryWorkspace({ threadId: 'thread_1' })).path!;
   const project = await store.addProject({ path: projectDir });
   return {
     fixtureRoot: root,

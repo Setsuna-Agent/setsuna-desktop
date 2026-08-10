@@ -1,0 +1,33 @@
+export const projectZhCN = {
+  'sidebar.directoryPickerUnavailable': '当前环境不支持选择项目目录。',
+  'sidebar.createProject': '新建项目',
+  'sidebar.editProject': '编辑项目',
+  'sidebar.projectEditorDescription': '项目名称用于跨设备关联，目录可以稍后再绑定。',
+  'sidebar.projectName': '项目名称',
+  'sidebar.projectNamePlaceholder': '例如：agent',
+  'sidebar.projectDirectory': '关联目录',
+  'sidebar.projectDirectoryPickerTitle': '选择项目关联目录',
+  'sidebar.projectDirectoryUnbound': '尚未关联本机目录',
+  'sidebar.bindProjectDirectory': '关联目录',
+  'sidebar.changeProjectDirectory': '更换目录',
+  'sidebar.unbindProjectDirectory': '取消关联目录',
+  'sidebar.projectUnbound': '未关联',
+  'sidebar.removeProject': '移除项目',
+} as const;
+
+export const projectEnUS: Record<keyof typeof projectZhCN, string> = {
+  'sidebar.directoryPickerUnavailable': 'The project folder picker is unavailable in this environment.',
+  'sidebar.createProject': 'New project',
+  'sidebar.editProject': 'Edit project',
+  'sidebar.projectEditorDescription': 'The project name links chats across devices; a folder can be associated later.',
+  'sidebar.projectName': 'Project name',
+  'sidebar.projectNamePlaceholder': 'For example: agent',
+  'sidebar.projectDirectory': 'Associated folder',
+  'sidebar.projectDirectoryPickerTitle': 'Choose the project folder',
+  'sidebar.projectDirectoryUnbound': 'No local folder associated',
+  'sidebar.bindProjectDirectory': 'Associate folder',
+  'sidebar.changeProjectDirectory': 'Change folder',
+  'sidebar.unbindProjectDirectory': 'Remove folder association',
+  'sidebar.projectUnbound': 'Unbound',
+  'sidebar.removeProject': 'Remove project',
+};

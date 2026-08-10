@@ -35,8 +35,8 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 130 total files
-├── src/ — 2 direct / 80 total files
+apps/desktop/main/ — 0 direct / 132 total files
+├── src/ — 2 direct / 82 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
@@ -48,7 +48,7 @@ apps/desktop/main/ — 0 direct / 130 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
 │   ├── updater/ — 3 direct / 3 total files
-│   ├── webdav-sync/ — 13 direct / 13 total files
+│   ├── webdav-sync/ — 15 direct / 15 total files
 │   ├── window/ — 3 direct / 5 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
@@ -81,14 +81,14 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 595 total files
-├── src/ — 2 direct / 439 total files
-│   ├── app/ — 2 direct / 35 total files
+apps/desktop/renderer/ — 0 direct / 599 total files
+├── src/ — 2 direct / 442 total files
+│   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
-│   │   ├── layout/ — 11 direct / 11 total files
+│   │   ├── layout/ — 12 direct / 12 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
-│   │   └── styles/ — 4 direct / 4 total files
+│   │   └── styles/ — 5 direct / 5 total files
 │   ├── features/ — 321 files
 │   │   ├── capabilities/ — 23 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
@@ -128,23 +128,23 @@ apps/desktop/renderer/ — 0 direct / 595 total files
 │   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 72 files
+│   └── shared/ — 73 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── code/ — 4 direct / 4 total files
 │       ├── hooks/ — 3 direct / 3 total files
-│       ├── i18n/ — 15 direct / 15 total files
+│       ├── i18n/ — 16 direct / 16 total files
 │       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 156 files
-    └── unit/ — 156 files
-        ├── app/ — 1 direct / 12 total files
+└── test/ — 157 files
+    └── unit/ — 157 files
+        ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
-        │   ├── layout/ — 3 direct / 3 total files
+        │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── features/ — 119 files

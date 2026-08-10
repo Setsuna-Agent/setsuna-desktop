@@ -11,6 +11,14 @@ import { relocateDataRootContents } from '../data-root/relocate.js';
 import { mergePortableConfigForRestore } from './portable-config.js';
 import { mergePortableSkillStateForRestore } from './portable-skill-state.js';
 import {
+  buildProjectRestoreActions,
+  projectRestoreFingerprint,
+  stageMergedProjectIndex,
+  type LocalProjectRecord,
+  type PortableProjectRecord,
+} from './portable-projects.js';
+import { remapStagedProjectReferences } from './project-references.js';
+import {
   assertNoPendingWebDavRestore,
   clearWebDavRestoreJournal,
   safeRelativePath,
@@ -30,6 +38,7 @@ const MAX_VISIBLE_DIFF_ITEMS = 100;
 export type StoredWebDavRestorePlan = {
   publicPlan: DesktopWebDavSyncRestorePlan;
   manifest: WebDavSnapshotManifest;
+  portableProjects: PortableProjectRecord[];
   reviewedImpactFingerprint: string;
 };
 
@@ -37,6 +46,8 @@ export function buildWebDavRestorePlan(input: {
   snapshot: WebDavSnapshotRecord;
   categories: DesktopWebDavSyncCategoryId[];
   localItems: LocalSnapshotInventoryItem[];
+  localProjects?: LocalProjectRecord[];
+  portableProjects?: PortableProjectRecord[];
   now?: Date;
 }): StoredWebDavRestorePlan {
   const now = input.now ?? new Date();
@@ -45,10 +56,13 @@ export function buildWebDavRestorePlan(input: {
       throw new Error('所选快照不包含这个数据类别。');
     }
   }
+  const portableProjects = input.portableProjects ?? [];
+  const localProjects = input.localProjects ?? [];
+  const includeProjects = input.categories.includes('conversations') || input.categories.includes('memories');
   const diffs = input.categories.map((category) => categoryDiff(
     category,
-    input.snapshot.manifest.items.filter((item) => item.category === category),
-    input.localItems.filter((item) => item.category === category),
+    input.snapshot.manifest.items.filter((item) => item.category === category && item.kind !== 'project-catalog'),
+    input.localItems.filter((item) => item.category === category && item.kind !== 'project-catalog'),
   ));
   const publicPlan: DesktopWebDavSyncRestorePlan = {
     id: randomUUID(),
@@ -59,14 +73,19 @@ export function buildWebDavRestorePlan(input: {
     expiresAt: new Date(now.getTime() + RESTORE_PLAN_TTL_MS).toISOString(),
     overwrittenCount: diffs.reduce((sum, diff) => sum + diff.overwrittenCount, 0),
     removedCount: diffs.reduce((sum, diff) => sum + diff.removedCount, 0),
+    projectActions: includeProjects
+      ? buildProjectRestoreActions(portableProjects, localProjects)
+      : [],
   };
   return {
     publicPlan,
     manifest: input.snapshot.manifest,
+    portableProjects,
     reviewedImpactFingerprint: restoreImpactFingerprint(
       input.snapshot.manifest,
       input.categories,
       input.localItems,
+      includeProjects ? projectRestoreFingerprint(portableProjects, localProjects) : '',
     ),
   };
 }
@@ -75,6 +94,7 @@ export function assertRestorePlanCurrent(
   plan: StoredWebDavRestorePlan,
   localItems: readonly LocalSnapshotInventoryItem[],
   now = new Date(),
+  localProjects: readonly LocalProjectRecord[] = [],
 ): void {
   if (Date.parse(plan.publicPlan.expiresAt) <= now.getTime()) {
     throw new Error('还原清单已过期，请重新检查覆盖内容。');
@@ -83,6 +103,9 @@ export function assertRestorePlanCurrent(
     plan.manifest,
     plan.publicPlan.categories,
     localItems,
+    plan.publicPlan.projectActions.length || plan.portableProjects.length
+      ? projectRestoreFingerprint(plan.portableProjects, localProjects)
+      : '',
   );
   if (current !== plan.reviewedImpactFingerprint) {
     throw new Error('检查清单后，会被覆盖或删除的本地内容发生了变化，请重新检查。');
@@ -94,6 +117,7 @@ export async function applyRestoredSnapshot(input: {
   stagingRoot: string;
   sourceDataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
+  portableProjects?: PortableProjectRecord[];
   secretsBuffer?: Buffer;
 }): Promise<void> {
   await relocateDataRootContents(input.stagingRoot, input.sourceDataRoot, input.dataRoot);
@@ -120,6 +144,21 @@ export async function applyRestoredSnapshot(input: {
         input.secretsBuffer,
       )
     : undefined;
+  const includesProjects = input.categories.includes('conversations') || input.categories.includes('memories');
+  if (includesProjects) {
+    const projectMerge = await stageMergedProjectIndex({
+      dataRoot: input.dataRoot,
+      stagingRoot: input.stagingRoot,
+      remoteProjects: input.portableProjects ?? [],
+    });
+    await remapStagedProjectReferences({
+      stagingRoot: input.stagingRoot,
+      projectIdMap: projectMerge.projectIdMap,
+      targetPaths: projectMerge.targetPaths,
+      conversations: input.categories.includes('conversations'),
+      memories: input.categories.includes('memories'),
+    });
+  }
   const targets = categoryTargetPaths(input.dataRoot, input.categories);
   const rollbackRoot = path.join(input.dataRoot, `.webdav-sync-rollback-${randomUUID()}`);
   const relativeTargets = targets.map((target) => safeRelativePath(input.dataRoot, target));
@@ -269,13 +308,14 @@ function restoreImpactFingerprint(
   manifest: WebDavSnapshotManifest,
   categories: readonly DesktopWebDavSyncCategoryId[],
   localItems: readonly LocalSnapshotInventoryItem[],
+  projectFingerprint = '',
 ): string {
   const selected = new Set(categories);
   const backupByCategoryAndPath = new Map(manifest.items
-    .filter((item) => selected.has(item.category))
+    .filter((item) => selected.has(item.category) && item.kind !== 'project-catalog')
     .map((item) => [`${item.category}\0${item.logicalPath}`, item]));
   const localByCategoryAndPath = new Map(localItems
-    .filter((item) => selected.has(item.category))
+    .filter((item) => selected.has(item.category) && item.kind !== 'project-catalog')
     .map((item) => [`${item.category}\0${item.logicalPath}`, item]));
   const impacts: string[] = [];
 
@@ -286,7 +326,11 @@ function restoreImpactFingerprint(
     }
   }
   for (const local of localItems) {
-    if (!selected.has(local.category) || local.category === 'model_credentials') continue;
+    if (
+      !selected.has(local.category)
+      || local.category === 'model_credentials'
+      || local.kind === 'project-catalog'
+    ) continue;
     const key = `${local.category}\0${local.logicalPath}`;
     if (!backupByCategoryAndPath.has(key)) {
       impacts.push(`${local.category}\0remove\0${local.logicalPath}`);
@@ -296,7 +340,7 @@ function restoreImpactFingerprint(
   // A reviewed path may change bytes while the dialog is open (notably the live
   // conversation database). That is safe when it remains in the same reviewed
   // overwrite/delete set; only a changed impact list requires another review.
-  const canonical = impacts.sort().join('\n');
+  const canonical = `${impacts.sort().join('\n')}\nprojects\0${projectFingerprint}`;
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 

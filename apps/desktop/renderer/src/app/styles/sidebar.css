@@ -632,6 +632,13 @@
   font-weight: 500;
 }
 
+.desktop-agent-project__text > small {
+  flex: 0 0 auto;
+  color: var(--app-sidebar-text-secondary);
+  font-size: 10px;
+  line-height: 16px;
+}
+
 .desktop-agent-sidebar__empty-session {
   display: flex;
   align-items: center;

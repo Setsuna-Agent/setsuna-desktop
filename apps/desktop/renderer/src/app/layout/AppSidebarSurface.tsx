@@ -60,7 +60,6 @@ export function AppSidebarSurface({
       projectsCollapsed={navigation.projectsCollapsed}
       searchOpen={navigation.sidebarSearchOpen}
       searchTriggerRef={searchTriggerRef}
-      selectingProjectDirectory={navigation.selectingProjectDirectory}
       sessionsCollapsed={navigation.sessionsCollapsed}
       threadActionMenuId={navigation.threadActionMenuId}
       threadsByProjectId={threadsByProjectId}
@@ -85,6 +84,7 @@ export function AppSidebarSurface({
         navigation.startProjectThread(projectId);
       }}
       onEnterChatMode={() => void navigation.enterChatMode()}
+      onEditProject={navigation.editProject}
       onOpenCapabilities={onOpenCapabilities}
       onOpenSettings={onOpenSettings}
       onRemoveProject={(project) => {
@@ -93,7 +93,7 @@ export function AppSidebarSurface({
       }}
       onResizeStep={onResizeStep}
       onResizeStart={onResizeStart}
-      onSelectDirectory={() => void navigation.selectProjectDirectory()}
+      onCreateProject={navigation.openCreateProject}
       onSelectProject={(project) => void navigation.selectProjectFromSidebar(project)}
       onSelectThread={(threadId) => void navigation.selectThread(threadId)}
       onToggleProjectActions={(projectId) => navigation.setProjectActionMenuId((current) => (current === projectId ? null : projectId))}

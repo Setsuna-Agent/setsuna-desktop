@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -17,6 +18,43 @@ afterEach(async () => {
 });
 
 describe('WebDAV restore planning and commit', () => {
+  it('lists project reuse and unbound creation in the restore plan', () => {
+    const manifest: WebDavSnapshotManifest = {
+      ...fixtureManifest(),
+      categories: ['conversations'],
+      items: [],
+    };
+    const plan = buildWebDavRestorePlan({
+      snapshot: { manifest, summary: snapshotSummary(manifest) },
+      categories: ['conversations'],
+      localItems: [],
+      localProjects: [{
+        ...portableProject('project_local_alpha', 'Alpha'),
+        path: '/local/alpha',
+      }],
+      portableProjects: [
+        portableProject('project_remote_alpha', 'Alpha'),
+        portableProject('project_remote_beta', 'Beta'),
+      ],
+    });
+
+    expect(plan.publicPlan.projectActions).toEqual([
+      {
+        sourceProjectId: 'project_remote_alpha',
+        targetProjectId: 'project_local_alpha',
+        name: 'Alpha',
+        action: 'reuse',
+        directoryBound: true,
+      },
+      {
+        sourceProjectId: 'project_remote_beta',
+        name: 'Beta',
+        action: 'create',
+        directoryBound: false,
+      },
+    ]);
+  });
+
   it('makes overwrite and local-loss entries explicit and rejects stale plans', () => {
     const manifest = fixtureManifest();
     const snapshot = { manifest, summary: snapshotSummary(manifest) };
@@ -180,7 +218,118 @@ describe('WebDAV restore planning and commit', () => {
     }
     expect(await readFile(path.join(dataRoot, 'runtime', 'memories', 'keep.md'), 'utf8')).toBe('keep me');
   });
+
+  it('reuses same-name local projects, creates unbound projects, and remaps restored chats', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-project-restore-'));
+    temporaryRoots.push(dataRoot);
+    const runtimeRoot = path.join(dataRoot, 'runtime');
+    const stagingRoot = path.join(dataRoot, '.webdav-sync-work', 'restored');
+    const localProjectPath = path.join(dataRoot, 'workspaces', 'alpha');
+    await Promise.all([
+      mkdir(runtimeRoot, { recursive: true }),
+      mkdir(path.join(stagingRoot, 'runtime'), { recursive: true }),
+      mkdir(localProjectPath, { recursive: true }),
+    ]);
+    await writeFile(path.join(runtimeRoot, 'projects.json'), JSON.stringify({
+      version: 1,
+      projects: [
+        projectRecord('project_local_alpha', 'Alpha', localProjectPath),
+        projectRecord('project_local_only', 'Local only'),
+      ],
+    }));
+    const databasePath = path.join(stagingRoot, 'runtime', 'threads.sqlite');
+    const database = new DatabaseSync(databasePath);
+    database.exec(`
+      CREATE TABLE threads (id TEXT PRIMARY KEY, project_id TEXT, snapshot_json TEXT NOT NULL);
+      CREATE TABLE thread_messages (
+        thread_id TEXT NOT NULL,
+        message_index INTEGER NOT NULL,
+        message_json TEXT NOT NULL,
+        PRIMARY KEY (thread_id, message_index)
+      );
+    `);
+    database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'thread_alpha',
+      'project_remote_alpha',
+      JSON.stringify({ id: 'thread_alpha', projectId: 'project_remote_alpha', messages: [] }),
+    );
+    database.prepare('INSERT INTO threads VALUES (?, ?, ?)').run(
+      'thread_beta',
+      'project_remote_beta',
+      JSON.stringify({ id: 'thread_beta', projectId: 'project_remote_beta', messages: [] }),
+    );
+    database.prepare('INSERT INTO thread_messages VALUES (?, ?, ?)').run(
+      'thread_alpha',
+      0,
+      JSON.stringify({
+        id: 'message_alpha',
+        artifact: {
+          projectId: 'project_remote_alpha',
+          workspaceRoot: '/source-device/alpha',
+        },
+      }),
+    );
+    database.close();
+
+    await applyRestoredSnapshot({
+      dataRoot,
+      stagingRoot,
+      sourceDataRoot: dataRoot,
+      categories: ['conversations'],
+      portableProjects: [
+        portableProject('project_remote_alpha', 'Alpha'),
+        portableProject('project_remote_beta', 'Beta'),
+      ],
+    });
+
+    const projects = JSON.parse(await readFile(path.join(runtimeRoot, 'projects.json'), 'utf8')) as {
+      projects: Array<{ id: string; name: string; path?: string }>;
+    };
+    expect(projects.projects).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'project_local_alpha', name: 'Alpha', path: localProjectPath }),
+      expect.objectContaining({ id: 'project_remote_beta', name: 'Beta' }),
+      expect.objectContaining({ id: 'project_local_only', name: 'Local only' }),
+    ]));
+    expect(projects.projects.find((project) => project.name === 'Beta')).not.toHaveProperty('path');
+
+    const restored = new DatabaseSync(path.join(runtimeRoot, 'threads.sqlite'), { readOnly: true });
+    try {
+      expect(restored.prepare('SELECT id, project_id FROM threads ORDER BY id').all()).toEqual([
+        { id: 'thread_alpha', project_id: 'project_local_alpha' },
+        { id: 'thread_beta', project_id: 'project_remote_beta' },
+      ]);
+      const alpha = restored.prepare('SELECT snapshot_json FROM threads WHERE id = ?').get('thread_alpha') as {
+        snapshot_json: string;
+      };
+      expect(JSON.parse(alpha.snapshot_json)).toMatchObject({ projectId: 'project_local_alpha' });
+      const message = restored.prepare('SELECT message_json FROM thread_messages').get() as { message_json: string };
+      expect(JSON.parse(message.message_json)).toMatchObject({
+        artifact: { projectId: 'project_local_alpha', workspaceRoot: localProjectPath },
+      });
+    } finally {
+      restored.close();
+    }
+  });
 });
+
+function projectRecord(id: string, name: string, projectPath?: string) {
+  return {
+    id,
+    name,
+    ...(projectPath ? { path: projectPath } : {}),
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  };
+}
+
+function portableProject(id: string, name: string) {
+  return {
+    id,
+    name,
+    createdAt: '2026-08-01T00:00:00.000Z',
+    updatedAt: '2026-08-01T00:00:00.000Z',
+  };
+}
 
 function fixtureManifest(): WebDavSnapshotManifest {
   return {

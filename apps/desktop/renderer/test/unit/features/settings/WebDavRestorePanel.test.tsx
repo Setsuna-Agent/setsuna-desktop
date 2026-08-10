@@ -107,8 +107,9 @@ const restorePlan: DesktopWebDavSyncRestorePlan = {
   categories: ['preferences', 'user_skills', 'memories'],
   createdAt: '2026-08-10T10:30:00.000Z',
   expiresAt: '2026-08-10T10:40:00.000Z',
-  overwrittenCount: 1,
-  removedCount: 1,
+      overwrittenCount: 1,
+      removedCount: 1,
+      projectActions: [],
   diffs: [
     {
       category: 'preferences',

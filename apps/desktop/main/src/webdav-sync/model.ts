@@ -41,7 +41,11 @@ export type WebDavRepositoryMetadata = {
   keyVerifier: string;
 };
 
-export type WebDavSnapshotItemKind = 'file' | 'provider-key' | 'image-generation-key';
+export type WebDavSnapshotItemKind =
+  | 'file'
+  | 'provider-key'
+  | 'image-generation-key'
+  | 'project-catalog';
 
 export type WebDavSnapshotManifestItem = {
   category: DesktopWebDavSyncCategoryId;

@@ -12,13 +12,13 @@ export class WorkspaceRuntimeEnvironmentResolver implements RuntimeEnvironmentRe
     const resolvedProjectId = projectId
       ?? (await this.projects.ensureTemporaryWorkspace({ threadId, createdAt: threadCreatedAt })).id;
     const status = await this.projects.getStatus(resolvedProjectId);
-    if (!status.project || !status.exists || !status.readable) {
+    const workspacePathValue = status.project?.path;
+    if (!status.project || !workspacePathValue || !status.exists || !status.readable) {
       throw new Error(projectId ? `Workspace is unavailable: ${projectId}` : 'Temporary workspace is unavailable.');
     }
 
-    const project = status.project;
     const gitRoot = status.gitRoot;
-    const workspaceRoot = await realpath(project.path).catch(() => path.resolve(project.path));
+    const workspaceRoot = await realpath(workspacePathValue).catch(() => path.resolve(workspacePathValue));
     const worktreeRoot = gitRoot
       ? await realpath(gitRoot).catch(() => path.resolve(gitRoot))
       : null;

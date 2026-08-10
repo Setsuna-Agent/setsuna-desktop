@@ -49,6 +49,19 @@ export async function handleRuntimeWorkspaceRequest(
     return true;
   }
 
+  const projectUpdateMatch = url.pathname.match(/^\/v1\/projects\/([^/]+)$/u);
+  if (projectUpdateMatch && request.method === 'PATCH') {
+    sendJson(
+      response,
+      200,
+      await runtime.workspaceProjects.updateProject(
+        decodeURIComponent(projectUpdateMatch[1]),
+        await readBody(request),
+      ),
+    );
+    return true;
+  }
+
   if (request.method === 'GET' && url.pathname === '/v1/workspace/status') {
     if (url.searchParams.has('threadId')) {
       const threadId = runtimeQueryId(url.searchParams.get('threadId'), 'Thread id');

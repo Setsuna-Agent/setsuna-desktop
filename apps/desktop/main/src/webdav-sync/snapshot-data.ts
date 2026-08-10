@@ -14,6 +14,7 @@ import { desktopDataLayout } from '../data-root/layout.js';
 import { sha256Buffer } from './crypto.js';
 import { createPortableConfigSnapshot } from './portable-config.js';
 import { createPortableSkillStateSnapshot } from './portable-skill-state.js';
+import { portableProjectCatalogSource } from './portable-projects.js';
 import type {
   LocalSnapshotInventoryItem,
   LocalSnapshotSource,
@@ -72,6 +73,12 @@ export async function prepareLocalSnapshotSources(
       labelPrefix: '记忆',
       signal: input.signal,
     });
+  }
+  if (categories.has('conversations') || categories.has('memories')) {
+    sources.push(await portableProjectCatalogSource(
+      input.dataRoot,
+      categories.has('conversations') ? 'conversations' : 'memories',
+    ));
   }
   if (categories.has('preferences') && await isRegularFile(layout.runtimeConfigPath)) {
     const portableConfigPath = path.join(input.stagingRoot, 'runtime', 'config.json');
@@ -222,6 +229,9 @@ export function categoryTargetPaths(
       path.join(layout.runtimeRoot, 'attachments'),
       layout.generatedImagesRoot,
     );
+  }
+  if (selected.has('conversations') || selected.has('memories')) {
+    targets.push(path.join(layout.runtimeRoot, 'projects.json'));
   }
   if (selected.has('memories')) targets.push(layout.memoriesRoot);
   if (selected.has('preferences')) targets.push(layout.runtimeConfigPath);

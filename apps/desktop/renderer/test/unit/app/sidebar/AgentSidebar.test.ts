@@ -9,7 +9,7 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('AgentSidebar project actions', () => {
-  it('renders project-scoped thread creation and archiving controls', () => {
+  it('renders the shared project creation and editing entries', () => {
     const project: WorkspaceProject = {
       id: 'project_test',
       name: 'test-project',
@@ -32,7 +32,6 @@ describe('AgentSidebar project actions', () => {
       projectsCollapsed: false,
       searchOpen: false,
       searchTriggerRef: createRef<HTMLButtonElement>(),
-      selectingProjectDirectory: false,
       sessionsCollapsed: false,
       threadActionMenuId: null,
       threadsByProjectId: new Map(),
@@ -43,13 +42,14 @@ describe('AgentSidebar project actions', () => {
       onCreateGlobalThread: noop,
       onCreateProjectThread: noop,
       onEnterChatMode: noop,
+      onEditProject: noop,
       onOpenCapabilities: noop,
       onOpenSettings: noop,
       onRemoveProject: noop,
       onRenameThread: noop,
       onResizeStart: noop,
       onResizeStep: noop,
-      onSelectDirectory: noop,
+      onCreateProject: noop,
       onSelectProject: noop,
       onSelectThread: noop,
       onToggleProjectActions: noop,
@@ -59,7 +59,9 @@ describe('AgentSidebar project actions', () => {
       onToggleThreadActions: noop,
     }));
 
+    expect(html).toContain('aria-label="新建项目"');
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
+    expect(html).toContain('>编辑项目</button>');
     expect(html).toContain('>归档项目</button>');
     expect(html).toContain('>插件</span>');
   });

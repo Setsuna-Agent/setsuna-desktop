@@ -135,7 +135,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       },
     },
     'app.addProject': {
-      execute: () => void navigation.selectProjectDirectory(),
+      execute: navigation.openCreateProject,
     },
     'app.openSettings': {
       execute: windowMenuActions.onOpenSettings,

@@ -363,7 +363,8 @@ export function snapshotSummary(manifest: WebDavSnapshotManifest): DesktopWebDav
     const items = manifest.items.filter((item) => item.category === id);
     return [{
       id,
-      itemCount: items.length,
+      // Project linkage is supporting metadata, not user content.
+      itemCount: items.filter((item) => item.kind !== 'project-catalog').length,
       totalBytes: items.reduce((sum, item) => sum + item.size, 0),
     } satisfies DesktopWebDavSyncCategorySummary];
   });
@@ -449,6 +450,7 @@ function parseSnapshotItem(value: unknown): WebDavSnapshotManifestItem {
   const kind = value.kind === 'file'
     || value.kind === 'provider-key'
     || value.kind === 'image-generation-key'
+    || value.kind === 'project-catalog'
     ? value.kind
     : null;
   if (!kind) throw new Error('WebDAV 快照条目类型无效。');
@@ -493,6 +495,15 @@ function requireLogicalPath(
     || logicalPath.split('/').some((segment) => !segment || segment === '.' || segment === '..')
   ) throw new Error('WebDAV 快照条目路径无效。');
   if (kind !== 'file') {
+    if (kind === 'project-catalog') {
+      if (
+        (category !== 'conversations' && category !== 'memories')
+        || logicalPath !== 'portable/projects.json'
+      ) {
+        throw new Error('WebDAV 项目清单的类别或路径无效。');
+      }
+      return logicalPath;
+    }
     if (category !== 'model_credentials' || !logicalPath.startsWith('model-credentials/')) {
       throw new Error('WebDAV 密钥条目的类别或路径无效。');
     }

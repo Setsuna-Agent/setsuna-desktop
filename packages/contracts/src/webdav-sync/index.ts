@@ -157,6 +157,17 @@ export type DesktopWebDavSyncRestorePlan = {
   expiresAt: string;
   overwrittenCount: number;
   removedCount: number;
+  projectActions: DesktopWebDavSyncRestoreProjectAction[];
+};
+
+export type DesktopWebDavSyncRestoreProjectAction = {
+  sourceProjectId: string;
+  name: string;
+  action: 'reuse' | 'create';
+  /** Existing target project id when `action` is `reuse`. */
+  targetProjectId?: string;
+  /** Reused projects retain this device-local directory binding. */
+  directoryBound: boolean;
 };
 
 export type DesktopWebDavSyncBackupResult = {

@@ -31,6 +31,7 @@
 - 还原前展示来源设备、时间、应用版本、完整统计和破坏性条目清单。
 - 还原使用短生命周期 plan、本地指纹复核、回滚目录和崩溃恢复日志。
 - 原始凭据文件永不上传；选中的模型 API Key 只以客户端加密密文进入 WebDAV。
+- 项目可以独立于目录存在；新增和编辑共用项目配置弹窗，可随时绑定、更换或解除本机目录。
 
 ### 明确非目标
 
@@ -44,7 +45,7 @@
 
 | 数据域 | 默认 | 还原语义 | 实际内容 |
 | --- | --- | --- | --- |
-| 对话与附件 | 开 | 整域替换 | `threads.sqlite` 的一致性副本、attachments 和 generated images。SQLite 使用 backup API，不直接拷贝活动 WAL 组合。 |
+| 对话与附件 | 开 | 整域替换 + 项目关联 | `threads.sqlite` 的一致性副本、attachments、generated images，以及不含目录路径的加密项目清单。SQLite 使用 backup API，不直接拷贝活动 WAL 组合。 |
 | 长期记忆 | 开 | 整域替换 | Runtime memory store 及其 baseline/rollout 等恢复所需文件。 |
 | 偏好与模型配置 | 开 | 白名单覆盖 + 安全合并 | Global prompt、memory 设置、task model、Setsuna style、provider/model 非敏感元数据、image generation 元数据、vision reference、界面语言和 Markdown 链接打开方式。 |
 | 模型 API Key | 开 | 同 ID 覆盖，仅本机 Key 保留 | Provider API key 和 image generation API key。每个 Key 是独立清单条目，不上传整个 `secrets.json`。 |
@@ -68,7 +69,7 @@
 | Network proxy 密码、MCP env/header secret、OAuth token | 属于设备或 session 凭据，目标设备必须重新配置。 |
 | Tool approval、policy amendment、PC local policy | 把“永久允许”带到另一台设备会扩大权限。 |
 | MCP 配置、Plugin bundle/trust、外部 Skill root | 包含本机命令、路径、凭据或可执行信任边界，第一版不同步。 |
-| `projects.json` 指向的项目和外部 workspace/Git 内容 | 不属于 Setsuna managed data root，应由 Git 或用户备份方案管理。 |
+| 项目关联的外部 workspace/Git 内容及其绝对路径 | 不属于 Setsuna managed data root，应由 Git 或用户备份方案管理；只备份项目名称与内部 ID。 |
 | Chromium profile、Cookies、Local/Session Storage、浏览器登录态 | 体积大、格式不稳定且包含敏感 session。 |
 | Window state、当前 thread、review layout、terminal/process 状态 | 设备相关或短生命周期，恢复价值低。 |
 | Workspace dependencies、Python/Node toolchain、cache、logs、debug trace | 可重建且跨操作系统不兼容。 |
@@ -86,6 +87,16 @@
 5. 目标设备重新写入自身的 `secrets.json`，文件权限收紧为 `0600`（Windows 由平台 ACL 处理）。
 
 因此新设备仍需要 WebDAV 地址、账号/app password 和 Setsuna 恢复密钥，但成功打开仓库后，可以一次恢复已选中的模型 API Key，不需要逐个平台重新查找。
+
+## 项目的换机语义
+
+项目分为两层：可跨设备的“项目身份”和仅本机有效的“目录绑定”。项目名称是跨设备匹配键，内部 ID 用于保持对话与记忆关联；绝对目录、Git root 和项目文件不进入备份。
+
+- 新建和编辑项目使用同一个项目配置弹窗。用户可以只填写名称创建空项目，也可以同时绑定目录。
+- 还原时，备份项目与本机同名项目匹配后复用本机项目 ID，并保留本机已有目录，不用远端状态覆盖。
+- 没有同名项目时创建未绑定目录的项目，对话仍归在该项目下；用户还原后通过项目配置弹窗手动关联目录。
+- 还原提交前在暂存的 SQLite 数据库和记忆索引中重写源项目 ID，避免新设备出现不可见的孤儿对话。
+- 本机存在同名项目歧义时停止备份或还原，要求用户先重命名，而不是静默猜测目标。
 
 ## 安全模型
 
@@ -159,8 +170,8 @@ WebDAV 服务端仍能看到仓库格式版本、随机 repository/device ID、�
 
 1. 用户查看当前备份并选择要还原的数据域。
 2. 应用解密 manifest，对当前本地数据建立同样的 inventory。
-3. 按稳定 logical path/provider ID 生成 `新增`、`覆盖`、`删除`、`保留` 统计和条目。
-4. UI 使用与模型列表同步确认一致的模态弹窗，逐项展示覆盖和删除的本地内容，并再次显示“将覆盖 X 项、删除 Y 项”。列表超过 100 项时只渲染前 100 项，但数量是完整统计，并明确显示截断警告。
+3. 按稳定 logical path/provider ID 生成 `新增`、`覆盖`、`删除`、`保留` 统计和条目；项目另列“复用同名项目”与“新建未绑定项目”。
+4. UI 使用与模型列表同步确认一致的模态弹窗，逐项展示项目关联、覆盖和删除的本地内容，并再次显示“将覆盖 X 项、删除 Y 项”。列表超过 100 项时只渲染前 100 项，但数量是完整统计，并明确显示截断警告。
 5. 用户必须勾选“已检查清单”，“还原并重启”按钮才可用。
 
 Restore plan 有 10 分钟有效期，并保存本地 inventory fingerprint。真正提交前会重新读取远端 manifest 和本地 inventory；只要任一方发生变化，必须重新生成清单。
@@ -169,7 +180,7 @@ Restore plan 有 10 分钟有效期，并保存本地 inventory fingerprint。�
 
 1. 下载选中对象，在非活动 staging 完成认证解密、size/hash 和路径校验。
 2. 再次锁定 Runtime 并复核本地指纹，然后停止 Runtime。
-3. 对可移植配置、API Key 和用户 Skill 状态执行安全合并，未选数据域完全不动。
+3. 对项目清单、可移植配置、API Key 和用户 Skill 状态执行安全合并，并在 staging 重写项目引用；未选数据域完全不动。
 4. 将当前目标 rename 到 data root 内的随机 rollback 目录，再安装已验证数据。
 5. 每次提交先原子写入 `.webdav-sync-restore.json`。进程在 rename 中崩溃时，下次 Runtime 启动前根据受校验的 target 清单自动回滚。
 6. 提交完成后 relaunch。新 Runtime 能正常启动后才清理 rollback；如果恢复后的数据导致 Runtime 启动失败，先回滚到原本地数据再重试启动。

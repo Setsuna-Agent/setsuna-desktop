@@ -24,6 +24,7 @@ import './shared/styles/file-icons.css';
 import './shared/styles/brand-icons.css';
 import './shared/styles/primitives.css';
 import './app/styles/sidebar.css';
+import './app/styles/project-editor.css';
 import './features/workspace/styles/panel-chrome.css';
 import './features/workspace/styles/workspace.css';
 import './features/workspace/styles/bottom-panel.css';

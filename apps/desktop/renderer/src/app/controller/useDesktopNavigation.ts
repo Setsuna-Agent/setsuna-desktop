@@ -2,11 +2,11 @@ import type {
   DesktopRuntimeClient,
   RuntimeThread,
   RuntimeThreadSummary,
+  UpdateWorkspaceProjectInput,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MainView } from '../types.js';
 
 type DesktopNavigationOptions = {
@@ -22,10 +22,13 @@ type DesktopNavigationOptions = {
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setCurrentThread: Dispatch<SetStateAction<RuntimeThread | null>>;
-  setError: Dispatch<SetStateAction<string | null>>;
   setProjects: Dispatch<SetStateAction<WorkspaceProject[]>>;
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>;
 };
+
+type ProjectEditorState =
+  | { mode: 'create' }
+  | { mode: 'edit'; project: WorkspaceProject };
 
 export function useDesktopNavigation({
   activeProjectId,
@@ -40,18 +43,16 @@ export function useDesktopNavigation({
   setActiveProjectId,
   setActiveView,
   setCurrentThread,
-  setError,
   setProjects,
   threadsByProjectId,
 }: DesktopNavigationOptions) {
-  const { t } = useI18n();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchValue, setSidebarSearchValue] = useState('');
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => new Set());
   const [forceExpandedProjectIds, setForceExpandedProjectIds] = useState<Set<string>>(() => new Set());
-  const [selectingProjectDirectory, setSelectingProjectDirectory] = useState(false);
+  const [projectEditor, setProjectEditor] = useState<ProjectEditorState | null>(null);
   const [projectActionMenuId, setProjectActionMenuId] = useState<string | null>(null);
   const [threadActionMenuId, setThreadActionMenuId] = useState<string | null>(null);
   const [renamingThread, setRenamingThread] = useState<RuntimeThreadSummary | null>(null);
@@ -262,43 +263,50 @@ export function useDesktopNavigation({
     [activeProjectId, selectProject, toggleProjectCollapsed],
   );
 
-  const addProjectByPath = useCallback(
-    async (pathValue: string) => {
-      const inputPath = pathValue.trim();
-      if (!inputPath) return;
-      if (!confirmDiscardProjectFile()) return;
-      const project = await client.addProject({ path: inputPath });
-      const list = await client.listProjects();
-      setProjects(list.projects);
+  const openCreateProject = useCallback(() => {
+    setProjectActionMenuId(null);
+    setProjectEditor({ mode: 'create' });
+  }, []);
+
+  const editProject = useCallback((project: WorkspaceProject) => {
+    setProjectActionMenuId(null);
+    setProjectEditor({ mode: 'edit', project });
+  }, []);
+
+  const closeProjectEditor = useCallback(() => setProjectEditor(null), []);
+
+  const saveProject = useCallback(async (input: UpdateWorkspaceProjectInput) => {
+    if (!projectEditor) return false;
+    const existingProject = projectEditor.mode === 'edit' ? projectEditor.project : null;
+    const nextPath = input.path === undefined
+      ? existingProject?.path
+      : input.path ?? undefined;
+    const pathChanged = existingProject !== null && existingProject.path !== nextPath;
+    const changesCurrentWorkspace = existingProject === null
+      || (existingProject.id === currentProjectId && pathChanged);
+    if (changesCurrentWorkspace && !confirmDiscardProjectFile()) {
+      return false;
+    }
+    const project = existingProject
+      ? await client.updateProject(existingProject.id, input)
+      : await client.addProject({
+          ...(input.name ? { name: input.name } : {}),
+          ...(nextPath ? { path: nextPath } : {}),
+        });
+    const list = await client.listProjects();
+    setProjects(list.projects);
+    if (!existingProject) {
       setActiveProjectId(project.id);
       expandProject(project.id);
-      resetProjectWorkspaceState();
       resetNewThreadWorkspacePanels(project.id);
-    },
-    [client, confirmDiscardProjectFile, expandProject, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setProjects],
-  );
-
-  const selectProjectDirectory = useCallback(async () => {
-    if (selectingProjectDirectory) return;
-    const api = window.setsunaDesktop?.desktop;
-    if (!api?.selectDirectory) {
-      setError(t('sidebar.directoryPickerUnavailable'));
-      return;
     }
-    setSelectingProjectDirectory(true);
-    try {
-      const selectedPath = await api.selectDirectory({ title: t('sidebar.chooseProject') });
-      if (selectedPath) await addProjectByPath(selectedPath);
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      setSelectingProjectDirectory(false);
-    }
-  }, [addProjectByPath, selectingProjectDirectory, setError, t]);
+    if (changesCurrentWorkspace) resetProjectWorkspaceState();
+    return true;
+  }, [client, confirmDiscardProjectFile, currentProjectId, expandProject, projectEditor, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, setActiveProjectId, setProjects]);
 
   const hideProjectFromNavigation = useCallback(
     async (project: WorkspaceProject, persist: () => Promise<void>) => {
-      if (!confirmDiscardProjectFile()) return;
+      if (!confirmDiscardProjectFile()) return false;
       await persist();
       const list = await client.listProjects();
       const nextThreads = await reloadThreads();
@@ -336,26 +344,28 @@ export function useDesktopNavigation({
       }
       resetNewThreadWorkspacePanels(project.id);
       resetProjectWorkspaceState();
+      return true;
     },
     [client, confirmDiscardProjectFile, currentThread?.projectId, expandProject, reloadThreads, resetNewThreadWorkspacePanels, resetProjectWorkspaceState, resetThreadWorkspacePanels, setActiveProjectId, setCurrentThread, setProjects, threadsByProjectId],
   );
 
   const archiveProject = useCallback(
-    async (project: WorkspaceProject) => {
-      await hideProjectFromNavigation(project, () => client.archiveProject(project.id));
-    },
+    (project: WorkspaceProject) => hideProjectFromNavigation(
+      project,
+      () => client.archiveProject(project.id),
+    ),
     [client, hideProjectFromNavigation],
   );
 
   const removeProject = useCallback(
-    async (project: WorkspaceProject) => {
-      await hideProjectFromNavigation(project, () => client.removeProject(project.id));
-    },
+    (project: WorkspaceProject) => hideProjectFromNavigation(
+      project,
+      () => client.removeProject(project.id),
+    ),
     [client, hideProjectFromNavigation],
   );
 
   return {
-    addProjectByPath,
     archiveProject,
     archiveThread,
     closeNavigationMenus,
@@ -363,18 +373,21 @@ export function useDesktopNavigation({
     collapsedProjectIds,
     enterChatMode,
     expandProject,
+    editProject,
     forceExpandedProjectIds,
     openRenameThread,
+    closeProjectEditor,
+    openCreateProject,
+    projectEditor,
     projectActionMenuId,
     projectsCollapsed,
     removeProject,
     renameThreadTitle,
     renamingThread,
     saveRenameThread,
-    selectProjectDirectory,
+    saveProject,
     selectProjectFromSidebar,
     selectThread,
-    selectingProjectDirectory,
     sessionsCollapsed,
     setProjectActionMenuId,
     setProjectsCollapsed,

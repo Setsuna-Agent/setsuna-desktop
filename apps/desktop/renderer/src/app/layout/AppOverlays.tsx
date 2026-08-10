@@ -4,6 +4,7 @@ import { RuntimeActivityCenter } from '../../features/runtime-activity/RuntimeAc
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { SidebarSearchOverlay } from '../sidebar/SidebarSearchOverlay.js';
 import { RenameThreadDialog } from './RenameThreadDialog.js';
+import { ProjectEditorDialog } from './ProjectEditorDialog.js';
 
 export function AppOverlays({
   client,
@@ -28,6 +29,9 @@ export function AppOverlays({
   onCloseRuntimeActivity: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
 }) {
+  const projectEditorProject = navigation.projectEditor?.mode === 'edit'
+    ? navigation.projectEditor.project
+    : null;
   return (
     <>
       {navigation.sidebarSearchOpen ? (
@@ -52,6 +56,15 @@ export function AppOverlays({
           onCancel={navigation.closeRenameThread}
           onChange={navigation.setRenameThreadTitle}
           onSave={() => void navigation.saveRenameThread()}
+        />
+      ) : null}
+      {navigation.projectEditor ? (
+        <ProjectEditorDialog
+          key={projectEditorProject?.id ?? 'new-project'}
+          project={projectEditorProject}
+          onClose={navigation.closeProjectEditor}
+          onRemove={navigation.removeProject}
+          onSave={navigation.saveProject}
         />
       ) : null}
       {runtimeActivityOpen ? (

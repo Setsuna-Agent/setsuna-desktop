@@ -2,6 +2,8 @@ import type { DesktopWebDavSyncRestorePlan } from '@setsuna-desktop/contracts';
 import {
   AlertTriangle,
   CirclePlus,
+  Folder,
+  FolderPlus,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -39,8 +41,10 @@ export function WebDavRestorePlanDialog({
   const { locale, t } = useI18n();
   const titleId = useId();
   const descriptionId = useId();
-  const addedCount = plan.diffs.reduce((sum, diff) => sum + diff.addedCount, 0);
-  const preservedCount = plan.diffs.reduce((sum, diff) => sum + diff.preservedCount, 0);
+  const addedCount = plan.diffs.reduce((sum, diff) => sum + diff.addedCount, 0)
+    + plan.projectActions.filter((action) => action.action === 'create').length;
+  const preservedCount = plan.diffs.reduce((sum, diff) => sum + diff.preservedCount, 0)
+    + plan.projectActions.filter((action) => action.action === 'reuse').length;
   const destructiveDiffs = plan.diffs.filter((diff) => (
     diff.overwrittenCount > 0 || diff.removedCount > 0
   ));
@@ -123,6 +127,32 @@ export function WebDavRestorePlanDialog({
               value={preservedCount}
             />
           </div>
+
+          {plan.projectActions.length ? (
+            <section className="settings-webdav-restore-projects">
+              <div className="settings-webdav-restore-projects__heading">
+                <strong>{t('settings.sync.restore.projectsTitle')}</strong>
+                <small>{t('settings.sync.restore.projectsDescription')}</small>
+              </div>
+              <div className="settings-webdav-restore-projects__list">
+                {plan.projectActions.map((action) => (
+                  <div key={action.sourceProjectId} className="settings-webdav-restore-project">
+                    <span aria-hidden="true">
+                      {action.action === 'reuse' ? <Folder size={15} /> : <FolderPlus size={15} />}
+                    </span>
+                    <div>
+                      <strong>{action.name}</strong>
+                      <small>{t(action.action === 'reuse'
+                        ? action.directoryBound
+                          ? 'settings.sync.restore.projectReuseBound'
+                          : 'settings.sync.restore.projectReuseUnbound'
+                        : 'settings.sync.restore.projectCreate')}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section className="settings-webdav-restore-changes">
             <div className="settings-webdav-restore-changes__heading">

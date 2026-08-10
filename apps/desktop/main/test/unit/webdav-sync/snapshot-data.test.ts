@@ -7,6 +7,7 @@ import {
   inventorySnapshotSources,
   prepareLocalSnapshotSources,
 } from '../../../src/webdav-sync/snapshot-data.js';
+import { parsePortableProjectCatalog } from '../../../src/webdav-sync/portable-projects.js';
 
 const temporaryRoots: string[] = [];
 
@@ -86,6 +87,42 @@ describe('WebDAV portable snapshot data', () => {
       stagingRoot: path.join(root, '.webdav-sync-work', 'unsafe'),
       categories: ['conversations'],
     })).rejects.toThrow('符号链接');
+  });
+
+  it('backs up project identity without leaking the device-local folder binding', async () => {
+    const root = await createDataRoot();
+    const localWorkspace = path.join(root, 'private', 'workspace');
+    await mkdir(localWorkspace, { recursive: true });
+    await writeFile(path.join(root, 'runtime', 'projects.json'), JSON.stringify({
+      version: 1,
+      projects: [{
+        id: 'project_portable',
+        name: 'Portable',
+        path: localWorkspace,
+        gitRoot: localWorkspace,
+        createdAt: '2026-08-01T00:00:00.000Z',
+        updatedAt: '2026-08-02T00:00:00.000Z',
+      }],
+    }));
+
+    const sources = await prepareLocalSnapshotSources({
+      dataRoot: root,
+      stagingRoot: path.join(root, '.webdav-sync-work', 'projects'),
+      categories: ['conversations'],
+    });
+    const catalog = sources.find((source) => source.kind === 'project-catalog');
+    expect(catalog).toMatchObject({
+      category: 'conversations',
+      logicalPath: 'portable/projects.json',
+      label: '项目关联',
+    });
+    expect(catalog?.data?.toString('utf8')).not.toContain(localWorkspace);
+    expect(parsePortableProjectCatalog(catalog!.data!)).toEqual([{
+      id: 'project_portable',
+      name: 'Portable',
+      createdAt: '2026-08-01T00:00:00.000Z',
+      updatedAt: '2026-08-02T00:00:00.000Z',
+    }]);
   });
 });
 

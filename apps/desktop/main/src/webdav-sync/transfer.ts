@@ -27,6 +27,10 @@ import {
   type EncryptedWebDavRepository,
   snapshotSummary,
 } from './repository.js';
+import {
+  parsePortableProjectCatalog,
+  type PortableProjectRecord,
+} from './portable-projects.js';
 
 export type WebDavTransferProgress = {
   phase: 'snapshotting' | 'encrypting' | 'uploading' | 'downloading' | 'inspecting';
@@ -179,15 +183,20 @@ export async function downloadSnapshotForRestore(input: {
   workRoot: string;
   signal?: AbortSignal;
   onProgress?: (progress: WebDavTransferProgress) => void;
-}): Promise<{ secretsBuffer?: Buffer }> {
+}): Promise<{ secretsBuffer?: Buffer; portableProjects: PortableProjectRecord[] }> {
   const selected = new Set(input.categories);
-  const items = input.manifest.items.filter((item) => selected.has(item.category));
+  const needsProjectCatalog = selected.has('conversations') || selected.has('memories');
+  const items = input.manifest.items.filter((item) => (
+    selected.has(item.category) || (needsProjectCatalog && item.kind === 'project-catalog')
+  ));
   const totalBytes = items.reduce((sum, item) => sum + item.size, 0);
   const restoredCredentialItems: Array<{
     kind: WebDavSnapshotManifestItem['kind'];
     credentialId?: string;
     data: Buffer;
   }> = [];
+  let portableProjects: PortableProjectRecord[] = [];
+  let projectCatalogFound = false;
   let completedBytes = 0;
   try {
     for (let index = 0; index < items.length; index += 1) {
@@ -222,11 +231,18 @@ export async function downloadSnapshotForRestore(input: {
         const data = input.repository.decryptSmallObject(input.manifest, item, encrypted);
         try {
           assertItemIntegrity(item, { sha256: sha256Buffer(data), size: data.byteLength });
-          restoredCredentialItems.push({
-            kind: item.kind,
-            ...(item.credentialId ? { credentialId: item.credentialId } : {}),
-            data,
-          });
+          if (item.kind === 'project-catalog') {
+            if (projectCatalogFound) throw new Error('备份包含重复的项目清单。');
+            projectCatalogFound = true;
+            portableProjects = parsePortableProjectCatalog(data);
+            data.fill(0);
+          } else {
+            restoredCredentialItems.push({
+              kind: item.kind,
+              ...(item.credentialId ? { credentialId: item.credentialId } : {}),
+              data,
+            });
+          }
         } catch (error) {
           data.fill(0);
           throw error;
@@ -234,10 +250,35 @@ export async function downloadSnapshotForRestore(input: {
       }
       completedBytes += item.size;
     }
-    if (!selected.has('model_credentials')) return {};
-    return { secretsBuffer: restoredSecretsBuffer(restoredCredentialItems) };
+    return {
+      portableProjects,
+      ...(selected.has('model_credentials')
+        ? { secretsBuffer: restoredSecretsBuffer(restoredCredentialItems) }
+        : {}),
+    };
   } finally {
     for (const item of restoredCredentialItems) item.data.fill(0);
+  }
+}
+
+export async function downloadSnapshotProjectCatalog(input: {
+  repository: EncryptedWebDavRepository;
+  manifest: WebDavSnapshotManifest;
+  workRoot: string;
+  signal?: AbortSignal;
+}): Promise<PortableProjectRecord[]> {
+  const item = input.manifest.items.find((candidate) => candidate.kind === 'project-catalog');
+  if (!item) return [];
+  const encryptedPath = path.join(input.workRoot, 'project-catalog', item.objectName);
+  await input.repository.downloadEncryptedObject(input.manifest, item, encryptedPath, input.signal);
+  const encrypted = await readFile(encryptedPath);
+  const data = input.repository.decryptSmallObject(input.manifest, item, encrypted);
+  try {
+    assertItemIntegrity(item, { sha256: sha256Buffer(data), size: data.byteLength });
+    return parsePortableProjectCatalog(data);
+  } finally {
+    encrypted.fill(0);
+    data.fill(0);
   }
 }
 
