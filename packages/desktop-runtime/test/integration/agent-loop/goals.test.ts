@@ -588,6 +588,11 @@ describe('agent loop persistent goals', () => {
 
       await loop.startTurn(thread.id, { input: 'Create a Goal and keep working on it.' });
       await modelClient.waitUntilAbortListenerReady();
+      await waitForTestState(
+        () => threadStore.listEvents(thread.id, 0),
+        (events) => events.some((event) => event.type === 'token.count'),
+        (events) => `Timed out waiting for founding-turn usage; events=${JSON.stringify(events)}`,
+      );
       expect((await threadStore.getThread(thread.id))?.goal).toMatchObject({
         objective: 'Pause the founding regular turn',
         status: 'active',
@@ -596,13 +601,33 @@ describe('agent loop persistent goals', () => {
       await loop.setThreadGoal(thread.id, { status: 'paused' });
       await waitForModelAbort(modelClient);
       await loop.shutdown();
+      const saved = await threadStore.getThread(thread.id);
+      const events = await threadStore.listEvents(thread.id, 0);
 
       expect(modelClient.requests).toHaveLength(2);
-      expect((await threadStore.getThread(thread.id))?.goal).toMatchObject({
+      expect(saved?.goal).toMatchObject({
         objective: 'Pause the founding regular turn',
         status: 'paused',
+        tokensUsed: 5,
         stopReason: { code: 'userPaused' },
       });
+      expect(saved?.messages).toContainEqual(expect.objectContaining({
+        goalMode: expect.objectContaining({
+          kind: 'paused',
+          goal: expect.objectContaining({ tokensUsed: 5 }),
+        }),
+      }));
+      expect(events).toContainEqual(expect.objectContaining({
+        type: 'thread.goal_updated',
+        payload: expect.objectContaining({
+          lifecycleMessage: expect.objectContaining({
+            goalMode: expect.objectContaining({ kind: 'paused' }),
+          }),
+        }),
+      }));
+      expect(events.some((event) => (
+        event.type === 'message.created' && event.payload.message.goalMode?.kind === 'paused'
+      ))).toBe(false);
     });
 
   it('retains Goal revision bindings while shutdown drains an edited turn', async () => {

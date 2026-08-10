@@ -11,8 +11,6 @@ import {
   type RuntimeTaskKind,
   type RuntimeThreadGoal,
   type RuntimeThreadGoalPatch,
-  type RuntimeThreadGoalStatus,
-  type RuntimeThreadGoalStopReason,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -95,6 +93,7 @@ export class RuntimeGoalCoordinator {
   private readonly goalIdByTurnId = new Map<string, string>();
   private readonly goalObjectiveByTurnId = new Map<string, string>();
   private readonly pendingCompletionGoalIdByTurnId = new Map<string, string>();
+  private readonly deferredLifecycleGoalIdByTurnId = new Map<string, string>();
   private readonly retiredGoalIds = new Set<string>();
   private readonly supersededGoalTurnIds = new Set<string>();
   private readonly suppressCancellationPauseThreads = new Set<string>();
@@ -186,6 +185,7 @@ export class RuntimeGoalCoordinator {
       this.supersedePendingGoalTurns(goal.id);
     }
     const active = this.options.activeTask(threadId);
+    const registered = this.options.registeredTask(threadId) ?? active;
     const replacingActiveGoal = Boolean(
       previous
       && previous.id !== goal.id
@@ -197,6 +197,15 @@ export class RuntimeGoalCoordinator {
       await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
     }
 
+    const lifecycleKind = goalLifecycleTransition(previous, goal);
+    const deferredLifecycleTurnId = lifecycleKind
+      && goal.status !== 'active'
+      && options.publishLifecycle !== false
+      && options.cancelActiveGoalTurn !== false
+      && registered
+      && this.taskBelongsToGoal(registered, goal.id)
+      ? registered.turnId
+      : undefined;
     await this.publishGoal(goal, {
       preserveExecution: Boolean(
         previous?.id === goal.id
@@ -206,8 +215,9 @@ export class RuntimeGoalCoordinator {
     });
     if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
 
-    const lifecycleKind = goalLifecycleTransition(previous, goal);
-    if (lifecycleKind && options.publishLifecycle !== false) {
+    if (deferredLifecycleTurnId) {
+      this.deferredLifecycleGoalIdByTurnId.set(deferredLifecycleTurnId, goal.id);
+    } else if (lifecycleKind && options.publishLifecycle !== false) {
       await this.publishLifecycle(goal, lifecycleKind, options.lifecycleTurnId);
     }
 
@@ -366,10 +376,17 @@ export class RuntimeGoalCoordinator {
       const thread = await this.requireThread(threadId);
       const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
       if (goal?.status === 'active') {
-        await this.updateStatus(goal, 'paused', {
+        const task = this.options.registeredTask(threadId) ?? this.options.activeTask(threadId);
+        const updated = withGoalStatus(goal, 'paused', this.options.clock.now(), {
           code: 'turnCancelled',
           message: 'Goal paused because its active turn was cancelled.',
-        }, 'paused');
+        });
+        await this.publishGoal(updated, { preserveExecution: Boolean(goal.execution) });
+        if (task && this.taskBelongsToGoal(task, goal.id)) {
+          this.deferredLifecycleGoalIdByTurnId.set(task.turnId, goal.id);
+        } else {
+          await this.publishLifecycle(updated, 'paused');
+        }
       }
     });
   }
@@ -410,6 +427,7 @@ export class RuntimeGoalCoordinator {
       this.goalIdByTurnId.delete(turnId);
       this.goalObjectiveByTurnId.delete(turnId);
       this.pendingCompletionGoalIdByTurnId.delete(turnId);
+      this.deferredLifecycleGoalIdByTurnId.delete(turnId);
       this.supersededGoalTurnIds.delete(turnId);
       if (settledGoalId) this.retiredGoalIds.delete(settledGoalId);
       pending.delete(settlement);
@@ -632,10 +650,14 @@ export class RuntimeGoalCoordinator {
     if (observedGoalObjective && observedGoalObjective !== goal.objective) {
       // An edit keeps Goal identity but changes the work contract. Preserve time/usage from the
       // already-running turn without letting its stale result complete, block, or score the edit.
-      await this.publishGoal({
+      const updated = {
         ...accounted,
         updatedAt: epochSeconds(this.options.clock.now()),
-      }, { preserveExecution: Boolean(accounted.execution) });
+      };
+      await this.publishGoal(updated, {
+        preserveExecution: Boolean(updated.execution),
+        lifecycleMessage: this.deferredLifecycleMessage(updated, turnId),
+      });
       if (accounted.status === 'active') await this.continueIfIdle(threadId);
       return;
     }
@@ -688,28 +710,18 @@ export class RuntimeGoalCoordinator {
       && pendingCompletionGoalId === updated.id
       ? goalLifecycleMessage(updated, 'complete', this.options.ids, this.options.clock, turnId)
       : undefined;
-    // Completion and its final accounted marker share one event so replay cannot observe only one.
+    const lifecycleMessage = completionLifecycleMessage ?? this.deferredLifecycleMessage(updated, turnId);
+    // Deferred control and completion markers share the final accounted event with their state.
     await this.publishGoal(updated, {
       preserveExecution: Boolean(updated.execution),
-      lifecycleMessage: completionLifecycleMessage,
+      lifecycleMessage,
     });
-    if (!completionLifecycleMessage && updated.status !== goal.status && updated.status !== 'active') {
+    if (!lifecycleMessage && updated.status !== goal.status && updated.status !== 'active') {
       await this.publishLifecycle(updated, lifecycleKindForStatus(updated.status), turnId);
     }
     if (updated.status === 'active') {
       await this.continueIfIdle(threadId);
     }
-  }
-
-  private async updateStatus(
-    goal: RuntimeThreadGoal,
-    status: RuntimeThreadGoalStatus,
-    stopReason?: RuntimeThreadGoalStopReason,
-    lifecycleKind?: RuntimeGoalLifecycleKind,
-  ): Promise<void> {
-    const updated = withGoalStatus(goal, status, this.options.clock.now(), stopReason);
-    await this.publishGoal(updated, { preserveExecution: Boolean(goal.execution) });
-    if (lifecycleKind) await this.publishLifecycle(updated, lifecycleKind);
   }
 
   private async publishLifecycle(
@@ -729,6 +741,12 @@ export class RuntimeGoalCoordinator {
       createdAt: message.createdAt,
       payload: { message },
     });
+  }
+
+  private deferredLifecycleMessage(goal: RuntimeThreadGoal, turnId: string): RuntimeMessage | undefined {
+    return goal.status !== 'active' && this.deferredLifecycleGoalIdByTurnId.get(turnId) === goal.id
+      ? goalLifecycleMessage(goal, lifecycleKindForStatus(goal.status), this.options.ids, this.options.clock, turnId)
+      : undefined;
   }
 
   private async publishGoal(

@@ -152,7 +152,11 @@ export class RegularTurnCreatesPersistentGoalModelClient implements ModelClient 
 /** Holds the founding regular turn open after create_goal so pause semantics can be exercised. */
 export class RegularTurnCreatesCancellableGoalModelClient implements ModelClient {
   requests: ModelRequest[] = [];
-  private readonly cancellable = new CancellableModelClient();
+  private readonly cancellable = new CancellableModelClient({
+    inputTokens: 3,
+    outputTokens: 2,
+    totalTokens: 5,
+  });
 
   get aborted(): boolean {
     return this.cancellable.aborted;

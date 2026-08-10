@@ -79,6 +79,21 @@ export function applyChatComposerFocusRequest(
   if (focusRequest !== 0) onConsumed?.(focusRequest);
 }
 
+export function goalActiveTurnStartedAt(
+  thread: RuntimeThread | null | undefined,
+  activeTurnId: string | null,
+  goalId: string | undefined,
+): string | undefined {
+  if (!thread || !activeTurnId || !goalId) return undefined;
+  const turn = thread.turns?.find((candidate) => candidate.id === activeTurnId);
+  if (!turn?.startedAt) return undefined;
+  const belongsToGoal = turn.taskKind === 'goal' || thread.messages.some((message) => (
+    message.turnId === activeTurnId
+    && message.goalMode?.goal.id === goalId
+  ));
+  return belongsToGoal ? turn.startedAt : undefined;
+}
+
 export function ChatComposer({
   activeTurnId,
   activeProject,
@@ -177,13 +192,10 @@ export function ChatComposer({
   const currentGoal = currentThread?.goal?.status === 'complete'
     ? null
     : currentThread?.goal ?? null;
-  const activeGoalTurnStartedAt = useMemo(() => (
-    activeTurnId
-      ? currentThread?.turns?.find((turn) => (
-          turn.id === activeTurnId && turn.taskKind === 'goal'
-        ))?.startedAt
-      : undefined
-  ), [activeTurnId, currentThread?.turns]);
+  const activeGoalTurnStartedAt = useMemo(
+    () => goalActiveTurnStartedAt(currentThread, activeTurnId, currentGoal?.id),
+    [activeTurnId, currentGoal?.id, currentThread?.messages, currentThread?.turns],
+  );
   const modeController = useChatComposerModeController({
     activeGoal: currentGoal,
     config,

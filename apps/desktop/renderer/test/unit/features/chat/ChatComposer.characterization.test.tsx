@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyChatComposerFocusRequest,
   ChatComposer,
+  goalActiveTurnStartedAt,
 } from '../../../../src/features/chat/ChatComposer.js';
 
 const composerHarness = vi.hoisted(() => ({
@@ -104,6 +105,17 @@ describe('ChatComposer view state characterization', () => {
 
     applyChatComposerFocusRequest({ focus }, true, 0, consume);
     expect(consume).toHaveBeenCalledTimes(1);
+  });
+
+  it('times a regular turn after it binds itself to the current Goal', () => {
+    const thread = {
+      messages: [{ turnId: 'turn-1', goalMode: { goal: { id: 'goal-1' } } }],
+      turns: [{ id: 'turn-1', items: [], startedAt: '2026-08-10T00:00:00.000Z', taskKind: 'regular' }],
+    } as unknown as RuntimeThread;
+
+    expect(goalActiveTurnStartedAt(thread, 'turn-1', 'goal-1'))
+      .toBe('2026-08-10T00:00:00.000Z');
+    expect(goalActiveTurnStartedAt(thread, 'turn-1', 'goal-2')).toBeUndefined();
   });
 
   beforeEach(() => {
