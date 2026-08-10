@@ -22,6 +22,7 @@ import type {
 } from './updater.js';
 import type {
   DesktopWebDavSyncBackupResult,
+  DesktopWebDavSyncCategorySummary,
   DesktopWebDavSyncConfigureInput,
   DesktopWebDavSyncConfigureResult,
   DesktopWebDavSyncPreferencesInput,
@@ -296,6 +297,7 @@ export type SetsunaDesktopBridge = {
   };
   webdavSync: {
     getState(): Promise<DesktopWebDavSyncState>;
+    getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]>;
     configure(input: DesktopWebDavSyncConfigureInput): Promise<DesktopWebDavSyncConfigureResult>;
     updatePreferences(input: DesktopWebDavSyncPreferencesInput): Promise<DesktopWebDavSyncState>;
     /** When input is provided, verifies the draft without saving it locally. */

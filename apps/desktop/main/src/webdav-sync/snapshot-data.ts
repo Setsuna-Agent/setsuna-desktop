@@ -1,4 +1,8 @@
-import type { DesktopWebDavSyncCategoryId } from '@setsuna-desktop/contracts';
+import {
+  DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
+  type DesktopWebDavSyncCategoryId,
+  type DesktopWebDavSyncCategorySummary,
+} from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import {
@@ -40,15 +44,53 @@ type StoredModelSecrets = {
 export async function prepareLocalSnapshotSources(
   input: SnapshotSourceInput,
 ): Promise<LocalSnapshotSource[]> {
+  return collectLocalSnapshotSources(input, true);
+}
+
+export async function summarizeLocalSnapshotCategories(
+  input: SnapshotSourceInput,
+): Promise<DesktopWebDavSyncCategorySummary[]> {
+  const sources = await collectLocalSnapshotSources(input, false);
+  const summaries = new Map<DesktopWebDavSyncCategoryId, DesktopWebDavSyncCategorySummary>();
+  for (const category of DESKTOP_WEBDAV_SYNC_CATEGORY_IDS) {
+    if (input.categories.includes(category)) {
+      summaries.set(category, { id: category, itemCount: 0, totalBytes: 0 });
+    }
+  }
+  try {
+    for (const source of sources) {
+      await throwIfAborted(input.signal);
+      const summary = summaries.get(source.category);
+      if (!summary) continue;
+      summary.totalBytes += await localSourceSize(source, input.dataRoot);
+      if (source.kind !== 'project-catalog') summary.itemCount += 1;
+    }
+    return DESKTOP_WEBDAV_SYNC_CATEGORY_IDS.flatMap((category) => {
+      const summary = summaries.get(category);
+      return summary ? [{ ...summary }] : [];
+    });
+  } finally {
+    for (const source of sources) source.data?.fill(0);
+  }
+}
+
+async function collectLocalSnapshotSources(
+  input: SnapshotSourceInput,
+  snapshotDatabase: boolean,
+): Promise<LocalSnapshotSource[]> {
   const layout = desktopDataLayout(input.dataRoot);
   const categories = new Set(input.categories);
   const sources: LocalSnapshotSource[] = [];
   if (categories.has('conversations')) {
-    const databaseSnapshotPath = path.join(input.stagingRoot, 'runtime', 'threads.sqlite');
     if (await isRegularFile(layout.runtimeDatabasePath)) {
       await throwIfAborted(input.signal);
-      await createSqliteSnapshot(layout.runtimeDatabasePath, databaseSnapshotPath);
-      sources.push(fileSource('conversations', databaseSnapshotPath, 'runtime/threads.sqlite', '会话数据库'));
+      const databaseSourcePath = snapshotDatabase
+        ? path.join(input.stagingRoot, 'runtime', 'threads.sqlite')
+        : layout.runtimeDatabasePath;
+      if (snapshotDatabase) {
+        await createSqliteSnapshot(layout.runtimeDatabasePath, databaseSourcePath);
+      }
+      sources.push(fileSource('conversations', databaseSourcePath, 'runtime/threads.sqlite', '会话数据库'));
     }
     await appendDirectorySources(sources, {
       category: 'conversations',
@@ -125,6 +167,36 @@ export async function prepareLocalSnapshotSources(
     left.category.localeCompare(right.category)
     || left.logicalPath.localeCompare(right.logicalPath)
   ));
+}
+
+async function localSourceSize(source: LocalSnapshotSource, dataRoot: string): Promise<number> {
+  if (source.data) return source.data.byteLength;
+  if (!source.sourcePath) return 0;
+  const layout = desktopDataLayout(dataRoot);
+  if (source.sourcePath === layout.runtimeDatabasePath) {
+    return sqliteLogicalSize(source.sourcePath);
+  }
+  return (await lstat(source.sourcePath)).size;
+}
+
+function sqliteLogicalSize(databasePath: string): number {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const pageCount = pragmaNumber(database, 'page_count');
+    const pageSize = pragmaNumber(database, 'page_size');
+    return pageCount * pageSize;
+  } finally {
+    database.close();
+  }
+}
+
+function pragmaNumber(database: DatabaseSync, name: 'page_count' | 'page_size'): number {
+  const row = database.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
+  const value = row?.[name];
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`无法读取会话数据库 ${name}。`);
+  }
+  return value;
 }
 
 export async function inventorySnapshotSources(

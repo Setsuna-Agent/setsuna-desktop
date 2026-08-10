@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   inventorySnapshotSources,
   prepareLocalSnapshotSources,
+  summarizeLocalSnapshotCategories,
 } from '../../../src/webdav-sync/snapshot-data.js';
 import { parsePortableProjectCatalog } from '../../../src/webdav-sync/portable-projects.js';
 
@@ -87,6 +88,48 @@ describe('WebDAV portable snapshot data', () => {
       stagingRoot: path.join(root, '.webdav-sync-work', 'unsafe'),
       categories: ['conversations'],
     })).rejects.toThrow('符号链接');
+  });
+
+  it('summarizes the current local size of every sync category', async () => {
+    const root = await createDataRoot();
+    const summaries = await summarizeLocalSnapshotCategories({
+      dataRoot: root,
+      stagingRoot: path.join(root, '.webdav-sync-work', 'summary'),
+      categories: [
+        'conversations',
+        'memories',
+        'preferences',
+        'model_credentials',
+        'user_skills',
+        'usage',
+      ],
+    });
+    const byCategory = new Map(summaries.map((summary) => [summary.id, summary]));
+
+    expect(summaries.map((summary) => summary.id)).toEqual([
+      'conversations',
+      'memories',
+      'preferences',
+      'model_credentials',
+      'user_skills',
+      'usage',
+    ]);
+    expect(byCategory.get('conversations')).toEqual(expect.objectContaining({
+      itemCount: 2,
+      totalBytes: expect.any(Number),
+    }));
+    expect(byCategory.get('preferences')).toEqual(expect.objectContaining({
+      itemCount: 1,
+      totalBytes: expect.any(Number),
+    }));
+    expect(byCategory.get('model_credentials')).toEqual({
+      id: 'model_credentials',
+      itemCount: 2,
+      totalBytes: Buffer.byteLength('sk-provider-secret') + Buffer.byteLength('sk-image-secret'),
+    });
+    expect(byCategory.get('user_skills')?.itemCount).toBe(2);
+    expect(byCategory.get('memories')).toEqual({ id: 'memories', itemCount: 0, totalBytes: 0 });
+    expect(byCategory.get('usage')).toEqual({ id: 'usage', itemCount: 0, totalBytes: 0 });
   });
 
   it('backs up project identity without leaking the device-local folder binding', async () => {

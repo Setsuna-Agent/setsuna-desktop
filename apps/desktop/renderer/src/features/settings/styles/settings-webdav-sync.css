@@ -325,6 +325,10 @@
   background: var(--app-surface-subtle);
 }
 
+.settings-webdav__category-list > label {
+  grid-template-columns: auto 28px minmax(0, 1fr) auto;
+}
+
 .settings-webdav__category-list > label.is-sensitive {
   border-color: color-mix(in srgb, var(--app-primary) 28%, var(--chat-settings-divider));
 }
@@ -339,11 +343,19 @@
   background: var(--app-surface-muted);
 }
 
-.settings-webdav__category-list > label > span:last-child,
+.settings-webdav__category-copy,
 .settings-webdav__restore-categories > label > span:last-child {
   display: grid;
   min-width: 0;
   gap: 2px;
+}
+
+.settings-webdav__category-size {
+  justify-self: end;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .settings-webdav__category-list strong,

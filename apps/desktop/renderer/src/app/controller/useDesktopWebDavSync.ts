@@ -1,5 +1,6 @@
 import type {
   DesktopWebDavSyncBackupResult,
+  DesktopWebDavSyncCategorySummary,
   DesktopWebDavSyncConfigureInput,
   DesktopWebDavSyncConfigureResult,
   DesktopWebDavSyncPreferencesInput,
@@ -68,6 +69,11 @@ export function useDesktopWebDavSync() {
       run((api) => api.configure(input), (result) => result.state),
     [run],
   );
+  const getLocalCategorySummaries = useCallback(
+    (): Promise<DesktopWebDavSyncCategorySummary[]> =>
+      run((api) => api.getLocalCategorySummaries()),
+    [run],
+  );
   const updatePreferences = useCallback(
     (input: DesktopWebDavSyncPreferencesInput) =>
       run((api) => api.updatePreferences(input), (result) => result),
@@ -111,6 +117,7 @@ export function useDesktopWebDavSync() {
     configure,
     disconnect,
     error,
+    getLocalCategorySummaries,
     inspectRestore,
     listSnapshots,
     loading,

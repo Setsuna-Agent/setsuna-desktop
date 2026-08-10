@@ -180,6 +180,7 @@ const updater: SetsunaDesktopBridge['updater'] = {
 
 const webdavSync: SetsunaDesktopBridge['webdavSync'] = {
   getState: () => ipcRenderer.invoke('webdav-sync:get-state'),
+  getLocalCategorySummaries: () => ipcRenderer.invoke('webdav-sync:get-local-category-summaries'),
   configure: (input) => ipcRenderer.invoke('webdav-sync:configure', input),
   updatePreferences: (input) => ipcRenderer.invoke('webdav-sync:update-preferences', input),
   testConnection: (input) => ipcRenderer.invoke('webdav-sync:test', input),

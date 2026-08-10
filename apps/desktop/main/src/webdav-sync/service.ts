@@ -1,5 +1,7 @@
 import {
+  DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
   type DesktopWebDavSyncBackupResult,
+  type DesktopWebDavSyncCategorySummary,
   type DesktopWebDavSyncConfigureInput,
   type DesktopWebDavSyncConfigureResult,
   type DesktopWebDavSyncOperationKind,
@@ -30,6 +32,7 @@ import {
 } from './normalization.js';
 import { EncryptedWebDavRepository } from './repository.js';
 import { readLocalProjects } from './portable-projects.js';
+import { summarizeLocalSnapshotCategories } from './snapshot-data.js';
 import {
   applyRestoredSnapshot,
   assertRestorePlanCurrent,
@@ -100,6 +103,19 @@ export class WebDavSyncService {
   async getState(): Promise<DesktopWebDavSyncState> {
     const config = await this.options.configStore.getConfig();
     return this.stateFromConfig(config);
+  }
+
+  async getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]> {
+    const workRoot = await this.createWorkRoot('summary');
+    try {
+      return await summarizeLocalSnapshotCategories({
+        dataRoot: this.options.dataRoot,
+        categories: DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
+        stagingRoot: path.join(workRoot, 'local-snapshot'),
+      });
+    } finally {
+      await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   subscribe(listener: (state: DesktopWebDavSyncState) => void): () => void {

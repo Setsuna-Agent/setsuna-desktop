@@ -13,6 +13,7 @@ export function registerWebDavSyncIpc(
 ): () => void {
   const channels = [
     'webdav-sync:get-state',
+    'webdav-sync:get-local-category-summaries',
     'webdav-sync:configure',
     'webdav-sync:update-preferences',
     'webdav-sync:test',
@@ -25,6 +26,8 @@ export function registerWebDavSyncIpc(
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
   ipcMain.handle('webdav-sync:get-state', async () => service.getState());
+  ipcMain.handle('webdav-sync:get-local-category-summaries', async () =>
+    service.getLocalCategorySummaries());
   ipcMain.handle('webdav-sync:configure', async (_event, value) => service.configure(configureInput(value)));
   ipcMain.handle('webdav-sync:update-preferences', async (_event, value) =>
     service.updatePreferences(preferencesInput(value)));

@@ -1,6 +1,7 @@
 import {
   DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
   type DesktopWebDavSyncCategoryId,
+  type DesktopWebDavSyncCategorySummary,
   type DesktopWebDavSyncSnapshotSummary,
 } from '@setsuna-desktop/contracts';
 import {
@@ -32,6 +33,9 @@ export function WebDavSyncSettings() {
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [backup, setBackup] = useState<DesktopWebDavSyncSnapshotSummary | null>(null);
+  const [localCategorySummaries, setLocalCategorySummaries] = useState<
+    DesktopWebDavSyncCategorySummary[] | null
+  >(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -43,13 +47,19 @@ export function WebDavSyncSettings() {
     setBackup(result.snapshots[0] ?? null);
   }, [sync.listSnapshots]);
 
+  const refreshLocalCategorySummaries = useCallback(async () => {
+    setLocalCategorySummaries(await sync.getLocalCategorySummaries());
+  }, [sync.getLocalCategorySummaries]);
+
   useEffect(() => {
     if (!state?.configured) {
       setBackup(null);
+      setLocalCategorySummaries(null);
       return;
     }
     void refreshBackup().catch(() => undefined);
-  }, [refreshBackup, state?.configured]);
+    void refreshLocalCategorySummaries().catch(() => undefined);
+  }, [refreshBackup, refreshLocalCategorySummaries, state?.configured]);
 
   if (sync.loading) return <EmptyState title={t('common.loading')} />;
   if (!state) {
@@ -87,6 +97,10 @@ export function WebDavSyncSettings() {
     await sync.backupNow();
     await refreshBackup();
   };
+
+  const localCategoryBytes = new Map(
+    localCategorySummaries?.map((summary) => [summary.id, summary.totalBytes]) ?? [],
+  );
 
   return (
     <div className="chat-user-settings__section settings-webdav">
@@ -229,9 +243,14 @@ export function WebDavSyncSettings() {
               <span className="settings-webdav__category-icon">
                 {category === 'model_credentials' ? <LockKeyhole size={15} /> : <Cloud size={15} />}
               </span>
-              <span>
+              <span className="settings-webdav__category-copy">
                 <strong>{t(webDavCategoryCopy[category].labelKey)}</strong>
                 <small>{t(webDavCategoryCopy[category].descriptionKey)}</small>
+              </span>
+              <span className="settings-webdav__category-size">
+                {localCategoryBytes.has(category)
+                  ? formatSyncBytes(localCategoryBytes.get(category)!, locale)
+                  : '—'}
               </span>
             </label>
           ))}
