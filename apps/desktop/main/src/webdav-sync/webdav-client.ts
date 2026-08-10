@@ -352,11 +352,11 @@ function decodePathname(value: string): string {
 
 function decodeXmlText(value: string): string {
   return value
-    .replaceAll('&amp;', '&')
     .replaceAll('&lt;', '<')
     .replaceAll('&gt;', '>')
     .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'");
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
 }
 
 function requireSafeRemoteSegment(value: string): string {

@@ -11,7 +11,26 @@ afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
-describe('WebDavClient response limits', () => {
+describe('WebDavClient', () => {
+  it('decodes XML entities once when listing remote paths', async () => {
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      async () => new Response(`<?xml version="1.0" encoding="utf-8"?>
+        <d:multistatus xmlns:d="DAV:">
+          <d:response>
+            <d:href>/dav/Backups/literal&amp;lt;name</d:href>
+            <d:propstat><d:prop><d:resourcetype /></d:prop></d:propstat>
+          </d:response>
+        </d:multistatus>`, { status: 207 }),
+    );
+
+    await expect(client.list([])).resolves.toEqual([{
+      name: 'literal&lt;name',
+      collection: false,
+    }]);
+  });
+
   it('stops streaming metadata once the configured limit is exceeded', async () => {
     const client = new WebDavClient(
       normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),

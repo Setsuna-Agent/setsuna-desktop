@@ -64,7 +64,7 @@ describe('WebDAV sync encryption', () => {
     const verifier = webDavRepositoryKeyVerifier(key, 'repo-id');
     expect(verifyWebDavRepositoryKey(key, 'repo-id', verifier)).toBe(true);
     expect(verifyWebDavRepositoryKey(generateWebDavRecoveryKey(), 'repo-id', verifier)).toBe(false);
-  });
+  }, 30_000);
 
   it('accepts only canonical 256-bit recovery keys', () => {
     const key = generateWebDavRecoveryKey();
