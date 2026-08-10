@@ -532,7 +532,7 @@ export class RuntimeGoalCoordinator {
     )))];
     return terminalTurnIds.reduce((accounted, turnId) => {
       const turnEvents = events.filter((event) => event.turnId === turnId);
-      return restoredTurnBelongsToGoal(turnEvents)
+      return restoredTurnBelongsToGoal(events, turnEvents, checkpoint.payload.goal)
         ? accountGoalTurn(accounted, turnEvents, this.options.clock.now())
         : accounted;
     }, goal);
@@ -827,15 +827,36 @@ export class RuntimeGoalCoordinator {
   }
 }
 
-function restoredTurnBelongsToGoal(events: RuntimeEvent[]): boolean {
-  return events.some((event) => (
-    event.type === 'turn.started'
-    && event.payload.taskKind === 'goal'
-  )) || events.some((event) => (
-    event.type === 'tool.completed'
-    && event.payload.toolName === 'create_goal'
-    && event.payload.status === 'success'
+function restoredTurnBelongsToGoal(
+  allEvents: RuntimeEvent[],
+  turnEvents: RuntimeEvent[],
+  goal: RuntimeThreadGoal,
+): boolean {
+  const lifecycleEvent = [...turnEvents].reverse().find((event) => (
+    event.type === 'message.created'
+    && event.payload.message.goalMode
   ));
+  let owner = lifecycleEvent?.type === 'message.created'
+    ? lifecycleEvent.payload.message.goalMode?.goal
+    : undefined;
+  if (!owner) {
+    const started = turnEvents.find((event) => event.type === 'turn.started');
+    if (started?.type !== 'turn.started' || started.payload.taskKind !== 'goal') return false;
+    const precedingGoalUpdate = [...allEvents].reverse().find((event) => (
+      event.seq < started.seq
+      && event.type === 'thread.goal_updated'
+    ));
+    owner = precedingGoalUpdate?.type === 'thread.goal_updated'
+      ? precedingGoalUpdate.payload.goal
+      : undefined;
+  }
+  if (!owner) return false;
+  const ownerId = (owner as RuntimeThreadGoal & { id?: unknown }).id;
+  const currentId = (goal as RuntimeThreadGoal & { id?: unknown }).id;
+  // Snapshots written before Goal identities existed can only be matched by their objective.
+  return typeof currentId === 'string' && currentId.trim()
+    ? ownerId === currentId
+    : owner.objective === goal.objective;
 }
 
 function goalToolResult(

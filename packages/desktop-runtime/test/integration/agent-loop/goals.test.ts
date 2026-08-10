@@ -127,11 +127,48 @@ describe('agent loop persistent goals', () => {
       }));
     });
 
-  it('pauses an active restored goal instead of silently continuing after restart', async () => {
+  it('accounts only the current Goal turn before pausing it after restart', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Restored goal' });
       const modelClient = new CancellableModelClient();
+      const replacedTurnId = 'turn_replaced_goal';
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'thread.goal_updated',
+        createdAt: systemClock.now().toISOString(),
+        payload: {
+          goal: {
+            version: 1,
+            id: 'goal_replaced',
+            threadId: thread.id,
+            objective: 'Do not charge this work to the replacement',
+            status: 'active',
+            tokenBudget: null,
+            tokensUsed: 0,
+            timeUsedSeconds: 0,
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        },
+      });
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: replacedTurnId,
+        type: 'turn.started',
+        createdAt: '2026-08-10T00:00:00.000Z',
+        payload: { input: 'Continue the replaced goal.', taskKind: 'goal' },
+      });
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: replacedTurnId,
+        type: 'token.count',
+        createdAt: '2026-08-10T00:00:01.000Z',
+        payload: { usage: { inputTokens: 50, outputTokens: 49, totalTokens: 99 } },
+      });
       await threadStore.appendEvent(thread.id, {
         id: ids.id('event'),
         threadId: thread.id,
@@ -151,6 +188,15 @@ describe('agent loop persistent goals', () => {
             updatedAt: 2,
           },
         },
+      });
+      // The replaced turn can finish after the current Goal checkpoint when cancellation races replacement.
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        turnId: replacedTurnId,
+        type: 'turn.cancelled',
+        createdAt: '2026-08-10T00:00:02.000Z',
+        payload: { reason: 'Replaced by a newer Goal.', taskKind: 'goal' },
       });
       const staleTurnId = 'turn_restored_goal';
       await threadStore.appendEvent(thread.id, {
