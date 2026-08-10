@@ -96,6 +96,7 @@ export class RuntimeGoalCoordinator {
   private readonly goalObjectiveByTurnId = new Map<string, string>();
   private readonly pendingCompletionGoalIdByTurnId = new Map<string, string>();
   private readonly retiredGoalIds = new Set<string>();
+  private readonly supersededGoalTurnIds = new Set<string>();
   private readonly suppressCancellationPauseThreads = new Set<string>();
   private readonly mutationTails = new Map<string, Promise<void>>();
   private stopped = false;
@@ -105,10 +106,6 @@ export class RuntimeGoalCoordinator {
   shutdown(): void {
     this.stopped = true;
     this.scheduling.clear();
-    this.goalIdByTurnId.clear();
-    this.goalObjectiveByTurnId.clear();
-    this.pendingCompletionGoalIdByTurnId.clear();
-    this.retiredGoalIds.clear();
   }
 
   async getGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
@@ -197,7 +194,11 @@ export class RuntimeGoalCoordinator {
     }
 
     await this.publishGoal(goal, {
-      preserveExecution: Boolean(previous?.execution && goal.execution),
+      preserveExecution: Boolean(
+        previous?.id === goal.id
+        && previous.execution
+        && goal.execution
+      ),
     });
     if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
 
@@ -353,6 +354,9 @@ export class RuntimeGoalCoordinator {
         return;
       }
       if (goal.status === 'complete') throw new Error('A completed goal cannot be resumed. Create a new goal instead.');
+      for (const [turnId, goalId] of this.goalIdByTurnId) {
+        if (goalId === goal.id) this.supersededGoalTurnIds.add(turnId);
+      }
       await this.setGoalUnlocked(threadId, { status: 'active' }, {});
     });
   }
@@ -408,6 +412,7 @@ export class RuntimeGoalCoordinator {
       this.goalIdByTurnId.delete(turnId);
       this.goalObjectiveByTurnId.delete(turnId);
       this.pendingCompletionGoalIdByTurnId.delete(turnId);
+      this.supersededGoalTurnIds.delete(turnId);
       if (settledGoalId) this.retiredGoalIds.delete(settledGoalId);
       pending.delete(settlement);
       if (!pending.size && this.pendingSettlements.get(threadId) === pending) {
@@ -423,6 +428,15 @@ export class RuntimeGoalCoordinator {
   async waitForThreadDeletionPause(threadId: string): Promise<void> {
     for (;;) {
       const pending = [...(this.pendingSettlements.get(threadId) ?? [])];
+      if (!pending.length) return;
+      await Promise.all(pending);
+    }
+  }
+
+  /** Waits for post-turn Goal accounting after the underlying turn tasks have drained. */
+  async waitForSettlements(): Promise<void> {
+    for (;;) {
+      const pending = [...this.pendingSettlements.values()].flatMap((settlements) => [...settlements]);
       if (!pending.length) return;
       await Promise.all(pending);
     }
@@ -532,6 +546,7 @@ export class RuntimeGoalCoordinator {
       || this.deletionPausedThreads.has(threadId)
       || this.scheduling.has(threadId)
       || this.options.activeTask(threadId)
+      || this.options.registeredTask(threadId)
     ) return;
     this.scheduling.add(threadId);
     try {
@@ -542,6 +557,7 @@ export class RuntimeGoalCoordinator {
         || !goal
         || goal.status !== 'active'
         || this.options.activeTask(threadId)
+        || this.options.registeredTask(threadId)
       ) return;
       // Explicit user work and unresolved Plan confirmation always beat autonomous continuation.
       if (await this.options.hasQueuedInput?.(threadId)) return;
@@ -605,6 +621,16 @@ export class RuntimeGoalCoordinator {
     if (observedGoalId && observedGoalId !== goal.id) return;
 
     const accounted = accountGoalTurn(goal, events, this.options.clock.now());
+    if (this.supersededGoalTurnIds.has(turnId)) {
+      // A user resumed this Goal while the cancelled turn was still settling. Keep the explicit
+      // active state, account only the old turn, then launch the deferred continuation.
+      await this.publishGoal({
+        ...accounted,
+        updatedAt: epochSeconds(this.options.clock.now()),
+      }, { preserveExecution: Boolean(accounted.execution) });
+      if (accounted.status === 'active') await this.continueIfIdle(threadId);
+      return;
+    }
     if (observedGoalObjective && observedGoalObjective !== goal.objective) {
       // An edit keeps Goal identity but changes the work contract. Preserve time/usage from the
       // already-running turn without letting its stale result complete, block, or score the edit.
@@ -659,12 +685,17 @@ export class RuntimeGoalCoordinator {
       safety,
       updatedAt: epochSeconds(this.options.clock.now()),
     };
-    await this.publishGoal(updated, { preserveExecution: Boolean(updated.execution) });
     const pendingCompletionGoalId = this.pendingCompletionGoalIdByTurnId.get(turnId);
-    if (updated.status === 'complete' && pendingCompletionGoalId === updated.id) {
-      // The lifecycle snapshot must include the final response's token/time accounting.
-      await this.publishLifecycle(updated, 'complete', turnId);
-    } else if (updated.status !== goal.status && updated.status !== 'active') {
+    const completionLifecycleMessage = updated.status === 'complete'
+      && pendingCompletionGoalId === updated.id
+      ? goalLifecycleMessage(updated, 'complete', this.options.ids, this.options.clock, turnId)
+      : undefined;
+    // Completion and its final accounted marker share one event so replay cannot observe only one.
+    await this.publishGoal(updated, {
+      preserveExecution: Boolean(updated.execution),
+      lifecycleMessage: completionLifecycleMessage,
+    });
+    if (!completionLifecycleMessage && updated.status !== goal.status && updated.status !== 'active') {
       await this.publishLifecycle(updated, lifecycleKindForStatus(updated.status), turnId);
     }
     if (updated.status === 'active') {
@@ -705,6 +736,7 @@ export class RuntimeGoalCoordinator {
   private async publishGoal(
     goal: RuntimeThreadGoal,
     options: {
+      lifecycleMessage?: RuntimeMessage;
       preserveExecution?: boolean;
       queuedInputId?: string;
       sourceMessage?: RuntimeMessage;
@@ -721,6 +753,7 @@ export class RuntimeGoalCoordinator {
       createdAt: this.options.clock.now().toISOString(),
       payload: {
         goal: snapshot,
+        ...(options.lifecycleMessage ? { lifecycleMessage: options.lifecycleMessage } : {}),
         ...(options.preserveExecution ? { preserveExecution: true } : {}),
         ...(options.queuedInputId ? { queuedInputId: options.queuedInputId } : {}),
         ...(options.sourceMessage ? { sourceMessage: options.sourceMessage } : {}),

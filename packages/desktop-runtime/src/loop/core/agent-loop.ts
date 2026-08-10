@@ -416,6 +416,8 @@ export class AgentLoop {
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
     ));
     const drained = await this.turnTasks.drain(timeoutMs);
+    // Drain Goal observers before flushing so accounting cannot arrive after shutdown.
+    if (drained) await this.goals.waitForSettlements();
     const backgroundDrained = await memoryDrained;
     await this.eventWriter.flushAll();
     return drained && backgroundDrained;

@@ -5,6 +5,7 @@ import type { SweThreadItem, SweThreadStatus, SweTokenUsageBreakdown } from './t
 export type SweMapperState = {
   assistantStreams: Map<string, AssistantStreamState>;
   itemTranscriptMessageIds: Set<string>;
+  pendingGoalSourceMessages: Map<string, Extract<RuntimeEvent, { type: 'message.created' }>>;
   turnDiffs: Map<string, string>;
   turnStartedAtMs: Map<string, number>;
   streamItems: Map<string, SweThreadItem>;

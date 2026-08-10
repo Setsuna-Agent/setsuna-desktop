@@ -105,6 +105,8 @@ export type RuntimeEvent =
        * 状态/计量更新不携带该字段。
        */
       sourceMessage?: RuntimeMessage;
+      /** Completion marker committed with the final accounted Goal snapshot. */
+      lifecycleMessage?: RuntimeMessage;
       /** 计量/状态更新可复用既有执行选项，避免在每轮事件中重复内联附件数据。 */
       preserveExecution?: boolean;
     }>

@@ -99,6 +99,10 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       draft.prepareMessageAppend();
       appendCreatedMessage(next, event.payload.sourceMessage, event.createdAt);
     }
+    if (event.payload.lifecycleMessage) {
+      draft.prepareMessageAppend();
+      appendCreatedMessage(next, event.payload.lifecycleMessage, event.createdAt);
+    }
     return next;
   }
 

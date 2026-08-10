@@ -146,26 +146,39 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         method: 'thread/goal/updated',
         params: { threadId: 'thread_1', turnId: 'turn_1', goal },
       }]);
-      expect(runtimeEventToSweNotifications(queuedUpdated)).toEqual([
-        {
-          method: 'item/started',
-          params: {
-            threadId: 'thread_1',
-            turnId: 'turn_1',
-            item: {
-              type: 'userMessage',
-              id: 'message_goal_source',
-              clientId: 'client_goal',
-              content: [{ type: 'text', text: 'Ship alignment.' }],
-            },
-            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
-          },
-        },
-        {
-          method: 'thread/goal/updated',
-          params: { threadId: 'thread_1', turnId: 'turn_1', goal },
-        },
+      const mapQueuedGoal = createSweNotificationMapper();
+      expect(mapQueuedGoal(queuedUpdated)).toEqual([{
+        method: 'thread/goal/updated',
+        params: { threadId: 'thread_1', turnId: 'turn_1', goal },
+      }]);
+      const startedNotifications = mapQueuedGoal({
+        id: 'event_goal_turn_started',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.started',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        payload: { input: 'Continue the active goal.', taskKind: 'goal' },
+      });
+      expect(startedNotifications.map((notification) => notification.method)).toEqual([
+        'thread/status/changed',
+        'turn/started',
+        'item/started',
       ]);
+      expect(startedNotifications[2]).toEqual({
+        method: 'item/started',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          item: {
+            type: 'userMessage',
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            content: [{ type: 'text', text: 'Ship alignment.' }],
+          },
+          startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        },
+      });
       expect(runtimeEventToSweNotifications(cleared)).toEqual([{
         method: 'thread/goal/cleared',
         params: { threadId: 'thread_1' },
