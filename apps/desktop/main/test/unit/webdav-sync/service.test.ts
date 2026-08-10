@@ -83,10 +83,12 @@ describe('WebDavSyncService', () => {
         deviceName: 'Test device',
       });
       expect(configured.recoveryKey).toMatch(/^setsuna-v1-/u);
+      expect(configured.state.operation).toBeUndefined();
       await expect(service.revealRecoveryKey()).resolves.toBe(configured.recoveryKey);
       await service.updatePreferences({ categories: ['preferences', 'model_credentials'] });
       const firstBackup = await service.backupNow();
       const backup = await service.backupNow();
+      expect(backup.state.operation).toBeUndefined();
       expect(backup.snapshot.id).not.toBe(firstBackup.snapshot.id);
       expect(backup.snapshot.categories.map((category) => category.id))
         .toEqual(['preferences', 'model_credentials']);
@@ -151,6 +153,59 @@ describe('WebDavSyncService', () => {
       service.close();
     }
   }, 15_000);
+
+  it('rolls back a newly created repository when secure local persistence fails', async () => {
+    const dataRoot = await createDataRoot();
+    const server = new MemoryWebDavServer('/dav');
+    const configPath = path.join(dataRoot, 'webdav-sync.json');
+    const runtime = {
+      prepare: async () => ({ ready: true as const, registeredTasks: 0, pendingMutations: 0 }),
+      release: async () => undefined,
+      stop: async () => undefined,
+      start: async () => undefined,
+    };
+    const failedService = new WebDavSyncService({
+      dataRoot,
+      appVersion: '0.2.1',
+      configStore: new WebDavSyncConfigStore(configPath, new RejectingCredentialVault()),
+      fetch: server.fetch,
+      runtime,
+      requestRelaunch: async () => undefined,
+    });
+    await failedService.initialize();
+    await expect(failedService.configure({
+      endpoint: 'https://dav.test/dav',
+      remoteRoot: '/Backups',
+      username: 'alice',
+      password: 'secret',
+      repositoryMode: 'create',
+    })).rejects.toThrow('安全存储不可用');
+    failedService.close();
+
+    expect([...server.files.keys()].some((remotePath) => remotePath.endsWith('/repository.json')))
+      .toBe(false);
+
+    const retryService = new WebDavSyncService({
+      dataRoot,
+      appVersion: '0.2.1',
+      configStore: new WebDavSyncConfigStore(configPath, new MemoryCredentialVault()),
+      fetch: server.fetch,
+      runtime,
+      requestRelaunch: async () => undefined,
+    });
+    await retryService.initialize();
+    try {
+      await expect(retryService.configure({
+        endpoint: 'https://dav.test/dav',
+        remoteRoot: '/Backups',
+        username: 'alice',
+        password: 'secret',
+        repositoryMode: 'create',
+      })).resolves.toMatchObject({ recoveryKey: expect.stringMatching(/^setsuna-v1-/u) });
+    } finally {
+      retryService.close();
+    }
+  });
 
   it('stops the runtime before validating the final restore inventory', async () => {
     const dataRoot = await createDataRoot();
@@ -239,4 +294,10 @@ class MemoryCredentialVault implements CredentialVault {
   async get(key: string) { return this.values.get(key); }
   async set(key: string, value: string) { this.values.set(key, value); }
   async delete(key: string) { this.values.delete(key); }
+}
+
+class RejectingCredentialVault extends MemoryCredentialVault {
+  override async set(): Promise<void> {
+    throw new Error('安全存储不可用');
+  }
 }

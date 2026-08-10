@@ -139,7 +139,7 @@ export class WebDavSyncService {
   }
 
   async configure(input: DesktopWebDavSyncConfigureInput): Promise<DesktopWebDavSyncConfigureResult> {
-    return this.runOperation('configure', 'connecting', true, async (signal) => {
+    const createdRecoveryKey = await this.runOperation('configure', 'connecting', true, async (signal) => {
       const location = normalizeWebDavLocation(input);
       const username = normalizeWebDavUsername(input.username);
       const existing = input.password === undefined
@@ -161,24 +161,42 @@ export class WebDavSyncService {
         repository = await EncryptedWebDavRepository.connect(client, recoveryKey, signal);
         await repository.testWriteAccess(signal);
       }
-      await this.options.configStore.saveConnection({
-        endpoint: location.endpoint,
-        remoteRoot: location.remoteRoot,
-        username,
-        allowInsecureHttp: input.allowInsecureHttp === true,
-        repositoryId: repository.metadata.repositoryId,
-        recoveryKey,
-        ...(input.password !== undefined ? { password } : {}),
-        ...(input.deviceName ? { deviceName: input.deviceName } : {}),
-      });
+      try {
+        await this.options.configStore.saveConnection({
+          endpoint: location.endpoint,
+          remoteRoot: location.remoteRoot,
+          username,
+          allowInsecureHttp: input.allowInsecureHttp === true,
+          repositoryId: repository.metadata.repositoryId,
+          recoveryKey,
+          ...(input.password !== undefined ? { password } : {}),
+          ...(input.deviceName ? { deviceName: input.deviceName } : {}),
+        });
+      } catch (error) {
+        if (input.repositoryMode === 'create') {
+          try {
+            // The recovery key has not reached the user yet. Remove only the
+            // metadata created by this attempt so create mode remains retryable.
+            await repository.rollbackCreation();
+          } catch (rollbackError) {
+            throw new Error('本机配置保存失败，且无法回滚刚创建的远端仓库。', {
+              cause: new AggregateError([error, rollbackError]),
+            });
+          }
+        }
+        throw error;
+      }
       this.restorePlans.clear();
       this.lastError = undefined;
       await this.scheduleAutomaticBackup();
-      return {
-        state: await this.getState(),
-        ...(input.repositoryMode === 'create' ? { recoveryKey } : {}),
-      };
+      return input.repositoryMode === 'create' ? recoveryKey : undefined;
     });
+    // runOperation publishes its final idle state before resolving. Reading
+    // state here prevents the invoke result from carrying a stale busy flag.
+    return {
+      state: await this.getState(),
+      ...(createdRecoveryKey ? { recoveryKey: createdRecoveryKey } : {}),
+    };
   }
 
   async updatePreferences(input: DesktopWebDavSyncPreferencesInput): Promise<DesktopWebDavSyncState> {
@@ -400,8 +418,9 @@ export class WebDavSyncService {
 
   private async performBackup(automatic: boolean): Promise<DesktopWebDavSyncBackupResult> {
     let succeeded = false;
+    let snapshot: DesktopWebDavSyncBackupResult['snapshot'];
     try {
-      const result = await this.runOperation('backup', 'connecting', true, async (signal) => {
+      snapshot = await this.runOperation('backup', 'connecting', true, async (signal) => {
         const config = await this.options.configStore.getConfig();
         const connection = await this.requireConnection();
         const repository = await this.repositoryFor(connection, signal);
@@ -435,17 +454,17 @@ export class WebDavSyncService {
             retained.manifest.createdAt,
           );
           this.lastError = undefined;
-          return { state: await this.getState(), snapshot: retained.summary };
+          return retained.summary;
         } finally {
           if (runtimePrepared) await this.options.runtime.release().catch(() => undefined);
           await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
         }
       });
       succeeded = true;
-      return result;
     } finally {
       await this.scheduleAutomaticBackup(automatic && !succeeded ? BUSY_AUTOMATIC_RETRY_MS : undefined);
     }
+    return { state: await this.getState(), snapshot };
   }
 
   private async connectedRepository(signal?: AbortSignal): Promise<EncryptedWebDavRepository> {

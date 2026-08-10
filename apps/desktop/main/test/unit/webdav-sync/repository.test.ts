@@ -170,6 +170,38 @@ describe('EncryptedWebDavRepository', () => {
     expect((await repository.listSnapshots()).map((record) => record.manifest.id)).toEqual([localId]);
   });
 
+  it('rejects non-portable backslashes in manifest paths instead of rewriting them', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      server.fetch,
+    );
+    const repository = await EncryptedWebDavRepository.create(client, generateWebDavRecoveryKey());
+    const snapshotId = createSnapshotId(new Date('2026-08-10T12:30:00.000Z'));
+
+    await expect(repository.publishSnapshot({
+      formatVersion: 1,
+      repositoryId: repository.metadata.repositoryId,
+      id: snapshotId,
+      deviceId: '55bc8840-ac7a-435a-b5a7-88c2e91e7d87',
+      deviceName: 'Work laptop',
+      createdAt: '2026-08-10T12:30:00.000Z',
+      appVersion: '0.2.1',
+      sourceDataRoot: '/Users/alice/Setsuna',
+      categories: ['user_skills'],
+      items: [{
+        category: 'user_skills',
+        kind: 'file',
+        logicalPath: 'runtime/user-skills/docs\\guide.md',
+        label: 'guide.md',
+        objectName: '000001.enc',
+        sha256: '0'.repeat(64),
+        size: 0,
+      }],
+    })).rejects.toThrow('路径无效');
+  });
+
   it('rejects the wrong recovery key and redirects', async () => {
     const server = new MemoryWebDavServer('/dav');
     const location = normalizeWebDavLocation({

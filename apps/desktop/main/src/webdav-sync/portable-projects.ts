@@ -150,7 +150,11 @@ export async function stageMergedProjectIndex(input: {
       name: remote.name,
       ...(local?.path ? { path: local.path } : {}),
       ...(local?.gitRoot ? { gitRoot: local.gitRoot } : {}),
-      ...(remote.archivedAt ? { archivedAt: remote.archivedAt } : {}),
+      // Reusing a project must not change whether the local project is visible.
+      // Only newly created records inherit the backup's archive state.
+      ...(local
+        ? (local.archivedAt ? { archivedAt: local.archivedAt } : {})
+        : (remote.archivedAt ? { archivedAt: remote.archivedAt } : {})),
       createdAt: remote.createdAt,
       updatedAt: remote.updatedAt,
     });

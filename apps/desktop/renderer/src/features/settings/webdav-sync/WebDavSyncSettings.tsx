@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Unplug,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useDesktopWebDavSync } from '../../../app/controller/useDesktopWebDavSync.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, EmptyState, StatusBadge, TextField } from '../../../shared/ui/primitives.js';
@@ -43,6 +43,8 @@ export function WebDavSyncSettings() {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [confirmAutomaticBackup, setConfirmAutomaticBackup] = useState(false);
   const [automaticBackupPending, setAutomaticBackupPending] = useState(false);
+  const [categoryUpdatePending, setCategoryUpdatePending] = useState(false);
+  const categoryUpdateInFlight = useRef(false);
   const [resetPending, setResetPending] = useState(false);
   const state = sync.state;
   const busy = Boolean(state?.operation);
@@ -109,6 +111,7 @@ export function WebDavSyncSettings() {
   }
 
   const updateCategory = async (category: DesktopWebDavSyncCategoryId, checked: boolean) => {
+    if (categoryUpdateInFlight.current) return;
     const categories = checked
       ? [...state.categories, category]
       : state.categories.filter((id) => id !== category);
@@ -117,7 +120,16 @@ export function WebDavSyncSettings() {
       return;
     }
     setCategoryError(null);
-    await sync.updatePreferences({ categories }).catch(() => undefined);
+    categoryUpdateInFlight.current = true;
+    setCategoryUpdatePending(true);
+    try {
+      await sync.updatePreferences({ categories });
+    } catch {
+      // The shared sync error surface displays the IPC failure.
+    } finally {
+      categoryUpdateInFlight.current = false;
+      setCategoryUpdatePending(false);
+    }
   };
 
   const runBackup = async () => {
@@ -289,7 +301,7 @@ export function WebDavSyncSettings() {
             <label key={category} className={category === 'model_credentials' ? 'is-sensitive' : ''}>
               <input
                 checked={state.categories.includes(category)}
-                disabled={busy}
+                disabled={busy || categoryUpdatePending}
                 type="checkbox"
                 onChange={(event) => void updateCategory(category, event.currentTarget.checked)}
               />

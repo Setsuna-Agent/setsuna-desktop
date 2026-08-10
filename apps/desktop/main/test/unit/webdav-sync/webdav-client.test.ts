@@ -48,6 +48,35 @@ describe('WebDavClient', () => {
       .rejects.toThrow('超过安全大小限制');
   });
 
+  it('keeps caller cancellation active while a response body is being read', async () => {
+    let markBodyRead: (() => void) | undefined;
+    const bodyRead = new Promise<void>((resolve) => { markBodyRead = resolve; });
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      async (_input, init) => {
+        const requestSignal = init?.signal;
+        return new Response(new ReadableStream<Uint8Array>({
+          start(controller) {
+            requestSignal?.addEventListener('abort', () => {
+              controller.error(requestSignal.reason);
+            }, { once: true });
+          },
+          pull() {
+            markBodyRead?.();
+          },
+        }), { status: 200 });
+      },
+    );
+    const abort = new AbortController();
+    const pending = client.getBuffer(['metadata'], { signal: abort.signal });
+    await bodyRead;
+
+    abort.abort(new Error('同步操作已取消。'));
+
+    await expect(pending).rejects.toThrow('同步操作已取消');
+  });
+
   it('turns nested transport failures into actionable diagnostics', async () => {
     const cause = Object.assign(new Error('getaddrinfo ENOTFOUND dav.invalid'), {
       code: 'ENOTFOUND',

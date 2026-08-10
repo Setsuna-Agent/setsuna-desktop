@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebDavSyncSettings } from '../../../../src/features/settings/webdav-sync/WebDavSyncSettings.js';
@@ -67,6 +67,32 @@ describe('WebDavSyncSettings', () => {
     dialog = await screen.findByRole('dialog', { name: '开启自动备份？' });
     await user.click(within(dialog).getByRole('button', { name: '确认开启' }));
     expect(updatePreferences).toHaveBeenCalledWith({ automaticBackup: true });
+  });
+
+  it('serializes category updates while the current selection is being saved', async () => {
+    const user = userEvent.setup();
+    const view = webDavSyncView();
+    let resolveUpdate: (() => void) | undefined;
+    const updatePending = new Promise<void>((resolve) => { resolveUpdate = resolve; });
+    view.updatePreferences = vi.fn(() => updatePending);
+    mocks.useDesktopWebDavSync.mockReturnValue(view);
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <WebDavSyncSettings />
+      </I18nProvider>,
+    );
+
+    const categorySection = screen.getByText('同步内容').closest('section');
+    expect(categorySection).not.toBeNull();
+    const categoryControls = within(categorySection!).getAllByRole('checkbox');
+    await user.click(within(categorySection!).getByRole('checkbox', { name: /对话与附件/u }));
+
+    expect(view.updatePreferences).toHaveBeenCalledOnce();
+    expect(categoryControls.every((control) => (control as HTMLInputElement).disabled)).toBe(true);
+    resolveUpdate?.();
+    await waitFor(() => {
+      expect(categoryControls.every((control) => !(control as HTMLInputElement).disabled)).toBe(true);
+    });
   });
 
   it('lets a connected device reveal its stored recovery key again', async () => {

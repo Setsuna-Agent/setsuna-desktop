@@ -230,12 +230,16 @@ export async function inventorySnapshotSources(
 }
 
 export function restoredFilePath(stagingRoot: string, logicalPath: string): string {
-  const normalized = logicalPath.replaceAll('\\', '/');
-  if (!normalized.startsWith('runtime/') || normalized.includes('../') || normalized.includes('/..')) {
+  if (
+    logicalPath.includes('\\')
+    || !logicalPath.startsWith('runtime/')
+    || logicalPath.includes('../')
+    || logicalPath.includes('/..')
+  ) {
     throw new Error('备份清单包含不安全的本地路径。');
   }
   const resolvedRoot = path.resolve(stagingRoot);
-  const resolved = path.resolve(resolvedRoot, ...normalized.split('/'));
+  const resolved = path.resolve(resolvedRoot, ...logicalPath.split('/'));
   if (!resolved.startsWith(`${resolvedRoot}${path.sep}`)) {
     throw new Error('备份清单路径越过了还原暂存目录。');
   }
@@ -356,6 +360,9 @@ async function appendDirectorySources(
     for (const entry of entries) {
       await throwIfAborted(input.signal);
       const relativePath = relativeRoot ? `${relativeRoot}/${entry.name}` : entry.name;
+      if (entry.name.includes('\\')) {
+        throw new Error(`同步数据包含无法跨平台还原的文件名：${input.logicalRoot}/${relativePath}`);
+      }
       const sourcePath = path.join(currentRoot, entry.name);
       if (entry.isSymbolicLink()) {
         throw new Error(`同步数据中包含不受支持的符号链接：${input.logicalRoot}/${relativePath}`);

@@ -29,13 +29,14 @@ export class WebDavClient {
   }
 
   async test(signal?: AbortSignal): Promise<void> {
-    const response = await this.request([], {
+    await this.request([], {
       method: 'PROPFIND',
       headers: { Depth: '0', 'Content-Type': 'application/xml; charset=utf-8' },
       body: propertyRequestBody,
+    }, async (response) => {
+      if (response.status === 404) return;
+      await assertWebDavStatus(response, [200, 207], '无法连接 WebDAV 服务器。');
     }, signal, true);
-    if (response.status === 404) return;
-    await assertWebDavStatus(response, [200, 207], '无法连接 WebDAV 服务器。');
   }
 
   /** Verifies authentication plus read/write/delete access without saving config. */
@@ -58,24 +59,25 @@ export class WebDavClient {
   }
 
   async exists(parts: readonly string[], signal?: AbortSignal): Promise<boolean> {
-    const response = await this.request(parts, {
+    return this.request(parts, {
       method: 'PROPFIND',
       headers: { Depth: '0', 'Content-Type': 'application/xml; charset=utf-8' },
       body: propertyRequestBody,
+    }, async (response) => {
+      if (response.status === 404) return false;
+      await assertWebDavStatus(response, [200, 207], '无法读取 WebDAV 远端路径。');
+      return true;
     }, signal);
-    if (response.status === 404) return false;
-    await assertWebDavStatus(response, [200, 207], '无法读取 WebDAV 远端路径。');
-    return true;
   }
 
   async ensureCollection(parts: readonly string[], signal?: AbortSignal): Promise<void> {
     const allParts = [...this.location.remoteRootSegments, ...parts];
     for (let index = 1; index <= allParts.length; index += 1) {
-      const response = await this.requestAbsoluteParts(allParts.slice(0, index), {
+      await this.requestAbsoluteParts(allParts.slice(0, index), {
         method: 'MKCOL',
+      }, async (response) => {
+        await assertWebDavStatus(response, [200, 201, 204, 405], '无法创建 WebDAV 远端目录。');
       }, signal, true, true);
-      if ([200, 201, 204, 405].includes(response.status)) continue;
-      await assertWebDavStatus(response, [200, 201, 204, 405], '无法创建 WebDAV 远端目录。');
     }
   }
 
@@ -84,7 +86,7 @@ export class WebDavClient {
     data: Buffer,
     options: { ifNoneMatch?: boolean; contentType?: string; signal?: AbortSignal } = {},
   ): Promise<void> {
-    const response = await this.request(parts, {
+    await this.request(parts, {
       method: 'PUT',
       headers: {
         'Content-Length': String(data.byteLength),
@@ -92,10 +94,11 @@ export class WebDavClient {
         ...(options.ifNoneMatch ? { 'If-None-Match': '*' } : {}),
       },
       body: data,
+    }, async (response) => {
+      await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
+        ? '远端备份仓库已存在。'
+        : '无法写入 WebDAV 远端文件。');
     }, options.signal, true);
-    await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
-      ? '远端备份仓库已存在。'
-      : '无法写入 WebDAV 远端文件。');
   }
 
   async putFile(
@@ -105,7 +108,7 @@ export class WebDavClient {
   ): Promise<void> {
     const fileStat = await stat(filePath);
     if (!fileStat.isFile()) throw new Error('待上传的备份对象不是普通文件。');
-    const response = await this.request(parts, {
+    await this.request(parts, {
       method: 'PUT',
       headers: {
         'Content-Length': String(fileStat.size),
@@ -114,24 +117,26 @@ export class WebDavClient {
       },
       body: createReadStream(filePath) as unknown as RequestInit['body'],
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' }, options.signal, true);
-    await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
-      ? '远端备份对象已存在。'
-      : '无法上传 WebDAV 备份对象。');
+    } as RequestInit & { duplex: 'half' }, async (response) => {
+      await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
+        ? '远端备份对象已存在。'
+        : '无法上传 WebDAV 备份对象。');
+    }, options.signal, true);
   }
 
   async getBuffer(
     parts: readonly string[],
     options: { maxBytes?: number; signal?: AbortSignal } = {},
   ): Promise<Buffer> {
-    const response = await this.request(parts, { method: 'GET' }, options.signal, true);
-    await assertWebDavStatus(response, [200], '无法下载 WebDAV 远端文件。');
-    const maxBytes = options.maxBytes ?? MAX_METADATA_BYTES;
-    const contentLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-      throw new Error('WebDAV 远端元数据超过安全大小限制。');
-    }
-    return boundedResponseBuffer(response, maxBytes, 'WebDAV 远端元数据超过安全大小限制。');
+    return this.request(parts, { method: 'GET' }, async (response) => {
+      await assertWebDavStatus(response, [200], '无法下载 WebDAV 远端文件。');
+      const maxBytes = options.maxBytes ?? MAX_METADATA_BYTES;
+      const contentLength = Number(response.headers.get('content-length'));
+      if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+        throw new Error('WebDAV 远端元数据超过安全大小限制。');
+      }
+      return boundedResponseBuffer(response, maxBytes, 'WebDAV 远端元数据超过安全大小限制。');
+    }, options.signal, true);
   }
 
   async downloadFile(
@@ -143,53 +148,55 @@ export class WebDavClient {
       onProgress?: (receivedBytes: number) => void;
     },
   ): Promise<void> {
-    const response = await this.request(parts, { method: 'GET' }, options.signal, true);
-    await assertWebDavStatus(response, [200], '无法下载 WebDAV 备份对象。');
-    if (!response.body) throw new Error('WebDAV 服务器返回了空响应。');
-    const contentLength = Number(response.headers.get('content-length'));
-    if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
-      throw new Error('WebDAV 备份对象超过清单声明的大小。');
-    }
-    let received = 0;
-    const limiter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        received += chunk.byteLength;
-        if (received > options.maxBytes) {
-          callback(new Error('WebDAV 备份对象超过清单声明的大小。'));
-          return;
-        }
-        try {
-          options.onProgress?.(received);
-          callback(null, chunk);
-        } catch (error) {
-          callback(error instanceof Error ? error : new Error(String(error)));
-        }
-      },
-    });
-    await mkdir(path.dirname(destinationPath), { recursive: true });
-    try {
-      await pipeline(
-        Readable.fromWeb(response.body as never),
-        limiter,
-        createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }),
-        options.signal ? { signal: options.signal } : {},
-      );
-    } catch (error) {
-      await rm(destinationPath, { force: true }).catch(() => undefined);
-      throw error;
-    }
+    await this.request(parts, { method: 'GET' }, async (response) => {
+      await assertWebDavStatus(response, [200], '无法下载 WebDAV 备份对象。');
+      if (!response.body) throw new Error('WebDAV 服务器返回了空响应。');
+      const contentLength = Number(response.headers.get('content-length'));
+      if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
+        throw new Error('WebDAV 备份对象超过清单声明的大小。');
+      }
+      let received = 0;
+      const limiter = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          received += chunk.byteLength;
+          if (received > options.maxBytes) {
+            callback(new Error('WebDAV 备份对象超过清单声明的大小。'));
+            return;
+          }
+          try {
+            options.onProgress?.(received);
+            callback(null, chunk);
+          } catch (error) {
+            callback(error instanceof Error ? error : new Error(String(error)));
+          }
+        },
+      });
+      await mkdir(path.dirname(destinationPath), { recursive: true });
+      try {
+        await pipeline(
+          Readable.fromWeb(response.body as never),
+          limiter,
+          createWriteStream(destinationPath, { flags: 'wx', mode: 0o600 }),
+          options.signal ? { signal: options.signal } : {},
+        );
+      } catch (error) {
+        await rm(destinationPath, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    }, options.signal, true);
   }
 
   async list(parts: readonly string[], signal?: AbortSignal): Promise<WebDavListEntry[]> {
-    const response = await this.request(parts, {
+    return this.request(parts, {
       method: 'PROPFIND',
       headers: { Depth: '1', 'Content-Type': 'application/xml; charset=utf-8' },
       body: propertyRequestBody,
+    }, async (response) => {
+      if (response.status === 404) return [];
+      await assertWebDavStatus(response, [200, 207], '无法列出 WebDAV 远端目录。');
+      const body = await boundedResponseText(response, MAX_PROPFIND_BYTES);
+      return parseWebDavList(body, this.url(parts, true));
     }, signal, true);
-    if (response.status === 404) return [];
-    await assertWebDavStatus(response, [200, 207], '无法列出 WebDAV 远端目录。');
-    const body = await boundedResponseText(response, MAX_PROPFIND_BYTES);
-    return parseWebDavList(body, this.url(parts, true));
   }
 
   async delete(
@@ -197,37 +204,47 @@ export class WebDavClient {
     signal?: AbortSignal,
     collection = true,
   ): Promise<void> {
-    const response = await this.request(parts, { method: 'DELETE' }, signal, collection);
-    await assertWebDavStatus(response, [200, 202, 204, 404], '无法删除过期的 WebDAV 备份。');
+    await this.request(parts, { method: 'DELETE' }, async (response) => {
+      await assertWebDavStatus(response, [200, 202, 204, 404], '无法删除过期的 WebDAV 备份。');
+    }, signal, collection);
   }
 
-  private request(
+  private request<T>(
     parts: readonly string[],
     init: RequestInit,
+    consume: (response: Response) => Promise<T>,
     signal?: AbortSignal,
     collection = false,
-  ): Promise<Response> {
-    return this.requestUrl(this.url(parts, collection), init, signal);
+  ): Promise<T> {
+    return this.requestUrl(this.url(parts, collection), init, consume, signal);
   }
 
-  private requestAbsoluteParts(
+  private requestAbsoluteParts<T>(
     parts: readonly string[],
     init: RequestInit,
+    consume: (response: Response) => Promise<T>,
     signal?: AbortSignal,
     collection = false,
     skipRemoteRoot = false,
-  ): Promise<Response> {
+  ): Promise<T> {
     const url = skipRemoteRoot ? this.absoluteUrl(parts, collection) : this.url(parts, collection);
-    return this.requestUrl(url, init, signal);
+    return this.requestUrl(url, init, consume, signal);
   }
 
-  private async requestUrl(url: URL, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+  private async requestUrl<T>(
+    url: URL,
+    init: RequestInit,
+    consume: (response: Response) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error('WebDAV 请求超时。')), DEFAULT_TIMEOUT_MS);
     const abort = () => controller.abort(signal?.reason);
-    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+    let headersReceived = false;
     try {
-      return await this.fetchImpl(url, {
+      const response = await this.fetchImpl(url, {
         ...init,
         redirect: 'manual',
         signal: controller.signal,
@@ -237,9 +254,12 @@ export class WebDavClient {
           ...init.headers,
         },
       });
+      headersReceived = true;
+      return await consume(response);
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? new Error('同步操作已取消。');
       if (controller.signal.aborted) throw new Error('WebDAV 请求超时。', { cause: error });
+      if (headersReceived) throw error;
       throw webDavTransportError(error);
     } finally {
       clearTimeout(timeout);

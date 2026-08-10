@@ -92,6 +92,14 @@ export class EncryptedWebDavRepository {
     return new EncryptedWebDavRepository(client, metadata, recoveryKey);
   }
 
+  async rollbackCreation(signal?: AbortSignal): Promise<void> {
+    const repositoryPath = [...REPOSITORY_PARTS, REPOSITORY_FILE];
+    const raw = await this.client.getBuffer(repositoryPath, { maxBytes: 16 * 1024, signal });
+    const current = parseRepositoryMetadata(parseJson(raw, 'WebDAV 仓库元数据'));
+    if (current.repositoryId !== this.metadata.repositoryId) return;
+    await this.client.delete(repositoryPath, signal, false);
+  }
+
   async initializeSnapshot(
     deviceId: string,
     snapshotId: string,
@@ -504,11 +512,12 @@ function requireLogicalPath(
   category: DesktopWebDavSyncCategoryId,
   kind: WebDavSnapshotManifestItem['kind'],
 ): string {
-  const logicalPath = stringValue(value).replaceAll('\\', '/');
+  const logicalPath = stringValue(value);
   if (
     !logicalPath
     || logicalPath.length > 2_048
     || logicalPath.startsWith('/')
+    || logicalPath.includes('\\')
     || logicalPath.split('/').some((segment) => !segment || segment === '.' || segment === '..')
   ) throw new Error('WebDAV 快照条目路径无效。');
   if (kind !== 'file') {
