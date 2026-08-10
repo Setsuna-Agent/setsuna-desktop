@@ -108,6 +108,8 @@ export const webDavSyncZhCN = {
   'settings.sync.restore.warning': '本次会覆盖 {overwritten} 项、删除 {removed} 项本地内容，然后重启应用。未勾选的类别、本机安全设置和仅本机 API Key 会保留。',
   'settings.sync.restore.confirm': '我已检查清单，了解上述本地内容会被覆盖或删除',
   'settings.sync.restore.action': '还原并重启',
+  'settings.sync.restore.starting': '正在开始还原…',
+  'settings.sync.restore.inProgress': '还原中…',
   'settings.sync.restore.closePlan': '取消还原',
   'settings.sync.error': 'WebDAV 同步操作失败',
 } as const;
@@ -222,6 +224,8 @@ export const webDavSyncEnUS: Record<keyof typeof webDavSyncZhCN, string> = {
   'settings.sync.restore.warning': 'This restore overwrites {overwritten} and removes {removed} local items, then restarts the app. Unselected categories, device security settings, and local-only API keys stay unchanged.',
   'settings.sync.restore.confirm': 'I reviewed the manifest and understand that the listed local content will be overwritten or deleted',
   'settings.sync.restore.action': 'Restore and restart',
+  'settings.sync.restore.starting': 'Starting restore…',
+  'settings.sync.restore.inProgress': 'Restoring…',
   'settings.sync.restore.closePlan': 'Cancel restore',
   'settings.sync.error': 'WebDAV sync operation failed',
 };

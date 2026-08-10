@@ -16,24 +16,28 @@ export function WebDavRestorePanel({
   onInspect,
   onRefresh,
   onRestore,
+  restoreStatus,
 }: {
   backup: DesktopWebDavSyncSnapshotSummary | null;
   busy: boolean;
   onInspect: (snapshotId: string, categories: DesktopWebDavSyncCategoryId[]) => Promise<DesktopWebDavSyncRestorePlan>;
   onRefresh: () => Promise<void>;
   onRestore: (planId: string) => Promise<void>;
+  restoreStatus?: string;
 }) {
   const { locale, t } = useI18n();
   const [selectedCategories, setSelectedCategories] = useState<DesktopWebDavSyncCategoryId[]>([]);
   const [plan, setPlan] = useState<DesktopWebDavSyncRestorePlan | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [restorePending, setRestorePending] = useState(false);
 
   useEffect(() => {
     setSelectedCategories(backup?.categories.map((category) => category.id) ?? []);
     setPlan(null);
     setConfirmed(false);
     setActionError(null);
+    setRestorePending(false);
   }, [backup]);
 
   const inspect = async () => {
@@ -50,10 +54,12 @@ export function WebDavRestorePanel({
   const restore = async () => {
     if (!plan || !confirmed) return;
     setActionError(null);
+    setRestorePending(true);
     try {
       await onRestore(plan.id);
     } catch (error) {
       setActionError(errorMessage(error));
+      setRestorePending(false);
     }
   };
 
@@ -133,12 +139,14 @@ export function WebDavRestorePanel({
       {actionError && !plan ? <div className="settings-webdav__error" role="alert">{actionError}</div> : null}
       {plan ? (
         <WebDavRestorePlanDialog
-          busy={busy}
+          busy={busy || restorePending}
           confirmed={confirmed}
           error={actionError}
           plan={plan}
+          restoring={restorePending}
+          restoreStatus={restoreStatus ?? t('settings.sync.restore.starting')}
           onClose={() => {
-            if (busy) return;
+            if (busy || restorePending) return;
             setPlan(null);
             setConfirmed(false);
             setActionError(null);

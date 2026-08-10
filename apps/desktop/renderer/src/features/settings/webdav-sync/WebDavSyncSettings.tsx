@@ -292,6 +292,9 @@ export function WebDavSyncSettings() {
         onInspect={(snapshotId, categories) => sync.inspectRestore({ snapshotId, categories })}
         onRefresh={refreshBackup}
         onRestore={async (planId) => { await sync.restore(planId); }}
+        restoreStatus={state.operation?.kind === 'restore'
+          ? t(webDavOperationMessageKey[state.operation.phase])
+          : undefined}
       />
 
       {sync.error || state.lastError ? (

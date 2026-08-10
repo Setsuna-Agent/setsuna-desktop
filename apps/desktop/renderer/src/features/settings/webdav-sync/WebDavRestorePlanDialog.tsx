@@ -18,6 +18,8 @@ type WebDavRestorePlanDialogProps = {
   confirmed: boolean;
   error: string | null;
   plan: DesktopWebDavSyncRestorePlan;
+  restoring: boolean;
+  restoreStatus: string;
   onClose: () => void;
   onConfirm: (confirmed: boolean) => void;
   onRestore: () => void;
@@ -28,6 +30,8 @@ export function WebDavRestorePlanDialog({
   confirmed,
   error,
   plan,
+  restoring,
+  restoreStatus,
   onClose,
   onConfirm,
   onRestore,
@@ -206,10 +210,20 @@ export function WebDavRestorePlanDialog({
               removed: plan.removedCount,
             })}</strong>
           </div>
-          {error ? <div className="settings-webdav__error" role="alert">{error}</div> : null}
         </div>
 
         <footer className="settings-webdav-restore-dialog__footer">
+          {restoring ? (
+            <div className="settings-webdav-restore-dialog__feedback" role="status">
+              <span className="settings-webdav__spinner" aria-hidden="true" />
+              <span>{restoreStatus}</span>
+            </div>
+          ) : error ? (
+            <div className="settings-webdav-restore-dialog__feedback is-error" role="alert">
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          ) : null}
           <label className="settings-webdav__restore-confirm">
             <input
               checked={confirmed}
@@ -224,7 +238,7 @@ export function WebDavRestorePlanDialog({
               {t('settings.sync.restore.closePlan')}
             </Button>
             <Button disabled={busy || !confirmed} variant="danger" onClick={onRestore}>
-              {t('settings.sync.restore.action')}
+              {t(restoring ? 'settings.sync.restore.inProgress' : 'settings.sync.restore.action')}
             </Button>
           </div>
         </footer>

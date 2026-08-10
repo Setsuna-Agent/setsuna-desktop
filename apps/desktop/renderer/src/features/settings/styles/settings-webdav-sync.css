@@ -890,10 +890,35 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
+  column-gap: 16px;
+  row-gap: 10px;
   padding: 13px 20px 15px;
   border-top: 1px solid var(--chat-settings-divider);
   background: var(--app-surface);
+}
+
+.settings-webdav-restore-dialog__feedback {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav-restore-dialog__feedback > svg,
+.settings-webdav-restore-dialog__feedback > .settings-webdav__spinner {
+  flex: 0 0 auto;
+}
+
+.settings-webdav-restore-dialog__feedback.is-error {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
 }
 
 .settings-webdav-restore-dialog__actions {

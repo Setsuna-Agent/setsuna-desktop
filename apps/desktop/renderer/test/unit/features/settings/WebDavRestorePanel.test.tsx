@@ -47,6 +47,26 @@ describe('WebDavRestorePanel', () => {
 
     expect(onInspect).toHaveBeenCalledWith(snapshot.id, ['preferences', 'user_skills', 'memories']);
     expect(onRestore).toHaveBeenCalledWith(restorePlan.id);
+    expect(screen.getByRole('status').textContent).toContain('正在开始还原');
+    expect(screen.getByRole('button', { name: '还原中…' })).toBeTruthy();
+  });
+
+  it('keeps restore failures visible beside the restore action', async () => {
+    const user = userEvent.setup();
+    renderRestorePanel({
+      onRestore: async () => {
+        throw new Error('检查清单后，会被覆盖或删除的本地内容发生了变化，请重新检查。');
+      },
+    });
+
+    await user.click(screen.getByRole('button', { name: '检查会覆盖什么' }));
+    const dialog = await screen.findByRole('dialog', { name: '还原覆盖清单' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /我已检查清单/u }));
+    await user.click(within(dialog).getByRole('button', { name: '还原并重启' }));
+
+    const error = await within(dialog).findByRole('alert');
+    expect(error.textContent).toContain('会被覆盖或删除的本地内容发生了变化');
+    expect(within(dialog).getByRole('button', { name: '还原并重启' })).toBeTruthy();
   });
 });
 

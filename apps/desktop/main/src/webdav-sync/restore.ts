@@ -30,7 +30,7 @@ const MAX_VISIBLE_DIFF_ITEMS = 100;
 export type StoredWebDavRestorePlan = {
   publicPlan: DesktopWebDavSyncRestorePlan;
   manifest: WebDavSnapshotManifest;
-  localFingerprint: string;
+  reviewedImpactFingerprint: string;
 };
 
 export function buildWebDavRestorePlan(input: {
@@ -63,7 +63,11 @@ export function buildWebDavRestorePlan(input: {
   return {
     publicPlan,
     manifest: input.snapshot.manifest,
-    localFingerprint: localInventoryFingerprint(input.localItems, input.categories),
+    reviewedImpactFingerprint: restoreImpactFingerprint(
+      input.snapshot.manifest,
+      input.categories,
+      input.localItems,
+    ),
   };
 }
 
@@ -75,9 +79,13 @@ export function assertRestorePlanCurrent(
   if (Date.parse(plan.publicPlan.expiresAt) <= now.getTime()) {
     throw new Error('还原清单已过期，请重新检查覆盖内容。');
   }
-  const current = localInventoryFingerprint(localItems, plan.publicPlan.categories);
-  if (current !== plan.localFingerprint) {
-    throw new Error('检查清单后本地数据发生了变化，请重新生成还原清单。');
+  const current = restoreImpactFingerprint(
+    plan.manifest,
+    plan.publicPlan.categories,
+    localItems,
+  );
+  if (current !== plan.reviewedImpactFingerprint) {
+    throw new Error('检查清单后，会被覆盖或删除的本地内容发生了变化，请重新检查。');
   }
 }
 
@@ -257,16 +265,38 @@ function diffItem(item: {
   };
 }
 
-function localInventoryFingerprint(
-  items: readonly LocalSnapshotInventoryItem[],
+function restoreImpactFingerprint(
+  manifest: WebDavSnapshotManifest,
   categories: readonly DesktopWebDavSyncCategoryId[],
+  localItems: readonly LocalSnapshotInventoryItem[],
 ): string {
   const selected = new Set(categories);
-  const canonical = items
+  const backupByCategoryAndPath = new Map(manifest.items
     .filter((item) => selected.has(item.category))
-    .map((item) => `${item.category}\0${item.logicalPath}\0${item.sha256}\0${item.size}`)
-    .sort()
-    .join('\n');
+    .map((item) => [`${item.category}\0${item.logicalPath}`, item]));
+  const localByCategoryAndPath = new Map(localItems
+    .filter((item) => selected.has(item.category))
+    .map((item) => [`${item.category}\0${item.logicalPath}`, item]));
+  const impacts: string[] = [];
+
+  for (const [key, backup] of backupByCategoryAndPath) {
+    const local = localByCategoryAndPath.get(key);
+    if (local && local.sha256 !== backup.sha256) {
+      impacts.push(`${backup.category}\0overwrite\0${backup.logicalPath}`);
+    }
+  }
+  for (const local of localItems) {
+    if (!selected.has(local.category) || local.category === 'model_credentials') continue;
+    const key = `${local.category}\0${local.logicalPath}`;
+    if (!backupByCategoryAndPath.has(key)) {
+      impacts.push(`${local.category}\0remove\0${local.logicalPath}`);
+    }
+  }
+
+  // A reviewed path may change bytes while the dialog is open (notably the live
+  // conversation database). That is safe when it remains in the same reviewed
+  // overwrite/delete set; only a changed impact list requires another review.
+  const canonical = impacts.sort().join('\n');
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
 

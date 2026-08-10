@@ -47,9 +47,23 @@ describe('WebDAV restore planning and commit', () => {
       .not.toThrow();
     expect(() => assertRestorePlanCurrent(
       plan,
+      localItems.map((item) => item.logicalPath === 'runtime/config.json'
+        ? { ...item, sha256: 'newer-local-config' }
+        : item),
+      new Date('2026-08-10T10:31:00.000Z'),
+    )).not.toThrow();
+    expect(() => assertRestorePlanCurrent(
+      plan,
+      localItems.map((item) => item.logicalPath === 'model-credentials/providers/openai'
+        ? { ...item, sha256: 'newer-local-key' }
+        : item),
+      new Date('2026-08-10T10:31:00.000Z'),
+    )).toThrow('会被覆盖或删除的本地内容发生了变化');
+    expect(() => assertRestorePlanCurrent(
+      plan,
       [...localItems, inventory('preferences', 'runtime/extra', 'new', 'Changed')],
       new Date('2026-08-10T10:31:00.000Z'),
-    )).toThrow('本地数据发生了变化');
+    )).toThrow('会被覆盖或删除的本地内容发生了变化');
   });
 
   it('merges portable config and API keys while preserving device-local security state', async () => {
