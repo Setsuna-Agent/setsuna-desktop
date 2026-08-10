@@ -273,31 +273,28 @@ export class EncryptedWebDavRepository {
   }
 
   /**
-   * Keeps the newest authenticated backup across every device. Resolving the
-   * winner from remote state prevents concurrent devices from deleting each
-   * other's replacement and leaving the repository without a complete backup.
+   * Keeps the newest authenticated backup while only deleting snapshots that
+   * were complete before this replacement started. A concurrently published
+   * snapshot is therefore never removed by another device's pruning pass; a
+   * later backup will collapse any temporary overlap back to one snapshot.
    */
-  async retainNewestCompleteSnapshot(signal?: AbortSignal): Promise<WebDavSnapshotRecord> {
+  async retainNewestCompleteSnapshot(
+    replaceableSnapshots: readonly WebDavSnapshotRecord[],
+    signal?: AbortSignal,
+  ): Promise<WebDavSnapshotRecord> {
     const retained = (await this.listSnapshots(signal))[0];
     if (!retained) throw new Error('新备份发布后无法读取，旧备份未被替换。');
     const retainedDeviceId = retained.manifest.deviceId;
     const retainedSnapshotId = retained.manifest.id;
-    const devices = (await this.client.list([
-      ...REPOSITORY_PARTS,
-      DEVICES_DIRECTORY,
-    ], signal)).filter((entry) => entry.collection && UUID_PATTERN.test(entry.name));
-    for (const device of devices) {
-      const snapshots = await this.client.list([
-        ...REPOSITORY_PARTS,
-        DEVICES_DIRECTORY,
-        device.name,
-        SNAPSHOTS_DIRECTORY,
-      ], signal);
-      for (const snapshot of snapshots) {
-        if (!snapshot.collection || !SNAPSHOT_ID_PATTERN.test(snapshot.name)) continue;
-        if (device.name === retainedDeviceId && snapshot.name === retainedSnapshotId) continue;
-        await this.client.delete(this.snapshotParts(device.name, snapshot.name), signal);
-      }
+    const deleted = new Set<string>();
+    for (const snapshot of replaceableSnapshots) {
+      const deviceId = snapshot.manifest.deviceId;
+      const snapshotId = snapshot.manifest.id;
+      if (deviceId === retainedDeviceId && snapshotId === retainedSnapshotId) continue;
+      const key = `${deviceId}/${snapshotId}`;
+      if (deleted.has(key)) continue;
+      deleted.add(key);
+      await this.client.delete(this.snapshotParts(deviceId, snapshotId), signal);
     }
     return retained;
   }

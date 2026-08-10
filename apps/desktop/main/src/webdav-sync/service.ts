@@ -390,6 +390,7 @@ export class WebDavSyncService {
         const workRoot = await this.createWorkRoot('backup');
         let runtimePrepared = false;
         try {
+          const replaceableSnapshots = await repository.listSnapshots(signal);
           runtimePrepared = await this.prepareRuntime(automatic, signal);
           await createAndUploadSnapshot({
             repository,
@@ -405,7 +406,10 @@ export class WebDavSyncService {
           });
           this.updateOperation('publishing', { cancellable: true });
           this.updateOperation('pruning', { cancellable: true });
-          const retained = await repository.retainNewestCompleteSnapshot(signal);
+          const retained = await repository.retainNewestCompleteSnapshot(
+            replaceableSnapshots,
+            signal,
+          );
           await this.options.configStore.markBackup(
             retained.manifest.id,
             retained.manifest.createdAt,

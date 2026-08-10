@@ -78,6 +78,7 @@ describe('EncryptedWebDavRepository', () => {
 
     const replacementDeviceId = '1455a7df-11ca-4b40-9fd8-f65e3a8846f0';
     const replacementId = createSnapshotId(new Date('2026-08-10T11:20:30.123Z'));
+    const replaceableSnapshots = await connected.listSnapshots();
     await connected.initializeSnapshot(replacementDeviceId, replacementId);
     await connected.publishSnapshot({
       formatVersion: 1,
@@ -91,12 +92,52 @@ describe('EncryptedWebDavRepository', () => {
       categories: ['usage'],
       items: [],
     });
-    const newest = await connected.retainNewestCompleteSnapshot();
+    const newest = await connected.retainNewestCompleteSnapshot(replaceableSnapshots);
 
     const retained = await connected.listSnapshots();
     expect(newest.manifest.id).toBe(replacementId);
     expect(retained.map((record) => record.manifest.id)).toEqual([replacementId]);
     expect([...server.files.keys()].some((remotePath) => remotePath.includes(snapshotId))).toBe(false);
+  });
+
+  it('never prunes a complete snapshot published by a concurrent backup', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const client = new WebDavClient(
+      normalizeWebDavLocation({
+        endpoint: 'https://dav.test/dav',
+        remoteRoot: '/Backups',
+      }),
+      { username: 'alice', password: 'secret' },
+      server.fetch,
+    );
+    const repository = await EncryptedWebDavRepository.create(client, generateWebDavRecoveryKey());
+    const deviceA = '55bc8840-ac7a-435a-b5a7-88c2e91e7d87';
+    const deviceB = '1455a7df-11ca-4b40-9fd8-f65e3a8846f0';
+    const initialId = createSnapshotId(new Date('2026-08-10T10:00:00.000Z'));
+    await publishEmptySnapshot(repository, deviceA, initialId, '2026-08-10T10:00:00.000Z');
+
+    // Both devices begin from the same complete snapshot. Neither pruning pass
+    // may delete a replacement that the other device publishes afterwards.
+    const replaceableByA = await repository.listSnapshots();
+    const replaceableByB = await repository.listSnapshots();
+    const snapshotA = createSnapshotId(new Date('2026-08-10T11:00:00.000Z'));
+    const snapshotB = createSnapshotId(new Date('2026-08-10T11:00:01.000Z'));
+    await publishEmptySnapshot(repository, deviceA, snapshotA, '2026-08-10T11:00:00.000Z');
+    await repository.retainNewestCompleteSnapshot(replaceableByA);
+    await publishEmptySnapshot(repository, deviceB, snapshotB, '2026-08-10T11:00:01.000Z');
+    await repository.retainNewestCompleteSnapshot(replaceableByB);
+
+    expect((await repository.listSnapshots()).map((record) => record.manifest.id))
+      .toEqual([snapshotB, snapshotA]);
+
+    // The following ordinary backup sees both candidates and collapses the
+    // temporary overlap back to the single newest complete snapshot.
+    const replaceableAfterConflict = await repository.listSnapshots();
+    const finalId = createSnapshotId(new Date('2026-08-10T12:00:00.000Z'));
+    await publishEmptySnapshot(repository, deviceA, finalId, '2026-08-10T12:00:00.000Z');
+    await repository.retainNewestCompleteSnapshot(replaceableAfterConflict);
+    expect((await repository.listSnapshots()).map((record) => record.manifest.id))
+      .toEqual([finalId]);
   });
 
   it('rejects the wrong recovery key and redirects', async () => {
@@ -118,3 +159,24 @@ describe('EncryptedWebDavRepository', () => {
     await expect(redirectingClient.test()).rejects.toThrow('不会自动跟随');
   });
 });
+
+async function publishEmptySnapshot(
+  repository: EncryptedWebDavRepository,
+  deviceId: string,
+  snapshotId: string,
+  createdAt: string,
+): Promise<void> {
+  await repository.initializeSnapshot(deviceId, snapshotId);
+  await repository.publishSnapshot({
+    formatVersion: 1,
+    repositoryId: repository.metadata.repositoryId,
+    id: snapshotId,
+    deviceId,
+    deviceName: deviceId,
+    createdAt,
+    appVersion: '0.2.1',
+    sourceDataRoot: '/Users/alice/Setsuna',
+    categories: ['usage'],
+    items: [],
+  });
+}
