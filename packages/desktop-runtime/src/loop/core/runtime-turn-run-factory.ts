@@ -182,7 +182,6 @@ export class RuntimeTurnRunFactory {
   async createGoalContinuation(
     threadId: string,
     goal: RuntimeThreadGoal,
-    runtimeContextMessages: RuntimeMessage[],
     execution: { turnId?: string } = {},
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const thread = await this.requireThread(threadId);
@@ -214,7 +213,6 @@ export class RuntimeTurnRunFactory {
         // 供应商所需用户消息发送。
         includeUserMessageInModel: true,
         publishUserMessage: false,
-        runtimeContextMessages,
         taskKind: 'goal',
       },
     }));

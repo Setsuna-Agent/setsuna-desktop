@@ -19,6 +19,10 @@ describe('runtime Goal tools', () => {
     expect(goalToolDefinitions(goal('paused')).map((tool) => tool.name)).toEqual(['create_goal']);
     expect(goalToolDefinitions(goal('complete')).map((tool) => tool.name)).toEqual(['create_goal']);
   });
+
+  it('withholds Goal mutations while the current turn is finalizing completion', () => {
+    expect(goalToolDefinitions(goal('active'), true)).toEqual([]);
+  });
 });
 
 function goal(status: RuntimeThreadGoal['status']): RuntimeThreadGoal {

@@ -39,6 +39,23 @@ export class PersistentGoalModelClient implements ModelClient {
   }
 }
 
+export class FailingGoalCompletionModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_complete_before_failure', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    throw new Error('Completion follow-up failed.');
+  }
+}
+
 export class GoalSteerModelClient implements ModelClient {
   requests: ModelRequest[] = [];
   private releaseFirst: () => void = () => undefined;

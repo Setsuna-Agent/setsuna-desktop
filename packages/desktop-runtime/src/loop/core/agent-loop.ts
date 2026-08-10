@@ -202,6 +202,8 @@ export class AgentLoop {
       contextCompactor: this.contextCompactor,
       debugTrace: options.debugTrace,
       environmentResolver,
+      ids: options.ids,
+      isGoalCompletionPending: (turnId, goalId) => this.goals.isCompletionPending(turnId, goalId),
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
@@ -344,15 +346,10 @@ export class AgentLoop {
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
       registeredTask: (threadId) => this.turnTasks.registeredForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      createContinuation: (threadId, goal, contextMessages, execution) => this.withThreadMutation(
+      createContinuation: (threadId, goal, execution) => this.withThreadMutation(
         threadId,
         async () => {
-          const run = await this.turnRuns.createGoalContinuation(
-            threadId,
-            goal,
-            contextMessages,
-            execution,
-          );
+          const run = await this.turnRuns.createGoalContinuation(threadId, goal, execution);
           this.queuedTurns.observeRun(threadId, run.turnId, 'goal', run.done);
           return run;
         },

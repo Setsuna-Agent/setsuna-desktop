@@ -230,6 +230,8 @@ export type RuntimeThreadGoalSafetyState = {
   automaticTurns: number;
   consecutiveNoProgressTurns: number;
   lastProgressFingerprint?: string;
+  /** Bounded recent evidence used to detect short repeating work cycles. */
+  recentProgressFingerprints?: string[];
 };
 
 export type RuntimeThreadGoalExecutionOptions = {
@@ -253,6 +255,8 @@ export type RuntimeThreadGoal = {
   tokenBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
+  /** Highest persisted event sequence already examined for Goal usage accounting. */
+  accountedThroughSeq?: number;
   createdAt: number;
   updatedAt: number;
   stopReason?: RuntimeThreadGoalStopReason;
@@ -280,7 +284,12 @@ export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGo
   return {
     ...goal,
     stopReason: goal.stopReason ? { ...goal.stopReason } : undefined,
-    safety: goal.safety ? { ...goal.safety } : undefined,
+    safety: goal.safety ? {
+      ...goal.safety,
+      recentProgressFingerprints: goal.safety.recentProgressFingerprints
+        ? [...goal.safety.recentProgressFingerprints]
+        : undefined,
+    } : undefined,
     execution: goal.execution ? {
       ...goal.execution,
       attachments: goal.execution.attachments?.map((attachment) => ({ ...attachment })),

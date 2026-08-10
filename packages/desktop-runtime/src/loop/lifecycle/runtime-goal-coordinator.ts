@@ -17,7 +17,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../../ports/tool-host.js';
 import { recordInput } from '../../shared/unknown.js';
-import { goalContinuationContextMessages, goalLifecycleMessage } from './runtime-goal-prompts.js';
+import { goalLifecycleMessage } from './runtime-goal-prompts.js';
 import {
   accountGoalTurn,
   epochSeconds,
@@ -47,9 +47,7 @@ type GoalContinuationRun = {
   turnId: string;
 };
 
-type GoalContinuationOptions = {
-  turnId?: string;
-};
+type GoalContinuationOptions = { turnId?: string };
 
 export type GoalToolExecutionResult = {
   content: string;
@@ -67,7 +65,6 @@ type RuntimeGoalCoordinatorOptions = {
   createContinuation(
     threadId: string,
     goal: RuntimeThreadGoal,
-    contextMessages: RuntimeMessage[],
     options?: GoalContinuationOptions,
   ): Promise<GoalContinuationRun>;
   hasQueuedInput?(threadId: string): Promise<boolean>;
@@ -110,6 +107,11 @@ export class RuntimeGoalCoordinator {
   async getGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
     const thread = await this.requireThread(threadId);
     return thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
+  }
+
+  /** Completion is committed only after this turn reaches a successful terminal event. */
+  isCompletionPending(turnId: string, goalId: string): boolean {
+    return this.pendingCompletionGoalIdByTurnId.get(turnId) === goalId;
   }
 
   /** Runtime restart never silently resumes an autonomous goal. */
@@ -301,7 +303,6 @@ export class RuntimeGoalCoordinator {
       const run = await this.options.createContinuation(
         threadId,
         goal,
-        goalContinuationContextMessages(goal, this.options.ids, this.options.clock),
         { turnId },
       );
       this.observeRun(threadId, run.turnId, 'goal', run.done, goal.id, goal.objective);
@@ -497,10 +498,8 @@ export class RuntimeGoalCoordinator {
             lifecycleTurnId: context.turnId,
           },
         );
-        if (context.turnId) {
-          this.goalIdByTurnId.set(context.turnId, goal.id);
-          this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
-        }
+        this.goalIdByTurnId.set(context.turnId, goal.id);
+        this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
         return goalToolResult(name, { goal }, 'Goal created.');
       });
     }
@@ -511,49 +510,58 @@ export class RuntimeGoalCoordinator {
         const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
         if (!goal || goal.status !== 'active') throw new Error('No active goal is available to complete.');
         this.assertCurrentGoalRevision(context.turnId, goal);
-        const deferCompletionMarker = Boolean(context.turnId);
-        const completed = await this.setGoalUnlocked(
-          context.threadId,
-          { status: 'complete' },
-          {
-            cancelActiveGoalTurn: false,
-            lifecycleTurnId: context.turnId,
-            publishLifecycle: !deferCompletionMarker,
-          },
+        // The provider must still consume this tool result and finish the turn. Keep the durable
+        // Goal active until that succeeds so a cancellation, runtime error, or restart cannot be
+        // mistaken for verified completion.
+        this.goalIdByTurnId.set(context.turnId, goal.id);
+        this.goalObjectiveByTurnId.set(context.turnId, goal.objective);
+        this.pendingCompletionGoalIdByTurnId.set(context.turnId, goal.id);
+        return goalToolResult(
+          name,
+          { goal, completionPending: true },
+          'Goal completion will be finalized when this turn completes successfully.',
         );
-        if (context.turnId) {
-          this.pendingCompletionGoalIdByTurnId.set(context.turnId, completed.id);
-        }
-        return goalToolResult(name, { goal: completed }, 'Goal marked complete.');
       });
     }
     throw new Error(`Unknown goal tool: ${name}`);
   }
 
-  /** Recovers usage from a terminal turn that reached storage after the latest Goal snapshot. */
+  /** Recovers terminal turns that are newer than the Goal's explicit accounting watermark. */
   private async accountUnsettledGoalTurns(
     threadId: string,
     goal: RuntimeThreadGoal,
   ): Promise<RuntimeThreadGoal> {
     const events = await this.options.threadStore.listEvents(threadId);
     const goalUpdates = events.filter((event) => event.type === 'thread.goal_updated');
-    const checkpoint = [...goalUpdates].reverse().find((event) => event.payload.goal.id === goal.id)
+    const identityCheckpoint = [...goalUpdates].reverse().find((event) => event.payload.goal.id === goal.id)
       ?? goalUpdates.at(-1);
-    if (!checkpoint) return goal;
-
-    const terminalTurnIds = [...new Set(events.flatMap((event) => (
-      event.seq > checkpoint.seq
+    if (!identityCheckpoint) return goal;
+    // Older snapshots keep their latest-snapshot baseline once; later writes persist this watermark.
+    const persistedAccountingSeq = goal.accountedThroughSeq;
+    const accountedThroughSeq = typeof persistedAccountingSeq === 'number'
+      && Number.isInteger(persistedAccountingSeq)
+      && persistedAccountingSeq >= 0
+      ? persistedAccountingSeq
+      : identityCheckpoint.seq;
+    const terminalEvents = events.filter((event) => (
+      event.seq > accountedThroughSeq
       && event.turnId
       && (event.type === 'turn.completed' || event.type === 'turn.cancelled' || event.type === 'runtime.error')
-        ? [event.turnId]
-        : []
-    )))];
-    return terminalTurnIds.reduce((accounted, turnId) => {
+    ));
+    const terminalTurnIds = [...new Set(terminalEvents.flatMap((event) => event.turnId ? [event.turnId] : []))];
+    const accounted = terminalTurnIds.reduce((current, turnId) => {
       const turnEvents = events.filter((event) => event.turnId === turnId);
-      return restoredTurnBelongsToGoal(events, turnEvents, checkpoint.payload.goal)
-        ? accountGoalTurn(accounted, turnEvents, this.options.clock.now())
-        : accounted;
+      return restoredTurnBelongsToGoal(events, turnEvents, identityCheckpoint.payload.goal)
+        ? accountGoalTurn(current, turnEvents, this.options.clock.now())
+        : current;
     }, goal);
+    return {
+      ...accounted,
+      accountedThroughSeq: Math.max(
+        accountedThroughSeq,
+        ...terminalEvents.map((event) => event.seq),
+      ),
+    };
   }
 
   private async continueIfIdle(threadId: string, publishContinuation = true): Promise<void> {
@@ -579,11 +587,7 @@ export class RuntimeGoalCoordinator {
       if (await this.options.hasQueuedInput?.(threadId)) return;
       if (hasAwaitingPlanConfirmation(thread.messages)) return;
       if (publishContinuation) await this.publishLifecycle(goal, 'continuation');
-      const run = await this.options.createContinuation(
-        threadId,
-        goal,
-        goalContinuationContextMessages(goal, this.options.ids, this.options.clock),
-      );
+      const run = await this.options.createContinuation(threadId, goal);
       this.observeRun(threadId, run.turnId, 'goal', run.done, goal.id, goal.objective);
       void run.done.catch(() => undefined);
     } finally {
@@ -663,22 +667,31 @@ export class RuntimeGoalCoordinator {
     }
     let nextStatus = accounted.status;
     let stopReason = accounted.stopReason;
+    const completionRequested = this.pendingCompletionGoalIdByTurnId.get(turnId) === goal.id;
+    const terminalEvent = [...events].reverse().find((event) => (
+      event.type === 'turn.completed'
+      || event.type === 'turn.cancelled'
+      || event.type === 'runtime.error'
+    ));
 
-    if (nextStatus === 'active' && events.some((event) => event.type === 'turn.cancelled')) {
+    if (nextStatus === 'active' && terminalEvent?.type === 'turn.cancelled') {
       nextStatus = 'paused';
       stopReason = {
         code: 'turnCancelled',
         message: 'Goal paused because its active turn was cancelled.',
       };
     }
-    const runtimeError = [...events].reverse().find((event) => event.type === 'runtime.error');
-    if (nextStatus === 'active' && runtimeError?.type === 'runtime.error') {
-      const usageLimited = isProviderUsageLimit(runtimeError.payload.message);
+    if (nextStatus === 'active' && terminalEvent?.type === 'runtime.error') {
+      const usageLimited = isProviderUsageLimit(terminalEvent.payload.message);
       nextStatus = usageLimited ? 'usageLimited' : 'blocked';
       stopReason = {
         code: usageLimited ? 'usageLimited' : 'runtimeError',
-        message: runtimeError.payload.message,
+        message: terminalEvent.payload.message,
       };
+    }
+    if (nextStatus === 'active' && completionRequested && terminalEvent?.type === 'turn.completed') {
+      nextStatus = 'complete';
+      stopReason = undefined;
     }
     let safety = accounted.safety;
     if (nextStatus === 'active') {
@@ -705,9 +718,8 @@ export class RuntimeGoalCoordinator {
       safety,
       updatedAt: epochSeconds(this.options.clock.now()),
     };
-    const pendingCompletionGoalId = this.pendingCompletionGoalIdByTurnId.get(turnId);
     const completionLifecycleMessage = updated.status === 'complete'
-      && pendingCompletionGoalId === updated.id
+      && completionRequested
       ? goalLifecycleMessage(updated, 'complete', this.options.ids, this.options.clock, turnId)
       : undefined;
     const lifecycleMessage = completionLifecycleMessage ?? this.deferredLifecycleMessage(updated, turnId);

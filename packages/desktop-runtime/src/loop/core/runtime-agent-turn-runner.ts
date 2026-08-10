@@ -247,6 +247,7 @@ export class RuntimeAgentTurnRunner {
           thinkingOptions: activeThinkingOptions,
           thread,
           threadId,
+          taskKind,
           turnId,
           toolAccess: planOnly ? 'none' : taskKind === 'review' ? 'read-only' : 'all',
         });

@@ -18,6 +18,7 @@ import { isGoalToolName } from './runtime-goal-tools.js';
 export const MAX_CONSECUTIVE_NO_PROGRESS_TURNS = 3;
 export const MAX_AUTOMATIC_GOAL_TURNS = 25;
 const MAX_GOAL_OBJECTIVE_LENGTH = 4_000;
+const MAX_RECENT_PROGRESS_FINGERPRINTS = MAX_CONSECUTIVE_NO_PROGRESS_TURNS;
 
 export function accountGoalTurn(
   goal: RuntimeThreadGoal,
@@ -43,6 +44,9 @@ export function accountGoalTurn(
     ...goal,
     tokensUsed: goal.tokensUsed + tokens,
     timeUsedSeconds: goal.timeUsedSeconds + elapsedSeconds,
+    ...(terminal ? {
+      accountedThroughSeq: Math.max(goal.accountedThroughSeq ?? 0, terminal.seq),
+    } : {}),
   };
 }
 
@@ -51,14 +55,24 @@ export function nextGoalSafety(
   events: RuntimeEvent[],
 ): NonNullable<RuntimeThreadGoal['safety']> {
   const fingerprint = progressFingerprint(events);
-  const repeatedOrMissing = !fingerprint || fingerprint === previous?.lastProgressFingerprint;
+  const previousFingerprints = previous?.recentProgressFingerprints?.length
+    ? [...previous.recentProgressFingerprints]
+    : previous?.lastProgressFingerprint
+      ? [previous.lastProgressFingerprint]
+      : [];
+  const repeatedOrMissing = !fingerprint || previousFingerprints.includes(fingerprint);
   const lastProgressFingerprint = fingerprint ?? previous?.lastProgressFingerprint;
+  const recentProgressFingerprints = fingerprint
+    ? [...previousFingerprints.filter((item) => item !== fingerprint), fingerprint]
+      .slice(-MAX_RECENT_PROGRESS_FINGERPRINTS)
+    : previousFingerprints;
   return {
     automaticTurns: (previous?.automaticTurns ?? 0) + 1,
     consecutiveNoProgressTurns: repeatedOrMissing
       ? (previous?.consecutiveNoProgressTurns ?? 0) + 1
       : 0,
     ...(lastProgressFingerprint ? { lastProgressFingerprint } : {}),
+    ...(recentProgressFingerprints.length ? { recentProgressFingerprints } : {}),
   };
 }
 
@@ -104,6 +118,7 @@ export function nextGoalState(
     tokenBudget: null,
     tokensUsed: replacesGoal ? 0 : previous.tokensUsed,
     timeUsedSeconds: replacesGoal ? 0 : previous.timeUsedSeconds,
+    accountedThroughSeq: replacesGoal ? 0 : previous.accountedThroughSeq,
     createdAt: replacesGoal ? now : previous.createdAt,
     updatedAt: now,
     stopReason: status === 'active' || status === 'complete'
@@ -113,7 +128,7 @@ export function nextGoalState(
         : previous?.stopReason,
     safety: replacesGoal || resumesGoal || objectiveChanged
       ? { automaticTurns: 0, consecutiveNoProgressTurns: 0 }
-      : previous.safety ? { ...previous.safety } : undefined,
+      : previous.safety ? cloneRuntimeThreadGoal(previous).safety : undefined,
     execution: replacesGoal
       ? undefined
       : previous.execution
@@ -128,13 +143,14 @@ export function normalizeRestoredGoal(
   ids: IdGenerator,
 ): RuntimeThreadGoal {
   const legacy = goal as RuntimeThreadGoal & { id?: unknown; version?: unknown };
+  const cloned = cloneRuntimeThreadGoal(goal);
   return {
-    ...cloneRuntimeThreadGoal(goal),
+    ...cloned,
     version: 1,
     id: typeof legacy.id === 'string' && legacy.id.trim()
       ? legacy.id
       : ids.id('goal'),
-    safety: goal.safety ? { ...goal.safety } : {
+    safety: cloned.safety ?? {
       automaticTurns: 0,
       consecutiveNoProgressTurns: 0,
     },
@@ -151,14 +167,15 @@ export function withGoalStatus(
   now: Date,
   stopReason?: RuntimeThreadGoalStopReason,
 ): RuntimeThreadGoal {
+  const cloned = cloneRuntimeThreadGoal(goal);
   return {
-    ...cloneRuntimeThreadGoal(goal),
+    ...cloned,
     status,
     updatedAt: epochSeconds(now),
     stopReason: status === 'active' || status === 'complete' ? undefined : stopReason,
     safety: status === 'active'
       ? { automaticTurns: 0, consecutiveNoProgressTurns: 0 }
-      : goal.safety ? { ...goal.safety } : undefined,
+      : cloned.safety,
   };
 }
 

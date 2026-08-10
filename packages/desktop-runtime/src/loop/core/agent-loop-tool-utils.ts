@@ -83,6 +83,7 @@ export function modelFacingTools(
   config: RuntimeConfigState | null | undefined,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
   goal?: RuntimeThreadGoal | null,
+  goalCompletionPending = false,
 ): RuntimeToolDefinition[] | undefined {
   const names = new Set((tools ?? []).map((tool) => tool.name));
   const merged = [...(tools ?? [])];
@@ -94,7 +95,7 @@ export function modelFacingTools(
       }
     }
   }
-  for (const tool of goalToolDefinitions(goal)) {
+  for (const tool of goalToolDefinitions(goal, goalCompletionPending)) {
     if (!names.has(tool.name)) {
       names.add(tool.name);
       merged.push(tool);
@@ -120,12 +121,13 @@ export async function samplingToolRuntimes(
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
   config: RuntimeConfigState | null | undefined,
   goal?: RuntimeThreadGoal | null,
+  goalCompletionPending = false,
 ): Promise<RuntimeModelRequestStepSnapshot['toolRuntimes']> {
   if (!tools.length) return [];
   const routerRuntimes = new Map((await toolRouter?.toolRuntimeMetadata() ?? []).map((runtime) => [runtime.name, runtime]));
   const dynamicToolNames = new Set((dynamicTools ?? []).map((tool) => tool.name));
   const collaborationEnabled = collaborationToolsEnabled(config);
-  const goalToolNames = new Set(goalToolDefinitions(goal).map((tool) => tool.name));
+  const goalToolNames = new Set(goalToolDefinitions(goal, goalCompletionPending).map((tool) => tool.name));
   return tools.map((tool) => {
     const routerRuntime = routerRuntimes.get(tool.name);
     if (routerRuntime) return { ...routerRuntime };

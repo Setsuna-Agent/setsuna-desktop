@@ -23,6 +23,22 @@ describe('runtime Goal state', () => {
     });
   });
 
+  it('counts a short alternating evidence cycle as repeated work', () => {
+    const states = [
+      progressEvent('turn_1', 'A'),
+      progressEvent('turn_2', 'B'),
+      progressEvent('turn_3', 'A'),
+      progressEvent('turn_4', 'B'),
+      progressEvent('turn_5', 'A'),
+    ].reduce<NonNullable<RuntimeThreadGoal['safety']>[]>((history, event) => {
+      history.push(nextGoalSafety(history.at(-1), [event]));
+      return history;
+    }, []);
+
+    expect(states.map((state) => state.consecutiveNoProgressTurns)).toEqual([0, 0, 1, 2, 3]);
+    expect(states.at(-1)?.recentProgressFingerprints).toHaveLength(2);
+  });
+
   it('starts fresh work when a completed Goal becomes active again', () => {
     const previous: RuntimeThreadGoal = {
       version: 1,
@@ -60,7 +76,7 @@ describe('runtime Goal state', () => {
   });
 });
 
-function progressEvent(turnId: string): RuntimeEvent {
+function progressEvent(turnId: string, evidence = 'README'): RuntimeEvent {
   return {
     id: `event_${turnId}`,
     seq: 1,
@@ -72,9 +88,9 @@ function progressEvent(turnId: string): RuntimeEvent {
       toolCallId: `tool_call_${turnId}`,
       toolName: 'workspace_read_file',
       status: 'success',
-      content: 'README contents',
-      argumentsPreview: '{"path":"README.md"}',
-      resultPreview: 'README contents',
+      content: `${evidence} contents`,
+      argumentsPreview: `{"path":"${evidence}.md"}`,
+      resultPreview: `${evidence} contents`,
     },
   };
 }

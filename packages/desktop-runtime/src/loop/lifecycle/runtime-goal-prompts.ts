@@ -1,7 +1,8 @@
-import type {
-  RuntimeGoalLifecycleKind,
-  RuntimeMessage,
-  RuntimeThreadGoal,
+import {
+  cloneRuntimeThreadGoal,
+  type RuntimeGoalLifecycleKind,
+  type RuntimeMessage,
+  type RuntimeThreadGoal,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
@@ -116,11 +117,7 @@ function activeGoalPrompt(): string {
 }
 
 function lifecycleGoalSnapshot(goal: RuntimeThreadGoal): RuntimeThreadGoal {
-  const snapshot: RuntimeThreadGoal = {
-    ...goal,
-    stopReason: goal.stopReason ? { ...goal.stopReason } : undefined,
-    safety: goal.safety ? { ...goal.safety } : undefined,
-  };
+  const snapshot = cloneRuntimeThreadGoal(goal);
   delete snapshot.execution;
   return snapshot;
 }

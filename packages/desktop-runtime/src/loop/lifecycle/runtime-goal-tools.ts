@@ -40,8 +40,12 @@ const UPDATE_GOAL_TOOL: RuntimeToolDefinition = {
   },
 };
 
-/** Goal creation is always available; read/completion tools only exist during active pursuit. */
-export function goalToolDefinitions(goal: RuntimeThreadGoal | null | undefined): RuntimeToolDefinition[] {
+/** Goal tools are withheld while completion waits for the current turn's final outcome. */
+export function goalToolDefinitions(
+  goal: RuntimeThreadGoal | null | undefined,
+  completionPending = false,
+): RuntimeToolDefinition[] {
+  if (completionPending) return [];
   return goal?.status === 'active'
     ? [CREATE_GOAL_TOOL, GET_GOAL_TOOL, UPDATE_GOAL_TOOL]
     : [CREATE_GOAL_TOOL];
