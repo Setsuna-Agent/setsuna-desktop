@@ -74,6 +74,14 @@ export function useDesktopWebDavSync() {
       run((api) => api.getLocalCategorySummaries()),
     [run],
   );
+  const revealRecoveryKey = useCallback(
+    (): Promise<string> => run((api) => api.revealRecoveryKey()),
+    [run],
+  );
+  const resetLocalConfiguration = useCallback(
+    () => run((api) => api.resetLocalConfiguration(), (result) => result),
+    [run],
+  );
   const updatePreferences = useCallback(
     (input: DesktopWebDavSyncPreferencesInput) =>
       run((api) => api.updatePreferences(input), (result) => result),
@@ -121,6 +129,8 @@ export function useDesktopWebDavSync() {
     inspectRestore,
     listSnapshots,
     loading,
+    revealRecoveryKey,
+    resetLocalConfiguration,
     restore,
     state,
     testConnection,

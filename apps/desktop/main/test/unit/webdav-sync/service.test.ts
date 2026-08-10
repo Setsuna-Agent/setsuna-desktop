@@ -40,6 +40,7 @@ describe('WebDavSyncService', () => {
     await expect(service.initialize()).rejects.toThrow('无法读取 WebDAV 同步配置');
     await expect(readFile(path.join(workRoot, 'stale', 'local-data.json'), 'utf8'))
       .rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(service.resetLocalConfiguration()).resolves.toMatchObject({ configured: false });
     service.close();
   });
 
@@ -82,6 +83,7 @@ describe('WebDavSyncService', () => {
         deviceName: 'Test device',
       });
       expect(configured.recoveryKey).toMatch(/^setsuna-v1-/u);
+      await expect(service.revealRecoveryKey()).resolves.toBe(configured.recoveryKey);
       await service.updatePreferences({ categories: ['preferences', 'model_credentials'] });
       const firstBackup = await service.backupNow();
       const backup = await service.backupNow();
@@ -145,6 +147,58 @@ describe('WebDavSyncService', () => {
         index === 0 || item.completed >= restoreDownloadProgress[index - 1]!.completed
       ))).toBe(true);
       expect([...server.files.values()].some((data) => data.includes('sk-backup-value'))).toBe(false);
+    } finally {
+      service.close();
+    }
+  }, 15_000);
+
+  it('stops the runtime before validating the final restore inventory', async () => {
+    const dataRoot = await createDataRoot();
+    const server = new MemoryWebDavServer('/dav');
+    const stop = vi.fn(async () => writeRuntimeConfig(dataRoot, 'changed while stopping'));
+    const start = vi.fn(async () => undefined);
+    const requestRelaunch = vi.fn(async () => undefined);
+    const service = new WebDavSyncService({
+      dataRoot,
+      appVersion: '0.2.1',
+      configStore: new WebDavSyncConfigStore(
+        path.join(dataRoot, 'webdav-sync.json'),
+        new MemoryCredentialVault(),
+      ),
+      fetch: server.fetch,
+      runtime: {
+        prepare: async () => ({ ready: true, registeredTasks: 0, pendingMutations: 0 }),
+        release: async () => undefined,
+        stop,
+        start,
+      },
+      requestRelaunch,
+    });
+    await service.initialize();
+    try {
+      await service.configure({
+        endpoint: 'https://dav.test/dav',
+        remoteRoot: '/Backups',
+        username: 'alice',
+        password: 'secret',
+        repositoryMode: 'create',
+      });
+      await service.updatePreferences({ categories: ['preferences'] });
+      const backup = await service.backupNow();
+      const plan = await service.inspectRestore({
+        snapshotId: backup.snapshot.id,
+        categories: ['preferences'],
+      });
+
+      await expect(service.restore(plan.id)).rejects.toThrow(
+        '检查清单后，会被覆盖或删除的本地内容发生了变化',
+      );
+
+      expect(stop).toHaveBeenCalledOnce();
+      expect(start).toHaveBeenCalledOnce();
+      expect(requestRelaunch).not.toHaveBeenCalled();
+      expect(await readFile(path.join(dataRoot, 'runtime', 'config.json'), 'utf8'))
+        .toContain('changed while stopping');
     } finally {
       service.close();
     }

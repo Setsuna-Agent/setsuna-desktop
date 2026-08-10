@@ -5,7 +5,7 @@ import {
   type DesktopWebDavSyncPreferencesInput,
 } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, rename } from 'node:fs/promises';
 import { writeJsonAtomically } from '../data-root/atomic-json.js';
 import type { CredentialVault } from '../security/credential-vault.js';
 import {
@@ -66,6 +66,25 @@ export class WebDavSyncConfigStore {
       throw new Error('WebDAV 安全凭据不可用，请重新连接服务器。');
     }
     return { ...connection, password, recoveryKey };
+  }
+
+  async resetDamagedConfig(): Promise<StoredWebDavSyncConfig> {
+    await this.enqueue(async () => {
+      this.config = null;
+      try {
+        await this.load();
+      } catch {
+        // Keep the unreadable metadata for diagnosis. Its opaque credential
+        // references cannot safely be enumerated or deleted from the vault.
+        const damagedPath = `${this.configPath}.invalid-${Date.now()}-${randomUUID()}`;
+        await rename(this.configPath, damagedPath);
+        this.config = defaultStoredConfig();
+        await this.persist(this.config);
+        return;
+      }
+      throw new Error('WebDAV 同步配置可正常读取，无需重置。');
+    });
+    return this.getConfig();
   }
 
   async saveConnection(input: {

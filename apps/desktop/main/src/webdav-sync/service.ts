@@ -105,6 +105,21 @@ export class WebDavSyncService {
     return this.stateFromConfig(config);
   }
 
+  async revealRecoveryKey(): Promise<string> {
+    this.assertIdle();
+    return (await this.requireConnection()).recoveryKey;
+  }
+
+  async resetLocalConfiguration(): Promise<DesktopWebDavSyncState> {
+    this.assertIdle();
+    await this.options.configStore.resetDamagedConfig();
+    this.restorePlans.clear();
+    this.lastError = undefined;
+    await this.scheduleAutomaticBackup();
+    await this.publishState();
+    return this.getState();
+  }
+
   async getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]> {
     const workRoot = await this.createWorkRoot('summary');
     try {
@@ -293,6 +308,13 @@ export class WebDavSyncService {
         });
         secretsBuffer = downloaded.secretsBuffer;
         runtimePrepared = await this.prepareRuntime(false, signal);
+        this.updateOperation('preparing-restore', { cancellable: false });
+        // Stopping the runtime before the final inventory closes every local
+        // mutation path, so the confirmed overwrite plan cannot race a config
+        // or attachment write that the quiescence gate does not own.
+        await this.options.runtime.stop();
+        runtimeStopped = true;
+        runtimePrepared = false;
         const localItems = await createLocalInventory({
           dataRoot: this.options.dataRoot,
           categories: plan.publicPlan.categories,
@@ -304,10 +326,6 @@ export class WebDavSyncService {
           ? await readLocalProjects(this.options.dataRoot)
           : [];
         assertRestorePlanCurrent(plan, localItems, this.now(), localProjects);
-        this.updateOperation('preparing-restore', { cancellable: false });
-        await this.options.runtime.stop();
-        runtimeStopped = true;
-        runtimePrepared = false;
         this.updateOperation('restoring', { cancellable: false });
         await applyRestoredSnapshot({
           dataRoot: this.options.dataRoot,
@@ -392,7 +410,7 @@ export class WebDavSyncService {
         try {
           const replaceableSnapshots = await repository.listSnapshots(signal);
           runtimePrepared = await this.prepareRuntime(automatic, signal);
-          await createAndUploadSnapshot({
+          const published = await createAndUploadSnapshot({
             repository,
             recoveryKey: connection.recoveryKey,
             dataRoot: this.options.dataRoot,
@@ -406,7 +424,9 @@ export class WebDavSyncService {
           });
           this.updateOperation('publishing', { cancellable: true });
           this.updateOperation('pruning', { cancellable: true });
-          const retained = await repository.retainNewestCompleteSnapshot(
+          const retained = await repository.retainPublishedSnapshot(
+            published.manifest.deviceId,
+            published.manifest.id,
             replaceableSnapshots,
             signal,
           );

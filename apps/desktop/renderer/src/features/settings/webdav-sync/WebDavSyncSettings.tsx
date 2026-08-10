@@ -11,6 +11,7 @@ import {
   KeyRound,
   LockKeyhole,
   Play,
+  RotateCcw,
   Server,
   ShieldCheck,
   Unplug,
@@ -42,6 +43,7 @@ export function WebDavSyncSettings() {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [confirmAutomaticBackup, setConfirmAutomaticBackup] = useState(false);
   const [automaticBackupPending, setAutomaticBackupPending] = useState(false);
+  const [resetPending, setResetPending] = useState(false);
   const state = sync.state;
   const busy = Boolean(state?.operation);
 
@@ -66,7 +68,29 @@ export function WebDavSyncSettings() {
 
   if (sync.loading) return <EmptyState title={t('common.loading')} />;
   if (!state) {
-    return <EmptyState title={t('settings.sync.unavailable')} body={sync.error ?? undefined} />;
+    return (
+      <div className="chat-user-settings__section settings-webdav">
+        <section className="settings-webdav__card settings-webdav__unavailable">
+          <div>
+            <strong>{t('settings.sync.unavailable')}</strong>
+            <small>{sync.error ?? t('settings.sync.unavailableDescription')}</small>
+            <small>{t('settings.sync.unavailableResetHint')}</small>
+          </div>
+          <Button
+            disabled={resetPending}
+            icon={<RotateCcw size={13} />}
+            onClick={() => {
+              setResetPending(true);
+              void sync.resetLocalConfiguration()
+                .catch(() => undefined)
+                .finally(() => setResetPending(false));
+            }}
+          >
+            {t('settings.sync.unavailableReset')}
+          </Button>
+        </section>
+      </div>
+    );
   }
 
   if (!state.configured || !state.connection) {
@@ -156,6 +180,18 @@ export function WebDavSyncSettings() {
             <StatusBadge tone="success">{t('settings.sync.connection.connected')}</StatusBadge>
           </div>
           <div className="settings-webdav__header-actions">
+            <Button
+              disabled={busy}
+              icon={<KeyRound size={13} />}
+              onClick={() => {
+                setCopied(false);
+                void sync.revealRecoveryKey()
+                  .then((value) => setRecoveryKey(value))
+                  .catch(() => undefined);
+              }}
+            >
+              {t('settings.sync.recovery.reveal')}
+            </Button>
             <Button
               disabled={busy}
               icon={<ShieldCheck size={13} />}

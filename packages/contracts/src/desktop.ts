@@ -298,6 +298,8 @@ export type SetsunaDesktopBridge = {
   webdavSync: {
     getState(): Promise<DesktopWebDavSyncState>;
     getLocalCategorySummaries(): Promise<DesktopWebDavSyncCategorySummary[]>;
+    revealRecoveryKey(): Promise<string>;
+    resetLocalConfiguration(): Promise<DesktopWebDavSyncState>;
     configure(input: DesktopWebDavSyncConfigureInput): Promise<DesktopWebDavSyncConfigureResult>;
     updatePreferences(input: DesktopWebDavSyncPreferencesInput): Promise<DesktopWebDavSyncState>;
     /** When input is provided, verifies the draft without saving it locally. */

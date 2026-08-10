@@ -13,6 +13,29 @@
   background: var(--app-surface);
 }
 
+.settings-webdav__unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-webdav__unavailable > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-webdav__unavailable strong {
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.settings-webdav__unavailable small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
 .settings-webdav__recovery-card {
   border-color: color-mix(in srgb, var(--app-warning) 48%, var(--chat-settings-divider));
   background: color-mix(in srgb, var(--app-warning) 7%, var(--app-surface));
@@ -1168,7 +1191,8 @@
 
 @media (max-width: 760px) {
   .settings-webdav__section-header,
-  .settings-webdav__disconnect-confirm {
+  .settings-webdav__disconnect-confirm,
+  .settings-webdav__unavailable {
     align-items: stretch;
     flex-direction: column;
   }

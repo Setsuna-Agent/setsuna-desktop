@@ -83,6 +83,29 @@ describe('WorkspaceRuntimeEnvironmentResolver', () => {
     )));
     expect(environment.workspaceRoot).toBe(environment.cwd);
   });
+
+  it('keeps an unbound project usable in a managed thread workspace', async () => {
+    const root = await temporaryDirectory();
+    const dataDir = path.join(root, 'data');
+    const store = new FileWorkspaceProjectStore(dataDir, systemClock);
+    const project = await store.addProject({ name: 'Restored project' });
+    const createdAt = new Date(2026, 6, 18, 12, 0, 0).toISOString();
+
+    const environment = await new WorkspaceRuntimeEnvironmentResolver(store).resolve({
+      projectId: project.id,
+      threadId: 'thread_restored',
+      threadCreatedAt: createdAt,
+    });
+
+    expect(environment.id).toBe(project.id);
+    expect(environment.cwd).toBe(await realpath(path.join(
+      dataDir,
+      'temporary-workspace',
+      '2026-07-18',
+      'thread_restored',
+    )));
+    expect(environment.workspaceRoot).toBe(environment.cwd);
+  });
 });
 
 async function temporaryDirectory(): Promise<string> {

@@ -1,5 +1,5 @@
 import { DEFAULT_DESKTOP_WEBDAV_SYNC_CATEGORIES } from '@setsuna-desktop/contracts';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -87,6 +87,26 @@ describe('WebDavSyncConfigStore', () => {
     );
     await store.initialize();
     await expect(store.updatePreferences({ categories: [] })).rejects.toThrow('至少一种');
+  });
+
+  it('preserves damaged metadata and resets only the local sync configuration', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-damaged-config-'));
+    temporaryRoots.push(root);
+    const configPath = path.join(root, 'webdav-sync.json');
+    await writeFile(configPath, '{ invalid json', 'utf8');
+    const store = new WebDavSyncConfigStore(configPath, new MemoryCredentialVault());
+
+    await expect(store.initialize()).rejects.toThrow('无法读取 WebDAV 同步配置');
+    const reset = await store.resetDamagedConfig();
+    expect(reset.automaticBackup).toBe(false);
+    expect(reset.connection).toBeUndefined();
+
+    expect(JSON.parse(await readFile(configPath, 'utf8'))).toMatchObject({
+      version: 2,
+      automaticBackup: false,
+    });
+    expect((await readdir(root)).some((name) => name.startsWith('webdav-sync.json.invalid-')))
+      .toBe(true);
   });
 });
 

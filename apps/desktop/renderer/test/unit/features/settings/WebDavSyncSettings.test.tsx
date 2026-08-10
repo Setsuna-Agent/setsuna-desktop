@@ -68,6 +68,43 @@ describe('WebDavSyncSettings', () => {
     await user.click(within(dialog).getByRole('button', { name: '确认开启' }));
     expect(updatePreferences).toHaveBeenCalledWith({ automaticBackup: true });
   });
+
+  it('lets a connected device reveal its stored recovery key again', async () => {
+    const user = userEvent.setup();
+    const view = webDavSyncView();
+    view.revealRecoveryKey = vi.fn(async () => 'setsuna-v1-recovery-key');
+    mocks.useDesktopWebDavSync.mockReturnValue(view);
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <WebDavSyncSettings />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: '查看恢复密钥' }));
+
+    expect(view.revealRecoveryKey).toHaveBeenCalledOnce();
+    expect(await screen.findByDisplayValue('setsuna-v1-recovery-key')).toBeTruthy();
+  });
+
+  it('offers a local reset when damaged sync metadata prevents loading', async () => {
+    const user = userEvent.setup();
+    const resetLocalConfiguration = vi.fn(async () => undefined);
+    mocks.useDesktopWebDavSync.mockReturnValue({
+      ...webDavSyncView(),
+      error: '无法读取 WebDAV 同步配置。',
+      resetLocalConfiguration,
+      state: null,
+    });
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <WebDavSyncSettings />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('无法读取 WebDAV 同步配置。')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '重置本机同步配置' }));
+    expect(resetLocalConfiguration).toHaveBeenCalledOnce();
+  });
 });
 
 function webDavSyncView() {
@@ -88,6 +125,8 @@ function webDavSyncView() {
     inspectRestore: vi.fn(async () => undefined),
     listSnapshots: vi.fn(async () => ({ snapshots: [] })),
     loading: false,
+    revealRecoveryKey: vi.fn(async () => ''),
+    resetLocalConfiguration: vi.fn(async () => undefined),
     restore: vi.fn(async () => undefined),
     state: {
       configPath: '/tmp/webdav-sync.json',

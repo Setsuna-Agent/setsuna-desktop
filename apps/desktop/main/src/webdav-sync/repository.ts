@@ -273,17 +273,28 @@ export class EncryptedWebDavRepository {
   }
 
   /**
-   * Keeps the newest authenticated backup while only deleting snapshots that
-   * were complete before this replacement started. A concurrently published
-   * snapshot is therefore never removed by another device's pruning pass; a
+   * Keeps the snapshot published by this backup while only deleting snapshots
+   * that were complete before the replacement started. Selecting the explicit
+   * publication avoids trusting another device's wall clock for retention. A
+   * concurrently published snapshot is never removed by this pruning pass; a
    * later backup will collapse any temporary overlap back to one snapshot.
    */
-  async retainNewestCompleteSnapshot(
+  async retainPublishedSnapshot(
+    publishedDeviceId: string,
+    publishedSnapshotId: string,
     replaceableSnapshots: readonly WebDavSnapshotRecord[],
     signal?: AbortSignal,
   ): Promise<WebDavSnapshotRecord> {
-    const retained = (await this.listSnapshots(signal))[0];
-    if (!retained) throw new Error('新备份发布后无法读取，旧备份未被替换。');
+    let retained: WebDavSnapshotRecord;
+    try {
+      retained = await this.readSnapshot(
+        requireUuid(publishedDeviceId, '设备标识'),
+        requireSnapshotId(publishedSnapshotId),
+        signal,
+      );
+    } catch (error) {
+      throw new Error('新备份发布后无法读取，旧备份未被替换。', { cause: error });
+    }
     const retainedDeviceId = retained.manifest.deviceId;
     const retainedSnapshotId = retained.manifest.id;
     const deleted = new Set<string>();

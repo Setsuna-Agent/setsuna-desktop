@@ -14,6 +14,8 @@ export function registerWebDavSyncIpc(
   const channels = [
     'webdav-sync:get-state',
     'webdav-sync:get-local-category-summaries',
+    'webdav-sync:reveal-recovery-key',
+    'webdav-sync:reset-local-configuration',
     'webdav-sync:configure',
     'webdav-sync:update-preferences',
     'webdav-sync:test',
@@ -28,6 +30,9 @@ export function registerWebDavSyncIpc(
   ipcMain.handle('webdav-sync:get-state', async () => service.getState());
   ipcMain.handle('webdav-sync:get-local-category-summaries', async () =>
     service.getLocalCategorySummaries());
+  ipcMain.handle('webdav-sync:reveal-recovery-key', async () => service.revealRecoveryKey());
+  ipcMain.handle('webdav-sync:reset-local-configuration', async () =>
+    service.resetLocalConfiguration());
   ipcMain.handle('webdav-sync:configure', async (_event, value) => service.configure(configureInput(value)));
   ipcMain.handle('webdav-sync:update-preferences', async (_event, value) =>
     service.updatePreferences(preferencesInput(value)));

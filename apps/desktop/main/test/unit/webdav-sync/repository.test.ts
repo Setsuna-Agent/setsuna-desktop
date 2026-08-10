@@ -92,7 +92,11 @@ describe('EncryptedWebDavRepository', () => {
       categories: ['usage'],
       items: [],
     });
-    const newest = await connected.retainNewestCompleteSnapshot(replaceableSnapshots);
+    const newest = await connected.retainPublishedSnapshot(
+      replacementDeviceId,
+      replacementId,
+      replaceableSnapshots,
+    );
 
     const retained = await connected.listSnapshots();
     expect(newest.manifest.id).toBe(replacementId);
@@ -123,9 +127,9 @@ describe('EncryptedWebDavRepository', () => {
     const snapshotA = createSnapshotId(new Date('2026-08-10T11:00:00.000Z'));
     const snapshotB = createSnapshotId(new Date('2026-08-10T11:00:01.000Z'));
     await publishEmptySnapshot(repository, deviceA, snapshotA, '2026-08-10T11:00:00.000Z');
-    await repository.retainNewestCompleteSnapshot(replaceableByA);
+    await repository.retainPublishedSnapshot(deviceA, snapshotA, replaceableByA);
     await publishEmptySnapshot(repository, deviceB, snapshotB, '2026-08-10T11:00:01.000Z');
-    await repository.retainNewestCompleteSnapshot(replaceableByB);
+    await repository.retainPublishedSnapshot(deviceB, snapshotB, replaceableByB);
 
     expect((await repository.listSnapshots()).map((record) => record.manifest.id))
       .toEqual([snapshotB, snapshotA]);
@@ -135,9 +139,35 @@ describe('EncryptedWebDavRepository', () => {
     const replaceableAfterConflict = await repository.listSnapshots();
     const finalId = createSnapshotId(new Date('2026-08-10T12:00:00.000Z'));
     await publishEmptySnapshot(repository, deviceA, finalId, '2026-08-10T12:00:00.000Z');
-    await repository.retainNewestCompleteSnapshot(replaceableAfterConflict);
+    await repository.retainPublishedSnapshot(deviceA, finalId, replaceableAfterConflict);
     expect((await repository.listSnapshots()).map((record) => record.manifest.id))
       .toEqual([finalId]);
+  });
+
+  it('retains the just-published backup instead of a peer snapshot with a future clock', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      server.fetch,
+    );
+    const repository = await EncryptedWebDavRepository.create(client, generateWebDavRecoveryKey());
+    const localDevice = '55bc8840-ac7a-435a-b5a7-88c2e91e7d87';
+    const peerDevice = '1455a7df-11ca-4b40-9fd8-f65e3a8846f0';
+    const peerId = createSnapshotId(new Date('2099-08-10T10:00:00.000Z'));
+    await publishEmptySnapshot(repository, peerDevice, peerId, '2099-08-10T10:00:00.000Z');
+    const replaceableSnapshots = await repository.listSnapshots();
+    const localId = createSnapshotId(new Date('2026-08-10T12:00:00.000Z'));
+    await publishEmptySnapshot(repository, localDevice, localId, '2026-08-10T12:00:00.000Z');
+
+    const retained = await repository.retainPublishedSnapshot(
+      localDevice,
+      localId,
+      replaceableSnapshots,
+    );
+
+    expect(retained.manifest.id).toBe(localId);
+    expect((await repository.listSnapshots()).map((record) => record.manifest.id)).toEqual([localId]);
   });
 
   it('rejects the wrong recovery key and redirects', async () => {
