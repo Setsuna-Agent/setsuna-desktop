@@ -171,6 +171,7 @@ export function SideChatPanel({
           onCancelActiveTurn={() => void sideChat.actions.cancelActiveTurn()}
           onClearContext={() => void sideChat.clearContext()}
           onClearThreadGoal={sideChat.clearGoal}
+          onUpdateThreadGoal={sideChat.updateGoal}
           onCompactContext={() => void sideChat.compactContext()}
           onDeleteMessages={sideChat.actions.deleteMessages}
           onDraftChange={sideChat.setDraft}

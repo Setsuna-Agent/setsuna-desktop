@@ -1,0 +1,107 @@
+.chat-goal-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 2;
+  width: min(var(--chat-content-max-width), 100%);
+  min-width: 0;
+  height: 34px;
+  margin-bottom: -5px;
+  padding: 0 10px;
+  border: 1px solid var(--desktop-agent-panel-border);
+  border-radius: 17px;
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--desktop-agent-main-surface) 94%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 7%, transparent);
+  font-size: 12px;
+}
+
+.chat-goal-status__target {
+  flex: 0 0 auto;
+  color: var(--app-primary);
+}
+
+.chat-goal-status strong {
+  flex: 0 0 auto;
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.chat-goal-status__objective {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-goal-status__elapsed {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.chat-goal-status__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.chat-goal-status__action:hover:not(:disabled),
+.chat-goal-status__action:focus-visible {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.chat-goal-status__action.is-danger:hover:not(:disabled),
+.chat-goal-status__action.is-danger:focus-visible {
+  color: var(--app-danger);
+}
+
+.chat-goal-status__action:disabled {
+  opacity: 0.45;
+}
+
+.chat-goal-status__error {
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--app-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-goal-editor__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-goal-editor__title svg {
+  color: var(--app-primary);
+}
+
+.chat-goal-editor__input {
+  margin-top: 8px;
+}
+
+.chat-goal-editor__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-goal-editor__error {
+  margin: 8px 0 0;
+  color: var(--app-danger);
+  font-size: 12px;
+}

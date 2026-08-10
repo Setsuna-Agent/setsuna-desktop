@@ -358,6 +358,8 @@ export class AgentLoop {
       ),
       hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+      publishMessage: (threadId, turnId, message) =>
+        this.publishMessage(threadId, turnId, message),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
@@ -600,7 +602,11 @@ export class AgentLoop {
   }
 
   resumeThreadGoal(threadId: string): Promise<void> {
-    return this.withThreadMutation(threadId, () => this.goals.resumeIfActive(threadId));
+    return this.withThreadMutation(threadId, () => this.goals.resumeGoal(threadId));
+  }
+
+  reconcileRestoredGoals(): Promise<void> {
+    return this.goals.reconcileRestoredGoals();
   }
 
   registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {

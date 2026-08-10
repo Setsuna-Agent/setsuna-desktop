@@ -194,15 +194,14 @@ export class RuntimeSamplingContextBuilder {
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
         })
       : null;
-    const threadHasGoal = Boolean(thread.goal);
     const availableTools = toolAccess === 'none'
       ? undefined
-      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, threadHasGoal);
+      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, thread.goal);
     const tools = toolAccess === 'read-only'
       ? availableTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
       : availableTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
-    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
+    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, thread.goal);
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,

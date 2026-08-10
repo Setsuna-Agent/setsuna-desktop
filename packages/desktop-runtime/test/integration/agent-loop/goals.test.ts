@@ -5,8 +5,11 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
+  EditedGoalModelClient,
   GoalSteerModelClient,
+  NoProgressGoalModelClient,
   PersistentGoalModelClient,
+  ReplacingGoalModelClient,
 } from '../../support/agent-loop/goals.js';
 import {
   CancellableModelClient,
@@ -18,6 +21,157 @@ import {
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop persistent goals', () => {
+  it('edits a durable goal without replacing its identity, counters, or execution context', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Editable goal' });
+      const modelClient = new CancellableModelClient();
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'thread.goal_updated',
+        createdAt: systemClock.now().toISOString(),
+        payload: {
+          goal: {
+            version: 1,
+            id: 'goal_editable',
+            threadId: thread.id,
+            objective: 'Original objective',
+            status: 'paused',
+            tokenBudget: null,
+            tokensUsed: 91,
+            timeUsedSeconds: 73,
+            createdAt: 1,
+            updatedAt: 2,
+            execution: { skillIds: ['skill_goal'], thinking: true, thinkingEffort: 'high' },
+          },
+        },
+      });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      const edited = await loop.setThreadGoal(thread.id, { objective: 'Updated objective' });
+
+      expect(edited).toMatchObject({
+        id: 'goal_editable',
+        objective: 'Updated objective',
+        status: 'paused',
+        tokensUsed: 91,
+        timeUsedSeconds: 73,
+        createdAt: 1,
+        execution: { skillIds: ['skill_goal'], thinking: true, thinkingEffort: 'high' },
+      });
+      expect(modelClient.requests).toEqual([]);
+      expect((await threadStore.getThread(thread.id))?.goal).toMatchObject(edited);
+    });
+
+  it('does not let an in-flight turn complete a goal after the user edits its objective', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Edited active goal' });
+      const modelClient = new EditedGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      const original = await loop.setThreadGoal(thread.id, {
+        objective: 'Complete the original objective',
+        status: 'active',
+      });
+      await waitForModelRequestCount(modelClient, 1);
+      const edited = await loop.setThreadGoal(thread.id, {
+        objective: 'Complete the edited objective',
+      });
+      modelClient.releaseStaleCompletion();
+
+      const completed = await waitForTestState(
+        async () => ({
+          activeTurnId: loop.activeTurnId(thread.id),
+          goal: (await threadStore.getThread(thread.id))?.goal,
+        }),
+        (state) => state.activeTurnId === null && state.goal?.status === 'complete',
+        (state) => `Timed out waiting for edited Goal; state=${JSON.stringify(state)}`,
+      );
+      const events = await threadStore.listEvents(thread.id, 0);
+
+      expect(edited.id).toBe(original.id);
+      expect(completed.goal).toMatchObject({
+        id: original.id,
+        objective: 'Complete the edited objective',
+        status: 'complete',
+      });
+      expect(events).toContainEqual(expect.objectContaining({
+        type: 'tool.completed',
+        payload: expect.objectContaining({
+          toolCallId: 'goal_stale_complete',
+          status: 'error',
+          content: expect.stringContaining('earlier goal revision'),
+        }),
+      }));
+      expect(modelClient.requests[2].messages).toContainEqual(expect.objectContaining({
+        role: 'user',
+        content: expect.stringContaining('Complete the edited objective'),
+      }));
+    });
+
+  it('pauses an active restored goal instead of silently continuing after restart', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Restored goal' });
+      const modelClient = new CancellableModelClient();
+      await threadStore.appendEvent(thread.id, {
+        id: ids.id('event'),
+        threadId: thread.id,
+        type: 'thread.goal_updated',
+        createdAt: systemClock.now().toISOString(),
+        payload: {
+          goal: {
+            version: 1,
+            id: 'goal_restored',
+            threadId: thread.id,
+            objective: 'Resume only when the user asks',
+            status: 'active',
+            tokenBudget: null,
+            tokensUsed: 12,
+            timeUsedSeconds: 8,
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        },
+      });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.reconcileRestoredGoals();
+      const restored = await threadStore.getThread(thread.id);
+
+      expect(restored?.goal).toMatchObject({
+        id: 'goal_restored',
+        status: 'paused',
+        stopReason: { code: 'runtimeReloaded' },
+      });
+      expect(restored?.messages).toContainEqual(expect.objectContaining({
+        role: 'developer',
+        visibility: 'transcript',
+        goalMode: expect.objectContaining({ kind: 'paused' }),
+      }));
+      expect(modelClient.requests).toEqual([]);
+    });
+
   it('continues a persistent goal across idle turns until the model marks it complete', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -69,6 +223,101 @@ describe('agent loop persistent goals', () => {
       expect(saved?.goal).toMatchObject({ status: 'complete', tokensUsed: 15 });
       expect(loop.activeTurnId(thread.id)).toBeNull();
     });
+
+  it('blocks autonomous continuation after three turns without new progress evidence', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'No-progress goal' });
+      const modelClient = new NoProgressGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.setThreadGoal(thread.id, { objective: 'Find verifiable progress', status: 'active' });
+      const blocked = await waitForTestState(
+        async () => (await threadStore.getThread(thread.id))?.goal,
+        (goal) => goal?.status === 'blocked',
+        (goal) => `Timed out waiting for no-progress guard; goal=${JSON.stringify(goal ?? null)}`,
+      );
+
+      expect(blocked).toMatchObject({
+        status: 'blocked',
+        stopReason: { code: 'noProgress' },
+        safety: { automaticTurns: 3, consecutiveNoProgressTurns: 3 },
+      });
+      expect(modelClient.requests).toHaveLength(3);
+      expect((await threadStore.getThread(thread.id))?.messages).toContainEqual(expect.objectContaining({
+        goalMode: expect.objectContaining({ kind: 'blocked' }),
+      }));
+    });
+
+  it('binds an in-flight Goal turn to a replacement created by the model', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Replace active goal' });
+      const modelClient = new ReplacingGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      const initialGoal = await loop.setThreadGoal(thread.id, {
+        objective: 'Explicitly replace this with the requested new goal',
+        status: 'active',
+      });
+      const completed = await waitForTestState(
+        async () => ({
+          activeTurnId: loop.activeTurnId(thread.id),
+          goal: (await threadStore.getThread(thread.id))?.goal,
+        }),
+        (state) => state.activeTurnId === null && state.goal?.status === 'complete',
+        (state) => `Timed out waiting for replacement Goal; state=${JSON.stringify(state)}`,
+      );
+
+      expect(completed.goal).toMatchObject({
+        objective: 'Replacement objective',
+        status: 'complete',
+      });
+      expect(completed.goal?.id).not.toBe(initialGoal.id);
+      expect(modelClient.requests).toHaveLength(3);
+    });
+
+  it('accounts a regular turn after create_goal binds it to the new Goal', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Create Goal from regular turn' });
+      const modelClient = new ReplacingGoalModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.sendTurn(thread.id, {
+        input: 'Explicitly create a persistent Goal for the replacement objective.',
+      });
+      const completed = await waitForTestState(
+        async () => (await threadStore.getThread(thread.id))?.goal,
+        (goal) => goal?.status === 'complete' && goal.tokensUsed === 6,
+        (goal) => `Timed out waiting for regular Goal accounting; goal=${JSON.stringify(goal ?? null)}`,
+      );
+
+      expect(completed).toMatchObject({
+        objective: 'Replacement objective',
+        status: 'complete',
+        tokensUsed: 6,
+      });
+      expect(modelClient.requests).toHaveLength(3);
+    });
   
   it('pauses a persistent goal when its active turn is cancelled', async () => {
       const ids = new RandomIdGenerator();
@@ -97,6 +346,35 @@ describe('agent loop persistent goals', () => {
   
       expect(pausedGoal).toMatchObject({ status: 'paused' });
       expect(modelClient.requests).toHaveLength(1);
+    });
+
+  it('does not resurrect a cleared Goal when its cancelled turn settles late', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Cleared goal' });
+      const modelClient = new CancellableModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await loop.setThreadGoal(thread.id, { objective: 'Clear this safely', status: 'active' });
+      await modelClient.waitUntilAbortListenerReady();
+      await loop.clearThreadGoal(thread.id);
+      await waitForModelAbort(modelClient);
+      const cleared = await waitForTestState(
+        () => threadStore.getThread(thread.id),
+        (snapshot) => snapshot?.goal === undefined && loop.activeTurnId(thread.id) === null,
+        (snapshot) => `Timed out waiting for cleared Goal; snapshot=${JSON.stringify(snapshot)}`,
+      );
+
+      expect(cleared?.goal).toBeUndefined();
+      expect(cleared?.messages).toContainEqual(expect.objectContaining({
+        goalMode: expect.objectContaining({ kind: 'cleared' }),
+      }));
     });
   
   it('accepts visible user guidance during an active goal turn and samples it next', async () => {

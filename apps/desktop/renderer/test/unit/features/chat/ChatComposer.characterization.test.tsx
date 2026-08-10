@@ -210,6 +210,7 @@ describe('ChatComposer view state characterization', () => {
     composerHarness.queuedEdit.editing = true;
     composerHarness.mode.planModeEnabled = true;
     composerHarness.mode.goalEnabled = true;
+    composerHarness.mode.goalModeEnabled = true;
 
     const html = renderComposer({
       activeTurnId: 'turn-1',

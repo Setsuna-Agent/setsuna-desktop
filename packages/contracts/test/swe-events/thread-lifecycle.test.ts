@@ -88,6 +88,8 @@ describe('runtime AppServer SWE thread lifecycle', () => {
   
   it('maps thread goal events to AppServer goal notifications', () => {
       const goal = {
+        version: 1 as const,
+        id: 'goal_1',
         threadId: 'thread_1',
         objective: 'Ship alignment.',
         status: 'active' as const,

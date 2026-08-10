@@ -259,6 +259,19 @@ export function useSideChat({
     return cleared;
   }, [client, currentThread, reloadThreads]);
 
+  const updateGoal = useCallback(async (patch: Parameters<DesktopRuntimeClient['setThreadGoal']>[1]) => {
+    if (!currentThread) return null;
+    const requestedThreadId = currentThread.id;
+    const goal = await client.setThreadGoal(requestedThreadId, patch);
+    if (threadIdRef.current === requestedThreadId) {
+      setCurrentThread((current) => (
+        current?.id === requestedThreadId ? { ...current, goal } : current
+      ));
+    }
+    await reloadThreads();
+    return goal;
+  }, [client, currentThread, reloadThreads]);
+
   const answerApproval = useCallback(async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
     await client.answerApproval(approvalId, input);
     if (!threadId) return;
@@ -303,6 +316,7 @@ export function useSideChat({
     setDraft,
     startReview,
     threadUsage,
+    updateGoal,
     updateMemoryMode,
   }), [
     actions,
@@ -318,6 +332,7 @@ export function useSideChat({
     setDraft,
     startReview,
     threadUsage,
+    updateGoal,
     updateMemoryMode,
   ]);
 }

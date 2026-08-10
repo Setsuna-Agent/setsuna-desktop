@@ -171,13 +171,16 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 
 - 原子建立 goal 与 source message。
 - 持久化执行选项：附件、Skill、thinking、source message。
-- 记录进展/计量。
+- 按稳定 Goal ID 记录进展、计量、停止原因和安全状态。
 - 在当前 goal turn 正常结束后创建 continuation。
 - 用户队列优先于自动 continuation。
 - Awaiting Plan confirmation 时暂停 continuation。
-- Goal 完成/清除后停止。
+- Goal 完成/清除后停止；reload、取消、provider 错误和无进展循环进入显式暂停/阻塞状态。
 
 Goal continuation 复用 execution metadata，避免重复保存内联图片。
+模型仅在 active Goal 中获得 `get_goal` / `update_goal`，且只能用 `update_goal` 提交 `complete`；
+`create_goal` 始终可用但只响应用户显式 Goal 请求。完整状态机和 renderer 控制见
+[持久化 Goal 设计](../../designs/persistent-goals.md)。
 
 ## Collaboration / Plan
 
@@ -262,4 +265,3 @@ Integration：`test/integration/agent-loop/`
 共享 harness：`test/support/agent-loop/`。
 
 修改 turn 生命周期时，优先增加一个精确 integration 场景，再给可独立协作者补单元测试。
-

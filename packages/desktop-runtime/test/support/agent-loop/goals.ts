@@ -69,3 +69,84 @@ export class GoalSteerModelClient implements ModelClient {
     yield { type: 'done', finishReason: 'stop' };
   }
 }
+
+export class NoProgressGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'text_delta', text: 'No new evidence yet.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+export class ReplacingGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{
+          id: 'goal_replace',
+          name: 'create_goal',
+          arguments: '{"objective":"Replacement objective"}',
+        }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_replace_complete', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Replacement goal completed.' };
+    yield { type: 'usage', usage: { inputTokens: 4, outputTokens: 2, totalTokens: 6 } };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+export class EditedGoalModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private releaseFirst: () => void = () => undefined;
+  private readonly firstReleased = new Promise<void>((resolve) => {
+    this.releaseFirst = resolve;
+  });
+
+  releaseStaleCompletion(): void {
+    this.releaseFirst();
+  }
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      await this.firstReleased;
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_stale_complete', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
+      yield { type: 'text_delta', text: 'The goal changed, so I will continue with the edited objective.' };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    if (this.requests.length === 3) {
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'goal_edited_complete', name: 'update_goal', arguments: '{"status":"complete"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Edited goal verified complete.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}

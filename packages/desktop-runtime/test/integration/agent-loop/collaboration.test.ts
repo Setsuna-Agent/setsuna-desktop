@@ -43,6 +43,7 @@ describe('agent loop collaboration tools', () => {
         'resume_agent',
         'wait',
         'close_agent',
+        'create_goal',
       ]);
       expect(child).toMatchObject({ parentThreadId: parent.id, projectId: 'project_1' });
       expect(parentEvents.filter((event) => event.type === 'item.completed').map((event) => event.payload.item.kind)).toEqual(expect.arrayContaining([

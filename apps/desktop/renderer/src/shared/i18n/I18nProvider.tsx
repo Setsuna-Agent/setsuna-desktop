@@ -51,7 +51,11 @@ export function useI18n(): I18nContextValue {
 }
 
 export function translate(locale: AppLocale, key: MessageKey, params?: TranslationParams): string {
-  const template: string = messages[locale][key];
+  // Dynamic lifecycle keys can arrive from newer persisted data. Keep one missing label from
+  // crashing the entire renderer and let the untranslated key remain diagnosable in the UI.
+  const localeMessages = messages[locale] as Partial<Record<MessageKey, string>>;
+  const fallbackMessages = messages[DEFAULT_APP_LOCALE] as Partial<Record<MessageKey, string>>;
+  const template = localeMessages[key] ?? fallbackMessages[key] ?? key;
   if (!params) return template;
   return template.replace(/\{(\w+)\}/gu, (match, name: string) => String(params[name] ?? match));
 }

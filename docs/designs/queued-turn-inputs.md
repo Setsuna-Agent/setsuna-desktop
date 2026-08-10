@@ -124,7 +124,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 ### 入队
 
 1. 规范化文本、附件、Skill 和 thinking effort。
-2. Goal 在事件落盘前复用目标长度和未完成目标校验，并拒绝同一线程重复排队 Goal。
+2. Goal 在事件落盘前复用目标长度校验，并拒绝同一线程重复排队 Goal；已运行的当前 Goal 不阻止用户排队一个显式替换项。
 3. 校验附件能力并把临时附件认领到线程。
 4. 写入 `turn.input_queued`。
 5. active turn 存在时保持等待。
@@ -244,7 +244,7 @@ runtime 与 contract 测试覆盖：
 - cancelled 后迟到的 completed 不会续发；旧 run 的迟到结算不会污染新 run。
 - active 期间误发普通 start 也会排队。
 - Plan/Goal 类型持久化、专用调度和 Goal 原子消费。
-- Goal 入队前完整校验、附件与执行选项续轮复用，以及 awaiting Plan 对 Goal 的调度阻塞。
+- Goal 入队前校验、当前 Goal 的显式替换、附件与执行选项续轮复用，以及 awaiting Plan 对 Goal 的调度阻塞。
 - 删除当前编辑项后恢复剩余队首；编辑占用下 start 返回 queued 成功且不重复。
 - REST 的创建、retrieve、release、更新、删除和 send-now 路由；AppServer busy start 返回显式 queued 结果而不伪造 turn ID。
 

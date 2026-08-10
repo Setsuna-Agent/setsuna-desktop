@@ -11,6 +11,7 @@
 | `create-mcp-in-chat/` | 在对话中收集结构化 MCP 配置并调用管理工具 |
 | `create-plugin-in-chat/` | 在对话中生成完整 Plugin Bundle 并调用受管创建工具 |
 | `create-skill-in-chat/` | 在对话中生成完整 Skill 内容并保存为用户 Skill |
+| `goal-writer/` | 把用户显式 Goal 请求改写成持久、可验证且无 Token 预算的目标 |
 
 具体行为以各目录的 `SKILL.md` 为准。
 
@@ -137,4 +138,3 @@ Skill 本身不能把 secret 写入 manifest；认证仍走 MCP/native secret �
 - `test/adapters/tool/skill-management-tool-host.test.ts`
 - Runtime server capabilities tests。
 - Renderer capabilities tests。
-

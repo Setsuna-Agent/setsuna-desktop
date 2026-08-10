@@ -599,6 +599,8 @@ describe('thread event lifecycle and metadata projection', () => {
           }],
         },
         goal: {
+          version: 1,
+          id: 'goal_1',
           threadId: 'thread_1',
           objective: 'Ship alignment.',
           status: 'active',

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Goal Writer"
+  short_description: "Write durable, verifiable multi-turn goals"
+  default_prompt: "Use $goal-writer to turn my request into a durable, evidence-checkable goal."

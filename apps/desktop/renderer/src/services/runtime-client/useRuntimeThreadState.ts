@@ -4,6 +4,7 @@ import type {
   RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
+  RuntimeThreadGoalPatch,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   WorkspaceProject,
@@ -47,6 +48,7 @@ export type RuntimeThreadClient = Pick<
   | 'deleteThread'
   | 'getThread'
   | 'listThreads'
+  | 'setThreadGoal'
   | 'startReview'
   | 'subscribeEvents'
   | 'updateThread'
@@ -480,6 +482,17 @@ export function useRuntimeThreadState({
     return cleared;
   }, [client, currentThread, reloadThreads, setCurrentThread]);
 
+  const updateCurrentThreadGoal = useCallback(async (patch: RuntimeThreadGoalPatch) => {
+    if (!currentThread) return null;
+    const threadId = currentThread.id;
+    const goal = await client.setThreadGoal(threadId, patch);
+    setCurrentThread((thread) => (
+      thread?.id === threadId ? { ...thread, goal } : thread
+    ));
+    await reloadThreads();
+    return goal;
+  }, [client, currentThread, reloadThreads, setCurrentThread]);
+
   const restoreArchivedThread = useCallback(async (threadId: string) => {
     const restored = await client.updateThread(threadId, { archived: false });
     await reloadThreads();
@@ -581,6 +594,7 @@ export function useRuntimeThreadState({
     startCurrentThreadReview,
     terminalTurnIdsRef,
     threads,
+    updateCurrentThreadGoal,
     updateCurrentThreadMemoryMode,
   };
 }

@@ -47,6 +47,7 @@ import {
 } from './ChatWorkHistory.js';
 import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
+import { GoalLifecycleMarker } from './GoalLifecycleMarker.js';
 
 export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
 export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
@@ -123,6 +124,9 @@ export function MessageItem({
   }
   if (item.type === 'review') {
     return <ReviewModeMarker message={item.message} />;
+  }
+  if (item.type === 'goal') {
+    return <GoalLifecycleMarker message={item.message} />;
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
