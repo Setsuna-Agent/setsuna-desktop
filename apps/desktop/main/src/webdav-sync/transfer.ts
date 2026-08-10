@@ -199,7 +199,7 @@ export async function downloadSnapshotForRestore(input: {
   let projectCatalogFound = false;
   let completedBytes = 0;
   let lastReportedBytes = 0;
-  const progressStepBytes = Math.max(64 * 1024, Math.ceil(totalBytes / 100));
+  const progressStepBytes = Math.max(16 * 1024, Math.ceil(totalBytes / 100));
   const reportDownloadProgress = (
     nextCompletedBytes: number,
     completedItems: number,

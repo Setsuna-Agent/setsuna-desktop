@@ -77,6 +77,7 @@ export class WebDavSyncService {
   private readonly subscribers = new Set<(state: DesktopWebDavSyncState) => void>();
   private readonly restorePlans = new Map<string, StoredWebDavRestorePlan>();
   private readonly now: () => Date;
+  private lastPublishedState: DesktopWebDavSyncState | null = null;
   private operation: DesktopWebDavSyncOperationState | undefined;
   private operationAbort: AbortController | null = null;
   private automaticTimer: ReturnType<typeof setTimeout> | null = null;
@@ -492,7 +493,16 @@ export class WebDavSyncService {
   ): void {
     if (!this.operation) return;
     this.operation = { ...this.operation, phase, ...patch };
-    void this.publishState();
+    if (this.lastPublishedState) {
+      // Progress updates arrive faster than an async config read can complete.
+      // Reuse the last base state so each sampled value reaches the renderer in order.
+      this.emitState({
+        ...this.lastPublishedState,
+        operation: { ...this.operation },
+      });
+    } else {
+      void this.publishState();
+    }
   }
 
   private applyTransferProgress(progress: WebDavTransferProgress): void {
@@ -546,7 +556,11 @@ export class WebDavSyncService {
 
   private async publishState(): Promise<void> {
     if (!this.subscribers.size) return;
-    const state = await this.getState();
+    this.emitState(await this.getState());
+  }
+
+  private emitState(state: DesktopWebDavSyncState): void {
+    this.lastPublishedState = state;
     for (const listener of this.subscribers) listener(state);
   }
 

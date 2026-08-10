@@ -113,7 +113,17 @@ describe('WebDavSyncService', () => {
       expect(plan.diffs.find((diff) => diff.category === 'model_credentials')?.preserved)
         .toContainEqual(expect.objectContaining({ detail: 'provider-local-only' }));
 
+      const restoreDownloadProgress: Array<{ completed: number; total: number }> = [];
+      const unsubscribe = service.subscribe((state) => {
+        const operation = state.operation;
+        if (operation?.kind !== 'restore' || operation.phase !== 'downloading' || !operation.totalBytes) return;
+        restoreDownloadProgress.push({
+          completed: operation.completedBytes ?? 0,
+          total: operation.totalBytes,
+        });
+      });
       await service.restore(plan.id);
+      unsubscribe();
 
       expect(requestRelaunch).toHaveBeenCalledOnce();
       expect(stop).toHaveBeenCalledOnce();
@@ -127,6 +137,13 @@ describe('WebDavSyncService', () => {
         'provider-local-only': 'sk-local-only',
         'provider-openai': 'sk-backup-value',
       });
+      expect(restoreDownloadProgress[0]?.completed).toBe(0);
+      const finalDownloadProgress = restoreDownloadProgress.at(-1);
+      expect(finalDownloadProgress).toBeDefined();
+      expect(finalDownloadProgress?.completed).toBe(finalDownloadProgress?.total);
+      expect(restoreDownloadProgress.every((item, index) => (
+        index === 0 || item.completed >= restoreDownloadProgress[index - 1]!.completed
+      ))).toBe(true);
       expect([...server.files.values()].some((data) => data.includes('sk-backup-value'))).toBe(false);
     } finally {
       service.close();
