@@ -88,6 +88,7 @@ import type {
 } from './workspace-dependencies.js';
 import type {
   AddWorkspaceProjectInput,
+  UpdateWorkspaceProjectInput,
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
@@ -176,6 +177,7 @@ export type DesktopRuntimeClient = {
   testVisionRecognition(input: RuntimeVisionRecognitionTestInput): Promise<RuntimeVisionRecognitionTestResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
+  updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   getWorkspaceStatus(query?: WorkspaceStatusQuery): Promise<WorkspaceStatus>;

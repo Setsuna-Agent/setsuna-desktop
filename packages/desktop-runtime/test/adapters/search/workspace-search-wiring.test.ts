@@ -30,9 +30,9 @@ describe('workspace search wiring', () => {
       turnId: 'turn_1',
       environment: {
         id: 'local',
-        cwd: project.path,
-        workspaceRoot: project.path,
-        workspaceRoots: [project.path],
+        cwd: project.path!,
+        workspaceRoot: project.path!,
+        workspaceRoots: [project.path!],
       },
     });
 
@@ -76,9 +76,9 @@ describe('workspace search wiring', () => {
       turnId: 'turn_1',
       environment: {
         id: 'local',
-        cwd: project.path,
-        workspaceRoot: project.path,
-        workspaceRoots: [project.path],
+        cwd: project.path!,
+        workspaceRoot: project.path!,
+        workspaceRoots: [project.path!],
       },
     };
 

@@ -1,5 +1,6 @@
 import type {
   AddWorkspaceProjectInput,
+  UpdateWorkspaceProjectInput,
   AnswerRuntimeApprovalInput,
   CreateRuntimeMemoryInput,
   CreateThreadInput,
@@ -408,6 +409,13 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     addProject(input: AddWorkspaceProjectInput) {
       return request<WorkspaceProject>({ path: '/v1/projects', method: 'POST', body: input });
+    },
+    updateProject(projectId: string, input: UpdateWorkspaceProjectInput) {
+      return request<WorkspaceProject>({
+        path: `/v1/projects/${encodeURIComponent(projectId)}`,
+        method: 'PATCH',
+        body: input,
+      });
     },
     archiveProject(projectId: string) {
       return request<void>({ path: `/v1/projects/${encodeURIComponent(projectId)}/archive`, method: 'POST' });

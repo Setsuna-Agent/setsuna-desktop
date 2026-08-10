@@ -1,5 +1,6 @@
 import type {
   AddWorkspaceProjectInput,
+  UpdateWorkspaceProjectInput,
   WorkspaceEntryList,
   WorkspaceEntrySearchResponse,
   WorkspaceFileRead,
@@ -45,6 +46,7 @@ export type WorkspaceFileReadOptions = {
 export type WorkspaceProjectStore = {
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
+  updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
   archiveProject(projectId: string): Promise<void>;
   removeProject(projectId: string): Promise<void>;
   ensureTemporaryWorkspace(input: TemporaryWorkspaceInput): Promise<WorkspaceProject>;

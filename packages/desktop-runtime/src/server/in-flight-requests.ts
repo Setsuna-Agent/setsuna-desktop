@@ -7,6 +7,10 @@ export class InFlightRequestTracker {
   private activeCount = 0;
   private readonly idleWaiters = new Set<() => void>();
 
+  get count(): number {
+    return this.activeCount;
+  }
+
   begin(): () => void {
     this.activeCount += 1;
     let finished = false;

@@ -1,9 +1,12 @@
 import {
+  normalizeWorkspaceProjectName,
   parseTemporaryWorkspaceProjectId,
   TEMPORARY_WORKSPACE_PROJECT_ID,
   temporaryWorkspaceProjectId,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
+  workspaceProjectNameKey,
   type AddWorkspaceProjectInput,
+  type UpdateWorkspaceProjectInput,
   type WorkspaceEntry,
   type WorkspaceEntryList,
   type WorkspaceEntrySearchResponse,
@@ -91,26 +94,90 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   }
 
   async addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject> {
-    const projectPath = await normalizeProjectPath(input.path);
-    const projectStat = await stat(projectPath);
-    if (!projectStat.isDirectory()) throw new Error('Project path must be a directory.');
+    const projectPath = input.path === undefined ? undefined : await normalizeProjectPath(input.path);
+    if (projectPath) await assertProjectDirectory(projectPath);
+    const requestedName = input.name === undefined
+      ? projectPath ? path.basename(projectPath) || projectPath : undefined
+      : input.name;
+    const fallbackName = normalizeWorkspaceProjectName(requestedName);
     return withFileStateUpdate(this.indexPath, async () => {
       const now = this.clock.now().toISOString();
       const index = await this.readIndex();
-      const existing = index.projects.find((project) => project.path === projectPath);
+      const existingByPath = projectPath
+        ? index.projects.find((project) => project.path === projectPath)
+        : undefined;
+      const projectName = input.name === undefined && existingByPath
+        ? existingByPath.name
+        : fallbackName;
+      const existingByName = index.projects.find((project) => (
+        workspaceProjectNameKey(project.name) === workspaceProjectNameKey(projectName)
+      ));
+      if (existingByName && existingByName.id !== existingByPath?.id) {
+        if (existingByPath) throw new Error(`A project named "${projectName}" already exists.`);
+        // A restored placeholder is completed when the user adds its matching folder.
+        if (!projectPath || existingByName.path) {
+          throw new Error(`A project named "${projectName}" already exists.`);
+        }
+      }
+      const existing = existingByPath ?? (existingByName?.path ? undefined : existingByName);
       const project: WorkspaceProject = {
         id: existing?.id ?? `project_${randomUUID().replaceAll('-', '').slice(0, 20)}`,
-        name: input.name?.trim() || existing?.name || path.basename(projectPath) || projectPath,
-        path: projectPath,
-        gitRoot: await findGitRoot(projectPath),
+        name: projectName,
+        ...(projectPath ? { path: projectPath, gitRoot: await findGitRoot(projectPath) } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
       await this.writeIndex({
         version: 1,
-        projects: [project, ...index.projects.filter((item) => item.id !== project.id && item.path !== project.path)],
+        projects: [project, ...index.projects.filter((item) => (
+          item.id !== project.id && (!project.path || item.path !== project.path)
+        ))],
       });
       return project;
+    });
+  }
+
+  async updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject> {
+    const projectPath = input.path === undefined
+      ? undefined
+      : input.path === null
+        ? null
+        : await normalizeProjectPath(input.path);
+    if (projectPath) await assertProjectDirectory(projectPath);
+    return withFileStateUpdate(this.indexPath, async () => {
+      const index = await this.readIndex();
+      const existing = index.projects.find((project) => project.id === projectId);
+      if (!existing) throw new Error(`Project not found: ${projectId}`);
+      const name = input.name === undefined
+        ? existing.name
+        : normalizeWorkspaceProjectName(input.name);
+      const nextPath = projectPath === undefined ? existing.path : projectPath ?? undefined;
+      const nameKey = workspaceProjectNameKey(name);
+      if (index.projects.some((project) => (
+        project.id !== projectId && workspaceProjectNameKey(project.name) === nameKey
+      ))) {
+        throw new Error(`A project named "${name}" already exists.`);
+      }
+      if (nextPath && index.projects.some((project) => (
+        project.id !== projectId && project.path === nextPath
+      ))) {
+        throw new Error('That directory is already associated with another project.');
+      }
+      const updated: WorkspaceProject = {
+        ...existing,
+        name,
+        ...(nextPath ? { path: nextPath, gitRoot: await findGitRoot(nextPath) } : {}),
+        updatedAt: this.clock.now().toISOString(),
+      };
+      if (!nextPath) {
+        delete updated.path;
+        delete updated.gitRoot;
+      }
+      await this.writeIndex({
+        version: 1,
+        projects: index.projects.map((project) => project.id === projectId ? updated : project),
+      });
+      return updated;
     });
   }
 
@@ -214,6 +281,7 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
   async getStatus(projectId?: string): Promise<WorkspaceStatus> {
     const project = await this.findProject(projectId);
     if (!project) return { exists: false, readable: false };
+    if (!project.path) return { project, exists: false, readable: false };
     try {
       const projectStat = await stat(project.path);
       const fileCount = projectStat.isDirectory() ? await countEntries(project.path) : 0;
@@ -538,10 +606,11 @@ export class FileWorkspaceProjectStore implements WorkspaceProjectStore {
     return null;
   }
 
-  private async requireProject(projectId: string): Promise<WorkspaceProject> {
+  private async requireProject(projectId: string): Promise<WorkspaceProject & { path: string }> {
     const project = await this.findProject(projectId);
     if (!project) throw new Error(`Project not found: ${projectId}`);
-    return project;
+    if (!project.path) throw new Error(`Project directory is not associated: ${projectId}`);
+    return project as WorkspaceProject & { path: string };
   }
 
   private async readIndex(): Promise<ProjectIndex> {
@@ -562,6 +631,11 @@ async function normalizeProjectPath(inputPath: string): Promise<string> {
   if (!trimmed) throw new Error('Project path is required.');
   const expanded = trimmed.startsWith('~/') ? path.join(process.env.HOME ?? '', trimmed.slice(2)) : trimmed;
   return realpath(path.resolve(expanded));
+}
+
+async function assertProjectDirectory(projectPath: string): Promise<void> {
+  const projectStat = await stat(projectPath);
+  if (!projectStat.isDirectory()) throw new Error('Project path must be a directory.');
 }
 
 function localDateSegment(createdAt: string | undefined, fallback: Date): string {

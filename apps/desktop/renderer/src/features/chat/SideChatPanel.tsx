@@ -96,7 +96,7 @@ export function SideChatPanel({
     [client, sideWorkspace],
   );
   const openSideWorkspaceFile = useCallback((filePath: string, line?: number) => {
-    if (!sideWorkspace) return;
+    if (!sideWorkspace?.path) return;
     if (sideWorkspace.id === activeWorkspace?.id) {
       onOpenWorkspaceFile(filePath, line);
       return;
@@ -116,7 +116,7 @@ export function SideChatPanel({
     });
   }, [activeWorkspace?.id, onError, onOpenWorkspaceFile, selectedWorkspaceApp, sideWorkspace, t]);
   const openSideWorkspaceDirectory = useCallback((directoryPath: string) => {
-    if (!sideWorkspace) return;
+    if (!sideWorkspace?.path) return;
     if (sideWorkspace.id === activeWorkspace?.id) {
       onOpenWorkspaceDirectory(directoryPath);
       return;

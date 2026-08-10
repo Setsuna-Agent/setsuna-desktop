@@ -172,7 +172,6 @@ export function useDesktopAppController() {
     setActiveProjectId,
     setActiveView,
     setCurrentThread,
-    setError,
     setProjects,
     threadsByProjectId,
   });

@@ -258,8 +258,11 @@ async function resolveAppServerFsWatchPath(
 }
 
 async function workspaceRoots(runtime: RuntimeFactory): Promise<string[]> {
-  const projects = (await runtime.workspaceProjects.listProjects()).projects;
-  const roots = await Promise.all(projects.map((project) => realpath(project.path).catch(() => path.resolve(project.path))));
+  const projectPaths = (await runtime.workspaceProjects.listProjects()).projects
+    .flatMap((project) => project.path ? [project.path] : []);
+  const roots = await Promise.all(projectPaths.map((projectPath) => (
+    realpath(projectPath).catch(() => path.resolve(projectPath))
+  )));
   return roots.map((root) => path.resolve(root));
 }
 

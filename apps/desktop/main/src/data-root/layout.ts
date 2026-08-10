@@ -23,6 +23,7 @@ export function desktopDataLayout(dataRoot: string) {
     runtimeDatabasePath: path.join(runtimeRoot, 'threads.sqlite'),
     credentialVaultPath: path.join(root, 'secure-credentials.json'),
     networkProxyPath: path.join(root, 'network-proxies.json'),
+    webDavSyncConfigPath: path.join(root, 'webdav-sync.json'),
     updateSourcesPath: path.join(root, 'update-download-sources.json'),
     windowStatePath: path.join(root, 'window-state.json'),
     markerPath: path.join(root, DATA_ROOT_MARKER_FILE_NAME),

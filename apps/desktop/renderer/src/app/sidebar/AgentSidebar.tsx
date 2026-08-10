@@ -8,8 +8,8 @@ import {
   FolderPlus,
   MoreHorizontal,
   Plus,
-  RefreshCw,
   Search,
+  Settings,
   Trash2,
 } from 'lucide-react';
 import {
@@ -42,7 +42,6 @@ export function AgentSidebar({
   projectsCollapsed,
   searchOpen,
   searchTriggerRef,
-  selectingProjectDirectory,
   sessionsCollapsed,
   threadActionMenuId,
   threadsByProjectId,
@@ -55,12 +54,13 @@ export function AgentSidebar({
   onCreateGlobalThread,
   onCreateProjectThread,
   onEnterChatMode,
+  onEditProject,
   onOpenCapabilities,
   onOpenSettings,
   onRemoveProject,
   onResizeStep,
   onResizeStart,
-  onSelectDirectory,
+  onCreateProject,
   onSelectProject,
   onSelectThread,
   onToggleProjectActions,
@@ -83,7 +83,6 @@ export function AgentSidebar({
   projectsCollapsed: boolean;
   searchOpen: boolean;
   searchTriggerRef: Ref<HTMLButtonElement>;
-  selectingProjectDirectory: boolean;
   sessionsCollapsed: boolean;
   threadActionMenuId: string | null;
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>;
@@ -96,12 +95,13 @@ export function AgentSidebar({
   onCreateGlobalThread: () => void;
   onCreateProjectThread: (projectId: string) => void;
   onEnterChatMode: () => void;
+  onEditProject: (project: WorkspaceProject) => void;
   onOpenCapabilities: () => void;
   onOpenSettings: () => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
-  onSelectDirectory: () => void;
+  onCreateProject: () => void;
   onSelectProject: (project: WorkspaceProject) => void;
   onSelectThread: (threadId: string) => void;
   onToggleProjectActions: (projectId: string) => void;
@@ -145,15 +145,15 @@ export function AgentSidebar({
           projectActionMenuId={projectActionMenuId}
           projects={projects}
           projectsCollapsed={projectsCollapsed}
-          selectingProjectDirectory={selectingProjectDirectory}
           threadActionMenuId={threadActionMenuId}
           threadsByProjectId={threadsByProjectId}
           onArchiveThread={onArchiveThread}
           onArchiveProject={onArchiveProject}
           onCreateProjectThread={onCreateProjectThread}
+          onEditProject={onEditProject}
           onRemoveProject={onRemoveProject}
           onRenameThread={onRenameThread}
-          onSelectDirectory={onSelectDirectory}
+          onCreateProject={onCreateProject}
           onSelectProject={onSelectProject}
           onSelectThread={onSelectThread}
           onToggleProjectActions={onToggleProjectActions}
@@ -211,15 +211,15 @@ function ProjectSection({
   projectActionMenuId,
   projects,
   projectsCollapsed,
-  selectingProjectDirectory,
   threadActionMenuId,
   threadsByProjectId,
   onArchiveThread,
   onArchiveProject,
   onCreateProjectThread,
+  onEditProject,
   onRemoveProject,
   onRenameThread,
-  onSelectDirectory,
+  onCreateProject,
   onSelectProject,
   onSelectThread,
   onToggleProjectActions,
@@ -234,15 +234,15 @@ function ProjectSection({
   projectActionMenuId: string | null;
   projects: WorkspaceProject[];
   projectsCollapsed: boolean;
-  selectingProjectDirectory: boolean;
   threadActionMenuId: string | null;
   threadsByProjectId: Map<string, RuntimeThreadSummary[]>;
   onArchiveThread: (thread: RuntimeThreadSummary) => void;
   onArchiveProject: (project: WorkspaceProject) => void;
   onCreateProjectThread: (projectId: string) => void;
+  onEditProject: (project: WorkspaceProject) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
-  onSelectDirectory: () => void;
+  onCreateProject: () => void;
   onSelectProject: (project: WorkspaceProject) => void;
   onSelectThread: (threadId: string) => void;
   onToggleProjectActions: (projectId: string) => void;
@@ -259,15 +259,14 @@ function ProjectSection({
           <ChevronDown className={`desktop-agent-sidebar__section-toggle ${projectsCollapsed ? 'is-collapsed' : ''}`} size={13} />
         </button>
         <div className="desktop-agent-sidebar__section-actions">
-          <ShortcutTooltip commandId="app.addProject" label={t('sidebar.chooseProject')}>
+          <ShortcutTooltip commandId="app.addProject" label={t('sidebar.createProject')}>
             <button
-              className={`agent-sidebar-icon-button ${selectingProjectDirectory ? 'is-active' : ''}`}
+              className="agent-sidebar-icon-button"
               type="button"
-              aria-label={t('sidebar.chooseProject')}
-              disabled={selectingProjectDirectory}
-              onClick={onSelectDirectory}
+              aria-label={t('sidebar.createProject')}
+              onClick={onCreateProject}
             >
-              {selectingProjectDirectory ? <RefreshCw className="is-spinning" size={14} /> : <FolderPlus size={14} />}
+              <FolderPlus size={14} />
             </button>
           </ShortcutTooltip>
         </div>
@@ -287,7 +286,7 @@ function ProjectSection({
                   <div className="desktop-agent-project-node" key={project.id}>
                     <div
                       className="desktop-agent-project"
-                      title={project.path}
+                      title={project.path ?? t('sidebar.projectDirectoryUnbound')}
                       onContextMenu={(event) => {
                         if (isProjectActionTarget(event.target)) return;
                         event.preventDefault();
@@ -305,9 +304,12 @@ function ProjectSection({
                           if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                         }}
                       >
-                        {isProjectCollapsed ? <Folder className="desktop-agent-project__icon" size={14} /> : <FolderOpen className="desktop-agent-project__icon" size={14} />}
+                        {project.path && !isProjectCollapsed
+                          ? <FolderOpen className="desktop-agent-project__icon" size={14} />
+                          : <Folder className="desktop-agent-project__icon" size={14} />}
                         <span className="desktop-agent-project__text">
                           <span className="desktop-agent-project__name">{project.name}</span>
+                          {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
                         </span>
                       </button>
                       <ProjectActionMenu
@@ -315,6 +317,7 @@ function ProjectSection({
                         project={project}
                         onArchiveProject={onArchiveProject}
                         onCreateProjectThread={onCreateProjectThread}
+                        onEditProject={onEditProject}
                         onRemoveProject={onRemoveProject}
                         onToggleProjectActions={onToggleProjectActions}
                       />
@@ -340,8 +343,8 @@ function ProjectSection({
                 );
               })
             ) : (
-              <button className="desktop-agent-sidebar__empty-project" type="button" disabled={selectingProjectDirectory} onClick={onSelectDirectory}>
-                {selectingProjectDirectory ? t('sidebar.choosingProject') : t('sidebar.chooseProject')}
+              <button className="desktop-agent-sidebar__empty-project" type="button" onClick={onCreateProject}>
+                {t('sidebar.createProject')}
               </button>
             )}
           </div>
@@ -356,6 +359,7 @@ function ProjectActionMenu({
   project,
   onArchiveProject,
   onCreateProjectThread,
+  onEditProject,
   onRemoveProject,
   onToggleProjectActions,
 }: {
@@ -363,6 +367,7 @@ function ProjectActionMenu({
   project: WorkspaceProject;
   onArchiveProject: (project: WorkspaceProject) => void;
   onCreateProjectThread: (projectId: string) => void;
+  onEditProject: (project: WorkspaceProject) => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onToggleProjectActions: (projectId: string) => void;
 }) {
@@ -404,6 +409,14 @@ function ProjectActionMenu({
         <MoreHorizontal size={14} />
       </button>
       <SidebarFloatingMenu open={open} placement="bottom-right" triggerRef={triggerRef} onClose={toggleMenu}>
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => onEditProject(project)}
+        >
+          <Settings size={13} />
+          {t('sidebar.editProject')}
+        </button>
         <button
           type="button"
           role="menuitem"

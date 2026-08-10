@@ -391,8 +391,8 @@ const stagedSummary: DesktopDiffSummary = {
 
 const reviewState: DesktopReviewState = {
   isGitRepository: true,
-  workspaceRoot: project.path,
-  gitRoot: project.path,
+  workspaceRoot: project.path!,
+  gitRoot: project.path!,
   currentBranch: 'main',
   currentRemoteRef: 'origin/main',
   baseRef: 'origin/main',

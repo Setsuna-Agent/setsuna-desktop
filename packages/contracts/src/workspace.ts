@@ -25,10 +25,27 @@ export function isTemporaryWorkspaceProjectId(projectId: string): boolean {
   return projectId === TEMPORARY_WORKSPACE_PROJECT_ID || parseTemporaryWorkspaceProjectId(projectId) !== null;
 }
 
+export const WORKSPACE_PROJECT_NAME_MAX_CHARS = 80;
+
+export function normalizeWorkspaceProjectName(value: unknown): string {
+  const name = typeof value === 'string' ? value.trim().normalize('NFC') : '';
+  if (!name) throw new Error('Project name is required.');
+  if (Array.from(name).length > WORKSPACE_PROJECT_NAME_MAX_CHARS) {
+    throw new Error(`Project name must not exceed ${WORKSPACE_PROJECT_NAME_MAX_CHARS} characters.`);
+  }
+  return name;
+}
+
+/** Names are the portable identity used to reconnect projects across devices. */
+export function workspaceProjectNameKey(value: unknown): string {
+  return normalizeWorkspaceProjectName(value).normalize('NFKC').toLocaleLowerCase('en-US');
+}
+
 export type WorkspaceProject = {
   id: string;
   name: string;
-  path: string;
+  /** Device-local directory binding. Missing for a restored project awaiting association. */
+  path?: string;
   gitRoot?: string;
   archivedAt?: string;
   createdAt: string;
@@ -40,8 +57,14 @@ export type WorkspaceProjectList = {
 };
 
 export type AddWorkspaceProjectInput = {
-  path: string;
+  path?: string;
   name?: string;
+};
+
+export type UpdateWorkspaceProjectInput = {
+  name?: string;
+  /** `null` explicitly removes the device-local directory binding. */
+  path?: string | null;
 };
 
 export type WorkspaceStatus = {

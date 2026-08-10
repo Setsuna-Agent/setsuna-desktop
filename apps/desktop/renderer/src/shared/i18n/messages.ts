@@ -6,15 +6,14 @@ import {
 } from './capabilitiesManagementMessages.js';
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
 import { dataRootCleanupEnUS, dataRootCleanupZhCN } from './dataRootCleanupMessages.js';
-import {
-  runtimeActivityEnUS,
-  runtimeActivityZhCN,
-} from './runtimeActivityMessages.js';
+import { runtimeActivityEnUS, runtimeActivityZhCN } from './runtimeActivityMessages.js';
 import { keyboardShortcutEnUS, keyboardShortcutZhCN } from './keyboardShortcutMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
 import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
+import { projectEnUS, projectZhCN } from './projectMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
+import { webDavSyncEnUS, webDavSyncZhCN } from './webDavSyncMessages.js';
 
 const zhCN = {
   'common.back': '返回',
@@ -537,9 +536,6 @@ const zhCN = {
   'sidebar.resize': '调整侧栏宽度',
   'sidebar.resizeHint': '拖拽调整侧栏宽度',
   'sidebar.projects': '项目',
-  'sidebar.chooseProject': '选择项目目录',
-  'sidebar.choosingProject': '正在选择项目目录...',
-  'sidebar.directoryPickerUnavailable': '当前环境不支持选择项目目录。',
   'sidebar.emptyChats': '暂无对话',
   'sidebar.projectActions': '项目操作',
   'sidebar.archiveProjectTitle': '确认归档项目「{project}」？项目下的全部对话也会归档，本地文件不会被删除。',
@@ -589,6 +585,8 @@ const zhCN = {
   ...chatSupplementZhCN,
   ...taskModelZhCN,
   ...networkProxyZhCN,
+  ...projectZhCN,
+  ...webDavSyncZhCN,
   ...toolRunZhCN,
 } as const;
 export type MessageKey = keyof typeof zhCN;
@@ -1114,9 +1112,6 @@ const enUS = {
   'sidebar.resize': 'Resize sidebar',
   'sidebar.resizeHint': 'Drag to resize the sidebar',
   'sidebar.projects': 'Projects',
-  'sidebar.chooseProject': 'Choose project folder',
-  'sidebar.choosingProject': 'Choosing project folder…',
-  'sidebar.directoryPickerUnavailable': 'The project folder picker is unavailable in this environment.',
   'sidebar.emptyChats': 'No chats',
   'sidebar.projectActions': 'Project actions',
   'sidebar.archiveProjectTitle': 'Archive project “{project}”? All chats in the project will also be archived. Local files will not be deleted.',
@@ -1166,6 +1161,8 @@ const enUS = {
   ...chatSupplementEnUS,
   ...taskModelEnUS,
   ...networkProxyEnUS,
+  ...projectEnUS,
+  ...webDavSyncEnUS,
   ...toolRunEnUS,
 } satisfies Record<MessageKey, string>;
 

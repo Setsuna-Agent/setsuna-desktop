@@ -6,6 +6,7 @@ export type SettingsSectionId =
   | 'personalization'
   | 'localLlm'
   | 'networkProxy'
+  | 'sync'
   | 'taskModels'
   | 'usage'
   | 'archives'

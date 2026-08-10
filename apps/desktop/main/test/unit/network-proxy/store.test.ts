@@ -41,6 +41,39 @@ describe('DesktopNetworkProxyStore', () => {
     });
   });
 
+  it('adds newly introduced scopes without invalidating an older proxy configuration', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-scope-migration-'));
+    const configPath = path.join(root, 'network-proxies.json');
+    await writeFile(configPath, JSON.stringify({
+      pendingCredentialCleanupKeys: [],
+      version: 1,
+      servers: [],
+      routing: {
+        global: { mode: 'direct' },
+        scopes: {
+          browser: { mode: 'system' },
+          terminal: { mode: 'inherit' },
+          updater: { mode: 'direct' },
+          runtime: { mode: 'inherit' },
+        },
+      },
+    }), 'utf8');
+    const store = new DesktopNetworkProxyStore(configPath, new MemoryCredentialVault());
+
+    await expect(store.getState()).resolves.toMatchObject({
+      routing: {
+        global: { mode: 'direct' },
+        scopes: {
+          browser: { mode: 'system' },
+          terminal: { mode: 'inherit' },
+          updater: { mode: 'direct' },
+          runtime: { mode: 'inherit' },
+          sync: { mode: 'inherit' },
+        },
+      },
+    });
+  });
+
   it('uses Chromium fetch for system routes and an explicit dispatcher for direct routes', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-route-'));
     const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(

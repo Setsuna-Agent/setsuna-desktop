@@ -4,6 +4,11 @@
  */
 export type RuntimeEnvironment = {
   id: string;
+  /**
+   * Registered project used by workspace-backed tools when it differs from the
+   * logical project identity, such as an unbound project's managed workspace.
+   */
+  workspaceProjectId?: string;
   /** Shell 命令的默认工作目录。 */
   cwd: string;
   /** 工作区相对路径文件工具使用的主要基准目录。 */

@@ -213,8 +213,18 @@ describe('agent loop thread deletion barrier', () => {
 
     modelClient.release();
     await waitForMigrationReadiness(loop);
+    expect(loop.prepareDataMigration(2)).toMatchObject({
+      ready: false,
+      registeredTasks: 0,
+      pendingMutations: 2,
+    });
     expect(loop.prepareDataMigration()).toMatchObject({
       ready: true,
+      registeredTasks: 0,
+      pendingMutations: 0,
+    });
+    expect(loop.prepareDataMigration()).toMatchObject({
+      ready: false,
       registeredTasks: 0,
       pendingMutations: 0,
     });

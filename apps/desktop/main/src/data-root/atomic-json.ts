@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, rename, rm } from 'node:fs/promises';
+import { mkdir, open, rename, rm, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const WINDOWS_RENAME_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
 const WINDOWS_RENAME_RETRY_DELAYS_MS = [20, 50, 100, 200, 400, 800, 1_600];
-const WINDOWS_UNSUPPORTED_DIRECTORY_SYNC_CODES = new Set(['EPERM', 'EINVAL']);
+const WINDOWS_UNSUPPORTED_DIRECTORY_SYNC_CODES = new Set([
+  'EACCES',
+  'EISDIR',
+  'EINVAL',
+  'EPERM',
+]);
 
 export function isAtomicJsonTemporaryFileName(
   fileName: string,
@@ -32,17 +37,22 @@ export async function writeJsonAtomically(filePath: string, value: unknown): Pro
     await rm(temporaryPath, { force: true }).catch(() => undefined);
     throw error;
   }
-  await syncDirectory(directory);
+  await syncDirectoryDurably(directory);
 }
 
 export async function removeFileDurably(filePath: string): Promise<void> {
   await rm(filePath, { force: true });
-  await syncDirectory(path.dirname(filePath));
+  await syncDirectoryDurably(path.dirname(filePath));
 }
 
-async function syncDirectory(directory: string): Promise<void> {
-  const directoryHandle = await open(directory, 'r').catch(() => null);
-  if (!directoryHandle) return;
+export async function syncDirectoryDurably(directory: string): Promise<void> {
+  let directoryHandle: FileHandle;
+  try {
+    directoryHandle = await open(directory, 'r');
+  } catch (error) {
+    if (isUnsupportedDirectorySyncError(error)) return;
+    throw error;
+  }
   try {
     await directoryHandle.sync();
   } catch (error) {

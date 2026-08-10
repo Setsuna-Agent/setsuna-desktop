@@ -17,18 +17,21 @@ const scopeRows: Array<{ scope: DesktopNetworkProxyScope; labelKey: ScopeLabelKe
   { scope: 'terminal', labelKey: 'settings.proxy.scope.terminal', detailKey: 'settings.proxy.scope.terminalDetail' },
   { scope: 'updater', labelKey: 'settings.proxy.scope.updater', detailKey: 'settings.proxy.scope.updaterDetail' },
   { scope: 'runtime', labelKey: 'settings.proxy.scope.runtime', detailKey: 'settings.proxy.scope.runtimeDetail' },
+  { scope: 'sync', labelKey: 'settings.proxy.scope.sync', detailKey: 'settings.proxy.scope.syncDetail' },
 ];
 
 type ScopeLabelKey =
   | 'settings.proxy.scope.browser'
   | 'settings.proxy.scope.terminal'
   | 'settings.proxy.scope.updater'
-  | 'settings.proxy.scope.runtime';
+  | 'settings.proxy.scope.runtime'
+  | 'settings.proxy.scope.sync';
 type ScopeDetailKey =
   | 'settings.proxy.scope.browserDetail'
   | 'settings.proxy.scope.terminalDetail'
   | 'settings.proxy.scope.updaterDetail'
-  | 'settings.proxy.scope.runtimeDetail';
+  | 'settings.proxy.scope.runtimeDetail'
+  | 'settings.proxy.scope.syncDetail';
 
 type ProxyEditorTarget =
   | { kind: 'create' }

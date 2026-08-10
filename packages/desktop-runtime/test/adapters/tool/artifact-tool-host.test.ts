@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ArtifactToolHost, PUBLISH_ARTIFACT_TOOL_NAME } from '../../../src/adapters/tool/artifact-tool-host.js';
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
+import { WorkspaceRuntimeEnvironmentResolver } from '../../../src/adapters/workspace/workspace-runtime-environment-resolver.js';
 import { systemClock } from '../../../src/ports/clock.js';
 
 const PDF_CONTENT = Buffer.from('%PDF-1.4\nfixture\n', 'utf8');
@@ -16,7 +17,7 @@ describe('artifact tool host', () => {
       threadId: 'thread_1',
       createdAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
     });
-    await writeFile(path.join(workspace.path, 'AI 趋势报告.pdf'), PDF_CONTENT);
+    await writeFile(path.join(workspace.path!, 'AI 趋势报告.pdf'), PDF_CONTENT);
     const host = new ArtifactToolHost(store);
     const context = {
       threadId: 'thread_1',
@@ -24,9 +25,9 @@ describe('artifact tool host', () => {
       toolCallId: 'call/1',
       environment: {
         id: workspace.id,
-        cwd: workspace.path,
-        workspaceRoot: workspace.path,
-        workspaceRoots: [workspace.path],
+        cwd: workspace.path!,
+        workspaceRoot: workspace.path!,
+        workspaceRoots: [workspace.path!],
       },
     };
     const tools = await host.listTools(context);
@@ -64,7 +65,7 @@ describe('artifact tool host', () => {
 
     await expect(host.runTool(
       PUBLISH_ARTIFACT_TOOL_NAME,
-      { path: path.join(project.path, 'output', 'report.xlsx') },
+      { path: path.join(project.path!, 'output', 'report.xlsx') },
       context,
     )).resolves.toMatchObject({
       data: { artifact: { path: 'output/report.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } },
@@ -72,5 +73,33 @@ describe('artifact tool host', () => {
     await expect(host.runTool(PUBLISH_ARTIFACT_TOOL_NAME, { path: '../outside.pdf' }, context)).rejects.toThrow('escapes');
     await expect(host.runTool(PUBLISH_ARTIFACT_TOOL_NAME, { path: 'output' }, context)).rejects.toThrow('not a file');
     await expect(host.runTool(PUBLISH_ARTIFACT_TOOL_NAME, { path: 'missing.pdf' }, context)).rejects.toThrow();
+  });
+
+  it('publishes from the managed workspace backing an unbound project', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-artifact-test-'));
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+    const project = await store.addProject({ name: 'Restored project' });
+    const environment = await new WorkspaceRuntimeEnvironmentResolver(store).resolve({
+      projectId: project.id,
+      threadId: 'thread_restored',
+      threadCreatedAt: new Date(2026, 6, 18, 12, 0, 0).toISOString(),
+    });
+    await writeFile(path.join(environment.workspaceRoot, 'report.pdf'), PDF_CONTENT);
+    const host = new ArtifactToolHost(store);
+
+    await expect(host.runTool(PUBLISH_ARTIFACT_TOOL_NAME, { path: 'report.pdf' }, {
+      threadId: 'thread_restored',
+      projectId: project.id,
+      toolCallId: 'call/restored',
+      environment,
+    })).resolves.toMatchObject({
+      data: {
+        artifact: {
+          projectId: environment.workspaceProjectId,
+          workspaceRoot: environment.workspaceRoot,
+          path: 'report.pdf',
+        },
+      },
+    });
   });
 });

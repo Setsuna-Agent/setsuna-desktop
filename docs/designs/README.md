@@ -5,6 +5,7 @@
 ## 当前设计
 
 - [Active turn 发送队列](queued-turn-inputs.md)：Contract event、runtime FIFO/steer/Goal 调度、REST 和 renderer composer 的完整链路。
+- [WebDAV 自动备份与手动还原](webdav-backup-and-restore.md)：已实施的数据白名单、API Key 端到端加密、不可变快照、还原损失清单和崩溃回滚协议。
 
 ## 评审与治理
 

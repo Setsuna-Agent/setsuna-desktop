@@ -211,8 +211,8 @@ const overview: ConversationOverviewState = {
 
 const reviewState: DesktopReviewState = {
   isGitRepository: true,
-  workspaceRoot: project.path,
-  gitRoot: project.path,
+  workspaceRoot: project.path!,
+  gitRoot: project.path!,
   currentBranch: 'setsuna/temp',
   currentRemoteRef: 'origin/setsuna/temp',
   baseRef: 'origin/setsuna/temp',

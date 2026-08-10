@@ -59,6 +59,48 @@ describe('file workspace project store', () => {
     });
   });
 
+  it('supports unbound projects and later associates a local directory', async () => {
+    const fixture = await createWorkspaceFixture();
+    const store = new FileWorkspaceProjectStore(fixture.dataDir, systemClock);
+
+    const placeholder = await store.addProject({ name: 'Portable project' });
+    expect(placeholder).not.toHaveProperty('path');
+    await expect(store.getStatus(placeholder.id)).resolves.toMatchObject({
+      project: { id: placeholder.id, name: 'Portable project' },
+      exists: false,
+      readable: false,
+    });
+    await expect(store.listEntries(placeholder.id)).rejects.toThrow('directory is not associated');
+
+    const associated = await store.updateProject(placeholder.id, {
+      name: 'Portable project',
+      path: fixture.projectDir,
+    });
+    expect(associated).toMatchObject({
+      id: placeholder.id,
+      name: 'Portable project',
+      path: await realpath(fixture.projectDir),
+    });
+    await expect(store.getStatus(placeholder.id)).resolves.toMatchObject({ exists: true, readable: true });
+
+    const unboundAgain = await store.updateProject(placeholder.id, { path: null });
+    expect(unboundAgain).not.toHaveProperty('path');
+  });
+
+  it('uses the project name as a unique portable identity', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-test-'));
+    const first = path.join(root, 'first');
+    const second = path.join(root, 'second');
+    await Promise.all([mkdir(first), mkdir(second)]);
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock);
+    const placeholder = await store.addProject({ name: 'Demo' });
+
+    const associated = await store.addProject({ name: 'demo', path: first });
+    expect(associated.id).toBe(placeholder.id);
+    await expect(store.addProject({ name: 'Ｄｅｍｏ', path: second }))
+      .rejects.toThrow('already exists');
+  });
+
   it('keeps previews bounded while allowing a complete editor read', async () => {
     const fixture = await createWorkspaceFixture();
     const content = `export const generated = '${'x'.repeat(WORKSPACE_TEXT_FILE_MAX_BYTES)}';\n`;
@@ -180,17 +222,17 @@ describe('file workspace project store', () => {
     const sibling = await store.ensureTemporaryWorkspace({ threadId: 'thread_keep', createdAt });
     const legacyMarker = path.join(dataDir, 'temporary-workspace', 'legacy.txt');
     await Promise.all([
-      writeFile(path.join(scoped.path, 'delete-me.txt'), 'delete\n'),
-      writeFile(path.join(sibling.path, 'keep-me.txt'), 'keep sibling\n'),
+      writeFile(path.join(scoped.path!, 'delete-me.txt'), 'delete\n'),
+      writeFile(path.join(sibling.path!, 'keep-me.txt'), 'keep sibling\n'),
       writeFile(legacyMarker, 'keep legacy\n'),
     ]);
 
     await store.removeTemporaryWorkspace({ threadId: 'thread_remove', createdAt });
 
-    await expect(access(scoped.path)).rejects.toMatchObject({ code: 'ENOENT' });
-    await expect(readFile(path.join(sibling.path, 'keep-me.txt'), 'utf8')).resolves.toBe('keep sibling\n');
+    await expect(access(scoped.path!)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(path.join(sibling.path!, 'keep-me.txt'), 'utf8')).resolves.toBe('keep sibling\n');
     await expect(readFile(legacyMarker, 'utf8')).resolves.toBe('keep legacy\n');
-    await expect(readFile(path.join(formalProject.path, 'formal.txt'), 'utf8')).resolves.toBe('keep formal\n');
+    await expect(readFile(path.join(formalProject.path!, 'formal.txt'), 'utf8')).resolves.toBe('keep formal\n');
   });
 
   it('unlinks a scoped workspace junction without traversing its target', async () => {

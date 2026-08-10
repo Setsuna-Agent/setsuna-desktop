@@ -9,16 +9,20 @@ export function workspaceProjectIdForToolContext(
   explicitProjectId: unknown,
   context: ToolExecutionContext,
 ): string | undefined {
+  const backingProjectId = context.environment?.workspaceProjectId?.trim();
+  const logicalProjectId = context.projectId?.trim();
   if (typeof explicitProjectId === 'string' && explicitProjectId.trim()) {
     const projectId = explicitProjectId.trim();
     if (isTemporaryWorkspaceProjectId(projectId)) {
-      const activeWorkspaceId = context.environment?.id.trim() || context.projectId?.trim();
+      const activeWorkspaceId = backingProjectId || context.environment?.id.trim() || logicalProjectId;
       if (projectId !== activeWorkspaceId) {
         throw new Error('A conversation temporary workspace can only be used by its active thread.');
       }
     }
+    if (backingProjectId && projectId === logicalProjectId) return backingProjectId;
     return projectId;
   }
-  if (context.projectId?.trim()) return context.projectId.trim();
+  if (backingProjectId) return backingProjectId;
+  if (logicalProjectId) return logicalProjectId;
   return context.environment?.id.trim() || undefined;
 }

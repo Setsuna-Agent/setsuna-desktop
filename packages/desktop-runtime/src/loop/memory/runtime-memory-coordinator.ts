@@ -191,6 +191,10 @@ export class RuntimeMemoryCoordinator {
     await this.passiveTasks.get(passiveTaskKey(threadId, turnId));
   }
 
+  pendingBackgroundTaskCount(): number {
+    return this.backgroundTasks.pendingTaskCount();
+  }
+
   shutdown(timeoutMs: number): Promise<boolean> {
     this.shuttingDown = true;
     return this.backgroundTasks.shutdown(timeoutMs);

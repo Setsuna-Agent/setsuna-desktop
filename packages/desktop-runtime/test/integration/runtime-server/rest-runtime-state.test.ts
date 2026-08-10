@@ -1,6 +1,7 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
+  type RuntimeDataMigrationReadiness,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { mkdir, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
@@ -18,6 +19,33 @@ describe('runtime server REST runtime state', () => {
 
   afterEach(async () => {
     await harness.close();
+  });
+
+  it('freezes every REST mutation while a WebDAV snapshot is being staged', async () => {
+    const project = await harness.runtimeFetch('/v1/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Before snapshot' }),
+    });
+    const readiness = await waitForWebDavPreparation(harness);
+
+    expect(readiness).toEqual({ ready: true, registeredTasks: 0, pendingMutations: 0 });
+    const blocked = await fetch(`${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${harness.token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'Must not be persisted' }),
+    });
+    expect(blocked.status).toBe(409);
+    await expect(blocked.json()).resolves.toMatchObject({ code: 'data_migration_preparing' });
+
+    await harness.runtimeFetch('/internal/webdav-sync/prepare', { method: 'DELETE' });
+    const updated = await harness.runtimeFetch(
+      `/v1/projects/${encodeURIComponent(project.id)}`,
+      { method: 'PATCH', body: JSON.stringify({ name: 'After snapshot' }) },
+    );
+    expect(updated).toMatchObject({ id: project.id, name: 'After snapshot' });
   });
 
   it('exposes local project status and revision-protected text-file APIs', async () => {
@@ -268,3 +296,16 @@ describe('runtime server REST runtime state', () => {
       });
     });
 });
+
+async function waitForWebDavPreparation(
+  harness: RuntimeServerTestHarness,
+): Promise<RuntimeDataMigrationReadiness> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const readiness = await harness.runtimeFetch('/internal/webdav-sync/prepare', {
+      method: 'POST',
+    }) as RuntimeDataMigrationReadiness;
+    if (readiness.ready) return readiness;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Runtime did not become ready for a WebDAV snapshot.');
+}
