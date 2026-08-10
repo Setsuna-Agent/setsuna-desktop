@@ -8,7 +8,7 @@ import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
-import { WorkspaceMentionText } from '../mentions/WorkspaceMentionText.js';
+import { SkillReferenceText } from '../skills/SkillReference.js';
 import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
 import {
   FileChangesSummaryCard,
@@ -153,7 +153,13 @@ export function MessageItem({
   );
 }
 
-function UserMessageContent({ message, streaming }: { message: RuntimeMessage; streaming: boolean }) {
+function UserMessageContent({
+  message,
+  streaming,
+}: {
+  message: RuntimeMessage;
+  streaming: boolean;
+}) {
   const hasSemanticKind = message.inputKind === 'plan' || message.inputKind === 'goal';
   return (
     <div className="chat-user-message-content">
@@ -166,7 +172,10 @@ function UserMessageContent({ message, streaming }: { message: RuntimeMessage; s
           {message.content || streaming
             ? (
                 <span className="chat-user-message-content__body">
-                  <WorkspaceMentionText content={message.content || '...'} />
+                  <SkillReferenceText
+                    content={message.content || '...'}
+                    skillIds={message.skillIds}
+                  />
                 </span>
               )
             : null}
@@ -371,7 +380,6 @@ function AssistantRunContent({
   if (planSegment) {
     return (
       <div className="chat-assistant-run">
-        <RuntimePluginUses active={active} plugins={pluginUses} />
         <PlanCard message={planSegment} active={active} onPlanDecision={onPlanDecision} />
       </div>
     );
@@ -643,7 +651,7 @@ function assistantWorkItemNodes(
     return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
   }
   if (item.type === 'pluginUses') {
-    return [<RuntimePluginUses active={itemActive} key={item.id} plugins={item.plugins} />];
+    return [<RuntimePluginUses key={item.id} plugins={item.plugins} />];
   }
   if (item.type === 'thinking') {
     return itemActive && item.segment.content.trim()

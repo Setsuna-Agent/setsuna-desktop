@@ -68,6 +68,7 @@ import { useChatMessageOperations } from './hooks/useChatMessageOperations.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
+import { SkillReferenceCatalogProvider } from './skills/SkillReference.js';
 
 type StarterSuggestion = {
   accent: 'blue' | 'green' | 'orange' | 'purple';
@@ -444,57 +445,57 @@ export function ChatWorkspace({
                   <ChatStarter composer={composer(true)} modelSetupNotice={modelSetupNotice} title={starterTitle} onSelectSuggestion={onDraftChange} />
                 ) : (
                   <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
-                    <div className="chat-bubble-list" ref={listRef}>
-                      {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
-                        <TranscriptWindowDivider
-                          hiddenMessageCount={renderWindow.hiddenMessageCount + messageHistory.remainingCount}
-                          loading={messageHistory.loading}
-                          onShowAll={showEarlierMessages}
-                        />
-                      ) : null}
-                      {renderedDisplayItems.map((item) => (
-                        <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null}>
-                          <MessageItem
-                            activeAssistantItemId={activeAssistantItemId}
-                            activeTurnId={activeTurnId}
-                            assistantItemIdByTurnId={assistantItemIdByTurnId}
-                            deleteMode={deleteMode}
-                            editingDraft={editingDraft}
-                            editingMessageId={editingMessageId}
-                            editingSubmitting={editingSubmitting}
-                            expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
-                            item={item}
-                            onAnswerApproval={onAnswerApproval}
-                            onCancelEdit={cancelEditingMessage}
-                            onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
-                            onEditDraftChange={setEditingDraft}
-                            onOpenFileReview={onOpenFileReview}
-                            onPlanDecision={onPlanDecision}
-                            onStartEdit={startEditingMessage}
-                            onStartDelete={startDeleteSelection}
-                            onSubmitEdit={submitEditingMessage}
-                            onToggleDelete={toggleDeleteSelection}
-                            onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
-                            pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? []) : []}
-                            selectedForDelete={selectedDeleteItemIds.has(item.id)}
+                    <SkillReferenceCatalogProvider skills={skills}>
+                      <div className="chat-bubble-list" ref={listRef}>
+                        {renderWindow.hiddenItemCount || messageHistory.hasMore ? (
+                          <TranscriptWindowDivider
+                            hiddenMessageCount={renderWindow.hiddenMessageCount + messageHistory.remainingCount}
+                            loading={messageHistory.loading}
+                            onShowAll={showEarlierMessages}
                           />
-                          {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
-                            <ActiveWorkPlaceholder
-                              pluginUses={activeTurnId ? (pluginUsesByTurnId.get(activeTurnId) ?? []) : []}
-                              segments={[item.message]}
+                        ) : null}
+                        {renderedDisplayItems.map((item) => (
+                          <ChatThreadProvider key={chatDisplayItemRenderKey(item)} threadId={currentThread?.id ?? null}>
+                            <MessageItem
+                              activeAssistantItemId={activeAssistantItemId}
+                              activeTurnId={activeTurnId}
+                              assistantItemIdByTurnId={assistantItemIdByTurnId}
+                              deleteMode={deleteMode}
+                              editingDraft={editingDraft}
+                              editingMessageId={editingMessageId}
+                              editingSubmitting={editingSubmitting}
+                              expandedWorkHistoryItemIds={expandedWorkHistoryItemIds}
+                              item={item}
+                              onAnswerApproval={onAnswerApproval}
+                              onCancelEdit={cancelEditingMessage}
+                              onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
+                              onEditDraftChange={setEditingDraft}
+                              onOpenFileReview={onOpenFileReview}
+                              onPlanDecision={onPlanDecision}
+                              onStartEdit={startEditingMessage}
+                              onStartDelete={startDeleteSelection}
+                              onSubmitEdit={submitEditingMessage}
+                              onToggleDelete={toggleDeleteSelection}
+                              onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
+                              pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? []) : []}
+                              selectedForDelete={selectedDeleteItemIds.has(item.id)}
                             />
-                          ) : null}
-                        </ChatThreadProvider>
-                      ))}
-                      {showActiveTurnPlaceholder && !activeUserVisible ? (
-                        <ActiveWorkPlaceholder
-                          pluginUses={activeTurnId ? (pluginUsesByTurnId.get(activeTurnId) ?? []) : []}
-                          segments={[]}
-                        />
-                      ) : null}
-                      {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
-                      <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
-                    </div>
+                            {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
+                              <ActiveWorkPlaceholder
+                                segments={[item.message]}
+                              />
+                            ) : null}
+                          </ChatThreadProvider>
+                        ))}
+                        {showActiveTurnPlaceholder && !activeUserVisible ? (
+                          <ActiveWorkPlaceholder
+                            segments={[]}
+                          />
+                        ) : null}
+                        {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
+                        <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
+                      </div>
+                    </SkillReferenceCatalogProvider>
                   </StreamingScrollPinProvider>
                 )}
               </div>

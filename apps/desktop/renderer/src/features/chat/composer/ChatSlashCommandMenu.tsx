@@ -13,7 +13,8 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { createSlashCommandMenuSections } from './chatSlashCommandSections.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export type SlashCommandMenuItem =
@@ -55,60 +56,73 @@ export function ChatSlashCommandMenu({
 }) {
   const { t } = useI18n();
   const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(items[activeIndex]?.key);
+  const sections = createSlashCommandMenuSections(items);
 
   return (
     <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label={t('chat.command.label')}>
-      <div className="chat-command-menu__title">{menuTitle(items[activeIndex] ?? items[0], t)}</div>
       {items.length ? (
-        items.map((item, index) => (
-          <button
-            ref={index === activeIndex ? activeOptionRef : undefined}
-            key={item.key}
-            type="button"
-            className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
-            disabled={item.kind === 'action' && item.disabled}
-            role="option"
-            aria-selected={index === activeIndex}
-            aria-pressed={item.kind === 'action' && isSwitchAction(item.type) ? Boolean(item.checked) : undefined}
-            onMouseDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSelect(item);
-            }}
-            onMouseMove={() => onHover(index)}
-          >
-            <SlashCommandIcon item={item} />
-            <span className="chat-command-menu__item-main">
-              <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.title}</span>
-              {item.kind === 'skill' ? (
-                (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
-                  <span className="chat-command-menu__item-desc">
-                    {unresolvedSkillMcpDependencyCount(item.skill)
-                      ? `${t('chat.command.mcpRequired', { count: unresolvedSkillMcpDependencyCount(item.skill) })}${item.skill.description ? ` · ${item.skill.description}` : ''}`
-                      : item.skill.description}
+        sections.map((section) => {
+          const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : t('chat.command.label');
+          return (
+            <div
+              key={`${section.id}:${section.items[0]?.item.key ?? 'empty'}`}
+              className="chat-command-menu__section"
+              role="group"
+              aria-label={sectionLabel}
+            >
+              <div className="chat-command-menu__title">{sectionLabel}</div>
+              {section.items.map(({ index, item }) => (
+                <button
+                  ref={index === activeIndex ? activeOptionRef : undefined}
+                  key={item.key}
+                  type="button"
+                  className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
+                  disabled={item.kind === 'action' && item.disabled}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  aria-pressed={item.kind === 'action' && isSwitchAction(item.type) ? Boolean(item.checked) : undefined}
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onSelect(item);
+                  }}
+                  onMouseMove={() => onHover(index)}
+                >
+                  <SlashCommandIcon item={item} />
+                  <span className="chat-command-menu__item-main">
+                    <span className="chat-command-menu__item-title">{item.kind === 'skill' ? item.skill.name : item.title}</span>
+                    {item.kind === 'skill' ? (
+                      (item.skill.description || unresolvedSkillMcpDependencyCount(item.skill)) ? (
+                        <span className="chat-command-menu__item-desc">
+                          {unresolvedSkillMcpDependencyCount(item.skill)
+                            ? `${t('chat.command.mcpRequired', { count: unresolvedSkillMcpDependencyCount(item.skill) })}${item.skill.description ? ` · ${item.skill.description}` : ''}`
+                            : item.skill.description}
+                        </span>
+                      ) : null
+                    ) : item.description ? (
+                      <span className="chat-command-menu__item-desc">{item.description}</span>
+                    ) : null}
                   </span>
-                ) : null
-              ) : item.description ? (
-                <span className="chat-command-menu__item-desc">{item.description}</span>
-              ) : null}
-            </span>
-            {item.kind === 'action' && isSwitchAction(item.type) ? (
-              <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
-            ) : (
-              <span className="chat-command-menu__item-scope">
-                {item.kind === 'skill'
-                  ? unresolvedSkillMcpDependencyCount(item.skill)
-                    ? t('chat.command.needsConfiguration')
-                    : item.skill.kind === 'user'
-                      ? t('chat.command.personal')
-                      : item.skill.kind === 'plugin'
-                        ? t('chat.command.plugin')
-                        : t('chat.command.builtIn')
-                  : item.scope}
-              </span>
-            )}
-          </button>
-        ))
+                  {item.kind === 'action' && isSwitchAction(item.type) ? (
+                    <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
+                  ) : (
+                    <span className="chat-command-menu__item-scope">
+                      {item.kind === 'skill'
+                        ? unresolvedSkillMcpDependencyCount(item.skill)
+                          ? t('chat.command.needsConfiguration')
+                          : item.skill.kind === 'user'
+                            ? t('chat.command.personal')
+                            : item.skill.kind === 'plugin'
+                              ? t('chat.command.plugin')
+                              : t('chat.command.builtIn')
+                        : item.scope}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })
       ) : (
         <div className="chat-command-menu__state">{t('chat.command.noMatch')}</div>
       )}
@@ -154,20 +168,6 @@ function MemoryCommandSwitch({ checked, disabled }: { checked: boolean; disabled
       <span />
     </span>
   );
-}
-
-function menuTitle(item: SlashCommandMenuItem | undefined, t: Translate): string {
-  if (!item) return t('chat.command.label');
-  if (item.kind === 'skill') return t('chat.command.skill');
-  if (item.kind === 'model') return t('chat.command.model');
-  if (item.type === 'plan') return t('chat.command.plan');
-  if (item.type === 'collaboration') return t('chat.command.collaboration');
-  if (item.type === 'goal') return t('chat.command.goal');
-  if (item.type === 'usage') return t('chat.composer.usage');
-  if (item.type === 'review') return t('chat.command.review');
-  if (item.type === 'side-chat') return t('chat.composer.sideChat');
-  if (item.type === 'memory-mode') return t('chat.command.memory');
-  return t('chat.command.label');
 }
 
 function isSwitchAction(type: Extract<SlashCommandMenuItem, { kind: 'action' }>['type']): boolean {

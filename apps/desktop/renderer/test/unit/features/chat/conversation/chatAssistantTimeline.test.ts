@@ -6,7 +6,7 @@ import {
 } from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
 
 describe('createAssistantRunTimeline', () => {
-  it('places Plugin attribution in work before a final answer', () => {
+  it('places Plugin attribution in the work body before a final answer', () => {
     const segments: RuntimeMessage[] = [{
       id: 'assistant_final',
       role: 'assistant',

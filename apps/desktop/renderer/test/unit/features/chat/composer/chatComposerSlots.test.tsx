@@ -96,7 +96,9 @@ describe('workspace mention slots', () => {
     if (slot.type !== 'tag') throw new Error('Expected a selected Skill tag');
     expect(slot.key).toBe('skill:first');
     expect(slot.props?.value).toBe('First skill');
-    expect(renderToStaticMarkup(slot.props?.label)).toContain('First skill');
+    const labelHtml = renderToStaticMarkup(slot.props?.label);
+    expect(labelHtml).toContain('chat-skill-reference');
+    expect(labelHtml).toContain('First skill');
     expect(filterSelectedSkillsBySlots([firstSkill, secondSkill], [slot])).toEqual([firstSkill]);
     const unchangedSkills = [firstSkill];
     expect(filterSelectedSkillsBySlots(unchangedSkills, [slot])).toBe(unchangedSkills);

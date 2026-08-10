@@ -37,6 +37,8 @@ export type RuntimeMessage = {
   inputKind?: RuntimeQueuedTurnInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
+  /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
+  skillIds?: string[];
   createdAt: string;
   completedAt?: string;
   status?: 'streaming' | 'complete' | 'error';

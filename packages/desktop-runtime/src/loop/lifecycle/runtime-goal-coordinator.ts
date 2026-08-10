@@ -186,6 +186,7 @@ export class RuntimeGoalCoordinator {
         role: 'user',
         inputKind: 'goal',
         content: objective,
+        skillIds: input.skillIds?.length ? [...input.skillIds] : undefined,
         attachments: input.attachments?.map((attachment) => ({ ...attachment })),
         createdAt,
         status: 'complete',

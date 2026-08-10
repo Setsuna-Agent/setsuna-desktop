@@ -21,6 +21,7 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    skillIds: message.skillIds ? [...message.skillIds] : undefined,
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,

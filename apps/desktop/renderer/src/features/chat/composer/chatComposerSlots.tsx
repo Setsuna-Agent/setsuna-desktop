@@ -3,8 +3,8 @@ import type {
   RuntimeSkillSummary,
   WorkspaceEntrySearchItem,
 } from '@setsuna-desktop/contracts';
-import { Boxes } from 'lucide-react';
 import { WorkspaceMentionLabel } from '../mentions/WorkspaceMentionLabel.js';
+import { SkillReferenceLabel } from '../skills/SkillReference.js';
 import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 
 const workspaceMentionSlotKeyPrefix = 'workspace:';
@@ -25,12 +25,7 @@ export function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigT
     type: 'tag',
     key: selectedSkillSlotKey(skill.id),
     props: {
-      label: (
-        <span className="chat-skill-slot" title={skill.description || skill.id}>
-          <Boxes size={13} />
-          <span className="chat-skill-slot__name">{tokenText}</span>
-        </span>
-      ),
+      label: <SkillReferenceLabel skill={skill} />,
       value: tokenText,
     },
     formatResult: () => tokenText,
@@ -51,6 +46,14 @@ export function filterSelectedSkillsBySlots(
   );
   const filteredSkills = skills.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id)));
   return filteredSkills.length === skills.length ? skills : filteredSkills;
+}
+
+export function hasSelectedSkillSlot(
+  skillId: string,
+  slotConfig: SlotConfigType[] | undefined,
+): boolean {
+  const slotKey = selectedSkillSlotKey(skillId);
+  return (slotConfig ?? []).some((slot) => slot.key === slotKey);
 }
 
 export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {

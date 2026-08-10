@@ -351,6 +351,7 @@ describe('agent loop queued turn inputs', () => {
     expect(visibleGoalMessage).toMatchObject({
       id: completed?.goal?.execution?.sourceMessageId,
       inputKind: 'goal',
+      skillIds: ['skill_step'],
       attachments: [expect.objectContaining({ id: 'attachment_goal' })],
     });
     expect(visibleGoalMessage?.turnId).toBeTruthy();

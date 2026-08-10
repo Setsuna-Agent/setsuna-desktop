@@ -1,8 +1,9 @@
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+import { SkillReferenceCatalogProvider } from '../../../../../src/features/chat/skills/SkillReference.js';
 
 function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'user' }> {
   return {
@@ -17,39 +18,56 @@ function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'us
   };
 }
 
-function renderUserMessage(inputKind: RuntimeMessage['inputKind'], editing = false, content = 'Inspect the queue.'): string {
+const skillCreator: RuntimeSkillSummary = {
+  id: 'skill-creator',
+  name: '对话创建Skill',
+  kind: 'builtin',
+  enabled: true,
+  selected: false,
+  description: '通过对话创建 Skill',
+};
+
+function renderUserMessage(
+  inputKind: RuntimeMessage['inputKind'],
+  editing = false,
+  content = 'Inspect the queue.',
+  options: { skillIds?: string[]; skills?: RuntimeSkillSummary[] } = {},
+): string {
   const message: RuntimeMessage = {
     id: `message_${inputKind}`,
     turnId: `turn_${inputKind}`,
     role: 'user',
     inputKind,
     content,
+    skillIds: options.skillIds,
     createdAt: '2026-07-27T00:00:00.000Z',
     status: 'complete',
   };
   return renderToStaticMarkup(
-    <MessageItem
-      activeAssistantItemId={null}
-      activeTurnId={null}
-      assistantItemIdByTurnId={new Map()}
-      deleteMode={false}
-      editingDraft={editing ? message.content : ''}
-      editingMessageId={editing ? message.id : null}
-      editingSubmitting={false}
-      expandedWorkHistoryItemIds={new Set()}
-      item={userItem(message)}
-      onAnswerApproval={async () => undefined}
-      onCancelEdit={() => undefined}
-      onEditDraftChange={() => undefined}
-      onPlanDecision={() => undefined}
-      onStartEdit={() => undefined}
-      onStartDelete={() => undefined}
-      onSubmitEdit={() => undefined}
-      onToggleDelete={() => undefined}
-      onWorkHistoryExpandedChange={() => undefined}
-      pluginUses={[]}
-      selectedForDelete={false}
-    />,
+    <SkillReferenceCatalogProvider skills={options.skills ?? []}>
+      <MessageItem
+        activeAssistantItemId={null}
+        activeTurnId={null}
+        assistantItemIdByTurnId={new Map()}
+        deleteMode={false}
+        editingDraft={editing ? message.content : ''}
+        editingMessageId={editing ? message.id : null}
+        editingSubmitting={false}
+        expandedWorkHistoryItemIds={new Set()}
+        item={userItem(message)}
+        onAnswerApproval={async () => undefined}
+        onCancelEdit={() => undefined}
+        onEditDraftChange={() => undefined}
+        onPlanDecision={() => undefined}
+        onStartEdit={() => undefined}
+        onStartDelete={() => undefined}
+        onSubmitEdit={() => undefined}
+        onToggleDelete={() => undefined}
+        onWorkHistoryExpandedChange={() => undefined}
+        pluginUses={[]}
+        selectedForDelete={false}
+      />
+    </SkillReferenceCatalogProvider>,
   );
 }
 
@@ -77,5 +95,25 @@ describe('MessageItem user messages', () => {
 
     expect(html).toContain('class="chat-user-message-content__body"');
     expect(html).toMatch(/chat-user-message-content__body">请看 .*agent-pc\/.* 以及 .*agent-mobile\/.* 现在处理<\/span>/u);
+  });
+
+  it('renders selected Skill references inline while leaving matching ordinary text plain', () => {
+    const selectedHtml = renderUserMessage(
+      'message',
+      false,
+      '对话创建Skill 你看下这个 skill',
+      { skillIds: [skillCreator.id], skills: [skillCreator] },
+    );
+    const plainHtml = renderUserMessage(
+      'message',
+      false,
+      '对话创建Skill 只是普通文字',
+      { skills: [skillCreator] },
+    );
+
+    expect(selectedHtml).toContain('class="chat-skill-reference"');
+    expect(selectedHtml).toContain('chat-capability-reference-icon');
+    expect(selectedHtml).toMatch(/chat-user-message-content__body"><span class="chat-skill-reference"[^>]*>.*对话创建Skill<\/span><\/span> 你看下这个 skill<\/span>/u);
+    expect(plainHtml).not.toContain('chat-skill-reference');
   });
 });

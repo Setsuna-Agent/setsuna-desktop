@@ -9,9 +9,13 @@ export type ComposerDraftSyncPlan =
  */
 export function createComposerDraftSyncPlan(
   externalDraft: string,
+  previousExternalDraft: string,
   lastEditorDraft: string,
   currentEditorDraft: string,
 ): ComposerDraftSyncPlan {
+  // Effects can be replayed before an imperative Sender insertion has propagated
+  // through onChange. An unchanged parent value is not an external reset.
+  if (externalDraft === previousExternalDraft) return { type: 'none' };
   if (externalDraft === lastEditorDraft) return { type: 'none' };
   if (externalDraft === currentEditorDraft) return { type: 'adopt' };
   if (externalDraft.startsWith(currentEditorDraft)) {

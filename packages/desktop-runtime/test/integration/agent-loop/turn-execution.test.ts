@@ -232,6 +232,9 @@ describe('agent loop turn execution', () => {
         ['step_tool_1'],
         ['step_tool_2'],
       ]);
+      expect(saved?.messages.find((message) => message.role === 'user')).toMatchObject({
+        skillIds: ['skill_step'],
+      });
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['step_tool_1']);
       expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['step_tool_2']);
       expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('step_tool_1 result'))).toBe(true);

@@ -375,7 +375,8 @@
   color: color-mix(in srgb, var(--app-warning) 80%, var(--app-text));
 }
 
-.chat-workspace-mention {
+.chat-workspace-mention,
+.chat-skill-reference {
   appearance: none;
   display: inline;
   min-height: 0;
@@ -417,6 +418,26 @@
   font-size: 1em;
   line-height: 1;
   vertical-align: -0.125em;
+}
+
+.chat-capability-reference-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: currentColor;
+  vertical-align: -0.125em;
+}
+
+.chat-capability-reference-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.chat-skill-reference .chat-capability-reference-icon {
+  margin-inline-end: 3px;
 }
 
 .chat-user-bubble--with-attachments .chat-user-message-content {

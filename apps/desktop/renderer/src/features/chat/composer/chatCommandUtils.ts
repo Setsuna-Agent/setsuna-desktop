@@ -1,4 +1,7 @@
 import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import { skillDisplayText } from '../skills/skillReferenceParser.js';
+
+export { skillDisplayText };
 
 export type TextCommand = {
   end: number;
@@ -20,10 +23,6 @@ export function entryLabel(entry: WorkspaceEntrySearchItem): string {
 
 export function skillTokenText(skill: RuntimeSkillSummary): string {
   return `/${skillDisplayText(skill)}`;
-}
-
-export function skillDisplayText(skill: RuntimeSkillSummary): string {
-  return skill.name.trim() || skill.id;
 }
 
 export function stripSkillToken(value: string, skill: RuntimeSkillSummary): string {
