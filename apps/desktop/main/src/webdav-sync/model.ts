@@ -3,7 +3,7 @@ import type {
   DesktopWebDavSyncSnapshotSummary,
 } from '@setsuna-desktop/contracts';
 
-export const WEB_DAV_SYNC_STORE_VERSION = 1;
+export const WEB_DAV_SYNC_STORE_VERSION = 2;
 export const WEB_DAV_REPOSITORY_FORMAT_VERSION = 1;
 export const WEB_DAV_SNAPSHOT_FORMAT_VERSION = 1;
 

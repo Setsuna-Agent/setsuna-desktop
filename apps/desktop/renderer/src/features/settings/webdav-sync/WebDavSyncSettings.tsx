@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useDesktopWebDavSync } from '../../../app/controller/useDesktopWebDavSync.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, EmptyState, StatusBadge, TextField } from '../../../shared/ui/primitives.js';
+import { WebDavAutomaticBackupDialog } from './WebDavAutomaticBackupDialog.js';
 import { WebDavConnectionForm } from './WebDavConnectionForm.js';
 import { WebDavRestorePanel } from './WebDavRestorePanel.js';
 import {
@@ -39,6 +40,8 @@ export function WebDavSyncSettings() {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [confirmAutomaticBackup, setConfirmAutomaticBackup] = useState(false);
+  const [automaticBackupPending, setAutomaticBackupPending] = useState(false);
   const state = sync.state;
   const busy = Boolean(state?.operation);
 
@@ -96,6 +99,16 @@ export function WebDavSyncSettings() {
   const runBackup = async () => {
     await sync.backupNow();
     await refreshBackup();
+  };
+
+  const enableAutomaticBackup = async () => {
+    setAutomaticBackupPending(true);
+    try {
+      await sync.updatePreferences({ automaticBackup: true });
+      setConfirmAutomaticBackup(false);
+    } finally {
+      setAutomaticBackupPending(false);
+    }
   };
 
   const localCategoryBytes = new Map(
@@ -215,9 +228,13 @@ export function WebDavSyncSettings() {
               checked={state.automaticBackup}
               disabled={busy}
               type="checkbox"
-              onChange={(event) => void sync.updatePreferences({
-                automaticBackup: event.currentTarget.checked,
-              }).catch(() => undefined)}
+              onChange={(event) => {
+                if (event.currentTarget.checked) {
+                  setConfirmAutomaticBackup(true);
+                  return;
+                }
+                void sync.updatePreferences({ automaticBackup: false }).catch(() => undefined);
+              }}
             />
             <span>{t('settings.sync.automatic.label')}</span>
           </label>
@@ -316,6 +333,14 @@ export function WebDavSyncSettings() {
 
       {sync.error || state.lastError ? (
         <div className="settings-webdav__error" role="alert">{sync.error ?? state.lastError}</div>
+      ) : null}
+
+      {confirmAutomaticBackup ? (
+        <WebDavAutomaticBackupDialog
+          pending={automaticBackupPending}
+          onCancel={() => setConfirmAutomaticBackup(false)}
+          onConfirm={() => void enableAutomaticBackup().catch(() => undefined)}
+        />
       ) : null}
     </div>
   );

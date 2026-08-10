@@ -81,15 +81,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 600 total files
-├── src/ — 2 direct / 442 total files
+apps/desktop/renderer/ — 0 direct / 601 total files
+├── src/ — 2 direct / 443 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 12 direct / 12 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── features/ — 321 files
+│   ├── features/ — 322 files
 │   │   ├── capabilities/ — 23 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -108,7 +108,7 @@ apps/desktop/renderer/ — 0 direct / 600 total files
 │   │   ├── conversation-debug/ — 17 direct / 17 total files
 │   │   ├── runtime-activity/ — 5 direct / 6 total files
 │   │   │   └── styles/ — 1 direct / 1 total files
-│   │   ├── settings/ — 10 direct / 64 total files
+│   │   ├── settings/ — 10 direct / 65 total files
 │   │   │   ├── components/ — 1 direct / 1 total files
 │   │   │   ├── data-root/ — 12 direct / 12 total files
 │   │   │   ├── network-proxy/ — 3 direct / 3 total files
@@ -117,7 +117,7 @@ apps/desktop/renderer/ — 0 direct / 600 total files
 │   │   │   ├── shortcuts/ — 1 direct / 1 total files
 │   │   │   ├── styles/ — 11 direct / 11 total files
 │   │   │   ├── usage/ — 7 direct / 7 total files
-│   │   │   └── webdav-sync/ — 6 direct / 6 total files
+│   │   │   └── webdav-sync/ — 7 direct / 7 total files
 │   │   └── workspace/ — 32 direct / 78 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files

@@ -509,6 +509,98 @@
   text-align: center;
 }
 
+.settings-webdav-automatic-backdrop {
+  z-index: 150;
+  background: color-mix(in srgb, var(--app-text) 18%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.settings-webdav-automatic-dialog {
+  width: min(460px, calc(100vw - 48px));
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__header {
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+}
+
+.settings-webdav-automatic-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-webdav-automatic-dialog__title > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav-automatic-dialog__title > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.settings-webdav-automatic-dialog__title strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.settings-webdav-automatic-dialog__title small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav-automatic-dialog__body {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.settings-webdav-automatic-dialog__body > p {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.settings-webdav-automatic-dialog__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.settings-webdav-automatic-dialog__notice > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--app-warning);
+}
+
+.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__footer {
+  padding: 13px 18px 15px;
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
 .settings-webdav-restore-backdrop {
   z-index: 150;
   background: color-mix(in srgb, var(--app-text) 18%, transparent);

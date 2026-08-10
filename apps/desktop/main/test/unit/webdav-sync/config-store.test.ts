@@ -1,5 +1,5 @@
 import { DEFAULT_DESKTOP_WEBDAV_SYNC_CATEGORIES } from '@setsuna-desktop/contracts';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,7 +21,7 @@ describe('WebDavSyncConfigStore', () => {
     const vault = new MemoryCredentialVault();
     const store = new WebDavSyncConfigStore(configPath, vault);
     const initial = await store.initialize();
-    expect(initial.automaticBackup).toBe(true);
+    expect(initial.automaticBackup).toBe(false);
     expect(initial.categories).toEqual(DEFAULT_DESKTOP_WEBDAV_SYNC_CATEGORIES);
     expect(initial.categories).not.toContain('usage');
     const recoveryKey = generateWebDavRecoveryKey();
@@ -51,6 +51,31 @@ describe('WebDavSyncConfigStore', () => {
     await store.disconnect();
     expect(vault.values.size).toBe(0);
     await expect(store.resolveConnection()).resolves.toBeNull();
+  });
+
+  it('disables the implicit version 1 automatic backup until the user enables it again', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-migration-'));
+    temporaryRoots.push(root);
+    const configPath = path.join(root, 'webdav-sync.json');
+    await writeFile(configPath, JSON.stringify({
+      version: 1,
+      deviceId: '55bc8840-ac7a-435a-b5a7-88c2e91e7d87',
+      deviceName: 'Work laptop',
+      automaticBackup: true,
+      categories: DEFAULT_DESKTOP_WEBDAV_SYNC_CATEGORIES,
+      pendingCredentialCleanupKeys: [],
+    }));
+    const store = new WebDavSyncConfigStore(configPath, new MemoryCredentialVault());
+
+    const migrated = await store.initialize();
+    expect(migrated.automaticBackup).toBe(false);
+    expect(JSON.parse(await readFile(configPath, 'utf8'))).toMatchObject({
+      version: 2,
+      automaticBackup: false,
+    });
+
+    await expect(store.updatePreferences({ automaticBackup: true }))
+      .resolves.toMatchObject({ automaticBackup: true });
   });
 
   it('refuses an empty category selection', async () => {

@@ -255,16 +255,17 @@ function defaultStoredConfig(): StoredWebDavSyncConfig {
     version: WEB_DAV_SYNC_STORE_VERSION,
     deviceId: randomUUID(),
     deviceName: normalizeWebDavDeviceName(),
-    automaticBackup: true,
+    automaticBackup: false,
     categories: [...DEFAULT_DESKTOP_WEBDAV_SYNC_CATEGORIES],
     pendingCredentialCleanupKeys: [],
   };
 }
 
 function normalizeStoredConfig(value: unknown): StoredWebDavSyncConfig {
-  if (!isRecord(value) || value.version !== WEB_DAV_SYNC_STORE_VERSION) {
+  if (!isRecord(value) || (value.version !== 1 && value.version !== WEB_DAV_SYNC_STORE_VERSION)) {
     throw new Error('WebDAV 同步配置版本不受支持。');
   }
+  const migratedFromImplicitAutomaticBackup = value.version === 1;
   const deviceId = normalizeRepositoryId(value.deviceId);
   const deviceName = normalizeWebDavDeviceName(typeof value.deviceName === 'string' ? value.deviceName : undefined);
   const categories = normalizeCategories(value.categories);
@@ -282,7 +283,9 @@ function normalizeStoredConfig(value: unknown): StoredWebDavSyncConfig {
     version: WEB_DAV_SYNC_STORE_VERSION,
     deviceId,
     deviceName,
-    automaticBackup: value.automaticBackup !== false,
+    // Version 1 enabled automatic backup by default and had no consent step.
+    // Migrated installations must explicitly confirm before background uploads resume.
+    automaticBackup: !migratedFromImplicitAutomaticBackup && value.automaticBackup === true,
     categories,
     ...(connection ? { connection } : {}),
     ...(typeof value.lastBackupAt === 'string' ? { lastBackupAt: requireIsoDate(value.lastBackupAt) } : {}),

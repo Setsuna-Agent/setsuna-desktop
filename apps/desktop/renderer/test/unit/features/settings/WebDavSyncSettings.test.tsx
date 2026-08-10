@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import { cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebDavSyncSettings } from '../../../../src/features/settings/webdav-sync/WebDavSyncSettings.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
@@ -36,6 +37,36 @@ describe('WebDavSyncSettings', () => {
     expect(await within(conversations!).findByText('1.5 KB')).toBeTruthy();
     expect(within(credentials!).getByText('64 B')).toBeTruthy();
     expect(within(usage!).getByText('0 B')).toBeTruthy();
+  });
+
+  it('requires confirmation before enabling automatic backup', async () => {
+    const user = userEvent.setup();
+    const view = webDavSyncView();
+    const updatePreferences = vi.fn(async () => undefined);
+    view.state.automaticBackup = false;
+    view.updatePreferences = updatePreferences;
+    mocks.useDesktopWebDavSync.mockReturnValue(view);
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <WebDavSyncSettings />
+      </I18nProvider>,
+    );
+
+    const toggle = screen.getByRole('checkbox', { name: '启用自动备份' });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    await user.click(toggle);
+
+    let dialog = await screen.findByRole('dialog', { name: '开启自动备份？' });
+    expect(within(dialog).getByText(/后完成的备份会成为唯一保留副本/u)).toBeTruthy();
+    expect(updatePreferences).not.toHaveBeenCalled();
+    await user.click(within(dialog).getByRole('button', { name: '取消' }));
+    expect(screen.queryByRole('dialog', { name: '开启自动备份？' })).toBeNull();
+    expect(updatePreferences).not.toHaveBeenCalled();
+
+    await user.click(toggle);
+    dialog = await screen.findByRole('dialog', { name: '开启自动备份？' });
+    await user.click(within(dialog).getByRole('button', { name: '确认开启' }));
+    expect(updatePreferences).toHaveBeenCalledWith({ automaticBackup: true });
   });
 });
 
