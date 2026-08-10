@@ -32,7 +32,7 @@
   justify-content: space-between;
 }
 
-.settings-webdav__section-header > div:first-child,
+.settings-webdav__section-header > div:first-child:not(.settings-webdav__connection-heading),
 .settings-webdav__card-header > div,
 .settings-webdav__connection-heading > div,
 .settings-webdav__recovery-heading > div {
