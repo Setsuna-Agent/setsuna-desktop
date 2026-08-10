@@ -178,6 +178,27 @@ const updater: SetsunaDesktopBridge['updater'] = {
   },
 };
 
+const webdavSync: SetsunaDesktopBridge['webdavSync'] = {
+  getState: () => ipcRenderer.invoke('webdav-sync:get-state'),
+  configure: (input) => ipcRenderer.invoke('webdav-sync:configure', input),
+  updatePreferences: (input) => ipcRenderer.invoke('webdav-sync:update-preferences', input),
+  testConnection: (input) => ipcRenderer.invoke('webdav-sync:test', input),
+  backupNow: () => ipcRenderer.invoke('webdav-sync:backup-now'),
+  listSnapshots: () => ipcRenderer.invoke('webdav-sync:list-snapshots'),
+  inspectRestore: (input) => ipcRenderer.invoke('webdav-sync:inspect-restore', input),
+  restore: (planId) => ipcRenderer.invoke('webdav-sync:restore', planId),
+  cancelCurrentOperation: () => ipcRenderer.invoke('webdav-sync:cancel'),
+  disconnect: () => ipcRenderer.invoke('webdav-sync:disconnect'),
+  onStateChange(callback) {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      state: Parameters<typeof callback>[0],
+    ) => callback(state);
+    ipcRenderer.on('webdav-sync:state-change', listener);
+    return () => ipcRenderer.off('webdav-sync:state-change', listener);
+  },
+};
+
 const desktopReview: SetsunaDesktopBridge['desktopReview'] = {
   getState: (workspaceRoot, options) =>
     ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot, baseRef: options?.baseRef ?? null }),
@@ -234,6 +255,7 @@ const bridge: SetsunaDesktopBridge = {
   runtime,
   terminal,
   updater,
+  webdavSync,
   windowControls,
   workspaceApps,
 };

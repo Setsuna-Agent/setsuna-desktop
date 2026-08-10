@@ -196,6 +196,17 @@ export class RuntimeHost {
     });
   }
 
+  /** Main-only quiescence gate used to take a consistent encrypted sync snapshot. */
+  prepareWebDavSync(): Promise<RuntimeDataMigrationReadiness> {
+    const requestPath = '/internal/webdav-sync/prepare';
+    return this.sendRequest({ path: requestPath, method: 'POST' }, requestPath);
+  }
+
+  async releaseWebDavSyncPreparation(): Promise<void> {
+    const requestPath = '/internal/webdav-sync/prepare';
+    await this.sendRequest({ path: requestPath, method: 'DELETE' }, requestPath);
+  }
+
   /** 上传一个由渲染进程选择的文件，同时不暴露 runtime 端口或令牌。 */
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');

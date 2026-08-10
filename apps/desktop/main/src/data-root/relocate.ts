@@ -224,7 +224,12 @@ async function relocateVirtualEnvironmentText(
 
 function replaceDataRoot(value: string, sourceRoot: string, targetRoot: string): string {
   let result = value;
+  const rawSource = sourceRoot.replace(/[\\/]+$/u, '');
+  const resolvedTarget = path.resolve(targetRoot);
   const replacements = new Map([
+    [rawSource, resolvedTarget],
+    [rawSource.replaceAll('\\', '/'), resolvedTarget.replaceAll('\\', '/')],
+    [rawSource.replaceAll('/', '\\'), resolvedTarget.replaceAll('/', '\\')],
     [path.resolve(sourceRoot), path.resolve(targetRoot)],
     [path.resolve(sourceRoot).replaceAll('\\', '/'), path.resolve(targetRoot).replaceAll('\\', '/')],
     [path.resolve(sourceRoot).replaceAll('/', '\\'), path.resolve(targetRoot).replaceAll('/', '\\')],

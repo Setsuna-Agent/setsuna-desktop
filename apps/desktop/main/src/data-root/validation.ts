@@ -10,6 +10,8 @@ const MANAGED_JSON_PATHS = new Set([
   'network-proxies.json',
   'secure-credentials.json',
   'update-download-sources.json',
+  'webdav-sync.json',
+  '.webdav-sync-restore.json',
   'window-state.json',
   'runtime/.setsuna-legacy-data-import.json',
   'runtime/attachments/index.json',

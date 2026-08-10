@@ -18,6 +18,26 @@ export async function handleRuntimeResourceRequest(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  if (request.method === 'POST' && url.pathname === '/internal/webdav-sync/prepare') {
+    const readiness = runtime.agentLoop.prepareDataMigration();
+    if (readiness.ready) {
+      try {
+        await runtime.threadStore.flush();
+      } catch (error) {
+        runtime.agentLoop.cancelDataMigrationPreparation();
+        throw error;
+      }
+    }
+    sendJson(response, 200, readiness);
+    return true;
+  }
+
+  if (request.method === 'DELETE' && url.pathname === '/internal/webdav-sync/prepare') {
+    runtime.agentLoop.cancelDataMigrationPreparation();
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
   if (request.method === 'POST' && url.pathname === '/v1/data-migration/prepare') {
     sendJson(response, 200, runtime.agentLoop.prepareDataMigration());
     return true;

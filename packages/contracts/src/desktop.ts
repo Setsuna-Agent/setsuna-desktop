@@ -20,6 +20,17 @@ import type {
   DesktopUpdateDownloadSourceInput,
   DesktopUpdateState,
 } from './updater.js';
+import type {
+  DesktopWebDavSyncBackupResult,
+  DesktopWebDavSyncConfigureInput,
+  DesktopWebDavSyncConfigureResult,
+  DesktopWebDavSyncPreferencesInput,
+  DesktopWebDavSyncRestorePlan,
+  DesktopWebDavSyncRestorePlanInput,
+  DesktopWebDavSyncRestoreResult,
+  DesktopWebDavSyncSnapshotList,
+  DesktopWebDavSyncState,
+} from './webdav-sync/index.js';
 
 export type DesktopOpenPathResult =
   | { ok: true }
@@ -282,6 +293,20 @@ export type SetsunaDesktopBridge = {
     quitAndInstall(): Promise<DesktopUpdateActionResult>;
     promptReadyUpdate(): Promise<DesktopUpdateActionResult>;
     onStateChange(callback: (state: DesktopUpdateState) => void): () => void;
+  };
+  webdavSync: {
+    getState(): Promise<DesktopWebDavSyncState>;
+    configure(input: DesktopWebDavSyncConfigureInput): Promise<DesktopWebDavSyncConfigureResult>;
+    updatePreferences(input: DesktopWebDavSyncPreferencesInput): Promise<DesktopWebDavSyncState>;
+    /** When input is provided, verifies the draft without saving it locally. */
+    testConnection(input?: DesktopWebDavSyncConfigureInput): Promise<DesktopWebDavSyncState>;
+    backupNow(): Promise<DesktopWebDavSyncBackupResult>;
+    listSnapshots(): Promise<DesktopWebDavSyncSnapshotList>;
+    inspectRestore(input: DesktopWebDavSyncRestorePlanInput): Promise<DesktopWebDavSyncRestorePlan>;
+    restore(planId: string): Promise<DesktopWebDavSyncRestoreResult>;
+    cancelCurrentOperation(): Promise<DesktopWebDavSyncState>;
+    disconnect(): Promise<DesktopWebDavSyncState>;
+    onStateChange(callback: (state: DesktopWebDavSyncState) => void): () => void;
   };
   windowControls: {
     minimize(): Promise<boolean>;

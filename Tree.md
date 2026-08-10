@@ -35,28 +35,29 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 106 total files
-├── src/ — 2 direct / 66 total files
+apps/desktop/main/ — 0 direct / 130 total files
+├── src/ — 2 direct / 80 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
-│   ├── ipc/ — 12 direct / 12 total files
+│   ├── ipc/ — 13 direct / 13 total files
 │   ├── network-proxy/ — 5 direct / 5 total files
 │   ├── review/ — 1 direct / 1 total files
 │   ├── runtime/ — 7 direct / 7 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
 │   ├── updater/ — 3 direct / 3 total files
+│   ├── webdav-sync/ — 13 direct / 13 total files
 │   ├── window/ — 3 direct / 5 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 40 files
+└── test/ — 50 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
-    ├── support/ — 2 direct / 2 total files
-    └── unit/ — 1 direct / 36 total files
+    ├── support/ — 3 direct / 3 total files
+    └── unit/ — 1 direct / 45 total files
         ├── browser/ — 6 direct / 8 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 8 direct / 8 total files
@@ -64,6 +65,7 @@ apps/desktop/main/ — 0 direct / 106 total files
         ├── runtime/ — 6 direct / 6 total files
         ├── security/ — 2 direct / 2 total files
         ├── updater/ — 2 direct / 2 total files
+        ├── webdav-sync/ — 9 direct / 9 total files
         ├── window/ — 3 direct / 5 total files
         │   └── splash/ — 2 direct / 2 total files
         └── workspace/ — 3 direct / 3 total files
@@ -79,15 +81,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 584 total files
-├── src/ — 2 direct / 430 total files
-│   ├── app/ — 2 direct / 34 total files
-│   │   ├── controller/ — 7 direct / 7 total files
+apps/desktop/renderer/ — 0 direct / 595 total files
+├── src/ — 2 direct / 439 total files
+│   ├── app/ — 2 direct / 35 total files
+│   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 11 direct / 11 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 4 direct / 4 total files
-│   ├── features/ — 314 files
+│   ├── features/ — 321 files
 │   │   ├── capabilities/ — 23 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -106,15 +108,16 @@ apps/desktop/renderer/ — 0 direct / 584 total files
 │   │   ├── conversation-debug/ — 17 direct / 17 total files
 │   │   ├── runtime-activity/ — 5 direct / 6 total files
 │   │   │   └── styles/ — 1 direct / 1 total files
-│   │   ├── settings/ — 10 direct / 57 total files
+│   │   ├── settings/ — 10 direct / 64 total files
 │   │   │   ├── components/ — 1 direct / 1 total files
 │   │   │   ├── data-root/ — 12 direct / 12 total files
 │   │   │   ├── network-proxy/ — 3 direct / 3 total files
 │   │   │   ├── providers/ — 6 direct / 6 total files
 │   │   │   ├── sections/ — 7 direct / 7 total files
 │   │   │   ├── shortcuts/ — 1 direct / 1 total files
-│   │   │   ├── styles/ — 10 direct / 10 total files
-│   │   │   └── usage/ — 7 direct / 7 total files
+│   │   │   ├── styles/ — 11 direct / 11 total files
+│   │   │   ├── usage/ — 7 direct / 7 total files
+│   │   │   └── webdav-sync/ — 6 direct / 6 total files
 │   │   └── workspace/ — 32 direct / 78 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files
@@ -125,26 +128,26 @@ apps/desktop/renderer/ — 0 direct / 584 total files
 │   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 71 files
+│   └── shared/ — 72 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── code/ — 4 direct / 4 total files
 │       ├── hooks/ — 3 direct / 3 total files
-│       ├── i18n/ — 14 direct / 14 total files
+│       ├── i18n/ — 15 direct / 15 total files
 │       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 154 files
-    └── unit/ — 154 files
+└── test/ — 156 files
+    └── unit/ — 156 files
         ├── app/ — 1 direct / 12 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 3 direct / 3 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 117 files
+        ├── features/ — 119 files
         │   ├── capabilities/ — 6 direct / 7 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 64 total files
@@ -158,7 +161,7 @@ apps/desktop/renderer/ — 0 direct / 584 total files
         │   │   └── tool-runs/ — 7 direct / 7 total files
         │   ├── conversation-debug/ — 7 direct / 7 total files
         │   ├── runtime-activity/ — 3 direct / 3 total files
-        │   ├── settings/ — 9 direct / 14 total files
+        │   ├── settings/ — 11 direct / 16 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
         │   └── workspace/ — 13 direct / 22 total files
@@ -181,11 +184,12 @@ apps/desktop/renderer/ — 0 direct / 584 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 72 total files
-├── src/ — 35 direct / 48 total files
+packages/contracts/ — 4 direct / 73 total files
+├── src/ — 35 direct / 49 total files
 │   ├── event-projections/ — 2 direct / 2 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
-│   └── swe/ — 10 direct / 10 total files
+│   ├── swe/ — 10 direct / 10 total files
+│   └── webdav-sync/ — 1 direct / 1 total files
 └── test/ — 11 direct / 20 total files
     ├── support/ — 1 direct / 1 total files
     ├── swe/ — 1 direct / 1 total files
@@ -371,14 +375,14 @@ plugins/ — 1 direct / 54 total files
 ### `docs/`
 
 ```text
-docs/ — 1 direct / 42 total files
+docs/ — 1 direct / 43 total files
 ├── apps/ — 13 files
 │   └── desktop/ — 1 direct / 13 total files
 │       ├── main/ — 5 direct / 5 total files
 │       ├── preload/ — 1 direct / 1 total files
 │       └── renderer/ — 6 direct / 6 total files
 ├── architecture/ — 4 direct / 4 total files
-├── designs/ — 4 direct / 4 total files
+├── designs/ — 5 direct / 5 total files
 ├── development/ — 3 direct / 3 total files
 ├── packages/ — 12 files
 │   ├── contracts/ — 4 direct / 4 total files

@@ -218,6 +218,11 @@ describe('agent loop thread deletion barrier', () => {
       registeredTasks: 0,
       pendingMutations: 0,
     });
+    expect(loop.prepareDataMigration()).toMatchObject({
+      ready: false,
+      registeredTasks: 0,
+      pendingMutations: 0,
+    });
     await expect(loop.startTurn(thread.id, { input: 'must wait for restart' }))
       .rejects.toThrow('preparing to stop');
 

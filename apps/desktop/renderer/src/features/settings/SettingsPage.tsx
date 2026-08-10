@@ -13,6 +13,7 @@ import {
   Archive,
   Bot,
   CircleGauge,
+  CloudCog,
   HardDrive,
   Info,
   Keyboard,
@@ -43,6 +44,7 @@ import type { RuntimePreferenceInput, SettingsSectionId } from './settings-types
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
 import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
+import { WebDavSyncSettings } from './webdav-sync/WebDavSyncSettings.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
@@ -53,6 +55,7 @@ const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; ico
   { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
   { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
   { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
+  { id: 'sync', labelKey: 'settings.section.sync', icon: <CloudCog size={14} /> },
   { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
   { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
   { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
@@ -65,6 +68,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
   networkProxy: 'settings.section.networkProxy',
+  sync: 'settings.section.sync',
   taskModels: 'settings.section.taskModels',
   usage: 'settings.section.usage',
   archives: 'settings.section.archives',
@@ -76,6 +80,7 @@ const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageK
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
   networkProxy: 'settings.section.networkProxyDescription',
+  sync: 'settings.section.syncDescription',
   taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
 };
@@ -161,6 +166,8 @@ export function SettingsPage({
       <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
     ) : activeSection === 'networkProxy' ? (
       <NetworkProxySettings proxy={networkProxy} />
+    ) : activeSection === 'sync' ? (
+      <WebDavSyncSettings />
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />

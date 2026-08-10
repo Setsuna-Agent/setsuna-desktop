@@ -294,8 +294,14 @@ function normalizeStoredConfig(value: unknown): StoredNetworkProxyConfig {
   if (!global || global.mode === 'inherit') throw new Error('全局代理路由配置无效。');
   if (!isRecord(value.routing.scopes)) throw new Error('代理范围路由配置无效。');
   const scopes = {} as DesktopNetworkProxyRoutingState['scopes'];
+  const defaultScopes = defaultDesktopNetworkProxyRouting().scopes;
   for (const scope of DESKTOP_NETWORK_PROXY_SCOPES) {
-    const route = normalizeDesktopNetworkProxyRoute(value.routing.scopes[scope]);
+    const storedRoute = value.routing.scopes[scope];
+    // New route scopes must not invalidate configurations written by an older
+    // app version. Missing scopes inherit the existing global route by default.
+    const route = storedRoute === undefined
+      ? defaultScopes[scope]
+      : normalizeDesktopNetworkProxyRoute(storedRoute);
     if (!route) throw new Error(`代理范围路由配置无效：${scope}`);
     scopes[scope] = route;
   }
@@ -383,6 +389,7 @@ function routingReferences(routing: DesktopNetworkProxyRoutingState, proxyServer
     terminal: '终端',
     updater: '应用更新',
     runtime: 'Runtime 服务',
+    sync: 'WebDAV 同步',
   };
   for (const scope of DESKTOP_NETWORK_PROXY_SCOPES) {
     const route = routing.scopes[scope];
