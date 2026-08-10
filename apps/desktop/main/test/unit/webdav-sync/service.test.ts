@@ -306,6 +306,93 @@ describe('WebDavSyncService', () => {
     }
   });
 
+  it('retries automatic backup when its timer fires during another sync operation', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-10T10:00:00.000Z'));
+    const requestGate = deferred();
+    const requestBlocked = deferred();
+    const automaticStarted = deferred();
+    let service: WebDavSyncService | undefined;
+    try {
+      const dataRoot = await createDataRoot();
+      const server = new MemoryWebDavServer('/dav');
+      let blockNextRequest = false;
+      const fetch = (async (...args: Parameters<typeof globalThis.fetch>) => {
+        if (blockNextRequest) {
+          blockNextRequest = false;
+          requestBlocked.resolve();
+          await requestGate.promise;
+        }
+        return server.fetch(...args);
+      }) as typeof globalThis.fetch;
+      const prepare = vi.fn(async () => {
+        automaticStarted.resolve();
+        return { ready: true as const, registeredTasks: 0, pendingMutations: 0 };
+      });
+      service = new WebDavSyncService({
+        dataRoot,
+        appVersion: '0.2.1',
+        configStore: new WebDavSyncConfigStore(
+          path.join(dataRoot, 'webdav-sync.json'),
+          new MemoryCredentialVault(),
+        ),
+        fetch,
+        runtime: {
+          prepare,
+          release: async () => undefined,
+          stop: async () => undefined,
+          start: async () => undefined,
+        },
+        requestRelaunch: async () => undefined,
+      });
+      await service.initialize();
+      await service.configure({
+        endpoint: 'https://dav.test/dav',
+        remoteRoot: '/Backups',
+        username: 'alice',
+        password: 'secret',
+        repositoryMode: 'create',
+      });
+      await service.updatePreferences({
+        automaticBackup: true,
+        categories: ['preferences'],
+      });
+      const initialSchedule = (await service.getState()).nextAutomaticBackupAt;
+
+      await vi.advanceTimersByTimeAsync(299_000);
+      blockNextRequest = true;
+      const listing = service.listSnapshots();
+      await requestBlocked.promise;
+
+      const retryScheduled = deferred();
+      const unsubscribeRetry = service.subscribe((state) => {
+        if (state.nextAutomaticBackupAt && state.nextAutomaticBackupAt !== initialSchedule) {
+          retryScheduled.resolve();
+        }
+      });
+      await vi.advanceTimersByTimeAsync(1_000);
+      await retryScheduled.promise;
+      unsubscribeRetry();
+      expect(prepare).not.toHaveBeenCalled();
+
+      requestGate.resolve();
+      await listing;
+      const backupCompleted = deferred();
+      const unsubscribeBackup = service.subscribe((state) => {
+        if (state.lastBackupAt) backupCompleted.resolve();
+      });
+      await vi.advanceTimersByTimeAsync(15 * 60 * 1_000);
+      await automaticStarted.promise;
+      await backupCompleted.promise;
+      unsubscribeBackup();
+      expect(prepare).toHaveBeenCalledOnce();
+    } finally {
+      requestGate.resolve();
+      service?.close();
+      vi.useRealTimers();
+    }
+  });
+
   it('stops the runtime before validating the final restore inventory', async () => {
     const dataRoot = await createDataRoot();
     const server = new MemoryWebDavServer('/dav');

@@ -96,6 +96,9 @@ describe('WebDAV portable snapshot data', () => {
 
     expect(script).toMatchObject({ executable: true });
     expect((await stat(script!.sourcePath!)).mode & 0o111).toBe(0);
+    const inventory = await inventorySnapshotSources(sources);
+    expect(inventory.find((item) => item.logicalPath.endsWith('/scripts/run.sh')))
+      .toMatchObject({ executable: true });
   });
 
   it('creates a consistent SQLite copy and rejects symlinks in managed directories', async () => {

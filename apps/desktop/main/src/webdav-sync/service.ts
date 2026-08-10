@@ -485,7 +485,7 @@ export class WebDavSyncService {
       });
       succeeded = true;
     } finally {
-      if (operationStarted) {
+      if (automatic || operationStarted) {
         await this.scheduleAutomaticBackup(automatic && !succeeded ? BUSY_AUTOMATIC_RETRY_MS : undefined);
       }
     }

@@ -231,6 +231,7 @@ export async function inventorySnapshotSources(
         label: source.label,
         ...(source.detail ? { detail: source.detail } : {}),
         ...(source.credentialId ? { credentialId: source.credentialId } : {}),
+        ...(source.executable ? { executable: true } : {}),
         ...measured,
       });
     }

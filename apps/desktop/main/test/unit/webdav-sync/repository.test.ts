@@ -170,6 +170,116 @@ describe('EncryptedWebDavRepository', () => {
     expect((await repository.listSnapshots()).map((record) => record.manifest.id)).toEqual([localId]);
   });
 
+  it('surfaces transient failures while reading a completed snapshot', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const location = normalizeWebDavLocation({
+      endpoint: 'https://dav.test/dav',
+      remoteRoot: '/Backups',
+    });
+    const recoveryKey = generateWebDavRecoveryKey();
+    const repository = await EncryptedWebDavRepository.create(
+      new WebDavClient(location, { username: 'alice', password: 'secret' }, server.fetch),
+      recoveryKey,
+    );
+    await publishEmptySnapshot(
+      repository,
+      '55bc8840-ac7a-435a-b5a7-88c2e91e7d87',
+      createSnapshotId(new Date('2026-08-10T12:00:00.000Z')),
+      '2026-08-10T12:00:00.000Z',
+    );
+    let failMarkerRead = true;
+    const flakyFetch = (async (...args: Parameters<typeof globalThis.fetch>) => {
+      const [input, init] = args;
+      const url = new URL(
+        typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+      );
+      if (
+        failMarkerRead
+        && (init?.method ?? 'GET').toUpperCase() === 'GET'
+        && url.pathname.replace(/\/+$/u, '').endsWith('/complete.json')
+      ) {
+        failMarkerRead = false;
+        return new Response(null, { status: 500 });
+      }
+      return server.fetch(...args);
+    }) as typeof globalThis.fetch;
+    const connected = await EncryptedWebDavRepository.connect(
+      new WebDavClient(location, { username: 'alice', password: 'secret' }, flakyFetch),
+      recoveryKey,
+    );
+
+    await expect(connected.listSnapshots()).rejects.toThrow('HTTP 500');
+  });
+
+  it('skips damaged completed snapshots without hiding healthy backups', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const repository = await EncryptedWebDavRepository.create(
+      new WebDavClient(
+        normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+        { username: 'alice', password: 'secret' },
+        server.fetch,
+      ),
+      generateWebDavRecoveryKey(),
+    );
+    const damagedId = createSnapshotId(new Date('2026-08-10T12:01:00.000Z'));
+    const healthyId = createSnapshotId(new Date('2026-08-10T12:00:00.000Z'));
+    await publishEmptySnapshot(
+      repository,
+      '55bc8840-ac7a-435a-b5a7-88c2e91e7d87',
+      healthyId,
+      '2026-08-10T12:00:00.000Z',
+    );
+    await publishEmptySnapshot(
+      repository,
+      '1455a7df-11ca-4b40-9fd8-f65e3a8846f0',
+      damagedId,
+      '2026-08-10T12:01:00.000Z',
+    );
+    const damagedManifestPath = [...server.files.keys()].find((remotePath) => (
+      remotePath.includes(damagedId) && remotePath.endsWith('/manifest.enc')
+    ));
+    expect(damagedManifestPath).toBeDefined();
+    server.files.set(damagedManifestPath!, Buffer.from('damaged manifest', 'utf8'));
+
+    await expect(repository.listSnapshots()).resolves.toMatchObject([
+      { manifest: { id: healthyId } },
+    ]);
+  });
+
+  it('lists backups past incomplete fragments and reclaims fragments from this device', async () => {
+    const server = new MemoryWebDavServer('/dav');
+    const repository = await EncryptedWebDavRepository.create(
+      new WebDavClient(
+        normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+        { username: 'alice', password: 'secret' },
+        server.fetch,
+      ),
+      generateWebDavRecoveryKey(),
+    );
+    const localDevice = '55bc8840-ac7a-435a-b5a7-88c2e91e7d87';
+    const peerDevice = '1455a7df-11ca-4b40-9fd8-f65e3a8846f0';
+    const healthyId = createSnapshotId(new Date('2026-08-10T10:00:00.000Z'));
+    await publishEmptySnapshot(repository, peerDevice, healthyId, '2026-08-10T10:00:00.000Z');
+    const incompleteIds = Array.from({ length: 201 }, (_, index) => (
+      createSnapshotId(new Date(Date.parse('2026-08-10T11:00:00.000Z') + index))
+    ));
+    for (const snapshotId of incompleteIds) {
+      await repository.initializeSnapshot(localDevice, snapshotId);
+    }
+
+    const replaceable = await repository.listSnapshots();
+    expect(replaceable.map((record) => record.manifest.id)).toEqual([healthyId]);
+
+    const finalId = createSnapshotId(new Date('2026-08-10T12:00:00.000Z'));
+    await publishEmptySnapshot(repository, localDevice, finalId, '2026-08-10T12:00:00.000Z');
+    await repository.retainPublishedSnapshot(localDevice, finalId, replaceable);
+
+    expect((await repository.listSnapshots()).map((record) => record.manifest.id)).toEqual([finalId]);
+    expect([...server.directories].filter((remotePath) => (
+      incompleteIds.some((snapshotId) => remotePath.includes(snapshotId))
+    ))).toEqual([]);
+  });
+
   it('rejects manifest paths that cannot round-trip across supported platforms', async () => {
     const server = new MemoryWebDavServer('/dav');
     const client = new WebDavClient(

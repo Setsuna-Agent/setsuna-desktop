@@ -12,6 +12,31 @@ afterEach(async () => {
 });
 
 describe('WebDavClient', () => {
+  it('uses file URLs without a collection trailing slash', async () => {
+    const requestedPaths: string[] = [];
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/backups' }),
+      { username: 'alice', password: 'secret' },
+      async (input, init) => {
+        const url = new URL(
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        );
+        requestedPaths.push(url.pathname);
+        return init?.method === 'GET'
+          ? new Response(new Uint8Array([1]), { status: 200 })
+          : new Response(null, { status: 201 });
+      },
+    );
+
+    await client.putBuffer(['objects', 'item.enc'], Buffer.from([1]));
+    await client.getBuffer(['objects', 'item.enc']);
+
+    expect(requestedPaths).toEqual([
+      '/dav/backups/objects/item.enc',
+      '/dav/backups/objects/item.enc',
+    ]);
+  });
+
   it('decodes XML entities once when listing remote paths', async () => {
     const client = new WebDavClient(
       normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),

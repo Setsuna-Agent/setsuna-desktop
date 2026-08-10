@@ -72,10 +72,11 @@ export async function mergePortableConfigForRestore(input: {
   delete merged.storagePath;
 
   const localSchemaVersion = finiteNumber(local.schemaVersion);
-  const backupSchemaVersion = finiteNumber(backup.schemaVersion);
-  if (localSchemaVersion !== undefined || backupSchemaVersion !== undefined) {
-    merged.schemaVersion = Math.max(localSchemaVersion ?? 0, backupSchemaVersion ?? 0);
-  }
+  // The schema describes the target device's complete config, including fields
+  // that are intentionally not portable. A newer backup must not make this
+  // device skip migrations for those local-only fields after it upgrades.
+  if (localSchemaVersion !== undefined) merged.schemaVersion = localSchemaVersion;
+  else delete merged.schemaVersion;
 
   merged.providers = mergeProviders(arrayRecords(local.providers), arrayRecords(backup.providers));
   mergeRecordField(merged, local, backup, 'desktopSettings');

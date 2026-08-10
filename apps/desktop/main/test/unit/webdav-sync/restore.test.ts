@@ -184,7 +184,7 @@ describe('WebDAV restore planning and commit', () => {
     await writeFile(
       path.join(stagingRoot, 'runtime', 'config.json'),
       JSON.stringify({
-        schemaVersion: 5,
+        schemaVersion: 9,
         globalPrompt: 'restored prompt',
         approvalPolicy: 'strict',
         hooks: {},

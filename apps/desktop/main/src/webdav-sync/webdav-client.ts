@@ -21,6 +21,8 @@ export type WebDavListEntry = {
   collection: boolean;
 };
 
+export class WebDavResponseTooLargeError extends Error {}
+
 export class WebDavClient {
   private readonly authorization: string;
 
@@ -102,7 +104,7 @@ export class WebDavClient {
       await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
         ? '远端备份仓库已存在。'
         : '无法写入 WebDAV 远端文件。');
-    }, options.signal, true);
+    }, options.signal);
   }
 
   async putFile(
@@ -125,7 +127,7 @@ export class WebDavClient {
       await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
         ? '远端备份对象已存在。'
         : '无法上传 WebDAV 备份对象。');
-    }, options.signal, true);
+    }, options.signal);
   }
 
   async getBuffer(
@@ -137,7 +139,7 @@ export class WebDavClient {
       const maxBytes = options.maxBytes ?? MAX_METADATA_BYTES;
       const contentLength = Number(response.headers.get('content-length'));
       if (Number.isFinite(contentLength) && contentLength > maxBytes) {
-        throw new Error('WebDAV 远端元数据超过安全大小限制。');
+        throw new WebDavResponseTooLargeError('WebDAV 远端元数据超过安全大小限制。');
       }
       return boundedResponseBuffer(
         response,
@@ -145,7 +147,7 @@ export class WebDavClient {
         'WebDAV 远端元数据超过安全大小限制。',
         reportActivity,
       );
-    }, options.signal, true);
+    }, options.signal);
   }
 
   async downloadFile(
@@ -193,7 +195,7 @@ export class WebDavClient {
         await rm(destinationPath, { force: true }).catch(() => undefined);
         throw error;
       }
-    }, options.signal, true);
+    }, options.signal);
   }
 
   async list(parts: readonly string[], signal?: AbortSignal): Promise<WebDavListEntry[]> {
@@ -355,7 +357,7 @@ async function boundedResponseBuffer(
       received += value.byteLength;
       if (received > maxBytes) {
         await reader.cancel(limitMessage).catch(() => undefined);
-        throw new Error(limitMessage);
+        throw new WebDavResponseTooLargeError(limitMessage);
       }
       chunks.push(Buffer.from(value));
     }

@@ -26,7 +26,10 @@ import {
   isPortablePathComponent,
   portablePathComparisonKey,
 } from './portable-path.js';
-import type { WebDavClient } from './webdav-client.js';
+import {
+  type WebDavClient,
+  WebDavResponseTooLargeError,
+} from './webdav-client.js';
 
 const REPOSITORY_PARTS = ['setsuna-backup', 'v1'] as const;
 const REPOSITORY_FILE = 'repository.json';
@@ -36,11 +39,20 @@ const OBJECTS_DIRECTORY = 'objects';
 const MANIFEST_FILE = 'manifest.enc';
 const COMPLETE_FILE = 'complete.json';
 const MAX_SNAPSHOT_COUNT = 200;
+const MAX_SNAPSHOT_DIRECTORY_COUNT = 10_000;
 const MAX_MANIFEST_ITEMS = 100_000;
 const MAX_MANIFEST_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_PLAINTEXT_BYTES = 1024 * 1024 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const SNAPSHOT_ID_PATTERN = /^[0-9]{8}T[0-9]{9}Z-[0-9a-f]{8}$/u;
+
+type SnapshotLocator = { deviceId: string; snapshotId: string };
+
+class DamagedWebDavSnapshotError extends Error {
+  constructor(cause: unknown) {
+    super('WebDAV 快照元数据已损坏。', { cause });
+  }
+}
 
 export class EncryptedWebDavRepository {
   constructor(
@@ -176,28 +188,8 @@ export class EncryptedWebDavRepository {
   }
 
   async listSnapshots(signal?: AbortSignal): Promise<WebDavSnapshotRecord[]> {
-    const deviceEntries = (await this.client.list([
-      ...REPOSITORY_PARTS,
-      DEVICES_DIRECTORY,
-    ], signal)).filter((entry) => entry.collection && UUID_PATTERN.test(entry.name));
-    if (deviceEntries.length > 100) throw new Error('WebDAV 仓库中的设备数量超过安全限制。');
-    const locators: Array<{ deviceId: string; snapshotId: string }> = [];
-    for (const device of deviceEntries) {
-      const snapshots = await this.client.list([
-        ...REPOSITORY_PARTS,
-        DEVICES_DIRECTORY,
-        device.name,
-        SNAPSHOTS_DIRECTORY,
-      ], signal);
-      for (const snapshot of snapshots) {
-        if (snapshot.collection && SNAPSHOT_ID_PATTERN.test(snapshot.name)) {
-          locators.push({ deviceId: device.name, snapshotId: snapshot.name });
-        }
-      }
-    }
-    locators.sort((left, right) => right.snapshotId.localeCompare(left.snapshotId));
     const records: WebDavSnapshotRecord[] = [];
-    for (const locator of locators.slice(0, MAX_SNAPSHOT_COUNT)) {
+    for (const locator of await this.listSnapshotLocators(signal)) {
       if (!await this.client.exists(
         this.snapshotParts(locator.deviceId, locator.snapshotId, COMPLETE_FILE),
         signal,
@@ -206,8 +198,11 @@ export class EncryptedWebDavRepository {
         records.push(await this.readSnapshot(locator.deviceId, locator.snapshotId, signal));
       } catch (error) {
         if (signal?.aborted) throw signal.reason ?? error;
-        // A damaged upload must not hide a usable complete backup.
+        // Corrupt metadata should not hide another usable backup, but transport
+        // and HTTP failures must remain visible so the user can retry.
+        if (!(error instanceof DamagedWebDavSnapshotError)) throw error;
       }
+      if (records.length >= MAX_SNAPSHOT_COUNT) break;
     }
     return records.sort((left, right) => right.manifest.createdAt.localeCompare(left.manifest.createdAt));
   }
@@ -319,6 +314,22 @@ export class EncryptedWebDavRepository {
       deleted.add(key);
       await this.client.delete(this.snapshotParts(deviceId, snapshotId), signal);
     }
+
+    // A failed upload from this device has no completion marker and is absent
+    // from replaceableSnapshots. Operations are serialized per device, so it is
+    // safe for a later successful upload to reclaim those private fragments
+    // without touching an in-progress upload from another device.
+    for (const locator of await this.listSnapshotLocators(signal)) {
+      if (
+        locator.deviceId !== retainedDeviceId
+        || locator.snapshotId === retainedSnapshotId
+        || await this.client.exists(
+          this.snapshotParts(locator.deviceId, locator.snapshotId, COMPLETE_FILE),
+          signal,
+        )
+      ) continue;
+      await this.client.delete(this.snapshotParts(locator.deviceId, locator.snapshotId), signal);
+    }
     return retained;
   }
 
@@ -334,31 +345,67 @@ export class EncryptedWebDavRepository {
     snapshotId: string,
     signal?: AbortSignal,
   ): Promise<WebDavSnapshotRecord> {
-    const marker = parseCompleteMarker(parseJson(
-      await this.client.getBuffer(
-        this.snapshotParts(deviceId, snapshotId, COMPLETE_FILE),
-        { maxBytes: 4 * 1024, signal },
-      ),
-      'WebDAV 快照完成标记',
+    const markerData = await readSnapshotMetadata(() => this.client.getBuffer(
+      this.snapshotParts(deviceId, snapshotId, COMPLETE_FILE),
+      { maxBytes: 4 * 1024, signal },
     ));
-    if (marker.snapshotId !== snapshotId) throw new Error('WebDAV 快照完成标记不匹配。');
-    const encrypted = await this.client.getBuffer(
+    const marker = parseSnapshotMetadata(() => parseCompleteMarker(parseJson(
+      markerData,
+      'WebDAV 快照完成标记',
+    )));
+    if (marker.snapshotId !== snapshotId) {
+      throw new DamagedWebDavSnapshotError(new Error('WebDAV 快照完成标记不匹配。'));
+    }
+    const encrypted = await readSnapshotMetadata(() => this.client.getBuffer(
       this.snapshotParts(deviceId, snapshotId, MANIFEST_FILE),
       { maxBytes: MAX_MANIFEST_BYTES + 64, signal },
-    );
-    const decrypted = decryptWebDavBuffer(
-      encrypted,
-      this.recoveryKey,
-      webDavObjectAad(this.metadata.repositoryId, snapshotId, MANIFEST_FILE),
-    );
-    const manifest = parseSnapshotManifest(
-      parseJson(decrypted, 'WebDAV 快照清单'),
-      this.metadata.repositoryId,
-    );
-    if (manifest.deviceId !== deviceId || manifest.id !== snapshotId) {
-      throw new Error('WebDAV 快照目录与清单不匹配。');
-    }
+    ));
+    const manifest = parseSnapshotMetadata(() => {
+      const decrypted = decryptWebDavBuffer(
+        encrypted,
+        this.recoveryKey,
+        webDavObjectAad(this.metadata.repositoryId, snapshotId, MANIFEST_FILE),
+      );
+      try {
+        const parsed = parseSnapshotManifest(
+          parseJson(decrypted, 'WebDAV 快照清单'),
+          this.metadata.repositoryId,
+        );
+        if (parsed.deviceId !== deviceId || parsed.id !== snapshotId) {
+          throw new Error('WebDAV 快照目录与清单不匹配。');
+        }
+        return parsed;
+      } finally {
+        decrypted.fill(0);
+      }
+    });
     return { manifest, summary: snapshotSummary(manifest) };
+  }
+
+  private async listSnapshotLocators(signal?: AbortSignal): Promise<SnapshotLocator[]> {
+    const deviceEntries = (await this.client.list([
+      ...REPOSITORY_PARTS,
+      DEVICES_DIRECTORY,
+    ], signal)).filter((entry) => entry.collection && UUID_PATTERN.test(entry.name));
+    if (deviceEntries.length > 100) throw new Error('WebDAV 仓库中的设备数量超过安全限制。');
+    const locators: SnapshotLocator[] = [];
+    for (const device of deviceEntries) {
+      const snapshots = await this.client.list([
+        ...REPOSITORY_PARTS,
+        DEVICES_DIRECTORY,
+        device.name,
+        SNAPSHOTS_DIRECTORY,
+      ], signal);
+      for (const snapshot of snapshots) {
+        if (snapshot.collection && SNAPSHOT_ID_PATTERN.test(snapshot.name)) {
+          locators.push({ deviceId: device.name, snapshotId: snapshot.name });
+          if (locators.length > MAX_SNAPSHOT_DIRECTORY_COUNT) {
+            throw new Error('WebDAV 仓库中的快照目录数量超过安全限制。');
+          }
+        }
+      }
+    }
+    return locators.sort((left, right) => right.snapshotId.localeCompare(left.snapshotId));
   }
 
   private snapshotParts(deviceId: string, snapshotId: string, tail?: string): string[] {
@@ -378,6 +425,26 @@ export class EncryptedWebDavRepository {
       OBJECTS_DIRECTORY,
       requireObjectName(objectName),
     ];
+  }
+}
+
+function parseSnapshotMetadata<T>(parse: () => T): T {
+  try {
+    return parse();
+  } catch (error) {
+    if (error instanceof DamagedWebDavSnapshotError) throw error;
+    throw new DamagedWebDavSnapshotError(error);
+  }
+}
+
+async function readSnapshotMetadata<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (error instanceof WebDavResponseTooLargeError) {
+      throw new DamagedWebDavSnapshotError(error);
+    }
+    throw error;
   }
 }
 
