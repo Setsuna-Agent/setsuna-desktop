@@ -4,6 +4,64 @@ import { applyRuntimeEventToThread } from '../src/thread-events.js';
 import type { RuntimeThread } from '../src/threads.js';
 
 describe('thread event lifecycle and metadata projection', () => {
+  it('projects replacement and cleared Skill metadata from message updates', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_1',
+      title: 'Thread',
+      createdAt: '2026-06-26T00:00:00.000Z',
+      updatedAt: '2026-06-26T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: 'Old Skill prompt',
+      lastSeq: 0,
+      messages: [{
+        id: 'msg_1',
+        role: 'user',
+        content: 'Old Skill prompt',
+        skillIds: ['skill_old'],
+        skillReferences: [{ skillId: 'skill_old', start: 0, end: 9 }],
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      }],
+    };
+    const replaced = applyRuntimeEventToThread(thread, {
+      id: 'event_1',
+      seq: 1,
+      threadId: 'thread_1',
+      type: 'message.updated',
+      createdAt: '2026-06-26T00:00:01.000Z',
+      payload: {
+        messageId: 'msg_1',
+        content: 'New Skill prompt',
+        skillIds: ['skill_new'],
+        skillReferences: [{ skillId: 'skill_new', start: 0, end: 9 }],
+      },
+    });
+
+    expect(replaced.messages[0]).toMatchObject({
+      content: 'New Skill prompt',
+      skillIds: ['skill_new'],
+      skillReferences: [{ skillId: 'skill_new', start: 0, end: 9 }],
+    });
+
+    const cleared = applyRuntimeEventToThread(replaced, {
+      id: 'event_2',
+      seq: 2,
+      threadId: 'thread_1',
+      type: 'message.updated',
+      createdAt: '2026-06-26T00:00:02.000Z',
+      payload: {
+        messageId: 'msg_1',
+        content: 'Plain prompt',
+        skillIds: [],
+        skillReferences: [],
+      },
+    });
+
+    expect(cleared.messages[0]?.skillIds).toBeUndefined();
+    expect(cleared.messages[0]?.skillReferences).toBeUndefined();
+  });
+
   it('records assistant completion time from message.completed events', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',

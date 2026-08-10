@@ -1,17 +1,17 @@
-import type {
-  RuntimeMailboxDelivery,
-  RuntimeMessage,
-  RuntimeQueuedTurnInput,
-  RuntimeThread,
-  SendTurnResponse,
-  SteerTurnInput,
+import {
+  normalizeRuntimeSkillReferences,
+  type RuntimeMailboxDelivery,
+  type RuntimeMessage,
+  type RuntimeQueuedTurnInput,
+  type RuntimeThread,
+  type SendTurnResponse,
+  type SteerTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from '../context/prompt-utils.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
-import { normalizeRuntimeSkillReferences } from '../core/runtime-skill-references.js';
 import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
 

@@ -242,8 +242,16 @@ export class RuntimeTurnRunFactory {
     const skillIds = input.skillIds ?? originalMessage.skillIds ?? [];
     if (!text) throw new Error('Message content is required.');
     await this.options.inputGuard.assertAttachmentsSupported(this.options.normalizeAttachments(originalMessage.attachments));
-    if (text !== originalMessage.content) {
-      await this.options.threadStore.updateMessage(threadId, messageId, { content: text });
+    if (
+      text !== originalMessage.content
+      || input.skillIds !== undefined
+      || input.skillReferences !== undefined
+    ) {
+      await this.options.threadStore.updateMessage(threadId, messageId, {
+        content: text,
+        skillIds,
+        ...(input.skillReferences !== undefined ? { skillReferences: input.skillReferences } : {}),
+      });
     }
     await this.options.threadStore.truncateMessagesAfter(threadId, messageId, false);
     await this.options.publishStoredEventsSince(threadId, originalThread.lastSeq);
@@ -264,8 +272,8 @@ export class RuntimeTurnRunFactory {
     }, (task) => this.options.runTurn({
       attachments,
       signal: task.controller.signal,
-      skillIds,
-      skillReferences: input.skillReferences ?? originalMessage.skillReferences,
+      skillIds: userMessage.skillIds ?? [],
+      skillReferences: userMessage.skillReferences,
       text,
       thinkingOptions: turnThinkingOptions(input),
       thread,

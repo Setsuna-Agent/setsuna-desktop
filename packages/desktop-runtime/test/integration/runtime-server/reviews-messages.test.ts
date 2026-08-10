@@ -177,7 +177,11 @@ describe('runtime server reviews and message mutations', () => {
       });
       await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
         method: 'POST',
-        body: JSON.stringify({ input: 'Original prompt.', skillIds: ['skill_http'] }),
+        body: JSON.stringify({
+          input: 'Skill HTTP Original prompt.',
+          skillIds: ['skill_http'],
+          skillReferences: [{ skillId: 'skill_http', start: 0, end: 'Skill HTTP'.length }],
+        }),
       });
       const populated = await harness.waitForThread(thread.id, (item) => item.messages.some((message) => message.role === 'assistant' && message.status === 'complete'));
       const userMessage = populated.messages.find((message) => message.role === 'user');
@@ -189,7 +193,11 @@ describe('runtime server reviews and message mutations', () => {
         method: 'PATCH',
         body: JSON.stringify({ content: 'Edited prompt.' }),
       });
-      expect(edited.messages.find((message: { id: string }) => message.id === userMessage.id)).toMatchObject({ content: 'Edited prompt.' });
+      expect(edited.messages.find((message: { id: string }) => message.id === userMessage.id)).toMatchObject({
+        content: 'Edited prompt.',
+        skillIds: ['skill_http'],
+      });
+      expect(edited.messages.find((message: { id: string }) => message.id === userMessage.id).skillReferences).toBeUndefined();
   
       const deleted = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/messages`, {
         method: 'DELETE',
@@ -199,7 +207,11 @@ describe('runtime server reviews and message mutations', () => {
   
       const regenerated = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/messages/${encodeURIComponent(userMessage.id)}/regenerate`, {
         method: 'POST',
-        body: JSON.stringify({ content: 'Regenerated prompt.' }),
+        body: JSON.stringify({
+          content: 'Skill HTTP Regenerated prompt.',
+          skillIds: ['skill_http'],
+          skillReferences: [{ skillId: 'skill_http', start: 0, end: 'Skill HTTP'.length }],
+        }),
       });
       const rerun = await harness.waitForThread(
         thread.id,
@@ -207,7 +219,11 @@ describe('runtime server reviews and message mutations', () => {
       );
   
       expect(rerun.messages.filter((message) => message.role === 'user')).toEqual([
-        expect.objectContaining({ content: 'Regenerated prompt.', skillIds: ['skill_http'] }),
+        expect.objectContaining({
+          content: 'Skill HTTP Regenerated prompt.',
+          skillIds: ['skill_http'],
+          skillReferences: [{ skillId: 'skill_http', start: 0, end: 'Skill HTTP'.length }],
+        }),
       ]);
       expect(rerun.messages.some((message) => message.id === assistantMessage.id)).toBe(false);
     });

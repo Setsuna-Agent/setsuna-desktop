@@ -251,6 +251,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       message.content = event.payload.content;
+      if (event.payload.skillIds !== undefined) {
+        message.skillIds = event.payload.skillIds.length ? [...event.payload.skillIds] : undefined;
+      }
+      if (event.payload.skillReferences !== undefined) {
+        const references = cloneRuntimeSkillReferences(event.payload.skillReferences);
+        message.skillReferences = references?.length ? references : undefined;
+      }
       message.status = 'complete';
       refreshThreadSummary(next);
       if (next.title === DEFAULT_THREAD_TITLE && message.role === 'user') {

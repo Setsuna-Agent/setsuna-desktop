@@ -94,11 +94,28 @@ describe('parseSkillReferenceText', () => {
     ]);
   });
 
-  it('requires valid durable range metadata and an exact serialized label', () => {
+  it('keeps the historical serialized label after a Skill is renamed', () => {
+    const renamedSkills = skills.map((skill) => (
+      skill.id === 'review-user' ? { ...skill, name: 'Review Plus' } : skill
+    ));
+
+    expect(parseSkillReferenceText(
+      'Review',
+      [{ skillId: 'review-user', start: 0, end: 'Review'.length }],
+      renamedSkills,
+    )).toEqual([{
+      skill: expect.objectContaining({ id: 'review-user', name: 'Review Plus' }),
+      start: 0,
+      type: 'skill',
+      value: 'Review',
+    }]);
+  });
+
+  it('requires valid durable range metadata', () => {
     expect(parseSkillReferenceText('PDF 是普通文字', undefined, skills)).toEqual([
       { start: 0, type: 'text', value: 'PDF 是普通文字' },
     ]);
-    expect(parseSkillReferenceText('myPDFparser', [{ skillId: 'pdf', start: 1, end: 4 }], skills)).toEqual([
+    expect(parseSkillReferenceText('myPDFparser', [{ skillId: 'pdf', start: -1, end: 2 }], skills)).toEqual([
       { start: 0, type: 'text', value: 'myPDFparser' },
     ]);
   });

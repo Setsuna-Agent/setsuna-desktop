@@ -63,19 +63,18 @@ function selectedSkillCandidates(
   for (const reference of [...(references ?? [])].sort((left, right) => left.start - right.start || left.end - right.end)) {
     const skill = skillsById.get(reference.skillId);
     if (!skill) continue;
-    const value = skillDisplayText(skill);
     if (
-      !value
-      || !Number.isInteger(reference.start)
+      !Number.isInteger(reference.start)
       || !Number.isInteger(reference.end)
       || reference.start < 0
       || reference.start < previousEnd
-      || reference.end !== reference.start + value.length
+      || reference.end <= reference.start
       || reference.end > content.length
-      || content.slice(reference.start, reference.end) !== value
     ) {
       continue;
     }
+    const value = content.slice(reference.start, reference.end);
+    if (!value) continue;
     candidates.push({
       end: reference.end,
       skill,

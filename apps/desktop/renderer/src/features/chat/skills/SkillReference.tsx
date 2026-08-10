@@ -21,14 +21,16 @@ export function SkillReferenceCatalogProvider({
 }
 
 export const SkillReferenceLabel = memo(function SkillReferenceLabel({
+  displayText,
   skill,
 }: {
+  displayText?: string;
   skill: RuntimeSkillSummary;
 }) {
   return (
     <span className="chat-skill-reference" title={skill.description || skill.id}>
       <ChatCapabilityReferenceIcon />
-      <span>{skillDisplayText(skill)}</span>
+      <span>{displayText ?? skillDisplayText(skill)}</span>
     </span>
   );
 });
@@ -49,7 +51,11 @@ export const SkillReferenceText = memo(function SkillReferenceText({
             <WorkspaceMentionText content={part.value} />
           </Fragment>
         ) : (
-          <SkillReferenceLabel key={`skill:${part.start}:${part.skill.id}`} skill={part.skill} />
+          <SkillReferenceLabel
+            key={`skill:${part.start}:${part.skill.id}`}
+            displayText={part.value}
+            skill={part.skill}
+          />
         )
       ))}
     </>

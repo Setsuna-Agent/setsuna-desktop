@@ -195,9 +195,9 @@ packages/contracts/ — 4 direct / 72 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 520 total files
+packages/desktop-runtime/ — 4 direct / 521 total files
 ├── src/ — 2 direct / 302 total files
-│   ├── adapters/ — 134 files
+│   ├── adapters/ — 135 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -210,15 +210,15 @@ packages/desktop-runtime/ — 4 direct / 520 total files
 │   │   ├── plugin/ — 6 direct / 6 total files
 │   │   ├── search/ — 6 direct / 6 total files
 │   │   ├── skill/ — 2 direct / 2 total files
-│   │   ├── store/ — 27 direct / 27 total files
+│   │   ├── store/ — 28 direct / 28 total files
 │   │   ├── tool/ — 19 direct / 41 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
 │   ├── extensions/ — 6 direct / 6 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 58 files
+│   ├── loop/ — 57 files
 │   │   ├── context/ — 14 direct / 14 total files
-│   │   ├── core/ — 15 direct / 15 total files
+│   │   ├── core/ — 14 direct / 14 total files
 │   │   ├── lifecycle/ — 14 direct / 14 total files
 │   │   ├── memory/ — 5 direct / 5 total files
 │   │   └── tools/ — 10 direct / 10 total files
@@ -230,8 +230,8 @@ packages/desktop-runtime/ — 4 direct / 520 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 214 files
-    ├── adapters/ — 68 files
+└── test/ — 215 files
+    ├── adapters/ — 69 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -242,7 +242,7 @@ packages/desktop-runtime/ — 4 direct / 520 total files
     │   ├── plugin/ — 5 direct / 5 total files
     │   ├── search/ — 5 direct / 5 total files
     │   ├── skill/ — 1 direct / 1 total files
-    │   ├── store/ — 13 direct / 13 total files
+    │   ├── store/ — 14 direct / 14 total files
     │   ├── tool/ — 14 direct / 18 total files
     │   │   └── pc-local/ — 4 direct / 4 total files
     │   └── workspace/ — 6 direct / 6 total files

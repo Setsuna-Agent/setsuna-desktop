@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ensureChatComposerSkillSlot,
   startChatComposerSkillSelection,
+  type ChatComposerSkillSelectionSession,
 } from '../../../../../src/features/chat/composer/chatComposerSkillSelection.js';
 
 const skill: RuntimeSkillSummary = {
@@ -46,6 +47,24 @@ describe('ensureChatComposerSkillSlot', () => {
     expect(insert).toHaveBeenCalledTimes(1);
   });
 
+  it('records the exact range when a prior effect already inserted the slot', () => {
+    const session: ChatComposerSkillSelectionSession = {};
+    const slot = {
+      type: 'tag' as const,
+      key: 'skill:create-plugin-in-chat',
+      props: { label: '对话创建插件', value: '对话创建插件' },
+    };
+
+    expect(ensureChatComposerSkillSlot({
+      getValue: () => ({
+        value: '  对话创建插件 existing draft',
+        slotConfig: [{ type: 'text', value: '  ' }, slot, { type: 'text', value: ' existing draft' }],
+      }),
+      insert: vi.fn(),
+    }, skill, session)).toBe(true);
+    expect(session.serializedRange).toEqual({ start: 2, end: 8 });
+  });
+
   it('reports a silent imperative insertion failure instead of consuming it', () => {
     const editor = {
       focus: vi.fn(),
@@ -56,7 +75,7 @@ describe('ensureChatComposerSkillSlot', () => {
     expect(ensureChatComposerSkillSlot(editor, skill)).toBe(false);
   });
 
-  it('restores a serialized Skill token instead of duplicating it after a remount', () => {
+  it('restores only the exact serialized range recorded by the selection session', () => {
     let slots: SlotConfigType[] = [{ type: 'text', value: '对话创建插件 existing draft' }];
     const focus = vi.fn();
     const insert = vi.fn((nextSlots: SlotConfigType[]) => {
@@ -67,13 +86,35 @@ describe('ensureChatComposerSkillSlot', () => {
       getValue: () => ({ value: '对话创建插件 existing draft', slotConfig: slots }),
       insert,
     };
+    const session: ChatComposerSkillSelectionSession = {
+      serializedRange: { start: 0, end: '对话创建插件'.length },
+    };
 
-    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
+    expect(ensureChatComposerSkillSlot(editor, skill, session)).toBe(true);
     expect(focus).toHaveBeenCalledWith({ cursor: 'all', preventScroll: true });
     expect(insert).toHaveBeenCalledWith([
       expect.objectContaining({ key: 'skill:create-plugin-in-chat' }),
       { type: 'text', value: ' existing draft' },
     ], 'cursor', undefined, true);
+  });
+
+  it('inserts a distinct Skill slot when ordinary prose already contains its name', () => {
+    const originalText = 'Do not use 对话创建插件';
+    let slots: SlotConfigType[] = [{ type: 'text', value: originalText }];
+    const insert = vi.fn((nextSlots: SlotConfigType[]) => {
+      slots = nextSlots;
+    });
+    const editor = {
+      focus: vi.fn(),
+      getValue: () => ({ value: originalText, slotConfig: slots }),
+      insert,
+    };
+
+    expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
+    expect(insert).toHaveBeenCalledWith([
+      expect.objectContaining({ key: 'skill:create-plugin-in-chat' }),
+      { type: 'text', value: ' ' },
+    ], 'start', undefined, true);
   });
 });
 

@@ -30,7 +30,7 @@ describe('chat composer Skill selection with the real Sender', () => {
     expect(screen.getByText('对话创建插件')).toBeTruthy();
   });
 
-  it('restores one Skill tag after a remount with its serialized token', async () => {
+  it('preserves ordinary matching text and inserts one distinct Skill tag', async () => {
     render(
       <StrictMode>
         <ScheduledSkillSelectionHarness draft="对话创建插件 existing draft" />
@@ -39,7 +39,7 @@ describe('chat composer Skill selection with the real Sender', () => {
 
     await waitFor(() => expect(screen.getByTestId('confirmed').textContent).toBe('true'));
     expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key="skill:create-plugin-in-chat"]')).toHaveLength(1);
-    expect(screen.getByRole('textbox').getAttribute('value')).toBe('对话创建插件 existing draft');
+    expect(screen.getByRole('textbox').getAttribute('value')).toBe('对话创建插件 对话创建插件 existing draft');
   });
 
   it('retains the inserted Skill tag while its delayed value change reaches the parent', async () => {

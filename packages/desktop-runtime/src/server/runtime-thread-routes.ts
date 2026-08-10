@@ -168,7 +168,14 @@ export async function handleRuntimeThreadRequest(
   if (messageMatch && request.method === 'PATCH') {
     const threadId = decodeRuntimeId(messageMatch[1], 'Thread id');
     const messageId = decodeURIComponent(messageMatch[2]);
-    const patch = await readBody<MessagePatch>(request);
+    const input = await readBody<MessagePatch>(request);
+    const patch: MessagePatch = {
+      content: typeof input.content === 'string' ? input.content : '',
+      skillIds: Array.isArray(input.skillIds)
+        ? input.skillIds.filter((item): item is string => typeof item === 'string')
+        : undefined,
+      skillReferences: runtimeSkillReferenceList(input.skillReferences),
+    };
     const thread = await runtime.agentLoop.withThreadMutation(threadId, async () => {
       const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
       const updated = await runtime.threadStore.updateMessage(

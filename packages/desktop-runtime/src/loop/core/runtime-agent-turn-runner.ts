@@ -1,9 +1,10 @@
-import type {
-  RuntimeEnvironment,
-  RuntimeMemoryCitation,
-  RuntimeMessage,
-  RuntimeToolCall,
-  RuntimeUsage,
+import {
+  normalizeRuntimeSkillReferences,
+  type RuntimeEnvironment,
+  type RuntimeMemoryCitation,
+  type RuntimeMessage,
+  type RuntimeToolCall,
+  type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
@@ -24,7 +25,6 @@ import { isSuccessfulRememberMemoryMessage } from '../memory/runtime-memory-coor
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { assertNewToolCallBatchInvariants } from './runtime-model-message-order.js';
-import { normalizeRuntimeSkillReferences } from './runtime-skill-references.js';
 import type { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { isAbortError, throwIfAborted } from './runtime-turn-errors.js';
 import type { RuntimeTurnExecutionInput } from './runtime-turn-run-factory.js';

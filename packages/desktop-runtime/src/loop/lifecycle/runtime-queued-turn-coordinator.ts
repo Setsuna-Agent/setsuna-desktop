@@ -15,12 +15,12 @@ import {
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
   normalizeRuntimeQueuedTurnInputKind,
+  normalizeRuntimeSkillReferences,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
-import { normalizeRuntimeSkillReferences } from '../core/runtime-skill-references.js';
 import type { RuntimeTurnTask, RuntimeTurnTaskRegistry } from './turn-task-registry.js';
 
 type QueuedTurnRun = {
