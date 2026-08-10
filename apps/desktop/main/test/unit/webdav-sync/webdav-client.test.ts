@@ -123,14 +123,19 @@ describe('WebDavClient', () => {
       const sourcePath = path.join(root, 'object.enc');
       await writeFile(sourcePath, Buffer.alloc(128 * 1024, 1));
       let markFirstChunk: (() => void) | undefined;
+      let markSecondChunk: (() => void) | undefined;
       const firstChunk = new Promise<void>((resolve) => { markFirstChunk = resolve; });
+      const secondChunk = new Promise<void>((resolve) => { markSecondChunk = resolve; });
       const client = new WebDavClient(
         normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
         { username: 'alice', password: 'secret' },
         async (_input, init) => {
           const body = init?.body as unknown as AsyncIterable<Uint8Array>;
+          let chunkIndex = 0;
           for await (const _chunk of body) {
-            markFirstChunk?.();
+            chunkIndex += 1;
+            if (chunkIndex === 1) markFirstChunk?.();
+            if (chunkIndex === 2) markSecondChunk?.();
             await abortableDelay(20_000, init?.signal);
           }
           return new Response(null, { status: 201 });
@@ -140,6 +145,7 @@ describe('WebDavClient', () => {
       const pending = client.putFile(['object.enc'], sourcePath);
       await firstChunk;
       await vi.advanceTimersByTimeAsync(20_000);
+      await secondChunk;
       await vi.advanceTimersByTimeAsync(20_000);
 
       await expect(pending).resolves.toBeUndefined();
