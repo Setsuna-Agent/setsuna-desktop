@@ -38,9 +38,7 @@ export async function handleRuntimeThreadCommandRequest(
   }
   if (goalMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(goalMatch[1], 'Thread id');
-    sendJson(response, 200, {
-      cleared: await clearRuntimeThreadGoal(runtime, threadId),
-    });
+    sendJson(response, 200, await clearRuntimeThreadGoal(runtime, threadId));
     return true;
   }
 

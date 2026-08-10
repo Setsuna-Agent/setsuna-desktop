@@ -123,6 +123,8 @@ describe('thread summary Goal projection', () => {
   it('omits Goal execution attachments from list summaries', () => {
     const thread = threadWithMetadata({});
     thread.goal = {
+      version: 1,
+      id: 'goal_1',
       threadId: thread.id,
       objective: 'Inspect the attached design.',
       status: 'active',
@@ -149,7 +151,7 @@ describe('thread summary Goal projection', () => {
       status: 'active',
     });
     expect(toSummary(thread).goal?.execution).toBeUndefined();
-    expect(thread.goal.execution?.attachments).toHaveLength(1);
+    expect(thread.goal?.execution?.attachments).toHaveLength(1);
   });
 });
 

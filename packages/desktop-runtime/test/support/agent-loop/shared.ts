@@ -306,6 +306,11 @@ export class CancellableModelClient implements ModelClient {
     this.abortListenerReadyResolve = resolve;
   });
 
+  constructor(
+    private readonly usage?: Extract<ModelStreamEvent, { type: 'usage' }>['usage'],
+    private readonly settleAfterAbort?: Promise<void>,
+  ) {}
+
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     const abortWait = new Promise<void>((resolve) => {
@@ -332,7 +337,9 @@ export class CancellableModelClient implements ModelClient {
       this.abortListenerReadyResolve();
     });
     yield { type: 'text_delta', text: 'partial response' };
+    if (this.usage) yield { type: 'usage', usage: this.usage };
     await abortWait;
+    await this.settleAfterAbort;
     request.signal?.throwIfAborted();
     yield { type: 'text_delta', text: ' should not appear' };
     yield { type: 'done', finishReason: 'stop' };

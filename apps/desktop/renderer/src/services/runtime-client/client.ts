@@ -57,8 +57,9 @@ import type {
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
   RuntimeThread,
-  RuntimeThreadGoal,
+  RuntimeThreadGoalClearResponse,
   RuntimeThreadGoalPatch,
+  RuntimeThreadGoalSetResponse,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   RuntimeWorkspaceDependenciesStatus,
@@ -157,18 +158,17 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       });
     },
     setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch) {
-      return request<RuntimeThreadGoal>({
+      return request<RuntimeThreadGoalSetResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/goal`,
         method: 'PUT',
         body: patch,
       });
     },
-    async clearThreadGoal(threadId: string) {
-      const result = await request<{ cleared: boolean }>({
+    clearThreadGoal(threadId: string) {
+      return request<RuntimeThreadGoalClearResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/goal`,
         method: 'DELETE',
       });
-      return result.cleared;
     },
     updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch) {
       return request<RuntimeThread>({

@@ -464,7 +464,7 @@ describe('agent loop queued turn inputs', () => {
     await waitForThreadIdle(threadStore, threadId);
   });
 
-  it('rejects another Goal before persistence while an unfinished Goal exists', async () => {
+  it('queues an explicit replacement while the current Goal is still running', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Existing goal validation' });
@@ -483,18 +483,26 @@ describe('agent loop queued turn inputs', () => {
     });
     await waitForModelRequestCount(modelClient, 1);
 
-    await expect(loop.queueTurnInput(thread.id, {
-      input: 'Do not persist this competing goal.',
+    const previousGoalId = (await threadStore.getThread(thread.id))?.goal?.id;
+    const queued = await loop.queueTurnInput(thread.id, {
+      input: 'Replace the current goal when its turn finishes.',
       kind: 'goal',
-    })).rejects.toThrow('An unfinished goal already exists');
-    expect((await threadStore.getThread(thread.id))?.queuedTurnInputs ?? []).toEqual([]);
+    });
+    expect(queued).toMatchObject({ disposition: 'queued', turnId: null });
+    expect((await threadStore.getThread(thread.id))?.queuedTurnInputs).toMatchObject([{
+      id: queued.queuedInputId,
+      kind: 'goal',
+    }]);
 
     modelClient.releaseFirstResponse();
     await waitForTestState(
       () => threadStore.getThread(thread.id),
-      (snapshot) => snapshot?.goal?.status === 'complete' && snapshot.activeTurnId === null,
-      (snapshot) => `Timed out waiting for existing goal completion; snapshot=${JSON.stringify(snapshot)}`,
+      (snapshot) => snapshot?.goal?.status === 'complete'
+        && snapshot.goal.objective === 'Replace the current goal when its turn finishes.'
+        && snapshot.activeTurnId === null,
+      (snapshot) => `Timed out waiting for replacement goal completion; snapshot=${JSON.stringify(snapshot)}`,
     );
+    expect((await threadStore.getThread(thread.id))?.goal?.id).not.toBe(previousGoalId);
   });
 
   it('keeps an active Goal idle while a queued Plan awaits confirmation', async () => {

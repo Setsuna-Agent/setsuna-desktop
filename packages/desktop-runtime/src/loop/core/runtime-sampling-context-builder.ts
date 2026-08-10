@@ -1,17 +1,22 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
+  cloneRuntimeSkillReferences,
+  isRuntimeInputMessageAttachment,
   runtimeDeveloperFeaturesEnabled,
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeMessage,
   type RuntimeModelRequestStepSnapshot,
+  type RuntimeTaskKind,
   type RuntimeThread,
+  type RuntimeThreadGoalExecutionOptions,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
+import type { IdGenerator } from '../../ports/id-generator.js';
 import type { McpStore } from '../../ports/mcp-store.js';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
@@ -41,6 +46,7 @@ import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeToolRouter } from '../tools/tool-router.js';
+import { goalContinuationContextMessages } from '../lifecycle/runtime-goal-prompts.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 
@@ -67,6 +73,8 @@ type RuntimeSamplingContextBuilderOptions = {
   contextCompactor: Pick<RuntimeContextCompactor, 'compactMessagesBeforeModelRequest'>;
   debugTrace?: RuntimeDebugTraceSink;
   environmentResolver: RuntimeEnvironmentResolver;
+  ids: IdGenerator;
+  isGoalCompletionPending?(turnId: string, goalId: string): boolean;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
@@ -106,8 +114,10 @@ export class RuntimeSamplingContextBuilder {
     runtimeConfig,
     signal,
     skillIds,
+    thinkingOptions,
     thread,
     threadId,
+    taskKind,
     turnId,
     toolAccess = 'all',
   }: {
@@ -116,8 +126,10 @@ export class RuntimeSamplingContextBuilder {
     runtimeConfig: RuntimeConfigState | null | undefined;
     signal: AbortSignal;
     skillIds: string[];
+    thinkingOptions?: Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
     thread: RuntimeThread;
     threadId: string;
+    taskKind: RuntimeTaskKind;
     turnId: string;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
@@ -170,8 +182,15 @@ export class RuntimeSamplingContextBuilder {
           ])],
         }
       : configuredSandbox;
+    const goalExecution = goalExecutionForTurn({
+      messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
+      skillIds,
+      thinkingOptions,
+      turnId,
+    });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
+      ...(goalExecution ? { goalExecution } : {}),
       threadId,
       projectId: thread.projectId,
       turnId,
@@ -184,6 +203,12 @@ export class RuntimeSamplingContextBuilder {
       signal,
     };
     const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
+    // Tool follow-ups must reflect Goal mutations committed earlier in the same turn.
+    const stepGoal = snapshotThread ? snapshotThread.goal : thread.goal;
+    const goalCompletionPending = Boolean(
+      stepGoal
+      && this.options.isGoalCompletionPending?.(turnId, stepGoal.id),
+    );
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -194,19 +219,34 @@ export class RuntimeSamplingContextBuilder {
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
         })
       : null;
-    const threadHasGoal = Boolean(thread.goal);
     const availableTools = toolAccess === 'none'
       ? undefined
-      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, threadHasGoal);
+      : modelFacingTools(
+          toolRouter?.tools,
+          stepRuntimeConfig,
+          dynamicTools,
+          stepGoal,
+          goalCompletionPending,
+        );
     const tools = toolAccess === 'read-only'
       ? availableTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
       : availableTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
-    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, threadHasGoal);
+    const toolRuntimes = await samplingToolRuntimes(
+      tools ?? [],
+      toolRouter,
+      dynamicTools,
+      stepRuntimeConfig,
+      stepGoal,
+      goalCompletionPending,
+    );
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages: [
+        ...(taskKind === 'goal' && stepGoal?.status === 'active' && !goalCompletionPending
+          ? goalContinuationContextMessages(stepGoal, this.options.ids, this.options.clock)
+          : []),
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
       ],
@@ -309,6 +349,36 @@ export class RuntimeSamplingContextBuilder {
       .filter(Boolean)
       .sort();
   }
+}
+
+function goalExecutionForTurn({
+  messages,
+  skillIds,
+  thinkingOptions,
+  turnId,
+}: {
+  messages: RuntimeMessage[];
+  skillIds: string[];
+  thinkingOptions: Pick<ModelRequest, 'thinking' | 'reasoningEffort'> | undefined;
+  turnId: string;
+}): RuntimeThreadGoalExecutionOptions | undefined {
+  const sourceMessage = messages.find((message) => (
+    message.turnId === turnId
+    && message.role === 'user'
+    && message.visibility !== 'model'
+  ));
+  if (!sourceMessage) return undefined;
+  const thinking = thinkingOptions?.thinking === true;
+  return {
+    attachments: sourceMessage.attachments
+      ?.filter(isRuntimeInputMessageAttachment)
+      .map((attachment) => ({ ...attachment })),
+    sourceMessageId: sourceMessage.id,
+    skillIds: skillIds.length ? [...skillIds] : undefined,
+    skillReferences: cloneRuntimeSkillReferences(sourceMessage.skillReferences),
+    thinking,
+    thinkingEffort: thinking ? thinkingOptions?.reasoningEffort : undefined,
+  };
 }
 
 function runtimeToolFeatureFlags(

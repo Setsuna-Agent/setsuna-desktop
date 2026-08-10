@@ -9,6 +9,7 @@ import {
   translate,
   useI18n,
 } from '../../../../src/shared/i18n/I18nProvider.js';
+import type { MessageKey } from '../../../../src/shared/i18n/messages.js';
 
 describe('renderer i18n', () => {
   it('translates typed messages and interpolates values', () => {
@@ -17,6 +18,12 @@ describe('renderer i18n', () => {
     expect(translate('en-US', 'chat.starter.projectTitle', { project: 'Setsuna' })).toBe(
       'What should we build in Setsuna?',
     );
+  });
+
+  it('keeps an unknown runtime key from crashing interpolation', () => {
+    const unknownKey = 'chat.goal.lifecycle.future' as MessageKey;
+
+    expect(translate('zh-CN', unknownKey, { duration: '1m' })).toBe(unknownKey);
   });
 
   it('normalizes supported locales and reads the persisted config value', () => {

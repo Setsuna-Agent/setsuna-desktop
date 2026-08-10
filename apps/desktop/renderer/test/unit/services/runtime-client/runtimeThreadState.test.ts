@@ -135,6 +135,33 @@ describe('adoptOwnedThreadSnapshot', () => {
     expect(adoptOwnedThreadSnapshot(current, current.id, older)).toBe(current);
     expect(adoptOwnedThreadSnapshot(current, current.id, newer)).toBe(newer);
   });
+
+  it('keeps a newer SSE Goal state over an older command response snapshot', () => {
+    const current = threadWithMessages([]);
+    current.lastSeq = 12;
+    current.goal = {
+      version: 1,
+      id: 'goal_1',
+      threadId: current.id,
+      objective: 'Ship the fix.',
+      status: 'complete',
+      tokenBudget: null,
+      tokensUsed: 7,
+      timeUsedSeconds: 3,
+      createdAt: 1,
+      updatedAt: 3,
+    };
+    const older = {
+      ...current,
+      lastSeq: 10,
+      goal: { ...current.goal, status: 'active' as const, tokensUsed: 0, updatedAt: 2 },
+    };
+
+    const adopted = adoptOwnedThreadSnapshot(current, current.id, older);
+
+    expect(adopted).toBe(current);
+    expect(adopted?.goal).toMatchObject({ status: 'complete', tokensUsed: 7 });
+  });
 });
 
 describe('isThreadContextCompacting', () => {

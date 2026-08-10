@@ -1,6 +1,10 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { copyRuntimeMessagesToThread } from '../../src/server/runtime-thread-events.js';
+import {
+  copyRuntimeMessagesToThread,
+  rollbackStartMessageId,
+  runtimeMessagesThroughTurn,
+} from '../../src/server/runtime-thread-events.js';
 import type { RuntimeFactory } from '../../src/server/types.js';
 
 describe('runtime thread event copying', () => {
@@ -139,6 +143,56 @@ describe('runtime thread event copying', () => {
     await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]))
       .rejects.toThrow('append result is uncertain');
     expect(deleteAsset).not.toHaveBeenCalled();
+  });
+
+  it('ignores Goal lifecycle markers when finding AppServer turn boundaries', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'msg_user',
+        turnId: 'turn_1',
+        role: 'user',
+        content: 'Do the work.',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'msg_assistant',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: 'Done.',
+        createdAt: '2026-07-17T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'msg_goal_paused',
+        turnId: 'goal:goal_1',
+        role: 'developer',
+        promptSource: 'goal',
+        visibility: 'transcript',
+        content: 'Goal paused.',
+        createdAt: '2026-07-17T00:00:02.000Z',
+        status: 'complete',
+        goalMode: {
+          kind: 'paused',
+          goal: {
+            version: 1,
+            id: 'goal_1',
+            threadId: 'thread_1',
+            objective: 'Do the work.',
+            status: 'paused',
+            tokenBudget: null,
+            tokensUsed: 0,
+            timeUsedSeconds: 2,
+            createdAt: 1784246400,
+            updatedAt: 1784246402,
+          },
+        },
+      },
+    ];
+
+    expect(rollbackStartMessageId(messages, 1)).toBe('msg_user');
+    expect(runtimeMessagesThroughTurn(messages, 'turn_1').map((message) => message.id))
+      .toEqual(['msg_user', 'msg_assistant']);
   });
 });
 

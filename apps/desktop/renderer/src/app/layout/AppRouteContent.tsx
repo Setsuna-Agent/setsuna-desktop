@@ -286,6 +286,7 @@ export function AppRouteContent({
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
       onClearThreadGoal={() => runtime.clearCurrentThreadGoal()}
+      onUpdateThreadGoal={(patch) => runtime.updateCurrentThreadGoal(patch)}
       onThreadMemoryModeChange={(mode) => void runtime.updateCurrentThreadMemoryMode(mode)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}

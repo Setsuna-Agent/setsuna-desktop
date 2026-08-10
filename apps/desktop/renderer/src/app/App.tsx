@@ -48,12 +48,14 @@ function AppContent() {
 
   if (controller.loadState === 'error') {
     return (
-      <ShellFrame status={<StatusBadge tone="danger">{t('app.error.runtime')}</StatusBadge>}>
-        <EmptyState
-          title={t('app.error.runtimeTitle')}
-          body={controller.runtime.error ?? t('common.unknownError')}
-          action={<Button variant="primary" onClick={() => void controller.runtime.refresh().catch(() => undefined)}>{t('common.retry')}</Button>}
-        />
+      <ShellFrame className="app-error-shell" inspectorOpen={false} showSidebarToggle={false} status={<StatusBadge tone="danger">{t('app.error.runtime')}</StatusBadge>}>
+        <div className="app-error-fallback">
+          <EmptyState
+            title={t('app.error.runtimeTitle')}
+            body={controller.runtime.error ?? t('common.unknownError')}
+            action={<Button variant="primary" onClick={() => void controller.runtime.refresh().catch(() => undefined)}>{t('common.retry')}</Button>}
+          />
+        </div>
       </ShellFrame>
     );
   }
@@ -92,12 +94,14 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 function AppErrorFallback({ error, onRetry }: { error: Error; onRetry: () => void }) {
   const { t } = useI18n();
   return (
-    <ShellFrame status={<StatusBadge tone="danger">{t('app.error.renderer')}</StatusBadge>}>
-      <EmptyState
-        title={t('app.error.rendererTitle')}
-        body={error.message}
-        action={<Button variant="primary" onClick={onRetry}>{t('common.retry')}</Button>}
-      />
+    <ShellFrame className="app-error-shell" inspectorOpen={false} showSidebarToggle={false} status={<StatusBadge tone="danger">{t('app.error.renderer')}</StatusBadge>}>
+      <div className="app-error-fallback">
+        <EmptyState
+          title={t('app.error.rendererTitle')}
+          body={error.message}
+          action={<Button variant="primary" onClick={onRetry}>{t('common.retry')}</Button>}
+        />
+      </div>
     </ShellFrame>
   );
 }

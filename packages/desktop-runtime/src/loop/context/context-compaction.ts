@@ -1,5 +1,6 @@
 import {
   cloneRuntimeSkillReferences,
+  cloneRuntimeThreadGoal,
   isRuntimeInlineMessageAttachment,
   isRuntimeStoredMessageAttachment,
   normalizeRuntimeMessageProviderMetadata,
@@ -452,6 +453,10 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    goalMode: message.goalMode ? {
+      ...message.goalMode,
+      goal: cloneRuntimeThreadGoal(message.goalMode.goal),
+    } : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
     providerMetadata: message.providerMetadata
       ? normalizeRuntimeMessageProviderMetadata(message.providerMetadata)

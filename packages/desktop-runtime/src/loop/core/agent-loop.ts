@@ -202,6 +202,8 @@ export class AgentLoop {
       contextCompactor: this.contextCompactor,
       debugTrace: options.debugTrace,
       environmentResolver,
+      ids: options.ids,
+      isGoalCompletionPending: (turnId, goalId) => this.goals.isCompletionPending(turnId, goalId),
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
@@ -342,22 +344,21 @@ export class AgentLoop {
       ids: options.ids,
       threadStore: options.threadStore,
       activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      registeredTask: (threadId) => this.turnTasks.registeredForThread(threadId),
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      createContinuation: (threadId, goal, contextMessages, execution) => this.withThreadMutation(
+      createContinuation: (threadId, goal, execution) => this.withThreadMutation(
         threadId,
         async () => {
-          const run = await this.turnRuns.createGoalContinuation(
-            threadId,
-            goal,
-            contextMessages,
-            execution,
-          );
+          const run = await this.turnRuns.createGoalContinuation(threadId, goal, execution);
           this.queuedTurns.observeRun(threadId, run.turnId, 'goal', run.done);
           return run;
         },
       ),
       hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
+      waitForCancellationWrites: (threadId) => this.turnTermination.waitForThread(threadId),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+      publishMessage: (threadId, turnId, message) =>
+        this.publishMessage(threadId, turnId, message),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
@@ -412,6 +413,8 @@ export class AgentLoop {
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
     ));
     const drained = await this.turnTasks.drain(timeoutMs);
+    // Drain Goal observers before flushing so accounting cannot arrive after shutdown.
+    if (drained) await this.goals.waitForSettlements();
     const backgroundDrained = await memoryDrained;
     await this.eventWriter.flushAll();
     return drained && backgroundDrained;
@@ -600,7 +603,11 @@ export class AgentLoop {
   }
 
   resumeThreadGoal(threadId: string): Promise<void> {
-    return this.withThreadMutation(threadId, () => this.goals.resumeIfActive(threadId));
+    return this.withThreadMutation(threadId, () => this.goals.resumeGoal(threadId));
+  }
+
+  reconcileRestoredGoals(): Promise<void> {
+    return this.goals.reconcileRestoredGoals();
   }
 
   registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {

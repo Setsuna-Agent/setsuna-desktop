@@ -42,6 +42,8 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
     // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
     await settleStaleRuntimeTurns(runtime);
+    // 持久 Goal 在 runtime 重启后必须显式恢复，避免打开应用即静默继续自治执行。
+    await runtime.agentLoop.reconcileRestoredGoals();
   } catch (error) {
     await runtime.extensionManager.shutdown().catch(() => undefined);
     await runtime.mcpConnections.shutdown().catch(() => undefined);

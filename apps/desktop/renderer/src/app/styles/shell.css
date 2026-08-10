@@ -542,6 +542,58 @@
     grid-template-rows 180ms ease;
 }
 
+.app-error-shell .app-topbar {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-error-shell .app-topbar__brand {
+  display: none;
+}
+
+.app-error-shell .app-topbar__right {
+  grid-column: 1;
+  justify-content: center;
+}
+
+.app-error-shell .app-topbar__workspace {
+  display: none;
+}
+
+:root[data-desktop-platform='darwin'] .app-error-shell > .app-topbar::before {
+  display: none;
+}
+
+:root[data-desktop-platform='win32'] .app-error-shell .app-topbar,
+:root[data-desktop-platform='linux'] .app-error-shell .app-topbar {
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) var(--app-titlebar-control-width);
+}
+
+:root[data-desktop-platform='win32'] .app-error-shell .app-topbar__brand,
+:root[data-desktop-platform='linux'] .app-error-shell .app-topbar__brand {
+  display: flex;
+  justify-content: flex-start;
+  padding-left: 12px;
+}
+
+.app-error-fallback {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  background: var(--app-bg);
+}
+
+.app-error-fallback .sd-empty-state {
+  width: min(520px, calc(100% - 40px));
+  padding: 28px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+}
+
 @media (min-width: 761px) {
   :root[data-desktop-platform='darwin'] .app-workbench::after {
     position: absolute;

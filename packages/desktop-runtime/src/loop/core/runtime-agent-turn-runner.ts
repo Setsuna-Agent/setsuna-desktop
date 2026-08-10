@@ -244,8 +244,10 @@ export class RuntimeAgentTurnRunner {
           runtimeConfig,
           signal,
           skillIds: activeSkillIds,
+          thinkingOptions: activeThinkingOptions,
           thread,
           threadId,
+          taskKind,
           turnId,
           toolAccess: planOnly ? 'none' : taskKind === 'review' ? 'read-only' : 'all',
         });

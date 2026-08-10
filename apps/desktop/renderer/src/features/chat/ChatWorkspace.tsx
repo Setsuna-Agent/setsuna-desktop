@@ -7,6 +7,7 @@ import type {
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
+  RuntimeThreadGoalPatch,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   RuntimeUsageResponse,
@@ -132,6 +133,7 @@ export function ChatWorkspace({
   onCompactContext,
   onClearContext,
   onClearThreadGoal,
+  onUpdateThreadGoal,
   onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
@@ -185,6 +187,7 @@ export function ChatWorkspace({
   onCompactContext: () => void;
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
+  onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
@@ -417,6 +420,7 @@ export function ChatWorkspace({
       onCompactContext={onCompactContext}
       onClearContext={onClearContext}
       onClearThreadGoal={onClearThreadGoal}
+      onUpdateThreadGoal={onUpdateThreadGoal}
       onDraftChange={onDraftChange}
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}

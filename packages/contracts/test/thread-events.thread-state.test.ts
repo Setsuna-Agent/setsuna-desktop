@@ -599,6 +599,8 @@ describe('thread event lifecycle and metadata projection', () => {
           }],
         },
         goal: {
+          version: 1,
+          id: 'goal_1',
           threadId: 'thread_1',
           objective: 'Ship alignment.',
           status: 'active',
@@ -637,18 +639,59 @@ describe('thread event lifecycle and metadata projection', () => {
         },
       },
     };
-    const clearedEvent: RuntimeEvent = {
-      id: 'event_goal_2',
+    const completedGoal = {
+      ...updatedEvent.payload.goal,
+      status: 'complete' as const,
+      tokensUsed: 25,
+      updatedAt: 1782432003,
+    };
+    const completedEvent: RuntimeEvent = {
+      id: 'event_goal_completed',
       seq: 3,
       threadId: 'thread_1',
-      type: 'thread.goal_cleared',
+      type: 'thread.goal_updated',
       createdAt: '2026-06-26T00:00:03.000Z',
-      payload: { cleared: true },
+      payload: {
+        preserveExecution: true,
+        goal: { ...completedGoal, execution: undefined },
+        lifecycleMessage: {
+          id: 'message_goal_completed',
+          turnId: 'turn_goal',
+          role: 'developer',
+          promptSource: 'goal',
+          visibility: 'transcript',
+          content: 'The goal is complete.',
+          createdAt: '2026-06-26T00:00:03.000Z',
+          status: 'complete',
+          goalMode: { kind: 'complete', goal: completedGoal },
+        },
+      },
+    };
+    const clearedEvent: RuntimeEvent = {
+      id: 'event_goal_2',
+      seq: 4,
+      threadId: 'thread_1',
+      type: 'thread.goal_cleared',
+      createdAt: '2026-06-26T00:00:04.000Z',
+      payload: {
+        cleared: true,
+        lifecycleMessage: {
+          id: 'message_goal_cleared',
+          role: 'developer',
+          promptSource: 'goal',
+          visibility: 'transcript',
+          content: 'The user cleared this goal.',
+          createdAt: '2026-06-26T00:00:04.000Z',
+          status: 'complete',
+          goalMode: { kind: 'cleared', goal: updatedEvent.payload.goal },
+        },
+      },
     };
 
     const withGoal = applyRuntimeEventToThread(thread, updatedEvent);
     const accounted = applyRuntimeEventToThread(withGoal, accountedEvent);
-    const cleared = applyRuntimeEventToThread(accounted, clearedEvent);
+    const completed = applyRuntimeEventToThread(accounted, completedEvent);
+    const cleared = applyRuntimeEventToThread(completed, clearedEvent);
 
     expect(withGoal.goal).toEqual(updatedEvent.payload.goal);
     expect(withGoal.queuedTurnInputs).toEqual([]);
@@ -665,7 +708,22 @@ describe('thread event lifecycle and metadata projection', () => {
       tokensUsed: 25,
       execution: updatedEvent.payload.goal.execution,
     });
+    expect(completed.goal).toMatchObject({
+      status: 'complete',
+      tokensUsed: 25,
+      execution: updatedEvent.payload.goal.execution,
+    });
+    expect(completed.messages).toContainEqual(expect.objectContaining({
+      id: 'message_goal_completed',
+      goalMode: expect.objectContaining({ kind: 'complete' }),
+    }));
+    expect(completed.messageCount).toBe(2);
     expect(cleared.goal).toBeUndefined();
+    expect(cleared.messages).toContainEqual(expect.objectContaining({
+      id: 'message_goal_cleared',
+      goalMode: expect.objectContaining({ kind: 'cleared' }),
+    }));
+    expect(cleared.messageCount).toBe(3);
   });
 
   it('stores and clears thread git metadata from metadata events', () => {

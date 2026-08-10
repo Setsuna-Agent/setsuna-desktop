@@ -6,6 +6,7 @@ import type {
   RuntimeQueuedTurnInput,
   RuntimeSkillSummary,
   RuntimeThread,
+  RuntimeThreadGoalPatch,
   RuntimeThreadMemoryMode,
   RuntimeUsageResponse,
   WorkspaceEntrySearchItem,
@@ -31,6 +32,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
 import { ChatComposerFooter } from './composer/ChatComposerFooter.js';
+import { ChatGoalStatusBar } from './composer/ChatGoalStatusBar.js';
 import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
@@ -77,6 +79,21 @@ export function applyChatComposerFocusRequest(
   if (focusRequest !== 0) onConsumed?.(focusRequest);
 }
 
+export function goalActiveTurnStartedAt(
+  thread: RuntimeThread | null | undefined,
+  activeTurnId: string | null,
+  goalId: string | undefined,
+): string | undefined {
+  if (!thread || !activeTurnId || !goalId) return undefined;
+  const turn = thread.turns?.find((candidate) => candidate.id === activeTurnId);
+  if (!turn?.startedAt) return undefined;
+  const belongsToGoal = turn.taskKind === 'goal' || thread.messages.some((message) => (
+    message.turnId === activeTurnId
+    && message.goalMode?.goal.id === goalId
+  ));
+  return belongsToGoal ? turn.startedAt : undefined;
+}
+
 export function ChatComposer({
   activeTurnId,
   activeProject,
@@ -101,6 +118,7 @@ export function ChatComposer({
   onCompactContext,
   onClearContext,
   onClearThreadGoal,
+  onUpdateThreadGoal = () => undefined,
   onDraftChange,
   onFocusRequestConsumed,
   onSelectModel,
@@ -140,6 +158,7 @@ export function ChatComposer({
   onCompactContext: () => void;
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
+  onUpdateThreadGoal?: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
   onFocusRequestConsumed?: (requestId: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
@@ -170,9 +189,15 @@ export function ChatComposer({
   const deleteQueuedTurnInput = queuedTurnActions.deleteQueuedTurnInput;
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerInputElement = useCallback(() => senderRef.current?.inputElement ?? null, []);
-  const activeGoal = currentThread?.goal?.status === 'active' ? currentThread.goal : null;
+  const currentGoal = currentThread?.goal?.status === 'complete'
+    ? null
+    : currentThread?.goal ?? null;
+  const activeGoalTurnStartedAt = useMemo(
+    () => goalActiveTurnStartedAt(currentThread, activeTurnId, currentGoal?.id),
+    [activeTurnId, currentGoal?.id, currentThread?.messages, currentThread?.turns],
+  );
   const modeController = useChatComposerModeController({
-    activeGoal,
+    activeGoal: currentGoal,
     config,
     currentThreadId: currentThread?.id,
     onClearThreadGoal,
@@ -241,7 +266,7 @@ export function ChatComposer({
     t,
   });
   const slashEntries = useMemo(() => createChatSlashCommandItems({
-    activeGoal,
+    activeGoal: currentGoal,
     activeModelName: modeController.activeModelName,
     activeProjectSelected: Boolean(activeProject),
     activeTurnId,
@@ -261,13 +286,13 @@ export function ChatComposer({
     skills,
     t,
   }), [
-    activeGoal,
     activeProject,
     activeTurnId,
     canClearContext,
     commandController.slashQuery,
     contextCompactPercent,
     contextCompacting,
+    currentGoal,
     currentThread,
     memoryGenerationEnabled,
     memoryMode,
@@ -593,6 +618,15 @@ export function ChatComposer({
         onEdit={queuedTurnEdit.edit}
         onSendNow={sendQueuedTurnInputNow}
       />
+      {currentGoal ? (
+        <ChatGoalStatusBar
+          key={`${currentGoal.threadId}:${currentGoal.id}`}
+          activeTurnStartedAt={activeGoalTurnStartedAt}
+          goal={currentGoal}
+          onClearGoal={onClearThreadGoal}
+          onUpdateGoal={onUpdateThreadGoal}
+        />
+      ) : null}
       <Sender
         ref={senderRef}
         value={draft}
@@ -637,9 +671,8 @@ export function ChatComposer({
             }}
             hasActiveTurn={Boolean(activeTurnId)}
             modeBadges={{
-              activeGoal: Boolean(activeGoal),
               collaborationEnabled: multiAgentEnabled,
-              goalEnabled: modeController.goalEnabled,
+              goalModeEnabled: modeController.goalModeEnabled,
               planEnabled: modeController.planModeEnabled,
               onClearGoal: modeController.clearGoalMode,
               onDisableCollaboration: () => void onSetMultiAgentEnabled(false),

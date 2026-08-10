@@ -362,11 +362,9 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await runtime.threadStore.getThread(threadId);
     if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-    await runtime.agentLoop.resumeThreadGoal(threadId);
-    const resumedThread = await runtime.threadStore.getThread(threadId) ?? thread;
     const config = await runtime.configStore.getConfig();
-    const response = sweThreadSessionResponse(resumedThread, process.cwd(), config, options, input.excludeTurns !== true);
-    const initialTurnsPage = sweInitialTurnsPage(resumedThread, input.initialTurnsPage);
+    const response = sweThreadSessionResponse(thread, process.cwd(), config, options, input.excludeTurns !== true);
+    const initialTurnsPage = sweInitialTurnsPage(thread, input.initialTurnsPage);
     return initialTurnsPage ? { ...response, initialTurnsPage } : response;
   }
 
@@ -401,9 +399,7 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await runtime.threadStore.getThread(threadId);
     if (!thread) throw new AppServerRpcError(-32004, 'Thread not found', { threadId });
-    await runtime.agentLoop.resumeThreadGoal(threadId);
-    const resumedThread = await runtime.threadStore.getThread(threadId) ?? thread;
-    return { thread: sweThreadFromRuntimeThread(resumedThread, process.cwd(), options, Boolean(input.includeTurns)) };
+    return { thread: sweThreadFromRuntimeThread(thread, process.cwd(), options, Boolean(input.includeTurns)) };
   }
 
   if (method === 'thread/turns/list') {
@@ -483,10 +479,9 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await requireRuntimeThread(runtime, threadId);
     const requested = sweSetThreadGoal(thread, input);
-    const goal = await setRuntimeThreadGoal(runtime, threadId, {
+    const { goal } = await setRuntimeThreadGoal(runtime, threadId, {
       objective: requested.objective,
       status: requested.status,
-      tokenBudget: requested.tokenBudget,
     });
     return { goal };
   }
@@ -515,7 +510,8 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/goal/clear') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    return { cleared: await clearRuntimeThreadGoal(runtime, threadId) };
+    const { cleared } = await clearRuntimeThreadGoal(runtime, threadId);
+    return { cleared };
   }
 
   if (method === 'thread/metadata/update') {

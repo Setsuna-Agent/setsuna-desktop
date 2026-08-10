@@ -42,7 +42,8 @@ import {
   isCollaborationToolName,
   type RuntimeCollaborationCoordinator,
 } from '../lifecycle/collaboration-coordinator.js';
-import { isGoalToolName, type RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
+import type { RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
+import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';

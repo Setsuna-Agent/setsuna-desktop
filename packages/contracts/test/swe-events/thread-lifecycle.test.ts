@@ -88,6 +88,8 @@ describe('runtime AppServer SWE thread lifecycle', () => {
   
   it('maps thread goal events to AppServer goal notifications', () => {
       const goal = {
+        version: 1 as const,
+        id: 'goal_1',
         threadId: 'thread_1',
         objective: 'Ship alignment.',
         status: 'active' as const,
@@ -105,6 +107,23 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         type: 'thread.goal_updated',
         createdAt: '2026-06-27T00:00:00.000Z',
         payload: { goal },
+      };
+      const queuedUpdated: RuntimeEvent = {
+        ...updated,
+        id: 'event_goal_queued',
+        payload: {
+          goal,
+          sourceMessage: {
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            turnId: 'turn_1',
+            role: 'user',
+            inputKind: 'goal',
+            content: 'Ship alignment.',
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+          },
+        },
       };
       const cleared: RuntimeEvent = {
         id: 'event_goal_2',
@@ -127,6 +146,39 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         method: 'thread/goal/updated',
         params: { threadId: 'thread_1', turnId: 'turn_1', goal },
       }]);
+      const mapQueuedGoal = createSweNotificationMapper();
+      expect(mapQueuedGoal(queuedUpdated)).toEqual([{
+        method: 'thread/goal/updated',
+        params: { threadId: 'thread_1', turnId: 'turn_1', goal },
+      }]);
+      const startedNotifications = mapQueuedGoal({
+        id: 'event_goal_turn_started',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'turn.started',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        payload: { input: 'Continue the active goal.', taskKind: 'goal' },
+      });
+      expect(startedNotifications.map((notification) => notification.method)).toEqual([
+        'thread/status/changed',
+        'turn/started',
+        'item/started',
+      ]);
+      expect(startedNotifications[2]).toEqual({
+        method: 'item/started',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_1',
+          item: {
+            type: 'userMessage',
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            content: [{ type: 'text', text: 'Ship alignment.' }],
+          },
+          startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        },
+      });
       expect(runtimeEventToSweNotifications(cleared)).toEqual([{
         method: 'thread/goal/cleared',
         params: { threadId: 'thread_1' },

@@ -103,6 +103,7 @@ export type RuntimeMessage = {
   error?: string;
   attachments?: RuntimeMessageAttachment[];
   contextCompaction?: RuntimeContextCompactionNotice;
+  goalMode?: RuntimeGoalLifecycleNotice;
   reviewMode?: RuntimeReviewModeNotice;
   planMode?: RuntimePlanModeNotice;
   providerMetadata?: RuntimeMessageProviderMetadata;
@@ -210,6 +211,29 @@ export type RuntimeThreadContextCompactionState = {
 
 export type RuntimeThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
 
+export type RuntimeThreadGoalStopReasonCode =
+  | 'userPaused'
+  | 'turnCancelled'
+  | 'runtimeReloaded'
+  | 'budgetReached'
+  | 'noProgress'
+  | 'continuationLimit'
+  | 'runtimeError'
+  | 'usageLimited';
+
+export type RuntimeThreadGoalStopReason = {
+  code: RuntimeThreadGoalStopReasonCode;
+  message?: string;
+};
+
+export type RuntimeThreadGoalSafetyState = {
+  automaticTurns: number;
+  consecutiveNoProgressTurns: number;
+  lastProgressFingerprint?: string;
+  /** Bounded recent evidence used to detect short repeating work cycles. */
+  recentProgressFingerprints?: string[];
+};
+
 export type RuntimeThreadGoalExecutionOptions = {
   /** 创建 Goal 时绑定的输入资源和执行选项，后续自动续轮会保持同一语义。 */
   attachments?: RuntimeInputMessageAttachment[];
@@ -222,20 +246,50 @@ export type RuntimeThreadGoalExecutionOptions = {
 };
 
 export type RuntimeThreadGoal = {
+  version: 1;
+  id: string;
   threadId: string;
   objective: string;
   status: RuntimeThreadGoalStatus;
+  /** Legacy persisted field. New Goal writes always normalize this to null. */
   tokenBudget: number | null;
   tokensUsed: number;
   timeUsedSeconds: number;
+  /** Highest persisted event sequence already examined for Goal usage accounting. */
+  accountedThroughSeq?: number;
   createdAt: number;
   updatedAt: number;
+  stopReason?: RuntimeThreadGoalStopReason;
+  safety?: RuntimeThreadGoalSafetyState;
   execution?: RuntimeThreadGoalExecutionOptions;
+};
+
+export type RuntimeGoalLifecycleKind =
+  | 'active'
+  | 'continuation'
+  | 'paused'
+  | 'resumed'
+  | 'blocked'
+  | 'usageLimited'
+  | 'budgetLimited'
+  | 'complete'
+  | 'cleared';
+
+export type RuntimeGoalLifecycleNotice = {
+  kind: RuntimeGoalLifecycleKind;
+  goal: RuntimeThreadGoal;
 };
 
 export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGoal {
   return {
     ...goal,
+    stopReason: goal.stopReason ? { ...goal.stopReason } : undefined,
+    safety: goal.safety ? {
+      ...goal.safety,
+      recentProgressFingerprints: goal.safety.recentProgressFingerprints
+        ? [...goal.safety.recentProgressFingerprints]
+        : undefined,
+    } : undefined,
     execution: goal.execution ? {
       ...goal.execution,
       attachments: goal.execution.attachments?.map((attachment) => ({ ...attachment })),
@@ -248,7 +302,6 @@ export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGo
 export type RuntimeThreadGoalPatch = {
   objective?: string;
   status?: RuntimeThreadGoalStatus;
-  tokenBudget?: number | null;
 };
 
 export type RuntimeQueuedTurnInputKind = 'message' | 'plan' | 'goal';

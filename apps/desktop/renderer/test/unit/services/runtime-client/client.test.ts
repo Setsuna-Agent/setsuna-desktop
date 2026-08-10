@@ -206,24 +206,45 @@ describe('desktop runtime client advanced thread methods', () => {
   });
 
   it('routes thread deletion, goals, and reviews through first-party REST', async () => {
+    const goal = {
+      version: 1 as const,
+      id: 'goal_1',
+      threadId: 'thread / 1',
+      objective: 'Ship it',
+      status: 'active' as const,
+      tokenBudget: null,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const activeThread = {
+      id: 'thread / 1',
+      title: 'Goal thread',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:01.000Z',
+      archived: false,
+      messageCount: 0,
+      lastMessagePreview: '',
+      lastSeq: 1,
+      messages: [],
+      goal,
+    };
+    const clearedThread = {
+      ...activeThread,
+      updatedAt: '2026-08-10T00:00:02.000Z',
+      lastSeq: 2,
+      goal: undefined,
+    };
     const request = installRuntimeBridge((input) => {
       if (input.method === 'PUT' && input.path.endsWith('/goal')) {
-        return {
-          threadId: 'thread / 1',
-          objective: 'Ship it',
-          status: 'active',
-          tokenBudget: 1000,
-          tokensUsed: 0,
-          timeUsedSeconds: 0,
-          createdAt: 1,
-          updatedAt: 1,
-        };
+        return { goal, thread: activeThread };
       }
       if (input.path.endsWith('/reviews')) {
         return { accepted: true, turnId: 'turn_review' };
       }
       if (input.path.endsWith('/goal')) {
-        return { cleared: true };
+        return { cleared: true, thread: clearedThread };
       }
       return { ok: true };
     });
@@ -233,12 +254,14 @@ describe('desktop runtime client advanced thread methods', () => {
     await client.deleteThread('thread / 1');
     await expect(client.setThreadGoal('thread / 1', {
       objective: 'Ship it',
-      tokenBudget: 1000,
     })).resolves.toMatchObject({
-      objective: 'Ship it',
-      tokenBudget: 1000,
+      goal: { objective: 'Ship it', tokenBudget: null },
+      thread: { id: 'thread / 1', lastSeq: 1 },
     });
-    await expect(client.clearThreadGoal('thread / 1')).resolves.toBe(true);
+    await expect(client.clearThreadGoal('thread / 1')).resolves.toMatchObject({
+      cleared: true,
+      thread: { id: 'thread / 1', lastSeq: 2, goal: undefined },
+    });
     await expect(client.startReview('thread / 1', target)).resolves.toEqual({
       accepted: true,
       turnId: 'turn_review',
@@ -252,7 +275,7 @@ describe('desktop runtime client advanced thread methods', () => {
       {
         path: '/v1/threads/thread%20%2F%201/goal',
         method: 'PUT',
-        body: { objective: 'Ship it', tokenBudget: 1000 },
+        body: { objective: 'Ship it' },
       },
       {
         path: '/v1/threads/thread%20%2F%201/goal',

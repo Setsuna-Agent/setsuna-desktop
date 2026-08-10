@@ -44,7 +44,9 @@ export function useChatMessageOperations({
 
   const selectableDeleteItems = useMemo(
     () => displayItems
-      .filter((item) => item.type !== 'context' && item.type !== 'review')
+      .filter((item): item is Extract<ChatDisplayItem, { type: 'user' | 'assistant' }> => (
+        item.type === 'user' || item.type === 'assistant'
+      ))
       .map((item) => ({
         id: item.id,
         messageIds: item.messageIds,

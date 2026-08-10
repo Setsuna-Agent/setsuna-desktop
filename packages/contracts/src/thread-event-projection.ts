@@ -1,5 +1,6 @@
 import {
   cloneRuntimeSkillReferences,
+  cloneRuntimeThreadGoal,
   type RuntimeHookRun,
   type RuntimeMessage,
   type RuntimeThread,
@@ -25,6 +26,10 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     skillIds: message.skillIds ? [...message.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    goalMode: message.goalMode ? {
+      ...message.goalMode,
+      goal: cloneRuntimeThreadGoal(message.goalMode.goal),
+    } : undefined,
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
     providerMetadata: message.providerMetadata ? cloneProviderMetadata(message.providerMetadata) : undefined,

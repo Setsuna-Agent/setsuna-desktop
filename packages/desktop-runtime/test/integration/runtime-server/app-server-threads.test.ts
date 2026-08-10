@@ -179,7 +179,6 @@ describe('runtime server AppServer thread lifecycle', () => {
           threadId: startedThread.thread.id,
           objective: 'Ship AppServer alignment.',
           status: 'active',
-          tokenBudget: 1000,
         });
         await expect(updatedStream.readContains('"method":"thread/goal/updated"')).resolves.toBe(true);
       } finally {
@@ -189,7 +188,7 @@ describe('runtime server AppServer thread lifecycle', () => {
         threadId: startedThread.thread.id,
         objective: 'Ship AppServer alignment.',
         status: 'active',
-        tokenBudget: 1000,
+        tokenBudget: null,
         tokensUsed: 0,
         timeUsedSeconds: 0,
       });
@@ -206,7 +205,7 @@ describe('runtime server AppServer thread lifecycle', () => {
         threadId: startedThread.thread.id,
         objective: 'Ship AppServer alignment.',
         status: 'paused',
-        tokenBudget: 1000,
+        tokenBudget: null,
         tokensUsed: 0,
         timeUsedSeconds: 0,
         createdAt: set.goal.createdAt,
@@ -240,12 +239,12 @@ describe('runtime server AppServer thread lifecycle', () => {
       });
   
       await expect(harness.appServerRpcEnvelope({
-        id: 'goal_bad_budget',
+        id: 'goal_unsupported_budget',
         method: 'thread/goal/set',
-        params: { threadId: startedThread.thread.id, objective: 'Ship it', tokenBudget: 0 },
+        params: { threadId: startedThread.thread.id, objective: 'Ship it', tokenBudget: 1_000 },
       })).resolves.toMatchObject({
-        id: 'goal_bad_budget',
-        error: { code: -32602, message: 'goal budgets must be positive when provided' },
+        id: 'goal_unsupported_budget',
+        error: { code: -32602, message: 'goal token budgets are no longer supported' },
       });
   
       await expect(harness.appServerRpcEnvelope({

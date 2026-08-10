@@ -81,6 +81,7 @@ export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotif
   const state: SweMapperState = {
     assistantStreams: new Map(),
     itemTranscriptMessageIds: new Set(),
+    pendingGoalSourceMessages: new Map(),
     turnDiffs: new Map(),
     turnStartedAtMs: new Map(),
     streamItems: new Map(),
@@ -104,6 +105,8 @@ export function runtimeThreadToSweTurns(thread: RuntimeThread): SweTurn[] {
   const groups = new Map<string, RuntimeSweTurnEntry[]>();
   for (const [index, message] of thread.messages.entries()) {
     if (message.visibility === 'model') continue;
+    // Goal lifecycle markers describe thread-level state; they must never manufacture AppServer turns.
+    if (message.goalMode) continue;
     if (!message.turnId) continue;
     groups.set(message.turnId, [...(groups.get(message.turnId) ?? []), { createdAt: message.createdAt, index, message }]);
   }
@@ -189,10 +192,28 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'thread.deleted') {
+    if (state) {
+      for (const [key, pending] of state.pendingGoalSourceMessages) {
+        if (pending.threadId === event.threadId) state.pendingGoalSourceMessages.delete(key);
+      }
+    }
     return [{ method: 'thread/deleted', params: { threadId: event.threadId } }];
   }
 
   if (event.type === 'thread.goal_updated') {
+    const sourceMessage = event.payload.sourceMessage;
+    const sourceTurnId = sourceMessage?.turnId ?? event.turnId;
+    if (state && sourceMessage && sourceTurnId) {
+      state.pendingGoalSourceMessages.set(turnDiffKey(event.threadId, sourceTurnId), {
+        id: event.id,
+        seq: event.seq,
+        threadId: event.threadId,
+        turnId: sourceTurnId,
+        type: 'message.created',
+        createdAt: sourceMessage.createdAt,
+        payload: { message: sourceMessage },
+      });
+    }
     return [{
       method: 'thread/goal/updated',
       params: {
@@ -240,11 +261,14 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'turn.started') {
+    const turnKey = turnDiffKey(event.threadId, turnId);
     if (turnId) {
-      state?.turnDiffs.set(turnDiffKey(event.threadId, turnId), '');
-      state?.turnStartedAtMs.set(turnDiffKey(event.threadId, turnId), toEpochMs(event.createdAt));
+      state?.turnDiffs.set(turnKey, '');
+      state?.turnStartedAtMs.set(turnKey, toEpochMs(event.createdAt));
       markTurnRunning(state, event.threadId, turnId);
     }
+    const sourceMessageEvent = turnId ? state?.pendingGoalSourceMessages.get(turnKey) : undefined;
+    if (sourceMessageEvent) state?.pendingGoalSourceMessages.delete(turnKey);
     return [
       ...threadStatusChangedNotifications(state, event.threadId),
       {
@@ -254,6 +278,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
         turn: liveSweTurn(turnId, 'inProgress', toEpochMs(event.createdAt), null),
       },
       },
+      ...(sourceMessageEvent ? runtimeEventToSweNotifications(sourceMessageEvent, state) : []),
     ];
   }
 
@@ -294,6 +319,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   if (event.type === 'turn.completed') {
     const turn = completedLiveSweTurn(state, event.threadId, turnId, 'completed', toEpochMs(event.createdAt));
     if (turnId) markTurnFinished(state, event.threadId, turnId);
+    if (turnId) state?.pendingGoalSourceMessages.delete(turnDiffKey(event.threadId, turnId));
     if (turnId) clearTurnState(state, event.threadId, turnId);
     return [
       {
@@ -307,6 +333,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   if (event.type === 'turn.cancelled') {
     const turn = completedLiveSweTurn(state, event.threadId, turnId, 'interrupted', toEpochMs(event.createdAt));
     if (turnId) markTurnFinished(state, event.threadId, turnId);
+    if (turnId) state?.pendingGoalSourceMessages.delete(turnDiffKey(event.threadId, turnId));
     if (turnId) clearTurnState(state, event.threadId, turnId);
     return [
       {
@@ -321,6 +348,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     const turn = completedLiveSweTurn(state, event.threadId, turnId, 'failed', toEpochMs(event.createdAt));
     if (turnId) markTurnFinished(state, event.threadId, turnId);
     if (!turnId) markSystemError(state, event.threadId);
+    if (turnId) state?.pendingGoalSourceMessages.delete(turnDiffKey(event.threadId, turnId));
     if (turnId) clearTurnState(state, event.threadId, turnId);
     return turnId
       ? [

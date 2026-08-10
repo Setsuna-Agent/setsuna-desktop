@@ -1,5 +1,6 @@
 import {
   cloneRuntimeSkillReferences,
+  cloneRuntimeThreadGoal,
   isActiveToolRun,
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
@@ -199,12 +200,14 @@ export function rollbackStartMessageId(messages: RuntimeMessage[], numTurns: num
   const firstDropped = [...order.entries()].find(([, turn]) => turn.order === firstDroppedOrder);
   if (!firstDropped) return null;
   const [turnId] = firstDropped;
-  return messages.find((message) => message.turnId === turnId)?.id ?? null;
+  return messages.find((message) => message.turnId === turnId && !message.goalMode)?.id ?? null;
 }
 
 function runtimeTurnOrder(messages: RuntimeMessage[]): Map<string, { endMs: number | null; order: number }> {
   const turns = new Map<string, { endMs: number | null; firstIndex: number; startMs: number | null; turnId: string }>();
   for (const [index, message] of messages.entries()) {
+    // Goal lifecycle markers are thread metadata, including legacy markers with synthetic turn IDs.
+    if (message.goalMode) continue;
     if (!message.turnId) continue;
     const createdAtMs = parseDateMs(message.createdAt);
     const existing = turns.get(message.turnId);
@@ -235,6 +238,10 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
+    goalMode: message.goalMode ? {
+      ...message.goalMode,
+      goal: cloneRuntimeThreadGoal(message.goalMode.goal),
+    } : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
     providerMetadata: message.providerMetadata
       ? normalizeRuntimeMessageProviderMetadata(message.providerMetadata)

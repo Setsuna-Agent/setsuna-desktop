@@ -1,8 +1,9 @@
 import type {
   RuntimeReviewTarget,
   RuntimeThread,
-  RuntimeThreadGoal,
+  RuntimeThreadGoalClearResponse,
   RuntimeThreadGoalPatch,
+  RuntimeThreadGoalSetResponse,
   RuntimeThreadGoalStatus,
   SendTurnResponse,
 } from '@setsuna-desktop/contracts';
@@ -92,10 +93,13 @@ export async function setRuntimeThreadGoal(
   runtime: RuntimeContainer,
   threadId: string,
   patch: RuntimeThreadGoalPatch,
-): Promise<RuntimeThreadGoal> {
-  await requireRuntimeThread(runtime, threadId);
+): Promise<RuntimeThreadGoalSetResponse> {
   try {
-    return await runtime.agentLoop.setThreadGoal(threadId, patch);
+    return await runtime.agentLoop.withThreadMutation(threadId, async () => {
+      await requireRuntimeThread(runtime, threadId);
+      const goal = await runtime.agentLoop.setThreadGoal(threadId, patch);
+      return { goal, thread: await requireRuntimeThread(runtime, threadId) };
+    });
   } catch (error) {
     if (error instanceof RuntimeUseCaseError) throw error;
     throw new RuntimeUseCaseError('conflict', runtimeUseCaseErrorMessage(error));
@@ -142,21 +146,12 @@ export function runtimeThreadGoalPatchFromInput(
   }
 
   if (hasOwn(input, 'tokenBudget')) {
-    const tokenBudget = input.tokenBudget;
-    if (
-      tokenBudget !== null
-      && (
-        typeof tokenBudget !== 'number'
-        || !Number.isFinite(tokenBudget)
-        || tokenBudget <= 0
-      )
-    ) {
+    if (input.tokenBudget !== null) {
       throw new RuntimeUseCaseError(
         'invalid_input',
-        'Goal token budget must be a positive number or null.',
+        'Goal token budgets are no longer supported; omit tokenBudget or pass null.',
       );
     }
-    patch.tokenBudget = tokenBudget;
   }
 
   return patch;
@@ -165,11 +160,13 @@ export function runtimeThreadGoalPatchFromInput(
 export async function clearRuntimeThreadGoal(
   runtime: RuntimeContainer,
   threadId: string,
-): Promise<boolean> {
-  const thread = await requireRuntimeThread(runtime, threadId);
-  if (!thread.goal) return false;
-  await runtime.agentLoop.clearThreadGoal(threadId);
-  return true;
+): Promise<RuntimeThreadGoalClearResponse> {
+  return runtime.agentLoop.withThreadMutation(threadId, async () => {
+    const thread = await requireRuntimeThread(runtime, threadId);
+    if (!thread.goal) return { cleared: false, thread };
+    await runtime.agentLoop.clearThreadGoal(threadId);
+    return { cleared: true, thread: await requireRuntimeThread(runtime, threadId) };
+  });
 }
 
 export function runtimeReviewRequestFromTarget(value: unknown): RuntimeReviewTurnInput {

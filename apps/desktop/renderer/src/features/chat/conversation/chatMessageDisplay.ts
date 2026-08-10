@@ -9,6 +9,7 @@ export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
   | { type: 'assistant'; id: string; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
+  | { type: 'goal'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
 export type ChatDisplayItem = ChatTranscriptItem;
@@ -98,8 +99,11 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       continue;
     }
     if (message.role === 'system' || message.role === 'developer') {
-      if (message.reviewMode) {
-        // 普通 system/developer 消息不进 transcript；review 标记是显式 UI 事件。
+      if (message.goalMode) {
+        flushAssistantRun();
+        items.push({ type: 'goal', id: message.id, message });
+      } else if (message.reviewMode) {
+        // 普通 system/developer 消息不进 transcript；显式生命周期标记作为 UI 事件。
         flushAssistantRun();
         items.push({ type: 'review', id: message.id, message });
       }
@@ -351,7 +355,7 @@ function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefi
 
 function itemIncludesTurn(item: ChatTranscriptItem, turnId: string): boolean {
   if (item.type === 'assistant') return assistantRunIncludesTurn(item, turnId);
-  return item.type === 'user' || item.type === 'review' || item.type === 'context'
+  return item.type === 'user' || item.type === 'review' || item.type === 'context' || item.type === 'goal'
     ? item.message.turnId === turnId
     : false;
 }
@@ -394,6 +398,7 @@ function messageScrollSignal(message: RuntimeMessage): string {
     message.error?.length ?? 0,
     message.attachments?.length ?? 0,
     message.reviewMode ? `${message.reviewMode.kind}:${message.reviewMode.review.length}` : '',
+    message.goalMode ? `${message.goalMode.kind}:${message.goalMode.goal.updatedAt}` : '',
     message.hookRuns?.map(hookRunScrollSignal).join(';') ?? '',
     message.toolRuns?.map(toolRunScrollSignal).join(';') ?? '',
   ].join(',');

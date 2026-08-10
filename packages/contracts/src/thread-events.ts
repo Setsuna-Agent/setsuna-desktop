@@ -99,11 +99,19 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       draft.prepareMessageAppend();
       appendCreatedMessage(next, event.payload.sourceMessage, event.createdAt);
     }
+    if (event.payload.lifecycleMessage) {
+      draft.prepareMessageAppend();
+      appendCreatedMessage(next, event.payload.lifecycleMessage, event.createdAt);
+    }
     return next;
   }
 
   if (event.type === 'thread.goal_cleared') {
     if (event.payload.cleared) delete next.goal;
+    if (event.payload.lifecycleMessage) {
+      draft.prepareMessageAppend();
+      appendCreatedMessage(next, event.payload.lifecycleMessage, event.createdAt);
+    }
     return next;
   }
 

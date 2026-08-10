@@ -2,7 +2,7 @@ import type {
   RuntimeGitInfo,
   RuntimeMessage,
   RuntimeThread,
-  RuntimeThreadGoal,
+  RuntimeThreadGoalPatch,
   RuntimeThreadGoalStatus,
   RuntimeThreadMemoryMode,
   SweTurn,
@@ -335,7 +335,7 @@ export function sweClientUserMessageId(input: Record<string, unknown>): string |
   return stringInput(input.clientUserMessageId ?? input.client_user_message_id);
 }
 
-export function sweSetThreadGoal(thread: RuntimeThread, input: Record<string, unknown>): RuntimeThreadGoal {
+export function sweSetThreadGoal(thread: RuntimeThread, input: Record<string, unknown>): RuntimeThreadGoalPatch {
   const hasObjective = Object.prototype.hasOwnProperty.call(input, 'objective') && input.objective !== null;
   const objective = hasObjective ? normalizeAppServerGoalObjective(input.objective) : thread.goal?.objective;
   if (!objective) throw new AppServerRpcError(-32602, `cannot update goal for thread ${thread.id}: no goal exists`);
@@ -343,19 +343,12 @@ export function sweSetThreadGoal(thread: RuntimeThread, input: Record<string, un
   const status = hasOwn(input, 'status') && input.status !== null
     ? sweGoalStatus(input.status)
     : thread.goal?.status ?? 'active';
-  const tokenBudget = hasOwn(input, 'tokenBudget')
-    ? sweGoalTokenBudget(input.tokenBudget)
-    : thread.goal?.tokenBudget ?? null;
-  const now = Math.floor(Date.now() / 1000);
+  if (hasOwn(input, 'tokenBudget') && input.tokenBudget !== null) {
+    throw new AppServerRpcError(-32602, 'goal token budgets are no longer supported');
+  }
   return {
-    threadId: thread.id,
     objective,
     status,
-    tokenBudget,
-    tokensUsed: thread.goal?.tokensUsed ?? 0,
-    timeUsedSeconds: thread.goal?.timeUsedSeconds ?? 0,
-    createdAt: thread.goal?.createdAt ?? now,
-    updatedAt: now,
   };
 }
 
@@ -379,14 +372,6 @@ function sweGoalStatus(value: unknown): RuntimeThreadGoalStatus {
     return value;
   }
   throw new AppServerRpcError(-32602, `Unsupported goal status: ${String(value)}`);
-}
-
-function sweGoalTokenBudget(value: unknown): number | null {
-  if (value === null) return null;
-  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
-    throw new AppServerRpcError(-32602, 'goal budgets must be positive when provided');
-  }
-  return value;
 }
 
 export function swePatchThreadGitInfo(thread: RuntimeThread, input: Record<string, unknown>): RuntimeGitInfo | null {
