@@ -46,7 +46,7 @@ describe('parseSkillReferenceText', () => {
       skills,
     );
 
-    expect(parts.map((part) => part.type === 'skill' ? part.skill.id : part.value)).toEqual([
+    expect(parts.map((part) => part.type === 'skill' ? part.skillId : part.value)).toEqual([
       'pdf-documents',
       ' 然后使用 ',
       'pdf',
@@ -61,7 +61,7 @@ describe('parseSkillReferenceText', () => {
       skillId: 'pdf',
       start: selectedStart,
       end: selectedStart + 'PDF'.length,
-    }], skills).map((part) => part.type === 'skill' ? part.skill.id : part.value)).toEqual([
+    }], skills).map((part) => part.type === 'skill' ? part.skillId : part.value)).toEqual([
       '不要使用 PDF；改用 ',
       'pdf',
     ]);
@@ -74,7 +74,7 @@ describe('parseSkillReferenceText', () => {
     expect(parseSkillReferenceText(content, [
       { skillId: 'review-builtin', start: 0, end: 'Review'.length },
       { skillId: 'review-user', start: secondStart, end: secondStart + 'Review'.length },
-    ], skills).filter((part) => part.type === 'skill').map((part) => part.skill.id)).toEqual([
+    ], skills).filter((part) => part.type === 'skill').map((part) => part.skillId)).toEqual([
       'review-builtin',
       'review-user',
     ]);
@@ -87,7 +87,7 @@ describe('parseSkillReferenceText', () => {
       content,
       [{ skillId: 'review-builtin', start: 2, end: 8 }],
       skills,
-    ).map((part) => part.type === 'skill' ? part.skill.id : part.value)).toEqual([
+    ).map((part) => part.type === 'skill' ? part.skillId : part.value)).toEqual([
       '请用',
       'review-builtin',
       '检查',
@@ -105,6 +105,20 @@ describe('parseSkillReferenceText', () => {
       renamedSkills,
     )).toEqual([{
       skill: expect.objectContaining({ id: 'review-user', name: 'Review Plus' }),
+      skillId: 'review-user',
+      start: 0,
+      type: 'skill',
+      value: 'Review',
+    }]);
+  });
+
+  it('keeps a durable fallback reference after the Skill leaves the catalog', () => {
+    expect(parseSkillReferenceText(
+      'Review',
+      [{ skillId: 'review-user', start: 0, end: 'Review'.length }],
+      [],
+    )).toEqual([{
+      skillId: 'review-user',
       start: 0,
       type: 'skill',
       value: 'Review',

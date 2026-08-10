@@ -28,10 +28,10 @@ export const SkillReferenceLabel = memo(function SkillReferenceLabel({
   skill: RuntimeSkillSummary;
 }) {
   return (
-    <span className="chat-skill-reference" title={skill.description || skill.id}>
-      <ChatCapabilityReferenceIcon />
-      <span>{displayText ?? skillDisplayText(skill)}</span>
-    </span>
+    <SkillReferencePresentation
+      displayText={displayText ?? skillDisplayText(skill)}
+      title={skill.description || skill.id}
+    />
   );
 });
 
@@ -51,13 +51,28 @@ export const SkillReferenceText = memo(function SkillReferenceText({
             <WorkspaceMentionText content={part.value} />
           </Fragment>
         ) : (
-          <SkillReferenceLabel
-            key={`skill:${part.start}:${part.skill.id}`}
+          <SkillReferencePresentation
+            key={`skill:${part.start}:${part.skillId}`}
             displayText={part.value}
-            skill={part.skill}
+            title={part.skill?.description || part.skillId}
           />
         )
       ))}
     </>
   );
 });
+
+function SkillReferencePresentation({
+  displayText,
+  title,
+}: {
+  displayText: string;
+  title: string;
+}) {
+  return (
+    <span className="chat-skill-reference" title={title}>
+      <ChatCapabilityReferenceIcon />
+      <span>{displayText}</span>
+    </span>
+  );
+}

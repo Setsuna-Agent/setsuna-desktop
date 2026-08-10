@@ -2,11 +2,12 @@ import type { RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-deskto
 
 export type SkillReferenceTextPart =
   | { start: number; type: 'text'; value: string }
-  | { skill: RuntimeSkillSummary; start: number; type: 'skill'; value: string };
+  | { skill?: RuntimeSkillSummary; skillId: string; start: number; type: 'skill'; value: string };
 
 type SkillReferenceCandidate = {
   end: number;
-  skill: RuntimeSkillSummary;
+  skill?: RuntimeSkillSummary;
+  skillId: string;
   start: number;
   value: string;
 };
@@ -37,7 +38,8 @@ export function parseSkillReferenceText(
       parts.push({ start: textStart, type: 'text', value: content.slice(textStart, candidate.start) });
     }
     parts.push({
-      skill: candidate.skill,
+      ...(candidate.skill ? { skill: candidate.skill } : {}),
+      skillId: candidate.skillId,
       start: candidate.start,
       type: 'skill',
       value: candidate.value,
@@ -62,7 +64,6 @@ function selectedSkillCandidates(
 
   for (const reference of [...(references ?? [])].sort((left, right) => left.start - right.start || left.end - right.end)) {
     const skill = skillsById.get(reference.skillId);
-    if (!skill) continue;
     if (
       !Number.isInteger(reference.start)
       || !Number.isInteger(reference.end)
@@ -77,7 +78,8 @@ function selectedSkillCandidates(
     if (!value) continue;
     candidates.push({
       end: reference.end,
-      skill,
+      ...(skill ? { skill } : {}),
+      skillId: reference.skillId,
       start: reference.start,
       value,
     });

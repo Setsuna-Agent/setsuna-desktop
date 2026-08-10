@@ -176,6 +176,17 @@ describe('MessageItem user messages', () => {
     expect(html).not.toContain('新的 Skill 名称');
   });
 
+  it('keeps a read-only historical Skill reference after the Skill is deleted', () => {
+    const html = renderUserMessage('message', false, '对话创建Skill 历史消息', {
+      skillReferences: [{ skillId: skillCreator.id, start: 0, end: skillCreator.name.length }],
+      skills: [],
+    });
+
+    expect(html).toContain('class="chat-skill-reference"');
+    expect(html).toContain('chat-capability-reference-icon');
+    expect(html).toContain('对话创建Skill');
+  });
+
   it('keeps Plugin attribution in the assistant body for Plan turns', () => {
     const html = renderPlanMessage([{
       id: 'vision-recognition',
