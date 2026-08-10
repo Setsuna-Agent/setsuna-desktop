@@ -184,6 +184,8 @@ export class RuntimeSamplingContextBuilder {
       signal,
     };
     const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
+    // Tool follow-ups must reflect Goal mutations committed earlier in the same turn.
+    const stepGoal = snapshotThread ? snapshotThread.goal : thread.goal;
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -196,12 +198,12 @@ export class RuntimeSamplingContextBuilder {
       : null;
     const availableTools = toolAccess === 'none'
       ? undefined
-      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, thread.goal);
+      : modelFacingTools(toolRouter?.tools, stepRuntimeConfig, dynamicTools, stepGoal);
     const tools = toolAccess === 'read-only'
       ? availableTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
       : availableTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
-    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, thread.goal);
+    const toolRuntimes = await samplingToolRuntimes(tools ?? [], toolRouter, dynamicTools, stepRuntimeConfig, stepGoal);
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig);
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,

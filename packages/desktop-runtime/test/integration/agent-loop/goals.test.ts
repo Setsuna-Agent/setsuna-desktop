@@ -332,6 +332,13 @@ describe('agent loop persistent goals', () => {
         tokensUsed: 6,
       });
       expect(modelClient.requests).toHaveLength(3);
+      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['create_goal']);
+      expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual([
+        'create_goal',
+        'get_goal',
+        'update_goal',
+      ]);
+      expect(modelClient.requests[2].tools?.map((tool) => tool.name)).toEqual(['create_goal']);
     });
   
   it('pauses a persistent goal when its active turn is cancelled', async () => {
@@ -367,7 +374,11 @@ describe('agent loop persistent goals', () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Cleared goal' });
-      const modelClient = new CancellableModelClient();
+      const modelClient = new CancellableModelClient({
+        inputTokens: 3,
+        outputTokens: 2,
+        totalTokens: 5,
+      });
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -378,6 +389,11 @@ describe('agent loop persistent goals', () => {
 
       await loop.setThreadGoal(thread.id, { objective: 'Clear this safely', status: 'active' });
       await modelClient.waitUntilAbortListenerReady();
+      await waitForTestState(
+        () => threadStore.listEvents(thread.id, 0),
+        (events) => events.some((event) => event.type === 'token.count'),
+        (events) => `Timed out waiting for pre-clear usage; events=${JSON.stringify(events)}`,
+      );
       await loop.clearThreadGoal(thread.id);
       await waitForModelAbort(modelClient);
       const cleared = await waitForTestState(
@@ -396,7 +412,10 @@ describe('agent loop persistent goals', () => {
         payload: {
           cleared: true,
           lifecycleMessage: expect.objectContaining({
-            goalMode: expect.objectContaining({ kind: 'cleared' }),
+            goalMode: expect.objectContaining({
+              kind: 'cleared',
+              goal: expect.objectContaining({ tokensUsed: 5 }),
+            }),
           }),
         },
       });

@@ -342,7 +342,7 @@ describe('runtime server REST threads and attachments', () => {
       });
       const threadPath = `/v1/threads/${encodeURIComponent(created.id)}`;
 
-      const goal = await harness.runtimeFetch(`${threadPath}/goal`, {
+      const goalResult = await harness.runtimeFetch(`${threadPath}/goal`, {
         method: 'PUT',
         body: JSON.stringify({
           objective: 'Keep the first-party runtime boundary small.',
@@ -350,23 +350,39 @@ describe('runtime server REST threads and attachments', () => {
           tokenBudget: 1_000,
         }),
       });
-      expect(goal).toMatchObject({
-        threadId: created.id,
-        objective: 'Keep the first-party runtime boundary small.',
-        status: 'paused',
-        tokenBudget: 1_000,
+      expect(goalResult).toMatchObject({
+        goal: {
+          threadId: created.id,
+          objective: 'Keep the first-party runtime boundary small.',
+          status: 'paused',
+          tokenBudget: 1_000,
+        },
+        thread: {
+          id: created.id,
+          goal: expect.objectContaining({ objective: 'Keep the first-party runtime boundary small.' }),
+        },
       });
       await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({
         id: created.id,
-        goal: expect.objectContaining({ objective: goal.objective }),
+        goal: expect.objectContaining({ objective: goalResult.goal.objective }),
       });
 
-      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
+      const clearedResult = await harness.runtimeFetch(`${threadPath}/goal`, {
         method: 'DELETE',
-      })).resolves.toEqual({ cleared: true });
-      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
+      });
+      expect(clearedResult).toMatchObject({
+        cleared: true,
+        thread: { id: created.id },
+      });
+      expect(clearedResult.thread).not.toHaveProperty('goal');
+      const emptyClearResult = await harness.runtimeFetch(`${threadPath}/goal`, {
         method: 'DELETE',
-      })).resolves.toEqual({ cleared: false });
+      });
+      expect(emptyClearResult).toMatchObject({
+        cleared: false,
+        thread: { id: created.id },
+      });
+      expect(emptyClearResult.thread).not.toHaveProperty('goal');
 
       await expect(harness.runtimeFetch(threadPath, {
         method: 'DELETE',

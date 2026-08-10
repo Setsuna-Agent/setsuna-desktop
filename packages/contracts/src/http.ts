@@ -113,6 +113,17 @@ export type RuntimeRequestInput = {
   body?: unknown;
 };
 
+/** Goal command responses include a sequenced snapshot so REST cannot regress newer SSE state. */
+export type RuntimeThreadGoalSetResponse = {
+  goal: RuntimeThreadGoal;
+  thread: RuntimeThread;
+};
+
+export type RuntimeThreadGoalClearResponse = {
+  cleared: boolean;
+  thread: RuntimeThread;
+};
+
 export type DesktopRuntimeClient = {
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
@@ -125,8 +136,8 @@ export type DesktopRuntimeClient = {
   deleteThread(threadId: string): Promise<void>;
   listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcessList>;
   terminateBackgroundShellProcess(threadId: string, processId: string): Promise<RuntimeBackgroundShellProcessTermination>;
-  setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal>;
-  clearThreadGoal(threadId: string): Promise<boolean>;
+  setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoalSetResponse>;
+  clearThreadGoal(threadId: string): Promise<RuntimeThreadGoalClearResponse>;
   updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;

@@ -296,19 +296,26 @@ export class RuntimeGoalCoordinator {
     if (!goal) return;
     const active = this.options.activeTask(threadId);
     const retiredActiveGoal = active?.taskKind === 'goal';
-    if (active?.taskKind === 'goal') {
-      // The cancelled turn may settle after goal_cleared; retire its ID before aborting so a
-      // late accounting write cannot resurrect the cleared Goal.
-      this.retiredGoalIds.add(goal.id);
-      await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
-    }
-    const lifecycleMessage = goalLifecycleMessage(
-      goal,
-      'cleared',
-      this.options.ids,
-      this.options.clock,
-    );
     try {
+      let clearedSnapshot = goal;
+      if (active?.taskKind === 'goal') {
+        // The cancelled turn may settle after goal_cleared; retire its ID before aborting so a
+        // late accounting write cannot resurrect the cleared Goal.
+        this.retiredGoalIds.add(goal.id);
+        await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
+        const events = (await this.options.threadStore.listEvents(threadId))
+          .filter((event) => event.turnId === active.turnId);
+        clearedSnapshot = {
+          ...accountGoalTurn(goal, events, this.options.clock.now()),
+          updatedAt: epochSeconds(this.options.clock.now()),
+        };
+      }
+      const lifecycleMessage = goalLifecycleMessage(
+        clearedSnapshot,
+        'cleared',
+        this.options.ids,
+        this.options.clock,
+      );
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,

@@ -479,7 +479,7 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId, 'threadId');
     const thread = await requireRuntimeThread(runtime, threadId);
     const requested = sweSetThreadGoal(thread, input);
-    const goal = await setRuntimeThreadGoal(runtime, threadId, {
+    const { goal } = await setRuntimeThreadGoal(runtime, threadId, {
       objective: requested.objective,
       status: requested.status,
       tokenBudget: requested.tokenBudget,
@@ -511,7 +511,8 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/goal/clear') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    return { cleared: await clearRuntimeThreadGoal(runtime, threadId) };
+    const { cleared } = await clearRuntimeThreadGoal(runtime, threadId);
+    return { cleared };
   }
 
   if (method === 'thread/metadata/update') {

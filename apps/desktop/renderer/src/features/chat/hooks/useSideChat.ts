@@ -10,6 +10,7 @@ import type {
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   activeTurnIdFromThreadSnapshot,
+  adoptOwnedThreadSnapshot,
   applyCurrentThreadEventBatch,
   isThreadContextCompacting,
 } from '../../../services/runtime-client/runtimeThreadState.js';
@@ -246,30 +247,28 @@ export function useSideChat({
 
   const clearGoal = useCallback(async () => {
     if (!currentThread) return false;
-    const cleared = await client.clearThreadGoal(currentThread.id);
-    if (cleared) {
-      setCurrentThread((current) => {
-        if (!current || current.id !== currentThread.id) return current;
-        const next = { ...current };
-        delete next.goal;
-        return next;
-      });
-    }
+    const requestedThreadId = currentThread.id;
+    const result = await client.clearThreadGoal(requestedThreadId);
+    setCurrentThread((current) => adoptOwnedThreadSnapshot(
+      current,
+      requestedThreadId,
+      result.thread,
+    ));
     await reloadThreads();
-    return cleared;
+    return result.cleared;
   }, [client, currentThread, reloadThreads]);
 
   const updateGoal = useCallback(async (patch: Parameters<DesktopRuntimeClient['setThreadGoal']>[1]) => {
     if (!currentThread) return null;
     const requestedThreadId = currentThread.id;
-    const goal = await client.setThreadGoal(requestedThreadId, patch);
-    if (threadIdRef.current === requestedThreadId) {
-      setCurrentThread((current) => (
-        current?.id === requestedThreadId ? { ...current, goal } : current
-      ));
-    }
+    const result = await client.setThreadGoal(requestedThreadId, patch);
+    setCurrentThread((current) => adoptOwnedThreadSnapshot(
+      current,
+      requestedThreadId,
+      result.thread,
+    ));
     await reloadThreads();
-    return goal;
+    return result.goal;
   }, [client, currentThread, reloadThreads]);
 
   const answerApproval = useCallback(async (approvalId: string, input: AnswerRuntimeApprovalInput) => {

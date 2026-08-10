@@ -469,29 +469,20 @@ export function useRuntimeThreadState({
   const clearCurrentThreadGoal = useCallback(async () => {
     if (!currentThread) return false;
     const threadId = currentThread.id;
-    const cleared = await client.clearThreadGoal(threadId);
-    if (cleared) {
-      setCurrentThread((thread) => {
-        if (thread?.id !== threadId) return thread;
-        const next = { ...thread };
-        delete next.goal;
-        return next;
-      });
-    }
+    const result = await client.clearThreadGoal(threadId);
+    adoptSnapshot(threadId, result.thread);
     await reloadThreads();
-    return cleared;
-  }, [client, currentThread, reloadThreads, setCurrentThread]);
+    return result.cleared;
+  }, [adoptSnapshot, client, currentThread, reloadThreads]);
 
   const updateCurrentThreadGoal = useCallback(async (patch: RuntimeThreadGoalPatch) => {
     if (!currentThread) return null;
     const threadId = currentThread.id;
-    const goal = await client.setThreadGoal(threadId, patch);
-    setCurrentThread((thread) => (
-      thread?.id === threadId ? { ...thread, goal } : thread
-    ));
+    const result = await client.setThreadGoal(threadId, patch);
+    adoptSnapshot(threadId, result.thread);
     await reloadThreads();
-    return goal;
-  }, [client, currentThread, reloadThreads, setCurrentThread]);
+    return result.goal;
+  }, [adoptSnapshot, client, currentThread, reloadThreads]);
 
   const restoreArchivedThread = useCallback(async (threadId: string) => {
     const restored = await client.updateThread(threadId, { archived: false });
