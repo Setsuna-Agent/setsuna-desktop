@@ -7,9 +7,9 @@ import {
   FolderOpen,
   FolderPlus,
   MoreHorizontal,
-  Pencil,
   Plus,
   Search,
+  Settings,
   Trash2,
 } from 'lucide-react';
 import {
@@ -414,7 +414,7 @@ function ProjectActionMenu({
           role="menuitem"
           onClick={() => onEditProject(project)}
         >
-          <Pencil size={13} />
+          <Settings size={13} />
           {t('sidebar.editProject')}
         </button>
         <button
