@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
 import type {
+  DesktopWebDavSyncOperationState,
   DesktopWebDavSyncRestorePlan,
   DesktopWebDavSyncSnapshotSummary,
 } from '@setsuna-desktop/contracts';
@@ -67,6 +68,31 @@ describe('WebDavRestorePanel', () => {
     const error = await within(dialog).findByRole('alert');
     expect(error.textContent).toContain('会被覆盖或删除的本地内容发生了变化');
     expect(within(dialog).getByRole('button', { name: '还原并重启' })).toBeTruthy();
+  });
+
+  it('shows live byte and percentage progress while downloading the restore', async () => {
+    const user = userEvent.setup();
+    const restoreOperation: DesktopWebDavSyncOperationState = {
+      kind: 'restore',
+      phase: 'downloading',
+      startedAt: '2026-08-10T10:31:00.000Z',
+      completedBytes: 384,
+      totalBytes: 512,
+      completedItems: 1,
+      totalItems: 2,
+      cancellable: true,
+    };
+    renderRestorePanel({ restoreOperation });
+
+    await user.click(screen.getByRole('button', { name: '检查会覆盖什么' }));
+    const dialog = await screen.findByRole('dialog', { name: '还原覆盖清单' });
+    await user.click(within(dialog).getByRole('checkbox', { name: /我已检查清单/u }));
+    await user.click(within(dialog).getByRole('button', { name: '还原并重启' }));
+
+    const progress = within(dialog).getByRole('progressbar', { name: '正在下载加密对象…' });
+    expect(progress.getAttribute('aria-valuenow')).toBe('75');
+    expect(within(dialog).getByText('75%')).toBeTruthy();
+    expect(within(dialog).getByText('384 B / 512 B')).toBeTruthy();
   });
 });
 

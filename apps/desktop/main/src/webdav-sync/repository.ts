@@ -9,6 +9,7 @@ import {
   decryptWebDavBuffer,
   encryptWebDavBuffer,
   verifyWebDavRepositoryKey,
+  WEB_DAV_ENCRYPTED_OBJECT_OVERHEAD_BYTES,
   webDavObjectAad,
   webDavRepositoryKeyVerifier,
 } from './crypto.js';
@@ -226,12 +227,20 @@ export class EncryptedWebDavRepository {
     item: WebDavSnapshotManifestItem,
     destinationPath: string,
     signal?: AbortSignal,
+    onProgress?: (receivedBytes: number, totalBytes: number) => void,
   ): Promise<void> {
     const maxBytes = item.size + 64;
+    const totalBytes = item.size + WEB_DAV_ENCRYPTED_OBJECT_OVERHEAD_BYTES;
     return this.client.downloadFile(
       this.objectParts(manifest.deviceId, manifest.id, item.objectName),
       destinationPath,
-      { maxBytes, signal },
+      {
+        maxBytes,
+        signal,
+        ...(onProgress ? {
+          onProgress: (receivedBytes) => onProgress(receivedBytes, totalBytes),
+        } : {}),
+      },
     );
   }
 

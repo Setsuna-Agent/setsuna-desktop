@@ -998,6 +998,57 @@
   flex: 0 0 auto;
 }
 
+.settings-webdav-restore-dialog__feedback.has-progress {
+  align-items: flex-start;
+}
+
+.settings-webdav-restore-dialog__feedback.has-progress > .settings-webdav__spinner {
+  margin-top: 2px;
+}
+
+.settings-webdav-restore-dialog__progress {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 5px;
+}
+
+.settings-webdav-restore-dialog__progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-webdav-restore-dialog__progress-heading strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.settings-webdav-restore-dialog__progress-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface-muted));
+}
+
+.settings-webdav-restore-dialog__progress-track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--app-primary);
+  transition: width 120ms ease-out;
+}
+
+.settings-webdav-restore-dialog__progress small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-webdav-restore-dialog__feedback.is-error {
   color: var(--app-danger);
   background: color-mix(in srgb, var(--app-danger) 7%, transparent);

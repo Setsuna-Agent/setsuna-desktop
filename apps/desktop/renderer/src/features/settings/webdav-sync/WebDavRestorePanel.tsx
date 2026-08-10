@@ -1,5 +1,6 @@
 import type {
   DesktopWebDavSyncCategoryId,
+  DesktopWebDavSyncOperationState,
   DesktopWebDavSyncRestorePlan,
   DesktopWebDavSyncSnapshotSummary,
 } from '@setsuna-desktop/contracts';
@@ -8,7 +9,11 @@ import { useEffect, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
 import { WebDavRestorePlanDialog } from './WebDavRestorePlanDialog.js';
-import { formatSyncBytes, webDavCategoryCopy } from './webDavSyncCopy.js';
+import {
+  formatSyncBytes,
+  webDavCategoryCopy,
+  webDavOperationMessageKey,
+} from './webDavSyncCopy.js';
 
 export function WebDavRestorePanel({
   backup,
@@ -16,14 +21,14 @@ export function WebDavRestorePanel({
   onInspect,
   onRefresh,
   onRestore,
-  restoreStatus,
+  restoreOperation,
 }: {
   backup: DesktopWebDavSyncSnapshotSummary | null;
   busy: boolean;
   onInspect: (snapshotId: string, categories: DesktopWebDavSyncCategoryId[]) => Promise<DesktopWebDavSyncRestorePlan>;
   onRefresh: () => Promise<void>;
   onRestore: (planId: string) => Promise<void>;
-  restoreStatus?: string;
+  restoreOperation?: DesktopWebDavSyncOperationState;
 }) {
   const { locale, t } = useI18n();
   const [selectedCategories, setSelectedCategories] = useState<DesktopWebDavSyncCategoryId[]>([]);
@@ -144,7 +149,10 @@ export function WebDavRestorePanel({
           error={actionError}
           plan={plan}
           restoring={restorePending}
-          restoreStatus={restoreStatus ?? t('settings.sync.restore.starting')}
+          restoreOperation={restoreOperation}
+          restoreStatus={restoreOperation
+            ? t(webDavOperationMessageKey[restoreOperation.phase])
+            : t('settings.sync.restore.starting')}
           onClose={() => {
             if (busy || restorePending) return;
             setPlan(null);

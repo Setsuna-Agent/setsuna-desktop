@@ -1,4 +1,7 @@
-import type { DesktopWebDavSyncRestorePlan } from '@setsuna-desktop/contracts';
+import type {
+  DesktopWebDavSyncOperationState,
+  DesktopWebDavSyncRestorePlan,
+} from '@setsuna-desktop/contracts';
 import {
   AlertTriangle,
   CirclePlus,
@@ -13,7 +16,7 @@ import { useEffect, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, IconButton } from '../../../shared/ui/primitives.js';
-import { webDavCategoryCopy } from './webDavSyncCopy.js';
+import { formatSyncBytes, webDavCategoryCopy } from './webDavSyncCopy.js';
 
 type WebDavRestorePlanDialogProps = {
   busy: boolean;
@@ -21,6 +24,7 @@ type WebDavRestorePlanDialogProps = {
   error: string | null;
   plan: DesktopWebDavSyncRestorePlan;
   restoring: boolean;
+  restoreOperation?: DesktopWebDavSyncOperationState;
   restoreStatus: string;
   onClose: () => void;
   onConfirm: (confirmed: boolean) => void;
@@ -33,6 +37,7 @@ export function WebDavRestorePlanDialog({
   error,
   plan,
   restoring,
+  restoreOperation,
   restoreStatus,
   onClose,
   onConfirm,
@@ -51,6 +56,7 @@ export function WebDavRestorePlanDialog({
   const safeDiffs = plan.diffs.filter((diff) => (
     diff.overwrittenCount === 0 && diff.removedCount === 0
   ));
+  const downloadProgress = restoreDownloadProgress(restoreOperation);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -244,9 +250,33 @@ export function WebDavRestorePlanDialog({
 
         <footer className="settings-webdav-restore-dialog__footer">
           {restoring ? (
-            <div className="settings-webdav-restore-dialog__feedback" role="status">
+            <div
+              className={`settings-webdav-restore-dialog__feedback${downloadProgress ? ' has-progress' : ''}`}
+              role="status"
+            >
               <span className="settings-webdav__spinner" aria-hidden="true" />
-              <span>{restoreStatus}</span>
+              {downloadProgress ? (
+                <div className="settings-webdav-restore-dialog__progress">
+                  <div className="settings-webdav-restore-dialog__progress-heading">
+                    <span>{restoreStatus}</span>
+                    <strong>{downloadProgress.percent}%</strong>
+                  </div>
+                  <div
+                    className="settings-webdav-restore-dialog__progress-track"
+                    role="progressbar"
+                    aria-label={restoreStatus}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={downloadProgress.percent}
+                  >
+                    <span style={{ width: `${downloadProgress.percent}%` }} />
+                  </div>
+                  <small>
+                    {formatSyncBytes(downloadProgress.completedBytes, locale)} /{' '}
+                    {formatSyncBytes(downloadProgress.totalBytes, locale)}
+                  </small>
+                </div>
+              ) : <span>{restoreStatus}</span>}
             </div>
           ) : error ? (
             <div className="settings-webdav-restore-dialog__feedback is-error" role="alert">
@@ -277,6 +307,23 @@ export function WebDavRestorePlanDialog({
   );
 
   return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
+}
+
+function restoreDownloadProgress(operation?: DesktopWebDavSyncOperationState): {
+  completedBytes: number;
+  percent: number;
+  totalBytes: number;
+} | null {
+  if (operation?.phase !== 'downloading' || !operation.totalBytes) return null;
+  const completedBytes = Math.min(
+    operation.totalBytes,
+    Math.max(0, operation.completedBytes ?? 0),
+  );
+  return {
+    completedBytes,
+    percent: Math.floor((completedBytes / operation.totalBytes) * 100),
+    totalBytes: operation.totalBytes,
+  };
 }
 
 function RestoreMetric({

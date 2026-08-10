@@ -18,6 +18,7 @@ const NONCE_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const ENVELOPE_MAGIC = Buffer.from('SETSDAV1', 'ascii');
 const ENVELOPE_HEADER_BYTES = ENVELOPE_MAGIC.byteLength + NONCE_BYTES;
+export const WEB_DAV_ENCRYPTED_OBJECT_OVERHEAD_BYTES = ENVELOPE_HEADER_BYTES + AUTH_TAG_BYTES;
 
 export function generateWebDavRecoveryKey(): string {
   return `${RECOVERY_KEY_PREFIX}${randomBytes(KEY_BYTES).toString('base64url')}`;

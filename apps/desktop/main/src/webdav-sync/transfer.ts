@@ -198,23 +198,46 @@ export async function downloadSnapshotForRestore(input: {
   let portableProjects: PortableProjectRecord[] = [];
   let projectCatalogFound = false;
   let completedBytes = 0;
+  let lastReportedBytes = 0;
+  const progressStepBytes = Math.max(64 * 1024, Math.ceil(totalBytes / 100));
+  const reportDownloadProgress = (
+    nextCompletedBytes: number,
+    completedItems: number,
+    force = false,
+  ) => {
+    if (
+      !force
+      && nextCompletedBytes < totalBytes
+      && nextCompletedBytes - lastReportedBytes < progressStepBytes
+    ) return;
+    lastReportedBytes = nextCompletedBytes;
+    input.onProgress?.({
+      phase: 'downloading',
+      completedBytes: nextCompletedBytes,
+      totalBytes,
+      completedItems,
+      totalItems: items.length,
+    });
+  };
   try {
+    reportDownloadProgress(0, 0, true);
     for (let index = 0; index < items.length; index += 1) {
       throwIfAborted(input.signal);
       const item = items[index]!;
       const encryptedPath = path.join(input.workRoot, 'downloads', item.objectName);
-      input.onProgress?.({
-        phase: 'downloading',
-        completedBytes,
-        totalBytes,
-        completedItems: index,
-        totalItems: items.length,
-      });
       await input.repository.downloadEncryptedObject(
         input.manifest,
         item,
         encryptedPath,
         input.signal,
+        (receivedBytes, encryptedTotalBytes) => {
+          const itemCompletedBytes = proportionalBytes(
+            item.size,
+            receivedBytes,
+            encryptedTotalBytes,
+          );
+          reportDownloadProgress(completedBytes + itemCompletedBytes, index);
+        },
       );
       if (item.kind === 'file') {
         const destinationPath = restoredFilePath(input.stagingRoot, item.logicalPath);
@@ -249,6 +272,7 @@ export async function downloadSnapshotForRestore(input: {
         }
       }
       completedBytes += item.size;
+      reportDownloadProgress(completedBytes, index + 1, true);
     }
     return {
       portableProjects,
@@ -259,6 +283,11 @@ export async function downloadSnapshotForRestore(input: {
   } finally {
     for (const item of restoredCredentialItems) item.data.fill(0);
   }
+}
+
+function proportionalBytes(totalBytes: number, completedBytes: number, measuredTotalBytes: number): number {
+  if (totalBytes <= 0 || measuredTotalBytes <= 0) return 0;
+  return Math.min(totalBytes, Math.floor((completedBytes / measuredTotalBytes) * totalBytes));
 }
 
 export async function downloadSnapshotProjectCatalog(input: {

@@ -137,7 +137,11 @@ export class WebDavClient {
   async downloadFile(
     parts: readonly string[],
     destinationPath: string,
-    options: { maxBytes: number; signal?: AbortSignal },
+    options: {
+      maxBytes: number;
+      signal?: AbortSignal;
+      onProgress?: (receivedBytes: number) => void;
+    },
   ): Promise<void> {
     const response = await this.request(parts, { method: 'GET' }, options.signal, true);
     await assertWebDavStatus(response, [200], '无法下载 WebDAV 备份对象。');
@@ -150,9 +154,16 @@ export class WebDavClient {
     const limiter = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
         received += chunk.byteLength;
-        callback(received <= options.maxBytes
-          ? null
-          : new Error('WebDAV 备份对象超过清单声明的大小。'), chunk);
+        if (received > options.maxBytes) {
+          callback(new Error('WebDAV 备份对象超过清单声明的大小。'));
+          return;
+        }
+        try {
+          options.onProgress?.(received);
+          callback(null, chunk);
+        } catch (error) {
+          callback(error instanceof Error ? error : new Error(String(error)));
+        }
       },
     });
     await mkdir(path.dirname(destinationPath), { recursive: true });
