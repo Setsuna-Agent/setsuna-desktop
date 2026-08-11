@@ -279,15 +279,10 @@ try {
   Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyWorkspaceAcl
   # Preserve private traversal while making inherited child writes broad. The
   # read-only capability deny must outrank this inherited host allow.
-  $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
-  $readOnlyBroadAcl = Get-Acl -LiteralPath $readOnlyWorkspace
-  $readOnlyBroadAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-    $everyone,
-    [System.Security.AccessControl.FileSystemRights]::Write,
-    [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
-    [System.Security.AccessControl.PropagationFlags]::None,
-    [System.Security.AccessControl.AccessControlType]::Allow
-  ))
+  $readOnlyBroadAcl = [System.Security.AccessControl.DirectorySecurity]::new()
+  $readOnlyBroadAcl.SetSecurityDescriptorSddlForm(
+    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)(A;OICI;GW;;;WD)"
+  )
   Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyBroadAcl
   $readOnlyNested = Join-Path $readOnlyWorkspace 'nested'
   New-Item -ItemType Directory -Force -Path $readOnlyNested | Out-Null
