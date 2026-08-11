@@ -7,8 +7,9 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 pub const STATE_SCHEMA_VERSION: u32 = 1;
-pub const OFFLINE_USERNAME: &str = "SetsunaSandboxOffline";
-pub const ONLINE_USERNAME: &str = "SetsunaSandboxOnline";
+// NetUserAdd-backed local SAM account names are limited to 20 characters.
+pub const OFFLINE_USERNAME: &str = "SetsunaSbOffline";
+pub const ONLINE_USERNAME: &str = "SetsunaSbOnline";
 pub const SANDBOX_GROUP: &str = "SetsunaSandboxUsers";
 pub const PROXY_PORT_START: u16 = 61_080;
 pub const PROXY_PORT_END: u16 = 61_089;
@@ -334,5 +335,15 @@ mod tests {
             .expect("installed")
             .capabilities
             .contains_key("policy"));
+    }
+
+    #[test]
+    fn managed_usernames_fit_windows_sam_limit() {
+        for username in [OFFLINE_USERNAME, ONLINE_USERNAME] {
+            assert!(
+                username.encode_utf16().count() <= 20,
+                "managed username exceeds the Windows local SAM limit: {username}"
+            );
+        }
     }
 }

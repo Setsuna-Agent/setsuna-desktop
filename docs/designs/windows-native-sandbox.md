@@ -65,7 +65,8 @@ Electron main 持有 sidecar 路径、UAC 生命周期和沙箱出口。preload 
 
 ## 文件系统权限
 
-安装创建 `SetsunaSandboxUsers`、`SetsunaSandboxOffline` 和 `SetsunaSandboxOnline`。执行时：
+安装创建 `SetsunaSandboxUsers`、`SetsunaSbOffline` 和 `SetsunaSbOnline`。两个用户名特意控制在
+Windows 本地 SAM 账户的 20 字符限制内。执行时：
 
 1. 本次登录唯一的 logon SID 同时存在于账户 token 和 restricting SID 列表，避免并发或历史工作区串读；
 2. policy-scoped capability SID 作为 restricting SID，满足 write-restricted 的第二次写访问检查；
