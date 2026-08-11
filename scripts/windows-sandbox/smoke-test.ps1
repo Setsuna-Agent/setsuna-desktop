@@ -281,6 +281,16 @@ try {
   New-Item -ItemType Directory -Force -Path $readOnlyNested | Out-Null
   $readOnlyExisting = Join-Path $readOnlyNested 'existing.txt'
   [System.IO.File]::WriteAllText($readOnlyExisting, 'read-only-existing', $utf8NoBom)
+  # The capability deny must remain authoritative even for a pre-existing
+  # child whose host ACL is intentionally broad.
+  $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
+  $readOnlyExistingAcl = Get-Acl -LiteralPath $readOnlyExisting
+  $readOnlyExistingAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+    $everyone,
+    [System.Security.AccessControl.FileSystemRights]::Modify,
+    [System.Security.AccessControl.AccessControlType]::Allow
+  ))
+  Set-Acl -LiteralPath $readOnlyExisting -AclObject $readOnlyExistingAcl
   [System.IO.File]::WriteAllText(
     (Join-Path $readOnlyWorkspace 'read-only-probe.cmd'),
     "@echo off`r`ntype nested\existing.txt >NUL || exit /b 40`r`necho changed>nested\existing.txt 2>NUL`r`nexit /b 0`r`n",
@@ -289,6 +299,7 @@ try {
   New-Item -ItemType Directory -Force -Path $protected | Out-Null
   New-Item -ItemType Directory -Force -Path $externalWritable | Out-Null
   New-Item -ItemType Directory -Force -Path $commandTemp | Out-Null
+  Set-Acl -LiteralPath $externalWritable -AclObject $readOnlyWorkspaceAcl
 
   Copy-Item -LiteralPath $probeBinaryPath -Destination (Join-Path $workspace 'windows-network-probe.exe')
   $outsideFile = Join-Path $protected 'forbidden.txt'
