@@ -102,8 +102,8 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
 sandbox 语义一致。需要 path-specific read deny 的策略会以 unsupported-policy 失败，而不是静默降级。
 
-CI 的真实账户 smoke 会让 read-only workspace 继承 `Everyone:Modify`，验证宽泛宿主 ACL 仍不能突破写入
-边界；workspace-write 则只能由 capability 或本次 logon SID 命中第二次写检查。
+CI 的真实账户 smoke 会让未授权外部目录继承 `Everyone:Modify`，验证宽泛宿主 ACL 仍不能突破写入边界；
+workspace-write 只能由 capability 或本次 logon SID 命中第二次写检查。
 
 ## 网络
 
@@ -148,9 +148,9 @@ Windows runtime 会把固定版本、固定 SHA-256 的 curl-for-win 放在 shel
 ## 构建与验证
 
 - CI 在一次性 `windows-2025` runner 上执行 rustfmt、Windows-target clippy、Rust tests，以及真实受限
-  身份、带 `Everyone:Modify` 的 read-only workspace、已有 workspace 文件写入、protected root、带宽泛
-  Authenticated Users 写权限的外部目录、offline/online 出站、认证代理、临时 ACL 回收和共享父目录不变的
-  smoke test；网络策略
+  身份、私有 read-only workspace 的既有子项、已有 workspace 文件写入、protected root、带
+  `Everyone:Modify` 的未授权外部目录、offline/online 出站、认证代理、临时 ACL 回收和共享父目录不变的 smoke
+  test；网络策略
   使用随测试构建、但不进入产品包的原生 probe 验证，最后无条件卸载测试身份；
 - release 的 Windows job 从锁定的 `Cargo.lock` 构建 MSVC release binary；
 - before-pack 复制 binary、Apache-2.0 license、NOTICE 和 SHA-256 metadata；

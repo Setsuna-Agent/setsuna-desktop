@@ -276,14 +276,6 @@ try {
   $readOnlyWorkspaceAcl.SetSecurityDescriptorSddlForm(
     "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)"
   )
-  # A broad host allow must not bypass the restricted token's write boundary.
-  $readOnlyWorkspaceAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-    [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
-    [System.Security.AccessControl.FileSystemRights]::Modify,
-    [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
-    [System.Security.AccessControl.PropagationFlags]::None,
-    [System.Security.AccessControl.AccessControlType]::Allow
-  ))
   Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyWorkspaceAcl
   $readOnlyNested = Join-Path $readOnlyWorkspace 'nested'
   New-Item -ItemType Directory -Force -Path $readOnlyNested | Out-Null
@@ -298,10 +290,11 @@ try {
   New-Item -ItemType Directory -Force -Path $externalWritable | Out-Null
   New-Item -ItemType Directory -Force -Path $commandTemp | Out-Null
 
-  $authenticatedUsers = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-11')
+  # A broad host allow must not bypass the restricted token's write boundary.
+  $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
   $externalAcl = Get-Acl -LiteralPath $externalWritable
   $externalAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-    $authenticatedUsers,
+    $everyone,
     [System.Security.AccessControl.FileSystemRights]::Modify,
     [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
     [System.Security.AccessControl.PropagationFlags]::None,
