@@ -72,6 +72,11 @@ button {
   cursor: default;
 }
 
+/* 未定制焦点态的控件也应跟随主题色，避免回落到 Chromium 的平台默认色。 */
+:focus-visible {
+  outline-color: var(--app-primary);
+}
+
 .desktop-agent-project:focus-visible,
 .desktop-agent-command:focus-visible,
 .chat-sidebar-user__trigger:focus-visible,
@@ -79,6 +84,7 @@ button {
 .chat-file-review-panel__tab-close:focus-visible,
 .chat-file-review-panel__heading-action:focus-visible,
 .chat-file-review-panel__close:focus-visible,
+.chat-goal-status__action:focus-visible,
 .sd-page-back:focus-visible,
 .chat-user-settings__tabs button:focus-visible,
 .chat-user-settings__option-button:focus-visible,

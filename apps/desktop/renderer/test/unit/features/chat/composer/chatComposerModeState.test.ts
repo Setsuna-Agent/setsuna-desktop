@@ -8,11 +8,11 @@ import {
   clearChatComposerGoalMode,
   clearChatComposerPlanMode,
   createChatComposerModelCapabilities,
+  enableChatComposerGoalMode,
+  enableChatComposerPlanMode,
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
-  toggleChatComposerGoalMode,
-  toggleChatComposerPlanMode,
   type ChatComposerLocalModes,
 } from '../../../../../src/features/chat/composer/chatComposerModeState.js';
 
@@ -68,18 +68,18 @@ describe('chat composer mode state', () => {
     expect(capabilities.supportsImageInput).toBe(false);
   });
 
-  it('keeps Plan and local Goal mutually exclusive', () => {
+  it('enables Plan and local Goal idempotently while keeping them mutually exclusive', () => {
     const empty: ChatComposerLocalModes = {
       goalModeEnabled: false,
       planModeEnabled: false,
     };
-    const goal = toggleChatComposerGoalMode(empty);
-    const plan = toggleChatComposerPlanMode(goal);
+    const goal = enableChatComposerGoalMode(empty);
+    const plan = enableChatComposerPlanMode(goal);
 
     expect(goal).toEqual({ goalModeEnabled: true, planModeEnabled: false });
     expect(plan).toEqual({ goalModeEnabled: false, planModeEnabled: true });
-    expect(toggleChatComposerPlanMode(plan)).toEqual(empty);
-    expect(toggleChatComposerGoalMode(goal)).toEqual(empty);
+    expect(enableChatComposerPlanMode(plan)).toBe(plan);
+    expect(enableChatComposerGoalMode(goal)).toBe(goal);
   });
 
   it('resets only thread-scoped Goal on identity changes and both modes after send', () => {

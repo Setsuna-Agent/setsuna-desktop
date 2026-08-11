@@ -357,8 +357,6 @@ export class AgentLoop {
       hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
       waitForCancellationWrites: (threadId) => this.turnTermination.waitForThread(threadId),
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      publishMessage: (threadId, turnId, message) =>
-        this.publishMessage(threadId, turnId, message),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,

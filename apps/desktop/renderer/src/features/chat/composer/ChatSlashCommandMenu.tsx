@@ -4,7 +4,6 @@ import {
   Boxes,
   CheckSquare,
   CircleGauge,
-  Database,
   ListChecks,
   MessageSquare,
   ShieldCheck,
@@ -25,16 +24,13 @@ export type SlashCommandMenuItem =
       kind: 'action';
       loading?: boolean;
       progressPercent?: number;
-      scope?: string;
       title: string;
-      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'memory-mode' | 'plan' | 'review' | 'side-chat' | 'usage';
-      checked?: boolean;
+      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'plan' | 'review' | 'side-chat' | 'usage';
     }
   | {
       description?: string;
       key: string;
       kind: 'model';
-      scope?: string;
       title: string;
     }
   | {
@@ -76,11 +72,10 @@ export function ChatSlashCommandMenu({
                   ref={index === activeIndex ? activeOptionRef : undefined}
                   key={item.key}
                   type="button"
-                  className={`chat-command-menu__item ${index === activeIndex ? 'is-active' : ''}`}
+                  className={`chat-command-menu__item ${item.kind === 'skill' ? 'chat-command-menu__item--skill' : ''} ${index === activeIndex ? 'is-active' : ''}`}
                   disabled={item.kind === 'action' && item.disabled}
                   role="option"
                   aria-selected={index === activeIndex}
-                  aria-pressed={item.kind === 'action' && isSwitchAction(item.type) ? Boolean(item.checked) : undefined}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
@@ -103,21 +98,17 @@ export function ChatSlashCommandMenu({
                       <span className="chat-command-menu__item-desc">{item.description}</span>
                     ) : null}
                   </span>
-                  {item.kind === 'action' && isSwitchAction(item.type) ? (
-                    <MemoryCommandSwitch checked={Boolean(item.checked)} disabled={Boolean(item.disabled)} />
-                  ) : (
+                  {item.kind === 'skill' ? (
                     <span className="chat-command-menu__item-scope">
-                      {item.kind === 'skill'
-                        ? unresolvedSkillMcpDependencyCount(item.skill)
-                          ? t('chat.command.needsConfiguration')
-                          : item.skill.kind === 'user'
-                            ? t('chat.command.personal')
-                            : item.skill.kind === 'plugin'
-                              ? t('chat.command.plugin')
-                              : t('chat.command.builtIn')
-                        : item.scope}
+                      {unresolvedSkillMcpDependencyCount(item.skill)
+                        ? t('chat.command.needsConfiguration')
+                        : item.skill.kind === 'user'
+                          ? t('chat.command.personal')
+                          : item.skill.kind === 'plugin'
+                            ? t('chat.command.plugin')
+                            : t('chat.command.builtIn')}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -144,7 +135,6 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.type === 'usage') return <CircleGauge className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'review') return <ShieldCheck className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'side-chat') return <MessageSquare className="chat-command-menu__item-icon" size={15} />;
-  if (item.type === 'memory-mode') return <Database className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {
     return (
       <Progress
@@ -160,16 +150,4 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   }
   if (item.type === 'clear-context') return <Trash2 className="chat-command-menu__item-icon" size={15} />;
   return <CheckSquare className="chat-command-menu__item-icon" size={15} />;
-}
-
-function MemoryCommandSwitch({ checked, disabled }: { checked: boolean; disabled: boolean }) {
-  return (
-    <span className={`chat-command-menu__item-switch ${checked ? 'is-on' : ''} ${disabled ? 'is-disabled' : ''}`} aria-hidden="true">
-      <span />
-    </span>
-  );
-}
-
-function isSwitchAction(type: Extract<SlashCommandMenuItem, { kind: 'action' }>['type']): boolean {
-  return type === 'memory-mode' || type === 'plan' || type === 'collaboration' || type === 'goal';
 }

@@ -275,65 +275,6 @@
   white-space: nowrap;
 }
 
-.chat-goal-marker {
-  width: min(760px, 100%);
-  color: var(--app-text-secondary);
-  font-size: 12px;
-}
-
-.chat-goal-marker__summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  padding: 3px 6px;
-  border-radius: var(--app-radius-sm);
-  cursor: pointer;
-  list-style: none;
-}
-
-.chat-goal-marker__summary::-webkit-details-marker {
-  display: none;
-}
-
-.chat-goal-marker__summary:hover {
-  background: color-mix(in srgb, var(--app-primary) 7%, transparent);
-}
-
-.chat-goal-marker__summary svg {
-  flex: 0 0 auto;
-  color: var(--app-primary);
-}
-
-.chat-goal-marker__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-goal-marker__usage {
-  margin-left: auto;
-  color: var(--app-text-muted);
-  white-space: nowrap;
-}
-
-.chat-goal-marker__detail {
-  display: grid;
-  gap: 5px;
-  margin: 3px 6px 5px 26px;
-  padding-left: 10px;
-  border-left: 1px solid color-mix(in srgb, var(--app-primary) 28%, var(--app-border));
-  overflow-wrap: anywhere;
-}
-
-.chat-goal-marker__detail p {
-  margin: 0;
-}
-
-.chat-goal-marker__reason {
-  color: var(--app-text-muted);
-}
-
 .chat-guidance-list {
   display: grid;
   gap: 5px;
@@ -431,7 +372,7 @@
 }
 
 .chat-user-message-kind--goal {
-  color: color-mix(in srgb, var(--app-warning) 80%, var(--app-text));
+  color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
 .chat-workspace-mention,

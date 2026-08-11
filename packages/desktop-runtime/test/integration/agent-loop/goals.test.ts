@@ -527,22 +527,9 @@ describe('agent loop persistent goals', () => {
         tokensUsed: 5,
         stopReason: { code: 'userPaused' },
       });
-      expect(saved?.messages).toContainEqual(expect.objectContaining({
-        goalMode: expect.objectContaining({
-          kind: 'paused',
-          goal: expect.objectContaining({ tokensUsed: 5 }),
-        }),
-      }));
-      expect(events).toContainEqual(expect.objectContaining({
-        type: 'thread.goal_updated',
-        payload: expect.objectContaining({
-          lifecycleMessage: expect.objectContaining({
-            goalMode: expect.objectContaining({ kind: 'paused' }),
-          }),
-        }),
-      }));
+      expect(saved?.messages.some((message) => message.goalMode)).toBe(false);
       expect(events.some((event) => (
-        event.type === 'message.created' && event.payload.message.goalMode?.kind === 'paused'
+        event.type === 'thread.goal_updated' && event.payload.lifecycleMessage
       ))).toBe(false);
     });
 
@@ -616,79 +603,13 @@ describe('agent loop persistent goals', () => {
       const clearedEvent = events.find((event) => event.type === 'thread.goal_cleared');
 
       expect(cleared?.goal).toBeUndefined();
-      expect(cleared?.messages).toContainEqual(expect.objectContaining({
-        goalMode: expect.objectContaining({ kind: 'cleared' }),
-      }));
+      expect(cleared?.messages.some((message) => message.goalMode)).toBe(false);
       expect(clearedEvent).toMatchObject({
-        payload: {
-          cleared: true,
-          lifecycleMessage: expect.objectContaining({
-            goalMode: expect.objectContaining({
-              kind: 'cleared',
-              goal: expect.objectContaining({ tokensUsed: 5 }),
-            }),
-          }),
-        },
+        payload: { cleared: true },
       });
       if (clearedEvent?.type === 'thread.goal_cleared') {
-        expect(clearedEvent.payload.lifecycleMessage).not.toHaveProperty('turnId');
+        expect(clearedEvent.payload.lifecycleMessage).toBeUndefined();
       }
-      expect(events.filter((event) => (
-        event.type === 'message.created'
-        && event.payload.message.goalMode?.kind === 'cleared'
-      ))).toHaveLength(0);
-    });
-
-  it('accounts an already-cancelled registered Goal turn before clearing it', async () => {
-      const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Cancelled then cleared goal' });
-      let releaseProvider: () => void = () => undefined;
-      const settleAfterAbort = new Promise<void>((resolve) => {
-        releaseProvider = resolve;
-      });
-      const modelClient = new CancellableModelClient({
-        inputTokens: 3,
-        outputTokens: 2,
-        totalTokens: 5,
-      }, settleAfterAbort);
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient,
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        ids,
-      });
-
-      await loop.setThreadGoal(thread.id, { objective: 'Cancel and clear safely', status: 'active' });
-      await modelClient.waitUntilAbortListenerReady();
-      await waitForTestState(
-        () => threadStore.listEvents(thread.id, 0),
-        (events) => events.some((event) => event.type === 'token.count'),
-        (events) => `Timed out waiting for pre-cancel usage; events=${JSON.stringify(events)}`,
-      );
-      const turnId = loop.activeTurnId(thread.id);
-      expect(turnId).toEqual(expect.any(String));
-      await loop.cancelTurn(thread.id, turnId!);
-      await waitForModelAbort(modelClient);
-      expect(loop.activeTurnId(thread.id)).toBeNull();
-
-      await loop.clearThreadGoal(thread.id);
-      const clearedEvent = (await threadStore.listEvents(thread.id, 0))
-        .find((event) => event.type === 'thread.goal_cleared');
-
-      expect(clearedEvent).toMatchObject({
-        payload: {
-          lifecycleMessage: expect.objectContaining({
-            goalMode: expect.objectContaining({
-              kind: 'cleared',
-              goal: expect.objectContaining({ tokensUsed: 5 }),
-            }),
-          }),
-        },
-      });
-      releaseProvider();
-      await loop.shutdown();
     });
 
   it('does not resurrect a Goal cleared while settlement is reading its turn events', async () => {

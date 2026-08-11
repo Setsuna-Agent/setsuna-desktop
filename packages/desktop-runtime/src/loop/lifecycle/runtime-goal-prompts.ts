@@ -1,6 +1,6 @@
 import {
   cloneRuntimeThreadGoal,
-  type RuntimeGoalLifecycleKind,
+  type RuntimeGoalExitKind,
   type RuntimeMessage,
   type RuntimeThreadGoal,
 } from '@setsuna-desktop/contracts';
@@ -8,9 +8,9 @@ import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import { neutralizePromptClosingTags } from '../context/prompt-utils.js';
 
-export function goalLifecycleMessage(
+export function goalExitMessage(
   goal: RuntimeThreadGoal,
-  kind: RuntimeGoalLifecycleKind,
+  kind: RuntimeGoalExitKind,
   ids: IdGenerator,
   clock: Clock,
   turnId?: string,
@@ -24,7 +24,7 @@ export function goalLifecycleMessage(
     visibility: 'transcript',
     createdAt: clock.now().toISOString(),
     status: 'complete',
-    content: goalLifecycleSummary(kind, snapshot),
+    content: goalExitSummary(kind, snapshot),
     goalMode: { kind, goal: snapshot },
   };
 }
@@ -78,22 +78,12 @@ function goalPolicyMessage(
   };
 }
 
-function goalLifecycleSummary(kind: RuntimeGoalLifecycleKind, goal: RuntimeThreadGoal): string {
-  if (kind === 'active') return `Goal started: ${goal.objective}`;
-  if (kind === 'continuation') return `Goal continued: ${goal.objective}`;
-  if (kind === 'resumed') return `Goal resumed: ${goal.objective}`;
-  if (kind === 'budgetLimited') return `Goal paused: ${goal.objective}`;
-  if (kind === 'paused') {
-    return `The user or runtime paused this goal. Do not continue it until the user explicitly resumes it.\n\nObjective: ${goal.objective}`;
-  }
-  if (kind === 'cleared') {
-    return `The user cleared this goal. Stop pursuing it.\n\nObjective was: ${goal.objective}`;
-  }
+function goalExitSummary(kind: RuntimeGoalExitKind, goal: RuntimeThreadGoal): string {
   if (kind === 'complete') {
     return `The goal is complete.\n\nObjective: ${goal.objective}\nUsage: ${goalUsageSummary(goal)}`;
   }
   const reason = goal.stopReason?.message ?? goal.stopReason?.code ?? kind;
-  return `The runtime stopped this goal (${reason}). Do not continue it until the user explicitly resumes or replaces it.\n\nObjective: ${goal.objective}`;
+  return `The runtime stopped this goal (${reason}). Do not continue it until the user explicitly resumes or replaces it.\n\nObjective: ${goal.objective}\nUsage: ${goalUsageSummary(goal)}`;
 }
 
 function activeGoalPrompt(): string {

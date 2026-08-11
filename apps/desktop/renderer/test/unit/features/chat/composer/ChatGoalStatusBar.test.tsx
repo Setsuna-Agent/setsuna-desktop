@@ -4,10 +4,8 @@ import type { RuntimeThreadGoal, RuntimeThreadGoalPatch } from '@setsuna-desktop
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  ChatGoalStatusBar,
-  formatGoalDuration,
-} from '../../../../../src/features/chat/composer/ChatGoalStatusBar.js';
+import { ChatGoalStatusBar } from '../../../../../src/features/chat/composer/ChatGoalStatusBar.js';
+import { formatGoalDuration } from '../../../../../src/features/chat/goalFormatting.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 
 afterEach(() => {

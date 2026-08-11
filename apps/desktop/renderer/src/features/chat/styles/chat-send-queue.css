@@ -61,8 +61,8 @@
 }
 
 .chat-send-queue__marker.is-goal {
-  color: var(--app-warning);
-  opacity: 0.94;
+  color: var(--app-primary);
+  opacity: 0.9;
 }
 
 .chat-send-queue__content {

@@ -166,7 +166,8 @@ describe('ChatComposer view state characterization', () => {
       closeUsagePanel: vi.fn(),
       createSendOptions: vi.fn(() => ({})),
       disablePlanMode: vi.fn(),
-      goalEnabled: false,
+      enableGoalMode: vi.fn(),
+      enablePlanMode: vi.fn(),
       goalModeEnabled: false,
       hasProtectedModeState: false,
       modelOpenSignal: 0,
@@ -185,8 +186,6 @@ describe('ChatComposer view state characterization', () => {
       thinkingEffort: '',
       thinkingEnabled: false,
       thinkingMenuOpen: false,
-      toggleGoalMode: vi.fn(),
-      togglePlanMode: vi.fn(),
       toggleUsagePanel: vi.fn(),
       usagePanelOpen: false,
     };
@@ -221,7 +220,6 @@ describe('ChatComposer view state characterization', () => {
   it('keeps editing, plan, collaboration and goal badges in the footer', () => {
     composerHarness.queuedEdit.editing = true;
     composerHarness.mode.planModeEnabled = true;
-    composerHarness.mode.goalEnabled = true;
     composerHarness.mode.goalModeEnabled = true;
 
     const html = renderComposer({
@@ -304,7 +302,6 @@ function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> =
       onSend={vi.fn(async () => true)}
       onSetMultiAgentEnabled={vi.fn()}
       onStartThreadReview={vi.fn()}
-      onThreadMemoryModeChange={vi.fn()}
       {...overrides}
     />,
   );

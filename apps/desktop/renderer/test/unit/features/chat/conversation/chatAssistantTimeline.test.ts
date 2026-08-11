@@ -74,6 +74,27 @@ describe('createAssistantRunTimeline', () => {
     });
   });
 
+  it('keeps answer text visible when its only tools update Plan and Goal state', () => {
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_final',
+      role: 'assistant',
+      content: '分析已经完成，正文不应折叠。',
+      createdAt: '2026-08-11T00:00:00.000Z',
+      status: 'complete',
+      toolRuns: [
+        { id: 'plan_update', name: 'update_plan', status: 'success' },
+        { id: 'goal_update', name: 'update_goal', status: 'success' },
+      ],
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([
+      {
+        type: 'content',
+        content: '分析已经完成，正文不应折叠。',
+      },
+    ]);
+  });
+
   it('does not leave an empty work block for completed closed thinking', () => {
     const segments: RuntimeMessage[] = [
       {

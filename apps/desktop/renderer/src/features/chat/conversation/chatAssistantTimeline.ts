@@ -1,6 +1,7 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { isRuntimeFileMutationRun } from '../tool-runs/runtimeFileChanges.js';
+import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
 
@@ -189,7 +190,7 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
     }
   }
 
-  const toolRuns = segment.toolRuns ?? [];
+  const toolRuns = (segment.toolRuns ?? []).filter((run) => !isTranscriptHiddenRuntimeToolRun(run));
   if (toolRuns.length) {
     items.push({ type: 'toolRuns', id: `${segment.id}:tools`, segment, toolRuns });
   }
@@ -274,7 +275,7 @@ export function shouldShowAssistantTrailingLoading({
   return active
     && status !== 'error'
     && hasRenderableContent
-    && !toolRuns.some(isActiveRuntimeToolRun);
+    && !toolRuns.some((run) => !isTranscriptHiddenRuntimeToolRun(run) && isActiveRuntimeToolRun(run));
 }
 
 function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {

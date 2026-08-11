@@ -145,11 +145,8 @@ describe('agent loop Goal recovery', () => {
       timeUsedSeconds: 10,
       stopReason: { code: 'runtimeReloaded' },
     });
-    expect(restored?.messages).toContainEqual(expect.objectContaining({
-      role: 'developer',
-      visibility: 'transcript',
-      goalMode: expect.objectContaining({ kind: 'paused' }),
-    }));
+    expect(restored?.messages.some((message) => message.goalMode)).toBe(false);
     expect(modelClient.requests).toEqual([]);
   });
+
 });

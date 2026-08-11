@@ -16,11 +16,11 @@ import {
   createChatComposerModelCapabilities,
   emptyChatComposerLocalModes,
   emptyChatThinkingSelection,
+  enableChatComposerGoalMode,
+  enableChatComposerPlanMode,
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
-  toggleChatComposerGoalMode,
-  toggleChatComposerPlanMode,
 } from './chatComposerModeState.js';
 import {
   createChatComposerSendOptions,
@@ -71,8 +71,8 @@ export function useChatComposerModeController({
     ));
   }, []);
 
-  const togglePlanMode = useCallback(() => {
-    setLocalModes(toggleChatComposerPlanMode);
+  const enablePlanMode = useCallback(() => {
+    setLocalModes(enableChatComposerPlanMode);
   }, []);
 
   const disablePlanMode = useCallback(() => {
@@ -84,14 +84,9 @@ export function useChatComposerModeController({
     setLocalModes(clearChatComposerGoalMode);
   }, [activeGoal, onClearThreadGoal]);
 
-  const toggleGoalMode = useCallback(() => {
-    if (activeGoal) {
-      void onClearThreadGoal();
-      setLocalModes(clearChatComposerGoalMode);
-      return;
-    }
-    setLocalModes(toggleChatComposerGoalMode);
-  }, [activeGoal, onClearThreadGoal]);
+  const enableGoalMode = useCallback(() => {
+    if (!activeGoal) setLocalModes(enableChatComposerGoalMode);
+  }, [activeGoal]);
 
   const openModelPicker = useCallback(() => {
     setModelOpenSignal((value) => value + 1);
@@ -142,7 +137,8 @@ export function useChatComposerModeController({
     closeUsagePanel,
     createSendOptions,
     disablePlanMode,
-    goalEnabled: localModes.goalModeEnabled || Boolean(activeGoal),
+    enableGoalMode,
+    enablePlanMode,
     goalModeEnabled: localModes.goalModeEnabled,
     hasProtectedModeState: Boolean(
       thinkingSelection.enabled
@@ -161,8 +157,6 @@ export function useChatComposerModeController({
     thinkingEffort: thinkingSelection.effort,
     thinkingEnabled: thinkingSelection.enabled,
     thinkingMenuOpen,
-    toggleGoalMode,
-    togglePlanMode,
     toggleUsagePanel,
     usagePanelOpen,
   };

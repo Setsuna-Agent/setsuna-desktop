@@ -1,15 +1,27 @@
-import type { RuntimeMessage, RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeGoalExitKind,
+  RuntimeGoalExitNotice,
+  RuntimeGoalLifecycleKind,
+  RuntimeMessage,
+  RuntimeMessageAttachment,
+} from '@setsuna-desktop/contracts';
 import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
-import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import {
+  DEFAULT_APP_LOCALE,
+  translate,
+  type AppLocale,
+  type Translate,
+} from '../../../shared/i18n/I18nProvider.js';
+import { formatGoalExitSummary } from '../goalFormatting.js';
+import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { visibleMarkdownContent } from './chatThinkingContent.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
+  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
-  | { type: 'goal'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
 export type ChatDisplayItem = ChatTranscriptItem;
@@ -99,9 +111,13 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       continue;
     }
     if (message.role === 'system' || message.role === 'developer') {
-      if (message.goalMode) {
+      if (message.goalMode && isGoalExitKind(message.goalMode.kind)) {
         flushAssistantRun();
-        items.push({ type: 'goal', id: message.id, message });
+        const assistantItem = lastAssistantItemForTurn(items, message.turnId);
+        if (assistantItem) {
+          assistantItem.goalExit = { kind: message.goalMode.kind, goal: message.goalMode.goal };
+          assistantItem.messageIds.push(message.id);
+        }
       } else if (message.reviewMode) {
         // 普通 system/developer 消息不进 transcript；显式生命周期标记作为 UI 事件。
         flushAssistantRun();
@@ -338,15 +354,19 @@ export function activeAssistantRunItemId(items: ChatDisplayItem[], activeTurnId:
 export function assistantRunCopyText(
   item: Extract<ChatDisplayItem, { type: 'assistant' }>,
   t: Translate = defaultTranslate,
+  locale: AppLocale = DEFAULT_APP_LOCALE,
 ): string {
-  return item.segments
+  const content = item.segments
     .flatMap((segment) => [
       visibleMarkdownContent(segment.content).trim(),
-      ...(segment.toolRuns ?? []).map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
+      ...(segment.toolRuns ?? [])
+        .filter((run) => !isTranscriptHiddenRuntimeToolRun(run))
+        .map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
       segment.error?.trim() ?? '',
     ])
-    .filter(Boolean)
-    .join('\n\n');
+    .filter(Boolean);
+  if (item.goalExit) content.push(formatGoalExitSummary(item.goalExit, t, locale));
+  return content.join('\n\n');
 }
 
 function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefined): boolean {
@@ -355,13 +375,28 @@ function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefi
 
 function itemIncludesTurn(item: ChatTranscriptItem, turnId: string): boolean {
   if (item.type === 'assistant') return assistantRunIncludesTurn(item, turnId);
-  return item.type === 'user' || item.type === 'review' || item.type === 'context' || item.type === 'goal'
+  return item.type === 'user' || item.type === 'review' || item.type === 'context'
     ? item.message.turnId === turnId
     : false;
 }
 
+function isGoalExitKind(kind: RuntimeGoalLifecycleKind): kind is RuntimeGoalExitKind {
+  return kind === 'complete' || kind === 'blocked' || kind === 'usageLimited';
+}
+
 function assistantRunIncludesTurn(item: Extract<ChatDisplayItem, { type: 'assistant' }>, turnId: string): boolean {
   return item.turnId === turnId || item.segments.some((message) => message.turnId === turnId);
+}
+
+function lastAssistantItemForTurn(
+  items: ChatTranscriptItem[],
+  turnId: string | undefined,
+): Extract<ChatTranscriptItem, { type: 'assistant' }> | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.type === 'assistant' && (!turnId || assistantRunIncludesTurn(item, turnId))) return item;
+  }
+  return null;
 }
 
 function assistantHasProcessingEvidence(message: RuntimeMessage): boolean {
@@ -379,7 +414,7 @@ function transcriptItemMessageCount(item: ChatTranscriptItem): number {
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {
   if (item.type === 'assistant') {
-    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}`;
+    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:goal-exit:${item.goalExit?.goal.updatedAt ?? ''}`;
   }
   if (item.type === 'user') {
     return `user:${messageScrollSignal(item.message)}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:${item.handledSteerMessageIds.join(',')}`;

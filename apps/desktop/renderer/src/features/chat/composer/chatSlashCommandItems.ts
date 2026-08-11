@@ -1,7 +1,6 @@
 import type {
   RuntimeSkillSummary,
   RuntimeThreadGoal,
-  RuntimeThreadMemoryMode,
 } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
@@ -18,11 +17,8 @@ export type ChatSlashCommandItemsOptions = {
   canClearContext: boolean;
   contextCompactPercent: number;
   contextCompacting: boolean;
-  goalEnabled: boolean;
   goalModeEnabled: boolean;
   hasCurrentThread: boolean;
-  memoryGenerationEnabled: boolean;
-  memoryMode: RuntimeThreadMemoryMode;
   multiAgentEnabled: boolean;
   planModeEnabled: boolean;
   query: string;
@@ -40,11 +36,8 @@ export function createChatSlashCommandItems({
   canClearContext,
   contextCompactPercent,
   contextCompacting,
-  goalEnabled,
   goalModeEnabled,
   hasCurrentThread,
-  memoryGenerationEnabled,
-  memoryMode,
   multiAgentEnabled,
   planModeEnabled,
   query,
@@ -59,7 +52,6 @@ export function createChatSlashCommandItems({
       kind: 'model',
       title: t('chat.composer.model'),
       description: activeModelName ?? t('chat.composer.selectConfiguredModel'),
-      scope: t('chat.composer.scope.local'),
     },
     {
       key: 'plan',
@@ -73,12 +65,6 @@ export function createChatSlashCommandItems({
         : planModeEnabled
           ? t('chat.composer.planEnabled')
           : t('chat.composer.planDescription'),
-      checked: planModeEnabled,
-      scope: activeTurnId
-        ? t('chat.composer.scope.nextTurn')
-        : planModeEnabled
-          ? t('chat.composer.scope.enabled')
-          : t('chat.composer.scope.local'),
     },
     {
       key: 'collaboration',
@@ -88,10 +74,6 @@ export function createChatSlashCommandItems({
       description: multiAgentEnabled
         ? t('chat.composer.collaborationEnabled')
         : t('chat.composer.collaborationDescription'),
-      checked: multiAgentEnabled,
-      scope: multiAgentEnabled
-        ? t('chat.composer.scope.enabled')
-        : t('chat.composer.scope.local'),
     },
     {
       key: 'goal',
@@ -107,12 +89,6 @@ export function createChatSlashCommandItems({
           : goalModeEnabled
             ? t('chat.composer.goalEnabled')
             : t('chat.composer.goalDescription'),
-      checked: goalEnabled,
-      scope: activeGoal || (!activeTurnId && goalEnabled)
-        ? t('chat.composer.scope.enabled')
-        : activeTurnId
-          ? t('chat.composer.scope.nextTurn')
-          : t('chat.composer.scope.currentThread'),
     },
     {
       key: 'usage',
@@ -123,7 +99,6 @@ export function createChatSlashCommandItems({
         ? t('chat.composer.usageDescription')
         : t('chat.composer.openChatFirst'),
       disabled: !hasCurrentThread,
-      scope: t('chat.composer.scope.currentThread'),
     },
     {
       key: 'side-chat',
@@ -132,7 +107,6 @@ export function createChatSlashCommandItems({
       title: t('chat.composer.sideChat'),
       description: t('chat.composer.sideChatDescription'),
       disabled: !sideChatAvailable,
-      scope: t('chat.composer.scope.rightSidebar'),
     },
     {
       key: 'review',
@@ -145,17 +119,6 @@ export function createChatSlashCommandItems({
           ? t('chat.composer.reviewDescription')
           : t('chat.composer.selectProjectFirst'),
       disabled: Boolean(activeTurnId) || !activeProjectSelected,
-      scope: t('chat.composer.scope.currentProject'),
-    },
-    {
-      key: 'memory-mode',
-      kind: 'action',
-      type: 'memory-mode',
-      title: t('chat.composer.memory'),
-      description: threadMemoryModeDescription(memoryMode, memoryGenerationEnabled, t),
-      disabled: !memoryGenerationEnabled,
-      checked: memoryGenerationEnabled && memoryMode === 'enabled',
-      scope: threadMemoryModeScope(memoryMode, memoryGenerationEnabled, t),
     },
     {
       key: 'compact-context',
@@ -174,7 +137,6 @@ export function createChatSlashCommandItems({
       disabled: Boolean(activeTurnId) || !canClearContext || contextCompacting,
       loading: contextCompacting,
       progressPercent: contextCompactPercent,
-      scope: t('chat.composer.scope.local'),
     },
     {
       key: 'clear-context',
@@ -187,13 +149,12 @@ export function createChatSlashCommandItems({
           ? t('chat.composer.clearDescription')
           : t('chat.composer.noContext'),
       disabled: Boolean(activeTurnId) || !canClearContext,
-      scope: t('chat.composer.scope.local'),
     },
   ];
   const normalizedQuery = query.trim().toLowerCase();
   const visibleActions = actions.filter((action) => (
     !normalizedQuery
-    || `${action.key} ${action.title} ${action.description ?? ''} ${action.scope ?? ''}`
+    || `${action.key} ${action.title} ${action.description ?? ''}`
       .toLowerCase()
       .includes(normalizedQuery)
   ));
@@ -214,31 +175,4 @@ export function createChatSlashCommandItems({
     }));
 
   return [...visibleActions, ...visibleSkills];
-}
-
-export function nextThreadMemoryMode(mode: RuntimeThreadMemoryMode): RuntimeThreadMemoryMode {
-  return mode === 'enabled' ? 'disabled' : 'enabled';
-}
-
-function threadMemoryModeDescription(
-  mode: RuntimeThreadMemoryMode,
-  globalGenerationEnabled: boolean,
-  t: Translate,
-): string {
-  if (!globalGenerationEnabled) return t('chat.composer.memoryGlobalOff');
-  if (mode === 'polluted') return t('chat.composer.memoryPolluted');
-  return mode === 'enabled'
-    ? t('chat.composer.memoryEnabled')
-    : t('chat.composer.memoryDisabled');
-}
-
-function threadMemoryModeScope(
-  mode: RuntimeThreadMemoryMode,
-  globalGenerationEnabled: boolean,
-  t: Translate,
-): string {
-  if (!globalGenerationEnabled) return t('chat.composer.scope.globalOff');
-  return mode === 'enabled'
-    ? t('chat.composer.scope.enabled')
-    : t('chat.composer.scope.paused');
 }

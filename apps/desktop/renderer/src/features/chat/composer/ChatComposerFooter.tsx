@@ -152,7 +152,7 @@ export function ChatComposerFooter({
           <ChatModeBadge
             label={hasActiveTurn
               ? t('chat.composer.badge.goalNext')
-              : t('chat.composer.badge.goalEnabled')}
+              : t('chat.composer.badge.goal')}
             onClose={modeBadges.onClearGoal}
           />
         ) : null}

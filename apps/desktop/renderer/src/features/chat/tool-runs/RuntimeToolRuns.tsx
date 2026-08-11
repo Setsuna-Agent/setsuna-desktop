@@ -19,6 +19,7 @@ import type {
   ToolRunGroupKind,
   ToolRunSummaryMode,
 } from './runtime-tool-run-types.js';
+import { isDisplayableRuntimeToolRun } from './runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from './runtimeToolRunState.js';
 import {
   ChangeCounts,
@@ -126,11 +127,6 @@ export function RuntimeHookRuns({ runs }: { runs?: RuntimeHookRun[] }) {
       <HookRunList runs={runs} />
     </div>
   );
-}
-
-export function isDisplayableRuntimeToolRun(run: RuntimeToolRun): boolean {
-  if (run.status === 'error') return false;
-  return Boolean(run.name || run.status || run.argumentsPreview || run.resultPreview);
 }
 
 function ToolRunDisclosure({

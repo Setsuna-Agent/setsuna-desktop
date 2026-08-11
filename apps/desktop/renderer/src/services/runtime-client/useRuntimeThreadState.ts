@@ -5,7 +5,6 @@ import type {
   RuntimeReviewTarget,
   RuntimeThread,
   RuntimeThreadGoalPatch,
-  RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -20,7 +19,6 @@ import {
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
-import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import {
@@ -103,7 +101,6 @@ export function useRuntimeThreadState({
   const threadSummaryPollingActiveRef = useRef(false);
   // 终态 turn 记录在本地，避免延迟快照把已完成 turn 重新推断成 active。
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
-  const threadMemoryModeRequests = useLatestRequestGuard();
   const currentThreadId = currentThread?.id ?? null;
   const contextRequests = useIdentityRequestGuard(currentThreadId ?? 'no-current-thread');
 
@@ -453,19 +450,6 @@ export function useRuntimeThreadState({
     setCurrentThread,
   ]);
 
-  const updateCurrentThreadMemoryMode = useCallback(
-    async (mode: RuntimeThreadMemoryMode) => {
-      if (!currentThread) return null;
-      const threadId = currentThread.id;
-      const isLatest = threadMemoryModeRequests.begin();
-      const updated = await client.updateThreadMemoryMode(threadId, { mode });
-      if (isLatest()) adoptSnapshot(threadId, updated);
-      await reloadThreads();
-      return updated;
-    },
-    [adoptSnapshot, client, currentThread, reloadThreads, threadMemoryModeRequests],
-  );
-
   const clearCurrentThreadGoal = useCallback(async () => {
     if (!currentThread) return false;
     const threadId = currentThread.id;
@@ -586,7 +570,6 @@ export function useRuntimeThreadState({
     terminalTurnIdsRef,
     threads,
     updateCurrentThreadGoal,
-    updateCurrentThreadMemoryMode,
   };
 }
 

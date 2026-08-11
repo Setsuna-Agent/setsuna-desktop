@@ -8,7 +8,6 @@ import type {
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadGoalPatch,
-  RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   RuntimeUsageResponse,
   WorkspaceEntrySearchResponse,
@@ -134,7 +133,6 @@ export function ChatWorkspace({
   onClearContext,
   onClearThreadGoal,
   onUpdateThreadGoal,
-  onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
   onDraftChange,
@@ -188,7 +186,6 @@ export function ChatWorkspace({
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
   onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
-  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
@@ -413,7 +410,6 @@ export function ChatWorkspace({
       skills={skills}
       threadUsage={displayedThreadUsage}
       starter={starter}
-      threadMemoryMode={currentThread?.memoryMode}
       placeholder={variant === 'side' ? t('chat.composer.sidePlaceholder') : undefined}
       onCancelActiveTurn={onCancelActiveTurn}
       onAccessModeChange={onAccessModeChange}
@@ -429,7 +425,6 @@ export function ChatWorkspace({
       onSend={handleSend}
       queuedTurnActions={queuedTurnActions}
       onStartThreadReview={onStartThreadReview}
-      onThreadMemoryModeChange={onThreadMemoryModeChange}
       onImageAttachmentRequestConsumed={onImageAttachmentRequestConsumed}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}
       onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
