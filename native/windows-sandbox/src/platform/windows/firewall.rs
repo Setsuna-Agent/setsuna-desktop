@@ -1,5 +1,5 @@
 use crate::protocol::{SandboxError, SandboxErrorCode};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use windows::core::{Interface, BSTR};
 use windows::Win32::Foundation::{S_OK, VARIANT_TRUE};
 use windows::Win32::NetworkManagement::WindowsFirewall::{
@@ -345,6 +345,9 @@ fn normalized_remote_addresses(value: &str) -> Vec<String> {
 
 fn normalized_remote_address_token(value: &str) -> String {
     let value = value.trim();
+    if let Some(subnet) = normalized_remote_subnet(value) {
+        return subnet;
+    }
     if let Ok(address) = value.parse::<IpAddr>() {
         let address = address.to_string();
         // A singleton and a one-address range are the same firewall policy.
@@ -357,6 +360,46 @@ fn normalized_remote_address_token(value: &str) -> String {
     }
     // Preserve CIDR and firewall keyword syntax while comparing it case-insensitively.
     value.to_ascii_lowercase()
+}
+
+fn normalized_remote_subnet(value: &str) -> Option<String> {
+    let (address, mask) = value.split_once('/')?;
+    let address = address.parse::<IpAddr>().ok()?;
+    let prefix = match address {
+        IpAddr::V4(_) => mask
+            .parse::<u8>()
+            .ok()
+            .filter(|prefix| *prefix <= 32)
+            .or_else(|| mask.parse::<Ipv4Addr>().ok().and_then(ipv4_mask_prefix)),
+        IpAddr::V6(_) => mask
+            .parse::<u8>()
+            .ok()
+            .filter(|prefix| *prefix <= 128)
+            .or_else(|| mask.parse::<Ipv6Addr>().ok().and_then(ipv6_mask_prefix)),
+    }?;
+    Some(format!("{address}/{prefix}"))
+}
+
+fn ipv4_mask_prefix(mask: Ipv4Addr) -> Option<u8> {
+    let mask = u32::from(mask);
+    let prefix = mask.leading_ones();
+    let expected = if prefix == 0 {
+        0
+    } else {
+        u32::MAX << (32 - prefix)
+    };
+    (mask == expected).then_some(prefix as u8)
+}
+
+fn ipv6_mask_prefix(mask: Ipv6Addr) -> Option<u8> {
+    let mask = u128::from(mask);
+    let prefix = mask.leading_ones();
+    let expected = if prefix == 0 {
+        0
+    } else {
+        u128::MAX << (128 - prefix)
+    };
+    (mask == expected).then_some(prefix as u8)
 }
 
 fn rule_specs<'a>(
@@ -492,6 +535,20 @@ mod tests {
         assert_ne!(
             normalized_remote_addresses("127.0.0.1,::"),
             normalized_remote_addresses("127.0.0.1,::1")
+        );
+    }
+
+    #[test]
+    fn remote_address_read_back_accepts_equivalent_subnet_masks() {
+        assert_eq!(
+            normalized_remote_addresses("127.0.0.0/8,::/127"),
+            normalized_remote_addresses(
+                "127.0.0.0/255.0.0.0,::/ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe"
+            )
+        );
+        assert_ne!(
+            normalized_remote_addresses("127.0.0.0/8"),
+            normalized_remote_addresses("127.0.0.0/255.0.255.0")
         );
     }
 }
