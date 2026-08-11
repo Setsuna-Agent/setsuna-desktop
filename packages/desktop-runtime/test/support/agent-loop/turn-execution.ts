@@ -53,6 +53,51 @@ export class ProviderMetadataToolModelClient implements ModelClient {
   }
 }
 
+/** Simulates provider phase hints that runtime must ignore when it owns turn classification. */
+export class ResponsesPhaseToolModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'item_started',
+        item: { id: 'response_commentary', kind: 'agent_message', content: '', status: 'in_progress', phase: 'final_answer' },
+      };
+      yield { type: 'item_delta', itemId: 'response_commentary', delta: 'I will inspect the file.' };
+      yield {
+        type: 'item_completed',
+        item: { id: 'response_commentary', kind: 'agent_message', content: 'I will inspect the file.', status: 'completed', phase: 'final_answer' },
+      };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_responses_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield {
+      type: 'item_started',
+      item: { id: 'response_final_1', kind: 'agent_message', content: '', status: 'in_progress', phase: 'final_answer' },
+    };
+    yield { type: 'item_delta', itemId: 'response_final_1', delta: 'The file ' };
+    yield {
+      type: 'item_completed',
+      item: { id: 'response_final_1', kind: 'agent_message', content: 'The file ', status: 'completed', phase: 'final_answer' },
+    };
+    yield {
+      type: 'item_started',
+      item: { id: 'response_final_2', kind: 'agent_message', content: '', status: 'in_progress', phase: 'commentary' },
+    };
+    yield { type: 'item_delta', itemId: 'response_final_2', delta: 'is ready.' };
+    yield {
+      type: 'item_completed',
+      item: { id: 'response_final_2', kind: 'agent_message', content: 'is ready.', status: 'completed', phase: 'commentary' },
+    };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 export class StepSnapshotModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 

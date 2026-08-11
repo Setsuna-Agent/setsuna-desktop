@@ -51,8 +51,9 @@ type RuntimeAgentTurnRunnerOptions = {
     threadId: string,
     turnId: string,
     messageId: string,
-    payload?: {
+    payload: {
       content?: string;
+      phase: NonNullable<RuntimeMessage['phase']>;
       usage?: RuntimeUsage;
       toolCalls?: RuntimeToolCall[];
       memoryCitation?: RuntimeMemoryCitation;
@@ -60,6 +61,7 @@ type RuntimeAgentTurnRunnerOptions = {
     },
   ): Promise<void>;
   publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void>;
+  publishAssistantItemDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void>;
   publishMessage(
     threadId: string,
     turnId: string,
@@ -150,6 +152,7 @@ export class RuntimeAgentTurnRunner {
           content: turnStartHooks.reason,
           createdAt: this.options.clock.now().toISOString(),
           status: 'complete',
+          phase: 'final_answer',
         });
         await this.options.appendEvent(threadId, {
           id: this.options.ids.id('event'),
@@ -280,6 +283,8 @@ export class RuntimeAgentTurnRunner {
           assertNewToolCallBatchInvariants(toolCalls);
           // 先把 toolCalls 挂到 assistant 消息上，再执行工具，UI 才能把后续 toolRuns 归到正确气泡。
           await this.options.completeMessage(threadId, turnId, assistantMessageId, {
+            content: roundText,
+            phase: 'commentary',
             toolCalls,
             usage: sampled.usage,
             memoryCitation: roundMemoryCitation,
@@ -289,6 +294,7 @@ export class RuntimeAgentTurnRunner {
           conversationMessages.push({
             ...assistantMessage,
             content: roundText,
+            phase: 'commentary',
             memoryCitation: roundMemoryCitation,
             toolCalls,
             status: 'complete',
@@ -302,11 +308,12 @@ export class RuntimeAgentTurnRunner {
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
             content: roundText,
+            phase: 'commentary',
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
@@ -319,13 +326,15 @@ export class RuntimeAgentTurnRunner {
         if (pendingChildren.total > 0) {
           if (pendingChildren.active > 0) {
             roundText += COLLABORATION_WAIT_NOTE;
+            await this.options.publishAssistantItemDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
             await this.options.publishAssistantDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
           }
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
             content: roundText,
+            phase: 'commentary',
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
@@ -341,11 +350,12 @@ export class RuntimeAgentTurnRunner {
           stopHookActive,
         });
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
-          await this.options.completeMessage(threadId, turnId, assistantMessageId, { usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
+          await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
             ...assistantMessage,
             content: roundText,
+            phase: 'commentary',
             memoryCitation: roundMemoryCitation,
             status: 'complete',
           });
@@ -384,7 +394,7 @@ export class RuntimeAgentTurnRunner {
       if (error instanceof HookStoppedTurnError) {
         settledContent = error.message;
         if (activeAssistantMessageId) {
-          await this.options.completeMessage(threadId, turnId, activeAssistantMessageId);
+          await this.options.completeMessage(threadId, turnId, activeAssistantMessageId, { phase: 'commentary' });
         }
         this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
         await this.options.publishMessage(threadId, turnId, {
@@ -394,6 +404,7 @@ export class RuntimeAgentTurnRunner {
           content: error.message,
           createdAt: this.options.clock.now().toISOString(),
           status: 'complete',
+          phase: 'final_answer',
         });
         await this.options.appendEvent(threadId, {
           id: this.options.ids.id('event'),
@@ -409,7 +420,7 @@ export class RuntimeAgentTurnRunner {
         cleanupStatus = 'cancelled';
         settledContent = error instanceof Error ? error.message : 'Turn cancelled.';
         if (activeAssistantMessageId) {
-          await this.options.completeMessage(threadId, turnId, activeAssistantMessageId);
+          await this.options.completeMessage(threadId, turnId, activeAssistantMessageId, { phase: 'commentary' });
         }
         await this.options.turnTermination.publishCancelledOnce(
           threadId,
@@ -422,6 +433,10 @@ export class RuntimeAgentTurnRunner {
       }
       cleanupStatus = 'failed';
       settledContent = error instanceof Error ? error.message : String(error);
+      if (activeAssistantMessageId) {
+        await this.options.completeMessage(threadId, turnId, activeAssistantMessageId, { phase: 'commentary' });
+        activeAssistantMessageId = null;
+      }
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,

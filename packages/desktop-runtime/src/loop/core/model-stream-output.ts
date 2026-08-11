@@ -7,8 +7,6 @@ import type {
 import { MemoryCitationStreamParser, parseMemoryCitationBodies } from '../memory/memory-citation.js';
 
 export type LegacyModelStreamMirrorState = {
-  agentItemStarted: boolean;
-  agentText: string;
   reasoningItemStarted: boolean;
   reasoningText: string;
   toolCalls: Map<string, RuntimeToolCall>;
@@ -50,8 +48,6 @@ export function createAssistantOutputAccumulator(
 
 export function createLegacyModelStreamMirrorState(): LegacyModelStreamMirrorState {
   return {
-    agentItemStarted: false,
-    agentText: '',
     reasoningItemStarted: false,
     reasoningText: '',
     toolCalls: new Map(),

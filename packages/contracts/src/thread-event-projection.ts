@@ -586,7 +586,7 @@ export function appendTurnDiff(current: string | undefined, diff: string): strin
 
 export function updatePreviewFromMessage(thread: RuntimeThread, message: RuntimeMessage): void {
   // 线程列表预览只取用户/助手可见内容，tool/system 不直接覆盖会话摘要。
-  if (!isTranscriptVisibleMessage(message) || message.contextCompaction || message.role === 'tool' || message.role === 'system' || message.role === 'developer') return;
+  if (!isThreadPreviewMessage(message)) return;
   const text = preview(message.content || attachmentPreview(message));
   if (text) thread.lastMessagePreview = text;
 }
@@ -594,8 +594,17 @@ export function updatePreviewFromMessage(thread: RuntimeThread, message: Runtime
 export function refreshThreadSummary(thread: RuntimeThread): void {
   const visibleMessages = thread.messages.filter(isTranscriptVisibleMessage);
   thread.messageCount = visibleMessages.length;
-  const lastVisibleMessage = [...visibleMessages].reverse().find((message) => !message.contextCompaction && message.role !== 'tool' && message.role !== 'system' && message.role !== 'developer' && (message.content.trim() || message.attachments?.length));
+  const lastVisibleMessage = [...visibleMessages].reverse().find((message) => isThreadPreviewMessage(message) && (message.content.trim() || message.attachments?.length));
   thread.lastMessagePreview = lastVisibleMessage ? preview(lastVisibleMessage.content || attachmentPreview(lastVisibleMessage)) : '';
+}
+
+function isThreadPreviewMessage(message: RuntimeMessage): boolean {
+  if (!isTranscriptVisibleMessage(message) || message.contextCompaction) return false;
+  if (message.role === 'tool' || message.role === 'system' || message.role === 'developer') return false;
+  if (message.role !== 'assistant') return true;
+  // Persisted legacy messages are normalized once at the storage read boundary. An unresolved
+  // stream never replaces the user's preview before runtime completion classifies it.
+  return message.phase === 'final_answer';
 }
 
 export function isTranscriptVisibleMessage(message: RuntimeMessage): boolean {

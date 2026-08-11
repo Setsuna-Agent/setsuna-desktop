@@ -1,4 +1,5 @@
 import type { RuntimeStreamItem } from '../provider.js';
+import type { RuntimeMessage } from '../threads.js';
 import {
   agentMessageItem,
   agentMessageItemId,
@@ -235,12 +236,13 @@ export function startAssistantMessageStream(
   messageId: string,
   text: string,
   startedAtMs: number,
+  phase: RuntimeMessage['phase'] | null = null,
 ): SweNotification[] {
   if (!text.trim()) return [];
   if (!state) {
     return [{
       method: 'item/started',
-      params: { threadId, turnId, item: agentMessageItem(messageId, text), startedAtMs },
+      params: { threadId, turnId, item: agentMessageItem(messageId, text, null, phase), startedAtMs },
     }];
   }
   if (!hasThinkTag(text)) {
@@ -250,7 +252,7 @@ export function startAssistantMessageStream(
     stream.agentSegmentIndex = 1;
     return [{
       method: 'item/started',
-      params: { threadId, turnId, item: agentMessageItem(messageId, text), startedAtMs },
+      params: { threadId, turnId, item: agentMessageItem(messageId, text, null, phase), startedAtMs },
     }];
   }
   return appendAssistantMessageDelta(state, threadId, turnId, messageId, text, startedAtMs);

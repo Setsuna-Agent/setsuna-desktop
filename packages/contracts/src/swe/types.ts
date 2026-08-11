@@ -94,7 +94,7 @@ export type SweThreadItem =
       type: 'agentMessage';
       id: string;
       text: string;
-      phase: null;
+      phase: RuntimeMessage['phase'] | null;
       memoryCitation: RuntimeMessage['memoryCitation'] | null;
     }
   | {

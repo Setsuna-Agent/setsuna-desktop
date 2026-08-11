@@ -412,9 +412,9 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
       }];
     }
     if (message.status === 'streaming') {
-      return startAssistantMessageStream(state, event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt));
+      return startAssistantMessageStream(state, event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.phase ?? null);
     }
-    return completedAssistantContentNotifications(event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.memoryCitation ?? null);
+    return completedAssistantContentNotifications(event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.memoryCitation ?? null, message.phase ?? null);
   }
 
   if (event.type === 'message.delta') {
@@ -439,7 +439,7 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     const stream = assistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
     if (!stream) return [];
     clearAssistantMessageStream(state, event.threadId, turnId, event.payload.messageId);
-    return completedAssistantContentNotifications(event.threadId, turnId, event.payload.messageId, stream.text, toEpochMs(event.createdAt), event.payload.memoryCitation ?? null);
+    return completedAssistantContentNotifications(event.threadId, turnId, event.payload.messageId, stream.text, toEpochMs(event.createdAt), event.payload.memoryCitation ?? null, event.payload.phase ?? null);
   }
 
   if (event.type === 'item.started') {

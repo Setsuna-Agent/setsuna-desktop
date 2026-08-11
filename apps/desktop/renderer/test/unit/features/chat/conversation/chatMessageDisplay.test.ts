@@ -728,6 +728,7 @@ describe('createChatDisplayItems', () => {
           id: 'assistant_1',
           role: 'assistant',
           content: '<think>internal plan</think>visible answer',
+          phase: 'final_answer',
           createdAt: '2026-06-26T00:00:02.000Z',
           status: 'complete',
         },

@@ -1,6 +1,5 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
-import { isRuntimeFileMutationRun } from '../tool-runs/runtimeFileChanges.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';
@@ -43,10 +42,7 @@ export function createAssistantRunTimeline(
   pluginUses: RuntimePluginUse[] = [],
 ): AssistantRunTimelineBlock[] {
   const parsedSegments = segments.map(parseAssistantSegment);
-  const lastProcessIndex = parsedSegments.reduce((lastIndex, parsed, index) => (hasProcessEvidence(parsed) ? index : lastIndex), -1);
-  const finalStartIndex = parsedSegments.findIndex(
-    (parsed, index) => index > lastProcessIndex && parsed.contentSegments.length > 0,
-  );
+  const finalStartIndex = assistantFinalStartIndex(parsedSegments);
   const finalStarted = finalStartIndex >= 0;
   const blocks: AssistantRunTimelineBlock[] = [];
   let workBlock: {
@@ -88,16 +84,16 @@ export function createAssistantRunTimeline(
 
   const flushWork = () => {
     if (!workBlock) return;
-    const hideThinkingItems = workBlock.toolRuns.some(isFileChangeWorkflowRun);
+    const active = workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveRuntimeToolRun);
     blocks.push({
       type: 'work',
       id: workBlock.id,
       segments: workBlock.segments,
       toolRuns: workBlock.toolRuns,
-      items: hideThinkingItems ? workBlock.items.filter((item) => item.type !== 'thinking') : workBlock.items,
+      items: workBlock.items,
       contentSegments: workBlock.contentSegments,
       thinkingSegments: workBlock.thinkingSegments,
-      active: workBlock.segments.some((segment) => segment.status === 'streaming') || workBlock.toolRuns.some(isActiveRuntimeToolRun),
+      active,
     });
     workBlock = null;
   };
@@ -117,21 +113,41 @@ export function createAssistantRunTimeline(
         appendWork(parsed.segment, parsed);
       }
     } else {
-      parsed.thinkingSegments.forEach((thinkingSegment) => {
-        appendWork(parsed.segment, { thinkingSegments: [thinkingSegment] });
+      // A provider may interleave visible text, reasoning, and tool items. Walk the
+      // parsed item stream directly so later work can only be appended below text
+      // that has already become part of the transcript.
+      parsed.items.forEach((item) => {
+        if (item.type === 'content') {
+          if (!isCommittedFinalAnswer(item.segment.segment)) {
+            appendWork(parsed.segment, {
+              contentSegments: [item.segment],
+              items: [item],
+            });
+            return;
+          }
+          flushWork();
+          blocks.push({
+            type: 'content',
+            id: item.segment.id,
+            segment: parsed.segment,
+            content: item.segment.content,
+          });
+          return;
+        }
+        if (item.type === 'thinking') {
+          appendWork(parsed.segment, {
+            items: [item],
+            thinkingSegments: [item.segment],
+          });
+          return;
+        }
+        if (item.type === 'toolRuns') {
+          appendWork(parsed.segment, {
+            items: [item],
+            toolRuns: item.toolRuns,
+          });
+        }
       });
-      parsed.contentSegments.forEach((contentSegment) => {
-        flushWork();
-        blocks.push({
-          type: 'content',
-          id: contentSegment.id,
-          segment: parsed.segment,
-          content: contentSegment.content,
-        });
-      });
-      if (parsed.toolRuns.length) {
-        appendWork(parsed.segment, { toolRuns: parsed.toolRuns });
-      }
     }
 
     if (isEmptyStreamingAssistantSegment(parsed.segment)) {
@@ -235,8 +251,14 @@ function appendWorkItems(items: AssistantWorkItem[], nextItems: AssistantWorkIte
   }
 }
 
-function hasProcessEvidence(segment: ParsedAssistantSegment): boolean {
-  return segment.thinkingSegments.length > 0 || segment.toolRuns.length > 0;
+function assistantFinalStartIndex(segments: ParsedAssistantSegment[]): number {
+  // Runtime assigns phase only when completing a segment, so streaming text remains the
+  // append-only work tail and can never be promoted above a later tool call.
+  return segments.findIndex((segment) => isCommittedFinalAnswer(segment.segment));
+}
+
+function isCommittedFinalAnswer(segment: RuntimeMessage): boolean {
+  return segment.phase === 'final_answer' && segment.status !== 'streaming';
 }
 
 function addWorkSegment(
@@ -276,8 +298,4 @@ export function shouldShowAssistantTrailingLoading({
     && status !== 'error'
     && hasRenderableContent
     && !toolRuns.some((run) => !isTranscriptHiddenRuntimeToolRun(run) && isActiveRuntimeToolRun(run));
-}
-
-function isFileChangeWorkflowRun(run: NonNullable<RuntimeMessage['toolRuns']>[number]): boolean {
-  return isRuntimeFileMutationRun(run);
 }

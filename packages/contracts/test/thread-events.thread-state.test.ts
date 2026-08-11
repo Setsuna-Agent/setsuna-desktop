@@ -89,13 +89,14 @@ describe('thread event lifecycle and metadata projection', () => {
       turnId: 'turn_1',
       type: 'message.completed',
       createdAt: '2026-06-26T00:00:03.000Z',
-      payload: { messageId: 'msg_1' },
+      payload: { messageId: 'msg_1', phase: 'final_answer' },
     };
 
     const completed = applyRuntimeEventToThread(thread, event);
 
     expect(completed.messages[0]).toMatchObject({
       completedAt: '2026-06-26T00:00:03.000Z',
+      phase: 'final_answer',
       status: 'complete',
     });
   });

@@ -7,7 +7,10 @@ describe('runtime base instructions', () => {
       /determine the declared workflow.*Never guess the package manager.*validate narrow-to-broad/su,
     );
     expect(RUNTIME_BASE_INSTRUCTIONS).toMatch(
-      /one brief user-visible update.*at least 60 seconds.*Never narrate individual tool calls/su,
+      /brief user-visible preamble.*Logically group related actions.*Do not send a separate sentence for every read.*reasonable intervals/su,
+    );
+    expect(RUNTIME_BASE_INSTRUCTIONS).toContain(
+      'do not add a new preamble for every trivial read',
     );
     expect(RUNTIME_BASE_INSTRUCTIONS).toMatch(
       /clickable Markdown link.*exact current 1-based start line.*Never guess a line number/su,

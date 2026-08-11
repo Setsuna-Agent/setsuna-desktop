@@ -144,7 +144,7 @@ export class RuntimeCollaborationCoordinator {
       return {
         threadId,
         title: thread?.title ?? threadId,
-        content: childAgentOutput(thread) || thread?.lastMessagePreview.trim() || 'Child finished without a textual result.',
+        content: childAgentOutput(thread) || childAgentTerminalOutcome(thread),
       };
     }));
     this.childrenByParentThread.delete(parentThreadId);
@@ -353,12 +353,28 @@ function childAgentOutput(thread: RuntimeThread | null): string {
   const turnMessages = latestTerminalTurn
     ? thread.messages.filter((message) => message.turnId === latestTerminalTurn.id)
     : thread.messages;
-  const assistantParts = turnMessages
-    .filter((message) => message.role === 'assistant' && message.visibility !== 'model')
+  const assistantMessages = turnMessages
+    .filter((message) => message.role === 'assistant' && message.visibility !== 'model');
+  const assistantParts = assistantMessages
+    .filter((message) => message.phase === 'final_answer')
     .map((message) => message.content.trim())
     .filter(Boolean);
   if (assistantParts.length) return assistantParts.join('\n\n');
-  return [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.content.trim())?.content.trim() ?? '';
+  return '';
+}
+
+function childAgentTerminalOutcome(thread: RuntimeThread | null): string {
+  if (!thread) return 'Child thread is unavailable.';
+  const turn = [...(thread.turns ?? [])].reverse().find((candidate) => (
+    candidate.status && candidate.status !== 'in_progress'
+  ));
+  if (turn?.status === 'failed') {
+    return turn.error ? `Child turn failed: ${turn.error}` : 'Child turn failed.';
+  }
+  if (turn?.status === 'cancelled') {
+    return turn.error ? `Child turn was cancelled: ${turn.error}` : 'Child turn was cancelled.';
+  }
+  return 'Child finished without a final answer.';
 }
 
 function requiredString(record: Record<string, unknown>, keys: string[], label: string): string {

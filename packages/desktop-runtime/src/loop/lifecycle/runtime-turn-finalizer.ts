@@ -64,6 +64,7 @@ export class RuntimeTurnFinalizer {
     }
     await this.options.streamEvents.completeMessage(threadId, turnId, messageId, {
       content: finalization.content,
+      phase: 'final_answer',
       usage: messageUsage,
       memoryCitation: finalization.memoryCitation,
       providerMetadata: finalization.providerMetadata,

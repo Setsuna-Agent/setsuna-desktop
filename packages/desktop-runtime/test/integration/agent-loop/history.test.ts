@@ -133,7 +133,14 @@ describe('agent loop stream history and regeneration', () => {
       expect(assistant?.content).toBe('<think>Need context.</think>Hello from item stream.');
       expect(events).toContainEqual(expect.objectContaining({
         type: 'item.started',
-        payload: { item: { id: 'agent_item_1', kind: 'agent_message', status: 'in_progress' } },
+        payload: {
+          item: expect.objectContaining({
+            id: assistant?.id,
+            kind: 'agent_message',
+            status: 'in_progress',
+            transcriptMessageId: assistant?.id,
+          }),
+        },
       }));
       expect(events).toContainEqual(expect.objectContaining({
         type: 'plan.delta',
@@ -158,7 +165,14 @@ describe('agent loop stream history and regeneration', () => {
         items: [
           { id: 'plan_item_1', kind: 'plan', content: '1. Inspect state.' },
           { id: 'reasoning_item_1', kind: 'reasoning', status: 'completed', content: 'Need context.' },
-          { id: 'agent_item_1', kind: 'agent_message', status: 'completed', content: 'Hello from item stream.' },
+          {
+            id: assistant?.id,
+            kind: 'agent_message',
+            status: 'completed',
+            content: 'Hello from item stream.',
+            phase: 'final_answer',
+            transcriptMessageId: assistant?.id,
+          },
         ],
       });
       expect(saved?.turns?.[0]?.tokenCounts).toEqual(expect.arrayContaining([

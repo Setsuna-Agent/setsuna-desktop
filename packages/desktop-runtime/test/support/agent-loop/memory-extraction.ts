@@ -40,6 +40,32 @@ export class BlockingPassiveMemoryModelClient implements ModelClient {
   }
 }
 
+export class CommentaryPassiveMemoryModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+  private foregroundRounds = 0;
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (request.model === 'passive-memory-extraction') {
+      yield { type: 'text_delta', text: JSON.stringify({ memories: [] }) };
+      yield { type: 'done', finishReason: 'stop' };
+      return;
+    }
+    this.foregroundRounds += 1;
+    if (this.foregroundRounds === 1) {
+      yield { type: 'text_delta', text: 'I will inspect the project first.' };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_memory_commentary', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'The durable answer is complete.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 export class CodexStage1MemoryModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 

@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from './events.js';
+import { normalizeLegacyAssistantPhasesForTurn } from './event-projections/assistant-phase.js';
 import { isRuntimeThreadProjectionIgnoredEvent } from './event-projections/dispositions.js';
 import {
   appendThreadTurnItemDelta,
@@ -290,6 +291,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       if (event.payload.content !== undefined) message.content = event.payload.content;
       message.status = 'complete';
       message.completedAt = event.createdAt;
+      if (event.payload.phase && message.role === 'assistant') message.phase = event.payload.phase;
       if (event.payload.toolCalls?.length) message.toolCalls = event.payload.toolCalls.map((toolCall) => ({ ...toolCall }));
       if (event.payload.memoryCitation) message.memoryCitation = cloneMemoryCitation(event.payload.memoryCitation);
       if (event.payload.planMode) message.planMode = { ...event.payload.planMode };
@@ -298,7 +300,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         if (providerMetadata) message.providerMetadata = providerMetadata;
         else delete message.providerMetadata;
       }
-      if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
+      if (isTranscriptVisibleMessage(message)) refreshThreadSummary(next);
     }
     return next;
   }
@@ -552,7 +554,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       message.completedAt = event.createdAt;
       message.error = event.payload.message;
     }
-    return next;
+    return normalizeLegacyAssistantPhasesForTurn(next, event.turnId);
   }
 
   if (event.type === 'turn.cancelled') {
@@ -576,7 +578,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       completeActiveMessageHookRuns(message, event.createdAt, reason);
     }
     completeActivePendingHookRuns(next, event.turnId, event.createdAt, reason);
-    return next;
+    return normalizeLegacyAssistantPhasesForTurn(next, event.turnId);
   }
 
   if (event.type === 'turn.completed') {
@@ -587,7 +589,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       turn.status = turn.status === 'failed' || turn.status === 'cancelled' ? turn.status : 'completed';
       turn.completedAt = turn.completedAt ?? event.createdAt;
     }
-    return next;
+    return normalizeLegacyAssistantPhasesForTurn(next, event.turnId);
   }
 
   if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;

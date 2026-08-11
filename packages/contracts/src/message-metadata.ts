@@ -2,6 +2,9 @@ import type { ModelProviderKind } from './model-provider.js';
 
 export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' | 'tool';
 
+/** Matches the Codex App Server / Responses wire values for assistant presentation. */
+export type RuntimeAssistantMessagePhase = 'commentary' | 'final_answer';
+
 export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
 
 export type RuntimeJsonPrimitive = string | number | boolean | null;
