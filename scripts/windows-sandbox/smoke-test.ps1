@@ -33,6 +33,7 @@ $tempBase = if ($RootBase) {
 $root = Join-Path $tempBase ("setsuna-sandbox-smoke-{0}" -f [Guid]::NewGuid().ToString('N'))
 $workspace = Join-Path $root 'workspace'
 $readOnlyWorkspace = Join-Path $root 'read-only-workspace'
+$otherReadOnlyWorkspace = Join-Path $root 'other-read-only-workspace'
 $protected = Join-Path $workspace 'protected'
 $externalWritable = Join-Path $root 'external-broad-write'
 $commandTemp = Join-Path $root 'command-temp\work'
@@ -271,6 +272,7 @@ function Complete-ProxyRequest(
 try {
   New-Item -ItemType Directory -Force -Path $workspace | Out-Null
   New-Item -ItemType Directory -Force -Path $readOnlyWorkspace | Out-Null
+  New-Item -ItemType Directory -Force -Path $otherReadOnlyWorkspace | Out-Null
   $currentUserSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
   $privateWorkspaceAcl = [System.Security.AccessControl.DirectorySecurity]::new()
   $privateWorkspaceAcl.SetSecurityDescriptorSddlForm(
@@ -284,6 +286,25 @@ try {
   [System.IO.File]::WriteAllText(
     (Join-Path $readOnlyWorkspace 'read-only-probe.cmd'),
     "@echo off`r`ntype nested\existing.txt >NUL || exit /b 40`r`necho changed>nested\existing.txt 2>NUL`r`nexit /b 0`r`n",
+    $utf8NoBom
+  )
+  Set-Acl -LiteralPath $otherReadOnlyWorkspace -AclObject $privateWorkspaceAcl
+  $otherReadOnlyNested = Join-Path $otherReadOnlyWorkspace 'nested'
+  New-Item -ItemType Directory -Force -Path $otherReadOnlyNested | Out-Null
+  [System.IO.File]::WriteAllText(
+    (Join-Path $otherReadOnlyNested 'existing.txt'),
+    'other-read-only-existing',
+    $utf8NoBom
+  )
+  [System.IO.File]::WriteAllLines(
+    (Join-Path $otherReadOnlyWorkspace 'cross-workspace-probe.cmd'),
+    @(
+      '@echo off'
+      'type nested\existing.txt >NUL || exit /b 41'
+      "type `"$readOnlyExisting`" >NUL 2>NUL"
+      'if not errorlevel 1 exit /b 42'
+      'exit /b 0'
+    ),
     $utf8NoBom
   )
   New-Item -ItemType Directory -Force -Path $protected | Out-Null
@@ -328,6 +349,20 @@ try {
   if ((Get-Content -LiteralPath $readOnlyExisting -Raw).Trim() -ne 'read-only-existing') {
     throw 'Read-only Windows sandbox modified an existing private workspace file'
   }
+
+  $crossWorkspaceRequest = New-SandboxRequest `
+    -ExecutionId 'windows_ci_cross_workspace_read' `
+    -Command 'cross-workspace-probe.cmd' `
+    -NetworkAccess $false `
+    -Environment (New-SandboxEnvironment)
+  $crossWorkspaceRequest.cwd = $otherReadOnlyWorkspace
+  $crossWorkspaceRequest.workspaceRoot = $otherReadOnlyWorkspace
+  $crossWorkspaceRequest.permissionProfile = 'read-only'
+  $crossWorkspaceRequest.readableRoots = @($otherReadOnlyWorkspace) + $preExistingReadableRoots
+  $crossWorkspaceRequest.writableRoots = @()
+  $crossWorkspaceRequest.ephemeralWritableRoots = @()
+  $crossWorkspaceRequest.protectedWritableRoots = @()
+  Invoke-SandboxRequest $crossWorkspaceRequest
 
   $offlineListener = Start-BlockedLoopbackListener
   $offlinePort = ([System.Net.IPEndPoint]$offlineListener.LocalEndpoint).Port

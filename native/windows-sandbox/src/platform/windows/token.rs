@@ -19,9 +19,10 @@ use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken}
 
 const DISABLE_MAX_PRIVILEGE: u32 = 0x01;
 const LUA_TOKEN: u32 = 0x04;
-const WRITE_RESTRICTED: u32 = 0x08;
 const GENERIC_ALL: u32 = 0x1000_0000;
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
+const ALL_APPLICATION_PACKAGES_SID: &str = "S-1-15-2-1";
+const ALL_RESTRICTED_APPLICATION_PACKAGES_SID: &str = "S-1-15-2-2";
 
 struct LocalSid(*mut c_void);
 
@@ -52,13 +53,16 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
     let base = current_process_token()?;
     let capability = LocalSid::parse(capability_sid)?;
     let everyone = LocalSid::parse("S-1-1-0")?;
+    let all_application_packages = LocalSid::parse(ALL_APPLICATION_PACKAGES_SID)?;
+    let all_restricted_application_packages =
+        LocalSid::parse(ALL_RESTRICTED_APPLICATION_PACKAGES_SID)?;
     let mut user_sid = token_user_sid_bytes(base.raw())?;
     let mut logon_sid = logon_sid_bytes(base.raw())?;
 
-    // WRITE_RESTRICTED performs a second SID check only for write-like access.
-    // Match the Windows sandbox token used by upstream Codex: capability SIDs
-    // scope writes, while the account, logon, and Everyone SIDs keep standard
-    // Windows objects and DLL initialization usable under the restricted token.
+    // Restrict reads as well as writes so a policy capability cannot borrow a
+    // stable account/group ACE installed for another workspace. App-package
+    // identities retain read/execute access to standard Windows binaries without
+    // admitting broad writable groups such as Users or Authenticated Users.
     let restricting_sids = [
         SID_AND_ATTRIBUTES {
             Sid: capability.0,
@@ -76,12 +80,20 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
             Sid: everyone.0,
             Attributes: 0,
         },
+        SID_AND_ATTRIBUTES {
+            Sid: all_application_packages.0,
+            Attributes: 0,
+        },
+        SID_AND_ATTRIBUTES {
+            Sid: all_restricted_application_packages.0,
+            Attributes: 0,
+        },
     ];
     let mut token = 0;
     let created = unsafe {
         CreateRestrictedToken(
             base.raw(),
-            DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED,
+            DISABLE_MAX_PRIVILEGE | LUA_TOKEN,
             0,
             std::ptr::null(),
             0,

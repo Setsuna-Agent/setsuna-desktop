@@ -81,22 +81,24 @@ Electron main 持有 sidecar 路径、UAC 生命周期和沙箱出口。preload 
 Windows 本地 SAM 账户的 20 字符限制内。执行时：
 
 1. 所有输入路径先 canonicalize，并限制为固定本机 NTFS 卷；
-2. readable roots 先用隔离账户 token 做真实 `AccessCheck`，仅在原权限不足时向本次 logon SID 临时授予
-   read/execute；临时 ACE 只修改所指对象，不向已有子树传播；
-3. 每种稳定写策略生成一个 capability SID。新的 writable root 首次授权时安装可继承 capability ACE；后续命令
-   先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加非递归 logon SID ACE；
-4. 如果隔离账户原本不能写入 writable root，同时为稳定沙箱组安装写 ACE，让普通 token 检查和 restricted SID
-   检查都通过；
+2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；命令特有的工具链文件仅在必要时向本次 logon SID
+   临时授予 read/execute，且只修改所指对象，不向已有子树传播；
+3. 每种稳定 workspace 策略生成一个 capability SID。私有只读 workspace 和新的 writable root 首次授权时安装
+   可继承 capability ACE；后续命令先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加
+   非递归 logon SID ACE；
+4. 如果隔离账户原本不能访问稳定 root，同时为稳定沙箱组安装对应 ACE：group 通过普通 token 检查，当前
+   policy capability 通过 restricted SID 二次检查，因此其他 workspace 的 capability 不能借用旧 group ACE；
 5. 已存在的 protected writable root 向 capability 安装稳定 write deny，覆盖从 workspace 继承的 allow；
 6. Job Object 结束后只回收本次 logon SID 和 request-bootstrap ACE；稳定 capability、group 和 deny ACE 留作复用；
 7. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
 
-最终 shell 使用 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`。restricting SID
-列表与上游 Codex 的 Windows 沙箱一致，包含 policy capability、专用隔离账户 SID、本次 logon SID 和
-`Everyone`：capability 收窄文件写入，账户 SID 让账户范围的 Windows 对象可用，logon SID 保持本次执行
-创建的对象可用，`Everyone` 则保证系统 DLL（包括 `bcrypt.dll`）和标准 Windows 对象能完成初始化；不会加入
-`Authenticated Users` 等其他宽泛组。外层 account runner 从机器级只读副本启动，并被放入不可 breakaway、
-close 即 kill 的 Job Object。
+最终 shell 以 Codex 的 restricted-token SID 结构为基线，但使用
+`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN)`，让 restricting SID 二次检查同时约束读取和写入。
+列表包含 policy capability、专用隔离账户 SID、本次 logon SID、`Everyone`、`ALL APPLICATION PACKAGES` 和
+`ALL RESTRICTED APPLICATION PACKAGES`：capability 把稳定 workspace ACE 绑定到当前策略，账户和 logon SID
+保持账户范围及本次执行对象可用，两个 app-package SID 提供标准 Windows 二进制的 read/execute 初始化能力；
+不会加入 `Users` 或 `Authenticated Users` 等可能同时放宽外部写路径的组。外层 account runner 从机器级只读
+副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
 
 `Everyone` 是 Windows restricted-token 模型的已知边界：宿主上预先存在、且明确向 `Everyone` 开放写入的
 路径不能被该 token 重新收窄。安装和执行流程不会创建这种宽泛 ACE；部署环境也不应把需要保护的路径设为

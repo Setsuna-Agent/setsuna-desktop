@@ -135,9 +135,10 @@ impl SandboxRunRequest {
         ] {
             validate_roots(label, roots)?;
         }
-        // WRITE_RESTRICTED tokens can make write denies authoritative. They cannot
-        // enforce path-specific read denies, and NTFS ACLs cannot represent globs.
-        // Reject these policies so the runtime can request a narrower approval.
+        // V1 materializes approved read/write roots and protected write denies. It
+        // does not yet install arbitrary read-deny roots, and NTFS ACLs cannot
+        // represent globs. Reject these policies so the runtime can ask for a
+        // narrower approval instead of silently weakening them.
         if !self.denied_roots.is_empty() || !self.denied_glob_reg_exp_sources.is_empty() {
             return Err(SandboxError::new(
                 SandboxErrorCode::UnsupportedPolicy,
