@@ -7,7 +7,6 @@ import type {
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadGoalPatch,
-  RuntimeThreadMemoryMode,
   RuntimeUsageResponse,
   WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
@@ -49,10 +48,7 @@ import {
   createWorkspaceMentionSlots,
   filterSelectedSkillsBySlots,
 } from './composer/chatComposerSlots.js';
-import {
-  createChatSlashCommandItems,
-  nextThreadMemoryMode,
-} from './composer/chatSlashCommandItems.js';
+import { createChatSlashCommandItems } from './composer/chatSlashCommandItems.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
 import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
@@ -128,11 +124,9 @@ export function ChatComposer({
   onSend,
   queuedTurnActions,
   onStartThreadReview,
-  onThreadMemoryModeChange,
   onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
-  threadMemoryMode,
 }: {
   activeTurnId: string | null;
   activeProject?: WorkspaceProject;
@@ -152,7 +146,6 @@ export function ChatComposer({
   threadUsage: RuntimeUsageResponse | null;
   starter?: boolean;
   placeholder?: string;
-  threadMemoryMode?: RuntimeThreadMemoryMode;
   onCancelActiveTurn: () => void;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onCompactContext: () => void;
@@ -168,7 +161,6 @@ export function ChatComposer({
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onStartThreadReview: () => void | Promise<unknown>;
-  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void | Promise<void>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
@@ -221,8 +213,6 @@ export function ChatComposer({
     && (draft.trim() || sendableAttachments.length),
   );
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
-  const memoryMode = threadMemoryMode ?? 'enabled';
-  const memoryGenerationEnabled = config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
   const multiAgentEnabled = config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
   const composerHasProtectedState = Boolean(
     draft
@@ -273,11 +263,8 @@ export function ChatComposer({
     canClearContext,
     contextCompactPercent,
     contextCompacting,
-    goalEnabled: modeController.goalEnabled,
     goalModeEnabled: modeController.goalModeEnabled,
     hasCurrentThread: Boolean(currentThread),
-    memoryGenerationEnabled,
-    memoryMode,
     multiAgentEnabled,
     planModeEnabled: modeController.planModeEnabled,
     query: commandController.slashQuery,
@@ -294,10 +281,7 @@ export function ChatComposer({
     contextCompacting,
     currentGoal,
     currentThread,
-    memoryGenerationEnabled,
-    memoryMode,
     modeController.activeModelName,
-    modeController.goalEnabled,
     modeController.goalModeEnabled,
     modeController.planModeEnabled,
     multiAgentEnabled,
@@ -472,11 +456,6 @@ export function ChatComposer({
       commandController.focusComposer();
       return;
     }
-    if (item.kind === 'action' && item.type === 'memory-mode') {
-      if (!item.disabled) void onThreadMemoryModeChange(nextThreadMemoryMode(memoryMode));
-      commandController.focusComposer();
-      return;
-    }
     const command = commandController.slashCommand
       ?? parseSlashCommand(draft, commandController.commandCursorOffset);
     const nextDraft = command ? `${draft.slice(0, command.start)}${draft.slice(command.end)}`.trimStart() : draft;
@@ -490,17 +469,17 @@ export function ChatComposer({
       return;
     }
     if (item.kind === 'action' && item.type === 'plan') {
-      modeController.togglePlanMode();
+      modeController.enablePlanMode();
       commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'collaboration') {
-      void onSetMultiAgentEnabled(!multiAgentEnabled);
+      if (!multiAgentEnabled) void onSetMultiAgentEnabled(true);
       commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'goal') {
-      modeController.toggleGoalMode();
+      modeController.enableGoalMode();
       commandController.focusComposer();
       return;
     }

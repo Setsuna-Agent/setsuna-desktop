@@ -5,7 +5,7 @@ import {
   fallbackThreadTitle,
   normalizeRuntimeQueuedTurnInputKind,
   type RuntimeEvent,
-  type RuntimeGoalLifecycleKind,
+  type RuntimeGoalExitKind,
   type RuntimeMessage,
   type RuntimeQueuedTurnInput,
   type RuntimeTaskKind,
@@ -17,15 +17,13 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext } from '../../ports/tool-host.js';
 import { recordInput } from '../../shared/unknown.js';
-import { goalLifecycleMessage } from './runtime-goal-prompts.js';
+import { goalExitMessage } from './runtime-goal-prompts.js';
 import {
   accountGoalTurn,
   epochSeconds,
   goalExecutionState,
-  goalLifecycleTransition,
   hasAwaitingPlanConfirmation,
   isProviderUsageLimit,
-  lifecycleKindForStatus,
   MAX_AUTOMATIC_GOAL_TURNS,
   MAX_CONSECUTIVE_NO_PROGRESS_TURNS,
   nextGoalSafety,
@@ -70,15 +68,12 @@ type RuntimeGoalCoordinatorOptions = {
   hasQueuedInput?(threadId: string): Promise<boolean>;
   waitForCancellationWrites(threadId: string): Promise<void>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
 
 type SetGoalOptions = {
   cancelActiveGoalTurn?: boolean;
   execution?: RuntimeThreadGoal['execution'];
   forceNew?: boolean;
-  lifecycleTurnId?: string;
-  publishLifecycle?: boolean;
 };
 
 /** 管理持久化目标状态、计量、模型工具、恢复安全和空闲轮次续接。 */
@@ -90,7 +85,6 @@ export class RuntimeGoalCoordinator {
   private readonly goalIdByTurnId = new Map<string, string>();
   private readonly goalObjectiveByTurnId = new Map<string, string>();
   private readonly pendingCompletionGoalIdByTurnId = new Map<string, string>();
-  private readonly deferredLifecycleGoalIdByTurnId = new Map<string, string>();
   private readonly retiredGoalIds = new Set<string>();
   private readonly supersededGoalTurnIds = new Set<string>();
   private readonly suppressCancellationPauseThreads = new Set<string>();
@@ -134,7 +128,6 @@ export class RuntimeGoalCoordinator {
             : { ...accounted, updatedAt: epochSeconds(now) };
         if (sameGoalState(thread.goal, restored)) return;
         await this.publishGoal(restored, { preserveExecution: Boolean(restored.execution) });
-        if (thread.goal.status === 'active') await this.publishLifecycle(restored, 'paused');
       });
     }
   }
@@ -187,7 +180,6 @@ export class RuntimeGoalCoordinator {
       this.supersedePendingGoalTurns(goal.id);
     }
     const active = this.options.activeTask(threadId);
-    const registered = this.options.registeredTask(threadId) ?? active;
     const replacingActiveGoal = Boolean(
       previous
       && previous.id !== goal.id
@@ -199,15 +191,6 @@ export class RuntimeGoalCoordinator {
       await this.cancelGoalTurnWithoutPausing(threadId, active.turnId);
     }
 
-    const lifecycleKind = goalLifecycleTransition(previous, goal);
-    const deferredLifecycleTurnId = lifecycleKind
-      && goal.status !== 'active'
-      && options.publishLifecycle !== false
-      && options.cancelActiveGoalTurn !== false
-      && registered
-      && this.taskBelongsToGoal(registered, goal.id)
-      ? registered.turnId
-      : undefined;
     await this.publishGoal(goal, {
       preserveExecution: Boolean(
         previous?.id === goal.id
@@ -216,12 +199,6 @@ export class RuntimeGoalCoordinator {
       ),
     });
     if (!previous) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
-
-    if (deferredLifecycleTurnId) {
-      this.deferredLifecycleGoalIdByTurnId.set(deferredLifecycleTurnId, goal.id);
-    } else if (lifecycleKind && options.publishLifecycle !== false) {
-      await this.publishLifecycle(goal, lifecycleKind, options.lifecycleTurnId);
-    }
 
     const currentActive = this.options.activeTask(threadId);
     if (
@@ -232,7 +209,7 @@ export class RuntimeGoalCoordinator {
     ) {
       await this.cancelGoalTurnWithoutPausing(threadId, currentActive.turnId);
     }
-    if (goal.status === 'active') await this.continueIfIdle(threadId, false);
+    if (goal.status === 'active') await this.continueIfIdle(threadId);
     return goal;
   }
 
@@ -298,7 +275,6 @@ export class RuntimeGoalCoordinator {
         sourceMessage,
         turnId,
       });
-      await this.publishLifecycle(goal, 'active', turnId);
       if (!thread.goal) await this.updateDefaultTitle(threadId, thread.title, goal.objective);
       const run = await this.options.createContinuation(
         threadId,
@@ -332,22 +308,12 @@ export class RuntimeGoalCoordinator {
         await this.cancelGoalTurnWithoutPausing(threadId, goalTask.turnId);
       }
       await this.options.waitForCancellationWrites(threadId);
-      const accounted = await this.accountUnsettledGoalTurns(threadId, goal);
-      const clearedSnapshot = sameGoalState(goal, accounted)
-        ? accounted
-        : { ...accounted, updatedAt: epochSeconds(this.options.clock.now()) };
-      const lifecycleMessage = goalLifecycleMessage(
-        clearedSnapshot,
-        'cleared',
-        this.options.ids,
-        this.options.clock,
-      );
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
         type: 'thread.goal_cleared',
         createdAt: this.options.clock.now().toISOString(),
-        payload: { cleared: true, lifecycleMessage },
+        payload: { cleared: true },
       });
     } catch (error) {
       // If the atomic clear fails, allow the cancelled turn to settle and pause the still-active Goal.
@@ -377,17 +343,11 @@ export class RuntimeGoalCoordinator {
       const thread = await this.requireThread(threadId);
       const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : null;
       if (goal?.status === 'active') {
-        const task = this.options.registeredTask(threadId) ?? this.options.activeTask(threadId);
         const updated = withGoalStatus(goal, 'paused', this.options.clock.now(), {
           code: 'turnCancelled',
           message: 'Goal paused because its active turn was cancelled.',
         });
         await this.publishGoal(updated, { preserveExecution: Boolean(goal.execution) });
-        if (task && this.taskBelongsToGoal(task, goal.id)) {
-          this.deferredLifecycleGoalIdByTurnId.set(task.turnId, goal.id);
-        } else {
-          await this.publishLifecycle(updated, 'paused');
-        }
       }
     });
   }
@@ -428,7 +388,6 @@ export class RuntimeGoalCoordinator {
       this.goalIdByTurnId.delete(turnId);
       this.goalObjectiveByTurnId.delete(turnId);
       this.pendingCompletionGoalIdByTurnId.delete(turnId);
-      this.deferredLifecycleGoalIdByTurnId.delete(turnId);
       this.supersededGoalTurnIds.delete(turnId);
       if (settledGoalId) this.retiredGoalIds.delete(settledGoalId);
       pending.delete(settlement);
@@ -495,7 +454,6 @@ export class RuntimeGoalCoordinator {
             cancelActiveGoalTurn: false,
             execution: boundToCurrentGoal ? currentGoal?.execution : context.goalExecution,
             forceNew: true,
-            lifecycleTurnId: context.turnId,
           },
         );
         this.goalIdByTurnId.set(context.turnId, goal.id);
@@ -564,7 +522,7 @@ export class RuntimeGoalCoordinator {
     };
   }
 
-  private async continueIfIdle(threadId: string, publishContinuation = true): Promise<void> {
+  private async continueIfIdle(threadId: string): Promise<void> {
     if (
       this.stopped
       || this.deletionPausedThreads.has(threadId)
@@ -586,7 +544,6 @@ export class RuntimeGoalCoordinator {
       // Explicit user work and unresolved Plan confirmation always beat autonomous continuation.
       if (await this.options.hasQueuedInput?.(threadId)) return;
       if (hasAwaitingPlanConfirmation(thread.messages)) return;
-      if (publishContinuation) await this.publishLifecycle(goal, 'continuation');
       const run = await this.options.createContinuation(threadId, goal);
       this.observeRun(threadId, run.turnId, 'goal', run.done, goal.id, goal.objective);
       void run.done.catch(() => undefined);
@@ -660,7 +617,6 @@ export class RuntimeGoalCoordinator {
       };
       await this.publishGoal(updated, {
         preserveExecution: Boolean(updated.execution),
-        lifecycleMessage: this.deferredLifecycleMessage(updated, turnId),
       });
       if (accounted.status === 'active') await this.continueIfIdle(threadId);
       return;
@@ -718,47 +674,19 @@ export class RuntimeGoalCoordinator {
       safety,
       updatedAt: epochSeconds(this.options.clock.now()),
     };
-    const completionLifecycleMessage = updated.status === 'complete'
-      && completionRequested
-      ? goalLifecycleMessage(updated, 'complete', this.options.ids, this.options.clock, turnId)
-      : undefined;
-    const lifecycleMessage = completionLifecycleMessage ?? this.deferredLifecycleMessage(updated, turnId);
-    // Deferred control and completion markers share the final accounted event with their state.
+    const exitKind = updated.status !== goal.status
+      ? goalExitKindForStatus(updated.status)
+      : null;
+    // The exit summary shares the final accounted event so its usage is exact, including this turn.
     await this.publishGoal(updated, {
       preserveExecution: Boolean(updated.execution),
-      lifecycleMessage,
+      lifecycleMessage: exitKind
+        ? goalExitMessage(updated, exitKind, this.options.ids, this.options.clock, turnId)
+        : undefined,
     });
-    if (!lifecycleMessage && updated.status !== goal.status && updated.status !== 'active') {
-      await this.publishLifecycle(updated, lifecycleKindForStatus(updated.status), turnId);
-    }
     if (updated.status === 'active') {
       await this.continueIfIdle(threadId);
     }
-  }
-
-  private async publishLifecycle(
-    goal: RuntimeThreadGoal,
-    kind: RuntimeGoalLifecycleKind,
-    turnId?: string,
-  ): Promise<void> {
-    const message = goalLifecycleMessage(goal, kind, this.options.ids, this.options.clock, turnId);
-    if (message.turnId) {
-      await this.options.publishMessage(goal.threadId, message.turnId, message);
-      return;
-    }
-    await this.options.appendEvent(goal.threadId, {
-      id: this.options.ids.id('event'),
-      threadId: goal.threadId,
-      type: 'message.created',
-      createdAt: message.createdAt,
-      payload: { message },
-    });
-  }
-
-  private deferredLifecycleMessage(goal: RuntimeThreadGoal, turnId: string): RuntimeMessage | undefined {
-    return goal.status !== 'active' && this.deferredLifecycleGoalIdByTurnId.get(turnId) === goal.id
-      ? goalLifecycleMessage(goal, lifecycleKindForStatus(goal.status), this.options.ids, this.options.clock, turnId)
-      : undefined;
   }
 
   private async publishGoal(
@@ -855,6 +783,12 @@ export class RuntimeGoalCoordinator {
     const boundGoalId = this.goalIdByTurnId.get(task.turnId);
     return boundGoalId ? boundGoalId === goalId : task.taskKind === 'goal';
   }
+}
+
+function goalExitKindForStatus(status: RuntimeThreadGoal['status']): RuntimeGoalExitKind | null {
+  return status === 'complete' || status === 'blocked' || status === 'usageLimited'
+    ? status
+    : null;
 }
 
 function restoredTurnBelongsToGoal(

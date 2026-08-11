@@ -264,19 +264,28 @@ export type RuntimeThreadGoal = {
   execution?: RuntimeThreadGoalExecutionOptions;
 };
 
+export type RuntimeGoalExitKind =
+  | 'blocked'
+  | 'usageLimited'
+  | 'complete';
+
+/** Legacy transcript notices may still contain lifecycle kinds hidden by current clients. */
 export type RuntimeGoalLifecycleKind =
   | 'active'
   | 'continuation'
   | 'paused'
   | 'resumed'
-  | 'blocked'
-  | 'usageLimited'
   | 'budgetLimited'
-  | 'complete'
-  | 'cleared';
+  | 'cleared'
+  | RuntimeGoalExitKind;
 
 export type RuntimeGoalLifecycleNotice = {
   kind: RuntimeGoalLifecycleKind;
+  goal: RuntimeThreadGoal;
+};
+
+export type RuntimeGoalExitNotice = {
+  kind: RuntimeGoalExitKind;
   goal: RuntimeThreadGoal;
 };
 

@@ -55,23 +55,23 @@ export function createChatComposerModelCapabilities(
   };
 }
 
-export function toggleChatComposerPlanMode(
+export function enableChatComposerPlanMode(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  const planModeEnabled = !modes.planModeEnabled;
+  if (modes.planModeEnabled && !modes.goalModeEnabled) return modes;
   return {
-    goalModeEnabled: planModeEnabled ? false : modes.goalModeEnabled,
-    planModeEnabled,
+    goalModeEnabled: false,
+    planModeEnabled: true,
   };
 }
 
-export function toggleChatComposerGoalMode(
+export function enableChatComposerGoalMode(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  const goalModeEnabled = !modes.goalModeEnabled;
+  if (modes.goalModeEnabled && !modes.planModeEnabled) return modes;
   return {
-    goalModeEnabled,
-    planModeEnabled: goalModeEnabled ? false : modes.planModeEnabled,
+    goalModeEnabled: true,
+    planModeEnabled: false,
   };
 }
 

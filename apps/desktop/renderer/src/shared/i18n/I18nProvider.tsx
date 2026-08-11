@@ -51,7 +51,7 @@ export function useI18n(): I18nContextValue {
 }
 
 export function translate(locale: AppLocale, key: MessageKey, params?: TranslationParams): string {
-  // Dynamic lifecycle keys can arrive from newer persisted data. Keep one missing label from
+  // Dynamic persisted notice keys can arrive from newer app versions. Keep one missing label from
   // crashing the entire renderer and let the untranslated key remain diagnosable in the UI.
   const localeMessages = messages[locale] as Partial<Record<MessageKey, string>>;
   const fallbackMessages = messages[DEFAULT_APP_LOCALE] as Partial<Record<MessageKey, string>>;

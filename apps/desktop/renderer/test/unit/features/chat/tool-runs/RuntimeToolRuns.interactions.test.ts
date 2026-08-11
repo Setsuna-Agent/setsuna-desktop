@@ -78,6 +78,15 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(text).not.toContain('已使用 update plan');
   });
 
+  it('does not render Plan and Goal state-update tools in the transcript', () => {
+    const html = renderedHtml([
+      toolRun('plan_update', 'update_plan', { plan: [] }),
+      toolRun('goal_update', 'update_goal', { status: 'complete' }),
+    ]);
+
+    expect(html).toBe('');
+  });
+
   it('wraps adjacent file and shell groups into one mixed summary', () => {
     const runs = [
       fileRun('write_selection', 'write_file', 'selection_sort.py', 'Created'),

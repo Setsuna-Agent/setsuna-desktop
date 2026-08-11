@@ -4,7 +4,6 @@ import type {
   RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
-  RuntimeThreadMemoryMode,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -16,7 +15,6 @@ import {
 } from '../../../services/runtime-client/runtimeThreadState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
 import { useChatTurnActions } from './useChatTurnActions.js';
@@ -45,7 +43,6 @@ export function useSideChat({
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
   const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
-  const memoryModeRequests = useLatestRequestGuard();
   const threadId = currentThread?.id ?? null;
   const {
     claimForThread: claimComposerForThread,
@@ -89,9 +86,8 @@ export function useSideChat({
     resetComposer();
     setActiveTurnId(null);
     setThreadUsage(null);
-    memoryModeRequests.invalidate();
     terminalTurnIdsRef.current.clear();
-  }, [activeProjectId, memoryModeRequests, resetComposer]);
+  }, [activeProjectId, resetComposer]);
 
   useEffect(() => {
     if (!threadId) return undefined;
@@ -231,20 +227,6 @@ export function useSideChat({
     }
   }, [client, contextCompacting, contextRequests, currentThread, reloadThreads]);
 
-  const updateMemoryMode = useCallback(async (mode: RuntimeThreadMemoryMode) => {
-    if (!currentThread) return null;
-    const requestedThreadId = currentThread.id;
-    const isLatest = memoryModeRequests.begin();
-    const updated = await client.updateThreadMemoryMode(requestedThreadId, { mode });
-    if (isLatest() && threadIdRef.current === requestedThreadId) {
-      setCurrentThread((thread) => (
-        thread?.id === requestedThreadId && updated.lastSeq >= thread.lastSeq ? updated : thread
-      ));
-    }
-    await reloadThreads();
-    return updated;
-  }, [client, currentThread, memoryModeRequests, reloadThreads]);
-
   const clearGoal = useCallback(async () => {
     if (!currentThread) return false;
     const requestedThreadId = currentThread.id;
@@ -316,7 +298,6 @@ export function useSideChat({
     startReview,
     threadUsage,
     updateGoal,
-    updateMemoryMode,
   }), [
     actions,
     answerApproval,
@@ -332,7 +313,6 @@ export function useSideChat({
     startReview,
     threadUsage,
     updateGoal,
-    updateMemoryMode,
   ]);
 }
 

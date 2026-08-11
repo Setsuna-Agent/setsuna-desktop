@@ -287,7 +287,6 @@ export function AppRouteContent({
       onClearContext={() => void runtime.clearCurrentThreadContext()}
       onClearThreadGoal={() => runtime.clearCurrentThreadGoal()}
       onUpdateThreadGoal={(patch) => runtime.updateCurrentThreadGoal(patch)}
-      onThreadMemoryModeChange={(mode) => void runtime.updateCurrentThreadMemoryMode(mode)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}
       onCloseBottomPanel={(panelId) => workspacePanels.closeDesktopPanelItem('bottom', panelId)}

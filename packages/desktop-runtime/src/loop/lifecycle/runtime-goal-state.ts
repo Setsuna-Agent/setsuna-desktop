@@ -3,7 +3,6 @@ import {
   cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   type RuntimeEvent,
-  type RuntimeGoalLifecycleKind,
   type RuntimeMessage,
   type RuntimeQueuedTurnInput,
   type RuntimeThreadGoal,
@@ -192,23 +191,6 @@ export function goalExecutionState(
     thinkingEffort: input.thinking === true ? input.thinkingEffort : undefined,
   };
   return { execution };
-}
-
-export function goalLifecycleTransition(
-  previous: RuntimeThreadGoal | undefined,
-  next: RuntimeThreadGoal,
-): RuntimeGoalLifecycleKind | null {
-  if (!previous || previous.id !== next.id) return next.status === 'active'
-    ? 'active'
-    : lifecycleKindForStatus(next.status);
-  if (previous.status === next.status) return null;
-  if (next.status === 'active') return 'resumed';
-  return lifecycleKindForStatus(next.status);
-}
-
-export function lifecycleKindForStatus(status: RuntimeThreadGoalStatus): RuntimeGoalLifecycleKind {
-  if (status === 'active') return 'resumed';
-  return status;
 }
 
 export function hasAwaitingPlanConfirmation(messages: RuntimeMessage[]): boolean {

@@ -90,8 +90,25 @@
   color: var(--app-primary);
 }
 
-.chat-goal-editor__input {
+.chat-goal-editor__input-shell {
+  position: relative;
+  display: grid;
+  min-width: 0;
   margin-top: 8px;
+}
+
+.chat-goal-editor__input {
+  padding-bottom: 28px;
+}
+
+.chat-goal-editor__count {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 14px;
+  pointer-events: none;
 }
 
 .chat-goal-editor__actions {

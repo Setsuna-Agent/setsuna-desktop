@@ -14,9 +14,10 @@ import {
   FileChangesSummaryCard,
   RuntimeHookRuns,
   RuntimeToolRuns,
-  isDisplayableRuntimeToolRun,
   type ToolRunSummaryMode,
 } from '../tool-runs/RuntimeToolRuns.js';
+import { isDisplayableRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
+import { formatGoalExitSummary } from '../goalFormatting.js';
 import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
 import {
   createAssistantGuidanceTimelinePlan,
@@ -47,7 +48,6 @@ import {
 } from './ChatWorkHistory.js';
 import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
-import { GoalLifecycleMarker } from './GoalLifecycleMarker.js';
 
 export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
 export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
@@ -124,9 +124,6 @@ export function MessageItem({
   }
   if (item.type === 'review') {
     return <ReviewModeMarker message={item.message} />;
-  }
-  if (item.type === 'goal') {
-    return <GoalLifecycleMarker message={item.message} />;
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
@@ -234,7 +231,7 @@ function AssistantRunItem({
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const status = assistantRunStatus(item);
   const belongsToActiveTurn = assistantRunIsActive(item, activeTurnId);
   const active = belongsToActiveTurn && item.id === activeAssistantItemId;
@@ -242,7 +239,7 @@ function AssistantRunItem({
   const lastSegment = item.segments[item.segments.length - 1];
   const footerMessage = {
     ...(lastSegment ?? item.segments[0]),
-    content: assistantRunCopyText(item, t),
+    content: assistantRunCopyText(item, t, locale),
   } as RuntimeMessage;
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
@@ -328,7 +325,7 @@ function AssistantRunContent({
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
 }) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
   const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
@@ -372,6 +369,7 @@ function AssistantRunContent({
   }, [active, hasFinalAnswerContent, toolRuns]);
   const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
   const artifacts = useMemo(() => runtimeArtifactsFromToolRuns(toolRuns), [toolRuns]);
+  const goalExitSummary = item.goalExit ? formatGoalExitSummary(item.goalExit, t, locale) : null;
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return active ? (
       <div className="chat-assistant-run">
@@ -423,6 +421,7 @@ function AssistantRunContent({
         </div>
       ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
+      {!active && goalExitSummary ? <div className="chat-assistant-run__segment">{goalExitSummary}</div> : null}
     </div>
   );
 }

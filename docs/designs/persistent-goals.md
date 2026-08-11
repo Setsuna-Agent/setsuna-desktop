@@ -20,7 +20,7 @@
 
 ## `pi-goal` 对齐结论
 
-调研基线是 `pi-goal` 0.1.7。它的核心不是 `/goal` 命令本身，而是以下闭环：持久化单一目标、显式创建/替换、受限模型工具、生命周期消息、turn 结算、空闲续轮、用户控制和 reload 后暂停。
+调研基线是 `pi-goal` 0.1.7。它的核心不是 `/goal` 命令本身，而是以下闭环：持久化单一目标、显式创建/替换、受限模型工具、turn 结算、空闲续轮、用户控制和 reload 后暂停。
 
 | 语义 | Setsuna Desktop |
 | --- | --- |
@@ -29,7 +29,7 @@
 | active 时暴露 `get_goal` / `update_goal` | 对齐；非 active 只保留 `create_goal` |
 | `update_goal` 只能提交 `complete` | 对齐 |
 | 完成前按真实证据审计 | 对齐；续轮 prompt 明确要求逐项映射证据 |
-| lifecycle marker + 紧凑状态 | 对齐；transcript marker 与 composer 状态栏分工 |
+| 紧凑状态与最终用量 | 语义对齐；过程状态只进线程投影，退出后才写一次精确用量总结 |
 | 最终 turn 仍计入用量/耗时 | 对齐 |
 | reload 不静默续跑 | 对齐；恢复为 `paused(runtimeReloaded)` |
 | Token 预算 | 有意不对齐；产品不展示、不接受 Goal tool 预算，也不按预算停止 |
@@ -54,13 +54,13 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 
 | 当前状态 | 用户动作 | 下一状态 | runtime 行为 |
 | --- | --- | --- | --- |
-| 无 Goal | 创建 | `active` | 写状态和 marker，线程空闲时启动首轮 |
+| 无 Goal | 创建 | `active` | 写状态，线程空闲时启动首轮 |
 | 任意 Goal | 创建新 Goal | `active`（新 ID） | 取消旧 Goal turn，替换状态并重新开始 |
 | `active` | 暂停 | `paused` | 写 `userPaused`，取消 active Goal turn |
 | `paused` / `blocked` / `usageLimited` | 继续 | `active` | 清除停止原因与安全计数，启动续轮 |
 | 非 `complete` | 编辑 | 状态不变 | 保留 ID、累计计量、创建时间和 execution；下一轮按新 objective 执行 |
-| 任意 Goal | 删除 | 无 Goal | 取消 Goal turn，写 cleared marker 和 clear 事件 |
-| `active` | 模型完成审计 | `complete` | 停止续轮，最终 turn 结算仍更新计量 |
+| 任意 Goal | 删除 | 无 Goal | 取消 Goal turn，只写 clear 事件，不保留 transcript 墓碑 |
+| `active` | 模型完成审计 | `complete` | 停止续轮，最终 turn 结算后写一次退出总结 |
 | `active` | runtime reload | `paused` | 写 `runtimeReloaded`，等待用户继续 |
 | `active` | 连续无进展/轮次上限 | `blocked` | 写结构化 stop reason，不再自动续轮 |
 
@@ -88,7 +88,7 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 1. developer policy：说明继续规则、真实证据审计和唯一完成入口。
 2. synthetic user context：携带当前 objective 和累计用量。
 
-持久化 lifecycle 消息只用于 transcript，避免在模型窗口里重复累积。工具暴露规则：
+开始、继续、暂停和恢复只更新 Goal 状态，不再生成 transcript 消息。完成、阻塞或用量受限后，runtime 才把已经结算最终 turn 的 Token 与耗时写成结构化退出数据；renderer 将它合并到该 turn 的最后一条助手消息，该数据不进入模型窗口。删除 Goal 不生成退出数据。工具暴露规则：
 
 - 无 active Goal：`create_goal`。
 - active Goal：`create_goal`、`get_goal`、`update_goal`。
@@ -107,7 +107,7 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 - active 时显示暂停，其他可恢复状态显示继续；
 - 删除按钮清除 Goal。
 
-生命周期转换另以紧凑、可展开的 transcript marker 留痕。状态栏承担当前控制，marker 负责历史解释，两者不重复承载完整操作。
+开始、继续、暂停和恢复不在 transcript 留行。Goal 完成、阻塞或受用量限制后，在最后一条助手消息末尾追加一行准确耗时和 Token；删除 Goal 不留任何总结。线程总用量继续由“用量与诊断”展示。
 
 ## 错误与恢复
 
@@ -120,9 +120,9 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 
 ## 验证覆盖
 
-- contract/store：Goal identity、stop reason、safety 和 lifecycle notice 的 clone/projection。
+- contract/store：Goal identity、stop reason、safety 和退出 notice 的 clone/projection，并兼容读取旧 lifecycle notice。
 - runtime integration：自动续轮与最终计量、取消暂停、用户 steer、编辑保留状态、reload 暂停、无进展保护、队列 Goal 替换。
-- renderer unit：状态栏耗时、继续/编辑/删除操作、lifecycle transcript projection、缺失 i18n key 不崩溃。
+- renderer unit：状态栏耗时、继续/编辑/删除操作、退出数据合并到助手文本、旧过程及 cleared notice 隐藏和缺失 i18n key 不崩溃。
 - Skill：`quick_validate.py` 校验 frontmatter 和 interface metadata；registry integration 负责实际发现与加载。
 
 ## 相关文件
@@ -133,5 +133,6 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 - `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-prompts.ts`
 - `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-tools.ts`
 - `apps/desktop/renderer/src/features/chat/composer/ChatGoalStatusBar.tsx`
-- `apps/desktop/renderer/src/features/chat/conversation/GoalLifecycleMarker.tsx`
+- `apps/desktop/renderer/src/features/chat/conversation/chatMessageDisplay.ts`
+- `apps/desktop/renderer/src/features/chat/goalFormatting.ts`
 - `skills/goal-writer/SKILL.md`

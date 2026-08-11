@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { formatGoalDuration } from '../goalFormatting.js';
 import { Button } from '../../../shared/ui/primitives.js';
 
 const MAX_GOAL_OBJECTIVE_LENGTH = 4_000;
@@ -131,16 +132,20 @@ export function ChatGoalStatusBar({
           </div>
         )}
       >
-        <Input.TextArea
-          autoFocus
-          className="chat-goal-editor__input"
-          value={draft}
-          maxLength={MAX_GOAL_OBJECTIVE_LENGTH}
-          rows={9}
-          showCount
-          placeholder={t('chat.goal.editPlaceholder')}
-          onChange={(event) => setDraft(event.currentTarget.value)}
-        />
+        <div className="chat-goal-editor__input-shell">
+          <Input.TextArea
+            autoFocus
+            className="chat-goal-editor__input"
+            value={draft}
+            maxLength={MAX_GOAL_OBJECTIVE_LENGTH}
+            rows={9}
+            placeholder={t('chat.goal.editPlaceholder')}
+            onChange={(event) => setDraft(event.currentTarget.value)}
+          />
+          <span className="chat-goal-editor__count">
+            {draft.length} / {MAX_GOAL_OBJECTIVE_LENGTH}
+          </span>
+        </div>
         {actionError ? <p className="chat-goal-editor__error">{actionError}</p> : null}
       </Modal>
     </>
@@ -192,14 +197,4 @@ function useGoalElapsedSeconds(goal: RuntimeThreadGoal, activeTurnStartedAt?: st
     ? 0
     : Math.max(0, Math.floor((now - activeStartedAt) / 1_000));
   return goal.timeUsedSeconds + activeSeconds;
-}
-
-export function formatGoalDuration(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(seconds / 3_600);
-  const minutes = Math.floor((seconds % 3_600) / 60);
-  const remainder = seconds % 60;
-  if (hours) return `${hours}h ${minutes}m ${remainder}s`;
-  if (minutes) return `${minutes}m ${remainder}s`;
-  return `${remainder}s`;
 }

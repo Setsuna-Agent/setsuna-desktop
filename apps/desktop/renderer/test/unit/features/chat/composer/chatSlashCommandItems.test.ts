@@ -26,7 +26,6 @@ describe('chat slash command items', () => {
       'usage',
       'side-chat',
       'review',
-      'memory-mode',
       'compact-context',
       'clear-context',
     ]);
@@ -63,7 +62,7 @@ describe('chat slash command items', () => {
       skills,
     }));
 
-    expect(items.slice(0, 10).map((item) => item.key)).toEqual([
+    expect(items.slice(0, 9).map((item) => item.key)).toEqual([
       'model',
       'plan',
       'collaboration',
@@ -71,11 +70,10 @@ describe('chat slash command items', () => {
       'usage',
       'side-chat',
       'review',
-      'memory-mode',
       'compact-context',
       'clear-context',
     ]);
-    expect(items.slice(10).map((item) => item.key)).toEqual(
+    expect(items.slice(9).map((item) => item.key)).toEqual(
       skills.slice(2).map((item) => `skill:${item.id}`),
     );
   });
@@ -96,11 +94,8 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     canClearContext: true,
     contextCompactPercent: 42,
     contextCompacting: false,
-    goalEnabled: false,
     goalModeEnabled: false,
     hasCurrentThread: true,
-    memoryGenerationEnabled: true,
-    memoryMode: 'enabled',
     multiAgentEnabled: false,
     planModeEnabled: false,
     query: '',

@@ -186,7 +186,6 @@ export function SideChatPanel({
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
           onStartThreadReview={() => sideChat.startReview({ type: 'uncommittedChanges' })}
           onSkillSelectionRequestConsumed={() => undefined}
-          onThreadMemoryModeChange={(mode) => void sideChat.updateMemoryMode(mode)}
         />
       </MarkdownNavigationProvider>
     </aside>

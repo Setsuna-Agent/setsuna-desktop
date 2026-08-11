@@ -21,7 +21,7 @@ describe('renderer i18n', () => {
   });
 
   it('keeps an unknown runtime key from crashing interpolation', () => {
-    const unknownKey = 'chat.goal.lifecycle.future' as MessageKey;
+    const unknownKey = 'chat.goal.exit.future' as MessageKey;
 
     expect(translate('zh-CN', unknownKey, { duration: '1m' })).toBe(unknownKey);
   });

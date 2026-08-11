@@ -9,7 +9,6 @@ import {
   type RuntimeSkillSummary,
   type RuntimeThread,
   type RuntimeThreadGoalPatch,
-  type RuntimeThreadMemoryMode,
   type RuntimeThreadSummary,
   type RuntimeUsageResponse,
   type WorkspaceEntry,
@@ -131,7 +130,6 @@ export function AppChatSurface({
   onClearContext,
   onClearThreadGoal,
   onUpdateThreadGoal,
-  onThreadMemoryModeChange,
   onDeleteMessages,
   onDiscardFileChanges,
   onCloseBottomPanel,
@@ -225,7 +223,6 @@ export function AppChatSurface({
   onClearContext: () => void;
   onClearThreadGoal: () => void | Promise<unknown>;
   onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
-  onThreadMemoryModeChange: (mode: RuntimeThreadMemoryMode) => void;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onCloseBottomPanel: (panelId: string) => void;
@@ -355,7 +352,6 @@ export function AppChatSurface({
             onClearContext={onClearContext}
             onClearThreadGoal={onClearThreadGoal}
             onUpdateThreadGoal={onUpdateThreadGoal}
-            onThreadMemoryModeChange={onThreadMemoryModeChange}
             onDeleteMessages={onDeleteMessages}
             onDiscardFileChanges={onDiscardFileChanges}
             onDraftChange={onDraftChange}
