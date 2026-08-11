@@ -2,12 +2,14 @@ import {
   type DesktopNetworkProxyRoute,
   type DesktopNetworkProxyRoutingInput,
   type DesktopNetworkProxyScope,
+  type DesktopSandboxNetworkEnvironment,
   type DesktopNetworkProxyServerInput,
   type DesktopNetworkProxyState,
   type DesktopResolveNetworkProxyInput,
   type DesktopResolvedNetworkProxy,
 } from '@setsuna-desktop/contracts';
 import { NetworkProxyGatewayPool } from './gateway.js';
+import { SandboxEgressGateway } from './sandbox-egress-gateway.js';
 import { DesktopNetworkProxyStore } from './store.js';
 
 type StateListener = (state: DesktopNetworkProxyState) => void;
@@ -16,6 +18,12 @@ export type NetworkProxyEnvironmentPatch = Record<string, string | null>;
 
 export class DesktopNetworkProxyService {
   private readonly gateways = new NetworkProxyGatewayPool();
+  private readonly sandboxEgress = new SandboxEgressGateway({
+    resolveUpstreamProxy: async () => {
+      const route = await this.resolve({ scope: 'runtime' });
+      return route.mode === 'proxy' ? route.proxyUrl : undefined;
+    },
+  });
   private readonly listeners = new Set<StateListener>();
   private readonly serverRevisions = new Map<string, number>();
   private routingRevision = 0;
@@ -107,6 +115,10 @@ export class DesktopNetworkProxyService {
     };
   }
 
+  sandboxEnvironment(): Promise<DesktopSandboxNetworkEnvironment> {
+    return this.sandboxEgress.environment();
+  }
+
   credentialsForLoopbackGateway(host: string, port: number) {
     return this.gateways.credentialsFor(host, port);
   }
@@ -116,9 +128,12 @@ export class DesktopNetworkProxyService {
     return () => this.listeners.delete(listener);
   }
 
-  close(): Promise<void> {
+  async close(): Promise<void> {
     this.listeners.clear();
-    return this.gateways.close();
+    await Promise.all([
+      this.gateways.close(),
+      this.sandboxEgress.close(),
+    ]);
   }
 
   private publish(state: DesktopNetworkProxyState): void {

@@ -15,6 +15,16 @@ exports.default = async function afterPack(context) {
     destination: path.join(resourcesDir, 'setsuna-path'),
   });
 
+  if (context.electronPlatformName === 'win32') {
+    const sandboxModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-windows-sandbox.mjs')).href;
+    const { verifyPreparedWindowsSandbox } = await import(sandboxModuleUrl);
+    await verifyPreparedWindowsSandbox({
+      projectDir: context.packager.projectDir,
+      destination: path.join(resourcesDir, 'setsuna-sandbox'),
+      execute: true,
+    });
+  }
+
   if (context.electronPlatformName !== 'darwin') return;
   if (process.env.SETSUNA_DESKTOP_SKIP_ADHOC_SIGN === '1') return;
   if (process.env.CSC_LINK || process.env.CSC_NAME) return;

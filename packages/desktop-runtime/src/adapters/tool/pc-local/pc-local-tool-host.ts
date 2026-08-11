@@ -43,7 +43,9 @@ type PcLocalToolHostOptions = {
   mcpConfigPath?: string;
   memoryStorageRoot?: string;
   shellSandboxCapability?: () => ReturnType<typeof pcTools.shellSandboxCapability>;
-  resolveShellEnvironment?: () => Promise<Record<string, string | null>>;
+  resolveShellEnvironment?: (options: {
+    sandboxNetworkAccess: boolean;
+  }) => Promise<Record<string, string | null>>;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
@@ -381,10 +383,19 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         ],
       };
     }
+    if (context.sandbox?.networkAccess === 'enabled') {
+      toolState.sandboxWorkspaceWrite = {
+        ...toolState.sandboxWorkspaceWrite,
+        networkAccess: true,
+      };
+    }
     if (normalized.name === 'run_shell_command' && this.options.resolveShellEnvironment) {
+      const sandboxNetworkAccess = toolState.osSandbox
+        && toolState.permissionProfile !== 'danger-full-access'
+        && toolState.sandboxWorkspaceWrite.networkAccess === true;
       toolState.shellEnvironment = applyShellEnvironmentPatch(
         toolState.shellEnvironment,
-        await this.options.resolveShellEnvironment(),
+        await this.options.resolveShellEnvironment({ sandboxNetworkAccess }),
       );
     }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
@@ -396,12 +407,6 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       });
     }
     toolState.expectedMutationIntegrityToken = context.expectedPreviewIntegrityToken || previewIntegrityToken;
-    if (context.sandbox?.networkAccess === 'enabled') {
-      toolState.sandboxWorkspaceWrite = {
-        ...toolState.sandboxWorkspaceWrite,
-        networkAccess: true,
-      };
-    }
     const result = await pcTools.executeLocalTool(normalized.name, normalized.args, toolState, {
       signal: context.signal,
       threadId: context.threadId,

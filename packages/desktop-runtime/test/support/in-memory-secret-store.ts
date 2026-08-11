@@ -2,6 +2,7 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
+  DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
 import { defaultDesktopNetworkProxyRouting } from '@setsuna-desktop/contracts';
 import type {
@@ -56,6 +57,10 @@ export class InMemoryDesktopNativeBridge extends InMemorySecretStore implements 
 
   async resolveNetworkProxy(_input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy> {
     return { mode: 'direct' };
+  }
+
+  async resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment> {
+    return {};
   }
 
   async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {

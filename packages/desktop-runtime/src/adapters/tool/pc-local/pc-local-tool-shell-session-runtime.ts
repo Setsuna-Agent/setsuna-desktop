@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
+import { writeWindowsSandboxRequest } from '../../sandbox/windows-native/windows-native-sandbox.js';
 import {
   MAX_SHELL_BUFFER_CHARS,
   MAX_SHELL_PROGRESS_CHARS,
@@ -37,7 +38,10 @@ export function isExpiredShellSession(session: ShellSession): boolean {
 export async function createShellSessionTempDirectory(
   sandboxPlan: SandboxExecutionPlan,
 ): Promise<string> {
-  if (sandboxPlan.provider !== 'macos-seatbelt' || sandboxPlan.permissionProfile !== 'workspace-write') return '';
+  const needsTemporaryDirectory = (
+    sandboxPlan.provider === 'macos-seatbelt' && sandboxPlan.permissionProfile === 'workspace-write'
+  ) || sandboxPlan.provider === 'windows-native';
+  if (!needsTemporaryDirectory) return '';
   const candidates = [...new Set([tmpdir(), '/tmp'])]
     .filter((candidate) => candidate && path.isAbsolute(candidate));
   for (const candidate of candidates) {
@@ -403,7 +407,20 @@ function boundedProgressText(value: string): string {
 export function shellSpawnSpec(
   command: string,
   sandboxPlan: SandboxExecutionPlan,
+  windowsRequestPath = '',
 ): ShellSpawnSpec {
+  if (sandboxPlan.provider === 'windows-native') {
+    if (!sandboxPlan.providerExecutable || !windowsRequestPath) {
+      throw new Error('Windows native sandbox spawn requires a sidecar and request file.');
+    }
+    return {
+      command: sandboxPlan.providerExecutable,
+      args: ['run', '--request', windowsRequestPath],
+      sandboxed: true,
+      sandboxProvider: sandboxPlan.provider,
+      shell: false,
+    };
+  }
   const guardedCommand = shellCommandWithPipefail(command);
   const sandboxProfile = shellSandboxProfile(sandboxPlan);
   if (!sandboxProfile) {
@@ -425,6 +442,8 @@ export function shellSpawnSpec(
     shell: false,
   };
 }
+
+export { writeWindowsSandboxRequest };
 
 function shellCommandWithPipefail(command: string): string {
   if (process.platform === 'win32') return command;

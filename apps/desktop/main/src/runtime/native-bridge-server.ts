@@ -1,10 +1,12 @@
 import {
   DESKTOP_NETWORK_PROXY_SCOPES,
+  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   normalizeDesktopNetworkProxyRoute,
   type DesktopNetworkProxyState,
   type DesktopResolveNetworkProxyInput,
   type DesktopResolvedNetworkProxy,
+  type DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
@@ -30,6 +32,7 @@ type DesktopNativeBridgeOptions = {
   deleteNetworkProxy(proxyServerId: string): Promise<DesktopNetworkProxyState>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
+  resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment>;
   systemProxyFetch: DesktopSystemProxyFetch;
   validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;
 };
@@ -130,6 +133,10 @@ export class DesktopNativeBridgeServer {
       if (request.method === 'POST' && request.url === '/v1/network-proxy/resolve') {
         const input = networkProxyInput(await readJsonBody(request));
         sendJson(response, 200, await this.options.resolveNetworkProxy(input));
+        return;
+      }
+      if (request.method === 'GET' && request.url === DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH) {
+        sendJson(response, 200, await this.options.resolveSandboxNetworkEnvironment());
         return;
       }
       if (request.method === 'POST' && request.url === DESKTOP_SYSTEM_PROXY_FETCH_PATH) {

@@ -247,13 +247,53 @@ describe('pc local shell sandbox policy', () => {
       osSandbox: true,
       permissionProfile: 'workspace-write',
       sandboxWorkspaceWrite: {},
-    }, capability)).toContain('执行前请求一次无沙箱批准');
+    }, capability)).toContain('Windows native sandbox');
     expect(shellSandboxUnavailableReason({
       root: 'C:\\workspace',
       osSandbox: true,
       permissionProfile: 'danger-full-access',
       sandboxWorkspaceWrite: {},
     }, capability)).toBe('');
+  });
+
+  it('builds a native Windows plan and fails closed for unrepresentable deny rules', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-windows-plan-'));
+    const capability = {
+      executablePath: 'C:\\Program Files\\Setsuna Desktop\\setsuna-sandbox-win.exe',
+      provider: 'windows-native',
+      reason: '',
+      supported: true,
+    };
+    const plan = createShellSandboxExecutionPlan({
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      root,
+      sandboxWorkspaceWrite: { networkAccess: true },
+    }, {
+      capability,
+      environment: { HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080' },
+      temporaryRoot: root,
+    });
+
+    expect(plan).toMatchObject({
+      networkAccess: true,
+      permissionProfile: 'workspace-write',
+      provider: 'windows-native',
+      providerExecutable: capability.executablePath,
+    });
+    expect(plan.writableRoots).toContain(await realpath(root));
+    expect(shellSandboxUnavailableReason({
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      root,
+      sandboxWorkspaceWrite: { deniedRoots: ['private'] },
+    }, capability)).toContain('已拒绝降级');
+    expect(shellSandboxUnavailableReason({
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      root,
+      sandboxWorkspaceWrite: { deniedGlobPatterns: ['**/*.secret'] },
+    }, capability)).toContain('已拒绝降级');
   });
 
   it('allows read-only shell writes only inside approved writable roots', async () => {

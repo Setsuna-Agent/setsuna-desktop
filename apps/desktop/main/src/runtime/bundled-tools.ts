@@ -4,6 +4,7 @@ import { prependPathDirectory } from './desktop-environment.js';
 
 export const BUNDLED_RIPGREP_ENV = 'SETSUNA_DESKTOP_RG_PATH';
 export const REQUIRE_BUNDLED_RIPGREP_ENV = 'SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG';
+export const BUNDLED_WINDOWS_SANDBOX_ENV = 'SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH';
 
 type ResolveDesktopRipgrepOptions = {
   appRoot: string;
@@ -14,6 +15,8 @@ type ResolveDesktopRipgrepOptions = {
   resourcesPath?: string;
 };
 
+type ResolveDesktopWindowsSandboxOptions = ResolveDesktopRipgrepOptions;
+
 /** Resolve an absolute executable path so internal search never depends on shell lookup. */
 export function resolveDesktopRipgrep(options: ResolveDesktopRipgrepOptions): string | undefined {
   const platform = options.platform ?? process.platform;
@@ -21,13 +24,17 @@ export function resolveDesktopRipgrep(options: ResolveDesktopRipgrepOptions): st
   const env = options.env ?? process.env;
   if (options.isPackaged) {
     const resourcesPath = options.resourcesPath ?? packagedResourcesPath(options.appRoot);
-    return requireExecutable(path.join(resourcesPath, 'setsuna-path', executableName(platform)), platform);
+    return requireExecutable(
+      path.join(resourcesPath, 'setsuna-path', executableName(platform)),
+      platform,
+      'Bundled ripgrep',
+    );
   }
 
   const explicitPath = String(env[BUNDLED_RIPGREP_ENV] ?? '').trim();
   if (explicitPath) {
     if (!path.isAbsolute(explicitPath)) throw new Error(`${BUNDLED_RIPGREP_ENV} must be an absolute path.`);
-    return requireExecutable(explicitPath, platform);
+    return requireExecutable(explicitPath, platform, 'Bundled ripgrep');
   }
 
   const builderOs = platform === 'darwin' ? 'mac' : platform === 'win32' ? 'win' : platform;
@@ -47,6 +54,54 @@ export function installDesktopRipgrepEnvironment(
   env[BUNDLED_RIPGREP_ENV] = ripgrepPath;
   if (options.required) env[REQUIRE_BUNDLED_RIPGREP_ENV] = '1';
   prependPathDirectory(env, path.dirname(ripgrepPath));
+}
+
+/** Resolve the Windows security sidecar without ever falling back to PATH. */
+export function resolveDesktopWindowsSandbox(
+  options: ResolveDesktopWindowsSandboxOptions,
+): string | undefined {
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'win32') return undefined;
+  const arch = options.arch ?? process.arch;
+  if (arch !== 'x64') throw new Error(`Windows sandbox does not support architecture ${arch}.`);
+  const env = options.env ?? process.env;
+  if (options.isPackaged) {
+    const resourcesPath = options.resourcesPath ?? packagedResourcesPath(options.appRoot);
+    return requireExecutable(
+      path.join(resourcesPath, 'setsuna-sandbox', 'setsuna-sandbox-win.exe'),
+      platform,
+      'Bundled Windows sandbox',
+    );
+  }
+
+  const explicitPath = String(env[BUNDLED_WINDOWS_SANDBOX_ENV] ?? '').trim();
+  if (explicitPath) {
+    if (!path.win32.isAbsolute(explicitPath) && !path.isAbsolute(explicitPath)) {
+      throw new Error(`${BUNDLED_WINDOWS_SANDBOX_ENV} must be an absolute path.`);
+    }
+    return requireExecutable(explicitPath, platform, 'Windows sandbox sidecar');
+  }
+
+  const preparedPath = path.join(
+    options.appRoot,
+    '.cache',
+    'windows-sandbox',
+    'win-x64',
+    'setsuna-sandbox-win.exe',
+  );
+  return isExecutable(preparedPath, platform) ? path.resolve(preparedPath) : undefined;
+}
+
+export function installDesktopWindowsSandboxEnvironment(
+  env: NodeJS.ProcessEnv,
+  executablePath: string | undefined,
+  options: { required: boolean },
+): void {
+  if (options.required && !executablePath) {
+    throw new Error('Bundled Windows sandbox is required but was not resolved.');
+  }
+  if (executablePath) env[BUNDLED_WINDOWS_SANDBOX_ENV] = executablePath;
+  else delete env[BUNDLED_WINDOWS_SANDBOX_ENV];
 }
 
 export function findExecutableOnPath(
@@ -76,9 +131,9 @@ function executableName(platform: NodeJS.Platform): string {
   return platform === 'win32' ? 'rg.exe' : 'rg';
 }
 
-function requireExecutable(value: string, platform: NodeJS.Platform): string {
+function requireExecutable(value: string, platform: NodeJS.Platform, label: string): string {
   const resolved = path.resolve(value);
-  if (!isExecutable(resolved, platform)) throw new Error(`Bundled ripgrep executable is missing or invalid: ${resolved}`);
+  if (!isExecutable(resolved, platform)) throw new Error(`${label} executable is missing or invalid: ${resolved}`);
   return resolved;
 }
 

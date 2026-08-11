@@ -1,9 +1,6 @@
 import { chatEnUS, chatZhCN } from './chatMessages.js';
 import { chatSupplementEnUS, chatSupplementZhCN } from './chatSupplementMessages.js';
-import {
-  capabilitiesManagementEnUS,
-  capabilitiesManagementZhCN,
-} from './capabilitiesManagementMessages.js';
+import { capabilitiesManagementEnUS, capabilitiesManagementZhCN } from './capabilitiesManagementMessages.js';
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
 import { dataRootCleanupEnUS, dataRootCleanupZhCN } from './dataRootCleanupMessages.js';
 import { runtimeActivityEnUS, runtimeActivityZhCN } from './runtimeActivityMessages.js';
@@ -14,6 +11,7 @@ import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
 import { projectEnUS, projectZhCN } from './projectMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
+import { windowsSandboxEnUS, windowsSandboxZhCN } from './windowsSandboxMessages.js';
 import { webDavSyncEnUS, webDavSyncZhCN } from './webDavSyncMessages.js';
 
 const zhCN = {
@@ -580,7 +578,7 @@ const zhCN = {
   ...runtimeActivityZhCN,
   ...settingsNavigationZhCN,
   ...keyboardShortcutZhCN,
-  ...workspaceZhCN,
+  ...workspaceZhCN, ...windowsSandboxZhCN,
   ...capabilitiesZhCN,
   ...capabilitiesManagementZhCN,
   ...chatZhCN,
@@ -1157,7 +1155,7 @@ const enUS = {
   ...runtimeActivityEnUS,
   ...settingsNavigationEnUS,
   ...keyboardShortcutEnUS,
-  ...workspaceEnUS,
+  ...workspaceEnUS, ...windowsSandboxEnUS,
   ...capabilitiesEnUS,
   ...capabilitiesManagementEnUS,
   ...chatEnUS,

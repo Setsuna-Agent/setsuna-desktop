@@ -36,6 +36,7 @@ import { registerTerminalIpc } from './ipc/terminal-ipc.js';
 import { registerUpdaterIpc } from './ipc/updater-ipc.js';
 import { registerWebDavSyncIpc } from './ipc/webdav-sync-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
+import { registerWindowsSandboxIpc } from './ipc/windows-sandbox-ipc.js';
 import { registerWorkspaceIpc } from './ipc/workspace-ipc.js';
 import {
   maintenanceProfileRoot,
@@ -49,9 +50,15 @@ import {
   DESKTOP_DEV_RELAUNCH_EXIT_CODE_ENV,
   parseDesktopDevRelaunchExitCode,
 } from './dev-relaunch-protocol.js';
-import { installDesktopRipgrepEnvironment, resolveDesktopRipgrep } from './runtime/bundled-tools.js';
+import {
+  installDesktopRipgrepEnvironment,
+  installDesktopWindowsSandboxEnvironment,
+  resolveDesktopRipgrep,
+  resolveDesktopWindowsSandbox,
+} from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
+import { WindowsSandboxManager } from './windows-sandbox/manager.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
 import { DesktopCredentialVault } from './security/credential-vault.js';
@@ -200,6 +207,14 @@ async function createWindow(): Promise<void> {
     resourcesPath: process.resourcesPath,
   });
   installDesktopRipgrepEnvironment(process.env, ripgrepPath, { required: app.isPackaged });
+  const windowsSandboxPath = resolveDesktopWindowsSandbox({
+    appRoot: app.getAppPath(),
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+  installDesktopWindowsSandboxEnvironment(process.env, windowsSandboxPath, {
+    required: app.isPackaged && process.platform === 'win32',
+  });
 
   const credentialVault = new DesktopCredentialVault(
     dataLayout.credentialVaultPath,
@@ -229,6 +244,7 @@ async function createWindow(): Promise<void> {
     deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
     resolveNetworkProxy: (input) => currentNetworkProxyService.resolve(input),
+    resolveSandboxNetworkEnvironment: () => currentNetworkProxyService.sandboxEnvironment(),
     systemProxyFetch: fetchWithElectronSystemProxy,
     validateNetworkProxyReferences: (proxyServerIds) =>
       currentNetworkProxyService.validateServerReferences(proxyServerIds),
@@ -243,6 +259,8 @@ async function createWindow(): Promise<void> {
     dataDir: dataLayout.root,
     ripgrepPath,
     requireBundledRipgrep: app.isPackaged,
+    windowsSandboxPath,
+    requireBundledWindowsSandbox: app.isPackaged && process.platform === 'win32',
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
   runtimeHost = currentRuntimeHost;
@@ -318,6 +336,10 @@ async function createWindow(): Promise<void> {
   registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
   registerPluginIpc(currentRuntimeHost, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
+  registerWindowsSandboxIpc(
+    new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
+    currentMainWindow,
+  );
   registerReviewIpc(currentRuntimeHost);
   registerWorkspaceIpc();
   registerTerminalIpc(terminalStore);

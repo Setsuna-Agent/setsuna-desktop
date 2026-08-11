@@ -2,6 +2,7 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
+  DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
 
 export type SecretStoreStatus = {
@@ -22,5 +23,6 @@ export interface DesktopNativeBridge extends SecretStore {
   fetchWithSystemProxy(input: string | URL, init?: RequestInit): Promise<Response>;
   openExternal(url: string): Promise<void>;
   resolveNetworkProxy(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
+  resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment>;
   validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;
 }

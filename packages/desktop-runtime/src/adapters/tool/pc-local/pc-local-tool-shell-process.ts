@@ -5,7 +5,7 @@ import {
   type ChildProcessWithoutNullStreams,
 } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { stat } from 'node:fs/promises';
+import { mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   errorMessage,
@@ -69,6 +69,7 @@ import {
   shellSpawnSpec,
   terminateShellSession,
   waitForShellSession,
+  writeWindowsSandboxRequest,
 } from './pc-local-tool-shell-session-runtime.js';
 
 export {
@@ -527,15 +528,30 @@ async function startShellSession({
   let child: ChildProcessWithoutNullStreams;
   try {
     if (temporaryRoot) {
+      // Keep the sidecar request outside the directory granted to sandboxed
+      // commands. The request contains policy and short-lived proxy credentials.
+      let commandTemporaryRoot = temporaryRoot;
+      if (sandboxPlan.provider === 'windows-native') {
+        const workingDirectory = path.join(temporaryRoot, 'work');
+        await mkdir(workingDirectory);
+        commandTemporaryRoot = realPathIfExists(workingDirectory);
+      }
       environment = {
         ...environment,
-        TMPDIR: temporaryRoot,
-        TEMP: temporaryRoot,
-        TMP: temporaryRoot,
+        TMPDIR: commandTemporaryRoot,
+        TEMP: commandTemporaryRoot,
+        TMP: commandTemporaryRoot,
       };
-      sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment, temporaryRoot });
+      sandboxPlan = createShellSandboxExecutionPlan(state, {
+        cwd,
+        environment,
+        temporaryRoot: commandTemporaryRoot,
+      });
     }
-    const spawnSpec = shellSpawnSpec(command, sandboxPlan);
+    const windowsRequestPath = sandboxPlan.provider === 'windows-native'
+      ? await writeWindowsSandboxRequest(command, sandboxPlan, session.id, temporaryRoot)
+      : '';
+    const spawnSpec = shellSpawnSpec(command, sandboxPlan, windowsRequestPath);
     session.sandboxed = Boolean(spawnSpec.sandboxed);
     session.sandboxProvider = spawnSpec.sandboxProvider;
     session.environment = environment;
