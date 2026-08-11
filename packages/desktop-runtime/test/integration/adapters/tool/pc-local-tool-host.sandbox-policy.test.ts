@@ -282,6 +282,7 @@ describe('pc local shell sandbox policy', () => {
       providerExecutable: capability.executablePath,
     });
     expect(plan.writableRoots).toContain(await realpath(root));
+    expect(plan.ephemeralWritableRoots).toEqual([await realpath(root)]);
     expect(shellSandboxUnavailableReason({
       osSandbox: true,
       permissionProfile: 'workspace-write',

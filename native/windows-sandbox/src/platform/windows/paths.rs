@@ -28,10 +28,38 @@ pub fn validate_request_paths(
     for (label, roots) in [
         ("readableRoots", &request.readable_roots),
         ("writableRoots", &request.writable_roots),
+        ("ephemeralWritableRoots", &request.ephemeral_writable_roots),
         ("protectedWritableRoots", &request.protected_writable_roots),
     ] {
         for root in roots {
             validate_directory(root, label)?;
+        }
+    }
+    let request_parent = request_path.parent().ok_or_else(|| {
+        SandboxError::new(
+            SandboxErrorCode::InvalidRequest,
+            "sandbox request file has no parent directory",
+        )
+    })?;
+    let request_parent = canonical_existing(request_parent)?;
+    for ephemeral in &request.ephemeral_writable_roots {
+        let ephemeral = canonical_existing(ephemeral)?;
+        let is_writable = request.writable_roots.iter().any(|root| {
+            canonical_existing(root)
+                .map(|root| root == ephemeral)
+                .unwrap_or(false)
+        });
+        if !is_writable
+            || ephemeral == request_parent
+            || !path_is_within(&ephemeral, &request_parent)
+        {
+            return Err(SandboxError::new(
+                SandboxErrorCode::InvalidRequest,
+                format!(
+                    "ephemeral writable root {} must be a writable child of the request directory",
+                    ephemeral.display()
+                ),
+            ));
         }
     }
     for protected in &request.protected_writable_roots {

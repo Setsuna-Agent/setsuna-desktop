@@ -15,6 +15,8 @@ export type SandboxExecutionPlan = {
   providerExecutable?: string;
   readableRoots: string[];
   writableRoots: string[];
+  /** Per-execution roots that must not create persistent provider capabilities. */
+  ephemeralWritableRoots?: string[];
   deniedRoots: string[];
   deniedGlobRegExpSources: string[];
   protectedWritableRoots: string[];

@@ -22,22 +22,26 @@ use windows_sys::Win32::System::Threading::{
 };
 use zeroize::{Zeroize, Zeroizing};
 
+pub struct AccountRunnerContext<'a> {
+    pub executable: &'a Path,
+    pub username: &'a str,
+    pub account_sid: &'a str,
+    pub password: &'a Zeroizing<String>,
+    pub acl_lock_path: &'a Path,
+}
+
 pub fn spawn_account_runner(
-    username: &str,
-    password: &Zeroizing<String>,
+    context: AccountRunnerContext<'_>,
     request: &SandboxRunRequest,
     request_path: &Path,
     capability_sid: &str,
-    supervisor_pids: &[u32],
 ) -> Result<i32, SandboxError> {
-    let supervisors = open_supervisors(supervisor_pids)?;
-    let executable = std::env::current_exe().map_err(|error| {
-        SandboxError::with_source(
-            SandboxErrorCode::Internal,
-            "cannot resolve sandbox sidecar executable",
-            error,
-        )
-    })?;
+    let supervisors = open_supervisors(&request.supervisor_pids)?;
+    let _request_acl = super::acl::prepare_request_bootstrap(
+        request_path,
+        context.account_sid,
+        context.acl_lock_path,
+    )?;
     let arguments = [
         "internal-child".to_string(),
         "--request".to_string(),
@@ -45,16 +49,16 @@ pub fn spawn_account_runner(
         "--capability-sid".to_string(),
         capability_sid.to_string(),
     ];
-    let command_line = std::iter::once(executable.to_string_lossy().into_owned())
+    let command_line = std::iter::once(context.executable.to_string_lossy().into_owned())
         .chain(arguments)
         .map(|argument| quote_windows_argument(&argument))
         .collect::<Vec<_>>()
         .join(" ");
     let mut command_line_wide = to_wide(command_line);
-    let executable_wide = to_wide(executable.as_os_str());
-    let username_wide = to_wide(username);
+    let executable_wide = to_wide(context.executable.as_os_str());
+    let username_wide = to_wide(context.username);
     let domain_wide = to_wide(".");
-    let mut password_wide = to_wide(password.as_str());
+    let mut password_wide = to_wide(context.password.as_str());
     let cwd = request_path.parent().ok_or_else(|| {
         SandboxError::new(
             SandboxErrorCode::InvalidRequest,
@@ -90,7 +94,7 @@ pub fn spawn_account_runner(
     if created == 0 {
         return Err(SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            format!("CreateProcessWithLogonW failed for {username}"),
+            format!("CreateProcessWithLogonW failed for {}", context.username),
             std::io::Error::last_os_error(),
         ));
     }
@@ -111,15 +115,18 @@ pub fn spawn_account_runner(
             error,
         )
     })?;
-    let prepared = process_logon_sid(process.raw()).and_then(|logon_sid| {
-        super::acl::prepare_execution(request, request_path, &logon_sid, capability_sid)
+    let execution_acl = process_logon_sid(process.raw()).and_then(|logon_sid| {
+        super::acl::prepare_execution(request, &logon_sid, capability_sid, context.acl_lock_path)
     });
-    if let Err(error) = prepared {
-        unsafe {
-            TerminateProcess(process.raw(), 1);
+    let _execution_acl = match execution_acl {
+        Ok(grant) => grant,
+        Err(error) => {
+            unsafe {
+                TerminateProcess(process.raw(), 1);
+            }
+            return Err(error);
         }
-        return Err(error);
-    }
+    };
     wait_for_contained_process(process, thread, &job, &supervisors)
 }
 

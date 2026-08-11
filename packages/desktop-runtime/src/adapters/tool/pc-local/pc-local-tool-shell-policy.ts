@@ -503,6 +503,9 @@ export function createShellSandboxExecutionPlan(
       : {}),
     readableRoots: shellExplicitReadableRoots(state, defaultTempRoots),
     writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
+    ephemeralWritableRoots: provider === 'windows-native'
+      ? [...new Set(defaultTempRoots.map(realPathIfExists))]
+      : [],
     deniedRoots: deniedRootsForState(state),
     deniedGlobRegExpSources: deniedGlobRegExpSourcesForState(state),
     protectedWritableRoots: ['.git', '.agents', '.codex']

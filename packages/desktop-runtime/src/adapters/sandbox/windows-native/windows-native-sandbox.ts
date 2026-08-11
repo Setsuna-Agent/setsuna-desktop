@@ -102,6 +102,7 @@ export async function writeWindowsSandboxRequest(
     permissionProfile: plan.permissionProfile,
     readableRoots: plan.readableRoots,
     writableRoots: plan.writableRoots,
+    ephemeralWritableRoots: plan.ephemeralWritableRoots ?? [],
     deniedRoots: plan.deniedRoots,
     deniedGlobRegExpSources: plan.deniedGlobRegExpSources,
     protectedWritableRoots: plan.protectedWritableRoots,

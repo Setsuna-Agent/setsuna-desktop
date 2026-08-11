@@ -58,6 +58,7 @@ describe('Windows native sandbox adapter', () => {
       deniedGlobRegExpSources: [],
       deniedRoots: [],
       environment: { HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080' },
+      ephemeralWritableRoots: [temporaryRoot],
       networkAccess: true,
       permissionProfile: 'workspace-write',
       protectedWritableRoots: [],
@@ -71,6 +72,7 @@ describe('Windows native sandbox adapter', () => {
     await expect(readFile(requestPath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
       command: 'echo hello',
       executionId: 'execution_1',
+      ephemeralWritableRoots: [temporaryRoot],
       networkAccess: true,
       protocolVersion: 1,
       permissionProfile: 'workspace-write',

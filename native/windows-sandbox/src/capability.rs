@@ -2,21 +2,42 @@ use crate::protocol::{SandboxError, SandboxErrorCode, SandboxRunRequest};
 use crate::state::CapabilityRecord;
 use rand::{rngs::OsRng, RngCore};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
+use std::path::Path;
 
 pub fn policy_key(request: &SandboxRunRequest) -> String {
     let mut hasher = Sha256::new();
     hasher.update(request.workspace_root.to_string_lossy().to_lowercase());
     hasher.update([0]);
     hasher.update(format!("{:?}", request.permission_profile));
-    for root in &request.writable_roots {
+    let ephemeral = request
+        .ephemeral_writable_roots
+        .iter()
+        .map(|root| root_key(root))
+        .collect::<HashSet<_>>();
+    for root in stable_root_keys(&request.writable_roots) {
+        if ephemeral.contains(&root) {
+            continue;
+        }
         hasher.update([0]);
-        hasher.update(root.to_string_lossy().to_lowercase());
+        hasher.update(root);
     }
-    for root in &request.protected_writable_roots {
+    for root in stable_root_keys(&request.protected_writable_roots) {
         hasher.update([1]);
-        hasher.update(root.to_string_lossy().to_lowercase());
+        hasher.update(root);
     }
     format!("{:x}", hasher.finalize())
+}
+
+fn stable_root_keys(roots: &[std::path::PathBuf]) -> Vec<String> {
+    let mut keys = roots.iter().map(|root| root_key(root)).collect::<Vec<_>>();
+    keys.sort_unstable();
+    keys.dedup();
+    keys
+}
+
+fn root_key(root: &Path) -> String {
+    root.to_string_lossy().to_lowercase()
 }
 
 pub fn new_capability_record() -> CapabilityRecord {
@@ -67,6 +88,7 @@ mod tests {
             permission_profile: PermissionProfile::WorkspaceWrite,
             readable_roots: vec![PathBuf::from("/workspace")],
             writable_roots,
+            ephemeral_writable_roots: Vec::new(),
             denied_roots: Vec::new(),
             denied_glob_reg_exp_sources: Vec::new(),
             protected_writable_roots: Vec::new(),
@@ -82,6 +104,22 @@ mod tests {
         assert_eq!(policy_key(&first), policy_key(&second));
         second.writable_roots.push(PathBuf::from("/cache"));
         assert_ne!(policy_key(&first), policy_key(&second));
+    }
+
+    #[test]
+    fn policy_key_ignores_per_execution_writable_roots() {
+        let mut first = request(vec![
+            PathBuf::from("/workspace"),
+            PathBuf::from("/temp/one/work"),
+        ]);
+        first.ephemeral_writable_roots = vec![PathBuf::from("/temp/one/work")];
+        let mut second = request(vec![
+            PathBuf::from("/temp/two/work"),
+            PathBuf::from("/workspace"),
+        ]);
+        second.ephemeral_writable_roots = vec![PathBuf::from("/temp/two/work")];
+
+        assert_eq!(policy_key(&first), policy_key(&second));
     }
 
     #[test]

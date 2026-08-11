@@ -33,6 +33,8 @@ pub struct SandboxRunRequest {
     #[serde(default)]
     pub writable_roots: Vec<PathBuf>,
     #[serde(default)]
+    pub ephemeral_writable_roots: Vec<PathBuf>,
+    #[serde(default)]
     pub denied_roots: Vec<PathBuf>,
     #[serde(default)]
     pub denied_glob_reg_exp_sources: Vec<String>,
@@ -127,6 +129,7 @@ impl SandboxRunRequest {
         for (label, roots) in [
             ("readableRoots", &self.readable_roots),
             ("writableRoots", &self.writable_roots),
+            ("ephemeralWritableRoots", &self.ephemeral_writable_roots),
             ("deniedRoots", &self.denied_roots),
             ("protectedWritableRoots", &self.protected_writable_roots),
         ] {
@@ -378,6 +381,7 @@ mod tests {
             permission_profile: PermissionProfile::WorkspaceWrite,
             readable_roots: vec![root.clone()],
             writable_roots: vec![root],
+            ephemeral_writable_roots: Vec::new(),
             denied_roots: Vec::new(),
             denied_glob_reg_exp_sources: Vec::new(),
             protected_writable_roots: Vec::new(),

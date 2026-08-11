@@ -8,9 +8,9 @@ use windows_sys::Win32::Security::Authorization::{
     GRANT_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
-    AdjustTokenPrivileges, CopySid, CreateRestrictedToken, CreateWellKnownSid, GetLengthSid,
-    GetTokenInformation, LookupPrivilegeValueW, SetTokenInformation, TokenDefaultDacl, TokenGroups,
-    ACL, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, SID_AND_ATTRIBUTES, TOKEN_ADJUST_DEFAULT,
+    AdjustTokenPrivileges, CopySid, CreateRestrictedToken, GetLengthSid, GetTokenInformation,
+    LookupPrivilegeValueW, SetTokenInformation, TokenDefaultDacl, TokenGroups, ACL,
+    LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED, SID_AND_ATTRIBUTES, TOKEN_ADJUST_DEFAULT,
     TOKEN_ADJUST_PRIVILEGES, TOKEN_ADJUST_SESSIONID, TOKEN_ASSIGN_PRIMARY, TOKEN_DEFAULT_DACL,
     TOKEN_DUPLICATE, TOKEN_PRIVILEGES, TOKEN_QUERY,
 };
@@ -21,7 +21,6 @@ const LUA_TOKEN: u32 = 0x04;
 const WRITE_RESTRICTED: u32 = 0x08;
 const GENERIC_ALL: u32 = 0x1000_0000;
 const SE_GROUP_LOGON_ID: u32 = 0xC000_0000;
-const WIN_WORLD_SID: i32 = 1;
 
 struct LocalSid(*mut c_void);
 
@@ -54,10 +53,9 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
     let base = current_process_token()?;
     let capability = LocalSid::parse(capability_sid)?;
     let mut logon_sid = logon_sid_bytes(base.raw())?;
-    // Keep the World SID for compatibility with Windows objects whose writable
-    // ACL is expressed only through Everyone. The unique logon SID and the
-    // policy capability remain the narrower authorities stamped on our roots.
-    let mut everyone_sid = world_sid_bytes()?;
+    // WRITE_RESTRICTED applies the second SID check only to write-like access.
+    // Reads keep normal Windows compatibility, while writes require an ACE for
+    // this execution's logon SID or the stable policy capability SID.
     let restricting_sids = [
         SID_AND_ATTRIBUTES {
             Sid: capability.0,
@@ -65,10 +63,6 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
         },
         SID_AND_ATTRIBUTES {
             Sid: logon_sid.as_mut_ptr().cast::<c_void>(),
-            Attributes: 0,
-        },
-        SID_AND_ATTRIBUTES {
-            Sid: everyone_sid.as_mut_ptr().cast::<c_void>(),
             Attributes: 0,
         },
     ];
@@ -100,52 +94,9 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
             error,
         )
     })?;
-    set_default_dacl(
-        token.raw(),
-        &[
-            capability.0,
-            logon_sid.as_mut_ptr().cast(),
-            everyone_sid.as_mut_ptr().cast(),
-        ],
-    )?;
+    set_default_dacl(token.raw(), &[capability.0, logon_sid.as_mut_ptr().cast()])?;
     enable_privilege(token.raw(), "SeChangeNotifyPrivilege")?;
     Ok(token)
-}
-
-fn world_sid_bytes() -> Result<Vec<u8>, SandboxError> {
-    let mut required = 0_u32;
-    unsafe {
-        CreateWellKnownSid(
-            WIN_WORLD_SID,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            &mut required,
-        );
-    }
-    if required == 0 {
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "cannot determine the Everyone SID size",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    let mut sid = vec![0_u8; required as usize];
-    if unsafe {
-        CreateWellKnownSid(
-            WIN_WORLD_SID,
-            std::ptr::null_mut(),
-            sid.as_mut_ptr().cast::<c_void>(),
-            &mut required,
-        )
-    } == 0
-    {
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::SpawnFailed,
-            "cannot create the Everyone SID",
-            std::io::Error::last_os_error(),
-        ));
-    }
-    Ok(sid)
 }
 
 pub fn process_logon_sid(process: isize) -> Result<String, SandboxError> {

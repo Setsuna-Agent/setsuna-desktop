@@ -1,5 +1,6 @@
 mod accounts;
 mod acl;
+mod bootstrap;
 mod dpapi;
 mod elevation;
 mod firewall;
@@ -62,13 +63,7 @@ pub fn install_elevated(owner_sid: &str) -> Result<CommandOutput, SandboxError> 
         ));
     }
     accounts::validate_sid_string(owner_sid)?;
-    let provisioned = accounts::provision_accounts()?;
-    visibility::hide_users(&[OFFLINE_USERNAME, ONLINE_USERNAME])?;
     let store = state_store()?;
-
-    // The directory DACL is installed before any machine-scope DPAPI blob is
-    // written. Sandbox accounts are explicitly denied even if a parent grants
-    // broad local-user access.
     fs::create_dir_all(store.directory()).map_err(|error| {
         SandboxError::with_source(
             SandboxErrorCode::SetupFailed,
@@ -79,13 +74,24 @@ pub fn install_elevated(owner_sid: &str) -> Result<CommandOutput, SandboxError> 
             error,
         )
     })?;
+    let _maintenance = store.acquire_maintenance_lock()?;
+    let provisioned = accounts::provision_accounts()?;
+    visibility::hide_users(&[OFFLINE_USERNAME, ONLINE_USERNAME])?;
+
+    // The directory DACL is installed before any machine-scope DPAPI blob is
+    // written. Sandbox accounts are explicitly denied even if a parent grants
+    // broad local-user access.
     acl::protect_state_path(store.directory(), owner_sid, &provisioned.group_sid)?;
+    acl::initialize_mutation_lock(&store.acl_lock_path())?;
+    acl::protect_state_path(&store.acl_lock_path(), owner_sid, &provisioned.group_sid)?;
+    acl::protect_state_path(&store.lifecycle_path(), owner_sid, &provisioned.group_sid)?;
     firewall::install(
         &provisioned.offline_sid,
         &provisioned.online_sid,
         PROXY_PORT_START,
         PROXY_PORT_END,
     )?;
+    bootstrap::install(&store, owner_sid, &provisioned.group_sid)?;
 
     let state = InstalledState {
         schema_version: STATE_SCHEMA_VERSION,
@@ -111,6 +117,8 @@ pub fn install_elevated(owner_sid: &str) -> Result<CommandOutput, SandboxError> 
     store.write_new(&state)?;
     acl::protect_state_path(&store.state_path(), owner_sid, &state.group_sid)?;
     acl::protect_state_path(&store.lock_path(), owner_sid, &state.group_sid)?;
+    acl::protect_state_path(&store.acl_lock_path(), owner_sid, &state.group_sid)?;
+    acl::protect_state_path(&store.lifecycle_path(), owner_sid, &state.group_sid)?;
     Ok(CommandOutput::success())
 }
 
@@ -122,6 +130,17 @@ pub fn uninstall_elevated() -> Result<CommandOutput, SandboxError> {
         ));
     }
     let store = state_store()?;
+    fs::create_dir_all(store.directory()).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::SetupFailed,
+            format!(
+                "cannot create sandbox state directory {}",
+                store.directory().display()
+            ),
+            error,
+        )
+    })?;
+    let maintenance = store.acquire_maintenance_lock()?;
     let installed = store.read().ok().flatten();
     let removed_from_state = if let Some(installed) = &installed {
         accounts::remove_accounts(
@@ -142,6 +161,8 @@ pub fn uninstall_elevated() -> Result<CommandOutput, SandboxError> {
     }
     visibility::unhide_users(&[OFFLINE_USERNAME, ONLINE_USERNAME])?;
     firewall::uninstall()?;
+    bootstrap::uninstall(&store)?;
+    drop(maintenance);
     if store.directory().exists() {
         fs::remove_dir_all(store.directory()).map_err(|error| {
             SandboxError::with_source(
@@ -161,13 +182,14 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;
     let store = state_store()?;
+    let _execution = store.acquire_execution_lock()?;
     let installed = store.read()?.ok_or_else(|| {
         SandboxError::new(
             SandboxErrorCode::NotInstalled,
             "Windows native sandbox is not installed",
         )
     })?;
-    validate_installation(&installed)?;
+    let runner_path = validate_installation(&installed)?;
 
     let key = policy_key(&request);
     let capability = store.update(|state| {
@@ -193,13 +215,18 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
             )
         })?;
     let password = dpapi::unprotect_string(&encrypted_password)?;
+    let acl_lock_path = store.acl_lock_path();
     let exit_code = process::spawn_account_runner(
-        &account.username,
-        &password,
+        process::AccountRunnerContext {
+            executable: &runner_path,
+            username: &account.username,
+            account_sid: &account.sid,
+            password: &password,
+            acl_lock_path: &acl_lock_path,
+        },
         &request,
         request_path,
         &capability.sid,
-        &request.supervisor_pids,
     )?;
     Ok(CommandOutput::process_exit(exit_code))
 }
@@ -211,6 +238,13 @@ pub fn internal_child(
     validate_capability_sid(capability_sid)?;
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;
+    fs::remove_file(request_path).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "cannot destroy the sandbox request before starting the restricted shell",
+            error,
+        )
+    })?;
     let exit_code = process::spawn_restricted_shell(&request, capability_sid)?;
     Ok(CommandOutput::process_exit(exit_code))
 }
@@ -233,7 +267,7 @@ fn current_status() -> SandboxStatus {
     };
     let installed_version = Some(installed.installed_version.clone());
     match validate_installation(&installed) {
-        Ok(()) => status_value(SandboxStatusKind::Ready, "", installed_version),
+        Ok(_) => status_value(SandboxStatusKind::Ready, "", installed_version),
         Err(error) => status_value(
             SandboxStatusKind::NeedsRepair,
             error.message,
@@ -242,7 +276,7 @@ fn current_status() -> SandboxStatus {
     }
 }
 
-fn validate_installation(state: &InstalledState) -> Result<(), SandboxError> {
+fn validate_installation(state: &InstalledState) -> Result<PathBuf, SandboxError> {
     state.validate()?;
     accounts::verify_account(OFFLINE_USERNAME, &state.offline.sid)?;
     accounts::verify_account(ONLINE_USERNAME, &state.online.sid)?;
@@ -254,7 +288,15 @@ fn validate_installation(state: &InstalledState) -> Result<(), SandboxError> {
     let store = state_store()?;
     let state_path = store.state_path();
     let lock_path = store.lock_path();
-    for path in [store.directory(), state_path.as_path(), lock_path.as_path()] {
+    let acl_lock_path = store.acl_lock_path();
+    let lifecycle_path = store.lifecycle_path();
+    for path in [
+        store.directory(),
+        state_path.as_path(),
+        lock_path.as_path(),
+        acl_lock_path.as_path(),
+        lifecycle_path.as_path(),
+    ] {
         acl::verify_state_path(path, &state.group_sid)?;
     }
     firewall::verify(
@@ -262,7 +304,8 @@ fn validate_installation(state: &InstalledState) -> Result<(), SandboxError> {
         &state.online.sid,
         state.proxy_port_start,
         state.proxy_port_end,
-    )
+    )?;
+    bootstrap::verify(&store, state)
 }
 
 fn status_value(

@@ -11,6 +11,7 @@ pub const STATE_SCHEMA_VERSION: u32 = 1;
 pub const OFFLINE_USERNAME: &str = "SetsunaSbOffline";
 pub const ONLINE_USERNAME: &str = "SetsunaSbOnline";
 pub const SANDBOX_GROUP: &str = "SetsunaSandboxUsers";
+pub const RUNNER_FILENAME: &str = "setsuna-sandbox-win.exe";
 pub const PROXY_PORT_START: u16 = 61_080;
 pub const PROXY_PORT_END: u16 = 61_089;
 
@@ -81,6 +82,17 @@ pub struct StateStore {
     directory: PathBuf,
 }
 
+#[derive(Debug)]
+pub struct LifecycleGuard {
+    file: File,
+}
+
+impl Drop for LifecycleGuard {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
 impl StateStore {
     pub fn new(directory: PathBuf) -> Self {
         Self { directory }
@@ -96,6 +108,38 @@ impl StateStore {
 
     pub fn lock_path(&self) -> PathBuf {
         self.directory.join("state.lock")
+    }
+
+    pub fn lifecycle_path(&self) -> PathBuf {
+        self.directory.join("lifecycle.lock")
+    }
+
+    pub fn acl_lock_path(&self) -> PathBuf {
+        self.directory.join("acl.lock")
+    }
+
+    pub fn runner_directory(&self) -> PathBuf {
+        self.directory.with_file_name("Sandbox Runner")
+    }
+
+    pub fn runner_path(&self) -> PathBuf {
+        self.runner_directory().join(RUNNER_FILENAME)
+    }
+
+    pub fn acquire_execution_lock(&self) -> Result<LifecycleGuard, SandboxError> {
+        self.acquire_lifecycle_lock(
+            true,
+            SandboxErrorCode::SpawnFailed,
+            "Windows sandbox maintenance is active; retry the command after it finishes",
+        )
+    }
+
+    pub fn acquire_maintenance_lock(&self) -> Result<LifecycleGuard, SandboxError> {
+        self.acquire_lifecycle_lock(
+            false,
+            SandboxErrorCode::SetupFailed,
+            "Windows sandbox commands are still running; terminate them before repair or uninstall",
+        )
     }
 
     pub fn read(&self) -> Result<Option<InstalledState>, SandboxError> {
@@ -243,6 +287,40 @@ impl StateStore {
                 SandboxError::with_source(code, "cannot open sandbox state lock", error)
             })
     }
+
+    fn acquire_lifecycle_lock(
+        &self,
+        shared: bool,
+        code: SandboxErrorCode,
+        contention_message: &str,
+    ) -> Result<LifecycleGuard, SandboxError> {
+        fs::create_dir_all(&self.directory).map_err(|error| {
+            SandboxError::with_source(
+                code,
+                format!(
+                    "cannot create sandbox state directory {}",
+                    self.directory.display()
+                ),
+                error,
+            )
+        })?;
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(self.lifecycle_path())
+            .map_err(|error| {
+                SandboxError::with_source(code, "cannot open sandbox lifecycle lock", error)
+            })?;
+        let locked = if shared {
+            FileExt::try_lock_shared(&file)
+        } else {
+            FileExt::try_lock_exclusive(&file)
+        };
+        locked.map_err(|error| SandboxError::with_source(code, contention_message, error))?;
+        Ok(LifecycleGuard { file })
+    }
 }
 
 fn update_locked_state<T>(
@@ -345,5 +423,30 @@ mod tests {
                 "managed username exceeds the Windows local SAM limit: {username}"
             );
         }
+    }
+
+    #[test]
+    fn maintenance_lock_refuses_active_execution() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let store = StateStore::new(directory.path().join("state"));
+        let execution = store.acquire_execution_lock().expect("execution lock");
+
+        let error = store
+            .acquire_maintenance_lock()
+            .expect_err("maintenance must fail closed");
+        assert_eq!(error.code, SandboxErrorCode::SetupFailed);
+
+        drop(execution);
+        let maintenance = store
+            .acquire_maintenance_lock()
+            .expect("maintenance lock after execution");
+        let error = store
+            .acquire_execution_lock()
+            .expect_err("execution must fail during maintenance");
+        assert_eq!(error.code, SandboxErrorCode::SpawnFailed);
+
+        drop(maintenance);
+        let _first = store.acquire_execution_lock().expect("first shared lock");
+        let _second = store.acquire_execution_lock().expect("second shared lock");
     }
 }

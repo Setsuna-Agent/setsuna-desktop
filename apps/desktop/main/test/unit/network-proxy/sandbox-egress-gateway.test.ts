@@ -12,12 +12,9 @@ afterEach(async () => {
 });
 
 describe('SandboxEgressGateway', () => {
-  it('requires per-launch credentials and relays through a fixed loopback port', async () => {
-    const upstream = createServer((_request, response) => response.end('sandbox-egress-ok'));
-    servers.push(upstream);
-    const upstreamPort = await listen(upstream);
+  it('requires per-launch credentials on a fixed loopback port', async () => {
     const gatewayPort = await reserveAvailablePort();
-    const resolveUpstreamProxy = vi.fn(async () => `http://127.0.0.1:${upstreamPort}`);
+    const resolveUpstreamProxy = vi.fn(async () => undefined);
     const gateway = new SandboxEgressGateway({ ports: [gatewayPort], resolveUpstreamProxy });
     gateways.push(gateway);
 
@@ -32,9 +29,22 @@ describe('SandboxEgressGateway', () => {
     expect(environment.NO_PROXY).toBe('');
     await expect(requestThroughProxy(proxyUrl, 'http://example.com/', false))
       .resolves.toMatchObject({ status: 407 });
-    await expect(requestThroughProxy(proxyUrl, 'http://example.com/', true))
-      .resolves.toEqual({ body: 'sandbox-egress-ok', status: 200 });
     expect(resolveUpstreamProxy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed before listening when an upstream proxy would own DNS', async () => {
+    const gatewayPort = await reserveAvailablePort();
+    const gateway = new SandboxEgressGateway({
+      ports: [gatewayPort],
+      resolveUpstreamProxy: async () => 'http://proxy.example.com:8080',
+    });
+    gateways.push(gateway);
+
+    await expect(gateway.environment()).rejects.toThrow('upstream controls DNS');
+
+    const replacement = createServer();
+    servers.push(replacement);
+    await expect(listenOn(replacement, gatewayPort)).resolves.toBeUndefined();
   });
 
   it('rejects host-local, private, and single-label destinations', () => {

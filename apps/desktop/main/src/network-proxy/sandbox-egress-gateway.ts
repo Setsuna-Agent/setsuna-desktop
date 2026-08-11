@@ -42,6 +42,7 @@ export class SandboxEgressGateway {
   }
 
   async environment(): Promise<DesktopSandboxNetworkEnvironment> {
+    assertDirectSandboxEgress(await this.options.resolveUpstreamProxy());
     const gateway = await this.start();
     return {
       ...Object.fromEntries(PROXY_ENVIRONMENT_KEYS.map((key) => [key, gateway.authenticatedUrl])),
@@ -99,11 +100,11 @@ export class SandboxEgressGateway {
             }
             assertSandboxEgressHostname(hostname);
             const upstreamProxyUrl = await this.options.resolveUpstreamProxy();
+            assertDirectSandboxEgress(upstreamProxyUrl);
             return {
-              upstreamProxyUrl,
-              // A configured upstream owns DNS. Direct mode validates the exact
-              // address handed to the outbound socket to prevent DNS rebinding.
-              ...(upstreamProxyUrl ? {} : { dnsLookup: sandboxEgressDnsLookup }),
+              // The validated address is handed to the same direct socket, which
+              // prevents DNS rebinding between policy and connection setup.
+              dnsLookup: sandboxEgressDnsLookup,
             };
           },
         });
@@ -128,6 +129,13 @@ export class SandboxEgressGateway {
       );
     }
   }
+}
+
+function assertDirectSandboxEgress(upstreamProxyUrl: string | undefined): void {
+  if (!upstreamProxyUrl) return;
+  throw new Error(
+    'Windows sandbox egress cannot safely use an upstream proxy because the upstream controls DNS; select a direct runtime route.',
+  );
 }
 
 function errorCode(error: unknown): string | undefined {

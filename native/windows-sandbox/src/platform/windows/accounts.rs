@@ -13,7 +13,7 @@ use windows_sys::Win32::NetworkManagement::NetManagement::{
     NetUserGetLocalGroups, NetUserSetInfo, LG_INCLUDE_INDIRECT, LOCALGROUP_INFO_1,
     LOCALGROUP_MEMBERS_INFO_3, LOCALGROUP_USERS_INFO_0, MAX_PREFERRED_LENGTH, UF_ACCOUNTDISABLE,
     UF_DONT_EXPIRE_PASSWD, UF_LOCKOUT, UF_NORMAL_ACCOUNT, UF_NOT_DELEGATED, UF_PASSWORD_EXPIRED,
-    UF_SCRIPT, USER_INFO_1, USER_INFO_1007, USER_PRIV_USER,
+    UF_SCRIPT, USER_INFO_1, USER_INFO_1007, USER_PRIV_GUEST, USER_PRIV_USER,
 };
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
@@ -510,7 +510,10 @@ fn verify_managed_user_configuration(
     }
     let info = unsafe { &*buffer.cast::<USER_INFO_1>() };
     let comment = wide_pointer_to_string(info.usri1_comment);
-    let privilege_valid = info.usri1_priv == USER_PRIV_USER;
+    // NetUserGetInfo can report USER_PRIV_GUEST for a deliberately unprivileged
+    // local account that is not a member of the built-in Users group. Group
+    // membership verification below is the authoritative privilege boundary.
+    let privilege_valid = matches!(info.usri1_priv, USER_PRIV_GUEST | USER_PRIV_USER);
     let flags = info.usri1_flags;
     let flags_valid = privilege_valid
         && flags & MANAGED_USER_FLAGS == MANAGED_USER_FLAGS
