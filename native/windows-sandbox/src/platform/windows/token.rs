@@ -51,7 +51,6 @@ impl Drop for LocalSid {
 pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, SandboxError> {
     let base = current_process_token()?;
     let capability = LocalSid::parse(capability_sid)?;
-    let local_system = LocalSid::parse("S-1-5-18")?;
     let everyone = LocalSid::parse("S-1-1-0")?;
     let mut user_sid = token_user_sid_bytes(base.raw())?;
     let mut logon_sid = logon_sid_bytes(base.raw())?;
@@ -106,9 +105,12 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
             error,
         )
     })?;
+    // Match upstream's permissive default DACL: some Windows pipeline and
+    // native-runtime IPC cannot initialize with only execution-scoped SIDs.
+    // Callers that need cross-account isolation must use an explicit DACL.
     set_default_dacl(
         token.raw(),
-        &[logon_sid.as_mut_ptr().cast(), local_system.0, capability.0],
+        &[logon_sid.as_mut_ptr().cast(), everyone.0, capability.0],
     )?;
     enable_privilege(token.raw(), "SeChangeNotifyPrivilege")?;
     Ok(token)

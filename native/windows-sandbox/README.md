@@ -27,6 +27,10 @@ boundary equivalent to a VM. Existing host DACLs may still make files readable
 to ordinary local users. As in upstream Codex, Windows compatibility requires
 the World SID in the write-restricted compatibility list, so objects already
 writable by an explicit Everyone ACE remain writable to the dedicated account.
+The token default DACL likewise follows upstream and grants World access so
+Windows pipelines and IPC-heavy native tools can initialize. Predictably named
+objects created without an explicit security descriptor are therefore not an
+isolation boundary between local machine accounts.
 Read-only workspaces and protected roots receive an explicit capability
 mutation deny that covers the root and normally inherited children, but cannot
 override an explicit allow installed directly on a child. Ordinary private

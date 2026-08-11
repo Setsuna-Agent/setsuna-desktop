@@ -96,10 +96,10 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，restricting SID 按顺序包含
 policy capability、专用隔离账户 SID、本次 logon SID 与 `Everyone`。`Everyone` 是 Windows 基础对象的兼容
 SID；缺少它时，普通 `>NUL` / `2>NUL`、Winsock 初始化和 curl-for-win 会在进程初始化阶段失败。默认 DACL
-仍只包含 capability、logon SID 和 `LOCAL SYSTEM`，不会像上游默认 DACL 那样向所有本机账户授予新建管道、
-mutex 或共享内存的 `GENERIC_ALL`。账户 SID 保持该专用账户自己的运行时对象可用，`LOCAL SYSTEM` 允许系统
-进程完成管道和 IPC 初始化。外层 account runner 从机器级只读副本启动，并被放入不可 breakaway、close 即
-kill 的 Job Object。
+也与上游一致包含 capability、logon SID 和 `Everyone` 的 `GENERIC_ALL`，否则 PowerShell/cmd 管道、系统 curl
+等依赖默认安全描述符的 IPC 会在初始化阶段失败。这意味着使用可预测名称且没有显式安全描述符的管道、mutex
+或共享内存不具备跨本机账户隔离；需要该隔离的工具必须自行安装显式 DACL。外层 account runner 从机器级只读
+副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
 
 `WRITE_RESTRICTED` 只对 write-like access 执行 restricting SID 二次检查。因此 V1 的原生边界是专用账户身份、
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
