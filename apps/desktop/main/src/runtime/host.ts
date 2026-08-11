@@ -20,6 +20,7 @@ import { accessSync, constants as fsConstants } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
+import { BUNDLED_SANDBOX_CURL_ENV } from './bundled-tools.js';
 import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
@@ -571,17 +572,12 @@ export function runtimeProcessEnvironment(
     if (!path.isAbsolute(options.sandboxCurlPath) && !path.win32.isAbsolute(options.sandboxCurlPath)) {
       throw new Error('Sandbox curl path must be absolute.');
     }
-    const sandboxCurlDirectory = path.dirname(options.sandboxCurlPath);
-    prependPathDirectory(env, sandboxCurlDirectory);
-    // curl reads this directory's _curlrc before any sandbox-account profile.
-    // That enables Windows native trust without returning to Schannel.
-    env.CURL_HOME = sandboxCurlDirectory;
+    env[BUNDLED_SANDBOX_CURL_ENV] = options.sandboxCurlPath;
   }
   if (options.sandboxCaBundlePath) {
     if (!path.isAbsolute(options.sandboxCaBundlePath) && !path.win32.isAbsolute(options.sandboxCaBundlePath)) {
       throw new Error('Sandbox curl trust bundle path must be absolute.');
     }
-    env.CURL_CA_BUNDLE = options.sandboxCaBundlePath;
     env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE = options.sandboxCaBundlePath;
   }
   if (options.requireBundledWindowsSandbox && !options.windowsSandboxPath) {

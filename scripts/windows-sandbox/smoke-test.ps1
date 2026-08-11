@@ -304,7 +304,7 @@ try {
   [System.IO.File]::WriteAllText((Join-Path $workspace 'existing.txt'), 'before', $utf8NoBom)
   [System.IO.File]::WriteAllText(
     (Join-Path $workspace 'curl-start-smoke.cmd'),
-    "@echo off`r`ncurl.exe --version >curl-version.txt 2>&1`r`necho %ERRORLEVEL%>curl-exit.txt`r`nexit /b 0`r`n",
+    "@echo off`r`ncurl.exe --version >curl-version.txt 2>&1`r`n>curl-exit.txt echo %ERRORLEVEL%`r`nexit /b 0`r`n",
     $utf8NoBom
   )
   foreach ($temporaryPath in @(

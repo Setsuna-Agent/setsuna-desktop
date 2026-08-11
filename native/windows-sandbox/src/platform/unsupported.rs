@@ -22,6 +22,7 @@ pub fn run(_request_path: &Path) -> Result<CommandOutput, SandboxError> {
 pub fn internal_child(
     _request_path: &Path,
     _capability_sid: &str,
+    _owner_sid: &str,
 ) -> Result<CommandOutput, SandboxError> {
     unsupported()
 }

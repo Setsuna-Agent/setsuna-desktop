@@ -119,11 +119,21 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
 pub fn process_logon_sid(process: isize) -> Result<String, SandboxError> {
     let token = open_process_token(process, TOKEN_QUERY)?;
     let mut sid = logon_sid_bytes(token.raw())?;
+    sid_bytes_to_string(&mut sid, "sandbox runner logon SID")
+}
+
+pub fn process_user_sid(process: isize) -> Result<String, SandboxError> {
+    let token = open_process_token(process, TOKEN_QUERY)?;
+    let mut sid = token_user_sid_bytes(token.raw())?;
+    sid_bytes_to_string(&mut sid, "process user SID")
+}
+
+fn sid_bytes_to_string(sid: &mut [u8], label: &str) -> Result<String, SandboxError> {
     let mut value = std::ptr::null_mut::<u16>();
     if unsafe { ConvertSidToStringSidW(sid.as_mut_ptr().cast::<c_void>(), &mut value) } == 0 {
         return Err(SandboxError::with_source(
             SandboxErrorCode::SpawnFailed,
-            "cannot serialize the sandbox runner logon SID",
+            format!("cannot serialize {label}"),
             std::io::Error::last_os_error(),
         ));
     }
@@ -134,7 +144,7 @@ pub fn process_logon_sid(process: isize) -> Result<String, SandboxError> {
         String::from_utf16(unsafe { std::slice::from_raw_parts(value, length) }).map_err(|error| {
             SandboxError::with_source(
                 SandboxErrorCode::SpawnFailed,
-                "sandbox runner logon SID is not Unicode",
+                format!("{label} is not Unicode"),
                 error,
             )
         });

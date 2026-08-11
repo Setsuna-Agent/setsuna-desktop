@@ -99,7 +99,8 @@ SID；缺少它时，普通 `>NUL` / `2>NUL`、Winsock 初始化和 curl-for-win
 也与上游一致包含 capability、logon SID 和 `Everyone` 的 `GENERIC_ALL`，否则 PowerShell/cmd 管道、系统 curl
 等依赖默认安全描述符的 IPC 会在初始化阶段失败。这意味着使用可预测名称且没有显式安全描述符的管道、mutex
 或共享内存不具备跨本机账户隔离；需要该隔离的工具必须自行安装显式 DACL。外层 account runner 从机器级只读
-副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
+副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。内部 child 入口在读取 request 或 capability
+之前校验父进程确实由桌面账户跨账户启动，沙箱进程不能直接借用其他持久 capability。
 
 `WRITE_RESTRICTED` 只对 write-like access 执行 restricting SID 二次检查。因此 V1 的原生边界是专用账户身份、
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
@@ -130,7 +131,8 @@ offline 请求会从最终环境删除全部 proxy 变量。online 请求只设�
 `HTTPS_PROXY`、`ALL_PROXY` 和空 `NO_PROXY`，避免 Windows 大小写不敏感的环境块出现重复键；随机
 loopback relay 凭据只短暂存在于 control request，且在最终 shell 启动前删除。
 
-Windows runtime 会把固定版本、固定 SHA-256 的 curl-for-win 放在 shell `PATH` 首位。该构建使用 LibreSSL，
+Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-for-win 放在 shell `PATH` 首位；bypass
+和 `danger-full-access` 保留用户原本的 curl。该构建使用 LibreSSL，
 不会调用 restricted token 下不可用的 Schannel 默认凭据。Electron main 在降权前读取桌面账号可见的 Windows
 系统 CA，把它们与随包 Mozilla CA bundle 合成运行时信任快照，并通过 `CURL_CA_BUNDLE` 交给 shell；Windows
 沙箱只获得这个 PEM 文件的读取权，不会递归放开数据目录。只读 `_curlrc` 仍通过 `--ca-native` 补充沙箱账号

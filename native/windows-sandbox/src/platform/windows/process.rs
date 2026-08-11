@@ -1,6 +1,8 @@
 use super::handle::OwnedHandle;
 use super::job::JobObject;
-use super::token::{create_restricted_token, process_impersonation_token, process_logon_sid};
+use super::token::{
+    create_restricted_token, process_impersonation_token, process_logon_sid, process_user_sid,
+};
 use super::wide::{quote_windows_argument, to_wide};
 use crate::protocol::{SandboxError, SandboxErrorCode, SandboxRunRequest};
 use std::collections::BTreeMap;
@@ -16,17 +18,22 @@ use windows_sys::Win32::System::Console::{
 use windows_sys::Win32::System::Diagnostics::Debug::{
     SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX,
 };
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessAsUserW, CreateProcessWithLogonW, GetExitCodeProcess, OpenProcess, ResumeThread,
-    TerminateProcess, WaitForMultipleObjects, WaitForSingleObject, CREATE_NO_WINDOW,
-    CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION,
-    PROCESS_SYNCHRONIZE, STARTF_USESTDHANDLES, STARTUPINFOW,
+    CreateProcessAsUserW, CreateProcessWithLogonW, GetCurrentProcess, GetCurrentProcessId,
+    GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess, WaitForMultipleObjects,
+    WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE,
+    PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
+    STARTF_USESTDHANDLES, STARTUPINFOW,
 };
 use zeroize::{Zeroize, Zeroizing};
 
 pub struct AccountRunnerContext<'a> {
     pub executable: &'a Path,
+    pub owner_sid: &'a str,
     pub username: &'a str,
     pub account_sid: &'a str,
     pub group_sid: &'a str,
@@ -52,6 +59,8 @@ pub fn spawn_account_runner(
         request_path.to_string_lossy().into_owned(),
         "--capability-sid".to_string(),
         capability_sid.to_string(),
+        "--owner-sid".to_string(),
+        context.owner_sid.to_string(),
     ];
     let command_line = std::iter::once(context.executable.to_string_lossy().into_owned())
         .chain(arguments)
@@ -140,6 +149,67 @@ pub fn spawn_account_runner(
         }
     };
     wait_for_contained_process(process, thread, &job, &supervisors)
+}
+
+/// `internal-child` is intentionally not a public protocol entrypoint. The
+/// trusted launcher crosses from the desktop account into a dedicated sandbox
+/// account; a nested call made by sandboxed code has the same account on both
+/// sides and is rejected before it can supply another capability SID.
+pub fn authenticate_internal_child_parent(expected_parent_sid: &str) -> Result<(), SandboxError> {
+    let current_sid = process_user_sid(unsafe { GetCurrentProcess() })?;
+    let parent_pid = current_parent_process_id()?;
+    let parent =
+        OwnedHandle::new(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, parent_pid) })
+            .map_err(|error| {
+                SandboxError::with_source(
+                    SandboxErrorCode::InvalidArguments,
+                    "cannot inspect the internal-child parent process",
+                    error,
+                )
+            })?;
+    let parent_sid = process_user_sid(parent.raw())?;
+    validate_internal_child_accounts(&current_sid, &parent_sid, expected_parent_sid)
+}
+
+fn validate_internal_child_accounts(
+    current_sid: &str,
+    parent_sid: &str,
+    expected_parent_sid: &str,
+) -> Result<(), SandboxError> {
+    if current_sid.eq_ignore_ascii_case(expected_parent_sid)
+        || !parent_sid.eq_ignore_ascii_case(expected_parent_sid)
+    {
+        return Err(SandboxError::new(
+            SandboxErrorCode::InvalidArguments,
+            "internal-child requires the trusted cross-account launcher",
+        ));
+    }
+    Ok(())
+}
+
+fn current_parent_process_id() -> Result<u32, SandboxError> {
+    let snapshot = OwnedHandle::new(unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) })
+        .map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::InvalidArguments,
+                "cannot enumerate processes for internal-child authentication",
+                error,
+            )
+        })?;
+    let current_pid = unsafe { GetCurrentProcessId() };
+    let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
+    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut found = unsafe { Process32FirstW(snapshot.raw(), &mut entry) } != 0;
+    while found {
+        if entry.th32ProcessID == current_pid && entry.th32ParentProcessID != 0 {
+            return Ok(entry.th32ParentProcessID);
+        }
+        found = unsafe { Process32NextW(snapshot.raw(), &mut entry) } != 0;
+    }
+    Err(SandboxError::new(
+        SandboxErrorCode::InvalidArguments,
+        "cannot resolve the internal-child parent process",
+    ))
 }
 
 pub fn spawn_restricted_shell(

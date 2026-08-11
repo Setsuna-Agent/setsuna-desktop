@@ -495,13 +495,9 @@ export function shellEnvironment(
   for (const [key, value] of Object.entries(overrides)) {
     if (key && typeof value === 'string') safeOverrides[key] = value;
   }
-  const trustedSandboxCaBundle = String(
-    process.env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE ?? '',
-  ).trim();
   return {
     ...defaults,
     ...safeOverrides,
-    ...(trustedSandboxCaBundle ? { CURL_CA_BUNDLE: trustedSandboxCaBundle } : {}),
     PATH: desktopShellPath(safeOverrides.PATH || safeEnv.PATH),
   };
 }

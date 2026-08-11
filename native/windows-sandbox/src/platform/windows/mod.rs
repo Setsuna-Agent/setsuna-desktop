@@ -228,6 +228,7 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
     let exit_code = process::spawn_account_runner(
         process::AccountRunnerContext {
             executable: &runner_path,
+            owner_sid: &installed.owner_sid,
             username: &account.username,
             account_sid: &account.sid,
             group_sid: &installed.group_sid,
@@ -244,7 +245,10 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
 pub fn internal_child(
     request_path: &Path,
     capability_sid: &str,
+    owner_sid: &str,
 ) -> Result<CommandOutput, SandboxError> {
+    accounts::validate_sid_string(owner_sid)?;
+    process::authenticate_internal_child_parent(owner_sid)?;
     validate_capability_sid(capability_sid)?;
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;

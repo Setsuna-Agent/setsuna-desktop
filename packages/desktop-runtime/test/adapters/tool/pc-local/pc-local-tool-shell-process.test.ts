@@ -77,13 +77,13 @@ describe('shellEnvironment', () => {
     expect(shellEnvironment().CURL_HOME).toBe('C:\\Setsuna\\setsuna-path');
   });
 
-  it('keeps the main-provided trust snapshot authoritative over shell overrides', () => {
+  it('does not apply native sandbox trust metadata to a generic shell environment', () => {
     vi.stubEnv('SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE', 'C:\\Setsuna\\trust\\system.pem');
     vi.stubEnv('CURL_CA_BUNDLE', 'C:\\untrusted\\override.pem');
 
     expect(shellEnvironment({
       CURL_CA_BUNDLE: 'C:\\another\\override.pem',
-    }).CURL_CA_BUNDLE).toBe('C:\\Setsuna\\trust\\system.pem');
+    }).CURL_CA_BUNDLE).toBe('C:\\another\\override.pem');
   });
 });
 

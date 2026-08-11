@@ -127,17 +127,20 @@ describe('runtime host packaging paths', () => {
     )).toThrow('Bundled ripgrep is required');
   });
 
-  it('puts the LibreSSL curl directory first in the runtime PATH', () => {
+  it('passes sandbox curl metadata without replacing runtime curl', () => {
     const sandboxCurlPath = path.resolve('fixtures', 'setsuna-path', 'curl.exe');
     const sandboxCaBundlePath = path.resolve('fixtures', 'sandbox-trust', 'curl-ca-bundle.pem');
+    const baseEnvironment = { PATH: '/usr/bin:/bin' };
+    const runtimePath = runtimeProcessEnvironment({}, baseEnvironment).PATH;
     const env = runtimeProcessEnvironment(
       { sandboxCaBundlePath, sandboxCurlPath, requireBundledSandboxCurl: true },
-      { PATH: '/usr/bin:/bin' },
+      baseEnvironment,
     );
 
-    expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(sandboxCurlPath));
-    expect(env.CURL_HOME).toBe(path.dirname(sandboxCurlPath));
-    expect(env.CURL_CA_BUNDLE).toBe(sandboxCaBundlePath);
+    expect(env.PATH).toBe(runtimePath);
+    expect(env.CURL_HOME).toBeUndefined();
+    expect(env.CURL_CA_BUNDLE).toBeUndefined();
+    expect(env.SETSUNA_DESKTOP_SANDBOX_CURL_PATH).toBe(sandboxCurlPath);
     expect(env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE).toBe(sandboxCaBundlePath);
   });
 
