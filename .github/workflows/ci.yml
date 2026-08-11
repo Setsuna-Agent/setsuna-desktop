@@ -136,20 +136,22 @@ jobs:
           $listener.Start()
           try {
             $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
-            @'
-          param([int]$Port)
-          $client = [System.Net.Sockets.TcpClient]::new()
-          try {
-            if ($client.ConnectAsync('127.0.0.1', $Port).Wait(2000)) { exit 9 }
-          } catch {}
-          exit 0
-          '@ | Set-Content -Encoding utf8 (Join-Path $workspace "offline-check.ps1")
+            if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
+              throw "Windows sandbox loopback smoke test requires curl.exe"
+            }
+            $acceptedConnection = $listener.AcceptTcpClientAsync()
             $offlineRequest = $request.Clone()
             $offlineRequest.executionId = "windows_ci_offline"
-            $offlineRequest.command = "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File offline-check.ps1 $port"
+            # Keep the client native: Windows PowerShell's CLR startup requires
+            # unrelated profile access that the restricted token intentionally lacks.
+            $offlineRequest.command = "curl.exe --connect-timeout 2 --max-time 2 --silent http://127.0.0.1:$port >NUL 2>&1 & exit /b 0"
             $offlineRequest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $requestPath
             & $binary run --request $requestPath
             if ($LASTEXITCODE -ne 0) {
+              throw "Offline Windows sandbox loopback probe command failed"
+            }
+            if ($acceptedConnection.Wait(1000)) {
+              $acceptedConnection.Result.Dispose()
               throw "Offline Windows sandbox reached a blocked host loopback port"
             }
             if (Test-Path $requestPath) {
