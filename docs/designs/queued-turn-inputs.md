@@ -6,7 +6,7 @@
 - [Runtime Agent loop](../packages/desktop-runtime/agent-loop.md)
 - [Renderer Chat](../apps/desktop/renderer/chat.md)
 
-本文记录聊天“引导对话发送队列”的设计与实现。用户在一个 turn 运行期间继续提交补充要求时，输入默认进入线程级 FIFO 队列，不会立刻加入当前 transcript；当前 turn 正常完成后，runtime 自动把队首作为新的独立 turn 发送。普通消息可以点击“立即发送”，显式复用原有 steer 逻辑插入当前 turn；Plan 和 Goal 是独立队列类型，必须等待当前 turn 结束后按各自语义启动。
+本文记录聊天“引导对话发送队列”的设计与实现。用户在一个 turn 运行期间继续提交补充要求时，输入默认进入线程级 FIFO 队列，不会立刻加入当前 transcript；当前 turn 正常完成后，runtime 自动把队首作为新的独立 turn 发送。普通消息可以点击“立即发送”，显式复用原有 steer 逻辑插入当前 turn；Goal 是独立队列类型，必须等待当前 turn 结束后按目标语义启动。
 
 ## 设计目标
 
@@ -15,7 +15,7 @@
 - 当前 turn 只有正常完成时才自动发送队首；取消或错误后保留并暂停队列。
 - 每个自动发送项创建独立 turn，usage、memory、工具链路和错误状态独立结算。
 - 普通消息的“立即发送”仍共享当前 `turnId`，并在下一个安全模型检查点被消费。
-- 普通、Plan、Goal 作为显式队列类型持久化，不能在排队过程中丢失执行语义。
+- 普通、Goal 作为显式队列类型持久化，不能在排队过程中丢失执行语义。
 - renderer、REST 和 runtime 共享同一套 contract 与事件投影，不维护平行状态。
 - 并发的自动调度、取回更新、立即发送和删除必须保证不丢、不重、FIFO 不越序。
 
@@ -30,7 +30,7 @@
 `RuntimeThread.queuedTurnInputs` 是队列快照。每个 `RuntimeQueuedTurnInput` 保存：
 
 - 稳定 `id` 和可选 `clientId`。
-- `kind: 'message' | 'plan' | 'goal'`；旧版本遗留项缺失时按 `message` 读取。
+- `kind: 'message' | 'goal'`；旧版本遗留项缺失或为已移除的 `plan` 时按 `message` 读取。
 - 文本、输入附件、Skill 和 thinking 配置。
 - `createdAt` 与可选 `updatedAt`。
 
@@ -42,7 +42,7 @@ turn.input_updated
 turn.input_deleted
 ```
 
-队列项开始发送时不额外写“dequeued”事件。普通和 Plan 项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项由 `thread.goal_updated` 同时写入目标状态、`sourceMessage` 和 `queuedInputId`。因此 Goal 目标、可见用户消息和队列消费不会出现部分提交，也不会在进程崩溃时丢失任一语义。
+队列项开始发送时不额外写“dequeued”事件。普通项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项由 `thread.goal_updated` 同时写入目标状态、`sourceMessage` 和 `queuedInputId`。因此 Goal 目标、可见用户消息和队列消费不会出现部分提交，也不会在进程崩溃时丢失任一语义。
 
 典型自动发送序列：
 
@@ -72,7 +72,7 @@ turn.completed(turn_1)
 
 ```ts
 type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
-  kind?: 'message' | 'plan' | 'goal';
+  kind?: 'message' | 'goal';
 };
 
 type QueuedTurnInputPatch = {
@@ -145,12 +145,11 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 `turn.cancelled` 或 `runtime.error` 会暂停自动调度并保留队列；之后用户点击“立即发送”、提交新输入或完成一次取回编辑，才恢复队列。
 
-用户队列优先于目标自动续轮。`RuntimeGoalCoordinator` 在创建 goal continuation 前检查队列，避免目标轮次长期抢占用户输入。Plan 进入 `awaiting_confirmation` 后，即使其队列项已经被消费，Goal 也会保持空闲；接受或放弃计划产生的决策轮次结算后再恢复续轮。
+用户队列优先于目标自动续轮。`RuntimeGoalCoordinator` 在创建 goal continuation 前检查队列，避免目标轮次长期抢占用户输入。
 
 队首按类型调度：
 
 - `message`：启动普通独立 turn。
-- `plan`：启动带 `collaborationMode: 'plan'` 的独立 turn。
 - `goal`：通过 `RuntimeGoalCoordinator.startQueuedGoal()` 原子建立目标、写入带 Goal 类型的可见用户消息并启动 goal turn；附件、Skill 和 thinking 选项随目标持久化，并在后续自动续轮中保持。首轮模型请求直接复用可见消息中的附件，避免在合成续轮输入上重复附加；后续计量和状态事件只标记复用既有执行选项。
 
 ### 立即发送
@@ -165,7 +164,7 @@ POST /v1/threads/:threadId/turns/:turnId/steer
 
 如果点击期间 active turn 恰好结束，协调器重新检查状态，并把该项作为独立 turn 启动。调度中的项会被标记，删除或重复发送都会拒绝。
 
-Plan 和 Goal 不能被改写为当前 turn 的 steer；active turn 存在时 UI 禁用它们的“立即发送”，runtime 也会拒绝绕过 UI 的请求。
+Goal 不能被改写为当前 turn 的 steer；active turn 存在时 UI 禁用它的“立即发送”，runtime 也会拒绝绕过 UI 的请求。
 
 ### 取回编辑
 
@@ -187,8 +186,8 @@ release 也必须携带同一令牌。旧页面或旧请求的迟到 release 无
 composer 上方渲染 `ChatSendQueue`：
 
 - 队列按 FIFO 顺序以紧凑单行列表展示，不额外占用标题卡片空间。
-- 每项展示文本和附件名；普通、Plan、Goal 分别使用消息、计划清单和目标图标。消息真正进入 transcript 后仍保留 `inputKind`，Plan/Goal 用户消息继续显示各自的语义图标。
-- 普通项的“立即发送”调用 send-now API；Plan/Goal 在 active turn 期间等待自动调度。
+- 每项展示文本和附件名；普通、Goal 分别使用消息和目标图标。消息真正进入 transcript 后仍保留 `inputKind`，Goal 用户消息继续显示目标语义图标。
+- 普通项的“立即发送”调用 send-now API；Goal 在 active turn 期间等待自动调度。
 - “编辑”调用 retrieve 后把文本与附件放入主输入框并隐藏原行；可删除或补充附件，再通过 PATCH 原子更新原队列项。
 - composer 已有内容时只禁用“编辑”，不会影响立即发送和删除；编辑期间通过 footer 小标签显式取消。
 - “删除”只移除尚未发送的项。
@@ -200,7 +199,7 @@ active turn 期间：
 - 普通 Enter 加入队列；组合键和输入法组合态不误提交。
 - 空输入仍显示停止按钮。
 - Skill 与 thinking 配置会随队列项保存，并在该项真正开始时使用。
-- Plan/Goal 模式随提交写入队列项 `kind`，提交成功后清除 composer 徽标，避免模式错误顺延到更晚的消息。
+- Goal 模式随提交写入队列项 `kind`，提交成功后清除 composer 徽标，避免模式错误顺延到更晚的消息。
 
 `useChatTurnActions` 负责提交和队列动作，展示组件只接收明确的异步回调。队列动作共享 composer identity guard；切换线程后，旧请求可以在后台完成，但不能再写入新线程的 active turn、错误或草稿状态。线程事件继续作为实时 UI 真源，renderer 的局部收敛只作为 SSE 到达前的过渡。
 
@@ -243,8 +242,8 @@ runtime 与 contract 测试覆盖：
 - 错误后暂停；新输入恢复时旧项优先。
 - cancelled 后迟到的 completed 不会续发；旧 run 的迟到结算不会污染新 run。
 - active 期间误发普通 start 也会排队。
-- Plan/Goal 类型持久化、专用调度和 Goal 原子消费。
-- Goal 入队前校验、当前 Goal 的显式替换、附件与执行选项续轮复用，以及 awaiting Plan 对 Goal 的调度阻塞。
+- Goal 类型持久化、专用调度和原子消费。
+- Goal 入队前校验、当前 Goal 的显式替换，以及附件与执行选项续轮复用。
 - 删除当前编辑项后恢复剩余队首；编辑占用下 start 返回 queued 成功且不重复。
 - REST 的创建、retrieve、release、更新、删除和 send-now 路由；AppServer busy start 返回显式 queued 结果而不伪造 turn ID。
 

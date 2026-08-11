@@ -9,6 +9,7 @@ import { normalizeRuntimeQueuedTurnInputKind } from '@setsuna-desktop/contracts'
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import { stringInput } from './app-server/input.js';
+import { RuntimeHttpError } from './http-error.js';
 import {
   decodeRuntimeId,
   isRuntimeMessageAttachment,
@@ -53,14 +54,12 @@ export async function handleRuntimeTurnRequest(
     const attachments: SendTurnInput['attachments'] = Array.isArray(input.attachments)
       ? input.attachments.filter(isRuntimeMessageAttachment)
       : [];
+    assertSupportedCollaborationMode(input.collaborationMode ?? input.collaboration_mode);
+    assertPlanDecisionRemoved(input.planDecision ?? input.plan_decision);
     sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, {
       attachments,
       clientId: stringInput(input.clientId),
-      collaborationMode: collaborationModeInput(
-        input.collaborationMode ?? input.collaboration_mode,
-      ),
       input: typeof input.input === 'string' ? input.input : '',
-      planDecision: planDecisionInput(input.planDecision ?? input.plan_decision),
       skillIds: runtimeStringList(input.skillIds),
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
@@ -108,7 +107,7 @@ export async function handleRuntimeTurnRequest(
       attachments,
       clientId: stringInput(input.clientId),
       input: typeof input.input === 'string' ? input.input : '',
-      kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
+      kind: queuedTurnInputKind(input.kind),
       skillIds: runtimeStringList(input.skillIds),
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
@@ -234,18 +233,27 @@ export async function handleRuntimeTurnRequest(
   return false;
 }
 
-function collaborationModeInput(
-  value: unknown,
-): SendTurnInput['collaborationMode'] {
+function assertSupportedCollaborationMode(value: unknown): void {
   const text = stringInput(value);
-  if (text === 'default' || text === 'plan') return text;
-  return undefined;
+  if (!text || text === 'default') return;
+  if (text === 'plan') {
+    throw new RuntimeHttpError(400, 'Plan mode is no longer supported.', 'plan_mode_removed');
+  }
+  throw new RuntimeHttpError(400, 'collaborationMode must be default.', 'invalid_collaboration_mode');
 }
 
-function planDecisionInput(value: unknown): SendTurnInput['planDecision'] {
-  const text = stringInput(value);
-  if (text === 'accepted' || text === 'dismissed') return text;
-  return undefined;
+function assertPlanDecisionRemoved(value: unknown): void {
+  if (value === undefined || value === null || value === '') return;
+  throw new RuntimeHttpError(400, 'Plan decisions are no longer supported.', 'plan_mode_removed');
+}
+
+function queuedTurnInputKind(value: unknown): QueueTurnInput['kind'] {
+  const kind = stringInput(value);
+  // 旧数据的 plan -> message 转换只能发生在持久化投影中；新 API 输入必须明确失败。
+  if (kind === 'plan') {
+    throw new RuntimeHttpError(400, 'Plan mode is no longer supported.', 'plan_mode_removed');
+  }
+  return normalizeRuntimeQueuedTurnInputKind(kind);
 }
 
 function runtimeStringList(value: unknown): string[] {

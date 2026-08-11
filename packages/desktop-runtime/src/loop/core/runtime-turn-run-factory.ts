@@ -2,7 +2,6 @@ import type {
   ModelRequest,
   RegenerateMessageInput,
   RuntimeMessage,
-  RuntimePlanDecision,
   RuntimeTaskKind,
   RuntimeThread,
   RuntimeThreadGoal,
@@ -28,8 +27,6 @@ export type RuntimeTurnExecutionOptions = {
   includeUserMessageInModel?: boolean;
   inputKind?: RuntimeMessage['inputKind'];
   modelInput?: string;
-  planDecision?: RuntimePlanDecision;
-  planOnly?: boolean;
   publishUserMessage?: boolean;
   queuedInputId?: string;
   review?: { displayText: string };
@@ -62,7 +59,6 @@ type RuntimeTurnRunFactoryOptions = {
   runTurn(input: RuntimeTurnExecutionInput): Promise<void>;
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
-  appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 
 /** 为受支持的轮次入口提供工厂，具体执行仍由 AgentLoop 负责。 */
@@ -76,17 +72,13 @@ export class RuntimeTurnRunFactory {
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const text = input.input.trim();
     let attachments = this.options.normalizeAttachments(input.attachments);
-    const planDecision = input.planDecision;
-    if (!text && !attachments.length && !planDecision) throw new Error('Turn input is required.');
+    if (!text && !attachments.length) throw new Error('Turn input is required.');
     await this.options.inputGuard.assertAttachmentsSupported(attachments);
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
 
     const thread = await this.requireThread(threadId);
     attachments = await this.options.claimAttachments(threadId, attachments);
-    const threadForRun = await this.applyPendingPlanDecision(threadId, thread, planDecisionForTurnInput(input));
     const turnId = this.options.ids.id('turn');
-    // 仅决策轮次使用只供模型执行的提示；被驳回的决策会在 AgentLoop 中直接结束。
-    const planDecisionOnly = Boolean(planDecision) && !text && !attachments.length;
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
@@ -99,19 +91,13 @@ export class RuntimeTurnRunFactory {
       skillReferences: input.skillReferences,
       text,
       thinkingOptions: turnThinkingOptions(input),
-      thread: threadForRun,
+      thread,
       threadId,
       turnId,
       options: {
         clientId: input.clientId,
-        inputKind: input.collaborationMode === 'plan' ? 'plan' : undefined,
         queuedInputId: execution.queuedInputId,
-        planOnly: input.collaborationMode === 'plan',
         taskKind: 'regular',
-        planDecision: planDecisionOnly ? planDecision : undefined,
-        ...(planDecisionOnly && planDecision === 'accepted'
-          ? { publishUserMessage: false, includeUserMessageInModel: true, modelInput: PLAN_ACCEPT_EXECUTION_PROMPT }
-          : {}),
       },
     }));
     return { turnId, done: run.done };
@@ -278,7 +264,6 @@ export class RuntimeTurnRunFactory {
       threadId,
       turnId,
       options: {
-        planOnly: userMessage.inputKind === 'plan',
         userMessage,
         publishUserMessage: false,
         taskKind: 'regular',
@@ -287,40 +272,11 @@ export class RuntimeTurnRunFactory {
     return { turnId, done: run.done };
   }
 
-  private async applyPendingPlanDecision(threadId: string, thread: RuntimeThread, decision: RuntimePlanDecision): Promise<RuntimeThread> {
-    const planMessage = [...thread.messages].reverse().find((message) =>
-      message.role === 'assistant'
-      && message.planMode?.mode === 'plan'
-      && message.planMode.status === 'awaiting_confirmation'
-    );
-    if (!planMessage) return thread;
-    await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      turnId: planMessage.turnId,
-      type: 'message.plan_mode_updated',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: {
-        messageId: planMessage.id,
-        content: planMessage.content,
-        planMode: { mode: 'plan', status: decision },
-      },
-    });
-    return (await this.options.threadStore.getThread(threadId)) ?? thread;
-  }
-
   private async requireThread(threadId: string): Promise<RuntimeThread> {
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     return thread;
   }
-}
-
-const PLAN_ACCEPT_EXECUTION_PROMPT = '请按照上述已确认的计划开始执行。';
-
-function planDecisionForTurnInput(input: SendTurnInput): RuntimePlanDecision {
-  if (input.planDecision) return input.planDecision;
-  return input.collaborationMode === 'plan' ? 'dismissed' : 'accepted';
 }
 
 function turnThinkingOptions(input: { thinking?: boolean; thinkingEffort?: string }): RuntimeTurnThinkingOptions {

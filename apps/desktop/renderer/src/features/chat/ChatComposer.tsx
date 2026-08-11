@@ -266,7 +266,6 @@ export function ChatComposer({
     goalModeEnabled: modeController.goalModeEnabled,
     hasCurrentThread: Boolean(currentThread),
     multiAgentEnabled,
-    planModeEnabled: modeController.planModeEnabled,
     query: commandController.slashQuery,
     selectedSkills,
     sideChatAvailable: Boolean(onOpenSideChat),
@@ -283,7 +282,6 @@ export function ChatComposer({
     currentThread,
     modeController.activeModelName,
     modeController.goalModeEnabled,
-    modeController.planModeEnabled,
     multiAgentEnabled,
     onOpenSideChat,
     selectedSkills,
@@ -468,11 +466,6 @@ export function ChatComposer({
       modeController.openModelPicker();
       return;
     }
-    if (item.kind === 'action' && item.type === 'plan') {
-      modeController.enablePlanMode();
-      commandController.focusComposer();
-      return;
-    }
     if (item.kind === 'action' && item.type === 'collaboration') {
       if (!multiAgentEnabled) void onSetMultiAgentEnabled(true);
       commandController.focusComposer();
@@ -652,10 +645,8 @@ export function ChatComposer({
             modeBadges={{
               collaborationEnabled: multiAgentEnabled,
               goalModeEnabled: modeController.goalModeEnabled,
-              planEnabled: modeController.planModeEnabled,
               onClearGoal: modeController.clearGoalMode,
               onDisableCollaboration: () => void onSetMultiAgentEnabled(false),
-              onDisablePlan: modeController.disablePlanMode,
             }}
             modelOpenSignal={modeController.modelOpenSignal}
             primaryAction={{

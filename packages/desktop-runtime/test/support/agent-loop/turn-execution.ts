@@ -53,41 +53,6 @@ export class ProviderMetadataToolModelClient implements ModelClient {
   }
 }
 
-export class PlanDeltaOnlyModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    yield { type: 'plan_delta', itemId: 'plan_item_1', text: '1. Inspect current files.\n' };
-    yield { type: 'plan_delta', itemId: 'plan_item_1', text: '2. Wait for confirmation before edits.' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-}
-
-export class PlanThenToolModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    if (this.requests.length === 1) {
-      yield { type: 'plan_delta', itemId: 'plan_item_1', text: '1. Inspect current files.\n' };
-      yield { type: 'plan_delta', itemId: 'plan_item_1', text: '2. Run the read tool after confirmation.' };
-      yield { type: 'done', finishReason: 'stop' };
-      return;
-    }
-    if (this.requests.length === 2) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{ id: 'call_after_plan', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'Executed the accepted plan.' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-}
-
 export class StepSnapshotModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 

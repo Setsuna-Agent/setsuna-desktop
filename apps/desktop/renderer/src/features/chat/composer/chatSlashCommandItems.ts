@@ -20,7 +20,6 @@ export type ChatSlashCommandItemsOptions = {
   goalModeEnabled: boolean;
   hasCurrentThread: boolean;
   multiAgentEnabled: boolean;
-  planModeEnabled: boolean;
   query: string;
   selectedSkills: RuntimeSkillSummary[];
   sideChatAvailable: boolean;
@@ -39,7 +38,6 @@ export function createChatSlashCommandItems({
   goalModeEnabled,
   hasCurrentThread,
   multiAgentEnabled,
-  planModeEnabled,
   query,
   selectedSkills,
   sideChatAvailable,
@@ -52,19 +50,6 @@ export function createChatSlashCommandItems({
       kind: 'model',
       title: t('chat.composer.model'),
       description: activeModelName ?? t('chat.composer.selectConfiguredModel'),
-    },
-    {
-      key: 'plan',
-      kind: 'action',
-      type: 'plan',
-      title: t('chat.composer.planMode'),
-      description: activeTurnId
-        ? planModeEnabled
-          ? t('chat.composer.planEnabledNext')
-          : t('chat.composer.planEnableNext')
-        : planModeEnabled
-          ? t('chat.composer.planEnabled')
-          : t('chat.composer.planDescription'),
     },
     {
       key: 'collaboration',

@@ -1,6 +1,6 @@
 import { Bubble } from '@ant-design/x';
-import type { RuntimeMessage, RuntimePlanDecision } from '@setsuna-desktop/contracts';
-import { BookOpen, ListTodo, Target } from 'lucide-react';
+import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { BookOpen, Target } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
@@ -67,7 +67,6 @@ export function MessageItem({
   onDiscardFileChanges,
   onEditDraftChange,
   onOpenFileReview,
-  onPlanDecision,
   onStartEdit,
   onStartDelete,
   onSubmitEdit,
@@ -90,7 +89,6 @@ export function MessageItem({
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
   onOpenFileReview?: (filePath?: string) => void;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartEdit: (message: RuntimeMessage) => void;
   onStartDelete: (itemId: string) => void;
   onSubmitEdit: (messageId: string) => void;
@@ -110,7 +108,6 @@ export function MessageItem({
         onAnswerApproval={onAnswerApproval}
         onDiscardFileChanges={onDiscardFileChanges}
         onOpenFileReview={onOpenFileReview}
-        onPlanDecision={onPlanDecision}
         onStartDelete={onStartDelete}
         onToggleDelete={onToggleDelete}
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
@@ -161,7 +158,7 @@ function UserMessageContent({
   message: RuntimeMessage;
   streaming: boolean;
 }) {
-  const hasSemanticKind = message.inputKind === 'plan' || message.inputKind === 'goal';
+  const hasSemanticKind = message.inputKind === 'goal';
   return (
     <div className="chat-user-message-content">
       {message.attachments?.length ? (
@@ -188,15 +185,11 @@ function UserMessageContent({
 
 function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
   const { t } = useI18n();
-  if (kind !== 'plan' && kind !== 'goal') return null;
-  const label = kind === 'goal'
-    ? t('chat.message.kind.goal')
-    : t('chat.message.kind.plan');
+  if (kind !== 'goal') return null;
+  const label = t('chat.message.kind.goal');
   return (
     <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
-      {kind === 'goal'
-        ? <Target size={13} strokeWidth={1.9} aria-hidden="true" />
-        : <ListTodo size={13} strokeWidth={1.9} aria-hidden="true" />}
+      <Target size={13} strokeWidth={1.9} aria-hidden="true" />
       <span>{label}</span>
     </span>
   );
@@ -210,7 +203,6 @@ function AssistantRunItem({
   onAnswerApproval,
   onDiscardFileChanges,
   onOpenFileReview,
-  onPlanDecision,
   onStartDelete,
   onToggleDelete,
   onWorkHistoryExpandedChange,
@@ -224,7 +216,6 @@ function AssistantRunItem({
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
@@ -246,7 +237,7 @@ function AssistantRunItem({
       {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onPlanDecision={onPlanDecision} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
+        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
@@ -312,7 +303,6 @@ function AssistantRunContent({
   onAnswerApproval,
   onDiscardFileChanges,
   onOpenFileReview,
-  onPlanDecision,
   onWorkHistoryExpandedChange,
   pluginUses,
 }: {
@@ -321,7 +311,6 @@ function AssistantRunContent({
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: (filePath?: string) => void;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
 }) {
@@ -383,7 +372,7 @@ function AssistantRunContent({
     return (
       <div className="chat-assistant-run">
         {pluginUses.length ? <RuntimePluginUses plugins={pluginUses} /> : null}
-        <PlanCard message={planSegment} active={active} onPlanDecision={onPlanDecision} />
+        <PlanCard message={planSegment} />
       </div>
     );
   }
@@ -450,14 +439,13 @@ function MemoryCitationCard({ entries }: { entries: NonNullable<RuntimeMessage['
   );
 }
 
-function PlanCard({ message, active, onPlanDecision }: { message: RuntimeMessage; active: boolean; onPlanDecision: (decision: RuntimePlanDecision) => void }) {
+function PlanCard({ message }: { message: RuntimeMessage }) {
   const { t } = useI18n();
   const planMode = message.planMode;
   if (!planMode) return null;
   const status = planMode.status;
   const streaming = message.status === 'streaming';
   const awaiting = status === 'awaiting_confirmation';
-  const canDecide = awaiting && !active;
   const statusLabel = awaiting
     ? t('chat.plan.awaiting')
     : status === 'accepted'
@@ -475,16 +463,6 @@ function PlanCard({ message, active, onPlanDecision }: { message: RuntimeMessage
         <span className={`chat-plan-card__status chat-plan-card__status--${status}`}>{statusLabel}</span>
       </header>
       <div className="chat-plan-card__body">{body}</div>
-      {canDecide ? (
-        <footer className="chat-plan-card__actions">
-          <button type="button" className="chat-plan-card__action chat-plan-card__action--accept" onClick={() => onPlanDecision('accepted')}>
-            {t('chat.plan.accept')}
-          </button>
-          <button type="button" className="chat-plan-card__action chat-plan-card__action--dismiss" onClick={() => onPlanDecision('dismissed')}>
-            {t('chat.plan.dismiss')}
-          </button>
-        </footer>
-      ) : null}
     </section>
   );
 }

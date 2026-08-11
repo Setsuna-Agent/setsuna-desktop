@@ -41,10 +41,8 @@ type ChatComposerFooterEditingControl = {
 type ChatComposerFooterModeBadges = {
   collaborationEnabled: boolean;
   goalModeEnabled: boolean;
-  planEnabled: boolean;
   onClearGoal: () => void;
   onDisableCollaboration: () => void;
-  onDisablePlan: () => void;
 };
 
 type ChatComposerFooterPrimaryAction = {
@@ -134,12 +132,6 @@ export function ChatComposerFooter({
             disabled={editingControl.disabled}
             label={t('chat.queue.editing')}
             onClose={editingControl.onCancel}
-          />
-        ) : null}
-        {modeBadges.planEnabled ? (
-          <ChatModeBadge
-            label={hasActiveTurn ? t('chat.composer.badge.planNext') : t('chat.composer.badge.plan')}
-            onClose={modeBadges.onDisablePlan}
           />
         ) : null}
         {modeBadges.collaborationEnabled ? (

@@ -46,13 +46,15 @@ Full snapshot 通常包含：
 - `visibility`：模型可见或 transcript-only。
 - `status`：streaming/complete/error 等。
 - `turnId`：关联同一轮输入、assistant 和工具。
-- `inputKind`：普通、Plan、Goal。
+- `inputKind`：普通、Goal。
 - Attachments。
 - Tool calls / tool results。
 - Provider metadata。
 - Context compaction / review 等特殊语义。
 
 一轮可以有多条 assistant message；message 不等于 UI display item。
+
+旧版本写入的 `planMode` 消息与 `message.plan_mode_updated` 事件仍保留读取投影兼容，但不再作为可创建、确认或执行的运行模式。
 
 ### `RuntimeToolRun`
 

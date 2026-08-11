@@ -58,8 +58,6 @@ export class RuntimeModelSampler {
   async sample({
     captureProtocolUsage,
     onAssistantStarted,
-    planMode,
-    planOnly,
     signal,
     step,
     thinkingOptions,
@@ -68,8 +66,6 @@ export class RuntimeModelSampler {
   }: {
     captureProtocolUsage: boolean;
     onAssistantStarted?(messageId: string): void;
-    planMode?: RuntimeMessage['planMode'];
-    planOnly: boolean;
     signal: AbortSignal;
     step: RuntimeSamplingModelContext;
     thinkingOptions: TurnThinkingOptions;
@@ -83,7 +79,6 @@ export class RuntimeModelSampler {
       role: 'assistant',
       content: '',
       createdAt: this.options.clock.now().toISOString(),
-      planMode,
       status: 'streaming',
     };
     onAssistantStarted?.(assistantMessageId);
@@ -96,11 +91,11 @@ export class RuntimeModelSampler {
     const output = createAssistantOutputAccumulator((delta) =>
       this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
     );
-    const streamBridge = createAssistantItemStreamBridge(output, { renderPlanDeltas: planOnly });
+    const streamBridge = createAssistantItemStreamBridge(output);
     const mirror = createLegacyModelStreamMirrorState();
-    const requestToolChoice = planOnly ? 'none' : step.toolChoice;
-    const requestTools = planOnly ? undefined : toolsForModelRequest(step.tools, requestToolChoice);
-    const requestSnapshot = planOnly ? noToolStepSnapshot(step.snapshot) : step.snapshot;
+    const requestToolChoice = step.toolChoice;
+    const requestTools = toolsForModelRequest(step.tools, requestToolChoice);
+    const requestSnapshot = step.snapshot;
     const samplingStepEvent = await this.options.streamEvents.publishSamplingStepSnapshot(
       threadId,
       turnId,
@@ -175,14 +170,6 @@ export class RuntimeModelSampler {
     await this.options.streamEvents.completeLegacyStreamItems(mirror, threadId, turnId, assistantMessageId);
     const memoryCitation = await output.finish();
     let text = output.text();
-    if (planOnly && toolCalls.length) {
-      toolCalls = [];
-      if (!text.trim()) {
-        const fallbackText = 'Plan mode is active. I will wait for confirmation before running tools.';
-        text += fallbackText;
-        await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, fallbackText);
-      }
-    }
     if (!text.trim() && !toolCalls.length) {
       // A transport can terminate cleanly while returning no usable model output (for example,
       // when an OpenAI-compatible base URL points at a website instead of its API). Treating that
@@ -207,16 +194,6 @@ export class RuntimeModelSampler {
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
-}
-
-function noToolStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeModelRequestStepSnapshot {
-  return {
-    ...snapshot,
-    toolNames: [],
-    advertisedToolNames: [],
-    toolRuntimes: [],
-    toolChoice: 'none',
-  };
 }
 
 function throwIfAborted(signal: AbortSignal): void {

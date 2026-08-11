@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
-import {
-  createOpenAiCaptureServer,
-  withTimeout
-} from '../../support/runtime-server/shared.js';
 
 describe('runtime server AppServer config', () => {
   let harness: RuntimeServerTestHarness;
@@ -332,15 +328,9 @@ describe('runtime server AppServer config', () => {
       });
     });
   
-  it('lists AppServer collaboration mode presets in upstream order', async () => {
+  it('lists only the default AppServer collaboration mode', async () => {
       await expect(harness.appServerRpc('collaborationMode/list', {})).resolves.toEqual({
         data: [
-          {
-            name: 'Plan',
-            mode: 'plan',
-            model: null,
-            reasoning_effort: 'medium',
-          },
           {
             name: 'Default',
             mode: 'default',
@@ -351,31 +341,20 @@ describe('runtime server AppServer config', () => {
       });
     });
   
-  it('applies AppServer Plan collaboration mode reasoning to turn starts', async () => {
-      const capture = await createOpenAiCaptureServer();
-      try {
-        await harness.configureOpenAiProvider('planmodeprovider', capture.baseUrl, {
-          thinkingEnabled: true,
-          thinkingEfforts: ['medium'],
-          defaultThinkingEffort: 'medium',
-        });
-        const startedThread = await harness.appServerRpc('thread/start', { name: 'Plan mode thread', cwd: process.cwd() });
-        await harness.appServerRpc('thread/memoryMode/set', { threadId: startedThread.thread.id, mode: 'disabled' });
-  
-        await harness.appServerRpc('turn/start', {
+  it('rejects the removed AppServer Plan collaboration mode', async () => {
+        const startedThread = await harness.appServerRpc('thread/start', { name: 'Default mode thread', cwd: process.cwd() });
+
+        await expect(harness.appServerRpcEnvelope({
+          id: 'removed_plan_mode',
+          method: 'turn/start',
+          params: {
           threadId: startedThread.thread.id,
           input: [{ type: 'text', text: 'Plan before editing.' }],
           collaborationMode: { mode: 'plan' },
+          },
+        })).resolves.toMatchObject({
+          id: 'removed_plan_mode',
+          error: { code: -32602, message: 'Plan mode is no longer supported' },
         });
-        const body = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for plan mode provider request');
-        const messages = Array.isArray(body.messages) ? body.messages : [];
-  
-        expect(body.reasoning_effort).toBe('medium');
-        expect(body.tools).toBeUndefined();
-        expect(body.tool_choice === undefined || body.tool_choice === 'none').toBe(true);
-        expect(messages.some((message) => String((message as { content?: unknown }).content).includes('<plan_mode>'))).toBe(true);
-      } finally {
-        await capture.close();
-      }
     });
 });

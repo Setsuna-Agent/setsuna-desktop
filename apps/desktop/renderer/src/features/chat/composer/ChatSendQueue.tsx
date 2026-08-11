@@ -3,7 +3,6 @@ import {
   type RuntimeQueuedTurnInput,
 } from '@setsuna-desktop/contracts';
 import {
-  ListChecks,
   MessageSquareText,
   Paperclip,
   Pencil,
@@ -57,16 +56,10 @@ export const ChatSendQueue = memo(function ChatSendQueue({
       <ol className="chat-send-queue__list">
         {items.map((item) => {
           const kind = normalizeRuntimeQueuedTurnInputKind(item.kind);
-          const MarkerIcon = kind === 'plan'
-            ? ListChecks
-            : kind === 'goal'
-              ? Target
-              : MessageSquareText;
-          const kindLabel = kind === 'plan'
-            ? t('chat.queue.kind.plan')
-            : kind === 'goal'
-              ? t('chat.queue.kind.goal')
-              : t('chat.queue.kind.message');
+          const MarkerIcon = kind === 'goal' ? Target : MessageSquareText;
+          const kindLabel = kind === 'goal'
+            ? t('chat.queue.kind.goal')
+            : t('chat.queue.kind.message');
           const itemPending = pendingAction?.inputId === item.id;
           const attachments = item.attachments ?? [];
           const actionsDisabled = disabled || Boolean(pendingAction);

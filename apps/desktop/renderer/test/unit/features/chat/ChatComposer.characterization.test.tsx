@@ -165,14 +165,11 @@ describe('ChatComposer view state characterization', () => {
       clearGoalMode: vi.fn(),
       closeUsagePanel: vi.fn(),
       createSendOptions: vi.fn(() => ({})),
-      disablePlanMode: vi.fn(),
       enableGoalMode: vi.fn(),
-      enablePlanMode: vi.fn(),
       goalModeEnabled: false,
       hasProtectedModeState: false,
       modelOpenSignal: 0,
       openModelPicker: vi.fn(),
-      planModeEnabled: false,
       resetAfterSend: vi.fn(),
       setThinkingEffort: vi.fn(),
       setThinkingEnabled: vi.fn(),
@@ -217,9 +214,8 @@ describe('ChatComposer view state characterization', () => {
     expect(attachmentOnly).not.toContain('data-action="sender-default"');
   });
 
-  it('keeps editing, plan, collaboration and goal badges in the footer', () => {
+  it('keeps editing, collaboration and goal badges in the footer', () => {
     composerHarness.queuedEdit.editing = true;
-    composerHarness.mode.planModeEnabled = true;
     composerHarness.mode.goalModeEnabled = true;
 
     const html = renderComposer({
@@ -230,7 +226,6 @@ describe('ChatComposer view state characterization', () => {
     });
 
     expect(html).toContain('chat.queue.editing');
-    expect(html).toContain('chat.composer.badge.planNext');
     expect(html).toContain('chat.composer.badge.collaboration');
     expect(html).toContain('chat.composer.badge.goalNext');
   });

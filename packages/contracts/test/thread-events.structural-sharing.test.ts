@@ -83,7 +83,7 @@ describe('thread event structural sharing', () => {
     expect(projected.turns).toBe(turns);
   });
 
-  it('normalizes legacy queued input kinds during unrelated projections', () => {
+  it('normalizes missing and removed Plan queued input kinds during unrelated projections', () => {
     const legacyInput = {
       id: 'queued_legacy',
       input: 'Continue later',
@@ -117,9 +117,9 @@ describe('thread event structural sharing', () => {
       payload: { title: 'After' },
     });
 
-    expect(projected.queuedTurnInputs?.map((input) => input.kind)).toEqual(['message', 'plan']);
+    expect(projected.queuedTurnInputs?.map((input) => input.kind)).toEqual(['message', 'message']);
     expect(projected.queuedTurnInputs?.[0]).not.toBe(legacyInput);
-    expect(projected.queuedTurnInputs?.[1]).toBe(planInput);
+    expect(projected.queuedTurnInputs?.[1]).not.toBe(planInput);
     expect(legacyInput).not.toHaveProperty('kind');
   });
 });

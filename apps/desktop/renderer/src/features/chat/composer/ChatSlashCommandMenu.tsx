@@ -4,7 +4,6 @@ import {
   Boxes,
   CheckSquare,
   CircleGauge,
-  ListChecks,
   MessageSquare,
   ShieldCheck,
   Target,
@@ -25,7 +24,7 @@ export type SlashCommandMenuItem =
       loading?: boolean;
       progressPercent?: number;
       title: string;
-      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'plan' | 'review' | 'side-chat' | 'usage';
+      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'review' | 'side-chat' | 'usage';
     }
   | {
       description?: string;
@@ -129,7 +128,6 @@ function unresolvedSkillMcpDependencyCount(skill: Extract<SlashCommandMenuItem, 
 function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'skill') return <Boxes className="chat-command-menu__item-icon" size={15} />;
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
-  if (item.type === 'plan') return <ListChecks className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'collaboration') return <Users className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'goal') return <Target className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'usage') return <CircleGauge className="chat-command-menu__item-icon" size={15} />;

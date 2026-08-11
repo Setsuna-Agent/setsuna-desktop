@@ -62,7 +62,6 @@ export function createLegacyModelStreamMirrorState(): LegacyModelStreamMirrorSta
 
 export function createAssistantItemStreamBridge(
   output: AssistantOutputAccumulator,
-  options: { renderPlanDeltas?: boolean } = {},
 ): {
   appendAgent(delta: string): Promise<void>;
   appendReasoning(delta: string): Promise<void>;
@@ -111,8 +110,6 @@ export function createAssistantItemStreamBridge(
       } else if (event.type === 'reasoning_summary_delta' || event.type === 'reasoning_raw_delta') {
         if (event.itemId) emittedTextItemIds.add(event.itemId);
         await appendReasoning(event.text);
-      } else if (event.type === 'plan_delta' && options.renderPlanDeltas) {
-        await appendAgent(event.text);
       }
     },
     async finish() {

@@ -521,9 +521,6 @@ function queuedInputAsTurnInput(input: RuntimeQueuedTurnInput): SendTurnInput {
     skillReferences: input.skillReferences,
     thinking: input.thinking,
     thinkingEffort: input.thinkingEffort,
-    ...(normalizeRuntimeQueuedTurnInputKind(input.kind) === 'plan'
-      ? { collaborationMode: 'plan' as const }
-      : {}),
   };
 }
 

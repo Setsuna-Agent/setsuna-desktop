@@ -20,7 +20,6 @@ describe('chat slash command items', () => {
 
     expect(items.map((item) => item.key)).toEqual([
       'model',
-      'plan',
       'collaboration',
       'goal',
       'usage',
@@ -62,9 +61,8 @@ describe('chat slash command items', () => {
       skills,
     }));
 
-    expect(items.slice(0, 9).map((item) => item.key)).toEqual([
+    expect(items.slice(0, 8).map((item) => item.key)).toEqual([
       'model',
-      'plan',
       'collaboration',
       'goal',
       'usage',
@@ -73,7 +71,7 @@ describe('chat slash command items', () => {
       'compact-context',
       'clear-context',
     ]);
-    expect(items.slice(9).map((item) => item.key)).toEqual(
+    expect(items.slice(8).map((item) => item.key)).toEqual(
       skills.slice(2).map((item) => `skill:${item.id}`),
     );
   });
@@ -97,7 +95,6 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     goalModeEnabled: false,
     hasCurrentThread: true,
     multiAgentEnabled: false,
-    planModeEnabled: false,
     query: '',
     selectedSkills: [],
     sideChatAvailable: true,

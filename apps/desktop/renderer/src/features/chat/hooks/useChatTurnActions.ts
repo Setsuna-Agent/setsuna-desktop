@@ -1,9 +1,7 @@
 import {
   isRuntimeInputMessageAttachment,
   type DesktopRuntimeClient,
-  type RuntimeCollaborationMode,
   type RuntimeMessageAttachment,
-  type RuntimePlanDecision,
   type RuntimeSkillReference,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
@@ -19,9 +17,7 @@ import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
 
 type ChatTurnSendOptions = {
   attachments?: RuntimeMessageAttachment[];
-  collaborationMode?: RuntimeCollaborationMode;
   goalMode?: boolean;
-  planDecision?: RuntimePlanDecision;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
@@ -75,9 +71,7 @@ export function useChatTurnActions({
     async (value?: string, options: ChatTurnSendOptions = {}) => {
       const input = (value ?? draft).trim();
       const attachments = (options.attachments ?? []).filter(isRuntimeInputMessageAttachment);
-      if (!input && !attachments.length && !options.planDecision) return false;
-      // 计划决策只能针对已有线程里的 awaiting 计划，没有线程时无从裁决。
-      if (options.planDecision && !currentThread) return false;
+      if (!input && !attachments.length) return false;
       const isCurrentRequest = actionRequests.begin();
       const clientId = createChatTurnClientId();
       let submissionDispatched = false;
@@ -109,8 +103,6 @@ export function useChatTurnActions({
           skillReferences: options.skillReferences,
           thinking: options.thinking === true,
           ...(options.thinking === true && options.thinkingEffort ? { thinkingEffort: options.thinkingEffort } : {}),
-          ...(options.collaborationMode ? { collaborationMode: options.collaborationMode } : {}),
-          ...(options.planDecision ? { planDecision: options.planDecision } : {}),
         });
         // Goal 无论线程当前是否空闲都先进入同一持久化入口；空闲时 runtime 会立刻
         // 原子消费并启动，忙碌时则保留完整附件、Skill 与 thinking 语义等待调度。
@@ -122,9 +114,7 @@ export function useChatTurnActions({
               input,
               kind: options.goalMode
                 ? 'goal'
-                : options.collaborationMode === 'plan'
-                  ? 'plan'
-                  : 'message',
+                : 'message',
               skillIds: options.skillIds,
               skillReferences: options.skillReferences,
               thinking: options.thinking,
@@ -247,9 +237,9 @@ export type ChatTurnActions = ReturnType<typeof useChatTurnActions>;
 
 export function shouldQueueComposerTurn(
   activeTurnId: string | null,
-  options: Pick<ChatTurnSendOptions, 'goalMode' | 'planDecision'>,
+  options: Pick<ChatTurnSendOptions, 'goalMode'>,
 ): boolean {
-  return options.goalMode === true || Boolean(activeTurnId && !options.planDecision);
+  return options.goalMode === true || Boolean(activeTurnId);
 }
 
 export function claimCreatedChatThreadForSend({

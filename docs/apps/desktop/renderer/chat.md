@@ -38,7 +38,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 
 - 文本输入。
 - 附件 tray。
-- Model / Skill / thinking / Plan / Goal 等发送选项。
+- Model / Skill / thinking / Goal 等发送选项。
 - Slash command 与命令菜单。
 - Active turn 的 stop/queue 语义。
 - `ChatSendQueue`。
@@ -61,13 +61,13 @@ Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页�
 - Regenerate。
 - Context clear/compact。
 - Review turn。
-- Plan / Goal mode。
+- Goal mode。
 
 ### `useQueuedTurnInputActions.ts`
 
 负责持久化队列的 retrieve、release、update、delete、send-now，并与 composer identity guard 协作。
 
-Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Plan/Goal 保持独立调度。完整状态机见 [Active turn 发送队列](../../../designs/queued-turn-inputs.md)。
+Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Goal 保持独立调度。完整状态机见 [Active turn 发送队列](../../../designs/queued-turn-inputs.md)。
 
 ## Composer state
 
@@ -75,8 +75,8 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Pl
 
 - `chatComposerDraftSync.ts`：thread/project 身份与 draft 同步。
 - `chatComposerSendOptions.ts`：附件、thinking、Skill 与 mode 的发送参数归一化。
-- `chatComposerModeState.ts`：当前模型能力、Plan/Goal 互斥和 thinking selection 的纯状态模型。
-- `useChatComposerModeController.ts`：Plan/Goal、thinking、model/usage view state 与 send options。
+- `chatComposerModeState.ts`：当前模型能力、Goal 和 thinking selection 的纯状态模型。
+- `useChatComposerModeController.ts`：Goal、thinking、model/usage view state 与 send options。
 - `ChatComposerFooter.tsx`：命令入口、thinking、审批策略、模式徽标、模型选择与 send/stop/queue 主操作的纯展示组合。
 - `ChatComposerOverlays.tsx`：mention、slash 和 usage 浮层的纯展示组合。
 - `chatAttachments.ts` / `chatImageAttachments.ts`：附件选择、上传、清理。
@@ -91,11 +91,11 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Pl
 
 取回队列项不会先删除持久化数据。Runtime 返回 edit token，renderer 暂时把内容接管到 composer；提交、取消、卸载和失败路径都要 release 或携 token 更新。
 
-Command controller 只拥有输入菜单交互，不负责发送、附件、Plan/Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
+Command controller 只拥有输入菜单交互，不负责发送、附件、Goal 或 queued edit 事务。Mention 菜单优先于强制打开的 slash 菜单；dismiss 只绑定当前 draft；queued edit 只阻止 slash menu。Project entry 搜索切换 query 或关闭菜单时会取消旧请求的写回。
 
 裸 `/` 菜单同时保留 quick actions 和最多 8 个 enabled、未选择的 Skill slot；quick action 数量不占用 Skill 的显示额度。
 
-Mode controller 只拥有本地模式选择和发送参数快照。Plan 与本地 Goal 原子互斥；切换 thread 只重置 thread-scoped Goal 和 usage panel，成功发送后重置 Plan/Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
+Mode controller 只拥有本地 Goal 选择和发送参数快照；切换 thread 会重置 thread-scoped Goal 和 usage panel，成功发送后重置 Goal，thinking 继续保留。附件 begin/settle、实际 `onSend`、queued-edit token 和 Sender clear 仍由各自原 owner 管理。
 
 Footer 和 overlays 不拥有 state、ref 或异步生命周期。它们通过分组控制面接收 controller 状态和回调；主操作保持 `queue > stop > attachment-only send > Sender default action` 的既有优先级。组件级 characterization test 固化该矩阵及模式徽标、菜单和 usage thread gate。
 

@@ -86,7 +86,7 @@
 
 跨越多个源码模块、但不适合归属于单个目录的设计放在 [designs](designs/README.md)：
 
-- [Active turn 发送队列](designs/queued-turn-inputs.md)：普通消息、Plan、Goal、steer、取回编辑和 FIFO 调度。
+- [Active turn 发送队列](designs/queued-turn-inputs.md)：普通消息、Goal、steer、取回编辑和 FIFO 调度。
 - [架构复杂度收敛评审](designs/architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点治理计划。
 - [Runtime 边界与事件矩阵](designs/runtime-boundary-matrix.md)：第一方 Runtime、app-server 和事件投影的当前边界。
 
