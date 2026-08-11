@@ -648,7 +648,7 @@ function sandboxCurlConfiguration(): SandboxCurlConfiguration | null {
     process.env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE,
   );
   if (!executablePath || !caBundlePath) return null;
-  const pathApi = path.win32.isAbsolute(executablePath) ? path.win32 : path;
+  const pathApi = usesWindowsPathSemantics(executablePath) ? path.win32 : path;
   const directory = pathApi.dirname(executablePath);
   const configPath = existingAbsoluteFile(pathApi.join(directory, '_curlrc'));
   return {
@@ -682,7 +682,7 @@ function applySandboxCurlEnvironment(
   environment: Record<string, string>,
   configuration: SandboxCurlConfiguration,
 ): void {
-  const windowsPath = path.win32.isAbsolute(configuration.executablePath);
+  const windowsPath = usesWindowsPathSemantics(configuration.executablePath);
   const delimiter = windowsPath ? ';' : path.delimiter;
   const existingPath = environmentValue(environment, 'PATH');
   const comparison = (value: string) => windowsPath ? value.toLowerCase() : value;
@@ -694,6 +694,14 @@ function applySandboxCurlEnvironment(
   setEnvironmentValue(environment, 'PATH', [configuration.directory, ...pathEntries].join(delimiter));
   setEnvironmentValue(environment, 'CURL_HOME', configuration.directory);
   setEnvironmentValue(environment, 'CURL_CA_BUNDLE', configuration.caBundlePath);
+}
+
+function usesWindowsPathSemantics(value: string): boolean {
+  if (process.platform === 'win32') return true;
+  // win32.isAbsolute also treats POSIX root paths such as `/tmp` as absolute.
+  // Outside Windows, only drive-qualified and UNC paths should select `;` and
+  // win32 dirname behavior.
+  return /^[a-z]:[\\/]/iu.test(value) || /^\\\\/u.test(value);
 }
 
 function environmentValue(environment: Record<string, string>, name: string): string {
