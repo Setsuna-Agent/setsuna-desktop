@@ -477,6 +477,9 @@ pub fn prepare_execution(
     lock_path: &Path,
 ) -> Result<TemporaryAclGrant, SandboxError> {
     let _mutation = AclMutationLock::acquire(lock_path)?;
+    // NUL is a machine-wide device, so update its capability ACE under the
+    // same cross-process lock used for filesystem ACL mutations.
+    super::null_device::ensure_access(capability_sid)?;
     let sandbox_group = LocalSid::parse(sandbox_group_sid)?;
     let capability = LocalSid::parse(capability_sid)?;
     let writable_roots = unique_existing_paths(&request.writable_roots)?;

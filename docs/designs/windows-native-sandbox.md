@@ -98,6 +98,10 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
 策略；默认 DACL 中的 `Everyone` 也会让其他本机账户访问沙箱进程新建的命名对象。外层 account runner 从
 机器级只读副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
 
+为保留普通 shell 的 `>NUL` / `2>NUL` 重定向，执行准备会沿用上游的窄授权方式：在全局 ACL 锁内，只向
+Windows `NUL` 设备对象上的当前 policy capability 添加读写执行 ACE。它不向 `Everyone` 放权，也不递归
+修改任何文件目录。
+
 `WRITE_RESTRICTED` 只对 write-like access 执行 restricting SID 二次检查。因此 V1 的原生边界是专用账户身份、
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
 sandbox 语义一致。需要 path-specific read deny 的策略会以 unsupported-policy 失败，而不是静默降级。

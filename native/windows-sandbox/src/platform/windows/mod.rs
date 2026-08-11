@@ -6,6 +6,7 @@ mod elevation;
 mod firewall;
 mod handle;
 mod job;
+mod null_device;
 mod paths;
 mod process;
 mod token;
