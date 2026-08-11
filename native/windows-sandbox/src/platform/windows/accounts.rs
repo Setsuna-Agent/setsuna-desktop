@@ -10,10 +10,10 @@ use windows_sys::Win32::Foundation::{GetLastError, LocalFree, HLOCAL};
 use windows_sys::Win32::NetworkManagement::NetManagement::{
     NERR_Success, NERR_UserExists, NetApiBufferFree, NetLocalGroupAdd, NetLocalGroupAddMembers,
     NetLocalGroupDel, NetLocalGroupGetInfo, NetUserAdd, NetUserDel, NetUserGetInfo,
-    NetUserGetLocalGroups, LG_INCLUDE_INDIRECT, LOCALGROUP_INFO_1, LOCALGROUP_MEMBERS_INFO_3,
-    LOCALGROUP_USERS_INFO_0, MAX_PREFERRED_LENGTH, UF_ACCOUNTDISABLE, UF_DONT_EXPIRE_PASSWD,
-    UF_LOCKOUT, UF_NORMAL_ACCOUNT, UF_NOT_DELEGATED, UF_PASSWORD_EXPIRED, UF_SCRIPT, USER_INFO_1,
-    USER_PRIV_USER,
+    NetUserGetLocalGroups, NetUserSetInfo, LG_INCLUDE_INDIRECT, LOCALGROUP_INFO_1,
+    LOCALGROUP_MEMBERS_INFO_3, LOCALGROUP_USERS_INFO_0, MAX_PREFERRED_LENGTH, UF_ACCOUNTDISABLE,
+    UF_DONT_EXPIRE_PASSWD, UF_LOCKOUT, UF_NORMAL_ACCOUNT, UF_NOT_DELEGATED, UF_PASSWORD_EXPIRED,
+    UF_SCRIPT, USER_INFO_1, USER_INFO_1007, USER_PRIV_USER,
 };
 use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
 use windows_sys::Win32::Security::{
@@ -389,7 +389,7 @@ fn ensure_user(name: &str, password: &str) -> Result<(), SandboxError> {
     };
     if added == NERR_Success {
         password_wide.zeroize();
-        return Ok(());
+        return finalize_created_user(name);
     }
     if added != NERR_UserExists {
         password_wide.zeroize();
@@ -433,7 +433,55 @@ fn ensure_user(name: &str, password: &str) -> Result<(), SandboxError> {
             ),
         ));
     }
-    Ok(())
+    finalize_created_user(name)
+}
+
+fn finalize_created_user(name: &str) -> Result<(), SandboxError> {
+    let result = set_managed_user_comment(name).and_then(|()| verify_managed_user(name));
+    if result.is_ok() {
+        return result;
+    }
+
+    // We just created this exact identity, so it is safe to remove if its
+    // management marker or hardened flags did not survive the NetAPI calls.
+    let deleted = unsafe { NetUserDel(std::ptr::null(), to_wide(name).as_ptr()) };
+    if deleted != NERR_Success && deleted != NERR_USER_NOT_FOUND {
+        return Err(SandboxError::new(
+            SandboxErrorCode::SetupFailed,
+            format!(
+                "sandbox user {name} failed post-create verification and cleanup failed: {deleted}"
+            ),
+        ));
+    }
+    result
+}
+
+fn set_managed_user_comment(name: &str) -> Result<(), SandboxError> {
+    let name_wide = to_wide(name);
+    let mut comment_wide = to_wide(MANAGED_USER_COMMENT);
+    let mut info = USER_INFO_1007 {
+        usri1007_comment: comment_wide.as_mut_ptr(),
+    };
+    let mut parameter_error = 0_u32;
+    let status = unsafe {
+        NetUserSetInfo(
+            std::ptr::null(),
+            name_wide.as_ptr(),
+            1007,
+            std::ptr::addr_of_mut!(info).cast::<u8>(),
+            &mut parameter_error,
+        )
+    };
+    if status == NERR_Success {
+        Ok(())
+    } else {
+        Err(SandboxError::new(
+            SandboxErrorCode::SetupFailed,
+            format!(
+                "cannot mark sandbox user {name} as Setsuna-managed: {status} (parameter {parameter_error})"
+            ),
+        ))
+    }
 }
 
 fn verify_managed_user(name: &str) -> Result<(), SandboxError> {
@@ -463,9 +511,10 @@ fn verify_managed_user_configuration(
     let info = unsafe { &*buffer.cast::<USER_INFO_1>() };
     let comment = wide_pointer_to_string(info.usri1_comment);
     let privilege_valid = info.usri1_priv == USER_PRIV_USER;
+    let flags = info.usri1_flags;
     let flags_valid = privilege_valid
-        && info.usri1_flags & MANAGED_USER_FLAGS == MANAGED_USER_FLAGS
-        && info.usri1_flags & (UF_ACCOUNTDISABLE | UF_LOCKOUT | UF_PASSWORD_EXPIRED) == 0;
+        && flags & MANAGED_USER_FLAGS == MANAGED_USER_FLAGS
+        && flags & (UF_ACCOUNTDISABLE | UF_LOCKOUT | UF_PASSWORD_EXPIRED) == 0;
     unsafe { NetApiBufferFree(buffer.cast::<c_void>()) };
     if comment.as_deref() == Some(MANAGED_USER_COMMENT)
         && privilege_valid
@@ -475,7 +524,12 @@ fn verify_managed_user_configuration(
     } else {
         Err(SandboxError::new(
             SandboxErrorCode::NeedsRepair,
-            format!("sandbox user {name} does not carry the Setsuna management marker"),
+            format!(
+                "sandbox user {name} failed management verification (comment={}, privilege={}, flags=0x{:08x})",
+                comment.as_deref() == Some(MANAGED_USER_COMMENT),
+                privilege_valid,
+                flags,
+            ),
         ))
     }
 }

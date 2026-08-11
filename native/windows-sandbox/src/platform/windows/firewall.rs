@@ -255,50 +255,71 @@ fn configure_rule(rule: &INetFwRule3, spec: &RuleSpec<'_>) -> Result<(), Sandbox
 
 fn verify_configured_rule(rule: &INetFwRule3, spec: &RuleSpec<'_>) -> Result<(), SandboxError> {
     let expected_local_user = format!("O:LSD:(A;;CC;;;{})", spec.sid);
-    let mismatch = unsafe {
-        rule.Enabled()
-            .map(|value| value != VARIANT_TRUE)
-            .unwrap_or(true)
-            || rule
-                .Direction()
-                .map(|value| value != NET_FW_RULE_DIR_OUT)
-                .unwrap_or(true)
-            || rule
-                .Action()
-                .map(|value| value != NET_FW_ACTION_BLOCK)
-                .unwrap_or(true)
-            || rule
-                .Profiles()
-                .map(|value| value != NET_FW_PROFILE2_ALL.0)
-                .unwrap_or(true)
-            || rule
-                .Protocol()
-                .map(|value| value != spec.protocol)
-                .unwrap_or(true)
-            || rule
-                .LocalUserAuthorizedList()
-                .map(|value| value != expected_local_user)
-                .unwrap_or(true)
-            || rule
-                .RemoteAddresses()
-                .map(|value| {
-                    let actual = value.to_string();
-                    actual != spec.remote_addresses
-                })
-                .unwrap_or(true)
-            || spec.remote_ports.is_some_and(|ports| {
-                rule.RemotePorts()
-                    .map(|value| {
-                        let actual = value.to_string();
-                        actual != ports
-                    })
-                    .unwrap_or(true)
-            })
+    let (
+        enabled,
+        direction,
+        action,
+        profiles,
+        protocol,
+        local_user,
+        remote_addresses,
+        remote_ports,
+    ) = unsafe {
+        (
+            rule.Enabled().ok(),
+            rule.Direction().ok(),
+            rule.Action().ok(),
+            rule.Profiles().ok(),
+            rule.Protocol().ok(),
+            rule.LocalUserAuthorizedList()
+                .ok()
+                .map(|value| value.to_string()),
+            rule.RemoteAddresses().ok().map(|value| value.to_string()),
+            rule.RemotePorts().ok().map(|value| value.to_string()),
+        )
     };
-    if mismatch {
+    let mut mismatches = Vec::new();
+    if enabled != Some(VARIANT_TRUE) {
+        mismatches.push(format!("enabled={enabled:?}"));
+    }
+    if direction != Some(NET_FW_RULE_DIR_OUT) {
+        mismatches.push(format!("direction={direction:?}"));
+    }
+    if action != Some(NET_FW_ACTION_BLOCK) {
+        mismatches.push(format!("action={action:?}"));
+    }
+    if profiles != Some(NET_FW_PROFILE2_ALL.0) {
+        mismatches.push(format!("profiles={profiles:?}"));
+    }
+    if protocol != Some(spec.protocol) {
+        mismatches.push(format!("protocol={protocol:?}"));
+    }
+    if local_user.as_deref() != Some(expected_local_user.as_str()) {
+        mismatches.push(format!(
+            "local-user={local_user:?}, expected={expected_local_user:?}"
+        ));
+    }
+    if remote_addresses.as_deref() != Some(spec.remote_addresses) {
+        mismatches.push(format!(
+            "remote-addresses={remote_addresses:?}, expected={:?}",
+            spec.remote_addresses
+        ));
+    }
+    if let Some(expected_ports) = spec.remote_ports {
+        if remote_ports.as_deref() != Some(expected_ports) {
+            mismatches.push(format!(
+                "remote-ports={remote_ports:?}, expected={expected_ports:?}"
+            ));
+        }
+    }
+    if !mismatches.is_empty() {
         return Err(SandboxError::new(
             SandboxErrorCode::NeedsRepair,
-            format!("firewall rule {} failed read-back verification", spec.name),
+            format!(
+                "firewall rule {} failed read-back verification: {}",
+                spec.name,
+                mismatches.join("; ")
+            ),
         ));
     }
     Ok(())
