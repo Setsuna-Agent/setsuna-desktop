@@ -10,9 +10,9 @@ The security boundary is fail-closed:
 - two managed local accounts separate offline and online executions;
 - Windows Firewall rules block direct egress and expose only the Setsuna proxy
   port range to the online account;
-- per-execution logon SIDs isolate readable roots across concurrent and past
-  sessions, while restricted tokens and policy-scoped capability SIDs constrain
-  writes; temporary logon/request ACL entries are revoked after each run;
+- restricted tokens, per-execution logon SIDs, and policy-scoped capability SIDs
+  constrain writes; temporary logon/request ACL entries are revoked after each
+  run, while reads remain governed by the dedicated account's host DACLs;
 - a hash-verified, machine-readable but sandbox-nonwritable runner copy removes
   dependencies on the per-user packaged executable ACL;
 - a non-breakaway Job Object terminates the whole process tree when the sidecar

@@ -272,11 +272,19 @@ try {
   New-Item -ItemType Directory -Force -Path $workspace | Out-Null
   New-Item -ItemType Directory -Force -Path $readOnlyWorkspace | Out-Null
   $currentUserSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-  $privateWorkspaceAcl = [System.Security.AccessControl.DirectorySecurity]::new()
-  $privateWorkspaceAcl.SetSecurityDescriptorSddlForm(
+  $readOnlyWorkspaceAcl = [System.Security.AccessControl.DirectorySecurity]::new()
+  $readOnlyWorkspaceAcl.SetSecurityDescriptorSddlForm(
     "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)"
   )
-  Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $privateWorkspaceAcl
+  # A broad host allow must not bypass the restricted token's write boundary.
+  $readOnlyWorkspaceAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
+    [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0'),
+    [System.Security.AccessControl.FileSystemRights]::Modify,
+    [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+    [System.Security.AccessControl.PropagationFlags]::None,
+    [System.Security.AccessControl.AccessControlType]::Allow
+  ))
+  Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyWorkspaceAcl
   $readOnlyNested = Join-Path $readOnlyWorkspace 'nested'
   New-Item -ItemType Directory -Force -Path $readOnlyNested | Out-Null
   $readOnlyExisting = Join-Path $readOnlyNested 'existing.txt'

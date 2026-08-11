@@ -92,19 +92,18 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
 7. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
 
 最终 shell 与上游 Codex 一样使用
-`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`。restricting SID 列表包含 policy
-capability、专用隔离账户 SID、本次 logon SID 和 `Everyone`：capability 收窄文件写入，账户和 logon SID 保持
-Windows 对象及本次执行对象可用，`Everyone` 保证系统 DLL 和标准对象能完成初始化；不会加入
-`Authenticated Users` 等额外宽泛组。外层 account runner 从机器级只读副本启动，并被放入不可 breakaway、
-close 即 kill 的 Job Object。
+`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，但 restricting SID 和默认 DACL
+进一步收窄为 policy capability 与本次 logon SID。这里有意不沿用上游 token 中的专用账户 SID 和 `Everyone`：
+如果宿主路径原本向这些稳定或宽泛身份开放写入，它们会满足 restricting SID 的第二次检查并绕过 read-only
+策略；默认 DACL 中的 `Everyone` 也会让其他本机账户访问沙箱进程新建的命名对象。外层 account runner 从
+机器级只读副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
 
 `WRITE_RESTRICTED` 只对 write-like access 执行 restricting SID 二次检查。因此 V1 的原生边界是专用账户身份、
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
 sandbox 语义一致。需要 path-specific read deny 的策略会以 unsupported-policy 失败，而不是静默降级。
 
-`Everyone` 是 Windows restricted-token 模型的已知边界：宿主上预先存在、且明确向 `Everyone` 开放写入的
-路径不能被该 token 重新收窄。安装和执行流程不会创建这种宽泛 ACE；部署环境也不应把需要保护的路径设为
-Everyone-writable。
+CI 的真实账户 smoke 会让 read-only workspace 继承 `Everyone:Modify`，验证宽泛宿主 ACL 仍不能突破写入
+边界；workspace-write 则只能由 capability 或本次 logon SID 命中第二次写检查。
 
 ## 网络
 
@@ -149,8 +148,9 @@ Windows runtime 会把固定版本、固定 SHA-256 的 curl-for-win 放在 shel
 ## 构建与验证
 
 - CI 在一次性 `windows-2025` runner 上执行 rustfmt、Windows-target clippy、Rust tests，以及真实受限
-  身份、已有 workspace 文件写入、protected root、带宽泛 Authenticated Users 写权限的外部目录、
-  offline/online 出站、认证代理、临时 ACL 回收和共享父目录不变的 smoke test；网络策略
+  身份、带 `Everyone:Modify` 的 read-only workspace、已有 workspace 文件写入、protected root、带宽泛
+  Authenticated Users 写权限的外部目录、offline/online 出站、认证代理、临时 ACL 回收和共享父目录不变的
+  smoke test；网络策略
   使用随测试构建、但不进入产品包的原生 probe 验证，最后无条件卸载测试身份；
 - release 的 Windows job 从锁定的 `Cargo.lock` 构建 MSVC release binary；
 - before-pack 复制 binary、Apache-2.0 license、NOTICE 和 SHA-256 metadata；
