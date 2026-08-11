@@ -114,6 +114,41 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
   );
 }
 
+function renderAssistantMessage(segments: RuntimeMessage[], active = false): string {
+  const turnId = segments[0]?.turnId ?? 'turn_assistant';
+  return renderToStaticMarkup(
+    <MessageItem
+      activeAssistantItemId={active ? 'assistant_item' : null}
+      activeTurnId={active ? turnId : null}
+      assistantItemIdByTurnId={new Map()}
+      deleteMode={false}
+      editingDraft=""
+      editingMessageId={null}
+      editingSubmitting={false}
+      expandedWorkHistoryItemIds={new Set()}
+      item={{
+        type: 'assistant',
+        id: 'assistant_item',
+        handledSteerMessageIds: [],
+        messageIds: segments.map((segment) => segment.id),
+        segments,
+        steerMessages: [],
+        turnId,
+      }}
+      onAnswerApproval={async () => undefined}
+      onCancelEdit={() => undefined}
+      onEditDraftChange={() => undefined}
+      onStartEdit={() => undefined}
+      onStartDelete={() => undefined}
+      onSubmitEdit={() => undefined}
+      onToggleDelete={() => undefined}
+      onWorkHistoryExpandedChange={() => undefined}
+      pluginUses={[]}
+      selectedForDelete={false}
+    />,
+  );
+}
+
 describe('MessageItem user messages', () => {
   it('marks Goal inputs distinctly without offering Goal regeneration', () => {
     const goalHtml = renderUserMessage('goal');
@@ -194,5 +229,44 @@ describe('MessageItem user messages', () => {
     expect(html).toContain('chat-plan-card');
     expect(html).toContain('计划模式已移除');
     expect(html).not.toContain('chat-plan-card__actions');
+  });
+});
+
+describe('MessageItem assistant tool history', () => {
+  it('keeps a completed tool summary stable when later answer content appears', () => {
+    const toolSegment: RuntimeMessage = {
+      id: 'assistant_tools',
+      turnId: 'turn_tools',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-08-11T00:00:00.000Z',
+      status: 'complete',
+      toolRuns: [
+        {
+          id: 'read_package',
+          name: 'workspace_read_file',
+          status: 'success',
+          argumentsPreview: '{"path":"package.json"}',
+        },
+        {
+          id: 'git_log',
+          name: 'exec_command',
+          status: 'success',
+          argumentsPreview: '{"cmd":"git log -1"}',
+        },
+      ],
+    };
+    const finalSegment: RuntimeMessage = {
+      id: 'assistant_final',
+      turnId: 'turn_tools',
+      role: 'assistant',
+      content: '检查完成。',
+      createdAt: '2026-08-11T00:00:01.000Z',
+      status: 'streaming',
+    };
+    const expectedSummary = '已读取 1 个文件，已运行 1 条命令';
+
+    expect(renderAssistantMessage([toolSegment])).toContain(expectedSummary);
+    expect(renderAssistantMessage([toolSegment, finalSegment], true)).toContain(expectedSummary);
   });
 });

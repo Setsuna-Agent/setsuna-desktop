@@ -14,9 +14,9 @@ import {
   FileChangesSummaryCard,
   RuntimeHookRuns,
   RuntimeToolRuns,
-  type ToolRunSummaryMode,
 } from '../tool-runs/RuntimeToolRuns.js';
 import { isDisplayableRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
+import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { formatGoalExitSummary } from '../goalFormatting.js';
 import type { AnswerApprovalHandler, WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
 import {
@@ -526,7 +526,6 @@ function renderAssistantTimelinePlan({
     if (node.type === 'workHistory') {
       nodes.push(
         assistantWorkHistoryNode({
-          hasFollowingContent: plan.hasFollowingContent,
           handledGuidanceMessageIds,
           itemId,
           onAnswerApproval,
@@ -548,7 +547,6 @@ function renderAssistantTimelinePlan({
 }
 
 function assistantWorkHistoryNode({
-  hasFollowingContent,
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
@@ -556,7 +554,6 @@ function assistantWorkHistoryNode({
   plan,
   workHistoryDefaultExpanded,
 }: {
-  hasFollowingContent: boolean;
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
@@ -567,7 +564,6 @@ function assistantWorkHistoryNode({
   const workNodes = assistantWorkEntriesNodes(
     plan.entries,
     onAnswerApproval,
-    hasFollowingContent,
     handledGuidanceMessageIds,
   );
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
@@ -608,17 +604,15 @@ function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type:
 function assistantWorkEntriesNodes(
   entries: AssistantWorkHistoryPlanEntry[],
   onAnswerApproval: AnswerApprovalHandler,
-  hasFollowingContent: boolean,
   handledGuidanceMessageIds: Set<string>,
 ): ReactNode[] {
-  const toolRunSummaryMode: ToolRunSummaryMode = hasFollowingContent ? 'aggregate' : 'latest';
   const nodes: ReactNode[] = [];
   entries.forEach((entry) => {
     if (entry.type === 'guidance') {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={entry.id} markerMode="handled" messages={entry.messages} />);
       return;
     }
-    nodes.push(...assistantWorkItemNodes(entry.item, entry.active, toolRunSummaryMode, onAnswerApproval));
+    nodes.push(...assistantWorkItemNodes(entry.item, entry.active, onAnswerApproval));
   });
   return nodes;
 }
@@ -626,7 +620,6 @@ function assistantWorkEntriesNodes(
 function assistantWorkItemNodes(
   item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
   itemActive: boolean,
-  toolRunSummaryMode: ToolRunSummaryMode,
   onAnswerApproval: AnswerApprovalHandler,
 ): ReactNode[] {
   if (item.type === 'content') {
@@ -649,11 +642,13 @@ function assistantWorkItemNodes(
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
   // 流式传输期间，连续工具片段会合并到此项目中，但首个片段保持稳定，
   // 从而保留非受控的 <details> DOM 节点。
+  // 摘要模式只跟随工具自身的生命周期；完成项不应因外层工作区仍活跃
+  // 或后续正文出现而改写。
   return visibleToolRuns.length ? [
     <RuntimeToolRuns
       key={item.segment.id}
       runs={visibleToolRuns}
-      summaryMode={toolRunSummaryMode}
+      summaryMode={visibleToolRuns.some(isActiveRuntimeToolRun) ? 'latest' : 'aggregate'}
       onAnswerApproval={onAnswerApproval}
     />,
   ] : [];

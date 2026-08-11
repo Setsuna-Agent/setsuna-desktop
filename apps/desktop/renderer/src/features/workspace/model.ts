@@ -93,6 +93,11 @@ export const findFileWorkspacePanelSlot = (
   if (sidePanelSlot.panels.some(isFileWorkspacePanel)) return 'side';
   return bottomPanelSlot.panels.some(isFileWorkspacePanel) ? 'bottom' : null;
 };
+export const fileWorkspacePanelTargetSlot = (
+  requestedSlot: DesktopPanelSlot,
+  sidePanelSlot: DesktopPanelSlotState,
+  bottomPanelSlot: DesktopPanelSlotState,
+): DesktopPanelSlot => findFileWorkspacePanelSlot(sidePanelSlot, bottomPanelSlot) ?? requestedSlot;
 export const canMoveDesktopPanelAcrossSlots = (
   panel: DesktopPanelTab,
   sourcePanels: readonly DesktopPanelTab[],

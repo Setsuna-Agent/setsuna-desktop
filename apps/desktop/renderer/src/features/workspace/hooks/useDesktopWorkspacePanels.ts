@@ -20,7 +20,7 @@ import {
   createReviewPanel,
   createSideChatPanel as createSideChatPanelTab,
   createWorkspaceOverviewPanel,
-  findFileWorkspacePanelSlot,
+  fileWorkspacePanelTargetSlot,
   findDesktopPanelLocationByType,
   movePanelBetweenSlotStates,
   removePanelFromSlotState,
@@ -381,7 +381,12 @@ export function useDesktopWorkspacePanels({
                   : type === 'files'
                     ? createFilesPanel()
                     : createTerminalPanel();
-      addPanelToDesktopSlot(slot, panel);
+      addPanelToDesktopSlot(
+        type === 'files'
+          ? fileWorkspacePanelTargetSlot(slot, sidePanelSlot, bottomPanelSlot)
+          : slot,
+        panel,
+      );
     },
     [
       activeProject,
@@ -421,7 +426,7 @@ export function useDesktopWorkspacePanels({
       setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
       return;
     }
-    addPanelToDesktopSlot(findFileWorkspacePanelSlot(sidePanelSlot, bottomPanelSlot) ?? 'side', panel);
+    addPanelToDesktopSlot(fileWorkspacePanelTargetSlot('side', sidePanelSlot, bottomPanelSlot), panel);
   }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {

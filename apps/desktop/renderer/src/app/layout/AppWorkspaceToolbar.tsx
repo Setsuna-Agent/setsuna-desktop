@@ -95,7 +95,10 @@ function WorkspaceOverviewToolbar({
   const { t } = useI18n();
 
   return (
-    <div className="desktop-workspace-toolbar desktop-workspace-toolbar--overview">
+    <div
+      className="desktop-workspace-toolbar desktop-workspace-toolbar--overview"
+      data-desktop-panel-placement="side"
+    >
       <div className="chat-file-review-panel__header">
         <div className="chat-file-review-panel__heading">
           <span className="chat-file-review-panel__tabs" aria-hidden="true" />

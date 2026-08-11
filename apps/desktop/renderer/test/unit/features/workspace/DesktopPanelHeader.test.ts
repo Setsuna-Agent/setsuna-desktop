@@ -243,6 +243,22 @@ describe('DesktopPanelHeader tab drag preview positioning', () => {
 });
 
 describe('DesktopPanelHeader cross-slot drop targeting', () => {
+  it('targets an empty side overview toolbar', () => {
+    const sideToolbar = document.createElement('div');
+    sideToolbar.dataset.desktopPanelPlacement = 'side';
+    sideToolbar.getBoundingClientRect = () => domRect(500, 0, 300, 42);
+    const emptyTabs = document.createElement('span');
+    emptyTabs.className = 'chat-file-review-panel__tabs';
+    sideToolbar.append(emptyTabs);
+    document.body.append(sideToolbar);
+
+    expect(panelCrossSlotDropTargetAtPoint(620, 20, 'bottom')).toEqual({
+      panelId: null,
+      placement: 'side',
+      position: 'after',
+    });
+  });
+
   it('targets the nearest tab in the other panel slot', () => {
     const sideHeader = document.createElement('div');
     sideHeader.dataset.desktopPanelPlacement = 'side';

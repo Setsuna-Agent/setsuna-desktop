@@ -12,6 +12,7 @@ import {
   createReviewPanel,
   createSideChatPanel,
   createWorkspaceOverviewPanel,
+  fileWorkspacePanelTargetSlot,
   findFileWorkspacePanelSlot,
   findDesktopPanelLocationByType,
   movePanelBetweenSlotStates,
@@ -185,7 +186,14 @@ describe('desktop workspace panel model', () => {
     const bottom = { active: 'files', panels: [createFilesPanel()] };
 
     expect(findFileWorkspacePanelSlot({ active: null, panels: [] }, bottom)).toBe('bottom');
+    expect(fileWorkspacePanelTargetSlot('side', { active: null, panels: [] }, bottom)).toBe('bottom');
     expect(canMoveDesktopPanelAcrossSlots(bottom.panels[0]!, bottom.panels)).toBe(true);
+  });
+
+  it('uses the requested slot when no file workspace exists yet', () => {
+    const empty = { active: null, panels: [] };
+
+    expect(fileWorkspacePanelTargetSlot('bottom', empty, empty)).toBe('bottom');
   });
 
   it('keeps the overview launcher in the side panel', () => {
