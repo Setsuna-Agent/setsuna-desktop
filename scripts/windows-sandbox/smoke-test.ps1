@@ -500,6 +500,10 @@ try {
   Assert-NoLogonSidAce
   Assert-SharedParentUnchanged
   Assert-PreExistingReadableAclsUnchanged
+} catch {
+  $failedLine = $_.InvocationInfo.ScriptLineNumber
+  $failedSource = if ($_.InvocationInfo.Line) { $_.InvocationInfo.Line.Trim() } else { '<unknown>' }
+  throw "Windows sandbox smoke failed at line ${failedLine}: $failedSource`n$($_.Exception.Message)`n$($_.ScriptStackTrace)"
 } finally {
   foreach ($listener in $listeners) {
     $listener.Stop()
