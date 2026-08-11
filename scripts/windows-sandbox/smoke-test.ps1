@@ -328,8 +328,12 @@ try {
   $readOnlyRequest.ephemeralWritableRoots = @()
   $readOnlyRequest.protectedWritableRoots = @()
   Invoke-SandboxRequest $readOnlyRequest
-  if ((Get-Content -LiteralPath $readOnlyExisting -Raw).Trim() -ne 'read-only-existing') {
-    throw 'Read-only Windows sandbox modified an existing private workspace file'
+  $readOnlyContents = [System.IO.File]::ReadAllText($readOnlyExisting, $utf8NoBom)
+  if ($readOnlyContents -ne 'read-only-existing') {
+    $readOnlyRootSddl = (Get-Acl -LiteralPath $readOnlyWorkspace).Sddl
+    $readOnlyNestedSddl = (Get-Acl -LiteralPath $readOnlyNested).Sddl
+    $readOnlyFileSddl = (Get-Acl -LiteralPath $readOnlyExisting).Sddl
+    throw "Read-only Windows sandbox modified an existing private workspace file (contents='$readOnlyContents').`nroot: $readOnlyRootSddl`nnested: $readOnlyNestedSddl`nfile: $readOnlyFileSddl"
   }
 
   $offlineListener = Start-BlockedLoopbackListener
