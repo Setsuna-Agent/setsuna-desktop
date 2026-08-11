@@ -1,6 +1,6 @@
 use super::paths::{canonical_existing, path_is_within};
 use super::wide::to_wide;
-use crate::protocol::{SandboxError, SandboxErrorCode, SandboxRunRequest};
+use crate::protocol::{PermissionProfile, SandboxError, SandboxErrorCode, SandboxRunRequest};
 use fs2::FileExt;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
@@ -481,6 +481,16 @@ pub fn prepare_execution(
     let capability = LocalSid::parse(capability_sid)?;
     let writable_roots = unique_existing_paths(&request.writable_roots)?;
     let ephemeral_roots = unique_existing_paths(&request.ephemeral_writable_roots)?;
+
+    if request.permission_profile == PermissionProfile::ReadOnly {
+        let workspace_root = canonical_existing(&request.workspace_root)?;
+        if !token_has_access(&workspace_root, read_access_token, READ_MASK)? {
+            // A dedicated sandbox account cannot consume owner-only ACEs inherited
+            // by an existing private workspace. Propagate one stable group read ACE
+            // for that workspace; command-specific toolchain roots stay non-recursive.
+            ensure_persistent_allow_aces(&workspace_root, &[(sandbox_group.raw(), READ_MASK)])?;
+        }
+    }
 
     // Stable roots are authorized once. Later commands observe the capability
     // ACE already present and perform no tree-wide filesystem metadata update.
@@ -993,7 +1003,7 @@ fn apply_persistent_acl_entries(
         ));
     }
     // This is intentionally the only propagating ACL operation. It runs only
-    // when a stable capability is first authorized for a writable root.
+    // when stable workspace authorization is missing.
     let applied = unsafe {
         SetNamedSecurityInfoW(
             path_wide.as_mut_ptr(),
