@@ -35,8 +35,8 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 141 total files
-├── src/ — 2 direct / 87 total files
+apps/desktop/main/ — 0 direct / 143 total files
+├── src/ — 2 direct / 88 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
@@ -44,7 +44,7 @@ apps/desktop/main/ — 0 direct / 141 total files
 │   ├── ipc/ — 14 direct / 14 total files
 │   ├── network-proxy/ — 7 direct / 7 total files
 │   ├── review/ — 1 direct / 1 total files
-│   ├── runtime/ — 7 direct / 7 total files
+│   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
 │   ├── updater/ — 3 direct / 3 total files
@@ -53,17 +53,17 @@ apps/desktop/main/ — 0 direct / 141 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   ├── windows-sandbox/ — 1 direct / 1 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 54 files
+└── test/ — 55 files
     ├── integration/ — 2 files
     │   ├── review/ — 1 direct / 1 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 3 direct / 3 total files
-    └── unit/ — 1 direct / 49 total files
+    └── unit/ — 1 direct / 50 total files
         ├── browser/ — 6 direct / 8 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── network-proxy/ — 2 direct / 2 total files
-        ├── runtime/ — 6 direct / 6 total files
+        ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files
         ├── updater/ — 2 direct / 2 total files
         ├── webdav-sync/ — 11 direct / 11 total files
@@ -291,12 +291,12 @@ packages/desktop-runtime/ — 4 direct / 530 total files
 ### `scripts/`
 
 ```text
-scripts/ — 19 direct / 28 total files
+scripts/ — 19 direct / 31 total files
 ├── ripgrep/ — 3 direct / 3 total files
 ├── test/ — 3 direct / 5 total files
 │   ├── ripgrep/ — 1 direct / 1 total files
 │   └── windows-sandbox/ — 1 direct / 1 total files
-└── windows-sandbox/ — 1 direct / 1 total files
+└── windows-sandbox/ — 4 direct / 4 total files
 ```
 
 ### `skills/`

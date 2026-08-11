@@ -218,10 +218,20 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       } : {}),
     };
     const resolvedToolchain = await resolveShellToolchain(command, environmentOverrides.PATH);
+    const cachedPnpmFiles = enabled && usesPnpmCommand(command)
+      ? await existingCorepackPnpmFiles(
+        path.join(this.cacheRoot, 'corepack'),
+        hints.packageManager?.name === 'pnpm' && hints.packageManager.version
+          ? hints.packageManager.version
+          : FALLBACK_PNPM_VERSION,
+      )
+      : [];
     const managedRoots = [
-      ...(manifest || packageManagerShims.binDir || useBundledNodeFallback ? [this.workspaceDependencyRoot] : []),
+      ...(manifest && needsPython ? [this.installRoot] : []),
+      ...(useBundledNodeFallback ? [this.nodeBinDir] : []),
       ...(useBundledNodeFallback ? [runtimeExecutableReadRoot(process.execPath)] : []),
       ...packageManagerShims.readableRoots,
+      ...cachedPnpmFiles,
     ];
     return {
       commands: resolvedToolchain.commands,
@@ -434,6 +444,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       );
       wroteShim = true;
     }
+    if (wroteShim && corepack) {
+      const corepackToolchain = await resolveShellToolchain(`"${corepack}" --version`, currentPath ?? '');
+      bundledReadRoots.push(...corepackToolchain.readableRoots);
+    }
     return {
       binDir: wroteShim ? this.projectBinDir : null,
       readableRoots: uniqueSafeRoots(bundledReadRoots),
@@ -631,4 +645,27 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     const manifestPath = path.join(this.installRoot, MANIFEST_FILE_NAME);
     return readJsonFile<WorkspaceDependencyManifest | null>(manifestPath, null).catch(() => null);
   }
+}
+
+function usesPnpmCommand(command: string): boolean {
+  return /(?:^|[\s;&|()])["']?pnpm(?:\.cmd)?["']?(?=$|[\s;&|()])/iu.test(command);
+}
+
+async function existingCorepackPnpmFiles(corepackHome: string, version: string): Promise<string[]> {
+  const packageRoot = path.join(corepackHome, 'v1', 'pnpm', version);
+  const candidates = [
+    path.dirname(packageRoot),
+    packageRoot,
+    path.join(packageRoot, 'bin'),
+    path.join(packageRoot, 'dist'),
+    path.join(packageRoot, '.corepack'),
+    path.join(packageRoot, 'package.json'),
+    path.join(packageRoot, 'bin', 'pnpm.cjs'),
+    path.join(packageRoot, 'dist', 'pnpm.cjs'),
+    path.join(packageRoot, 'dist', 'pnpmrc'),
+  ];
+  const existing = await Promise.all(candidates.map(async (candidate) => (
+    await pathExists(candidate) ? candidate : null
+  )));
+  return existing.filter((candidate): candidate is string => Boolean(candidate));
 }

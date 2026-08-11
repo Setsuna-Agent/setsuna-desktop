@@ -28,6 +28,11 @@ function runPnpm(args: string[]): void {
 
 runPnpm(['build:contracts']);
 runPnpm(['build:runtime']);
+if (process.platform === 'win32' && process.arch === 'x64') {
+  // Dev resolves the sidecar from .cache before Electron starts, just like a packaged build.
+  runPnpm(['build:windows-sandbox']);
+  runPnpm(['prepare:windows-sandbox-curl']);
+}
 await buildElectron();
 
 let activeElectron: ChildProcess | null = null;

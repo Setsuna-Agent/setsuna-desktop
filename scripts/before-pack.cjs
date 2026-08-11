@@ -9,6 +9,13 @@ exports.default = async function beforePack(context) {
     projectDir: context.packager.projectDir,
   });
   if (context.electronPlatformName === 'win32') {
+    const curlModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-sandbox-curl.mjs')).href;
+    const { prepareSandboxCurl } = await import(curlModuleUrl);
+    await prepareSandboxCurl({
+      platform: context.electronPlatformName,
+      arch: electronBuilderArchName(context.arch),
+      projectDir: context.packager.projectDir,
+    });
     const sandboxModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-windows-sandbox.mjs')).href;
     const { prepareWindowsSandbox } = await import(sandboxModuleUrl);
     await prepareWindowsSandbox({

@@ -25,8 +25,10 @@ pub fn validate_request_paths(
         ));
     }
     validate_file(request_path, "request file")?;
+    for root in &request.readable_roots {
+        validate_readable_path(root, "readableRoots")?;
+    }
     for (label, roots) in [
-        ("readableRoots", &request.readable_roots),
         ("writableRoots", &request.writable_roots),
         ("ephemeralWritableRoots", &request.ephemeral_writable_roots),
         ("protectedWritableRoots", &request.protected_writable_roots),
@@ -100,6 +102,18 @@ pub fn path_is_within(path: &Path, root: &Path) -> bool {
             .iter()
             .zip(folded_root.iter())
             .all(|(left, right)| left == right)
+}
+
+fn validate_readable_path(path: &Path, label: &str) -> Result<PathBuf, SandboxError> {
+    let canonical = canonical_existing(path)?;
+    if !canonical.is_dir() && !canonical.is_file() {
+        return Err(SandboxError::new(
+            SandboxErrorCode::InvalidRequest,
+            format!("{label} is not a file or directory: {}", path.display()),
+        ));
+    }
+    validate_fixed_ntfs(&canonical, label)?;
+    Ok(canonical)
 }
 
 fn validate_directory(path: &Path, label: &str) -> Result<PathBuf, SandboxError> {

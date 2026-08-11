@@ -482,8 +482,8 @@ export function createShellSandboxExecutionPlan(
         ? 'windows-native'
         : 'unavailable';
   const environment = { ...(options.environment ?? state?.shellEnvironment ?? {}) };
-  // The process layer gives each macOS shell session its own TMPDIR. Grant that
-  // one directory instead of widening the sandbox to the shared user temp root.
+  // The process layer gives each sandboxed shell its own temporary directory.
+  // Grant that one directory instead of widening to the shared user temp root.
   const defaultTempRoots = (
     provider === 'macos-seatbelt' || provider === 'windows-native'
   ) && permissionProfile === 'workspace-write'
@@ -493,6 +493,7 @@ export function createShellSandboxExecutionPlan(
     ? shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false })
     : [...shellWorkspaceWriteRoots(state), ...defaultTempRoots];
   const workspaceRoot = realPathIfExists(state?.root || process.cwd());
+  const resolvedWritableRoots = [...new Set(writableRoots.map(realPathIfExists))];
   return {
     cwd: path.resolve(options.cwd ?? workspaceRoot),
     workspaceRoot,
@@ -502,7 +503,7 @@ export function createShellSandboxExecutionPlan(
       ? { providerExecutable: capability.executablePath }
       : {}),
     readableRoots: shellExplicitReadableRoots(state, defaultTempRoots),
-    writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
+    writableRoots: resolvedWritableRoots,
     ephemeralWritableRoots: provider === 'windows-native'
       ? [...new Set(defaultTempRoots.map(realPathIfExists))]
       : [],
@@ -512,7 +513,13 @@ export function createShellSandboxExecutionPlan(
       .map((name) => realPathIfExists(path.join(workspaceRoot, name)))
       // NTFS ACLs cannot reserve an absent child name. Protect every metadata
       // directory that exists when the execution plan is materialized.
-      .filter((protectedRoot) => provider !== 'windows-native' || existsSync(protectedRoot)),
+      .filter((protectedRoot) => (
+        provider !== 'windows-native'
+        || (
+          existsSync(protectedRoot)
+          && resolvedWritableRoots.some((writableRoot) => isPathInsideRoot(protectedRoot, writableRoot))
+        )
+      )),
     networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
     environment,
   };
@@ -614,11 +621,24 @@ function shellExplicitReadableRoots(
   const roots = [
     ...readableRootsForState(state),
     ...shellWorkspaceWriteRoots(state),
+    ...sandboxCurlTrustRoots(),
     ...additionalRoots,
   ];
   return [...new Set(roots
     .flatMap(shellReadablePathVariants)
     .filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
+}
+
+function sandboxCurlTrustRoots(): string[] {
+  const candidate = String(
+    process.env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE ?? '',
+  ).trim();
+  if (!candidate || !path.isAbsolute(candidate)) return [];
+  try {
+    return statSync(candidate).isFile() ? [candidate] : [];
+  } catch {
+    return [];
+  }
 }
 
 function shellReadablePathVariants(value: unknown): string[] {

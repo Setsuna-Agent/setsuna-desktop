@@ -6,7 +6,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
-pub const STATE_SCHEMA_VERSION: u32 = 1;
+pub const STATE_SCHEMA_VERSION: u32 = 2;
 // NetUserAdd-backed local SAM account names are limited to 20 characters.
 pub const OFFLINE_USERNAME: &str = "SetsunaSbOffline";
 pub const ONLINE_USERNAME: &str = "SetsunaSbOnline";

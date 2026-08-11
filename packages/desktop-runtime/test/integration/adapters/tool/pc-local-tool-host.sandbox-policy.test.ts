@@ -240,7 +240,11 @@ describe('pc local shell sandbox policy', () => {
   });
 
   it('routes restricted Windows shell execution through the sandbox-unavailable approval path', () => {
-    const capability = shellSandboxCapability('win32');
+    const capability = shellSandboxCapability('win32', false, {
+      supported: false,
+      provider: '',
+      reason: 'Windows native sandbox is unavailable.',
+    });
     expect(capability).toMatchObject({ supported: false, provider: '' });
     expect(shellSandboxUnavailableReason({
       root: 'C:\\workspace',

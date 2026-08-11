@@ -127,6 +127,37 @@ describe('runtime host packaging paths', () => {
     )).toThrow('Bundled ripgrep is required');
   });
 
+  it('puts the LibreSSL curl directory first in the runtime PATH', () => {
+    const sandboxCurlPath = path.resolve('fixtures', 'setsuna-path', 'curl.exe');
+    const sandboxCaBundlePath = path.resolve('fixtures', 'sandbox-trust', 'curl-ca-bundle.pem');
+    const env = runtimeProcessEnvironment(
+      { sandboxCaBundlePath, sandboxCurlPath, requireBundledSandboxCurl: true },
+      { PATH: '/usr/bin:/bin' },
+    );
+
+    expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(sandboxCurlPath));
+    expect(env.CURL_HOME).toBe(path.dirname(sandboxCurlPath));
+    expect(env.CURL_CA_BUNDLE).toBe(sandboxCaBundlePath);
+    expect(env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE).toBe(sandboxCaBundlePath);
+  });
+
+  it('fails closed when a packaged Windows runtime has no bundled curl', () => {
+    expect(() => runtimeProcessEnvironment(
+      { requireBundledSandboxCurl: true },
+      { PATH: '' },
+    )).toThrow('Bundled sandbox curl is required');
+  });
+
+  it('fails closed when packaged sandbox curl has no desktop trust snapshot', () => {
+    expect(() => runtimeProcessEnvironment(
+      {
+        requireBundledSandboxCurl: true,
+        sandboxCurlPath: 'C:\\Setsuna\\setsuna-path\\curl.exe',
+      },
+      { PATH: '' },
+    )).toThrow('trust bundle is required');
+  });
+
   it('passes a Windows-absolute sandbox sidecar path to the runtime on any build host', () => {
     const windowsSandboxPath = 'C:\\Program Files\\Setsuna Desktop\\setsuna-sandbox-win.exe';
     const env = runtimeProcessEnvironment({

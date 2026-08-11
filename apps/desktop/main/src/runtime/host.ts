@@ -37,8 +37,11 @@ type RuntimeHostOptions = {
   dataDir: string;
   ripgrepPath?: string;
   requireBundledRipgrep?: boolean;
+  requireBundledSandboxCurl?: boolean;
   requireBundledWindowsSandbox?: boolean;
   runtimeEntry?: string;
+  sandboxCaBundlePath?: string;
+  sandboxCurlPath?: string;
   windowsSandboxPath?: string;
   runtimeRequestRetryDelayMs?: number;
   shutdownTimeoutMs?: number;
@@ -536,6 +539,9 @@ export function runtimeProcessEnvironment(
   options: Pick<RuntimeHostOptions,
     | 'ripgrepPath'
     | 'requireBundledRipgrep'
+    | 'requireBundledSandboxCurl'
+    | 'sandboxCaBundlePath'
+    | 'sandboxCurlPath'
     | 'windowsSandboxPath'
     | 'requireBundledWindowsSandbox'
   >,
@@ -555,6 +561,29 @@ export function runtimeProcessEnvironment(
     prependPathDirectory(env, path.dirname(options.ripgrepPath));
   }
   if (options.requireBundledRipgrep) env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG = '1';
+  if (options.requireBundledSandboxCurl && !options.sandboxCurlPath) {
+    throw new Error('Bundled sandbox curl is required for the packaged Windows runtime.');
+  }
+  if (options.requireBundledSandboxCurl && !options.sandboxCaBundlePath) {
+    throw new Error('Sandbox curl trust bundle is required for the packaged Windows runtime.');
+  }
+  if (options.sandboxCurlPath) {
+    if (!path.isAbsolute(options.sandboxCurlPath) && !path.win32.isAbsolute(options.sandboxCurlPath)) {
+      throw new Error('Sandbox curl path must be absolute.');
+    }
+    const sandboxCurlDirectory = path.dirname(options.sandboxCurlPath);
+    prependPathDirectory(env, sandboxCurlDirectory);
+    // curl reads this directory's _curlrc before any sandbox-account profile.
+    // That enables Windows native trust without returning to Schannel.
+    env.CURL_HOME = sandboxCurlDirectory;
+  }
+  if (options.sandboxCaBundlePath) {
+    if (!path.isAbsolute(options.sandboxCaBundlePath) && !path.win32.isAbsolute(options.sandboxCaBundlePath)) {
+      throw new Error('Sandbox curl trust bundle path must be absolute.');
+    }
+    env.CURL_CA_BUNDLE = options.sandboxCaBundlePath;
+    env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE = options.sandboxCaBundlePath;
+  }
   if (options.requireBundledWindowsSandbox && !options.windowsSandboxPath) {
     throw new Error('Bundled Windows sandbox is required for the packaged runtime.');
   }

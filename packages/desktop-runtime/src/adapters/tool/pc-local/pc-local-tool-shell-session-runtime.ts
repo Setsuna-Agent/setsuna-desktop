@@ -1,10 +1,13 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
-import { writeWindowsSandboxRequest } from '../../sandbox/windows-native/windows-native-sandbox.js';
+import {
+  windowsNativeSandboxTempRoot,
+  writeWindowsSandboxRequest,
+} from '../../sandbox/windows-native/windows-native-sandbox.js';
 import {
   MAX_SHELL_BUFFER_CHARS,
   MAX_SHELL_PROGRESS_CHARS,
@@ -42,13 +45,18 @@ export async function createShellSessionTempDirectory(
     sandboxPlan.provider === 'macos-seatbelt' && sandboxPlan.permissionProfile === 'workspace-write'
   ) || sandboxPlan.provider === 'windows-native';
   if (!needsTemporaryDirectory) return '';
-  const candidates = [...new Set([tmpdir(), '/tmp'])]
+  const candidates = [...new Set([
+    sandboxPlan.provider === 'windows-native' ? windowsNativeSandboxTempRoot() : '',
+    tmpdir(),
+    process.platform === 'win32' ? '' : '/tmp',
+  ])]
     .filter((candidate) => candidate && path.isAbsolute(candidate));
   for (const candidate of candidates) {
     try {
+      await mkdir(candidate, { recursive: true });
       return realPathIfExists(await mkdtemp(path.join(candidate, 'setsuna-shell-')));
     } catch {
-      // Try the conventional Unix temp root when the inherited TMPDIR is stale.
+      // Try the next platform temp root when this one is unavailable.
     }
   }
   return '';
@@ -487,9 +495,13 @@ export function shellEnvironment(
   for (const [key, value] of Object.entries(overrides)) {
     if (key && typeof value === 'string') safeOverrides[key] = value;
   }
+  const trustedSandboxCaBundle = String(
+    process.env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE ?? '',
+  ).trim();
   return {
     ...defaults,
     ...safeOverrides,
+    ...(trustedSandboxCaBundle ? { CURL_CA_BUNDLE: trustedSandboxCaBundle } : {}),
     PATH: desktopShellPath(safeOverrides.PATH || safeEnv.PATH),
   };
 }
