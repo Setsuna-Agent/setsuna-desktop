@@ -87,29 +87,28 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
    先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加非递归 logon SID ACE；
 4. 如果隔离账户原本不能访问稳定 root，同时为稳定沙箱组安装对应 read 或 write ACE，让账户 token 检查和
    restricted SID 的写检查都能通过；
-5. 已存在的 protected writable root 向 capability 安装稳定 write deny，覆盖从 workspace 继承的 allow；
+5. read-only workspace 与已存在的 protected writable root 向 capability 安装稳定 mutation deny，覆盖宽泛宿主
+   allow 或从 workspace 继承的 write allow，同时保留读取；
 6. Job Object 结束后只回收本次 logon SID 和 request-bootstrap ACE；稳定 capability、group 和 deny ACE 留作复用；
 7. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
 
 最终 shell 与上游 Codex 一样使用
-`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，但 restricting SID 和默认 DACL
-列表收窄为 policy capability、专用隔离账户 SID 与本次 logon SID，默认 DACL 则只包含 capability、logon SID
-和 `LOCAL SYSTEM`。账户 SID 保持该专用账户自己的 Windows 运行时对象可用，`LOCAL SYSTEM` 允许 Windows
-系统进程完成管道和 IPC 初始化；这里有意不沿用上游 token 中的 `Everyone`，
-否则宿主路径原有的宽泛写 ACE 会满足 restricting SID 的第二次检查并绕过策略，默认 DACL 中的 `Everyone`
-也会让其他本机账户访问沙箱进程新建的命名对象。外层 account runner 从机器级只读副本启动，并被放入不可
-breakaway、close 即 kill 的 Job Object。
-
-为保留普通 shell 的 `>NUL` / `2>NUL` 重定向，执行准备会沿用上游的窄授权方式：在全局 ACL 锁内，只向
-Windows `NUL` 设备对象上的当前 policy capability 添加读写执行 ACE。它不向 `Everyone` 放权，也不递归
-修改任何文件目录。
+`CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，restricting SID 按顺序包含
+policy capability、专用隔离账户 SID、本次 logon SID 与 `Everyone`。`Everyone` 是 Windows 基础对象的兼容
+SID；缺少它时，普通 `>NUL` / `2>NUL`、Winsock 初始化和 curl-for-win 会在进程初始化阶段失败。默认 DACL
+仍只包含 capability、logon SID 和 `LOCAL SYSTEM`，不会像上游默认 DACL 那样向所有本机账户授予新建管道、
+mutex 或共享内存的 `GENERIC_ALL`。账户 SID 保持该专用账户自己的运行时对象可用，`LOCAL SYSTEM` 允许系统
+进程完成管道和 IPC 初始化。外层 account runner 从机器级只读副本启动，并被放入不可 breakaway、close 即
+kill 的 Job Object。
 
 `WRITE_RESTRICTED` 只对 write-like access 执行 restricting SID 二次检查。因此 V1 的原生边界是专用账户身份、
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
 sandbox 语义一致。需要 path-specific read deny 的策略会以 unsupported-policy 失败，而不是静默降级。
 
-CI 的真实账户 smoke 会让未授权外部目录继承 `Everyone:Modify`，验证宽泛宿主 ACL 仍不能突破写入边界；
-workspace-write 只能由 capability 或本次 logon SID 命中第二次写检查。
+和上游相同，宿主上原本就向 `Everyone` 开放写入的对象仍可由隔离账户写入；专用账户的第一轮 DACL 检查
+负责隔离普通用户私有路径，capability 则开放稳定 writable roots。read-only workspace 与 protected roots
+额外安装 capability mutation deny，所以即使宿主 ACL 宽泛也不能被修改。CI 的真实账户 smoke 覆盖私有
+read-only 子树、普通未授权外部目录、workspace 写入、protected root 与进程初始化兼容性。
 
 ## 网络
 

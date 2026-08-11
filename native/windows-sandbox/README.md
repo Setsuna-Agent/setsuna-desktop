@@ -24,8 +24,13 @@ The security boundary is fail-closed:
 
 V1 protects write integrity and network egress; it is not a confidentiality
 boundary equivalent to a VM. Existing host DACLs may still make files readable
-to ordinary local users. Denied-root/glob policies, non-NTFS paths, UNC paths,
-and absent protected child names are rejected or documented as unsupported in
+to ordinary local users. As in upstream Codex, Windows compatibility requires
+the World SID in the write-restricted compatibility list, so objects already
+writable by Everyone remain writable to the dedicated account. Read-only
+workspaces and protected roots receive an explicit capability mutation deny;
+ordinary private paths remain isolated by the account's first DACL check.
+Denied-root/glob policies, non-NTFS paths, UNC paths, and absent protected child
+names are rejected or documented as unsupported in
 `docs/designs/windows-native-sandbox.md`. Upstream proxies are also rejected:
 only direct egress can bind the validated DNS result to the outbound socket.
 

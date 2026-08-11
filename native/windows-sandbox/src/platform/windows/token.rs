@@ -52,12 +52,13 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
     let base = current_process_token()?;
     let capability = LocalSid::parse(capability_sid)?;
     let local_system = LocalSid::parse("S-1-5-18")?;
+    let everyone = LocalSid::parse("S-1-1-0")?;
     let mut user_sid = token_user_sid_bytes(base.raw())?;
     let mut logon_sid = logon_sid_bytes(base.raw())?;
 
-    // WRITE_RESTRICTED applies the second SID check only to write-like access.
-    // The dedicated account SID keeps its own Windows runtime objects usable;
-    // omit broad groups such as Everyone so host ACLs cannot authorize writes.
+    // Keep the upstream Codex ordering. World is required for core Windows
+    // objects (including Winsock startup and NUL), while the dedicated account
+    // remains the first access-check boundary and capabilities authorize roots.
     let restricting_sids = [
         SID_AND_ATTRIBUTES {
             Sid: capability.0,
@@ -69,6 +70,10 @@ pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, Sand
         },
         SID_AND_ATTRIBUTES {
             Sid: logon_sid.as_mut_ptr().cast::<c_void>(),
+            Attributes: 0,
+        },
+        SID_AND_ATTRIBUTES {
+            Sid: everyone.0,
             Attributes: 0,
         },
     ];

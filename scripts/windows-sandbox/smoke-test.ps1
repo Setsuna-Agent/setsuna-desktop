@@ -290,21 +290,15 @@ try {
   New-Item -ItemType Directory -Force -Path $externalWritable | Out-Null
   New-Item -ItemType Directory -Force -Path $commandTemp | Out-Null
 
-  # A broad host allow must not bypass the restricted token's write boundary.
-  $everyone = [System.Security.Principal.SecurityIdentifier]::new('S-1-1-0')
-  $externalAcl = Get-Acl -LiteralPath $externalWritable
-  $externalAcl.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new(
-    $everyone,
-    [System.Security.AccessControl.FileSystemRights]::Modify,
-    [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
-    [System.Security.AccessControl.PropagationFlags]::None,
-    [System.Security.AccessControl.AccessControlType]::Allow
-  ))
-  Set-Acl -LiteralPath $externalWritable -AclObject $externalAcl
   Copy-Item -LiteralPath $probeBinaryPath -Destination (Join-Path $workspace 'windows-network-probe.exe')
   $outsideFile = Join-Path $protected 'forbidden.txt'
   $externalFile = Join-Path $externalWritable 'forbidden.txt'
   [System.IO.File]::WriteAllText((Join-Path $workspace 'existing.txt'), 'before', $utf8NoBom)
+  [System.IO.File]::WriteAllText(
+    (Join-Path $workspace 'curl-start-smoke.cmd'),
+    "@echo off`r`ncurl.exe --version >curl-version.txt 2>&1`r`necho %ERRORLEVEL%>curl-exit.txt`r`nexit /b 0`r`n",
+    $utf8NoBom
+  )
   foreach ($temporaryPath in @(
     $externalWritable,
     $commandTemp,
@@ -339,7 +333,7 @@ try {
     "(`"$nodeBinaryPath`" -e `"$nodeRealpathProbe`" >node-realpath-debug.txt 2>&1 && echo ready>node-realpath-status.txt || echo failed>node-realpath-status.txt)"
     'echo workspace-ok>offline-write.txt'
     'echo existing-ok>existing.txt'
-    '(curl.exe --version >curl-version.txt 2>&1 & call echo %%ERRORLEVEL%%>curl-exit.txt)'
+    'call curl-start-smoke.cmd'
     "echo forbidden>$outsideFile 2>NUL"
     "echo forbidden>$externalFile 2>NUL"
     "(windows-network-probe.exe tcp 127.0.0.1 $offlinePort 2000 >NUL 2>&1 && echo reached>offline-loopback.txt || echo blocked>offline-loopback.txt)"
@@ -384,7 +378,7 @@ try {
     throw 'Offline sandbox wrote inside a protected writable root'
   }
   if (Test-Path -LiteralPath $externalFile) {
-    throw 'Offline sandbox borrowed a broad host ACL to write outside approved roots'
+    throw 'Offline sandbox wrote outside approved roots'
   }
   foreach ($resultName in @('offline-loopback.txt', 'offline-public.txt')) {
     if ((Get-Content -LiteralPath (Join-Path $workspace $resultName) -Raw).Trim() -ne 'blocked') {

@@ -477,9 +477,6 @@ pub fn prepare_execution(
     lock_path: &Path,
 ) -> Result<TemporaryAclGrant, SandboxError> {
     let _mutation = AclMutationLock::acquire(lock_path)?;
-    // NUL is a machine-wide device, so update its capability ACE under the
-    // same cross-process lock used for filesystem ACL mutations.
-    super::null_device::ensure_access(capability_sid)?;
     let sandbox_group = LocalSid::parse(sandbox_group_sid)?;
     let capability = LocalSid::parse(capability_sid)?;
     let writable_roots = unique_existing_paths(&request.writable_roots)?;
@@ -493,6 +490,10 @@ pub fn prepare_execution(
             // for that workspace; command-specific toolchain roots stay non-recursive.
             ensure_persistent_allow_aces(&workspace_root, &[(sandbox_group.raw(), READ_MASK)])?;
         }
+        // The upstream-compatible World restricting SID is required by core
+        // Windows objects. An explicit capability deny still makes read-only
+        // authoritative even when the host workspace is broadly writable.
+        ensure_persistent_deny_ace(&workspace_root, capability.raw(), MUTATING_MASK)?;
     }
 
     // Stable roots are authorized once. Later commands observe the capability
@@ -512,7 +513,7 @@ pub fn prepare_execution(
         ensure_persistent_allow_aces(root, &allows)?;
     }
     for root in unique_existing_paths(&request.protected_writable_roots)? {
-        ensure_persistent_deny_ace(&root, capability.raw(), WRITE_MASK)?;
+        ensure_persistent_deny_ace(&root, capability.raw(), MUTATING_MASK)?;
     }
 
     let mut logon = TemporaryAclGrant::new(logon_sid, lock_path)?;
