@@ -16,7 +16,12 @@ import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
-import type { DesktopPanelDropPlacement, DesktopPanelTab, DesktopPanelType } from './model.js';
+import {
+  canMoveDesktopPanelAcrossSlots,
+  type DesktopPanelDropPlacement,
+  type DesktopPanelTab,
+  type DesktopPanelType,
+} from './model.js';
 
 export type DesktopPanelPlacement = 'side' | 'bottom';
 
@@ -39,6 +44,7 @@ type PanelPointerDrag = {
   clientX: number;
   clientY: number;
   crossSlotPlaceholder: HTMLSpanElement | null;
+  crossSlotEnabled: boolean;
   crossSlotTarget: string | null;
   height: number;
   lastReorderTarget: string | null;
@@ -80,6 +86,7 @@ export function DesktopPanelHeader({
   activePanelId,
   availablePanelTypes,
   bottomBarActive = false,
+  bottomTerminalActive = false,
   onClose,
   onClosePanel,
   onMovePanel,
@@ -94,6 +101,7 @@ export function DesktopPanelHeader({
   activePanelId?: string | null;
   availablePanelTypes?: DesktopPanelType[];
   bottomBarActive?: boolean;
+  bottomTerminalActive?: boolean;
   onClose: () => void;
   onClosePanel?: (panelId: string) => void;
   onMovePanel?: (
@@ -137,7 +145,8 @@ export function DesktopPanelHeader({
       && (item.key !== 'files' || !hasFilesPanel),
   );
   const sortable = Boolean(onReorderPanels && tabPanels.length > 1);
-  const draggable = sortable || Boolean(onMovePanel);
+  const canDragPanel = (panel: DesktopPanelTab) =>
+    sortable || Boolean(onMovePanel && canMoveDesktopPanelAcrossSlots(panel, tabPanels));
   const draggedPanelId = dragOverlay?.panel.id ?? null;
 
   const updateLauncherPosition = () => {
@@ -225,7 +234,7 @@ export function DesktopPanelHeader({
       drag.previewFrame = null;
       if (pointerDragRef.current !== drag || !dragPreviewRef.current) return;
       dragPreviewRef.current.style.transform = `translate3d(${drag.previewLeft}px, ${drag.previewTop}px, 0)`;
-      const crossSlotTarget = onMovePanel
+      const crossSlotTarget = drag.crossSlotEnabled
         ? panelCrossSlotDropTargetAtPoint(drag.clientX, drag.clientY, placement)
         : null;
       if (crossSlotTarget) {
@@ -273,7 +282,7 @@ export function DesktopPanelHeader({
   }, []);
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLSpanElement>, panel: DesktopPanelTab) => {
-    if (!draggable || event.button !== 0) return;
+    if (!canDragPanel(panel) || event.button !== 0) return;
     if ((event.target as Element).closest('.chat-file-review-panel__tab-close')) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const captureTarget = headerRef.current;
@@ -283,6 +292,7 @@ export function DesktopPanelHeader({
       active: false,
       clientX: event.clientX,
       clientY: event.clientY,
+      crossSlotEnabled: Boolean(onMovePanel && canMoveDesktopPanelAcrossSlots(panel, tabPanels)),
       crossSlotPlaceholder: null,
       crossSlotTarget: null,
       height: rect.height * scaleInverse,
@@ -306,7 +316,7 @@ export function DesktopPanelHeader({
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     const drag = pointerDragRef.current;
-    if (!draggable || !drag || drag.pointerId !== event.pointerId) return;
+    if (!drag || drag.pointerId !== event.pointerId) return;
     const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY);
     if (!drag.active && distance < PANEL_DRAG_START_DISTANCE) return;
     event.preventDefault();
@@ -324,7 +334,7 @@ export function DesktopPanelHeader({
     }
     if (suppressClick) event.preventDefault();
     if (drag.active && event.type === 'pointerup') {
-      const crossSlotTarget = onMovePanel
+      const crossSlotTarget = drag.crossSlotEnabled
         ? panelCrossSlotDropTargetAtPoint(event.clientX, event.clientY, placement)
         : null;
       if (crossSlotTarget) {
@@ -388,6 +398,7 @@ export function DesktopPanelHeader({
           {tabPanels.map((panel) => {
             const closingWidth = closingPanelWidths[panel.id];
             const closing = closingWidth !== undefined;
+            const draggable = canDragPanel(panel);
             const tabStyle = closing
               ? { '--desktop-panel-tab-exit-width': `${closingWidth}px` } as CSSProperties
               : undefined;
@@ -498,7 +509,7 @@ export function DesktopPanelHeader({
           {placement === 'side' && onToggleBottomTerminal ? (
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
-              label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
+              label={t(bottomTerminalActive ? 'topbar.closeTerminal' : 'workspace.panel.openBottomTerminal')}
             >
               <button
                 className={[
@@ -510,8 +521,8 @@ export function DesktopPanelHeader({
                   .filter(Boolean)
                   .join(' ')}
                 type="button"
-                aria-label={t(bottomBarActive ? 'workspace.panel.closeBottom' : 'workspace.panel.openBottomTerminal')}
-                aria-pressed={bottomBarActive}
+                aria-label={t(bottomTerminalActive ? 'topbar.closeTerminal' : 'workspace.panel.openBottomTerminal')}
+                aria-pressed={bottomTerminalActive}
                 onClick={onToggleBottomTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />

@@ -243,6 +243,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
             activeView={activeView}
             updater={controller.updater}
             bottomPanelVisible={workspacePanels.bottomPanelVisible}
+            bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
             conversationOverviewAvailable={Boolean(runtime.currentThread)}
             conversationOverviewVisible={conversationOverviewRendered}
             sidePanelVisible={workspacePanels.sidePanelVisible}

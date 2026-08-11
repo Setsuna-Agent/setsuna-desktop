@@ -6,6 +6,7 @@ export function WorkspaceTopbar({
   availablePanelTypes,
   panels,
   bottomPanelOpen,
+  bottomTerminalActive,
   onClosePanel,
   onOpenBrowser,
   onOpenConversationDebug,
@@ -23,6 +24,7 @@ export function WorkspaceTopbar({
   availablePanelTypes: DesktopPanelType[];
   panels: DesktopPanelTab[];
   bottomPanelOpen: boolean;
+  bottomTerminalActive: boolean;
   onClosePanel: (panelId: string) => void;
   onOpenBrowser: () => void;
   onOpenConversationDebug: () => void;
@@ -75,6 +77,7 @@ export function WorkspaceTopbar({
         activePanelId={activePanel.id}
         availablePanelTypes={availablePanelTypes}
         bottomBarActive={bottomPanelOpen}
+        bottomTerminalActive={bottomTerminalActive}
         onClose={onToggleWorkspace}
         onClosePanel={onClosePanel}
         onMovePanel={onMovePanel}

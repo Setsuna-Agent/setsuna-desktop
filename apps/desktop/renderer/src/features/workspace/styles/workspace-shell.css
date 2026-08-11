@@ -35,6 +35,9 @@
 :root .desktop-workspace-panel.desktop-workspace-panel--bottom-floating {
   grid-column: 2 / -1;
   grid-row: 2;
+  justify-self: stretch;
+  width: 100%;
+  max-width: none;
   margin-top: var(--desktop-workspace-toolbar-height);
   padding-top: 0;
   border-top: 0;

@@ -20,6 +20,7 @@ export function AppWorkspaceToolbar({
     return (
       <WorkspaceOverviewToolbar
         bottomPanelOpen={workspacePanels.bottomPanelVisible}
+        bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
         onToggleTerminal={workspacePanels.toggleBottomTerminal}
         onToggleWorkspace={workspacePanels.toggleSidePanel}
       />
@@ -32,6 +33,7 @@ export function AppWorkspaceToolbar({
       availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
       bottomPanelOpen={workspacePanels.bottomPanelVisible}
+      bottomTerminalActive={workspacePanels.bottomTerminalPanelActive}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
         workspacePanels.openBrowserPanel();
@@ -81,10 +83,12 @@ export function AppWorkspaceToolbar({
 
 function WorkspaceOverviewToolbar({
   bottomPanelOpen,
+  bottomTerminalActive,
   onToggleTerminal,
   onToggleWorkspace,
 }: {
   bottomPanelOpen: boolean;
+  bottomTerminalActive: boolean;
   onToggleTerminal: () => void;
   onToggleWorkspace: () => void;
 }) {
@@ -98,7 +102,7 @@ function WorkspaceOverviewToolbar({
           <span className="chat-file-review-panel__heading-actions">
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
-              label={bottomPanelOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+              label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
             >
               <button
                 className={[
@@ -110,8 +114,8 @@ function WorkspaceOverviewToolbar({
                   .filter(Boolean)
                   .join(' ')}
                 type="button"
-                aria-label={bottomPanelOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
-                aria-pressed={bottomPanelOpen}
+                aria-label={bottomTerminalActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
+                aria-pressed={bottomTerminalActive}
                 onClick={onToggleTerminal}
               >
                 <PanelPlacementIcon placement="bottom" />

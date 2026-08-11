@@ -20,6 +20,7 @@ import {
   createReviewPanel,
   createSideChatPanel as createSideChatPanelTab,
   createWorkspaceOverviewPanel,
+  findFileWorkspacePanelSlot,
   findDesktopPanelLocationByType,
   movePanelBetweenSlotStates,
   removePanelFromSlotState,
@@ -104,6 +105,7 @@ export function useDesktopWorkspacePanels({
   const bottomActivePanel = activePanelInSlot(bottomPanelSlot);
   const sidePanelVisible = activeView === 'chat' && sidePanelExpanded && Boolean(sideActivePanel);
   const bottomPanelVisible = activeView === 'chat' && Boolean(bottomActivePanel);
+  const bottomTerminalPanelActive = bottomPanelVisible && bottomActivePanel?.type === 'terminal';
   const browserPanelInstances = useMemo(
     () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, {
       bottomVisible: bottomPanelVisible,
@@ -419,7 +421,7 @@ export function useDesktopWorkspacePanels({
       setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
       return;
     }
-    addPanelToDesktopSlot('side', panel);
+    addPanelToDesktopSlot(findFileWorkspacePanelSlot(sidePanelSlot, bottomPanelSlot) ?? 'side', panel);
   }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
@@ -652,6 +654,7 @@ export function useDesktopWorkspacePanels({
       bottomActivePanel,
       bottomPanelSlot,
       bottomPanelVisible,
+      bottomTerminalPanelActive,
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,
@@ -699,6 +702,7 @@ export function useDesktopWorkspacePanels({
       bottomActivePanel,
       bottomPanelSlot,
       bottomPanelVisible,
+      bottomTerminalPanelActive,
       bottomTerminalPanelOpen,
       browserPanelInstances,
       claimForThread,

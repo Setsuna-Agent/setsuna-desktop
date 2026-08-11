@@ -49,9 +49,9 @@ describe('DesktopPanelHeader browser tabs', () => {
       placement: 'side',
     }));
 
-    const bottomPanelToggle = getByRole('button', { name: '关闭底栏' });
+    const bottomPanelToggle = getByRole('button', { name: '打开底栏终端' });
     expect(bottomPanelToggle.classList.contains('chat-file-review-panel__close--active')).toBe(true);
-    expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('true');
+    expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('false');
     const bottomPanelIcon = bottomPanelToggle.querySelector('.app-panel-placement-icon--bottom rect');
     expect(bottomPanelIcon?.getAttribute('width')).toBe('19');
     expect(bottomPanelIcon?.getAttribute('height')).toBe('16');
@@ -62,6 +62,23 @@ describe('DesktopPanelHeader browser tabs', () => {
     const sidePanelIcon = sidePanelToggle.querySelector('.app-panel-placement-icon--side rect');
     expect(sidePanelIcon?.getAttribute('width')).toBe('16');
     expect(sidePanelIcon?.getAttribute('height')).toBe('19');
+  });
+
+  it('exposes terminal close semantics only while the bottom terminal is active', () => {
+    const { getByRole } = render(createElement(DesktopPanelHeader, {
+      activePanel: 'review',
+      activePanelId: 'review',
+      bottomBarActive: true,
+      bottomTerminalActive: true,
+      onClose: () => undefined,
+      onToggleBottomTerminal: () => undefined,
+      panels: [{ id: 'review', type: 'review' }],
+      placement: 'side',
+    }));
+
+    const bottomPanelToggle = getByRole('button', { name: '关闭终端' });
+    expect(bottomPanelToggle.classList.contains('chat-file-review-panel__close--active')).toBe(true);
+    expect(bottomPanelToggle.getAttribute('aria-pressed')).toBe('true');
   });
 });
 
@@ -199,6 +216,29 @@ describe('DesktopPanelHeader tab drag preview positioning', () => {
     fireEvent.pointerUp(sourceHeader, { clientX: 430, clientY: 18, pointerId: 1 });
     expect(onMovePanel).toHaveBeenCalledWith('review', 'side', 'terminal-1', 'before');
     expect(targetTabs.querySelector('.desktop-panel-tab-drop-placeholder')).toBeNull();
+  });
+
+  it('does not start a cross-slot drag for the side overview launcher', () => {
+    const onMovePanel = vi.fn();
+    const { container } = render(createElement(DesktopPanelHeader, {
+      activePanel: 'overview',
+      activePanelId: 'workspace-overview',
+      onClose: () => undefined,
+      onMovePanel,
+      panels: [{ id: 'workspace-overview', type: 'overview' }],
+      placement: 'side',
+    }));
+    const header = container.querySelector<HTMLElement>('[data-desktop-panel-placement="side"]');
+    const overviewTab = container.querySelector<HTMLElement>('[data-desktop-panel-tab-id="workspace-overview"]');
+    expect(header && overviewTab).toBeTruthy();
+    if (!header || !overviewTab) return;
+
+    header.setPointerCapture = vi.fn();
+    fireEvent.pointerDown(overviewTab, { button: 0, clientX: 24, clientY: 18, pointerId: 1 });
+
+    expect(header.setPointerCapture).not.toHaveBeenCalled();
+    expect(overviewTab.classList.contains('chat-file-review-panel__title--sortable')).toBe(false);
+    expect(onMovePanel).not.toHaveBeenCalled();
   });
 });
 
