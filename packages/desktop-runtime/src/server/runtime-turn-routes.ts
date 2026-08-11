@@ -107,7 +107,7 @@ export async function handleRuntimeTurnRequest(
       attachments,
       clientId: stringInput(input.clientId),
       input: typeof input.input === 'string' ? input.input : '',
-      kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
+      kind: queuedTurnInputKind(input.kind),
       skillIds: runtimeStringList(input.skillIds),
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
@@ -245,6 +245,15 @@ function assertSupportedCollaborationMode(value: unknown): void {
 function assertPlanDecisionRemoved(value: unknown): void {
   if (value === undefined || value === null || value === '') return;
   throw new RuntimeHttpError(400, 'Plan decisions are no longer supported.', 'plan_mode_removed');
+}
+
+function queuedTurnInputKind(value: unknown): QueueTurnInput['kind'] {
+  const kind = stringInput(value);
+  // 旧数据的 plan -> message 转换只能发生在持久化投影中；新 API 输入必须明确失败。
+  if (kind === 'plan') {
+    throw new RuntimeHttpError(400, 'Plan mode is no longer supported.', 'plan_mode_removed');
+  }
+  return normalizeRuntimeQueuedTurnInputKind(kind);
 }
 
 function runtimeStringList(value: unknown): string[] {

@@ -268,6 +268,13 @@ describe('runtime server REST runtime state', () => {
         method: 'POST',
         body: JSON.stringify({ input: '', planDecision: 'accepted' }),
       })).rejects.toThrow('Plan decisions are no longer supported');
+      await expect(harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs`, {
+        method: 'POST',
+        body: JSON.stringify({ input: 'Plan this later.', kind: 'plan' }),
+      })).rejects.toThrow('Plan mode is no longer supported');
+
+      const unchanged = await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`);
+      expect(unchanged.queuedTurnInputs ?? []).toEqual([]);
     });
   
   it('settles persisted active turns when the runtime starts', async () => {
