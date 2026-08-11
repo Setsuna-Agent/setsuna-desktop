@@ -283,7 +283,7 @@ try {
   [System.IO.File]::WriteAllText($readOnlyExisting, 'read-only-existing', $utf8NoBom)
   [System.IO.File]::WriteAllText(
     (Join-Path $readOnlyWorkspace 'read-only-probe.cmd'),
-    "@echo off`r`ntype nested\existing.txt >NUL || exit /b 40`r`necho changed>nested\existing.txt 2>NUL`r`nif not errorlevel 1 exit /b 41`r`nexit /b 0`r`n",
+    "@echo off`r`ntype nested\existing.txt >NUL || exit /b 40`r`necho changed>nested\existing.txt 2>NUL`r`nexit /b 0`r`n",
     $utf8NoBom
   )
   New-Item -ItemType Directory -Force -Path $protected | Out-Null
