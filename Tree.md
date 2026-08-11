@@ -81,15 +81,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 607 total files
-├── src/ — 2 direct / 447 total files
+apps/desktop/renderer/ — 0 direct / 612 total files
+├── src/ — 2 direct / 450 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 12 direct / 12 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── features/ — 326 files
+│   ├── features/ — 328 files
 │   │   ├── capabilities/ — 23 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
@@ -118,7 +118,7 @@ apps/desktop/renderer/ — 0 direct / 607 total files
 │   │   │   ├── styles/ — 11 direct / 11 total files
 │   │   │   ├── usage/ — 7 direct / 7 total files
 │   │   │   └── webdav-sync/ — 7 direct / 7 total files
-│   │   └── workspace/ — 32 direct / 78 total files
+│   │   └── workspace/ — 34 direct / 80 total files
 │   │       ├── assets/ — 20 direct / 20 total files
 │   │       ├── browser/ — 1 direct / 1 total files
 │   │       ├── editor/ — 3 direct / 3 total files
@@ -128,26 +128,26 @@ apps/desktop/renderer/ — 0 direct / 607 total files
 │   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 73 files
+│   └── shared/ — 74 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
 │       ├── code/ — 4 direct / 4 total files
 │       ├── hooks/ — 3 direct / 3 total files
-│       ├── i18n/ — 16 direct / 16 total files
+│       ├── i18n/ — 17 direct / 17 total files
 │       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 7 direct / 7 total files
 │       └── ui/ — 5 direct / 5 total files
-└── test/ — 160 files
-    └── unit/ — 160 files
+└── test/ — 162 files
+    └── unit/ — 162 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 122 files
+        ├── features/ — 123 files
         │   ├── capabilities/ — 6 direct / 7 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 66 total files
@@ -164,13 +164,13 @@ apps/desktop/renderer/ — 0 direct / 607 total files
         │   ├── settings/ — 12 direct / 17 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   └── usage/ — 3 direct / 3 total files
-        │   └── workspace/ — 13 direct / 22 total files
+        │   └── workspace/ — 14 direct / 23 total files
         │       ├── browser/ — 1 direct / 1 total files
         │       ├── hooks/ — 7 direct / 7 total files
         │       └── model/ — 1 direct / 1 total files
         ├── services/ — 8 files
         │   └── runtime-client/ — 8 direct / 8 total files
-        └── shared/ — 17 files
+        └── shared/ — 18 files
             ├── branding/ — 1 direct / 1 total files
             ├── code/ — 1 direct / 1 total files
             ├── hooks/ — 2 direct / 2 total files
@@ -178,7 +178,7 @@ apps/desktop/renderer/ — 0 direct / 607 total files
             ├── lib/ — 3 direct / 3 total files
             ├── preferences/ — 5 direct / 5 total files
             ├── shortcuts/ — 2 direct / 2 total files
-            └── ui/ — 2 direct / 2 total files
+            └── ui/ — 3 direct / 3 total files
 ```
 
 ### `packages/contracts/`

@@ -13,11 +13,14 @@ import {
 } from 'lucide-react';
 import { useState, type ComponentProps } from 'react';
 import { useI18n } from '../i18n/I18nProvider.js';
-import { localizedRuntimeAccessModeOptions } from '../i18n/runtimeAccessModeCopy.js';
+import {
+  localizedRuntimeAccessModeOptions,
+  type LocalizedRuntimeAccessModeOption,
+} from '../i18n/runtimeAccessModeCopy.js';
 import {
   type RuntimeAccessMode,
 } from '../lib/runtimeAccessMode.js';
-import { Button } from './primitives.js';
+import { Button, SelectField } from './primitives.js';
 
 const modeIcons: Record<RuntimeAccessMode, LucideIcon> = {
   'request-approval': Hand,
@@ -42,17 +45,12 @@ export function RuntimeAccessModeMenu({
   const activeOption = runtimeAccessModeOptions.find((option) => option.value === mode) ?? runtimeAccessModeOptions[1];
   const ActiveIcon = modeIcons[activeOption.value];
   const items: NonNullable<ComponentProps<typeof Dropdown>['menu']>['items'] = runtimeAccessModeOptions.map((option) => {
-    const Icon = modeIcons[option.value];
     return {
       key: option.value,
       className: option.value === 'full-access' ? 'runtime-access-mode-menu__item--full-access' : undefined,
       label: (
         <span className="runtime-access-mode-menu__item">
-          <Icon className="runtime-access-mode-menu__icon" size={14} />
-          <span className="runtime-access-mode-menu__copy">
-            <strong>{option.label}</strong>
-            <small>{option.description}</small>
-          </span>
+          <RuntimeAccessModeOptionContent option={option} />
           <span className="runtime-access-mode-menu__check">
             {option.value === mode ? <Check size={14} /> : null}
           </span>
@@ -65,42 +63,64 @@ export function RuntimeAccessModeMenu({
   const requestModeChange = (nextMode: RuntimeAccessMode) => {
     if (nextMode !== 'full-access' || mode === 'full-access') {
       onChange(nextMode);
-      return;
+      return true;
     }
     setFullAccessConfirmationOpen(true);
+    // The confirmation dialog takes focus; do not move it back to the closed select trigger.
+    return false;
   };
 
   const confirmFullAccess = () => {
     setFullAccessConfirmationOpen(false);
     onChange('full-access');
   };
+  const triggerClassName = mode === 'full-access' ? ' runtime-access-mode-trigger--full-access' : '';
 
   return (
     <>
-      <Dropdown
-        rootClassName="runtime-access-mode-menu-root"
-        trigger={['click']}
-        placement={settingsVariant ? 'bottomRight' : 'topLeft'}
-        disabled={disabled}
-        menu={{
-          items,
-          selectedKeys: [mode],
-          onClick: ({ key }) => requestModeChange(key as RuntimeAccessMode),
-        }}
-      >
-        <AntButton
-          type={settingsVariant ? 'default' : 'text'}
-          size="small"
-          className={`${settingsVariant
-            ? 'settings-local-control chat-user-settings__runtime-policy-control runtime-access-mode-trigger runtime-access-mode-trigger--settings'
-            : 'chat-authorization-switch chat-approval-menu__trigger runtime-access-mode-trigger'} ${mode === 'full-access' ? 'runtime-access-mode-trigger--full-access' : ''}`}
+      {settingsVariant ? (
+        <SelectField
+          aria-label={t('settings.runtime.permissionPolicy')}
+          className={`settings-local-control chat-user-settings__runtime-policy-control runtime-access-mode-trigger runtime-access-mode-trigger--settings${triggerClassName}`}
           disabled={disabled}
+          menuClassName="runtime-access-mode-menu-root runtime-access-mode-menu-root--select"
+          menuMinWidth={320}
+          value={mode}
+          valueContent={<RuntimeAccessModeTriggerValue option={activeOption} />}
+          onValueChange={(nextMode) => requestModeChange(nextMode as RuntimeAccessMode)}
         >
-          <ActiveIcon className="runtime-access-mode-trigger__icon" size={13} />
-          <span className="runtime-access-mode-trigger__label">{activeOption.label}</span>
-          <ChevronDown className="runtime-access-mode-trigger__arrow" size={12} />
-        </AntButton>
-      </Dropdown>
+          {runtimeAccessModeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              <span className={`runtime-access-mode-menu__item runtime-access-mode-menu__item--select${option.value === 'full-access' ? ' runtime-access-mode-menu__item--full-access' : ''}`}>
+                <RuntimeAccessModeOptionContent option={option} />
+              </span>
+            </option>
+          ))}
+        </SelectField>
+      ) : (
+        <Dropdown
+          rootClassName="runtime-access-mode-menu-root"
+          trigger={['click']}
+          placement="topLeft"
+          disabled={disabled}
+          menu={{
+            items,
+            selectedKeys: [mode],
+            onClick: ({ key }) => requestModeChange(key as RuntimeAccessMode),
+          }}
+        >
+          <AntButton
+            type="text"
+            size="small"
+            className={`chat-authorization-switch chat-approval-menu__trigger runtime-access-mode-trigger${triggerClassName}`}
+            disabled={disabled}
+          >
+            <ActiveIcon className="runtime-access-mode-trigger__icon" size={13} />
+            <span className="runtime-access-mode-trigger__label">{activeOption.label}</span>
+            <ChevronDown className="runtime-access-mode-trigger__arrow" size={12} />
+          </AntButton>
+        </Dropdown>
+      )}
       <Modal
         aria-label={t('accessMode.confirm.label')}
         centered
@@ -174,5 +194,28 @@ export function RuntimeAccessModeMenu({
         </div>
       </Modal>
     </>
+  );
+}
+
+function RuntimeAccessModeOptionContent({ option }: { option: LocalizedRuntimeAccessModeOption }) {
+  const Icon = modeIcons[option.value];
+  return (
+    <>
+      <Icon className="runtime-access-mode-menu__icon" size={14} />
+      <span className="runtime-access-mode-menu__copy">
+        <strong>{option.label}</strong>
+        <small>{option.description}</small>
+      </span>
+    </>
+  );
+}
+
+function RuntimeAccessModeTriggerValue({ option }: { option: LocalizedRuntimeAccessModeOption }) {
+  const Icon = modeIcons[option.value];
+  return (
+    <span className="runtime-access-mode-trigger__value">
+      <Icon className="runtime-access-mode-trigger__icon" size={13} />
+      <span className="runtime-access-mode-trigger__label">{option.label}</span>
+    </span>
   );
 }

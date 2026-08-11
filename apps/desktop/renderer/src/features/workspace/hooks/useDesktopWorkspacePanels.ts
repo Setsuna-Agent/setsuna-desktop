@@ -21,6 +21,7 @@ import {
   createSideChatPanel as createSideChatPanelTab,
   createWorkspaceOverviewPanel,
   findDesktopPanelLocationByType,
+  movePanelBetweenSlotStates,
   removePanelFromSlotState,
   reorderPanelInSlotState,
   slotHasPanelType,
@@ -57,8 +58,6 @@ type WorkspacePanelsOptions = {
 };
 
 type TerminalSessionsByPanelId = Record<string, Record<string, DesktopTerminalSession>>;
-type OpenableDesktopPanelType = Exclude<DesktopPanelType, 'browser' | 'file'>;
-
 const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
 
 export function useDesktopWorkspacePanels({
@@ -106,12 +105,35 @@ export function useDesktopWorkspacePanels({
   const sidePanelVisible = activeView === 'chat' && sidePanelExpanded && Boolean(sideActivePanel);
   const bottomPanelVisible = activeView === 'chat' && Boolean(bottomActivePanel);
   const browserPanelInstances = useMemo(
-    () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, sidePanelVisible),
-    [layouts, sidePanelVisible, targetIdentity],
+    () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, {
+      bottomVisible: bottomPanelVisible,
+      sideVisible: sidePanelVisible,
+    }),
+    [bottomPanelVisible, layouts, sidePanelVisible, targetIdentity],
   );
   const bottomTerminalPanelOpen = slotHasPanelType(bottomPanelSlot, 'terminal');
   const sideReviewPanelOpen = slotHasPanelType(sidePanelSlot, 'review');
   const bottomReviewPanelOpen = slotHasPanelType(bottomPanelSlot, 'review');
+  const panelLauncherTypes = useMemo(() => [
+    'chat',
+    'browser',
+    developerFeaturesEnabled === true
+      && !slotHasPanelType(sidePanelSlot, 'conversation-debug')
+      && !slotHasPanelType(bottomPanelSlot, 'conversation-debug')
+      ? 'conversation-debug'
+      : null,
+    activeProject
+      && !slotHasPanelType(sidePanelSlot, 'review')
+      && !slotHasPanelType(bottomPanelSlot, 'review')
+      ? 'review'
+      : null,
+    activeProject?.path
+      && !slotHasPanelType(sidePanelSlot, 'files')
+      && !slotHasPanelType(bottomPanelSlot, 'files')
+      ? 'files'
+      : null,
+    'terminal',
+  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, developerFeaturesEnabled, sidePanelSlot]);
   const terminalProjectKey = activeProject?.id ?? GLOBAL_TERMINAL_PROJECT_KEY;
   const terminalWorkspacePath = readyThreadWorkspacePath(activeProject, workspaceStatus);
   const activeTerminalSessionsByPanelId = useMemo(() => {
@@ -247,13 +269,11 @@ export function useDesktopWorkspacePanels({
     return {
       id: `terminal-${Date.now()}-${terminalPanelSeqRef.current}`,
       type: 'terminal',
-      title: terminalPanelSeqRef.current === 1
-        ? t('workspace.panel.terminal')
-        : t('workspace.panels.terminalNumbered', { sequence: terminalPanelSeqRef.current }),
+      title: t('workspace.panel.terminal'),
     };
   }, [t]);
 
-  const createSideChatPanel = useCallback((): DesktopPanelTab => {
+  const createChatPanel = useCallback((): DesktopPanelTab => {
     sideChatPanelSeqRef.current += 1;
     const sequence = sideChatPanelSeqRef.current;
     return createSideChatPanelTab(
@@ -269,11 +289,20 @@ export function useDesktopWorkspacePanels({
     return createBrowserPanel(`browser-${Date.now()}-${browserPanelSeqRef.current}`, url);
   }, []);
 
-  const openBrowserPanel = useCallback((url?: string) => {
+  const addPanelToDesktopSlot = useCallback((slot: DesktopPanelSlot, panel: DesktopPanelTab) => {
+    const updater = (current: DesktopPanelSlotState) => addPanelToSlotState(current, panel);
+    if (slot === 'side') {
+      setSidePanelExpanded(true);
+      setSidePanelSlot(updater);
+      return;
+    }
+    setBottomPanelSlot(updater);
+  }, [setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot]);
+
+  const openBrowserPanel = useCallback((url?: string, slot: DesktopPanelSlot = 'side') => {
     closeWorkspaceMenus();
-    setSidePanelExpanded(true);
-    setSidePanelSlot((current) => addPanelToSlotState(current, createBrowserPanelTab(url)));
-  }, [closeWorkspaceMenus, createBrowserPanelTab, setSidePanelExpanded, setSidePanelSlot]);
+    addPanelToDesktopSlot(slot, createBrowserPanelTab(url));
+  }, [addPanelToDesktopSlot, closeWorkspaceMenus, createBrowserPanelTab]);
 
   const openTerminalSessionForPanel = useCallback(
     async (panelId: string) => {
@@ -317,55 +346,81 @@ export function useDesktopWorkspacePanels({
   );
 
   const openDesktopPanel = useCallback(
-    (slot: DesktopPanelSlot, type: OpenableDesktopPanelType) => {
-      if (type === 'chat' && slot !== 'side') return;
-      if (type === 'conversation-debug' && (slot !== 'side' || developerFeaturesEnabled !== true)) return;
+    (slot: DesktopPanelSlot, type: DesktopPanelType) => {
+      if (type === 'file') return;
+      if (type === 'conversation-debug' && developerFeaturesEnabled !== true) return;
       if (type === 'review' && !activeProject) return;
       if (type === 'files' && !activeProject?.path) return;
-      const panel =
-        type === 'chat'
-          ? createSideChatPanel()
-          : type === 'conversation-debug'
-            ? createConversationDebugPanel()
-            : type === 'overview'
-              ? createWorkspaceOverviewPanel()
-              : type === 'review'
-                ? createReviewPanel()
-                : type === 'files'
-                  ? createFilesPanel()
-                  : createTerminalPanel();
-      const updater = (current: DesktopPanelSlotState) => addPanelToSlotState(current, panel);
-      if (slot === 'side') {
-        setSidePanelExpanded(true);
-        setSidePanelSlot(updater);
-        return;
+      closeWorkspaceMenus();
+      if (isSingletonDesktopPanelType(type)) {
+        const existing = findDesktopPanelLocationByType(sidePanelSlot, bottomPanelSlot, type);
+        if (existing) {
+          const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, existing.panelId);
+          if (existing.slot === 'side') {
+            setSidePanelExpanded(true);
+            setSidePanelSlot(updater);
+          } else {
+            setBottomPanelSlot(updater);
+          }
+          return;
+        }
       }
-      setBottomPanelSlot(updater);
+      const panel =
+        type === 'browser'
+          ? createBrowserPanelTab()
+          : type === 'chat'
+            ? createChatPanel()
+            : type === 'conversation-debug'
+              ? createConversationDebugPanel()
+              : type === 'overview'
+                ? createWorkspaceOverviewPanel()
+                : type === 'review'
+                  ? createReviewPanel()
+                  : type === 'files'
+                    ? createFilesPanel()
+                    : createTerminalPanel();
+      addPanelToDesktopSlot(slot, panel);
     },
     [
       activeProject,
-      createSideChatPanel,
+      addPanelToDesktopSlot,
+      bottomPanelSlot,
+      closeWorkspaceMenus,
+      createBrowserPanelTab,
+      createChatPanel,
       createTerminalPanel,
       developerFeaturesEnabled,
       setBottomPanelSlot,
       setSidePanelExpanded,
       setSidePanelSlot,
+      sidePanelSlot,
     ],
   );
 
   useEffect(() => {
     if (developerFeaturesEnabled !== false) return;
-    setSidePanelSlot((current) => {
+    const removeDebugPanel = (current: DesktopPanelSlotState) => {
       const debugPanel = current.panels.find((panel) => panel.type === 'conversation-debug');
       return debugPanel ? removePanelFromSlotState(current, debugPanel.id) : current;
-    });
-  }, [developerFeaturesEnabled, setSidePanelSlot]);
+    };
+    setSidePanelSlot(removeDebugPanel);
+    setBottomPanelSlot(removeDebugPanel);
+  }, [developerFeaturesEnabled, setBottomPanelSlot, setSidePanelSlot]);
 
   const openFilePanel = useCallback((filePath: string) => {
     closeWorkspaceMenus();
-    setSidePanelExpanded(true);
-    setSidePanelSlot((current) => addPanelToSlotState(current, createFilePanel(filePath)));
-  }, [closeWorkspaceMenus, setSidePanelExpanded, setSidePanelSlot]);
+    const panel = createFilePanel(filePath);
+    if (sidePanelSlot.panels.some((item) => item.id === panel.id)) {
+      setSidePanelExpanded(true);
+      setSidePanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      return;
+    }
+    if (bottomPanelSlot.panels.some((item) => item.id === panel.id)) {
+      setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      return;
+    }
+    addPanelToDesktopSlot('side', panel);
+  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
     const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, panelId);
@@ -391,9 +446,16 @@ export function useDesktopWorkspacePanels({
   ) => {
     updateLayoutForIdentity(identity, (current) => {
       const sidePanelSlot = updatePanelInSlotState(current.sidePanelSlot, panelId, patch);
-      return sidePanelSlot === current.sidePanelSlot ? current : { ...current, sidePanelSlot };
+      const bottomPanelSlot = updatePanelInSlotState(current.bottomPanelSlot, panelId, patch);
+      return sidePanelSlot === current.sidePanelSlot && bottomPanelSlot === current.bottomPanelSlot
+        ? current
+        : { ...current, bottomPanelSlot, sidePanelSlot };
     });
   }, [updateLayoutForIdentity]);
+
+  const updateDesktopPanel = useCallback((panelId: string, patch: DesktopPanelTabPatch) => {
+    updateBrowserPanel(targetIdentity, panelId, patch);
+  }, [targetIdentity, updateBrowserPanel]);
 
   const reorderDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => {
     const updater = (current: DesktopPanelSlotState) => reorderPanelInSlotState(current, panelId, targetPanelId, placement);
@@ -403,6 +465,33 @@ export function useDesktopWorkspacePanels({
     }
     setBottomPanelSlot(updater);
   }, [setBottomPanelSlot, setSidePanelSlot]);
+
+  const moveDesktopPanel = useCallback((
+    sourceSlot: DesktopPanelSlot,
+    panelId: string,
+    targetSlot: DesktopPanelSlot,
+    targetPanelId: string | null,
+    placement: DesktopPanelDropPlacement,
+  ) => {
+    if (sourceSlot === targetSlot) {
+      if (targetPanelId) reorderDesktopPanel(sourceSlot, panelId, targetPanelId, placement);
+      return;
+    }
+    updateLayoutForIdentity(targetIdentity, (current) => {
+      const source = sourceSlot === 'side' ? current.sidePanelSlot : current.bottomPanelSlot;
+      const target = targetSlot === 'side' ? current.sidePanelSlot : current.bottomPanelSlot;
+      const moved = movePanelBetweenSlotStates(source, target, panelId, targetPanelId, placement);
+      if (moved.source === source && moved.target === target) return current;
+      const sidePanelSlot = sourceSlot === 'side' ? moved.source : moved.target;
+      const bottomPanelSlot = sourceSlot === 'bottom' ? moved.source : moved.target;
+      return {
+        ...current,
+        bottomPanelSlot,
+        sidePanelExpanded: targetSlot === 'side' || (current.sidePanelExpanded && sidePanelSlot.panels.length > 0),
+        sidePanelSlot,
+      };
+    });
+  }, [reorderDesktopPanel, targetIdentity, updateLayoutForIdentity]);
 
   const closeDesktopPanelItem = useCallback(
     (slot: DesktopPanelSlot, panelId: string) => {
@@ -572,6 +661,7 @@ export function useDesktopWorkspacePanels({
       copyWorkspaceFilePath,
       developerFeaturesEnabled: developerFeaturesEnabled === true,
       loadReviewState,
+      moveDesktopPanel,
       openBrowserPanel,
       openDesktopPanel,
       openFileInWorkspaceApp,
@@ -579,6 +669,7 @@ export function useDesktopWorkspacePanels({
       openFilePanel,
       openWorkspaceDirectory,
       openSelectedWorkspaceApp,
+      panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
       resetThreadPanelSession,
@@ -598,6 +689,7 @@ export function useDesktopWorkspacePanels({
       toggleSidePanel,
       toggleWorkspaceAppMenu,
       updateBrowserPanel,
+      updateDesktopPanel,
       workspaceAppMenuOpen,
       workspaceApps,
     }),
@@ -616,6 +708,7 @@ export function useDesktopWorkspacePanels({
       copyWorkspaceFilePath,
       developerFeaturesEnabled,
       loadReviewState,
+      moveDesktopPanel,
       openBrowserPanel,
       openDesktopPanel,
       openFileInWorkspaceApp,
@@ -623,6 +716,7 @@ export function useDesktopWorkspacePanels({
       openFilePanel,
       openWorkspaceDirectory,
       openSelectedWorkspaceApp,
+      panelLauncherTypes,
       panelLauncherMenuOpen,
       resetNewThreadPanelSession,
       resetThreadPanelSession,
@@ -642,6 +736,7 @@ export function useDesktopWorkspacePanels({
       toggleSidePanel,
       toggleWorkspaceAppMenu,
       updateBrowserPanel,
+      updateDesktopPanel,
       workspaceAppMenuOpen,
       workspaceApps,
     ],
@@ -650,6 +745,10 @@ export function useDesktopWorkspacePanels({
 
 function terminalSessionKey(panelId: string, projectKey: string): string {
   return `${panelId}:${projectKey}`;
+}
+
+function isSingletonDesktopPanelType(type: DesktopPanelType): boolean {
+  return type === 'overview' || type === 'conversation-debug' || type === 'review' || type === 'files';
 }
 
 export type DesktopWorkspacePanelsState = ReturnType<typeof useDesktopWorkspacePanels>;

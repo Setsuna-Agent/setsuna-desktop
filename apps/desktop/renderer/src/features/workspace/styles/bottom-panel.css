@@ -3,11 +3,11 @@
   grid-column: 2 / -1;
   grid-row: 2;
   position: relative;
-  grid-template-rows: 40px minmax(0, 1fr);
+  grid-template-rows: var(--desktop-workspace-toolbar-height) minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   border-top: 1px solid var(--desktop-agent-panel-border);
-  background: var(--app-surface);
+  background: var(--desktop-agent-main-bg);
 }
 
 .bottom-panel__resize-handle {
@@ -33,32 +33,22 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
   background: var(--app-text-muted);
 }
 
-.bottom-panel .desktop-panel-chrome {
-  padding: 7px 10px 5px;
-  background: var(--app-surface-subtle);
-}
-
-.bottom-panel .desktop-panel-chrome .chat-file-review-panel__heading-actions {
-  gap: 8px;
-}
-
-:root[data-theme='dark'] .bottom-panel .desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
-  background: #8f8f8f;
-}
-
 .bottom-panel__body {
+  position: relative;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-}
-
-.bottom-panel__body--terminal,
-.bottom-panel__body--review {
   overflow: hidden;
   background: var(--app-bg);
 }
 
-.bottom-panel__body--review .desktop-review-panel {
+.bottom-panel .desktop-workspace-panel.desktop-workspace-panel--bottom-embedded {
+  width: 100%;
+  height: 100%;
+  padding-top: 0;
+  border-left: 0;
+}
+
+.bottom-panel .desktop-workspace-panel--bottom-embedded .desktop-review-panel {
   height: 100%;
   border-right: 0;
 }

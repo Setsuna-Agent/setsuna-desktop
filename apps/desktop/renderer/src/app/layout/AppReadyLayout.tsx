@@ -221,7 +221,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         />
       )}
       toolbarTitle={toolbarTitle}
-      workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar activeProject={activeWorkspace} projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
+      workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}
       className={shellClassName}
       actions={activeView === 'chat' ? (
@@ -242,7 +242,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           <AppTopbarActions
             activeView={activeView}
             updater={controller.updater}
-            bottomTerminalPanelOpen={workspacePanels.bottomTerminalPanelOpen}
+            bottomPanelVisible={workspacePanels.bottomPanelVisible}
             conversationOverviewAvailable={Boolean(runtime.currentThread)}
             conversationOverviewVisible={conversationOverviewRendered}
             sidePanelVisible={workspacePanels.sidePanelVisible}

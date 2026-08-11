@@ -163,6 +163,25 @@ export const reorderPanelInSlotState = (
   if (panels.every((item, index) => item.id === slot.panels[index]?.id)) return slot;
   return { ...slot, panels };
 };
+
+export const movePanelBetweenSlotStates = (
+  source: DesktopPanelSlotState,
+  target: DesktopPanelSlotState,
+  panelId: string,
+  targetPanelId?: string | null,
+  placement: DesktopPanelDropPlacement = 'after',
+): { source: DesktopPanelSlotState; target: DesktopPanelSlotState } => {
+  const panel = source.panels.find((item) => item.id === panelId);
+  if (!panel) return { source, target };
+
+  const nextSource = removePanelFromSlotState(source, panelId);
+  let nextTarget = addPanelToSlotState(target, panel);
+  if (targetPanelId && targetPanelId !== panelId) {
+    nextTarget = reorderPanelInSlotState(nextTarget, panel.id, targetPanelId, placement);
+  }
+  return { source: nextSource, target: nextTarget };
+};
+
 export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: string): DesktopPanelSlotState => {
   const panelIndex = slot.panels.findIndex((panel) => panel.id === panelId);
   if (panelIndex < 0) return slot;

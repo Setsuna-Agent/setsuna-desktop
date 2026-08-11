@@ -7,6 +7,7 @@ import {
 import { capabilitiesEnUS, capabilitiesZhCN } from './capabilitiesMessages.js';
 import { dataRootCleanupEnUS, dataRootCleanupZhCN } from './dataRootCleanupMessages.js';
 import { runtimeActivityEnUS, runtimeActivityZhCN } from './runtimeActivityMessages.js';
+import { settingsNavigationEnUS, settingsNavigationZhCN } from './settingsNavigationMessages.js';
 import { keyboardShortcutEnUS, keyboardShortcutZhCN } from './keyboardShortcutMessages.js';
 import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
 import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
@@ -577,6 +578,7 @@ const zhCN = {
   'topbar.openBottomTerminal': '打开底栏终端',
   'topbar.collapseRightSidebar': '收起右侧栏',
   ...runtimeActivityZhCN,
+  ...settingsNavigationZhCN,
   ...keyboardShortcutZhCN,
   ...workspaceZhCN,
   ...capabilitiesZhCN,
@@ -1153,6 +1155,7 @@ const enUS = {
   'topbar.openBottomTerminal': 'Open terminal in bottom panel',
   'topbar.collapseRightSidebar': 'Collapse right sidebar',
   ...runtimeActivityEnUS,
+  ...settingsNavigationEnUS,
   ...keyboardShortcutEnUS,
   ...workspaceEnUS,
   ...capabilitiesEnUS,

@@ -5,6 +5,7 @@ import {
 } from '../../chat/hooks/useChatComposerSession.js';
 import {
   createEmptyPanelSlot,
+  type DesktopPanelSlot,
   type DesktopPanelSlotState,
   type DesktopPanelTab,
 } from '../model.js';
@@ -20,6 +21,7 @@ export type DesktopWorkspacePanelLayouts = Partial<Record<ChatComposerTargetIden
 export type DesktopWorkspaceBrowserPanelInstance = {
   active: boolean;
   panel: DesktopPanelTab;
+  placement: DesktopPanelSlot;
   targetIdentity: ChatComposerTargetIdentity;
 };
 
@@ -75,21 +77,28 @@ export function claimDesktopWorkspacePanelLayout(
 export function desktopWorkspaceBrowserPanelInstances(
   layouts: DesktopWorkspacePanelLayouts,
   activeIdentity: ChatComposerTargetIdentity,
-  activeLayoutVisible: boolean,
+  visibility: { bottomVisible: boolean; sideVisible: boolean },
 ): DesktopWorkspaceBrowserPanelInstance[] {
   const instances: DesktopWorkspaceBrowserPanelInstance[] = [];
   for (const targetIdentity of Object.keys(layouts) as ChatComposerTargetIdentity[]) {
     const layout = layouts[targetIdentity];
     if (!layout) continue;
-    for (const panel of layout.sidePanelSlot.panels) {
-      if (panel.type !== 'browser') continue;
-      instances.push({
-        active: targetIdentity === activeIdentity
-          && activeLayoutVisible
-          && layout.sidePanelSlot.active === panel.id,
-        panel,
-        targetIdentity,
-      });
+    const slots: Array<[DesktopPanelSlot, DesktopPanelSlotState]> = [
+      ['side', layout.sidePanelSlot],
+      ['bottom', layout.bottomPanelSlot],
+    ];
+    for (const [placement, slot] of slots) {
+      for (const panel of slot.panels) {
+        if (panel.type !== 'browser') continue;
+        instances.push({
+          active: targetIdentity === activeIdentity
+            && (placement === 'side' ? visibility.sideVisible : visibility.bottomVisible)
+            && slot.active === panel.id,
+          panel,
+          placement,
+          targetIdentity,
+        });
+      }
     }
   }
   return instances;

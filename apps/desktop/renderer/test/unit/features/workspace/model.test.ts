@@ -12,6 +12,7 @@ import {
   createSideChatPanel,
   createWorkspaceOverviewPanel,
   findDesktopPanelLocationByType,
+  movePanelBetweenSlotStates,
   removePanelFromSlotState,
   reorderPanelInSlotState,
   updatePanelInSlotState,
@@ -153,6 +154,33 @@ describe('desktop workspace panel model', () => {
     const next = reorderPanelInSlotState(slot, 'review', 'file:src/main.ts', 'after');
 
     expect(next.panels.map((panel) => panel.id)).toEqual(['files', 'file:src/main.ts', 'review']);
+  });
+
+  it('moves a panel between side and bottom slots at the requested position', () => {
+    const terminal = { id: 'terminal-1', type: 'terminal' as const, title: '终端' };
+    const source = { active: terminal.id, panels: [createFilesPanel(), terminal] };
+    const target = { active: 'review', panels: [createReviewPanel(), createFilePanel('src/main.ts')] };
+
+    const moved = movePanelBetweenSlotStates(source, target, terminal.id, 'file:src/main.ts', 'before');
+
+    expect(moved.source).toEqual({ active: 'files', panels: [createFilesPanel()] });
+    expect(moved.target.active).toBe(terminal.id);
+    expect(moved.target.panels.map((panel) => panel.id)).toEqual(['review', terminal.id, 'file:src/main.ts']);
+  });
+
+  it('merges a legacy duplicate singleton while moving it between slots', () => {
+    const review = createReviewPanel();
+    const moved = movePanelBetweenSlotStates(
+      { active: review.id, panels: [review] },
+      { active: 'files', panels: [review, createFilesPanel()] },
+      review.id,
+      'files',
+      'after',
+    );
+
+    expect(moved.source).toEqual({ active: null, panels: [] });
+    expect(moved.target.panels.map((panel) => panel.id)).toEqual(['files', 'review']);
+    expect(moved.target.active).toBe(review.id);
   });
 
   it('keeps the same slot object when the requested order is unchanged', () => {

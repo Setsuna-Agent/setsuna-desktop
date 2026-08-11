@@ -1120,6 +1120,22 @@
   min-width: 0;
 }
 
+.runtime-access-mode-menu__item--select {
+  grid-template-columns: 16px minmax(0, 1fr);
+  width: 100%;
+}
+
+.runtime-access-mode-menu-root--select .sd-select-menu__option {
+  min-height: 52px;
+  padding: 7px 9px;
+}
+
+.runtime-access-mode-menu-root--select .sd-select-menu__option > span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .runtime-access-mode-menu__icon {
   margin-top: 2px;
   color: var(--app-text-muted);
@@ -1172,6 +1188,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.runtime-access-mode-trigger__value {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
 }
 
 .runtime-access-mode-trigger--full-access :where(

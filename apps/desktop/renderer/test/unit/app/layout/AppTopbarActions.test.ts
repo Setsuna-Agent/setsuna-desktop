@@ -26,20 +26,31 @@ describe('AppTopbarActions', () => {
     expect(html).toContain('aria-pressed="false"');
   });
 
+  it('底栏打开时使用底部面板图标和选中背景', () => {
+    const html = renderActions({ activeView: 'chat', bottomPanelVisible: true, sidePanelVisible: false });
+    const bottomPanelButton = html.match(/<button aria-label="关闭底栏"[^>]*>/)?.[0] ?? '';
+
+    expect(bottomPanelButton).toContain('aria-pressed="true"');
+    expect(bottomPanelButton).toContain('is-active');
+    expect(html).toContain('app-panel-placement-icon--bottom');
+  });
+
 });
 
 function renderActions({
   activeView,
+  bottomPanelVisible = false,
   conversationOverviewVisible = true,
   sidePanelVisible,
 }: {
   activeView: 'chat' | 'capabilities' | 'settings';
+  bottomPanelVisible?: boolean;
   conversationOverviewVisible?: boolean;
   sidePanelVisible: boolean;
 }): string {
   return renderToStaticMarkup(createElement(AppTopbarActions, {
     activeView,
-    bottomTerminalPanelOpen: false,
+    bottomPanelVisible,
     conversationOverviewAvailable: true,
     conversationOverviewVisible,
     onToggleConversationOverview: vi.fn(),

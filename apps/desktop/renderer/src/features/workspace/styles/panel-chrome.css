@@ -1,7 +1,13 @@
 .desktop-panel-chrome {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  width: 100%;
+  height: var(--desktop-workspace-toolbar-height);
   min-width: 0;
   min-height: 0;
+  padding: 7px 8px 5px;
   border-bottom: 0;
+  background: transparent;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__heading {
@@ -207,6 +213,8 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  gap: 4px;
+  margin-left: auto;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__heading-action,
@@ -289,8 +297,28 @@
   user-select: none;
 }
 
+/* Hide the source contents without hiding its pointer-capture node, preserving a stable empty slot. */
 .desktop-panel-chrome .chat-file-review-panel__title.is-dragging {
-  opacity: 0.24;
+  color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title.is-dragging > .chat-file-review-panel__tab-button,
+.desktop-panel-chrome .chat-file-review-panel__title.is-dragging > .chat-file-review-panel__tab-close {
+  visibility: hidden;
+}
+
+.desktop-panel-chrome .chat-file-review-panel__title.is-dragging.is-cross-slot-targeting {
+  display: none;
+}
+
+.desktop-panel-tab-drop-placeholder {
+  flex: 0 0 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title--drag-preview {
@@ -299,12 +327,10 @@
   display: inline-flex;
   min-width: 0;
   max-width: none;
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-surface) 94%, var(--app-text) 6%);
   box-shadow: var(--app-shadow-popover);
-  opacity: 0.98;
   pointer-events: none;
   cursor: grabbing;
+  will-change: transform;
   animation: none;
 }
 
@@ -315,4 +341,8 @@
 
 :root[data-theme='dark'] .desktop-panel-chrome .chat-file-review-panel__tab-close {
   background: #737373;
+}
+
+:root[data-theme='dark'] .desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
+  background: #8a8a8a;
 }

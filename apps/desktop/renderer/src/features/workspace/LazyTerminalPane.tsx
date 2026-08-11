@@ -8,7 +8,13 @@ const TerminalPane = lazy(async () => {
   return { default: module.TerminalPane };
 });
 
-export function LazyTerminalPane({ session }: { session: DesktopTerminalSession | null }) {
+export function LazyTerminalPane({
+  session,
+  onTitleChange,
+}: {
+  session: DesktopTerminalSession | null;
+  onTitleChange?: (title: string) => void;
+}) {
   const { t } = useI18n();
   return (
     <Suspense fallback={(
@@ -17,7 +23,7 @@ export function LazyTerminalPane({ session }: { session: DesktopTerminalSession 
         <span>{t('workspace.terminal.starting')}</span>
       </div>
     )}>
-      <TerminalPane session={session} />
+      <TerminalPane session={session} onTitleChange={onTitleChange} />
     </Suspense>
   );
 }

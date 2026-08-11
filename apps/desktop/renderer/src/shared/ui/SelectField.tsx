@@ -30,12 +30,15 @@ type SelectFieldProps = {
   className?: string;
   disabled?: boolean;
   id?: string;
+  menuClassName?: string;
+  menuMinWidth?: number;
   name?: string;
-  onValueChange: (value: string) => void;
+  onValueChange: (value: string) => boolean | void;
   required?: boolean;
   style?: CSSProperties;
   title?: string;
   value: string;
+  valueContent?: ReactNode;
 };
 
 export type SelectMenuPosition = {
@@ -47,6 +50,7 @@ export type SelectMenuPosition = {
 
 type SelectMenuViewport = {
   height: number;
+  minWidth?: number;
   scaleInverse?: number;
   width: number;
 };
@@ -62,12 +66,15 @@ export function SelectField({
   className = '',
   disabled = false,
   id,
+  menuClassName = '',
+  menuMinWidth,
   name,
   onValueChange,
   required = false,
   style,
   title,
   value,
+  valueContent,
 }: SelectFieldProps) {
   const options = useMemo(() => optionElements(children), [children]);
   const selectedIndex = options.findIndex((option) => option.value === value);
@@ -84,10 +91,11 @@ export function SelectField({
     if (!trigger) return;
     setMenuPosition(selectMenuPosition(trigger.getBoundingClientRect(), options.length, {
       height: window.innerHeight,
+      minWidth: menuMinWidth,
       scaleInverse: pageScaleInverse(),
       width: window.innerWidth,
     }));
-  }, [options.length]);
+  }, [menuMinWidth, options.length]);
 
   const openMenu = useCallback((preferredIndex = selectedIndex) => {
     if (disabled || options.length === 0) return;
@@ -103,8 +111,8 @@ export function SelectField({
 
   const selectOption = useCallback((option: SelectOption) => {
     if (option.disabled) return;
-    if (option.value !== value) onValueChange(option.value);
-    closeMenu(true);
+    const restoreFocus = option.value === value || onValueChange(option.value) !== false;
+    closeMenu(restoreFocus);
   }, [closeMenu, onValueChange, value]);
 
   useEffect(() => {
@@ -167,7 +175,7 @@ export function SelectField({
         ref={triggerRef}
         id={id}
         type="button"
-        className={`sd-field sd-select-field ${open ? 'is-open' : ''} ${className}`}
+        className={['sd-field', 'sd-select-field', open ? 'is-open' : '', className].filter(Boolean).join(' ')}
         aria-activedescendant={open && activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined}
         aria-controls={open ? listboxId : undefined}
         aria-expanded={open}
@@ -180,7 +188,7 @@ export function SelectField({
         onClick={() => open ? closeMenu() : openMenu()}
         onKeyDown={onKeyDown}
       >
-        <span className="sd-select-field__value">{selectedOption?.label ?? ''}</span>
+        <span className="sd-select-field__value">{valueContent ?? selectedOption?.label ?? ''}</span>
         <ChevronDown className="sd-select-field__chevron" size={15} aria-hidden="true" />
       </button>
       {name || required ? (
@@ -214,7 +222,7 @@ export function SelectField({
           <div
             ref={menuRef}
             id={listboxId}
-            className="sd-select-menu"
+            className={`sd-select-menu${menuClassName ? ` ${menuClassName}` : ''}`}
             role="listbox"
             aria-label={ariaLabel}
             aria-labelledby={ariaLabelledBy}
@@ -273,7 +281,7 @@ export function selectMenuPosition(
   const opensAbove = spaceBelow < Math.min(desiredHeight, 160) && spaceAbove > spaceBelow;
   const availableHeight = Math.max(88, (opensAbove ? spaceAbove : spaceBelow) - MENU_GAP);
   const maxHeight = Math.min(MENU_MAX_HEIGHT, availableHeight);
-  const width = Math.min(Math.max(rectWidth, 160), viewportWidth - VIEWPORT_GUTTER * 2);
+  const width = Math.min(Math.max(rectWidth, viewport.minWidth ?? 160), viewportWidth - VIEWPORT_GUTTER * 2);
   const left = Math.min(
     Math.max(VIEWPORT_GUTTER, rectLeft),
     viewportWidth - width - VIEWPORT_GUTTER,

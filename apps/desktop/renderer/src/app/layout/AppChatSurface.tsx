@@ -41,9 +41,11 @@ import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopPanelDropPlacement,
+  DesktopPanelSlot,
   DesktopPanelSlotState,
   DesktopPanelTab,
   DesktopPanelTabPatch,
+  DesktopPanelType,
   DesktopReviewFocusRequest,
   DesktopReviewLoadOptions,
   DesktopReviewState,
@@ -51,7 +53,6 @@ import type {
   DesktopWorkspaceApp,
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
-import { workspaceFileMentionEntry } from '../../features/workspace/workspaceFileMention.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
   ChatSkillSelectionRequest,
@@ -103,6 +104,7 @@ export function AppChatSurface({
   fileDraft,
   filePreview,
   plugins,
+  panelLauncherTypes,
   skillSelectionRequest,
   reviewError,
   reviewFocusRequest,
@@ -139,8 +141,7 @@ export function AppChatSurface({
   onOpenFileWithApp,
   onSelectModel,
   onSearchProjectEntries,
-  onOpenBottomReviewPanel,
-  onOpenBottomTerminalPanel,
+  onOpenBottomPanel,
   onOpenBrowser,
   onOpenConversationDebug,
   onOpenMarkdownWebLink,
@@ -154,6 +155,7 @@ export function AppChatSurface({
   onOpenEntry,
   onOpenProjectFile,
   onOpenWorkspaceDirectory,
+  onMoveBottomPanel,
   onReorderBottomPanels,
   onReloadThreads,
   onReviewRefresh,
@@ -167,6 +169,7 @@ export function AppChatSurface({
   onTerminalResizeStep,
   onTerminalResizeStart,
   onUpdateBrowserPanel,
+  onUpdateDesktopPanel,
   terminalHeight,
   terminalMaxHeight,
   terminalMinHeight,
@@ -195,6 +198,7 @@ export function AppChatSurface({
   fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   plugins: RuntimePluginSummary[];
+  panelLauncherTypes: DesktopPanelType[];
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   reviewError: string | null;
   reviewFocusRequest: DesktopReviewFocusRequest | null;
@@ -231,8 +235,7 @@ export function AppChatSurface({
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
-  onOpenBottomReviewPanel: () => void;
-  onOpenBottomTerminalPanel: () => void;
+  onOpenBottomPanel: (panel: DesktopPanelType) => void;
   onOpenBrowser: (url?: string) => void;
   onOpenConversationDebug: () => void;
   onOpenMarkdownWebLink: (url: string) => void;
@@ -246,6 +249,12 @@ export function AppChatSurface({
   onOpenEntry: (entry: WorkspaceEntry) => void;
   onOpenProjectFile: (filePath: string) => void;
   onOpenWorkspaceDirectory: (directoryPath: string) => void;
+  onMoveBottomPanel: (
+    panelId: string,
+    targetPlacement: DesktopPanelSlot,
+    targetPanelId: string | null,
+    placement: DesktopPanelDropPlacement,
+  ) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReloadThreads: () => Promise<unknown>;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
@@ -259,6 +268,7 @@ export function AppChatSurface({
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onUpdateBrowserPanel: BrowserPanelMetadataHandler;
+  onUpdateDesktopPanel: (panelId: string, patch: DesktopPanelTabPatch) => void;
   terminalHeight: number;
   terminalMaxHeight: number;
   terminalMinHeight: number;
@@ -288,10 +298,6 @@ export function AppChatSurface({
       request: { entry, requestId: workspaceMentionRequestIdRef.current },
     });
   }, [composerKey]);
-  const requestWorkspaceFileMention = useCallback(
-    (filePath: string) => requestWorkspaceMention(workspaceFileMentionEntry(filePath)),
-    [requestWorkspaceMention],
-  );
   const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
     setScopedWorkspaceMentionRequest((current) => current?.request.requestId === requestId ? null : current);
   }, []);
@@ -300,6 +306,52 @@ export function AppChatSurface({
     [currentThread?.messages],
   );
   const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
+  const chatPanelInstances = [
+    ...sidePanelSlot.panels
+      .filter((panel) => panel.type === 'chat')
+      .map((panel) => ({ panel, placement: 'side' as const })),
+    ...bottomPanelSlot.panels
+      .filter((panel) => panel.type === 'chat')
+      .map((panel) => ({ panel, placement: 'bottom' as const })),
+  ];
+  const activeDebugPanel = sidePanelVisible && sideActivePanel?.type === 'conversation-debug'
+    ? { panel: sideActivePanel, placement: 'side' as const }
+    : bottomPanelVisible && bottomActivePanel?.type === 'conversation-debug'
+      ? { panel: bottomActivePanel, placement: 'bottom' as const }
+      : null;
+  const workspacePanelProps = {
+    activeProject: activeWorkspace,
+    fileDraft,
+    filePreview,
+    latestReviewSummary,
+    reviewError,
+    reviewFocusRequest,
+    reviewLoading,
+    reviewState,
+    selectedWorkspaceApp,
+    workspaceApps,
+    onAddFileToConversation: requestWorkspaceMention,
+    onCopyFilePath,
+    onExternalOpenFile,
+    onOpenFileWithApp,
+    onSearchProjectEntries,
+    onOpenEntry,
+    onOpenProjectFile,
+    onOpenFilesPanel,
+    onOpenBrowser,
+    onOpenConversationDebug: runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined,
+    onOpenReviewPanel: onOpenFileReviewPanel,
+    onOpenSideChat,
+    onOpenTerminalPanel: onOpenSideTerminalPanel,
+    onTerminalTitleChange: (panelId: string, title: string) => onUpdateDesktopPanel(panelId, { title }),
+    onReviewRefresh,
+    onRevealFile,
+    onResizeStep: onWorkspaceResizeStep,
+    onResizeStart: onWorkspaceResizeStart,
+    resizeMax: workspaceMaxWidth,
+    resizeMin: workspaceMinWidth,
+    resizeValue: workspaceWidth,
+  } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'activePanel' | 'placement' | 'terminalSession'>;
 
   return (
     <WorkspaceGitCommitProvider
@@ -368,14 +420,56 @@ export function AppChatSurface({
             onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
           />
         </MarkdownNavigationProvider>
-        {sidePanelSlot.panels.filter((panel) => panel.type === 'chat').map((panel) => (
+        {sidePanelVisible && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
+          <Suspense fallback={null}>
+            <WorkspacePanel
+              {...workspacePanelProps}
+              activePanel={sideActivePanel}
+              placement="side"
+              terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
+            />
+          </Suspense>
+        ) : null}
+        {bottomPanelVisible && bottomActivePanel ? (
+          <Suspense fallback={null}>
+            <BottomToolsPanel
+              activePanel={bottomActivePanel}
+              availablePanelTypes={panelLauncherTypes}
+              panels={bottomPanelSlot.panels}
+              onActivatePanel={onActivateBottomPanel}
+              onClosePanel={onCloseBottomPanel}
+              onCloseSlot={onCloseBottomSlot}
+              onMovePanel={onMoveBottomPanel}
+              onOpenPanel={onOpenBottomPanel}
+              onReorderPanels={onReorderBottomPanels}
+              onResizeStep={onTerminalResizeStep}
+              onResizeStart={onTerminalResizeStart}
+              resizeMax={terminalMaxHeight}
+              resizeMin={terminalMinHeight}
+              resizeValue={terminalHeight}
+            >
+              {!isFloatingPanelType(bottomActivePanel.type) ? (
+                <WorkspacePanel
+                  {...workspacePanelProps}
+                  activePanel={bottomActivePanel}
+                  placement="bottom"
+                  terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
+                />
+              ) : null}
+            </BottomToolsPanel>
+          </Suspense>
+        ) : null}
+        {chatPanelInstances.map(({ panel, placement }) => (
           <SideChatPanel
             activeProjectId={activeProject?.id ?? null}
             activeWorkspace={activeWorkspace}
             client={runtimeClient}
             config={config}
-            hidden={!sidePanelVisible || sideActivePanel?.id !== panel.id}
+            hidden={placement === 'side'
+              ? !sidePanelVisible || sideActivePanel?.id !== panel.id
+              : !bottomPanelVisible || bottomActivePanel?.id !== panel.id}
             key={panel.id}
+            placement={placement}
             plugins={plugins}
             selectedWorkspaceApp={selectedWorkspaceApp}
             skills={skills}
@@ -411,92 +505,18 @@ export function AppChatSurface({
             />
           </Suspense>
         ))}
-        {sidePanelVisible && sideActivePanel && sideActivePanel.type !== 'browser' && sideActivePanel.type !== 'chat' ? (
-          sideActivePanel.type === 'conversation-debug' ? (
-            runtimeDeveloperFeaturesEnabled(config) ? (
-              <Suspense fallback={null}>
-                <ConversationDebugPanel
-                  client={runtimeClient}
-                  thread={currentThread}
-                  onResizeStep={onWorkspaceResizeStep}
-                  onResizeStart={onWorkspaceResizeStart}
-                  resizeMax={workspaceMaxWidth}
-                  resizeMin={workspaceMinWidth}
-                  resizeValue={workspaceWidth}
-                />
-              </Suspense>
-            ) : null
-          ) : (
-            <Suspense fallback={null}>
-              <WorkspacePanel
-                activePanel={sideActivePanel}
-                activeProject={activeWorkspace}
-                fileDraft={fileDraft}
-                filePreview={filePreview}
-                reviewError={reviewError}
-                reviewFocusRequest={reviewFocusRequest}
-                latestReviewSummary={latestReviewSummary}
-                reviewLoading={reviewLoading}
-                reviewState={reviewState}
-                selectedWorkspaceApp={selectedWorkspaceApp}
-                workspaceApps={workspaceApps}
-                terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-                onAddFileToConversation={requestWorkspaceMention}
-                onCopyFilePath={onCopyFilePath}
-                onExternalOpenFile={onExternalOpenFile}
-                onOpenFileWithApp={onOpenFileWithApp}
-                onSearchProjectEntries={onSearchProjectEntries}
-                onOpenEntry={onOpenEntry}
-                onOpenProjectFile={onOpenProjectFile}
-                onOpenFilesPanel={onOpenFilesPanel}
-                onOpenBrowser={onOpenBrowser}
-                onOpenConversationDebug={runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined}
-                onOpenReviewPanel={onOpenFileReviewPanel}
-                onOpenSideChat={onOpenSideChat}
-                onOpenTerminalPanel={onOpenSideTerminalPanel}
-                onReviewRefresh={onReviewRefresh}
-                onRevealFile={onRevealFile}
-                onResizeStep={onWorkspaceResizeStep}
-                onResizeStart={onWorkspaceResizeStart}
-                resizeMax={workspaceMaxWidth}
-                resizeMin={workspaceMinWidth}
-                resizeValue={workspaceWidth}
-              />
-            </Suspense>
-          )
-        ) : null}
-        {bottomPanelVisible && bottomActivePanel ? (
+        {activeDebugPanel && runtimeDeveloperFeaturesEnabled(config) ? (
           <Suspense fallback={null}>
-            <BottomToolsPanel
-              activePanel={bottomActivePanel}
-              panels={bottomPanelSlot.panels}
-              reviewError={reviewError}
-              reviewFocusRequest={reviewFocusRequest}
-              latestReviewSummary={latestReviewSummary}
-              reviewLoading={reviewLoading}
-              reviewState={reviewState}
-              selectedWorkspaceApp={selectedWorkspaceApp}
-              workspaceApps={workspaceApps}
-              activeProject={activeWorkspace}
-              terminalSession={terminalSessionsByPanelId[bottomActivePanel.id] ?? null}
-              onAddFileToConversation={requestWorkspaceFileMention}
-              onActivatePanel={onActivateBottomPanel}
-              onClosePanel={onCloseBottomPanel}
-              onCloseSlot={onCloseBottomSlot}
-              onCopyFilePath={onCopyFilePath}
-              onExternalOpenFile={onExternalOpenFile}
-              onOpenFileWithApp={onOpenFileWithApp}
-              onOpenProjectFile={onOpenProjectFile}
-              onOpenReviewPanel={onOpenBottomReviewPanel}
-              onOpenTerminalPanel={onOpenBottomTerminalPanel}
-              onReorderPanels={onReorderBottomPanels}
-              onReviewRefresh={onReviewRefresh}
-              onRevealFile={onRevealFile}
-              onResizeStep={onTerminalResizeStep}
-              onResizeStart={onTerminalResizeStart}
-              resizeMax={terminalMaxHeight}
-              resizeMin={terminalMinHeight}
-              resizeValue={terminalHeight}
+            <ConversationDebugPanel
+              client={runtimeClient}
+              key={activeDebugPanel.panel.id}
+              placement={activeDebugPanel.placement}
+              thread={currentThread}
+              onResizeStep={onWorkspaceResizeStep}
+              onResizeStart={onWorkspaceResizeStart}
+              resizeMax={workspaceMaxWidth}
+              resizeMin={workspaceMinWidth}
+              resizeValue={workspaceWidth}
             />
           </Suspense>
         ) : null}
@@ -522,7 +542,12 @@ function PersistentBrowserPanel({
       {...panelProps}
       hidden={!instance.active}
       panel={instance.panel}
+      placement={instance.placement}
       onPanelMetadataChange={updatePanelMetadata}
     />
   );
+}
+
+function isFloatingPanelType(type: DesktopPanelType): boolean {
+  return type === 'browser' || type === 'chat' || type === 'conversation-debug';
 }

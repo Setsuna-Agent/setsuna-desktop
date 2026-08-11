@@ -1,18 +1,14 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { PanelRight, Terminal } from 'lucide-react';
 import { WorkspaceTopbar } from '../../features/workspace/WorkspaceTopbar.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
-import type { DesktopPanelType } from '../../features/workspace/model.js';
+import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 
 export function AppWorkspaceToolbar({
-  activeProject,
   projectWorkspace,
   workspacePanels,
 }: {
-  activeProject?: WorkspaceProject;
   projectWorkspace: ProjectWorkspaceState;
   workspacePanels: DesktopWorkspacePanelsState;
 }) {
@@ -23,31 +19,19 @@ export function AppWorkspaceToolbar({
   if (activePanel?.type === 'overview') {
     return (
       <WorkspaceOverviewToolbar
-        terminalOpen={workspacePanels.bottomTerminalPanelOpen}
+        bottomPanelOpen={workspacePanels.bottomPanelVisible}
         onToggleTerminal={workspacePanels.toggleBottomTerminal}
         onToggleWorkspace={workspacePanels.toggleSidePanel}
       />
     );
   }
 
-  const sideAvailablePanelTypes = [
-    'chat',
-    'browser',
-    workspacePanels.developerFeaturesEnabled
-      && !sidePanels.some((panel) => panel.type === 'conversation-debug')
-      ? 'conversation-debug'
-      : null,
-    activeProject && !sidePanels.some((panel) => panel.type === 'review') ? 'review' : null,
-    activeProject?.path && !sidePanels.some((panel) => panel.type === 'files') ? 'files' : null,
-    'terminal',
-  ].filter(Boolean) as DesktopPanelType[];
-
   return (
     <WorkspaceTopbar
       activePanelId={workspacePanels.sidePanelSlot.active}
-      availablePanelTypes={sideAvailablePanelTypes}
+      availablePanelTypes={workspacePanels.panelLauncherTypes}
       panels={workspacePanels.sidePanelSlot.panels}
-      terminalOpen={workspacePanels.bottomTerminalPanelOpen}
+      bottomPanelOpen={workspacePanels.bottomPanelVisible}
       onClosePanel={(panelId) => workspacePanels.closeDesktopPanelItem('side', panelId)}
       onOpenBrowser={() => {
         workspacePanels.openBrowserPanel();
@@ -74,6 +58,9 @@ export function AppWorkspaceToolbar({
         workspacePanels.closeWorkspaceMenus();
         workspacePanels.openDesktopPanel('side', 'terminal');
       }}
+      onMovePanel={(panelId, targetPlacement, targetPanelId, placement) => {
+        workspacePanels.moveDesktopPanel('side', panelId, targetPlacement, targetPanelId, placement);
+      }}
       onReorderPanels={(panelId, targetPanelId, placement) => {
         workspacePanels.reorderDesktopPanel('side', panelId, targetPanelId, placement);
       }}
@@ -93,11 +80,11 @@ export function AppWorkspaceToolbar({
 }
 
 function WorkspaceOverviewToolbar({
-  terminalOpen,
+  bottomPanelOpen,
   onToggleTerminal,
   onToggleWorkspace,
 }: {
-  terminalOpen: boolean;
+  bottomPanelOpen: boolean;
   onToggleTerminal: () => void;
   onToggleWorkspace: () => void;
 }) {
@@ -111,32 +98,34 @@ function WorkspaceOverviewToolbar({
           <span className="chat-file-review-panel__heading-actions">
             <ShortcutTooltip
               commandId="layout.toggleTerminal"
-              label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+              label={bottomPanelOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
             >
               <button
                 className={[
                   'app-shell-icon-control',
                   'chat-file-review-panel__close',
                   'chat-file-review-panel__terminal-action',
-                  terminalOpen ? 'chat-file-review-panel__close--active' : '',
+                  bottomPanelOpen ? 'chat-file-review-panel__close--active' : '',
                 ]
                   .filter(Boolean)
                   .join(' ')}
                 type="button"
-                aria-label={terminalOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+                aria-label={bottomPanelOpen ? t('topbar.closeBottom') : t('topbar.openBottomTerminal')}
+                aria-pressed={bottomPanelOpen}
                 onClick={onToggleTerminal}
               >
-                <Terminal size={14} />
+                <PanelPlacementIcon placement="bottom" />
               </button>
             </ShortcutTooltip>
             <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('topbar.collapseRightSidebar')}>
               <button
-                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close"
+                className="app-shell-icon-control chat-file-review-panel__close chat-file-review-panel__panel-close chat-file-review-panel__close--active"
                 type="button"
                 aria-label={t('topbar.collapseRightSidebar')}
+                aria-pressed={true}
                 onClick={onToggleWorkspace}
               >
-                <PanelRight size={14} />
+                <PanelPlacementIcon placement="side" />
               </button>
             </ShortcutTooltip>
           </span>

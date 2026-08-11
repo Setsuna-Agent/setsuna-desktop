@@ -25,7 +25,7 @@ import {
   resolveBrowserFaviconUrl,
   resolveBrowserFaviconUrls,
 } from './browserFaviconCoordinator.js';
-import { DEFAULT_BROWSER_URL, type DesktopPanelTab, type DesktopPanelTabPatch } from './model.js';
+import { DEFAULT_BROWSER_URL, type DesktopPanelSlot, type DesktopPanelTab, type DesktopPanelTabPatch } from './model.js';
 import { useBrowserScreenshot, type BrowserScreenshotAttachmentHandler } from './useBrowserScreenshot.js';
 
 export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
@@ -52,6 +52,7 @@ type BrowserTab = {
 export function BrowserPanel({
   hidden,
   panel,
+  placement = 'side',
   onPanelMetadataChange,
   onResizeStep,
   onResizeStart,
@@ -62,6 +63,7 @@ export function BrowserPanel({
 }: {
   hidden: boolean;
   panel: DesktopPanelTab;
+  placement?: DesktopPanelSlot;
   onPanelMetadataChange: (panelId: string, patch: DesktopPanelTabPatch) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -237,8 +239,14 @@ export function BrowserPanel({
   };
 
   return (
-    <aside className="desktop-workspace-panel desktop-browser-panel" aria-label={t('workspace.browser.label')} hidden={hidden}>
-      <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
+    <aside
+      className={`desktop-workspace-panel desktop-browser-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
+      aria-label={t('workspace.browser.label')}
+      hidden={hidden}
+    >
+      {placement === 'side' ? (
+        <WorkspaceResizeHandle max={resizeMax} min={resizeMin} value={resizeValue} onResizeStart={onResizeStart} onResizeStep={onResizeStep} />
+      ) : null}
       <div className="desktop-browser-navigation">
         <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoBack} aria-label={t('workspace.browser.back')} onClick={() => navigateHistory('back')}>
           <ArrowLeft size={14} />
