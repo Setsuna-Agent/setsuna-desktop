@@ -377,29 +377,54 @@ fn normalized_remote_subnet(value: &str) -> Option<String> {
             .filter(|prefix| *prefix <= 128)
             .or_else(|| mask.parse::<Ipv6Addr>().ok().and_then(ipv6_mask_prefix)),
     }?;
-    Some(format!("{address}/{prefix}"))
+    Some(normalized_subnet_range(address, prefix))
+}
+
+fn normalized_subnet_range(address: IpAddr, prefix: u8) -> String {
+    match address {
+        IpAddr::V4(address) => {
+            let mask = ipv4_prefix_mask(prefix);
+            let start = u32::from(address) & mask;
+            let end = start | !mask;
+            format!("{}-{}", Ipv4Addr::from(start), Ipv4Addr::from(end))
+        }
+        IpAddr::V6(address) => {
+            let mask = ipv6_prefix_mask(prefix);
+            let start = u128::from(address) & mask;
+            let end = start | !mask;
+            format!("{}-{}", Ipv6Addr::from(start), Ipv6Addr::from(end))
+        }
+    }
 }
 
 fn ipv4_mask_prefix(mask: Ipv4Addr) -> Option<u8> {
     let mask = u32::from(mask);
     let prefix = mask.leading_ones();
-    let expected = if prefix == 0 {
-        0
-    } else {
-        u32::MAX << (32 - prefix)
-    };
+    let expected = ipv4_prefix_mask(prefix as u8);
     (mask == expected).then_some(prefix as u8)
 }
 
 fn ipv6_mask_prefix(mask: Ipv6Addr) -> Option<u8> {
     let mask = u128::from(mask);
     let prefix = mask.leading_ones();
-    let expected = if prefix == 0 {
+    let expected = ipv6_prefix_mask(prefix as u8);
+    (mask == expected).then_some(prefix as u8)
+}
+
+fn ipv4_prefix_mask(prefix: u8) -> u32 {
+    if prefix == 0 {
+        0
+    } else {
+        u32::MAX << (32 - prefix)
+    }
+}
+
+fn ipv6_prefix_mask(prefix: u8) -> u128 {
+    if prefix == 0 {
         0
     } else {
         u128::MAX << (128 - prefix)
-    };
-    (mask == expected).then_some(prefix as u8)
+    }
 }
 
 fn rule_specs<'a>(
@@ -528,14 +553,16 @@ mod tests {
 
     #[test]
     fn remote_address_read_back_accepts_singleton_range_serialization() {
+        let expected = normalized_remote_addresses("127.0.0.1,::");
         assert_eq!(
-            normalized_remote_addresses("127.0.0.1,::"),
+            expected,
             normalized_remote_addresses("::-::,127.0.0.1-127.0.0.1")
         );
-        assert_ne!(
-            normalized_remote_addresses("127.0.0.1,::"),
-            normalized_remote_addresses("127.0.0.1,::1")
+        assert_eq!(
+            expected,
+            normalized_remote_addresses("127.0.0.1/255.255.255.255,::/128")
         );
+        assert_ne!(expected, normalized_remote_addresses("127.0.0.1,::1"));
     }
 
     #[test]
