@@ -1,4 +1,5 @@
 use crate::protocol::{SandboxError, SandboxErrorCode};
+use std::net::IpAddr;
 use windows::core::{Interface, BSTR};
 use windows::Win32::Foundation::{S_OK, VARIANT_TRUE};
 use windows::Win32::NetworkManagement::WindowsFirewall::{
@@ -304,7 +305,9 @@ fn verify_configured_rule(rule: &INetFwRule3, spec: &RuleSpec<'_>) -> Result<(),
             "local-user={local_user:?}, expected={expected_local_user:?}"
         ));
     }
-    if remote_addresses.as_deref() != Some(spec.remote_addresses) {
+    if !remote_addresses.as_deref().is_some_and(|read_back| {
+        normalized_remote_addresses(read_back) == normalized_remote_addresses(spec.remote_addresses)
+    }) {
         mismatches.push(format!(
             "remote-addresses={remote_addresses:?}, expected={:?}",
             spec.remote_addresses
@@ -328,6 +331,32 @@ fn verify_configured_rule(rule: &INetFwRule3, spec: &RuleSpec<'_>) -> Result<(),
         ));
     }
     Ok(())
+}
+
+fn normalized_remote_addresses(value: &str) -> Vec<String> {
+    let mut tokens = value
+        .split(',')
+        .map(normalized_remote_address_token)
+        .collect::<Vec<_>>();
+    // Windows Firewall may reorder an address list when serializing it back.
+    tokens.sort_unstable();
+    tokens
+}
+
+fn normalized_remote_address_token(value: &str) -> String {
+    let value = value.trim();
+    if let Ok(address) = value.parse::<IpAddr>() {
+        let address = address.to_string();
+        // A singleton and a one-address range are the same firewall policy.
+        return format!("{address}-{address}");
+    }
+    if let Some((start, end)) = value.split_once('-') {
+        if let (Ok(start), Ok(end)) = (start.parse::<IpAddr>(), end.parse::<IpAddr>()) {
+            return format!("{start}-{end}");
+        }
+    }
+    // Preserve CIDR and firewall keyword syntax while comparing it case-insensitively.
+    value.to_ascii_lowercase()
 }
 
 fn rule_specs<'a>(
@@ -451,6 +480,18 @@ mod tests {
         assert_eq!(
             blocked_port_complement(61_080, 61_089).expect("valid range"),
             "1-61079,61090-65535"
+        );
+    }
+
+    #[test]
+    fn remote_address_read_back_accepts_singleton_range_serialization() {
+        assert_eq!(
+            normalized_remote_addresses("127.0.0.1,::"),
+            normalized_remote_addresses("::-::,127.0.0.1-127.0.0.1")
+        );
+        assert_ne!(
+            normalized_remote_addresses("127.0.0.1,::"),
+            normalized_remote_addresses("127.0.0.1,::1")
         );
     }
 }
