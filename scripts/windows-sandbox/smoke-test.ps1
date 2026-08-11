@@ -339,7 +339,7 @@ try {
     "(`"$nodeBinaryPath`" -e `"$nodeRealpathProbe`" >node-realpath-debug.txt 2>&1 && echo ready>node-realpath-status.txt || echo failed>node-realpath-status.txt)"
     'echo workspace-ok>offline-write.txt'
     'echo existing-ok>existing.txt'
-    '(curl.exe --version >curl-version.txt 2>&1 && echo started>curl-start.txt || echo failed>curl-start.txt)'
+    '(curl.exe --version >curl-version.txt 2>&1 & call echo %%ERRORLEVEL%%>curl-exit.txt)'
     "echo forbidden>$outsideFile 2>NUL"
     "echo forbidden>$externalFile 2>NUL"
     "(windows-network-probe.exe tcp 127.0.0.1 $offlinePort 2000 >NUL 2>&1 && echo reached>offline-loopback.txt || echo blocked>offline-loopback.txt)"
@@ -360,9 +360,10 @@ try {
   if ((Get-Content -LiteralPath (Join-Path $workspace 'identity-offline.txt') -Raw).Trim() -notmatch '\\setsunasboffline$') {
     throw 'Offline command did not run as SetsunaSbOffline'
   }
-  if ((Get-Content -LiteralPath (Join-Path $workspace 'curl-start.txt') -Raw).Trim() -ne 'started') {
+  $curlExit = (Get-Content -LiteralPath (Join-Path $workspace 'curl-exit.txt') -Raw).Trim()
+  if ($curlExit -ne '0') {
     $curlOutput = (@(Get-Content -LiteralPath (Join-Path $workspace 'curl-version.txt')) -join "`n").Trim()
-    throw "Windows curl.exe did not start under the restricted token: $curlOutput"
+    throw "Windows curl.exe did not start under the restricted token (exit $curlExit): $curlOutput"
   }
   $nodeRealpathStatus = (Get-Content -LiteralPath (Join-Path $workspace 'node-realpath-status.txt') -Raw).Trim()
   if (
