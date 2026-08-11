@@ -1,6 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyShellEnvironmentPatch } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
 import { classifyShellSessionFailure } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
+import { shellEnvironment } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-session-runtime.js';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('classifyShellSessionFailure', () => {
   it.each([
@@ -43,6 +48,42 @@ describe('applyShellEnvironmentPatch', () => {
       HTTP_PROXY: '',
       HTTPS_PROXY: '',
     });
+  });
+
+  it('replaces Windows environment keys case-insensitively', () => {
+    expect(applyShellEnvironmentPatch(
+      {
+        PATH: 'C:\\Windows\\System32',
+        all_proxy: 'http://stale-proxy.example',
+        no_proxy: 'localhost',
+      },
+      {
+        ALL_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+        NO_PROXY: '',
+      },
+      'win32',
+    )).toEqual({
+      PATH: 'C:\\Windows\\System32',
+      ALL_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+      NO_PROXY: '',
+    });
+  });
+});
+
+describe('shellEnvironment', () => {
+  it('preserves the non-secret curl configuration directory for sandbox commands', () => {
+    vi.stubEnv('CURL_HOME', 'C:\\Setsuna\\setsuna-path');
+
+    expect(shellEnvironment().CURL_HOME).toBe('C:\\Setsuna\\setsuna-path');
+  });
+
+  it('does not apply native sandbox trust metadata to a generic shell environment', () => {
+    vi.stubEnv('SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE', 'C:\\Setsuna\\trust\\system.pem');
+    vi.stubEnv('CURL_CA_BUNDLE', 'C:\\untrusted\\override.pem');
+
+    expect(shellEnvironment({
+      CURL_CA_BUNDLE: 'C:\\another\\override.pem',
+    }).CURL_CA_BUNDLE).toBe('C:\\another\\override.pem');
   });
 });
 

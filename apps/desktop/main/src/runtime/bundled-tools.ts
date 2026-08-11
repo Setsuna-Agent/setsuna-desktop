@@ -5,6 +5,7 @@ import { prependPathDirectory } from './desktop-environment.js';
 export const BUNDLED_RIPGREP_ENV = 'SETSUNA_DESKTOP_RG_PATH';
 export const REQUIRE_BUNDLED_RIPGREP_ENV = 'SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG';
 export const BUNDLED_WINDOWS_SANDBOX_ENV = 'SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH';
+export const BUNDLED_SANDBOX_CURL_ENV = 'SETSUNA_DESKTOP_SANDBOX_CURL_PATH';
 
 type ResolveDesktopRipgrepOptions = {
   appRoot: string;
@@ -16,6 +17,7 @@ type ResolveDesktopRipgrepOptions = {
 };
 
 type ResolveDesktopWindowsSandboxOptions = ResolveDesktopRipgrepOptions;
+type ResolveDesktopSandboxCurlOptions = ResolveDesktopRipgrepOptions;
 
 /** Resolve an absolute executable path so internal search never depends on shell lookup. */
 export function resolveDesktopRipgrep(options: ResolveDesktopRipgrepOptions): string | undefined {
@@ -104,6 +106,40 @@ export function installDesktopWindowsSandboxEnvironment(
   else delete env[BUNDLED_WINDOWS_SANDBOX_ENV];
 }
 
+/** Resolve the LibreSSL curl used by restricted Windows shell commands. */
+export function resolveDesktopSandboxCurl(
+  options: ResolveDesktopSandboxCurlOptions,
+): string | undefined {
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'win32') return undefined;
+  const arch = options.arch ?? process.arch;
+  if (arch !== 'x64') throw new Error(`Sandbox curl does not support architecture ${arch}.`);
+  const env = options.env ?? process.env;
+  const candidate = options.isPackaged
+    ? path.join(
+      options.resourcesPath ?? packagedResourcesPath(options.appRoot),
+      'setsuna-path',
+      'curl.exe',
+    )
+    : String(env[BUNDLED_SANDBOX_CURL_ENV] ?? '').trim() || path.join(
+      options.appRoot,
+      '.cache',
+      'sandbox-curl',
+      'win-x64',
+      'curl.exe',
+    );
+  if (!options.isPackaged && String(env[BUNDLED_SANDBOX_CURL_ENV] ?? '').trim()) {
+    if (!path.win32.isAbsolute(candidate) && !path.isAbsolute(candidate)) {
+      throw new Error(`${BUNDLED_SANDBOX_CURL_ENV} must be an absolute path.`);
+    }
+  }
+  if (!options.isPackaged && !isExecutable(candidate, platform)) return undefined;
+  const executable = requireExecutable(candidate, platform, 'Bundled sandbox curl');
+  requireFile(path.join(path.dirname(executable), 'curl-ca-bundle.crt'), 'Bundled sandbox curl CA bundle');
+  requireFile(path.join(path.dirname(executable), '_curlrc'), 'Bundled sandbox curl configuration');
+  return executable;
+}
+
 export function findExecutableOnPath(
   command: string,
   env: NodeJS.ProcessEnv,
@@ -135,6 +171,17 @@ function requireExecutable(value: string, platform: NodeJS.Platform, label: stri
   const resolved = path.resolve(value);
   if (!isExecutable(resolved, platform)) throw new Error(`${label} executable is missing or invalid: ${resolved}`);
   return resolved;
+}
+
+function requireFile(value: string, label: string): string {
+  const resolved = path.resolve(value);
+  try {
+    if (!statSync(resolved).isFile()) throw new Error('not a file');
+    accessSync(resolved, constants.F_OK);
+    return resolved;
+  } catch {
+    throw new Error(`${label} is missing or invalid: ${resolved}`);
+  }
 }
 
 function isExecutable(value: string, platform: NodeJS.Platform): boolean {

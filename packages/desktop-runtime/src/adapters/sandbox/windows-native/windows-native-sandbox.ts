@@ -79,6 +79,20 @@ export function clearWindowsNativeSandboxCapabilityCache(): void {
   cachedCapability = null;
 }
 
+/**
+ * Keep command control files outside the interactive user's private profile.
+ * Windows Temp lets ordinary accounts create and traverse randomized children
+ * without granting them directory listing or read access to another user's files.
+ */
+export function windowsNativeSandboxTempRoot(env: NodeJS.ProcessEnv = process.env): string {
+  const systemRoot = String(
+    env.SystemRoot ?? env.SYSTEMROOT ?? env.windir ?? env.WINDIR ?? '',
+  ).trim();
+  if (!systemRoot || !path.win32.isAbsolute(systemRoot)) return '';
+  const systemTemp = path.win32.join(systemRoot, 'Temp');
+  return existsSync(systemTemp) ? systemTemp : '';
+}
+
 export async function writeWindowsSandboxRequest(
   command: string,
   plan: SandboxExecutionPlan,

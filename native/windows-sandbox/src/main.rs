@@ -48,7 +48,8 @@ fn run() -> Result<CommandOutput, SandboxError> {
         "internal-child" => {
             let request_path = option_path(&remaining, "--request")?;
             let capability_sid = option_string(&remaining, "--capability-sid")?;
-            platform::internal_child(&request_path, &capability_sid)
+            let owner_sid = option_string(&remaining, "--owner-sid")?;
+            platform::internal_child(&request_path, &capability_sid, &owner_sid)
         }
         "install-elevated" => {
             let owner_sid = option_string(&remaining, "--owner-sid")?;

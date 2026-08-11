@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "name": "curl-for-win",
+  "version": "8.21.0",
+  "build": "8.21.0_5",
+  "license": "curl and bundled third-party licenses",
+  "packages": {
+    "win-x64": {
+      "platform": "win32",
+      "arch": "x64",
+      "archiveFormat": "zip",
+      "archiveSize": 8625821,
+      "archiveSha256": "4c48761e9b70f447af76e65564cf2afbbf626e4ea6286008fde5cc068de237fd",
+      "url": "https://curl.se/windows/dl-8.21.0_5/curl-8.21.0_5-win64-mingw.zip",
+      "members": {
+        "binary": "curl-8.21.0_5-win64-mingw/bin/curl.exe",
+        "caBundle": "curl-8.21.0_5-win64-mingw/bin/curl-ca-bundle.crt",
+        "curlLicense": "curl-8.21.0_5-win64-mingw/COPYING.txt",
+        "brotliLicense": "curl-8.21.0_5-win64-mingw/dep/brotli/LICENSE.txt",
+        "certdataLicense": "curl-8.21.0_5-win64-mingw/dep/certdata/LICENSE.url",
+        "libpslLicense": "curl-8.21.0_5-win64-mingw/dep/libpsl/COPYING.txt",
+        "libresslLicense": "curl-8.21.0_5-win64-mingw/dep/libressl/COPYING.txt",
+        "libssh2License": "curl-8.21.0_5-win64-mingw/dep/libssh2/COPYING.txt",
+        "nghttp2License": "curl-8.21.0_5-win64-mingw/dep/nghttp2/COPYING.txt",
+        "nghttp3License": "curl-8.21.0_5-win64-mingw/dep/nghttp3/COPYING.txt",
+        "ngtcp2License": "curl-8.21.0_5-win64-mingw/dep/ngtcp2/COPYING.txt",
+        "pslLicense": "curl-8.21.0_5-win64-mingw/dep/psl/LICENSE.txt",
+        "zlibngLicense": "curl-8.21.0_5-win64-mingw/dep/zlibng/LICENSE.md",
+        "zstdLicense": "curl-8.21.0_5-win64-mingw/dep/zstd/LICENSE.txt"
+      }
+    }
+  }
+}

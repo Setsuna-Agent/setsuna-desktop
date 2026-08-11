@@ -1,34 +1,44 @@
-use super::paths::canonical_existing;
+use super::paths::{canonical_existing, path_is_within};
 use super::wide::to_wide;
-use crate::protocol::{SandboxError, SandboxErrorCode, SandboxRunRequest};
+use crate::protocol::{PermissionProfile, SandboxError, SandboxErrorCode, SandboxRunRequest};
 use fs2::FileExt;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
-use windows_sys::Win32::Foundation::{LocalFree, ERROR_SUCCESS, HLOCAL};
+use windows_sys::Win32::Foundation::{
+    GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HLOCAL,
+};
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW,
     GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW, DENY_ACCESS, EXPLICIT_ACCESS_W,
     REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
-    EqualSid, GetAce, GetSecurityDescriptorControl, ACCESS_ALLOWED_ACE, ACCESS_DENIED_ACE, ACL,
-    CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
-    PROTECTED_DACL_SECURITY_INFORMATION, SE_DACL_PROTECTED,
+    AccessCheck, AclSizeInformation, EqualSid, GetAce, GetAclInformation,
+    GetSecurityDescriptorControl, InitializeSecurityDescriptor, IsValidAcl, IsValidSid,
+    MapGenericMask, SetFileSecurityW, SetSecurityDescriptorDacl, ACCESS_ALLOWED_ACE,
+    ACCESS_DENIED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE,
+    DACL_SECURITY_INFORMATION, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
+    OWNER_SECURITY_INFORMATION, PRIVILEGE_SET, PROTECTED_DACL_SECURITY_INFORMATION,
+    SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA, FILE_DELETE_CHILD, FILE_GENERIC_EXECUTE,
-    FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_READ_ATTRIBUTES, FILE_TRAVERSE,
-    FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA,
+    FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_READ_ATTRIBUTES, FILE_WRITE_ATTRIBUTES,
+    FILE_WRITE_DATA, FILE_WRITE_EA,
 };
 
 const SE_FILE_OBJECT: i32 = 1;
+const SECURITY_DESCRIPTOR_REVISION: u32 = 1;
 const WRITE_MASK: u32 =
     FILE_GENERIC_READ | FILE_GENERIC_EXECUTE | FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
-const DENY_WRITE_MASK: u32 = FILE_GENERIC_WRITE | DELETE | FILE_DELETE_CHILD;
+// DELETE is inherited by each child. FILE_DELETE_CHILD is deliberately excluded
+// so an allow on the workspace parent cannot bypass a protected child root.
+const PERSISTENT_WRITE_MASK: u32 =
+    FILE_GENERIC_READ | FILE_GENERIC_EXECUTE | FILE_GENERIC_WRITE | DELETE;
 const READ_MASK: u32 = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
-const TRAVERSE_MASK: u32 = FILE_TRAVERSE | FILE_READ_ATTRIBUTES;
+const ANCESTOR_METADATA_MASK: u32 = FILE_READ_ATTRIBUTES;
 const MUTATING_MASK: u32 = FILE_WRITE_DATA
     | FILE_APPEND_DATA
     | FILE_WRITE_EA
@@ -39,6 +49,7 @@ const MUTATING_MASK: u32 = FILE_WRITE_DATA
     | WRITE_OWNER_MASK;
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
 const ACCESS_DENIED_ACE_TYPE: u8 = 1;
+const INHERIT_ONLY_ACE: u8 = 0x08;
 const WRITE_DAC_MASK: u32 = 0x0004_0000;
 const WRITE_OWNER_MASK: u32 = 0x0008_0000;
 const LOCAL_SYSTEM_SID: &str = "S-1-5-18";
@@ -101,7 +112,7 @@ impl TemporaryAclGrant {
     }
 
     fn allow(&mut self, path: &Path, mask: u32, inheritance: u32) -> Result<(), SandboxError> {
-        let key = path.to_string_lossy().to_lowercase();
+        let key = format!("allow:{}", path.to_string_lossy().to_lowercase());
         if let Some(index) = self.indices.get(&key).copied() {
             let entry = &self.entries[index];
             let combined_mask = entry.mask | mask;
@@ -460,32 +471,93 @@ pub fn verify_state_path(path: &Path, sandbox_group_sid: &str) -> Result<(), San
 pub fn prepare_execution(
     request: &SandboxRunRequest,
     logon_sid: &str,
+    read_access_token: isize,
+    sandbox_group_sid: &str,
     capability_sid: &str,
     lock_path: &Path,
 ) -> Result<TemporaryAclGrant, SandboxError> {
     let _mutation = AclMutationLock::acquire(lock_path)?;
-    let mut logon = TemporaryAclGrant::new(logon_sid, lock_path)?;
+    let sandbox_group = LocalSid::parse(sandbox_group_sid)?;
     let capability = LocalSid::parse(capability_sid)?;
+    let writable_roots = unique_existing_paths(&request.writable_roots)?;
+    let ephemeral_roots = unique_existing_paths(&request.ephemeral_writable_roots)?;
+
+    if request.permission_profile == PermissionProfile::ReadOnly {
+        let workspace_root = canonical_existing(&request.workspace_root)?;
+        if !token_has_access(&workspace_root, read_access_token, READ_MASK)? {
+            // A dedicated sandbox account cannot consume owner-only ACEs inherited
+            // by an existing private workspace. Propagate one stable group read ACE
+            // for that workspace; command-specific toolchain roots stay non-recursive.
+            ensure_persistent_allow_aces(&workspace_root, &[(sandbox_group.raw(), READ_MASK)])?;
+        }
+        // The upstream-compatible World restricting SID is required by core
+        // Windows objects. An explicit capability deny still makes read-only
+        // authoritative even when the host workspace is broadly writable.
+        ensure_persistent_deny_ace(&workspace_root, capability.raw(), MUTATING_MASK)?;
+    }
+
+    // Stable roots are authorized once. Later commands observe the capability
+    // ACE already present and perform no tree-wide filesystem metadata update.
+    // Per-command temp roots are empty, so a non-recursive logon grant is enough.
+    for root in &writable_roots {
+        if ephemeral_roots
+            .iter()
+            .any(|ephemeral| same_path(root, ephemeral))
+        {
+            continue;
+        }
+        let mut allows = vec![(capability.raw(), PERSISTENT_WRITE_MASK)];
+        if !token_has_access(root, read_access_token, PERSISTENT_WRITE_MASK)? {
+            allows.push((sandbox_group.raw(), PERSISTENT_WRITE_MASK));
+        }
+        ensure_persistent_allow_aces(root, &allows)?;
+    }
+    for root in unique_existing_paths(&request.protected_writable_roots)? {
+        ensure_persistent_deny_ace(&root, capability.raw(), MUTATING_MASK)?;
+    }
+
+    let mut logon = TemporaryAclGrant::new(logon_sid, lock_path)?;
     let prepared = (|| {
+        let mut self_contained_roots = request.ephemeral_writable_roots.clone();
+        self_contained_roots.push(request.workspace_root.clone());
+        self_contained_roots.push(request.cwd.clone());
+        let self_contained_roots = unique_existing_paths(&self_contained_roots)?;
         let mut readable_roots = request.readable_roots.clone();
         readable_roots.push(request.workspace_root.clone());
         readable_roots.push(request.cwd.clone());
         for root in unique_existing_paths(&readable_roots)? {
-            grant_temporary(&root, &mut logon, READ_MASK, inherited_for(&root))?;
-            ensure_parent_traversal(&root, &mut logon)?;
+            if !self_contained_roots
+                .iter()
+                .any(|contained| same_path(&root, contained))
+            {
+                grant_ancestor_metadata_if_needed(
+                    &root,
+                    read_access_token,
+                    &self_contained_roots,
+                    &mut logon,
+                )?;
+            }
+            grant_read_if_needed(&root, read_access_token, &mut logon)?;
         }
 
-        for root in unique_existing_paths(&request.writable_roots)? {
-            let inheritance = inherited_for(&root);
-            // The per-logon SID satisfies the ordinary token check without granting
-            // future or concurrent sandbox sessions access to this workspace.
-            grant_temporary(&root, &mut logon, WRITE_MASK, inheritance)?;
-            ensure_allow(&root, capability.raw(), WRITE_MASK, inheritance)?;
-            ensure_parent_traversal(&root, &mut logon)?;
-        }
-
-        for root in unique_existing_paths(&request.protected_writable_roots)? {
-            ensure_deny_write(&root, capability.raw(), inherited_for(&root))?;
+        for root in &writable_roots {
+            if !self_contained_roots
+                .iter()
+                .any(|contained| same_path(root, contained))
+            {
+                grant_ancestor_metadata_if_needed(
+                    root,
+                    read_access_token,
+                    &self_contained_roots,
+                    &mut logon,
+                )?;
+            }
+            if ephemeral_roots
+                .iter()
+                .any(|ephemeral| same_path(root, ephemeral))
+            {
+                grant_temporary(root, &mut logon, WRITE_MASK, inherited_for(root))?;
+            }
         }
         Ok(())
     })();
@@ -513,10 +585,9 @@ pub fn prepare_request_bootstrap(
                 "sandbox request file has no parent directory",
             )
         })?;
-        // The control directory is unique per execution. Granting the stable account
-        // SID on shared ancestors would let one concurrent run revoke another's ACE.
-        // Standard account tokens retain SeChangeNotifyPrivilege for ancestor traverse.
-        grant_temporary(request_directory, &mut account, TRAVERSE_MASK, 0)
+        // The control directory is unique per execution. A non-inheriting read grant
+        // lets the account canonicalize the request path without touching shared ancestors.
+        grant_temporary(request_directory, &mut account, READ_MASK, 0)
     })();
     if let Err(error) = prepared {
         account.revoke_unlocked();
@@ -549,18 +620,6 @@ fn inherited_for(path: &Path) -> u32 {
     }
 }
 
-fn ensure_parent_traversal(path: &Path, grant: &mut TemporaryAclGrant) -> Result<(), SandboxError> {
-    let mut parent = path.parent();
-    while let Some(candidate) = parent {
-        if candidate.parent().is_none() {
-            break;
-        }
-        grant_temporary(candidate, grant, TRAVERSE_MASK, 0)?;
-        parent = candidate.parent();
-    }
-    Ok(())
-}
-
 fn grant_temporary(
     path: &Path,
     grant: &mut TemporaryAclGrant,
@@ -570,20 +629,410 @@ fn grant_temporary(
     grant.allow(path, mask, inheritance)
 }
 
-fn ensure_allow(
+fn grant_read_if_needed(
+    path: &Path,
+    access_token: isize,
+    grant: &mut TemporaryAclGrant,
+) -> Result<(), SandboxError> {
+    // PATH entries and system toolchains are commonly readable through an inherited
+    // group ACE while remaining protected from ACL changes by an unprivileged caller.
+    if token_has_access(path, access_token, READ_MASK)? {
+        return Ok(());
+    }
+    grant_temporary(path, grant, READ_MASK, inherited_for(path))
+}
+
+fn grant_ancestor_metadata_if_needed(
+    path: &Path,
+    access_token: isize,
+    stop_boundaries: &[PathBuf],
+    grant: &mut TemporaryAclGrant,
+) -> Result<(), SandboxError> {
+    let mut parent = path.parent();
+    while let Some(candidate) = parent {
+        if candidate.parent().is_none() {
+            break;
+        }
+        if stop_boundaries
+            .iter()
+            .any(|boundary| same_path(candidate, boundary))
+        {
+            break;
+        }
+        // SeChangeNotifyPrivilege bypasses directory traversal checks, but runtimes
+        // such as Node still open every ancestor for lstat/realpath metadata. Grant
+        // only non-inheriting metadata access, and only where the account needs it.
+        if !token_has_access(candidate, access_token, ANCESTOR_METADATA_MASK)? {
+            grant_temporary(candidate, grant, ANCESTOR_METADATA_MASK, 0)?;
+        }
+        parent = candidate.parent();
+    }
+    Ok(())
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    path_is_within(left, right) && path_is_within(right, left)
+}
+
+fn token_has_access(
+    path: &Path,
+    access_token: isize,
+    requested: u32,
+) -> Result<bool, SandboxError> {
+    let mut path_wide = to_wide(path.as_os_str());
+    let mut owner = std::ptr::null_mut();
+    let mut group = std::ptr::null_mut();
+    let mut dacl = std::ptr::null_mut();
+    let mut descriptor = std::ptr::null_mut();
+    let fetched = unsafe {
+        GetNamedSecurityInfoW(
+            path_wide.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            &mut group,
+            &mut dacl,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if fetched != ERROR_SUCCESS || descriptor.is_null() {
+        if !descriptor.is_null() {
+            unsafe { LocalFree(descriptor as HLOCAL) };
+        }
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot inspect existing access for {}: {fetched}",
+                path.display()
+            ),
+        ));
+    }
+
+    let result = access_check(descriptor, access_token, requested, path);
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    result
+}
+
+fn access_check(
+    descriptor: *mut c_void,
+    access_token: isize,
+    requested: u32,
+    path: &Path,
+) -> Result<bool, SandboxError> {
+    let mapping = GENERIC_MAPPING {
+        GenericRead: FILE_GENERIC_READ,
+        GenericWrite: FILE_GENERIC_WRITE,
+        GenericExecute: FILE_GENERIC_EXECUTE,
+        GenericAll: FILE_ALL_ACCESS,
+    };
+    let mut desired = requested;
+    unsafe { MapGenericMask(&mut desired, &mapping) };
+
+    let mut privilege_set_length = std::mem::size_of::<PRIVILEGE_SET>() as u32;
+    let mut privilege_set = aligned_buffer(privilege_set_length as usize);
+    loop {
+        let mut granted = 0_u32;
+        let mut allowed = 0_i32;
+        let checked = unsafe {
+            AccessCheck(
+                descriptor,
+                access_token,
+                desired,
+                &mapping,
+                privilege_set.as_mut_ptr().cast::<PRIVILEGE_SET>(),
+                &mut privilege_set_length,
+                &mut granted,
+                &mut allowed,
+            )
+        };
+        if checked != 0 {
+            return Ok(allowed != 0 && granted & desired == desired);
+        }
+
+        let error = unsafe { GetLastError() };
+        if error == ERROR_INSUFFICIENT_BUFFER
+            && privilege_set_length as usize > privilege_set.len() * std::mem::size_of::<usize>()
+        {
+            privilege_set = aligned_buffer(privilege_set_length as usize);
+            continue;
+        }
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot evaluate sandbox read access for {}: {error}",
+                path.display()
+            ),
+        ));
+    }
+}
+
+fn aligned_buffer(byte_length: usize) -> Vec<usize> {
+    let word_length = byte_length.div_ceil(std::mem::size_of::<usize>());
+    vec![0_usize; word_length]
+}
+
+fn ensure_persistent_allow_aces(
+    path: &Path,
+    allows: &[(*mut c_void, u32)],
+) -> Result<(), SandboxError> {
+    let inheritance = inherited_for(path);
+    let missing = allows
+        .iter()
+        .filter_map(|(sid, mask)| {
+            match path_has_effective_ace(path, *sid, ACCESS_ALLOWED_ACE_TYPE, *mask, inheritance) {
+                Ok(true) => None,
+                Ok(false) => Some(Ok(EXPLICIT_ACCESS_W {
+                    grfAccessPermissions: *mask,
+                    grfAccessMode: SET_ACCESS,
+                    grfInheritance: inheritance,
+                    Trustee: TRUSTEE_W {
+                        pMultipleTrustee: std::ptr::null_mut(),
+                        MultipleTrusteeOperation: 0,
+                        TrusteeForm: TRUSTEE_IS_SID,
+                        TrusteeType: TRUSTEE_IS_UNKNOWN,
+                        ptstrName: sid.cast::<u16>(),
+                    },
+                })),
+                Err(error) => Some(Err(error)),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if missing.is_empty() {
+        return Ok(());
+    }
+    apply_persistent_acl_entries(path, &missing)
+}
+
+fn ensure_persistent_deny_ace(
     path: &Path,
     sid: *mut c_void,
     mask: u32,
-    inheritance: u32,
 ) -> Result<(), SandboxError> {
-    mutate_acl(path, sid, mask, inheritance, SET_ACCESS)
+    let inheritance = inherited_for(path);
+    if path_has_effective_ace(path, sid, ACCESS_DENIED_ACE_TYPE, mask, inheritance)? {
+        return Ok(());
+    }
+    let entry = EXPLICIT_ACCESS_W {
+        grfAccessPermissions: mask,
+        grfAccessMode: DENY_ACCESS,
+        grfInheritance: inheritance,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: 0,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: sid.cast::<u16>(),
+        },
+    };
+    apply_persistent_acl_entries(path, &[entry])
 }
 
-fn ensure_deny_write(path: &Path, sid: *mut c_void, inheritance: u32) -> Result<(), SandboxError> {
-    // DENY_ACCESS appends an ACE. Revoke the policy SID's explicit entries first
-    // so repeated executions cannot grow the protected root DACL indefinitely.
-    mutate_acl(path, sid, 0, 0, REVOKE_ACCESS)?;
-    mutate_acl(path, sid, DENY_WRITE_MASK, inheritance, DENY_ACCESS)
+fn path_has_effective_ace(
+    path: &Path,
+    sid: *mut c_void,
+    ace_type: u8,
+    mask: u32,
+    inheritance: u32,
+) -> Result<bool, SandboxError> {
+    let mut path_wide = to_wide(path.as_os_str());
+    let mut descriptor = std::ptr::null_mut();
+    let mut dacl_out = std::mem::MaybeUninit::<*mut ACL>::uninit();
+    let fetched = unsafe {
+        GetNamedSecurityInfoW(
+            path_wide.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            dacl_out.as_mut_ptr(),
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if fetched != ERROR_SUCCESS || descriptor.is_null() {
+        if !descriptor.is_null() {
+            unsafe { LocalFree(descriptor as HLOCAL) };
+        }
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot inspect persistent ACL for {}: {fetched}",
+                path.display()
+            ),
+        ));
+    }
+    // GetNamedSecurityInfoW initializes every requested output on success. Keep
+    // the out-parameter uninitialized until then so no sentinel pointer can be
+    // mistaken for an ACL returned by Windows.
+    let dacl = unsafe { dacl_out.assume_init() };
+    if dacl.is_null() || unsafe { IsValidAcl(dacl) } == 0 {
+        unsafe { LocalFree(descriptor as HLOCAL) };
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("persistent ACL is invalid for {}", path.display()),
+        ));
+    }
+
+    let mut acl_info = ACL_SIZE_INFORMATION {
+        AceCount: 0,
+        AclBytesInUse: 0,
+        AclBytesFree: 0,
+    };
+    if unsafe {
+        GetAclInformation(
+            dacl,
+            std::ptr::addr_of_mut!(acl_info).cast::<c_void>(),
+            std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+            AclSizeInformation,
+        )
+    } == 0
+    {
+        unsafe { LocalFree(descriptor as HLOCAL) };
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("cannot inspect persistent ACL for {}", path.display()),
+            std::io::Error::last_os_error(),
+        ));
+    }
+
+    let mut found = false;
+    let desired_mask = map_file_mask(mask);
+    let required_inheritance = inheritance as u8;
+    for index in 0..acl_info.AceCount {
+        let mut ace_out = std::mem::MaybeUninit::<*mut c_void>::uninit();
+        if unsafe { GetAce(dacl, index, ace_out.as_mut_ptr()) } == 0 {
+            continue;
+        }
+        let ace_pointer = unsafe { ace_out.assume_init() };
+        if ace_pointer.is_null() {
+            continue;
+        }
+        let header = unsafe { ace_pointer.cast::<ACE_HEADER>().read_unaligned() };
+        if header.AceType != ace_type || header.AceFlags & INHERIT_ONLY_ACE != 0 {
+            continue;
+        }
+        if required_inheritance != 0
+            && header.AceFlags & required_inheritance != required_inheritance
+        {
+            continue;
+        }
+
+        let sid_offset = std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart);
+        let ace_size = usize::from(header.AceSize);
+        const MIN_SID_SIZE: usize = 8;
+        if ace_size < sid_offset + MIN_SID_SIZE {
+            continue;
+        }
+        let sub_authority_count =
+            unsafe { ace_pointer.cast::<u8>().add(sid_offset + 1).read() } as usize;
+        let sid_size = MIN_SID_SIZE + sub_authority_count * std::mem::size_of::<u32>();
+        if sid_offset + sid_size > ace_size {
+            continue;
+        }
+        let ace = unsafe { ace_pointer.cast::<ACCESS_ALLOWED_ACE>().read_unaligned() };
+        let ace_sid = unsafe { ace_pointer.cast::<u8>().add(sid_offset).cast::<c_void>() };
+        if unsafe { IsValidSid(ace_sid) } == 0 || unsafe { EqualSid(ace_sid, sid) } == 0 {
+            continue;
+        }
+        let granted_mask = map_file_mask(ace.Mask);
+        if granted_mask & desired_mask == desired_mask {
+            found = true;
+            break;
+        }
+    }
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    Ok(found)
+}
+
+fn map_file_mask(mut mask: u32) -> u32 {
+    let mapping = GENERIC_MAPPING {
+        GenericRead: FILE_GENERIC_READ,
+        GenericWrite: FILE_GENERIC_WRITE,
+        GenericExecute: FILE_GENERIC_EXECUTE,
+        GenericAll: FILE_ALL_ACCESS,
+    };
+    unsafe { MapGenericMask(&mut mask, &mapping) };
+    mask
+}
+
+fn apply_persistent_acl_entries(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
+    let mut path_wide = to_wide(path.as_os_str());
+    let mut descriptor = std::ptr::null_mut();
+    let mut old_dacl = std::ptr::null_mut();
+    let fetched = unsafe {
+        GetNamedSecurityInfoW(
+            path_wide.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut old_dacl,
+            std::ptr::null_mut(),
+            &mut descriptor,
+        )
+    };
+    if fetched != ERROR_SUCCESS {
+        if !descriptor.is_null() {
+            unsafe { LocalFree(descriptor as HLOCAL) };
+        }
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot read persistent ACL for {}: {fetched}",
+                path.display()
+            ),
+        ));
+    }
+    let mut new_dacl = std::ptr::null_mut();
+    let merged = unsafe {
+        SetEntriesInAclW(
+            entries.len() as u32,
+            entries.as_ptr(),
+            old_dacl,
+            &mut new_dacl,
+        )
+    };
+    if merged != ERROR_SUCCESS {
+        unsafe { LocalFree(descriptor as HLOCAL) };
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot construct persistent ACL for {}: {merged}",
+                path.display()
+            ),
+        ));
+    }
+    // This is intentionally the only propagating ACL operation. It runs only
+    // when stable workspace authorization is missing.
+    let applied = unsafe {
+        SetNamedSecurityInfoW(
+            path_wide.as_mut_ptr(),
+            SE_FILE_OBJECT,
+            DACL_SECURITY_INFORMATION,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            new_dacl,
+            std::ptr::null_mut(),
+        )
+    };
+    unsafe {
+        LocalFree(new_dacl as HLOCAL);
+        LocalFree(descriptor as HLOCAL);
+    }
+    if applied != ERROR_SUCCESS {
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot apply persistent ACL for {}: {applied}",
+                path.display()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn mutate_acl(
@@ -593,7 +1042,7 @@ fn mutate_acl(
     inheritance: u32,
     access_mode: i32,
 ) -> Result<(), SandboxError> {
-    let mut path_wide = to_wide(path.as_os_str());
+    let path_wide = to_wide(path.as_os_str());
     let mut descriptor = std::ptr::null_mut();
     let mut old_dacl = std::ptr::null_mut();
     let fetched = unsafe {
@@ -637,26 +1086,56 @@ fn mutate_acl(
             format!("cannot construct ACL for {}: {merged}", path.display()),
         ));
     }
-    let applied = unsafe {
-        SetNamedSecurityInfoW(
-            path_wide.as_mut_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            new_dacl,
-            std::ptr::null_mut(),
-        )
-    };
+    // SetNamedSecurityInfoW automatically propagates every inheritable ACE in a
+    // directory DACL to all existing descendants. That turns a one-path grant into
+    // an unbounded tree rewrite. SetFileSecurityW updates only this object; OI/CI
+    // still applies normally to children created after the grant.
+    let applied = set_file_dacl(&path_wide, new_dacl);
     unsafe {
         LocalFree(new_dacl as HLOCAL);
         LocalFree(descriptor as HLOCAL);
     }
-    if applied != ERROR_SUCCESS {
-        return Err(SandboxError::new(
+    if let Err(error) = applied {
+        return Err(SandboxError::with_source(
             SandboxErrorCode::UnsupportedPolicy,
-            format!("cannot apply ACL for {}: {applied}", path.display()),
+            format!("cannot apply non-recursive ACL for {}", path.display()),
+            error,
         ));
+    }
+    Ok(())
+}
+
+fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Error> {
+    let mut descriptor: SECURITY_DESCRIPTOR = unsafe { std::mem::zeroed() };
+    if unsafe {
+        InitializeSecurityDescriptor(
+            std::ptr::addr_of_mut!(descriptor).cast::<c_void>(),
+            SECURITY_DESCRIPTOR_REVISION,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    if unsafe {
+        SetSecurityDescriptorDacl(
+            std::ptr::addr_of_mut!(descriptor).cast::<c_void>(),
+            1,
+            dacl,
+            0,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    if unsafe {
+        SetFileSecurityW(
+            path_wide.as_ptr(),
+            DACL_SECURITY_INFORMATION,
+            std::ptr::addr_of_mut!(descriptor).cast::<c_void>(),
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
     }
     Ok(())
 }

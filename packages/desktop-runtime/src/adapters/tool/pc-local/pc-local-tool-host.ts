@@ -647,9 +647,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
 export function applyShellEnvironmentPatch(
   current: Record<string, string> | undefined,
   patch: Record<string, string | null>,
+  platform: NodeJS.Platform | string = process.platform,
 ): Record<string, string> {
   const next = { ...current };
   for (const [key, value] of Object.entries(patch)) {
+    if (platform === 'win32') {
+      for (const existingKey of Object.keys(next)) {
+        if (existingKey.toLowerCase() === key.toLowerCase()) delete next[existingKey];
+      }
+    }
     // The shell process layer merges these overrides on top of process.env.
     // An empty override is therefore required to mask an inherited proxy;
     // deleting the key here would allow the parent value to reappear later.

@@ -233,9 +233,13 @@
 }
 
 .desktop-settings-panel .windows-sandbox-settings__status-row {
-  grid-template-columns: minmax(0, 1fr) minmax(240px, auto);
-  min-height: 78px;
-  row-gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding-top: 11px;
+  padding-bottom: 11px;
+  column-gap: 20px;
+  row-gap: 10px;
+  border-bottom: 0;
 }
 
 .desktop-settings-panel .windows-sandbox-settings__icon {
@@ -246,39 +250,42 @@
   color: var(--app-text-muted);
 }
 
+.desktop-settings-panel .windows-sandbox-settings__summary {
+  align-content: center;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
 .desktop-settings-panel .windows-sandbox-settings__status {
-  display: grid;
-  justify-items: end;
-  gap: 8px;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__version {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font: 10px/14px var(--app-code-font-family);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .desktop-settings-panel .windows-sandbox-settings__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  justify-self: end;
   justify-content: flex-end;
   gap: 6px;
 }
 
 .desktop-settings-panel .windows-sandbox-settings__actions .sd-button {
   min-height: 30px;
-}
-
-.desktop-settings-panel .windows-sandbox-settings__details {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 9px 14px;
-  border-top: 1px solid var(--app-border);
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.desktop-settings-panel .windows-sandbox-settings__details code {
-  flex: 0 0 auto;
-  color: var(--app-text-secondary);
-  font: 11px/16px var(--app-code-font-family);
 }
 
 .desktop-settings-panel .windows-sandbox-settings__card > .chat-user-settings__runtime-error {
@@ -422,17 +429,9 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .desktop-settings-panel .windows-sandbox-settings__status {
-    justify-items: start;
-  }
-
   .desktop-settings-panel .windows-sandbox-settings__actions {
+    justify-self: start;
     justify-content: flex-start;
-  }
-
-  .desktop-settings-panel .windows-sandbox-settings__details {
-    align-items: flex-start;
-    flex-direction: column;
   }
 
   .desktop-settings-panel .workspace-dependencies-settings__toggle-control {

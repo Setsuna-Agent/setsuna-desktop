@@ -7,6 +7,7 @@ import {
   readlink,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
 } from 'node:fs/promises';
@@ -71,6 +72,7 @@ export async function resolveShellToolchain(command: string, pathValue: string):
   commands: Record<string, ShellToolchainCommand>;
   readableRoots: string[];
 }> {
+  const requestedCommandNames = new Set(shellCommandNames(command).map(normalizedCommandName));
   const commandNames = new Set<string>([
     ...BASELINE_SHELL_COMMANDS,
     ...shellCommandNames(command),
@@ -82,36 +84,88 @@ export async function resolveShellToolchain(command: string, pathValue: string):
     if (!executablePath) continue;
     const canonicalPath = await realpath(executablePath).catch(() => path.resolve(executablePath));
     const packageBinTargets = await packageBinWrapperTargets(executablePath);
-    const commandTarget = packageBinTargets[0] ?? await platformCommandTarget(commandName, canonicalPath);
+    const windowsWrapperTargets = process.platform === 'win32'
+      ? await windowsCommandWrapperTargets(executablePath)
+      : [];
+    const windowsNodeExecutables = process.platform === 'win32'
+      && windowsWrapperTargets.some((target) => /\.(?:cjs|js|mjs)$/iu.test(target))
+      ? await windowsNodeExecutableFiles(pathValue)
+      : [];
+    const windowsPackageFiles = process.platform === 'win32'
+      ? await windowsNodePackageFiles(windowsWrapperTargets)
+      : [];
+    const wrapperTargets = [...new Set([
+      ...packageBinTargets,
+      ...windowsWrapperTargets,
+      ...windowsNodeExecutables,
+      ...windowsPackageFiles,
+    ])];
+    const commandTarget = wrapperTargets.find((target) => !/^node(?:\.exe)?$/iu.test(path.basename(target)))
+      ?? wrapperTargets[0]
+      ?? await platformCommandTarget(commandName, canonicalPath);
     const installationRoot = commandInstallationRoot(commandTarget);
     commands[commandName] = { executablePath, installationRoot };
-    readableRoots.push(
-      path.dirname(executablePath),
-      path.dirname(canonicalPath),
-      ...packageBinTargets.flatMap((target) => [path.dirname(target), commandInstallationRoot(target)]),
-      path.dirname(commandTarget),
-      installationRoot,
-    );
+    // Keep the established macOS/Unix toolchain roots: package scripts may invoke
+    // them transitively. On Windows, only private toolchains named by this command
+    // need ACL grants; broad baseline discovery previously reached into AppData.
+    const includeReadableRoots = process.platform !== 'win32'
+      || requestedCommandNames.has(normalizedCommandName(commandName));
+    if (includeReadableRoots) {
+      if (process.platform === 'win32') {
+        // Directory ACEs are intentionally non-recursive, so pre-existing native
+        // executables need their own grants before the sandbox can start them.
+        readableRoots.push(executablePath, canonicalPath);
+      }
+      if (process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(executablePath)) {
+        // PATH lookup and Corepack enumerate a few containing directories. Include
+        // those objects plus the exact entrypoints; the native provider applies
+        // directory ACLs without rewriting existing descendants.
+        const windowsFiles = [
+          executablePath,
+          canonicalPath,
+          ...windowsWrapperTargets,
+          ...windowsNodeExecutables,
+          ...windowsPackageFiles,
+        ];
+        readableRoots.push(
+          ...windowsFiles,
+          ...windowsFiles.map((file) => path.dirname(file)),
+        );
+      } else {
+        readableRoots.push(
+          path.dirname(executablePath),
+          path.dirname(canonicalPath),
+          ...wrapperTargets.flatMap((target) => [path.dirname(target), commandInstallationRoot(target)]),
+          path.dirname(commandTarget),
+          installationRoot,
+        );
+      }
+    }
   }
   return { commands, readableRoots: uniqueSafeRoots(readableRoots) };
+}
+
+function normalizedCommandName(value: string): string {
+  return path.basename(value).replace(/\.(?:bat|cmd|com|exe)$/iu, '').toLowerCase();
 }
 
 export async function commandUsesBundledCorepack(
   executablePath: string,
   bundledCorepackRoot: string,
 ): Promise<boolean> {
-  const targets = await packageBinWrapperTargets(executablePath);
+  const targets = await commandWrapperTargets(executablePath);
   return targets.some((target) => pathIsInsideRoot(target, bundledCorepackRoot));
 }
 
 export function uniqueSafeRoots(roots: string[]): string[] {
-  const result = new Set<string>();
+  const result = new Map<string, string>();
   for (const root of roots) {
     const resolved = path.resolve(String(root || ''));
     if (!root || resolved === path.parse(resolved).root) continue;
-    result.add(resolved);
+    const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+    if (!result.has(key)) result.set(key, resolved);
   }
-  return [...result];
+  return [...result.values()];
 }
 
 export async function findManagedPython(
@@ -367,6 +421,100 @@ async function packageBinWrapperTargets(executablePath: string): Promise<string[
     targets.push(candidate, await realpath(candidate).catch(() => candidate));
   }
   return [...new Set(targets)];
+}
+
+async function commandWrapperTargets(executablePath: string): Promise<string[]> {
+  const targets = [
+    ...await packageBinWrapperTargets(executablePath),
+    ...(process.platform === 'win32' ? await windowsCommandWrapperTargets(executablePath) : []),
+  ];
+  return [...new Set(targets)];
+}
+
+async function windowsCommandWrapperTargets(executablePath: string): Promise<string[]> {
+  if (!/\.(?:bat|cmd)$/iu.test(executablePath)) return [];
+  const content = await readFile(executablePath, 'utf8').catch(() => '');
+  if (!content || Buffer.byteLength(content) > MAX_PROJECT_HINT_BYTES) return [];
+  const binDir = path.dirname(path.resolve(executablePath));
+  const nodeModulesRoot = path.dirname(binDir);
+  const allowedRoot = path.basename(binDir).toLowerCase() === '.bin'
+    && path.basename(nodeModulesRoot).toLowerCase() === 'node_modules'
+    ? nodeModulesRoot
+    : binDir;
+  const targets: string[] = [];
+  for (const match of content.matchAll(/%(?:dp0%|~dp0)[\\/]+([^"%\r\n]+)/giu)) {
+    const relativeTarget = String(match[1] ?? '').trim();
+    if (!relativeTarget) continue;
+    const candidate = path.resolve(binDir, relativeTarget.replaceAll(/[\\/]/gu, path.sep));
+    if (!pathIsInsideRoot(candidate, allowedRoot) || !await pathExists(candidate)) continue;
+    targets.push(candidate, await realpath(candidate).catch(() => candidate));
+  }
+  return [...new Set(targets)];
+}
+
+async function windowsNodePackageFiles(entrypoints: string[]): Promise<string[]> {
+  const files = new Set<string>();
+  const queue = [...entrypoints];
+  const visited = new Set<string>();
+  while (queue.length) {
+    const source = path.resolve(queue.shift() ?? '');
+    const key = source.toLowerCase();
+    if (!source || visited.has(key) || !/\.(?:cjs|js|mjs)$/iu.test(source)) continue;
+    visited.add(key);
+    const info = await stat(source).catch(() => null);
+    if (!info?.isFile()) continue;
+    files.add(source);
+    files.add(await realpath(source).catch(() => source));
+    if (info.size > MAX_PROJECT_HINT_BYTES) continue;
+    const content = await readFile(source, 'utf8').catch(() => '');
+    const packageRoot = commandInstallationRoot(source);
+    for (const match of content.matchAll(/require\(\s*['"](\.{1,2}[\\/][^'"]+)['"]\s*\)/giu)) {
+      const required = await resolveNodeFile(path.resolve(path.dirname(source), match[1]));
+      if (!required || !pathIsInsideRoot(required, packageRoot)) continue;
+      queue.push(required);
+    }
+  }
+
+  // Bundled package-manager CLIs still read a small amount of package metadata
+  // without going through require(). Add those exact files, never their directory.
+  for (const file of [...files]) {
+    const packageRoot = commandInstallationRoot(file);
+    for (const candidate of [
+      path.join(packageRoot, 'package.json'),
+      path.join(path.dirname(file), 'pnpmrc'),
+    ]) {
+      if (await pathExists(candidate)) {
+        files.add(candidate);
+        files.add(await realpath(candidate).catch(() => candidate));
+      }
+    }
+  }
+  return [...files];
+}
+
+async function windowsNodeExecutableFiles(pathValue: string): Promise<string[]> {
+  const executable = await findExecutable('node', pathValue);
+  if (!executable) return [];
+  return [...new Set([
+    path.resolve(executable),
+    await realpath(executable).catch(() => path.resolve(executable)),
+  ])];
+}
+
+async function resolveNodeFile(candidate: string): Promise<string | null> {
+  for (const file of [
+    candidate,
+    `${candidate}.js`,
+    `${candidate}.cjs`,
+    `${candidate}.mjs`,
+    `${candidate}.json`,
+    path.join(candidate, 'index.js'),
+    path.join(candidate, 'index.cjs'),
+  ]) {
+    const info = await stat(file).catch(() => null);
+    if (info?.isFile()) return file;
+  }
+  return null;
 }
 
 function commandInstallationRoot(executablePath: string): string {

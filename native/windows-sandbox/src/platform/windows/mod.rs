@@ -10,6 +10,7 @@ mod paths;
 mod process;
 mod token;
 mod visibility;
+mod wfp;
 mod wide;
 
 use crate::capability::{new_capability_record, policy_key, validate_capability_sid};
@@ -91,6 +92,13 @@ pub fn install_elevated(owner_sid: &str) -> Result<CommandOutput, SandboxError> 
         PROXY_PORT_START,
         PROXY_PORT_END,
     )?;
+    wfp::install(
+        owner_sid,
+        &provisioned.offline_sid,
+        &provisioned.online_sid,
+        PROXY_PORT_START,
+        PROXY_PORT_END,
+    )?;
     bootstrap::install(&store, owner_sid, &provisioned.group_sid)?;
 
     let state = InstalledState {
@@ -112,7 +120,7 @@ pub fn install_elevated(owner_sid: &str) -> Result<CommandOutput, SandboxError> 
         },
         proxy_port_start: PROXY_PORT_START,
         proxy_port_end: PROXY_PORT_END,
-        capabilities: BTreeMap::default(),
+        capabilities: BTreeMap::new(),
     };
     store.write_new(&state)?;
     acl::protect_state_path(&store.state_path(), owner_sid, &state.group_sid)?;
@@ -161,6 +169,7 @@ pub fn uninstall_elevated() -> Result<CommandOutput, SandboxError> {
     }
     visibility::unhide_users(&[OFFLINE_USERNAME, ONLINE_USERNAME])?;
     firewall::uninstall()?;
+    wfp::uninstall()?;
     bootstrap::uninstall(&store)?;
     drop(maintenance);
     if store.directory().exists() {
@@ -190,7 +199,6 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
         )
     })?;
     let runner_path = validate_installation(&installed)?;
-
     let key = policy_key(&request);
     let capability = store.update(|state| {
         Ok(state
@@ -200,6 +208,7 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
             .clone())
     })?;
     validate_capability_sid(&capability.sid)?;
+
     let account = if request.network_access {
         &installed.online
     } else {
@@ -219,8 +228,10 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
     let exit_code = process::spawn_account_runner(
         process::AccountRunnerContext {
             executable: &runner_path,
+            owner_sid: &installed.owner_sid,
             username: &account.username,
             account_sid: &account.sid,
+            group_sid: &installed.group_sid,
             password: &password,
             acl_lock_path: &acl_lock_path,
         },
@@ -234,7 +245,10 @@ pub fn run(request_path: &Path) -> Result<CommandOutput, SandboxError> {
 pub fn internal_child(
     request_path: &Path,
     capability_sid: &str,
+    owner_sid: &str,
 ) -> Result<CommandOutput, SandboxError> {
+    accounts::validate_sid_string(owner_sid)?;
+    process::authenticate_internal_child_parent(owner_sid)?;
     validate_capability_sid(capability_sid)?;
     let request = SandboxRunRequest::from_file(request_path)?;
     paths::validate_request_paths(&request, request_path)?;
@@ -300,6 +314,12 @@ fn validate_installation(state: &InstalledState) -> Result<PathBuf, SandboxError
         acl::verify_state_path(path, &state.group_sid)?;
     }
     firewall::verify(
+        &state.offline.sid,
+        &state.online.sid,
+        state.proxy_port_start,
+        state.proxy_port_end,
+    )?;
+    wfp::verify(
         &state.offline.sid,
         &state.online.sid,
         state.proxy_port_start,

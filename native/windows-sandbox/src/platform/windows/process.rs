@@ -1,6 +1,8 @@
 use super::handle::OwnedHandle;
 use super::job::JobObject;
-use super::token::{create_restricted_token, process_logon_sid};
+use super::token::{
+    create_restricted_token, process_impersonation_token, process_logon_sid, process_user_sid,
+};
 use super::wide::{quote_windows_argument, to_wide};
 use crate::protocol::{SandboxError, SandboxErrorCode, SandboxRunRequest};
 use std::collections::BTreeMap;
@@ -13,19 +15,28 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
 };
+use windows_sys::Win32::System::Diagnostics::Debug::{
+    SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX,
+};
+use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+    CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+};
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessAsUserW, CreateProcessWithLogonW, GetExitCodeProcess, OpenProcess, ResumeThread,
-    TerminateProcess, WaitForMultipleObjects, WaitForSingleObject, CREATE_SUSPENDED,
-    CREATE_UNICODE_ENVIRONMENT, INFINITE, PROCESS_INFORMATION, PROCESS_SYNCHRONIZE,
+    CreateProcessAsUserW, CreateProcessWithLogonW, GetCurrentProcess, GetCurrentProcessId,
+    GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess, WaitForMultipleObjects,
+    WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE,
+    PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
     STARTF_USESTDHANDLES, STARTUPINFOW,
 };
 use zeroize::{Zeroize, Zeroizing};
 
 pub struct AccountRunnerContext<'a> {
     pub executable: &'a Path,
+    pub owner_sid: &'a str,
     pub username: &'a str,
     pub account_sid: &'a str,
+    pub group_sid: &'a str,
     pub password: &'a Zeroizing<String>,
     pub acl_lock_path: &'a Path,
 }
@@ -48,6 +59,8 @@ pub fn spawn_account_runner(
         request_path.to_string_lossy().into_owned(),
         "--capability-sid".to_string(),
         capability_sid.to_string(),
+        "--owner-sid".to_string(),
+        context.owner_sid.to_string(),
     ];
     let command_line = std::iter::once(context.executable.to_string_lossy().into_owned())
         .chain(arguments)
@@ -83,7 +96,7 @@ pub fn spawn_account_runner(
             0,
             executable_wide.as_ptr(),
             command_line_wide.as_mut_ptr(),
-            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
+            CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
             std::ptr::null::<c_void>(),
             cwd_wide.as_ptr(),
             &startup,
@@ -116,7 +129,15 @@ pub fn spawn_account_runner(
         )
     })?;
     let execution_acl = process_logon_sid(process.raw()).and_then(|logon_sid| {
-        super::acl::prepare_execution(request, &logon_sid, capability_sid, context.acl_lock_path)
+        let access_token = process_impersonation_token(process.raw())?;
+        super::acl::prepare_execution(
+            request,
+            &logon_sid,
+            access_token.raw(),
+            context.group_sid,
+            capability_sid,
+            context.acl_lock_path,
+        )
     });
     let _execution_acl = match execution_acl {
         Ok(grant) => grant,
@@ -130,10 +151,75 @@ pub fn spawn_account_runner(
     wait_for_contained_process(process, thread, &job, &supervisors)
 }
 
+/// `internal-child` is intentionally not a public protocol entrypoint. The
+/// trusted launcher crosses from the desktop account into a dedicated sandbox
+/// account; a nested call made by sandboxed code has the same account on both
+/// sides and is rejected before it can supply another capability SID.
+pub fn authenticate_internal_child_parent(expected_parent_sid: &str) -> Result<(), SandboxError> {
+    let current_sid = process_user_sid(unsafe { GetCurrentProcess() })?;
+    let parent_pid = current_parent_process_id()?;
+    let parent =
+        OwnedHandle::new(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, parent_pid) })
+            .map_err(|error| {
+                SandboxError::with_source(
+                    SandboxErrorCode::InvalidArguments,
+                    "cannot inspect the internal-child parent process",
+                    error,
+                )
+            })?;
+    let parent_sid = process_user_sid(parent.raw())?;
+    validate_internal_child_accounts(&current_sid, &parent_sid, expected_parent_sid)
+}
+
+fn validate_internal_child_accounts(
+    current_sid: &str,
+    parent_sid: &str,
+    expected_parent_sid: &str,
+) -> Result<(), SandboxError> {
+    if current_sid.eq_ignore_ascii_case(expected_parent_sid)
+        || !parent_sid.eq_ignore_ascii_case(expected_parent_sid)
+    {
+        return Err(SandboxError::new(
+            SandboxErrorCode::InvalidArguments,
+            "internal-child requires the trusted cross-account launcher",
+        ));
+    }
+    Ok(())
+}
+
+fn current_parent_process_id() -> Result<u32, SandboxError> {
+    let snapshot = OwnedHandle::new(unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) })
+        .map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::InvalidArguments,
+                "cannot enumerate processes for internal-child authentication",
+                error,
+            )
+        })?;
+    let current_pid = unsafe { GetCurrentProcessId() };
+    let mut entry: PROCESSENTRY32W = unsafe { std::mem::zeroed() };
+    entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+    let mut found = unsafe { Process32FirstW(snapshot.raw(), &mut entry) } != 0;
+    while found {
+        if entry.th32ProcessID == current_pid && entry.th32ParentProcessID != 0 {
+            return Ok(entry.th32ParentProcessID);
+        }
+        found = unsafe { Process32NextW(snapshot.raw(), &mut entry) } != 0;
+    }
+    Err(SandboxError::new(
+        SandboxErrorCode::InvalidArguments,
+        "cannot resolve the internal-child parent process",
+    ))
+}
+
 pub fn spawn_restricted_shell(
     request: &SandboxRunRequest,
     capability_sid: &str,
 ) -> Result<i32, SandboxError> {
+    // Tool failures must surface through exit codes instead of modal Windows dialogs.
+    unsafe {
+        SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+    }
     let token = create_restricted_token(capability_sid)?;
     let command_processor = system_command_processor()?;
     let command_line = format!(
@@ -165,7 +251,7 @@ pub fn spawn_restricted_shell(
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             1,
-            CREATE_UNICODE_ENVIRONMENT,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
             environment_block.as_ptr().cast::<c_void>(),
             cwd_wide.as_ptr(),
             &startup,
@@ -350,37 +436,36 @@ fn harden_environment(environment: &mut BTreeMap<String, String>, network_access
     ] {
         remove_environment_key(environment, key);
     }
-    environment.insert("SETSUNA_WINDOWS_SANDBOX".to_string(), "1".to_string());
-    environment.insert(
-        "SETSUNA_WINDOWS_SANDBOX_NETWORK".to_string(),
-        if network_access { "proxy" } else { "offline" }.to_string(),
+    set_environment_key(environment, "SETSUNA_WINDOWS_SANDBOX", "1");
+    set_environment_key(
+        environment,
+        "SETSUNA_WINDOWS_SANDBOX_NETWORK",
+        if network_access { "proxy" } else { "offline" },
     );
     if !network_access {
-        for key in [
-            "HTTP_PROXY",
-            "HTTPS_PROXY",
-            "ALL_PROXY",
-            "http_proxy",
-            "https_proxy",
-            "all_proxy",
-        ] {
+        for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
             remove_environment_key(environment, key);
         }
     }
     // Loopback bypass would let online commands reach arbitrary host services.
     // The dedicated egress proxy is itself selected explicitly by proxy vars.
-    environment.insert("NO_PROXY".to_string(), String::new());
-    environment.insert("no_proxy".to_string(), String::new());
+    set_environment_key(environment, "NO_PROXY", "");
 }
 
 fn remove_environment_key(environment: &mut BTreeMap<String, String>, requested: &str) {
-    if let Some(key) = environment
+    let matching_keys = environment
         .keys()
-        .find(|key| key.eq_ignore_ascii_case(requested))
+        .filter(|key| key.eq_ignore_ascii_case(requested))
         .cloned()
-    {
+        .collect::<Vec<_>>();
+    for key in matching_keys {
         environment.remove(&key);
     }
+}
+
+fn set_environment_key(environment: &mut BTreeMap<String, String>, key: &str, value: &str) {
+    remove_environment_key(environment, key);
+    environment.insert(key.to_string(), value.to_string());
 }
 
 fn environment_block(environment: &BTreeMap<String, String>) -> Vec<u16> {
@@ -393,4 +478,93 @@ fn environment_block(environment: &BTreeMap<String, String>) -> Vec<u16> {
     }
     block.push(0);
     block
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn online_environment_uses_one_canonical_entry_per_windows_key() {
+        let mut environment = BTreeMap::from([
+            (
+                "HTTP_PROXY".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            (
+                "HTTPS_PROXY".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            (
+                "ALL_PROXY".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            ("no_proxy".to_string(), "localhost".to_string()),
+            ("setsuna_windows_sandbox".to_string(), "stale".to_string()),
+        ]);
+
+        harden_environment(&mut environment, true);
+
+        assert_eq!(
+            environment
+                .get("SETSUNA_WINDOWS_SANDBOX")
+                .map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            environment
+                .get("SETSUNA_WINDOWS_SANDBOX_NETWORK")
+                .map(String::as_str),
+            Some("proxy")
+        );
+        assert_eq!(environment.get("NO_PROXY").map(String::as_str), Some(""));
+        assert!(!environment.contains_key("no_proxy"));
+        assert_case_insensitive_keys_are_unique(&environment);
+    }
+
+    #[test]
+    fn offline_environment_removes_proxy_entries_regardless_of_case() {
+        let mut environment = BTreeMap::from([
+            (
+                "http_proxy".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            (
+                "Https_Proxy".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            (
+                "ALL_PROXY".to_string(),
+                "http://127.0.0.1:61080".to_string(),
+            ),
+            ("No_Proxy".to_string(), "localhost".to_string()),
+        ]);
+
+        harden_environment(&mut environment, false);
+
+        for key in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"] {
+            assert!(!environment
+                .keys()
+                .any(|candidate| candidate.eq_ignore_ascii_case(key)));
+        }
+        assert_eq!(environment.get("NO_PROXY").map(String::as_str), Some(""));
+        assert_eq!(
+            environment
+                .get("SETSUNA_WINDOWS_SANDBOX_NETWORK")
+                .map(String::as_str),
+            Some("offline")
+        );
+        assert_case_insensitive_keys_are_unique(&environment);
+    }
+
+    fn assert_case_insensitive_keys_are_unique(environment: &BTreeMap<String, String>) {
+        let mut keys = HashSet::new();
+        for key in environment.keys() {
+            assert!(
+                keys.insert(key.to_ascii_uppercase()),
+                "duplicate environment key: {key}"
+            );
+        }
+    }
 }

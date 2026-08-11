@@ -53,11 +53,13 @@ import {
 import {
   installDesktopRipgrepEnvironment,
   installDesktopWindowsSandboxEnvironment,
+  resolveDesktopSandboxCurl,
   resolveDesktopRipgrep,
   resolveDesktopWindowsSandbox,
 } from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
+import { prepareSandboxCurlTrustBundle } from './runtime/sandbox-curl-trust.js';
 import { WindowsSandboxManager } from './windows-sandbox/manager.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
@@ -215,6 +217,17 @@ async function createWindow(): Promise<void> {
   installDesktopWindowsSandboxEnvironment(process.env, windowsSandboxPath, {
     required: app.isPackaged && process.platform === 'win32',
   });
+  const sandboxCurlPath = resolveDesktopSandboxCurl({
+    appRoot: app.getAppPath(),
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+  });
+  const sandboxCaBundlePath = sandboxCurlPath
+    ? (await prepareSandboxCurlTrustBundle({
+      bundledCaPath: path.join(path.dirname(sandboxCurlPath), 'curl-ca-bundle.crt'),
+      destination: path.join(dataLayout.root, 'sandbox-trust', 'curl-ca-bundle.pem'),
+    })).bundlePath
+    : undefined;
 
   const credentialVault = new DesktopCredentialVault(
     dataLayout.credentialVaultPath,
@@ -259,6 +272,9 @@ async function createWindow(): Promise<void> {
     dataDir: dataLayout.root,
     ripgrepPath,
     requireBundledRipgrep: app.isPackaged,
+    requireBundledSandboxCurl: app.isPackaged && process.platform === 'win32',
+    sandboxCaBundlePath,
+    sandboxCurlPath,
     windowsSandboxPath,
     requireBundledWindowsSandbox: app.isPackaged && process.platform === 'win32',
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,

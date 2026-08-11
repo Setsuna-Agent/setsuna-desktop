@@ -81,6 +81,8 @@ export const SHELL_READ_COMMANDS_WITH_PATH_ARGS = new Set([
 
 export const SAFE_SHELL_ENV_KEYS = new Set([
   'ComSpec',
+  'CURL_CA_BUNDLE',
+  'CURL_HOME',
   'HOME',
   'HOMEDRIVE',
   'HOMEPATH',

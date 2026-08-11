@@ -50,6 +50,13 @@ export type ShellSandboxCapability = {
   executablePath?: string;
 };
 
+type SandboxCurlConfiguration = {
+  caBundlePath: string;
+  configPath?: string;
+  directory: string;
+  executablePath: string;
+};
+
 export type ShellPolicyAction = 'allow' | 'ask' | 'deny';
 
 export type ShellPolicyRule = {
@@ -482,8 +489,10 @@ export function createShellSandboxExecutionPlan(
         ? 'windows-native'
         : 'unavailable';
   const environment = { ...(options.environment ?? state?.shellEnvironment ?? {}) };
-  // The process layer gives each macOS shell session its own TMPDIR. Grant that
-  // one directory instead of widening the sandbox to the shared user temp root.
+  const sandboxCurl = provider === 'windows-native' ? sandboxCurlConfiguration() : null;
+  if (sandboxCurl) applySandboxCurlEnvironment(environment, sandboxCurl);
+  // The process layer gives each sandboxed shell its own temporary directory.
+  // Grant that one directory instead of widening to the shared user temp root.
   const defaultTempRoots = (
     provider === 'macos-seatbelt' || provider === 'windows-native'
   ) && permissionProfile === 'workspace-write'
@@ -493,6 +502,7 @@ export function createShellSandboxExecutionPlan(
     ? shellWorkspaceWriteRoots(state, { includeWorkspaceRoot: false })
     : [...shellWorkspaceWriteRoots(state), ...defaultTempRoots];
   const workspaceRoot = realPathIfExists(state?.root || process.cwd());
+  const resolvedWritableRoots = [...new Set(writableRoots.map(realPathIfExists))];
   return {
     cwd: path.resolve(options.cwd ?? workspaceRoot),
     workspaceRoot,
@@ -501,8 +511,11 @@ export function createShellSandboxExecutionPlan(
     ...(provider === 'windows-native' && capability.executablePath
       ? { providerExecutable: capability.executablePath }
       : {}),
-    readableRoots: shellExplicitReadableRoots(state, defaultTempRoots),
-    writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
+    readableRoots: shellExplicitReadableRoots(state, [
+      ...defaultTempRoots,
+      ...sandboxCurlReadableRoots(sandboxCurl),
+    ]),
+    writableRoots: resolvedWritableRoots,
     ephemeralWritableRoots: provider === 'windows-native'
       ? [...new Set(defaultTempRoots.map(realPathIfExists))]
       : [],
@@ -512,7 +525,13 @@ export function createShellSandboxExecutionPlan(
       .map((name) => realPathIfExists(path.join(workspaceRoot, name)))
       // NTFS ACLs cannot reserve an absent child name. Protect every metadata
       // directory that exists when the execution plan is materialized.
-      .filter((protectedRoot) => provider !== 'windows-native' || existsSync(protectedRoot)),
+      .filter((protectedRoot) => (
+        provider !== 'windows-native'
+        || (
+          existsSync(protectedRoot)
+          && resolvedWritableRoots.some((writableRoot) => isPathInsideRoot(protectedRoot, writableRoot))
+        )
+      )),
     networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
     environment,
   };
@@ -619,6 +638,86 @@ function shellExplicitReadableRoots(
   return [...new Set(roots
     .flatMap(shellReadablePathVariants)
     .filter((root) => Boolean(root) && path.resolve(root) !== path.parse(path.resolve(root)).root))];
+}
+
+function sandboxCurlConfiguration(): SandboxCurlConfiguration | null {
+  const executablePath = existingAbsoluteFile(
+    process.env.SETSUNA_DESKTOP_SANDBOX_CURL_PATH,
+  );
+  const caBundlePath = existingAbsoluteFile(
+    process.env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE,
+  );
+  if (!executablePath || !caBundlePath) return null;
+  const pathApi = usesWindowsPathSemantics(executablePath) ? path.win32 : path;
+  const directory = pathApi.dirname(executablePath);
+  const configPath = existingAbsoluteFile(pathApi.join(directory, '_curlrc'));
+  return {
+    caBundlePath,
+    ...(configPath ? { configPath } : {}),
+    directory,
+    executablePath,
+  };
+}
+
+function existingAbsoluteFile(value: unknown): string {
+  const candidate = String(value ?? '').trim();
+  if (!candidate || (!path.isAbsolute(candidate) && !path.win32.isAbsolute(candidate))) return '';
+  try {
+    return statSync(candidate).isFile() ? candidate : '';
+  } catch {
+    return '';
+  }
+}
+
+function sandboxCurlReadableRoots(configuration: SandboxCurlConfiguration | null): string[] {
+  if (!configuration) return [];
+  return [
+    configuration.executablePath,
+    configuration.caBundlePath,
+    configuration.configPath ?? '',
+  ].filter(Boolean);
+}
+
+function applySandboxCurlEnvironment(
+  environment: Record<string, string>,
+  configuration: SandboxCurlConfiguration,
+): void {
+  const windowsPath = usesWindowsPathSemantics(configuration.executablePath);
+  const delimiter = windowsPath ? ';' : path.delimiter;
+  const existingPath = environmentValue(environment, 'PATH');
+  const comparison = (value: string) => windowsPath ? value.toLowerCase() : value;
+  const directoryKey = comparison(configuration.directory);
+  const pathEntries = existingPath
+    .split(delimiter)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry && comparison(entry) !== directoryKey);
+  setEnvironmentValue(environment, 'PATH', [configuration.directory, ...pathEntries].join(delimiter));
+  setEnvironmentValue(environment, 'CURL_HOME', configuration.directory);
+  setEnvironmentValue(environment, 'CURL_CA_BUNDLE', configuration.caBundlePath);
+}
+
+function usesWindowsPathSemantics(value: string): boolean {
+  if (process.platform === 'win32') return true;
+  // win32.isAbsolute also treats POSIX root paths such as `/tmp` as absolute.
+  // Outside Windows, only drive-qualified and UNC paths should select `;` and
+  // win32 dirname behavior.
+  return /^[a-z]:[\\/]/iu.test(value) || /^\\\\/u.test(value);
+}
+
+function environmentValue(environment: Record<string, string>, name: string): string {
+  const key = Object.keys(environment).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key ? environment[key] ?? '' : '';
+}
+
+function setEnvironmentValue(
+  environment: Record<string, string>,
+  name: string,
+  value: string,
+): void {
+  for (const key of Object.keys(environment)) {
+    if (key !== name && key.toLowerCase() === name.toLowerCase()) delete environment[key];
+  }
+  environment[name] = value;
 }
 
 function shellReadablePathVariants(value: unknown): string[] {

@@ -67,10 +67,10 @@ jobs:
         run: cargo fmt --manifest-path native/windows-sandbox/Cargo.toml -- --check
 
       - name: Lint Windows sidecar
-        run: cargo clippy --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc -- -D warnings
+        run: cargo clippy --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc --all-targets -- -D warnings
 
       - name: Test Windows sidecar
-        run: cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml
+        run: cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml --all-targets
 
       - name: Smoke-test Windows executable protocol
         shell: pwsh
@@ -79,8 +79,11 @@ jobs:
           if (-not $result.ok -or -not $result.version) {
             throw "Windows sandbox version protocol failed"
           }
+          cargo build --quiet --locked --manifest-path native/windows-sandbox/Cargo.toml --target x86_64-pc-windows-msvc --example windows-network-probe
+          if ($LASTEXITCODE -ne 0) { throw "Windows sandbox network probe build failed" }
 
       - name: Exercise Windows accounts, ACLs, firewall, and restricted process
+        timeout-minutes: 5
         shell: pwsh
         run: |
           $binary = (Resolve-Path "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/setsuna-sandbox-win.exe").Path
@@ -92,77 +95,8 @@ jobs:
           if (-not $status.ok -or $status.status.state -ne "ready") {
             throw "Windows sandbox did not report ready after installation"
           }
-
-          $root = Join-Path $env:RUNNER_TEMP "setsuna-sandbox-smoke"
-          $workspace = Join-Path $root "workspace"
-          New-Item -ItemType Directory -Force -Path $workspace | Out-Null
-          $requestPath = Join-Path $root "request.json"
-          $request = @{
-            protocolVersion = 1
-            executionId = "windows_ci_smoke"
-            supervisorPids = @($PID)
-            command = "echo sandbox-ok>result.txt"
-            cwd = $workspace
-            workspaceRoot = $workspace
-            permissionProfile = "workspace-write"
-            readableRoots = @($workspace)
-            writableRoots = @($workspace)
-            ephemeralWritableRoots = @()
-            deniedRoots = @()
-            deniedGlobRegExpSources = @()
-            protectedWritableRoots = @()
-            networkAccess = $false
-            environment = @{
-              ComSpec = $env:ComSpec
-              PATH = $env:PATH
-              SystemRoot = $env:SystemRoot
-              TEMP = $workspace
-              TMP = $workspace
-            }
-          }
-          $request | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $requestPath
-
-          & $binary run --request $requestPath
-          if ($LASTEXITCODE -ne 0) { throw "Restricted Windows sandbox command failed" }
-          if (Test-Path $requestPath) {
-            throw "Sandbox request containing relay credentials was not destroyed"
-          }
-          if ((Get-Content (Join-Path $workspace "result.txt") -Raw).Trim() -ne "sandbox-ok") {
-            throw "Restricted Windows sandbox command produced an unexpected result"
-          }
-          $workspaceAceCount = (Get-Acl $workspace).Access.Count
-
-          $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
-          $listener.Start()
-          try {
-            $port = ([System.Net.IPEndPoint]$listener.LocalEndpoint).Port
-            if (-not (Get-Command curl.exe -ErrorAction SilentlyContinue)) {
-              throw "Windows sandbox loopback smoke test requires curl.exe"
-            }
-            $acceptedConnection = $listener.AcceptTcpClientAsync()
-            $offlineRequest = $request.Clone()
-            $offlineRequest.executionId = "windows_ci_offline"
-            # Keep the client native: Windows PowerShell's CLR startup requires
-            # unrelated profile access that the restricted token intentionally lacks.
-            $offlineRequest.command = "curl.exe --connect-timeout 2 --max-time 2 --silent http://127.0.0.1:$port >NUL 2>&1 & exit /b 0"
-            $offlineRequest | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 $requestPath
-            & $binary run --request $requestPath
-            if ($LASTEXITCODE -ne 0) {
-              throw "Offline Windows sandbox loopback probe command failed"
-            }
-            if ($acceptedConnection.Wait(1000)) {
-              $acceptedConnection.Result.Dispose()
-              throw "Offline Windows sandbox reached a blocked host loopback port"
-            }
-            if (Test-Path $requestPath) {
-              throw "Second sandbox request was not destroyed"
-            }
-            if ((Get-Acl $workspace).Access.Count -ne $workspaceAceCount) {
-              throw "Per-logon sandbox ACL entries accumulated after command exit"
-            }
-          } finally {
-            $listener.Stop()
-          }
+          $probe = (Resolve-Path "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/examples/windows-network-probe.exe").Path
+          & scripts/windows-sandbox/smoke-test.ps1 -Binary $binary -ProbeBinary $probe
 
       - name: Remove Windows sandbox smoke-test identities
         if: always()

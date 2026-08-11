@@ -27,6 +27,14 @@ describe('SandboxEgressGateway', () => {
     expect(proxyUrl.password).not.toBe('');
     expect(environment.HTTPS_PROXY).toBe(environment.HTTP_PROXY);
     expect(environment.NO_PROXY).toBe('');
+    expect(Object.keys(environment).sort()).toEqual([
+      'ALL_PROXY',
+      'HTTPS_PROXY',
+      'HTTP_PROXY',
+      'NO_PROXY',
+    ]);
+    expect(new Set(Object.keys(environment).map((key) => key.toUpperCase())).size)
+      .toBe(Object.keys(environment).length);
     await expect(requestThroughProxy(proxyUrl, 'http://example.com/', false))
       .resolves.toMatchObject({ status: 407 });
     expect(resolveUpstreamProxy).toHaveBeenCalledTimes(1);

@@ -22,6 +22,7 @@ import {
   ManagedWorkspaceDependencyManager,
   runtimeExecutableReadRoot,
 } from '../../../src/adapters/workspace/managed-workspace-dependency-manager.js';
+import { resolveShellToolchain } from '../../../src/adapters/workspace/managed-workspace-toolchain.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -100,6 +101,7 @@ describe('managed workspace dependency manager', () => {
         environment: testEnvironment(dataDir),
       });
       const dependencyRoot = path.join(dataDir, 'workspace-dependencies');
+      const installRoot = path.join(dependencyRoot, 'toolchain');
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       expect(shell).toMatchObject({
         environment: {
@@ -110,7 +112,7 @@ describe('managed workspace dependency manager', () => {
           UV_PYTHON: path.join(fakeBin, 'python3'),
           npm_config_registry: 'https://registry.example/npm/',
         },
-        readableRoots: expect.arrayContaining([dependencyRoot]),
+        readableRoots: expect.arrayContaining([installRoot]),
         writableCacheRoots: [path.join(dependencyRoot, 'cache')],
       });
       expect(shell?.readableRoots.some((root) => pathIsInside(process.execPath, root))).toBe(true);
@@ -368,6 +370,100 @@ describe('managed workspace dependency manager', () => {
       '/Applications/Setsuna Desktop.app/Contents/Frameworks/Setsuna Desktop Helper.app/Contents/MacOS/Setsuna Desktop Helper',
       'darwin',
     )).toBe('/Applications/Setsuna Desktop.app');
+  });
+
+  it.skipIf(process.platform !== 'win32')('only grants Windows readable roots for tools named by the shell command', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-command-toolchain-roots-'));
+    const packageManagerBin = path.join(dataDir, 'package-manager-bin');
+    const unrelatedPythonBin = path.join(dataDir, 'unrelated-python-bin');
+    const packageManagerName = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
+    const pythonName = process.platform === 'win32' ? 'python.exe' : 'python';
+    await Promise.all([
+      mkdir(packageManagerBin, { recursive: true }),
+      mkdir(unrelatedPythonBin, { recursive: true }),
+    ]);
+    const packageManagerExecutable = path.join(packageManagerBin, packageManagerName);
+    const pythonExecutable = path.join(unrelatedPythonBin, pythonName);
+    await Promise.all([
+      writeExecutable(packageManagerExecutable, 'test package manager'),
+      writeExecutable(pythonExecutable, 'test python'),
+    ]);
+
+    try {
+      const shell = await resolveShellToolchain(
+        'pnpm lint',
+        [packageManagerBin, unrelatedPythonBin].join(path.delimiter),
+      );
+
+      expect(shell.commands.pnpm).toBeDefined();
+      expect(shell.commands.python).toBeDefined();
+      expect(shell.readableRoots).toContain(packageManagerBin);
+      expect(shell.readableRoots).not.toContain(unrelatedPythonBin);
+
+      const nativeShell = await resolveShellToolchain(
+        'python --version',
+        [packageManagerBin, unrelatedPythonBin].join(path.delimiter),
+      );
+      const nativeReadableRootKeys = nativeShell.readableRoots.map((value) => value.toLowerCase());
+      expect(nativeReadableRootKeys).toEqual(expect.arrayContaining([
+        pythonExecutable,
+        unrelatedPythonBin,
+      ].map((value) => value.toLowerCase())));
+      expect(nativeReadableRootKeys).not.toContain(packageManagerBin.toLowerCase());
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'win32')('keeps Windows package-manager wrappers narrowly scoped', async () => {
+    const installRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-windows-wrapper-roots-'));
+    const packageRoot = path.join(installRoot, 'node_modules', 'pnpm');
+    const packageBin = path.join(packageRoot, 'bin');
+    const packageDist = path.join(packageRoot, 'dist');
+    const wrapper = path.join(installRoot, 'pnpm.cmd');
+    const nodeExecutable = path.join(installRoot, 'node.exe');
+    const packageEntrypoint = path.join(packageBin, 'pnpm.cjs');
+    const bundledEntrypoint = path.join(packageDist, 'pnpm.cjs');
+    const bundledConfig = path.join(packageDist, 'pnpmrc');
+    const packageManifest = path.join(packageRoot, 'package.json');
+    await Promise.all([
+      mkdir(packageBin, { recursive: true }),
+      mkdir(packageDist, { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(wrapper, [
+        '@echo off',
+        '"%~dp0\\node.exe" "%~dp0\\node_modules\\pnpm\\bin\\pnpm.cjs" %*',
+        '',
+      ].join('\r\n'), 'utf8'),
+      writeFile(nodeExecutable, 'test node', 'utf8'),
+      writeFile(packageEntrypoint, "require('../dist/pnpm.cjs')\n", 'utf8'),
+      writeFile(bundledEntrypoint, 'test bundled pnpm', 'utf8'),
+      writeFile(bundledConfig, 'registry=https://registry.npmjs.org/', 'utf8'),
+      writeFile(packageManifest, '{"name":"pnpm"}', 'utf8'),
+    ]);
+
+    try {
+      const shell = await resolveShellToolchain('pnpm lint', installRoot);
+
+      expect(shell.commands.pnpm?.installationRoot).toBe(packageRoot);
+      const readableRootKeys = shell.readableRoots.map((value) => value.toLowerCase());
+      expect(readableRootKeys).toEqual(expect.arrayContaining([
+        installRoot,
+        packageRoot,
+        packageBin,
+        packageDist,
+        wrapper,
+        nodeExecutable,
+        packageEntrypoint,
+        bundledEntrypoint,
+        bundledConfig,
+        packageManifest,
+      ].map((value) => value.toLowerCase())));
+      expect(readableRootKeys).not.toContain(path.join(installRoot, 'node_modules').toLowerCase());
+    } finally {
+      await rm(installRoot, { recursive: true, force: true });
+    }
   });
 });
 

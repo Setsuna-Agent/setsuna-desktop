@@ -30,6 +30,7 @@
     "package:mac:arm64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --mac --arm64 --publish never",
     "package:mac:x64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --mac --x64 --publish never",
     "package:win:x64": "node scripts/validate-release-version.mjs && pnpm build && electron-builder --win --x64 --publish never --config.npmRebuild=false",
+    "prepare:windows-sandbox-curl": "node scripts/windows-sandbox/prepare-sandbox-curl.mjs --platform win32 --arch x64",
     "postinstall": "node scripts/prepare-node-pty.mjs",
     "release:dry-run": "node scripts/validate-release-version.mjs && pnpm build && node scripts/release-dry-run.mjs",
     "start": "electron .",
@@ -38,7 +39,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:release": "node scripts/ripgrep/prepare-ripgrep.mjs && vitest run --config vitest.release.config.ts",
     "test:unit": "vitest run --config vitest.unit.config.ts",
-    "test:windows-sandbox": "cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml",
+    "test:windows-sandbox": "cargo test --locked --manifest-path native/windows-sandbox/Cargo.toml --all-targets",
     "typecheck": "pnpm check:architecture && tsc -b --pretty false",
     "validate:release-version": "node scripts/validate-release-version.mjs"
   },
@@ -141,6 +142,19 @@
     "win": {
       "icon": "assets/build/icon.ico",
       "extraResources": [
+        {
+          "from": ".cache/sandbox-curl/win-x64",
+          "to": "setsuna-path",
+          "filter": [
+            "curl.exe",
+            "curl-ca-bundle.crt",
+            "_curlrc",
+            "LICENSE-CURL.txt",
+            "THIRD-PARTY-LICENSES-CURL.txt",
+            "NOTICE-CURL.txt",
+            "curl-metadata.json"
+          ]
+        },
         {
           "from": ".cache/windows-sandbox/win-x64",
           "to": "setsuna-sandbox",

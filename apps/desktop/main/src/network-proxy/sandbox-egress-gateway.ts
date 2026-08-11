@@ -13,9 +13,6 @@ const PROXY_ENVIRONMENT_KEYS = [
   'HTTP_PROXY',
   'HTTPS_PROXY',
   'ALL_PROXY',
-  'http_proxy',
-  'https_proxy',
-  'all_proxy',
 ] as const;
 
 type SandboxEgressGatewayOptions = {
@@ -48,7 +45,6 @@ export class SandboxEgressGateway {
       ...Object.fromEntries(PROXY_ENVIRONMENT_KEYS.map((key) => [key, gateway.authenticatedUrl])),
       // A bypass would ask the sandbox to connect to a port WFP intentionally blocks.
       NO_PROXY: '',
-      no_proxy: '',
     };
   }
 

@@ -16,6 +16,13 @@ exports.default = async function afterPack(context) {
   });
 
   if (context.electronPlatformName === 'win32') {
+    const curlModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-sandbox-curl.mjs')).href;
+    const { verifyPreparedSandboxCurl } = await import(curlModuleUrl);
+    await verifyPreparedSandboxCurl({
+      projectDir: context.packager.projectDir,
+      destination: path.join(resourcesDir, 'setsuna-path'),
+      execute: true,
+    });
     const sandboxModuleUrl = pathToFileURL(require.resolve('./windows-sandbox/prepare-windows-sandbox.mjs')).href;
     const { verifyPreparedWindowsSandbox } = await import(sandboxModuleUrl);
     await verifyPreparedWindowsSandbox({

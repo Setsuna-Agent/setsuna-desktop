@@ -35,69 +35,77 @@ export function WindowsSandboxSettings() {
         <div className="chat-user-settings__row windows-sandbox-settings__status-row">
           <span className="chat-user-settings__runtime-policy-copy">
             <ShieldCheck className="windows-sandbox-settings__icon" aria-hidden="true" />
-            <span>
-              <strong>{t('settings.windowsSandbox.nativeProvider')}</strong>
+            <span className="windows-sandbox-settings__summary">
+              <span className="windows-sandbox-settings__heading">
+                <strong>{t('settings.windowsSandbox.nativeProvider')}</strong>
+                <span
+                  className="windows-sandbox-settings__status"
+                  aria-atomic="true"
+                  aria-live="polite"
+                >
+                  {status ? (
+                    <StatusBadge tone={statusTone(status.state)}>
+                      {t(STATUS_LABEL_KEYS[status.state])}
+                    </StatusBadge>
+                  ) : null}
+                </span>
+                {status?.sidecarVersion ? (
+                  <span
+                    className="windows-sandbox-settings__version"
+                    title={t('settings.windowsSandbox.version', { version: status.sidecarVersion })}
+                  >
+                    v{status.sidecarVersion}
+                  </span>
+                ) : null}
+              </span>
               <small>{statusDescription(status?.state, status?.reason, t)}</small>
             </span>
           </span>
-          <div className="windows-sandbox-settings__status" aria-live="polite">
-            {status ? (
-              <StatusBadge tone={statusTone(status.state)}>
-                {t(STATUS_LABEL_KEYS[status.state])}
-              </StatusBadge>
-            ) : null}
-            <div className="windows-sandbox-settings__actions">
+          <div className="windows-sandbox-settings__actions">
+            <Button
+              icon={<RefreshCw className={sandbox.busyAction === 'refresh' ? 'is-spinning' : ''} size={14} />}
+              disabled={busy}
+              onClick={() => void sandbox.refresh()}
+            >
+              {sandbox.busyAction === 'refresh'
+                ? t('settings.windowsSandbox.checking')
+                : t('settings.windowsSandbox.check')}
+            </Button>
+            {status?.state === 'not-installed' ? (
               <Button
-                icon={<RefreshCw className={sandbox.busyAction === 'refresh' ? 'is-spinning' : ''} size={14} />}
-                disabled={busy}
-                onClick={() => void sandbox.refresh()}
+                icon={<Download size={14} />}
+                disabled={busy || !status.installSupported}
+                onClick={() => void sandbox.runAction('install')}
               >
-                {sandbox.busyAction === 'refresh'
-                  ? t('settings.windowsSandbox.checking')
-                  : t('settings.windowsSandbox.check')}
+                {sandbox.busyAction === 'install'
+                  ? t('settings.windowsSandbox.installing')
+                  : t('settings.windowsSandbox.install')}
               </Button>
-              {status?.state === 'not-installed' ? (
-                <Button
-                  icon={<Download size={14} />}
-                  disabled={busy || !status.installSupported}
-                  onClick={() => void sandbox.runAction('install')}
-                >
-                  {sandbox.busyAction === 'install'
-                    ? t('settings.windowsSandbox.installing')
-                    : t('settings.windowsSandbox.install')}
-                </Button>
-              ) : null}
-              {status?.state === 'needs-repair' ? (
-                <Button
-                  icon={<Wrench size={14} />}
-                  disabled={busy || !status.installSupported}
-                  onClick={() => void sandbox.runAction('repair')}
-                >
-                  {sandbox.busyAction === 'repair'
-                    ? t('settings.windowsSandbox.repairing')
-                    : t('settings.windowsSandbox.repair')}
-                </Button>
-              ) : null}
-              {status && ['ready', 'needs-repair'].includes(status.state) ? (
-                <Button
-                  icon={<Trash2 size={14} />}
-                  variant="danger"
-                  disabled={busy}
-                  onClick={uninstall}
-                >
-                  {sandbox.busyAction === 'uninstall'
-                    ? t('settings.windowsSandbox.uninstalling')
-                    : t('settings.windowsSandbox.uninstall')}
-                </Button>
-              ) : null}
-            </div>
+            ) : null}
+            {status?.state === 'needs-repair' ? (
+              <Button
+                icon={<Wrench size={14} />}
+                disabled={busy || !status.installSupported}
+                onClick={() => void sandbox.runAction('repair')}
+              >
+                {sandbox.busyAction === 'repair'
+                  ? t('settings.windowsSandbox.repairing')
+                  : t('settings.windowsSandbox.repair')}
+              </Button>
+            ) : null}
+            {status && ['ready', 'needs-repair'].includes(status.state) ? (
+              <Button
+                icon={<Trash2 size={14} />}
+                variant="danger"
+                disabled={busy}
+                onClick={uninstall}
+              >
+                {sandbox.busyAction === 'uninstall'
+                  ? t('settings.windowsSandbox.uninstalling')
+                  : t('settings.windowsSandbox.uninstall')}
+              </Button>
+            ) : null}
           </div>
-        </div>
-        <div className="windows-sandbox-settings__details">
-          <span>{t('settings.windowsSandbox.boundary')}</span>
-          {status?.sidecarVersion ? (
-            <code>{t('settings.windowsSandbox.version', { version: status.sidecarVersion })}</code>
-          ) : null}
         </div>
         {sandbox.error ? (
           <div className="chat-user-settings__runtime-error" role="alert">{sandbox.error}</div>
