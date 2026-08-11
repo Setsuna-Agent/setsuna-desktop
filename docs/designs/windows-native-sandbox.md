@@ -105,10 +105,11 @@ kill 的 Job Object。
 写入范围和网络出口，不把 readable roots 当作 workspace 之间的读取隔离边界；这与上游 Codex 的 Windows
 sandbox 语义一致。需要 path-specific read deny 的策略会以 unsupported-policy 失败，而不是静默降级。
 
-和上游相同，宿主上原本就向 `Everyone` 开放写入的对象仍可由隔离账户写入；专用账户的第一轮 DACL 检查
-负责隔离普通用户私有路径，capability 则开放稳定 writable roots。read-only workspace 与 protected roots
-额外安装 capability mutation deny，所以即使宿主 ACL 宽泛也不能被修改。CI 的真实账户 smoke 覆盖私有
-read-only 子树、普通未授权外部目录、workspace 写入、protected root 与进程初始化兼容性。
+和上游相同，宿主上带有显式 `Everyone` write allow 的对象仍可由隔离账户写入；专用账户的第一轮 DACL
+检查负责隔离普通用户私有路径，capability 则开放稳定 writable roots。read-only workspace 与 protected roots
+会在对应根上安装显式 capability mutation deny，并向普通继承子项传播；但 Windows 的显式子项 allow 排在
+继承 deny 之前，因此 V1 不把已单独放宽的子项描述成精确写隔离。CI 的真实账户 smoke 覆盖私有 read-only
+子树上的继承宽泛写 ACE、普通未授权外部目录、workspace 写入、protected root 与进程初始化兼容性。
 
 ## 网络
 
