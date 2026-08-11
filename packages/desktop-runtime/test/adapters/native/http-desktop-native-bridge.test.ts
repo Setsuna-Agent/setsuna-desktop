@@ -21,6 +21,8 @@ describe('HttpDesktopNativeBridge', () => {
           ? { value: 'secret' }
           : request.url === '/v1/network-proxy/resolve'
             ? { mode: 'proxy', proxyServerId: 'proxy-example', proxyUrl: 'http://user:pass@127.0.0.1:3128' }
+            : request.url === '/v1/network-proxy/sandbox-environment'
+              ? { HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080' }
             : request.url === '/v1/network-proxy/delete'
               ? { configPath: '/test/network-proxies.json', routing: { global: { mode: 'system' }, scopes: {} }, servers: [] }
             : { ok: true, available: true, backend: 'test' },
@@ -41,6 +43,9 @@ describe('HttpDesktopNativeBridge', () => {
         override: { mode: 'proxy', proxyServerId: 'proxy-example' },
       })).resolves.toMatchObject({ mode: 'proxy', proxyServerId: 'proxy-example' });
       await client.validateNetworkProxyReferences(['proxy-example']);
+      await expect(client.resolveSandboxNetworkEnvironment()).resolves.toEqual({
+        HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+      });
       await expect(client.deleteNetworkProxy('proxy-example')).resolves.toMatchObject({ servers: [] });
       expect(calls.every((call) => call.authorization === 'Bearer bridge-token')).toBe(true);
       expect(calls).toContainEqual(expect.objectContaining({
@@ -80,6 +85,7 @@ describe('HttpDesktopNativeBridge', () => {
     await expect(client.validateNetworkProxyReferences(['proxy-example']))
       .rejects.toThrow('Setsuna Desktop host');
     await expect(client.deleteNetworkProxy('proxy-example')).rejects.toThrow('Setsuna Desktop host');
+    await expect(client.resolveSandboxNetworkEnvironment()).rejects.toThrow('Setsuna Desktop host');
   });
 
   it('streams system-routed requests and oversized metadata through the authenticated bridge', async () => {

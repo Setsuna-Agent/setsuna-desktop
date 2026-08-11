@@ -3,6 +3,8 @@ node_modules/
 dist/
 coverage/
 .cache/ripgrep/
+.cache/windows-sandbox/
+native/windows-sandbox/target/
 .env
 .env.*
 !.env.example

@@ -7,6 +7,10 @@ import type {
 import { existsSync, lstatSync, readFileSync, readlinkSync, statSync } from 'node:fs';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
+import {
+  windowsNativeSandboxCapability,
+  type WindowsNativeSandboxCapability,
+} from '../../sandbox/windows-native/windows-native-sandbox.js';
 import { protectedWorkspaceMetadataPathForPath } from '../../../security/file-system-policy.js';
 import {
   assessShellNetworkAccess,
@@ -43,6 +47,7 @@ export type ShellSandboxCapability = {
   supported: boolean;
   provider: string;
   reason: string;
+  executablePath?: string;
 };
 
 export type ShellPolicyAction = 'allow' | 'ask' | 'deny';
@@ -86,6 +91,7 @@ export {
 export function shellSandboxCapability(
   platform: NodeJS.Platform | string = process.platform,
   hasMacSandboxExec = existsSync('/usr/bin/sandbox-exec'),
+  windowsCapability: WindowsNativeSandboxCapability = windowsNativeSandboxCapability(),
 ): ShellSandboxCapability {
   if (platform === 'darwin') {
     if (hasMacSandboxExec) {
@@ -102,11 +108,7 @@ export function shellSandboxCapability(
     };
   }
   if (platform === 'win32') {
-    return {
-      supported: false,
-      provider: '',
-      reason: 'Windows 当前没有可用的桌面 OS sandbox provider。交互审批模式会在命令执行前请求一次无沙箱批准；禁止提示且保持受限权限的组合会拒绝执行。',
-    };
+    return windowsCapability;
   }
   return {
     supported: false,
@@ -359,7 +361,15 @@ export function shellSandboxUnavailableReason(
     return 'OS sandbox 当前只支持 read-only 或 workspace-write 硬隔离；请关闭 os_sandbox，或切换权限配置。';
   }
   if (!capability.supported) return capability.reason;
-  if (capability.provider !== 'macos-seatbelt') return '当前 OS sandbox provider 不支持 shell 硬隔离。';
+  if (capability.provider !== 'macos-seatbelt' && capability.provider !== 'windows-native') {
+    return '当前 OS sandbox provider 不支持 shell 硬隔离。';
+  }
+  if (
+    capability.provider === 'windows-native'
+    && (deniedRootsForState(state).length || deniedGlobRegExpSourcesForState(state).length)
+  ) {
+    return 'Windows 原生沙箱 V1 无法强制执行 denied_roots 或 denied_glob_patterns；已拒绝降级到较弱隔离。';
+  }
   return '';
 }
 
@@ -468,11 +478,15 @@ export function createShellSandboxExecutionPlan(
     ? 'bypass'
     : capability.supported && capability.provider === 'macos-seatbelt'
       ? 'macos-seatbelt'
-      : 'unavailable';
+      : capability.supported && capability.provider === 'windows-native'
+        ? 'windows-native'
+        : 'unavailable';
   const environment = { ...(options.environment ?? state?.shellEnvironment ?? {}) };
   // The process layer gives each macOS shell session its own TMPDIR. Grant that
   // one directory instead of widening the sandbox to the shared user temp root.
-  const defaultTempRoots = provider === 'macos-seatbelt' && permissionProfile === 'workspace-write'
+  const defaultTempRoots = (
+    provider === 'macos-seatbelt' || provider === 'windows-native'
+  ) && permissionProfile === 'workspace-write'
     ? shellSandboxTempRoots(options.temporaryRoot)
     : [];
   const writableRoots = permissionProfile === 'read-only'
@@ -484,11 +498,21 @@ export function createShellSandboxExecutionPlan(
     workspaceRoot,
     permissionProfile,
     provider,
+    ...(provider === 'windows-native' && capability.executablePath
+      ? { providerExecutable: capability.executablePath }
+      : {}),
     readableRoots: shellExplicitReadableRoots(state, defaultTempRoots),
     writableRoots: [...new Set(writableRoots.map(realPathIfExists))],
+    ephemeralWritableRoots: provider === 'windows-native'
+      ? [...new Set(defaultTempRoots.map(realPathIfExists))]
+      : [],
     deniedRoots: deniedRootsForState(state),
     deniedGlobRegExpSources: deniedGlobRegExpSourcesForState(state),
-    protectedWritableRoots: ['.git', '.agents', '.codex'].map((name) => realPathIfExists(path.join(workspaceRoot, name))),
+    protectedWritableRoots: ['.git', '.agents', '.codex']
+      .map((name) => realPathIfExists(path.join(workspaceRoot, name)))
+      // NTFS ACLs cannot reserve an absent child name. Protect every metadata
+      // directory that exists when the execution plan is materialized.
+      .filter((protectedRoot) => provider !== 'windows-native' || existsSync(protectedRoot)),
     networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
     environment,
   };

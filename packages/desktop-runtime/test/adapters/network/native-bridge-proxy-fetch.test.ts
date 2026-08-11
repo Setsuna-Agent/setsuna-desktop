@@ -99,6 +99,22 @@ describe('NativeBridgeProxyFetch', () => {
     }
   });
 
+  it('uses the host-issued fixed-port environment for Windows sandbox shells', async () => {
+    const bridge = new RecordingNativeBridge({ mode: 'direct' });
+    bridge.sandboxEnvironment = {
+      HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+      NO_PROXY: '',
+    };
+    const proxyFetch = new NativeBridgeProxyFetch(bridge);
+
+    try {
+      await expect(proxyFetch.environmentForSandboxRoute()).resolves.toEqual(bridge.sandboxEnvironment);
+      expect(bridge.sandboxEnvironmentRequests).toBe(1);
+    } finally {
+      await proxyFetch.close();
+    }
+  });
+
   it('rechecks loopback bypass rules for every redirected request', async () => {
     let targetPort = 0;
     const target = createServer((request, response) => {
@@ -149,6 +165,8 @@ describe('NativeBridgeProxyFetch', () => {
 class RecordingNativeBridge extends InMemoryDesktopNativeBridge {
   readonly inputs: DesktopResolveNetworkProxyInput[] = [];
   readonly systemFetchInputs: string[] = [];
+  sandboxEnvironment: Record<string, string> = {};
+  sandboxEnvironmentRequests = 0;
 
   constructor(private readonly result: DesktopResolvedNetworkProxy) {
     super();
@@ -162,5 +180,10 @@ class RecordingNativeBridge extends InMemoryDesktopNativeBridge {
   override async fetchWithSystemProxy(input: string | URL) {
     this.systemFetchInputs.push(typeof input === 'string' ? input : input.href);
     return new Response('system');
+  }
+
+  override async resolveSandboxNetworkEnvironment() {
+    this.sandboxEnvironmentRequests += 1;
+    return this.sandboxEnvironment;
   }
 }

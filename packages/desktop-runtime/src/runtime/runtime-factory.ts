@@ -183,7 +183,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       ],
       mcpConfigPath: path.join(runtimeDataDir, 'mcp.json'),
       memoryStorageRoot: path.join(runtimeDataDir, 'memories'),
-      resolveShellEnvironment: () => networkProxyFetch.environmentForRoute(),
+      resolveShellEnvironment: ({ sandboxNetworkAccess }) => (
+        process.platform === 'win32' && sandboxNetworkAccess
+          ? networkProxyFetch.environmentForSandboxRoute()
+          : networkProxyFetch.environmentForRoute()
+      ),
     },
   );
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。

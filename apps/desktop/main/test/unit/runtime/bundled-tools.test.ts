@@ -4,7 +4,9 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   installDesktopRipgrepEnvironment,
+  installDesktopWindowsSandboxEnvironment,
   resolveDesktopRipgrep,
+  resolveDesktopWindowsSandbox,
 } from '../../../src/runtime/bundled-tools.js';
 
 describe('bundled desktop tools', () => {
@@ -55,5 +57,46 @@ describe('bundled desktop tools', () => {
     expect(env.SETSUNA_DESKTOP_RG_PATH).toBe(binaryPath);
     expect(env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG).toBe('1');
     expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(binaryPath));
+  });
+
+  it('resolves the packaged Windows sandbox only from its bundled resource', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-windows-sandbox-'));
+    const binaryPath = path.join(root, 'setsuna-sandbox', 'setsuna-sandbox-win.exe');
+    await mkdir(path.dirname(binaryPath), { recursive: true });
+    await writeFile(binaryPath, 'test sidecar');
+
+    expect(resolveDesktopWindowsSandbox({
+      appRoot: path.join(root, 'app.asar'),
+      arch: 'x64',
+      env: { PATH: '' },
+      isPackaged: true,
+      platform: 'win32',
+      resourcesPath: root,
+    })).toBe(binaryPath);
+  });
+
+  it('reports the Windows sandbox when its packaged resource is missing', () => {
+    expect(() => resolveDesktopWindowsSandbox({
+      appRoot: '/missing/app.asar',
+      arch: 'x64',
+      env: { PATH: '' },
+      isPackaged: true,
+      platform: 'win32',
+      resourcesPath: '/missing',
+    })).toThrow('Bundled Windows sandbox executable is missing or invalid');
+  });
+
+  it('installs and removes the explicit Windows sandbox path', () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    installDesktopWindowsSandboxEnvironment(env, 'C:\\Setsuna\\setsuna-sandbox-win.exe', {
+      required: true,
+    });
+    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBe(
+      'C:\\Setsuna\\setsuna-sandbox-win.exe',
+    );
+
+    installDesktopWindowsSandboxEnvironment(env, undefined, { required: false });
+    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBeUndefined();
   });
 });

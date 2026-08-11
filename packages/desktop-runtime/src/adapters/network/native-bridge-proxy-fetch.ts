@@ -86,6 +86,10 @@ export class NativeBridgeProxyFetch {
     };
   }
 
+  environmentForSandboxRoute(): Promise<Record<string, string>> {
+    return this.nativeBridge.resolveSandboxNetworkEnvironment();
+  }
+
   async close(): Promise<void> {
     const agents = [...this.proxyDispatchers.values()].map(({ agent }) => agent);
     this.proxyDispatchers.clear();

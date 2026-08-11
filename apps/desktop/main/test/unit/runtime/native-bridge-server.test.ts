@@ -32,6 +32,9 @@ describe('DesktopNativeBridgeServer', () => {
       proxyServerId: 'proxy-example',
       proxyUrl: 'http://relay:secret@127.0.0.1:1234',
     }));
+    const resolveSandboxNetworkEnvironment = vi.fn(async () => ({
+      HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+    }));
     const deleteNetworkProxy = vi.fn(async () => ({
       configPath: '/test/network-proxies.json',
       routing: defaultDesktopNetworkProxyRouting(),
@@ -47,6 +50,7 @@ describe('DesktopNativeBridgeServer', () => {
       deleteNetworkProxy,
       openExternal,
       resolveNetworkProxy,
+      resolveSandboxNetworkEnvironment,
       systemProxyFetch,
       validateNetworkProxyReferences,
     });
@@ -85,6 +89,10 @@ describe('DesktopNativeBridgeServer', () => {
       scope: 'runtime',
       override: { mode: 'proxy', proxyServerId: 'proxy-example' },
     });
+    await expect(nativeGet(connection, '/v1/network-proxy/sandbox-environment')).resolves.toEqual({
+      HTTP_PROXY: 'http://sandbox:secret@127.0.0.1:61080',
+    });
+    expect(resolveSandboxNetworkEnvironment).toHaveBeenCalledOnce();
     await expect(nativeRequest(connection, '/v1/network-proxy/validate-references', {
       proxyServerIds: ['proxy-example', 'proxy-example'],
     })).resolves.toEqual({ ok: true });
@@ -141,6 +149,7 @@ describe('DesktopNativeBridgeServer', () => {
       }),
       openExternal: async () => undefined,
       resolveNetworkProxy: async () => ({ mode: 'direct' }),
+      resolveSandboxNetworkEnvironment: async () => ({}),
       systemProxyFetch: async () => new Response('ok'),
       validateNetworkProxyReferences: async () => undefined,
     });
@@ -169,6 +178,17 @@ function systemFetchFrame(metadata: DesktopSystemProxyFetchRequest, body = ''): 
   const prefix = Buffer.alloc(DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES);
   prefix.writeUInt32BE(metadataBytes.length, 0);
   return Buffer.concat([prefix, metadataBytes, Buffer.from(body)]);
+}
+
+async function nativeGet(
+  connection: { token: string; url: string },
+  pathname: string,
+): Promise<unknown> {
+  const response = await fetch(`${connection.url}${pathname}`, {
+    headers: { Authorization: `Bearer ${connection.token}` },
+  });
+  expect(response.status).toBe(200);
+  return response.json();
 }
 
 async function nativeRequest(

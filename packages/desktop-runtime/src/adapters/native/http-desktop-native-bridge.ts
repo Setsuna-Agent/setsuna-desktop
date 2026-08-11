@@ -3,12 +3,14 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
+  DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER,
   DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
+  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
 } from '@setsuna-desktop/contracts';
 import { Agent } from 'undici';
 import type { DesktopNativeBridge, SecretStoreStatus } from '../../ports/secret-store.js';
@@ -98,6 +100,10 @@ export class HttpDesktopNativeBridge implements DesktopNativeBridge {
     return this.request('/v1/network-proxy/resolve', { body: input, method: 'POST' });
   }
 
+  resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment> {
+    return this.request(DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH, { method: 'GET' });
+  }
+
   async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {
     await this.request('/v1/network-proxy/validate-references', {
       body: { proxyServerIds },
@@ -166,6 +172,10 @@ export class UnavailableDesktopNativeBridge implements DesktopNativeBridge {
       throw new Error('A configured network proxy requires the Setsuna Desktop host.');
     }
     return input.override?.mode === 'direct' ? { mode: 'direct' } : { mode: 'system' };
+  }
+
+  async resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment> {
+    throw new Error('The Windows sandbox network gateway requires the Setsuna Desktop host.');
   }
 
   async validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void> {

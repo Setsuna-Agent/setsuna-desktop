@@ -142,6 +142,11 @@ const networkProxy: SetsunaDesktopBridge['networkProxy'] = {
   },
 };
 
+const windowsSandbox: SetsunaDesktopBridge['windowsSandbox'] = {
+  getStatus: () => ipcRenderer.invoke('windows-sandbox:get-status'),
+  runAction: (action) => ipcRenderer.invoke('windows-sandbox:run-action', action),
+};
+
 const browser: SetsunaDesktopBridge['browser'] = {
   captureScreenshot: (tabId) =>
     ipcRenderer.invoke('browser:capture-screenshot', { tabId }),
@@ -260,6 +265,7 @@ const bridge: SetsunaDesktopBridge = {
   updater,
   webdavSync,
   windowControls,
+  windowsSandbox,
   workspaceApps,
 };
 contextBridge.exposeInMainWorld('setsunaDesktop', bridge);

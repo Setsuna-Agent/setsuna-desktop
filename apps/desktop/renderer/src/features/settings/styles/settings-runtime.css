@@ -228,6 +228,63 @@
   display: grid;
 }
 
+.desktop-settings-panel .windows-sandbox-settings__card {
+  display: grid;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__status-row {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, auto);
+  min-height: 78px;
+  row-gap: 8px;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__icon {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: var(--app-text-muted);
+}
+
+.desktop-settings-panel .windows-sandbox-settings__status {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__actions .sd-button {
+  min-height: 30px;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  border-top: 1px solid var(--app-border);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-settings-panel .windows-sandbox-settings__details code {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+  font: 11px/16px var(--app-code-font-family);
+}
+
+.desktop-settings-panel .windows-sandbox-settings__card > .chat-user-settings__runtime-error {
+  margin: 10px 14px 12px;
+}
+
 .desktop-settings-panel .workspace-dependencies-settings__toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
 }
@@ -342,7 +399,8 @@
   margin: 10px 14px 12px;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings .is-spinning {
+.desktop-settings-panel .workspace-dependencies-settings .is-spinning,
+.desktop-settings-panel .windows-sandbox-settings .is-spinning {
   animation: workspace-dependencies-spin 0.9s linear infinite;
 }
 
@@ -358,6 +416,23 @@
   .desktop-settings-panel .workspace-dependencies-settings__status-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 8px;
+  }
+
+  .desktop-settings-panel .windows-sandbox-settings__status-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-settings-panel .windows-sandbox-settings__status {
+    justify-items: start;
+  }
+
+  .desktop-settings-panel .windows-sandbox-settings__actions {
+    justify-content: flex-start;
+  }
+
+  .desktop-settings-panel .windows-sandbox-settings__details {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .desktop-settings-panel .workspace-dependencies-settings__toggle-control {
@@ -379,7 +454,6 @@
   .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
     justify-self: start;
   }
-
 }
 
 @media (max-width: 560px) {

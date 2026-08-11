@@ -127,6 +127,22 @@ describe('runtime host packaging paths', () => {
     )).toThrow('Bundled ripgrep is required');
   });
 
+  it('passes a Windows-absolute sandbox sidecar path to the runtime on any build host', () => {
+    const windowsSandboxPath = 'C:\\Program Files\\Setsuna Desktop\\setsuna-sandbox-win.exe';
+    const env = runtimeProcessEnvironment({
+      windowsSandboxPath,
+      requireBundledWindowsSandbox: true,
+    }, {});
+
+    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBe(windowsSandboxPath);
+  });
+
+  it('fails closed when a packaged runtime has no Windows sandbox sidecar', () => {
+    expect(() => runtimeProcessEnvironment({
+      requireBundledWindowsSandbox: true,
+    }, {})).toThrow('Bundled Windows sandbox is required');
+  });
+
   it('reconnects a dropped SSE stream from the last delivered sequence', async () => {
     const firstEvent = runtimeEvent(1);
     const secondEvent = runtimeEvent(2);
