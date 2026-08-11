@@ -306,7 +306,6 @@ export class AgentLoop {
       claimAttachments: (threadId, attachments) => options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       normalizeAttachments,
       publishStoredEventsSince: (threadId, sinceSeq) => this.publishStoredEventsSince(threadId, sinceSeq),
       runTurn: (input) => this.turnRunner.run(input),
@@ -437,15 +436,15 @@ export class AgentLoop {
   async startTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const active = this.turnTasks.activeForThread(threadId);
-      const hasQueuedInput = !input.planDecision && await this.queuedTurns.hasPending(threadId);
-      if ((active || hasQueuedInput) && !input.planDecision) {
+      const hasQueuedInput = await this.queuedTurns.hasPending(threadId);
+      if (active || hasQueuedInput) {
         // 防御 renderer/SSE 短暂不同步：即使客户端误走普通发送入口，也必须进入
         // 跨轮次队列。线程因错误暂停时也先恢复旧项，避免新输入越过 FIFO。
         const queued = await this.queuedTurns.enqueue(threadId, {
           attachments: input.attachments,
           clientId: input.clientId,
           input: input.input,
-          kind: input.collaborationMode === 'plan' ? 'plan' : 'message',
+          kind: 'message',
           skillIds: input.skillIds,
           skillReferences: input.skillReferences,
           thinking: input.thinking,
@@ -771,7 +770,7 @@ export class AgentLoop {
     return this.modelStreamEvents.publishAssistantDelta(threadId, turnId, messageId, text);
   }
 
-  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; planMode?: RuntimeMessage['planMode']; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
+  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
     return this.modelStreamEvents.completeMessage(threadId, turnId, messageId, payload);
   }
   /**

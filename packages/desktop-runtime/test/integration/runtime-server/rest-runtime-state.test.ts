@@ -252,6 +252,23 @@ describe('runtime server REST runtime state', () => {
       expect(cancelled).toMatchObject({ ok: true });
       expect(typeof cancelled.cancelled).toBe('boolean');
     });
+
+  it('rejects removed Plan mode turn inputs', async () => {
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Default mode only' }),
+      });
+      const turnPath = `/v1/threads/${encodeURIComponent(thread.id)}/turns`;
+
+      await expect(harness.runtimeFetch(turnPath, {
+        method: 'POST',
+        body: JSON.stringify({ input: 'Plan first.', collaborationMode: 'plan' }),
+      })).rejects.toThrow('Plan mode is no longer supported');
+      await expect(harness.runtimeFetch(turnPath, {
+        method: 'POST',
+        body: JSON.stringify({ input: '', planDecision: 'accepted' }),
+      })).rejects.toThrow('Plan decisions are no longer supported');
+    });
   
   it('settles persisted active turns when the runtime starts', async () => {
       await harness.server.close();

@@ -22,7 +22,6 @@ import {
   accountGoalTurn,
   epochSeconds,
   goalExecutionState,
-  hasAwaitingPlanConfirmation,
   isProviderUsageLimit,
   MAX_AUTOMATIC_GOAL_TURNS,
   MAX_CONSECUTIVE_NO_PROGRESS_TURNS,
@@ -541,9 +540,8 @@ export class RuntimeGoalCoordinator {
         || this.options.activeTask(threadId)
         || this.options.registeredTask(threadId)
       ) return;
-      // Explicit user work and unresolved Plan confirmation always beat autonomous continuation.
+      // Explicit user work always beats autonomous continuation.
       if (await this.options.hasQueuedInput?.(threadId)) return;
-      if (hasAwaitingPlanConfirmation(thread.messages)) return;
       const run = await this.options.createContinuation(threadId, goal);
       this.observeRun(threadId, run.turnId, 'goal', run.done, goal.id, goal.objective);
       void run.done.catch(() => undefined);

@@ -88,7 +88,7 @@ export type RuntimeMessage = {
   clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
-  /** 用户输入的领域类型；普通消息可省略，Plan/Goal 由 transcript 使用独立标识展示。 */
+  /** 用户输入的领域类型；普通消息可省略，Goal 由 transcript 使用独立标识展示。 */
   inputKind?: RuntimeQueuedTurnInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
@@ -144,12 +144,11 @@ export type RuntimeReviewModeNotice = {
   review: string;
 };
 
+/** 仅用于读取旧线程；runtime 不再创建或更新 Plan mode 消息。 */
 export type RuntimePlanModeNotice = {
   mode: 'plan';
   status: 'awaiting_confirmation' | 'accepted' | 'dismissed';
 };
-
-export type RuntimePlanDecision = Exclude<RuntimePlanModeNotice['status'], 'awaiting_confirmation'>;
 
 export type RuntimeMailboxDeliveryRecord = {
   id: string;
@@ -313,10 +312,11 @@ export type RuntimeThreadGoalPatch = {
   status?: RuntimeThreadGoalStatus;
 };
 
-export type RuntimeQueuedTurnInputKind = 'message' | 'plan' | 'goal';
+export type RuntimeQueuedTurnInputKind = 'message' | 'goal';
 
 export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueuedTurnInputKind {
-  return value === 'plan' || value === 'goal' ? value : 'message';
+  // 已持久化的旧版 plan 队列项在升级后按普通消息继续执行，避免遗留队列卡住。
+  return value === 'goal' ? 'goal' : 'message';
 }
 
 /**
@@ -494,14 +494,10 @@ export type ThreadMemoryModePatch = {
   mode: RuntimeThreadMemoryMode;
 };
 
-export type RuntimeCollaborationMode = 'default' | 'plan';
-
 export type SendTurnInput = {
   input: string;
   clientId?: string;
   attachments?: RuntimeInputMessageAttachment[];
-  collaborationMode?: RuntimeCollaborationMode;
-  planDecision?: RuntimePlanDecision;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;

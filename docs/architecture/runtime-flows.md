@@ -151,7 +151,7 @@ AgentLoop facade
 
 ### 输入队列和 steer
 
-Active turn 期间的普通提交默认进入线程级 FIFO 队列。用户显式“立即发送”时，普通消息可以在安全检查点作为 steer 加入当前 turn；Plan 和 Goal 保持独立轮次。完整状态机见 [Active turn 发送队列](../designs/queued-turn-inputs.md)。
+Active turn 期间的普通提交默认进入线程级 FIFO 队列。用户显式“立即发送”时，普通消息可以在安全检查点作为 steer 加入当前 turn；Goal 保持独立轮次。完整状态机见 [Active turn 发送队列](../designs/queued-turn-inputs.md)。
 
 ## 内置浏览器控制
 

@@ -178,7 +178,6 @@ export function SideChatPanel({
           onEditUserMessage={sideChat.actions.editUserMessage}
           onOpenSideChat={onOpenSideChat}
           onOpenThread={() => undefined}
-          onPlanDecision={(decision) => void sideChat.actions.sendInput('', { planDecision: decision })}
           onSearchProjectEntries={searchSideWorkspaceEntries}
           onSelectModel={onSelectModel}
           onSend={(value, options) => sideChat.actions.sendInput(value, options)}

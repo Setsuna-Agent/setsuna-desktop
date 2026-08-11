@@ -69,12 +69,12 @@
 | `tool-approval-coordinator.ts` | 510 | 统一审批策略、PermissionRequest hook、session/persistent grant | 审批语义集中，需保持不同审批入口的一致性 |
 | `tool-approval-lifecycle.ts` | 68 | 唯一 create/requested/wait/cancel/resolved 生命周期 | 取消必须只解析并发布一次 |
 | `tool-retry-strategy.ts` | 334 | Network、readable-root、sandbox bypass 决策与二次执行 | 不得拥有 terminal event 发布能力 |
-| `ChatComposer.tsx` | 628 | 2 个 state、8 个 ref；组合 command、mode 与 queued-edit controller | 继续持有附件/队列发送事务和外部请求接入，不再持有 footer/overlay 细节 |
+| `ChatComposer.tsx` | 683 | 2 个 state、8 个 ref；组合 command、mode 与 queued-edit controller | 继续持有附件/队列发送事务和外部请求接入，不再持有 footer/overlay 细节 |
 | `useChatCommandController.ts` | 240 | 8 个 state；统一 mention/slash、光标、搜索取消与键盘导航 | owner 单一；继续由纯状态矩阵和异步竞态测试约束 |
-| `useChatComposerModeController.ts` | 165 | 5 个 state；统一 Plan/Goal、thinking、model/usage view 和 send options | 不得接管附件结算、queued-edit token 或实际发送事务 |
-| `ChatComposerFooter.tsx` | 361 | 0 个 state/ref；按 command、attachment、editing、mode、thinking 分组接收显式控制面 | 纯展示 owner；不得接管发送或附件生命周期 |
+| `useChatComposerModeController.ts` | 147 | 5 个 state；统一 Goal、thinking、model/usage view 和 send options | 不得接管附件结算、queued-edit token 或实际发送事务 |
+| `ChatComposerFooter.tsx` | 350 | 0 个 state/ref；按 command、attachment、editing、mode、thinking 分组接收显式控制面 | 纯展示 owner；不得接管发送或附件生命周期 |
 | `ChatComposerOverlays.tsx` | 102 | 0 个 state/ref；组合 mention、slash 与 usage panel | 纯展示 owner；菜单搜索和 open state 仍归 controller |
-| `app-server/dispatcher.ts` | 765 | 69 个 RPC method；删除、Goal、Review、MCP 已下沉 | 协议分发器仍覆盖大量 SWE method |
+| `app-server/dispatcher.ts` | 754 | 69 个 RPC method；删除、Goal、Review、MCP 已下沉 | 协议分发器仍覆盖大量 SWE method |
 | `app-server/config-protocol.ts` | 799 | Config read/write、model、memory、sandbox；feature 与分页已拆出 | model/sandbox 继续按真实变更评审，不做纯尺寸拆分 |
 | `app-server/feature-protocol.ts` | 198 | Feature 目录、默认/强制禁用策略与 enablement 写入 | 上游兼容清单和运行时配置映射由同一 owner 维护 |
 | `app-server/pagination.ts` | 27 | Model、feature、permission、MCP 共用 offset cursor 校验 | 只拥有无状态协议分页，不接管目录业务 |
@@ -291,7 +291,7 @@ RuntimeEvent log
 - [x] 把 command visibility/dismiss 优先级固化为纯状态模型，把 slash action/Skill 列表固化为纯映射。
 - [x] 为迟到 workspace 搜索、菜单索引环绕、queued edit 阻塞、action/Skill 过滤和 Slot 选择同步增加 characterization test。
 - [x] `ChatComposer.tsx` 从 1,179 行降至 897 行，退出 900 行热点区；Sender 与外部 props API 保持不变。
-- [x] 把 Plan/Goal 原子互斥、thinking 能力归一化、model/usage view state 和 send options 下沉到 `useChatComposerModeController.ts`。
+- [x] 把 Goal、thinking 能力归一化、model/usage view state 和 send options 下沉到 `useChatComposerModeController.ts`。
 - [x] 把当前 provider/model fallback 和 thinking effort 规范化固化为纯模型；模式切换、thread identity reset 和 send-success reset 有 characterization test。
 - [x] `ChatComposer.tsx` 进一步降至 813 行，只保留 selected Skill、submitting 与跨 controller 编排。
 - [x] 把 footer 和 overlay 组合下沉到 `ChatComposerFooter.tsx` 与 `ChatComposerOverlays.tsx`；两者不新增 state/ref。

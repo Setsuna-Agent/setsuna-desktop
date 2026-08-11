@@ -3,7 +3,6 @@ import {
   cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   type RuntimeEvent,
-  type RuntimeMessage,
   type RuntimeQueuedTurnInput,
   type RuntimeThreadGoal,
   type RuntimeThreadGoalExecutionOptions,
@@ -191,14 +190,6 @@ export function goalExecutionState(
     thinkingEffort: input.thinking === true ? input.thinkingEffort : undefined,
   };
   return { execution };
-}
-
-export function hasAwaitingPlanConfirmation(messages: RuntimeMessage[]): boolean {
-  return messages.some((message) => (
-    message.role === 'assistant'
-    && message.planMode?.mode === 'plan'
-    && message.planMode.status === 'awaiting_confirmation'
-  ));
 }
 
 export function isProviderUsageLimit(message: string): boolean {

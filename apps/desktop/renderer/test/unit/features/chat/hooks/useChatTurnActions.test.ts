@@ -58,7 +58,6 @@ describe('composer turn routing', () => {
   it('always uses the durable queue entry point for Goal submissions', () => {
     expect(shouldQueueComposerTurn(null, { goalMode: true })).toBe(true);
     expect(shouldQueueComposerTurn('turn_active', {})).toBe(true);
-    expect(shouldQueueComposerTurn('turn_active', { planDecision: 'accepted' })).toBe(false);
     expect(shouldQueueComposerTurn(null, {})).toBe(false);
   });
 });

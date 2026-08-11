@@ -59,7 +59,6 @@ function renderUserMessage(
         onAnswerApproval={async () => undefined}
         onCancelEdit={() => undefined}
         onEditDraftChange={() => undefined}
-        onPlanDecision={() => undefined}
         onStartEdit={() => undefined}
         onStartDelete={() => undefined}
         onSubmitEdit={() => undefined}
@@ -104,7 +103,6 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
       onAnswerApproval={async () => undefined}
       onCancelEdit={() => undefined}
       onEditDraftChange={() => undefined}
-      onPlanDecision={() => undefined}
       onStartEdit={() => undefined}
       onStartDelete={() => undefined}
       onSubmitEdit={() => undefined}
@@ -117,12 +115,9 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
 }
 
 describe('MessageItem user messages', () => {
-  it('marks Plan and Goal inputs distinctly without offering Goal regeneration', () => {
-    const planHtml = renderUserMessage('plan');
+  it('marks Goal inputs distinctly without offering Goal regeneration', () => {
     const goalHtml = renderUserMessage('goal');
 
-    expect(planHtml).toContain('chat-user-message-kind--plan');
-    expect(planHtml).toContain('计划');
     expect(goalHtml).toContain('chat-user-message-kind--goal');
     expect(goalHtml).toContain('目标');
     expect(goalHtml).not.toContain('aria-label="编辑"');
@@ -187,7 +182,7 @@ describe('MessageItem user messages', () => {
     expect(html).toContain('对话创建Skill');
   });
 
-  it('keeps Plugin attribution in the assistant body for Plan turns', () => {
+  it('renders legacy Plan messages read-only with Plugin attribution', () => {
     const html = renderPlanMessage([{
       id: 'vision-recognition',
       installed: true,
@@ -197,5 +192,7 @@ describe('MessageItem user messages', () => {
     expect(html).toContain('已使用插件');
     expect(html).toContain('视觉识别');
     expect(html).toContain('chat-plan-card');
+    expect(html).toContain('计划模式已移除');
+    expect(html).not.toContain('chat-plan-card__actions');
   });
 });

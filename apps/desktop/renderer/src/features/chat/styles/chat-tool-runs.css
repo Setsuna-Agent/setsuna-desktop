@@ -1253,37 +1253,3 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   line-height: 1.6;
   color: var(--app-text);
 }
-
-.chat-plan-card__actions {
-  display: flex;
-  gap: 8px;
-}
-
-.chat-plan-card__action {
-  height: 28px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.chat-plan-card__action--accept {
-  color: #fff;
-  background: var(--app-primary);
-}
-
-.chat-plan-card__action--accept:hover {
-  background: color-mix(in srgb, var(--app-primary) 88%, #000);
-}
-
-.chat-plan-card__action--dismiss {
-  color: var(--app-text-secondary);
-  background: color-mix(in srgb, var(--app-text) 6%, transparent);
-}
-
-.chat-plan-card__action--dismiss:hover {
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 10%, transparent);
-}

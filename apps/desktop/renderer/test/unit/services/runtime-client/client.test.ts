@@ -93,7 +93,7 @@ describe('desktop runtime client advanced thread methods', () => {
     const queuedInput = {
       input: 'follow up',
       clientId: 'client_1',
-      kind: 'plan' as const,
+      kind: 'message' as const,
       skillIds: ['skill_1'],
       thinking: true,
       thinkingEffort: 'high',

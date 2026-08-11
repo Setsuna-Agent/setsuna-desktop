@@ -48,18 +48,17 @@ describe('ChatSendQueue', () => {
     expect(html).toContain('aria-label="立即发送"');
   });
 
-  it('keeps Plan and Goal send-now disabled until the active turn finishes', () => {
+  it('keeps Goal send-now disabled until the active turn finishes', () => {
     const html = renderQueue([
-      queuedInput({ id: 'queued_plan', input: 'Plan', kind: 'plan' }),
+      queuedInput({ id: 'queued_message', input: 'Message', kind: 'message' }),
       queuedInput({ id: 'queued_goal', input: 'Goal', kind: 'goal' }),
     ], false, true);
 
-    expect(html).toContain('data-queue-kind="plan"');
+    expect(html).toContain('data-queue-kind="message"');
     expect(html).toContain('data-queue-kind="goal"');
-    expect(html).toMatch(/class="chat-send-queue__marker is-plan" role="img" aria-label="[^"]+"/);
     expect(html).toMatch(/class="chat-send-queue__marker is-goal" role="img" aria-label="[^"]+"/);
-    expect(html.match(/aria-label="计划和目标需等待当前轮次结束"/g)).toHaveLength(2);
-    expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html.match(/aria-label="目标需等待当前轮次结束"/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="立即发送"');
   });
 });
 

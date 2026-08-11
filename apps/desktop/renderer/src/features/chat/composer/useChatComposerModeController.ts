@@ -12,12 +12,10 @@ import {
 } from 'react';
 import {
   clearChatComposerGoalMode,
-  clearChatComposerPlanMode,
   createChatComposerModelCapabilities,
   emptyChatComposerLocalModes,
   emptyChatThinkingSelection,
   enableChatComposerGoalMode,
-  enableChatComposerPlanMode,
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
@@ -71,14 +69,6 @@ export function useChatComposerModeController({
     ));
   }, []);
 
-  const enablePlanMode = useCallback(() => {
-    setLocalModes(enableChatComposerPlanMode);
-  }, []);
-
-  const disablePlanMode = useCallback(() => {
-    setLocalModes(clearChatComposerPlanMode);
-  }, []);
-
   const clearGoalMode = useCallback(() => {
     if (activeGoal) void onClearThreadGoal();
     setLocalModes(clearChatComposerGoalMode);
@@ -115,7 +105,6 @@ export function useChatComposerModeController({
   }): ChatComposerSendOptions => createChatComposerSendOptions({
     attachments,
     goalModeEnabled: localModes.goalModeEnabled,
-    planModeEnabled: localModes.planModeEnabled,
     selectedSkillIds,
     selectedSkillReferences,
     supportsImageInput: modelCapabilities.supportsImageInput,
@@ -124,7 +113,6 @@ export function useChatComposerModeController({
     thinkingSupported: modelCapabilities.thinking.supported,
   }), [
     localModes.goalModeEnabled,
-    localModes.planModeEnabled,
     modelCapabilities.supportsImageInput,
     modelCapabilities.thinking.supported,
     thinkingSelection.effort,
@@ -136,18 +124,14 @@ export function useChatComposerModeController({
     clearGoalMode,
     closeUsagePanel,
     createSendOptions,
-    disablePlanMode,
     enableGoalMode,
-    enablePlanMode,
     goalModeEnabled: localModes.goalModeEnabled,
     hasProtectedModeState: Boolean(
       thinkingSelection.enabled
-      || localModes.planModeEnabled
       || localModes.goalModeEnabled
     ),
     modelOpenSignal,
     openModelPicker,
-    planModeEnabled: localModes.planModeEnabled,
     resetAfterSend,
     setThinkingEffort,
     setThinkingEnabled,

@@ -2,7 +2,6 @@ import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
 
 export type ChatComposerLocalModes = {
   goalModeEnabled: boolean;
-  planModeEnabled: boolean;
 };
 
 export type ChatThinkingConfig = {
@@ -24,7 +23,6 @@ export type ChatComposerModelCapabilities = {
 
 export const emptyChatComposerLocalModes: ChatComposerLocalModes = {
   goalModeEnabled: false,
-  planModeEnabled: false,
 };
 
 export const emptyChatThinkingSelection: ChatThinkingSelection = {
@@ -55,24 +53,11 @@ export function createChatComposerModelCapabilities(
   };
 }
 
-export function enableChatComposerPlanMode(
-  modes: ChatComposerLocalModes,
-): ChatComposerLocalModes {
-  if (modes.planModeEnabled && !modes.goalModeEnabled) return modes;
-  return {
-    goalModeEnabled: false,
-    planModeEnabled: true,
-  };
-}
-
 export function enableChatComposerGoalMode(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  if (modes.goalModeEnabled && !modes.planModeEnabled) return modes;
-  return {
-    goalModeEnabled: true,
-    planModeEnabled: false,
-  };
+  if (modes.goalModeEnabled) return modes;
+  return { goalModeEnabled: true };
 }
 
 export function clearChatComposerGoalMode(
@@ -85,16 +70,6 @@ export function clearChatComposerGoalMode(
   };
 }
 
-export function clearChatComposerPlanMode(
-  modes: ChatComposerLocalModes,
-): ChatComposerLocalModes {
-  if (!modes.planModeEnabled) return modes;
-  return {
-    ...modes,
-    planModeEnabled: false,
-  };
-}
-
 export function resetThreadScopedChatComposerModes(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
@@ -104,8 +79,7 @@ export function resetThreadScopedChatComposerModes(
 export function resetChatComposerModesAfterSend(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  if (!modes.goalModeEnabled && !modes.planModeEnabled) return modes;
-  return emptyChatComposerLocalModes;
+  return clearChatComposerGoalMode(modes);
 }
 
 export function normalizeChatThinkingSelection(

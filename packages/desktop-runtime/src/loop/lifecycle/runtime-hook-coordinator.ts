@@ -155,25 +155,6 @@ export class RuntimeHookCoordinator {
     };
   }
 
-  planModeContextMessages(turnId: string): RuntimeMessage[] {
-    return [{
-      id: 'desktop_plan_mode',
-      turnId,
-      role: 'developer',
-      promptSource: 'plan',
-      content: [
-        '<plan_mode>',
-        'Plan mode is active. Produce a concise implementation plan or review plan only.',
-        'Do not call tools, edit files, run commands, or claim completed work in this turn.',
-        'End by waiting for the user to confirm before execution.',
-        '</plan_mode>',
-      ].join('\n'),
-      createdAt: this.options.clock.now().toISOString(),
-      status: 'complete',
-      visibility: 'model',
-    }];
-  }
-
   stopContinuationMessages(reason: string, turnId: string): RuntimeMessage[] {
     const text = reason.trim();
     if (!text) return [];

@@ -2,9 +2,7 @@ import {
   runtimeDeveloperFeaturesEnabled,
   type AnswerRuntimeApprovalInput,
   type DesktopRuntimeClient,
-  type RuntimeCollaborationMode,
   type RuntimeConfigState,
-  type RuntimePlanDecision,
   type RuntimePluginSummary,
   type RuntimeSkillSummary,
   type RuntimeThread,
@@ -165,7 +163,6 @@ export function AppChatSurface({
   onStartThreadReview,
   onSend,
   queuedTurnActions,
-  onPlanDecision,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
@@ -256,9 +253,8 @@ export function AppChatSurface({
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
-  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
+  onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -364,7 +360,6 @@ export function AppChatSurface({
             onSelectModel={onSelectModel}
             onSend={onSend}
             queuedTurnActions={queuedTurnActions}
-            onPlanDecision={onPlanDecision}
             onReviewRefresh={onReviewRefresh}
             onSetMultiAgentEnabled={onSetMultiAgentEnabled}
             onStartThreadReview={onStartThreadReview}

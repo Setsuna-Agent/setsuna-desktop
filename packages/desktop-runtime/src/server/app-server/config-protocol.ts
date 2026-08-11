@@ -581,12 +581,6 @@ export function sweCollaborationModeListResponse() {
   return {
     data: [
       {
-        name: 'Plan',
-        mode: 'plan',
-        model: null,
-        reasoning_effort: 'medium',
-      },
-      {
         name: 'Default',
         mode: 'default',
         model: null,

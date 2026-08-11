@@ -298,41 +298,6 @@ describe('agent loop queued turn inputs', () => {
     expect(modelClient.requests[1]?.stepSnapshot?.messageIds).toContain('skill_skill_step');
   });
 
-  it('restores Plan mode when a typed queued item starts', async () => {
-    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
-    await loop.startTurn(threadId, { input: 'Initial prompt' });
-    await waitForModelRequestCount(modelClient, 1);
-
-    const queued = await loop.queueTurnInput(threadId, {
-      input: 'Plan the refactor before editing.',
-      kind: 'plan',
-    });
-    expect((await threadStore.getThread(threadId))?.queuedTurnInputs).toMatchObject([{
-      id: queued.queuedInputId,
-      kind: 'plan',
-    }]);
-
-    modelClient.releaseFirstResponse();
-    await waitForQueueDrain(threadStore, threadId, 2);
-
-    expect(modelClient.requests[1]).toMatchObject({ toolChoice: 'none' });
-    expect(modelClient.requests[1]?.messages).toContainEqual(expect.objectContaining({
-      id: 'desktop_plan_mode',
-      role: 'developer',
-    }));
-    const plannedThread = await threadStore.getThread(threadId);
-    expect(plannedThread?.messages.find((message) => (
-      message.role === 'user'
-      && message.content === 'Plan the refactor before editing.'
-    ))).toMatchObject({
-      inputKind: 'plan',
-    });
-    expect(plannedThread?.messages.at(-1)?.planMode).toEqual({
-      mode: 'plan',
-      status: 'awaiting_confirmation',
-    });
-  });
-
   it('turns a typed Goal item into a persistent goal and consumes it atomically', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -503,62 +468,6 @@ describe('agent loop queued turn inputs', () => {
       (snapshot) => `Timed out waiting for replacement goal completion; snapshot=${JSON.stringify(snapshot)}`,
     );
     expect((await threadStore.getThread(thread.id))?.goal?.id).not.toBe(previousGoalId);
-  });
-
-  it('keeps an active Goal idle while a queued Plan awaits confirmation', async () => {
-    const ids = new RandomIdGenerator();
-    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Goal waits for plan confirmation' });
-    const modelClient = new GoalWithQueuedPlanModelClient();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids,
-    });
-
-    await loop.setThreadGoal(thread.id, {
-      objective: 'Finish only after the plan is confirmed.',
-      status: 'active',
-    });
-    await waitForModelRequestCount(modelClient, 1);
-    await loop.queueTurnInput(thread.id, {
-      input: 'Plan the remaining Goal work.',
-      kind: 'plan',
-    });
-    modelClient.releaseFirstGoalResponse();
-
-    const awaiting = await waitForTestState(
-      () => threadStore.getThread(thread.id),
-      (snapshot) => Boolean(
-        snapshot
-        && snapshot.activeTurnId === null
-        && snapshot.goal?.status === 'active'
-        && snapshot.messages.some((message) =>
-          message.planMode?.status === 'awaiting_confirmation'
-        )
-      ),
-      (snapshot) => `Timed out waiting for queued Plan confirmation; snapshot=${JSON.stringify(snapshot)}`,
-    );
-    expect(awaiting?.queuedTurnInputs).toEqual([]);
-    expect(modelClient.requests).toHaveLength(2);
-
-    await loop.startTurn(thread.id, { input: '', planDecision: 'accepted' });
-    const completed = await waitForTestState(
-      () => threadStore.getThread(thread.id),
-      (snapshot) => snapshot?.goal?.status === 'complete' && snapshot.activeTurnId === null,
-      (snapshot) => `Timed out waiting for Goal after plan acceptance; snapshot=${JSON.stringify(snapshot)}`,
-    );
-
-    expect(completed?.messages.find((message) => message.planMode)).toMatchObject({
-      planMode: { mode: 'plan', status: 'accepted' },
-    });
-    expect(modelClient.requests).toHaveLength(5);
-    expect(modelClient.requests[2]?.messages).toContainEqual(expect.objectContaining({
-      role: 'user',
-      content: '请按照上述已确认的计划开始执行。',
-    }));
   });
 
   it('returns queued success when an edit claim prevents immediate scheduling', async () => {
@@ -771,51 +680,5 @@ class QueuedGoalModelClient implements ModelClient {
 
   releaseFirstResponse(): void {
     this.releaseFirst();
-  }
-}
-
-class GoalWithQueuedPlanModelClient implements ModelClient {
-  requests: ModelRequest[] = [];
-  private releaseFirstGoal: () => void = () => undefined;
-  private readonly firstGoalReleased = new Promise<void>((resolve) => {
-    this.releaseFirstGoal = resolve;
-  });
-
-  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
-    this.requests.push(request);
-    if (this.requests.length === 1) {
-      yield { type: 'text_delta', text: 'Initial Goal work.' };
-      await this.firstGoalReleased;
-      yield { type: 'done', finishReason: 'stop' };
-      return;
-    }
-    if (this.requests.length === 2) {
-      yield { type: 'text_delta', text: '1. Inspect the remaining work.\n2. Finish the Goal.' };
-      yield { type: 'done', finishReason: 'stop' };
-      return;
-    }
-    if (this.requests.length === 3) {
-      yield { type: 'text_delta', text: 'Confirmed plan execution finished.' };
-      yield { type: 'done', finishReason: 'stop' };
-      return;
-    }
-    if (this.requests.length === 4) {
-      yield {
-        type: 'tool_calls',
-        toolCalls: [{
-          id: 'goal_after_plan_complete',
-          name: 'update_goal',
-          arguments: '{"status":"complete"}',
-        }],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    yield { type: 'text_delta', text: 'Goal completed after plan confirmation.' };
-    yield { type: 'done', finishReason: 'stop' };
-  }
-
-  releaseFirstGoalResponse(): void {
-    this.releaseFirstGoal();
   }
 }

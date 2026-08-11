@@ -22,8 +22,6 @@ import {
 import {
   EmptyModelClient,
   FailingCleanupToolHost,
-  PlanDeltaOnlyModelClient,
-  PlanThenToolModelClient,
   ProviderMetadataToolModelClient,
   RefreshingToolHost,
   StepSnapshotConfigStore,
@@ -425,38 +423,6 @@ describe('agent loop turn execution', () => {
       expect((await threadStore.getThread(thread.id))?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     });
   
-  it('keeps plan collaboration mode from executing tools', async () => {
-      const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Plan-only loop', projectId: 'project_1' });
-      const modelClient = new ToolCallingModelClient();
-      const toolHost = new CapturingToolHost();
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient,
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        ids,
-        toolHost,
-      });
-  
-      await loop.sendTurn(thread.id, { input: 'make a plan first', collaborationMode: 'plan' });
-      const saved = await threadStore.getThread(thread.id);
-  
-      expect(modelClient.requests).toHaveLength(1);
-      expect(modelClient.requests[0].tools).toBeUndefined();
-      expect(modelClient.requests[0].toolChoice).toBe('none');
-      expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([]);
-      expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([]);
-      expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_local_tool_rules')).toBe(false);
-      expect(modelClient.requests[0].stepSnapshot?.contextWindow?.toolDefinitionTokens).toBe(0);
-      expect(modelClient.requests[0].messages.some((message) => message.id === 'desktop_plan_mode' && message.content.includes('<plan_mode>'))).toBe(true);
-      expect(toolHost.calls).toEqual([]);
-      expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-      expect(saved?.messages.at(-1)?.content).toContain('Plan mode is active');
-      expect(saved?.messages.at(-1)?.planMode).toEqual({ mode: 'plan', status: 'awaiting_confirmation' });
-    });
-  
   it('uses the dedicated review policy and exposes only read-only review tools', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -499,75 +465,6 @@ describe('agent loop turn execution', () => {
       }));
     });
   
-  it('persists PlanDelta-only model output as the plan-mode assistant message', async () => {
-      const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Plan delta loop', projectId: 'project_1' });
-      const modelClient = new PlanDeltaOnlyModelClient();
-      const toolHost = new CapturingToolHost();
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient,
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        ids,
-        toolHost,
-      });
-  
-      await loop.sendTurn(thread.id, { input: 'plan from delta stream', collaborationMode: 'plan' });
-      const saved = await threadStore.getThread(thread.id);
-      const events = await threadStore.listEvents(thread.id, 0);
-  
-      expect(modelClient.requests[0].tools).toBeUndefined();
-      expect(modelClient.requests[0].toolChoice).toBe('none');
-      expect(toolHost.calls).toEqual([]);
-      expect(events.filter((event) => event.type === 'plan.delta').map((event) => event.payload.delta)).toEqual([
-        '1. Inspect current files.\n2. Wait for confirmation before edits.',
-      ]);
-      expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
-      expect(saved?.messages.at(-1)?.content).toBe('1. Inspect current files.\n2. Wait for confirmation before edits.');
-      expect(saved?.messages.at(-1)?.planMode).toEqual({ mode: 'plan', status: 'awaiting_confirmation' });
-    });
-  
-  it('accepts an awaiting Plan mode message when a default turn continues execution', async () => {
-      const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Plan accept loop', projectId: 'project_1' });
-      const modelClient = new PlanThenToolModelClient();
-      const toolHost = new CapturingToolHost();
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient,
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        ids,
-        toolHost,
-      });
-  
-      await loop.sendTurn(thread.id, { input: 'plan before editing', collaborationMode: 'plan' });
-      const planned = await threadStore.getThread(thread.id);
-      const planMessageId = planned?.messages.at(-1)?.id;
-  
-      await loop.sendTurn(thread.id, { input: 'Proceed with the plan.' });
-      const saved = await threadStore.getThread(thread.id);
-      const events = await threadStore.listEvents(thread.id, 0);
-      const planUpdatedIndex = events.findIndex((event) =>
-        event.type === 'message.plan_mode_updated' &&
-        event.payload.messageId === planMessageId &&
-        event.payload.planMode.status === 'accepted'
-      );
-      const executionTurnIndex = events.findIndex((event) =>
-        event.type === 'turn.started' &&
-        event.payload.input === 'Proceed with the plan.'
-      );
-  
-      expect(saved?.messages.find((message) => message.id === planMessageId)?.planMode).toEqual({ mode: 'plan', status: 'accepted' });
-      expect(planUpdatedIndex).toBeGreaterThanOrEqual(0);
-      expect(executionTurnIndex).toBeGreaterThan(planUpdatedIndex);
-      expect(toolHost.calls).toEqual([{ name: 'workspace_read_file', input: { path: 'README.md' }, projectId: 'project_1' }]);
-      expect(modelClient.requests[0].toolChoice).toBe('none');
-      expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toContain('workspace_read_file');
-    });
 });
 
 function developerFeaturesConfig(): RuntimeConfigState {

@@ -19,7 +19,6 @@ export type RuntimeAssistantTurnFinalization = {
   content?: string;
   explicitMemory?: ExplicitMemoryInput;
   memoryCitation?: RuntimeMemoryCitation;
-  planMode?: RuntimeMessage['planMode'];
   providerMetadata?: RuntimeMessage['providerMetadata'];
   review?: string;
   taskKind?: RuntimeTaskKind;
@@ -67,7 +66,6 @@ export class RuntimeTurnFinalizer {
       content: finalization.content,
       usage: messageUsage,
       memoryCitation: finalization.memoryCitation,
-      planMode: finalization.planMode,
       providerMetadata: finalization.providerMetadata,
     });
     await this.options.threadTitles.commit(threadId, turnId, finalization.threadTitle);

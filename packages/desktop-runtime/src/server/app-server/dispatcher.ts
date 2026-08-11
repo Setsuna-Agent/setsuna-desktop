@@ -1,7 +1,5 @@
 import {
   DEFAULT_THREAD_TITLE,
-  type RuntimeCollaborationMode,
-  type RuntimePlanDecision,
   type ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
@@ -621,8 +619,9 @@ export async function dispatchAppServerRpcRequest(
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
     const text = sweUserInputText(input.input);
-    const collaborationMode = appServerCollaborationMode(input.collaborationMode ?? input.collaboration_mode ?? input.mode);
-    const thinking = appServerTurnThinkingInput(input, collaborationMode);
+    assertSupportedCollaborationMode(input.collaborationMode ?? input.collaboration_mode ?? input.mode);
+    assertPlanDecisionRemoved(input.planDecision ?? input.plan_decision);
+    const thinking = appServerTurnThinkingInput(input);
     if (hasAppServerDynamicToolsInput(input)) requireExperimentalAppServerApi(connectionRegistry, connectionId, 'dynamicTools');
     const dynamicTools = appServerDynamicToolsInput(input.dynamicTools ?? input.dynamic_tools);
     if (dynamicTools !== undefined) {
@@ -632,8 +631,6 @@ export async function dispatchAppServerRpcRequest(
     const started = await runtime.agentLoop.startTurn(threadId, {
       input: text,
       clientId: sweClientUserMessageId(input),
-      ...(collaborationMode ? { collaborationMode } : {}),
-      ...appServerPlanDecisionInput(input.planDecision ?? input.plan_decision),
       ...thinking,
     });
     if ('queuedInputId' in started && !started.turnId) {
@@ -734,28 +731,24 @@ function mailboxDeliveryMode(value: unknown): 'queue_only' | 'trigger_turn' | un
   throw new AppServerRpcError(-32602, 'deliveryMode must be queue_only or trigger_turn');
 }
 
-function appServerTurnThinkingInput(input: Record<string, unknown>, collaborationMode: RuntimeCollaborationMode | ''): { thinking?: boolean; thinkingEffort?: string } {
+function appServerTurnThinkingInput(input: Record<string, unknown>): { thinking?: boolean; thinkingEffort?: string } {
   const reasoningEffort = stringInput(input.reasoningEffort ?? input.reasoning_effort ?? input.thinkingEffort ?? input.thinking_effort);
   const explicitThinking = typeof input.thinking === 'boolean' ? input.thinking : undefined;
-  const planMode = collaborationMode === 'plan';
-  const thinking = explicitThinking ?? (planMode || Boolean(reasoningEffort) ? true : undefined);
-  const thinkingEffort = reasoningEffort ?? (planMode ? 'medium' : undefined);
+  const thinking = explicitThinking ?? (reasoningEffort ? true : undefined);
   return {
     ...(thinking !== undefined ? { thinking } : {}),
-    ...(thinking && thinkingEffort ? { thinkingEffort } : {}),
+    ...(thinking && reasoningEffort ? { thinkingEffort: reasoningEffort } : {}),
   };
 }
 
-function appServerCollaborationMode(value: unknown): RuntimeCollaborationMode | '' {
+function assertSupportedCollaborationMode(value: unknown): void {
   const text = typeof value === 'string' ? value.trim() : stringInput(recordInput(value).mode) ?? '';
-  if (!text) return '';
-  if (text === 'default' || text === 'plan') return text;
-  throw new AppServerRpcError(-32602, 'collaborationMode must be default or plan');
+  if (!text || text === 'default') return;
+  if (text === 'plan') throw new AppServerRpcError(-32602, 'Plan mode is no longer supported');
+  throw new AppServerRpcError(-32602, 'collaborationMode must be default');
 }
 
-function appServerPlanDecisionInput(value: unknown): { planDecision?: RuntimePlanDecision } {
-  const text = stringInput(value);
-  if (!text) return {};
-  if (text === 'accepted' || text === 'dismissed') return { planDecision: text };
-  throw new AppServerRpcError(-32602, 'planDecision must be accepted or dismissed');
+function assertPlanDecisionRemoved(value: unknown): void {
+  if (value === undefined || value === null || value === '') return;
+  throw new AppServerRpcError(-32602, 'Plan decisions are no longer supported');
 }

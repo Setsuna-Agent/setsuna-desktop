@@ -6,10 +6,8 @@ import type {
 import { describe, expect, it } from 'vitest';
 import {
   clearChatComposerGoalMode,
-  clearChatComposerPlanMode,
   createChatComposerModelCapabilities,
   enableChatComposerGoalMode,
-  enableChatComposerPlanMode,
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
@@ -68,41 +66,29 @@ describe('chat composer mode state', () => {
     expect(capabilities.supportsImageInput).toBe(false);
   });
 
-  it('enables Plan and local Goal idempotently while keeping them mutually exclusive', () => {
+  it('enables local Goal idempotently', () => {
     const empty: ChatComposerLocalModes = {
       goalModeEnabled: false,
-      planModeEnabled: false,
     };
     const goal = enableChatComposerGoalMode(empty);
-    const plan = enableChatComposerPlanMode(goal);
 
-    expect(goal).toEqual({ goalModeEnabled: true, planModeEnabled: false });
-    expect(plan).toEqual({ goalModeEnabled: false, planModeEnabled: true });
-    expect(enableChatComposerPlanMode(plan)).toBe(plan);
+    expect(goal).toEqual({ goalModeEnabled: true });
     expect(enableChatComposerGoalMode(goal)).toBe(goal);
   });
 
-  it('resets only thread-scoped Goal on identity changes and both modes after send', () => {
+  it('resets thread-scoped Goal on identity changes and after send', () => {
     const modes = {
       goalModeEnabled: true,
-      planModeEnabled: true,
     };
 
     expect(resetThreadScopedChatComposerModes(modes)).toEqual({
       goalModeEnabled: false,
-      planModeEnabled: true,
     });
     expect(clearChatComposerGoalMode(modes)).toEqual({
       goalModeEnabled: false,
-      planModeEnabled: true,
-    });
-    expect(clearChatComposerPlanMode(modes)).toEqual({
-      goalModeEnabled: true,
-      planModeEnabled: false,
     });
     expect(resetChatComposerModesAfterSend(modes)).toEqual({
       goalModeEnabled: false,
-      planModeEnabled: false,
     });
   });
 

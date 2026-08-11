@@ -34,7 +34,7 @@ type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
   collaborationCoordinator: Pick<RuntimeCollaborationCoordinator, 'collectPendingChildren' | 'pendingChildren'>;
   configStore?: ConfigStore;
-  hooks: Pick<RuntimeHookCoordinator, 'planModeContextMessages' | 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
+  hooks: Pick<RuntimeHookCoordinator, 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
   ids: IdGenerator;
   modelSampler: Pick<RuntimeModelSampler, 'sample'>;
   samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build'>;
@@ -56,7 +56,6 @@ type RuntimeAgentTurnRunnerOptions = {
       usage?: RuntimeUsage;
       toolCalls?: RuntimeToolCall[];
       memoryCitation?: RuntimeMemoryCitation;
-      planMode?: RuntimeMessage['planMode'];
       providerMetadata?: RuntimeMessage['providerMetadata'];
     },
   ): Promise<void>;
@@ -90,7 +89,6 @@ export class RuntimeAgentTurnRunner {
     let activeAssistantMessageId: string | null = null;
     const publishUserMessage = options.publishUserMessage !== false;
     const taskKind = options.taskKind ?? 'regular';
-    const planOnly = options.planOnly === true;
     const selectedSkillIds = [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
     const selectedSkillReferences = normalizeRuntimeSkillReferences({
       content: text,
@@ -124,20 +122,6 @@ export class RuntimeAgentTurnRunner {
       createdAt,
       payload: { input: text, taskKind },
     });
-    if (options.planDecision === 'dismissed') {
-      // 放弃计划：awaiting 状态已由 applyPendingPlanDecision 标记为 dismissed，无需调用模型，直接结束 turn。
-      this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'turn.completed',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { taskKind },
-      });
-      await this.dispatchTurnSettled(thread, turnId, 'completed', undefined, undefined, runtimeConfig?.features);
-      return;
-    }
     if (publishUserMessage) {
       await this.options.publishMessage(threadId, turnId, userMessage, {
         queuedInputId: options.queuedInputId,
@@ -183,7 +167,6 @@ export class RuntimeAgentTurnRunner {
       const additionalContextMessages = [
         ...(options.runtimeContextMessages ?? []),
         ...turnStartHooks.contextMessages,
-        ...(planOnly ? this.options.hooks.planModeContextMessages(turnId) : []),
       ];
       // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
       const threadTitleGeneration = this.options.threadTitles.start({
@@ -249,7 +232,7 @@ export class RuntimeAgentTurnRunner {
           threadId,
           taskKind,
           turnId,
-          toolAccess: planOnly ? 'none' : taskKind === 'review' ? 'read-only' : 'all',
+          toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
@@ -277,8 +260,6 @@ export class RuntimeAgentTurnRunner {
           onAssistantStarted: (messageId) => {
             activeAssistantMessageId = messageId;
           },
-          planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
-          planOnly,
           signal,
           step: stepContext,
           thinkingOptions: activeThinkingOptions,
@@ -391,7 +372,6 @@ export class RuntimeAgentTurnRunner {
             memoryCitation: roundMemoryCitation,
             providerMetadata: assistantMessage.providerMetadata,
             content: roundText,
-            planMode: planOnly ? awaitingPlanConfirmationNotice() : undefined,
             review: options.review ? roundText : undefined,
             taskKind,
             threadTitle: threadTitleGeneration,
@@ -538,11 +518,4 @@ export class RuntimeAgentTurnRunner {
       }).catch(() => undefined);
     }
   }
-}
-
-function awaitingPlanConfirmationNotice(): NonNullable<RuntimeMessage['planMode']> {
-  return {
-    mode: 'plan',
-    status: 'awaiting_confirmation',
-  };
 }

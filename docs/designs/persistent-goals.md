@@ -73,11 +73,10 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 - Goal 仍是同一个 `goal.id` 且状态为 `active`；
 - 线程没有 active task；
 - 没有显式 queued input；
-- 没有等待用户确认的 Plan；
 - runtime 未关闭，线程未进入删除屏障；
 - 安全保护没有把 Goal 转成 `blocked`。
 
-显式用户输入和 Plan 决策优先于后台 Goal。普通消息可以在 Goal turn 的安全检查点作为 steer 消费；新 Goal/Plan 保持独立轮次语义。
+显式用户输入优先于后台 Goal。普通消息可以在 Goal turn 的安全检查点作为 steer 消费；新 Goal 保持独立轮次语义。
 
 进展指纹只使用成功的非 Goal tool 结果。没有工具证据，或连续重复相同工具参数与结果，都算一轮没有新证据。这个规则宁可暂停让用户判断，也不允许模型用重复文本维持无限循环。
 

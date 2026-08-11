@@ -1,9 +1,7 @@
 import type {
   DesktopRuntimeClient,
-  RuntimeCollaborationMode,
   RuntimeConfigState,
   RuntimeMessage,
-  RuntimePlanDecision,
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
@@ -145,7 +143,6 @@ export function ChatWorkspace({
   onSearchProjectEntries,
   onSend,
   queuedTurnActions,
-  onPlanDecision,
   onReviewRefresh,
   onSetMultiAgentEnabled,
   onStartThreadReview,
@@ -196,9 +193,8 @@ export function ChatWorkspace({
   onOpenModelSettings?: () => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
-  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; collaborationMode?: RuntimeCollaborationMode; goalMode?: boolean; planDecision?: RuntimePlanDecision; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
+  onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onPlanDecision: (decision: RuntimePlanDecision) => void;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: () => void | Promise<unknown>;
@@ -470,7 +466,6 @@ export function ChatWorkspace({
                               onDiscardFileChanges={reviewState?.isGitRepository ? onDiscardFileChanges : undefined}
                               onEditDraftChange={setEditingDraft}
                               onOpenFileReview={onOpenFileReview}
-                              onPlanDecision={onPlanDecision}
                               onStartEdit={startEditingMessage}
                               onStartDelete={startDeleteSelection}
                               onSubmitEdit={submitEditingMessage}

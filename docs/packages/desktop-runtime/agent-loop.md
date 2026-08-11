@@ -50,7 +50,7 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `runtime-turn-input-coordinator.ts` | 用户输入、steer、mailbox |
 | `runtime-queued-turn-coordinator.ts` | 持久化 FIFO、edit token、调度 |
 | `runtime-goal-coordinator.ts` | Goal 建立、计量和 continuation |
-| `collaboration-coordinator.ts` | Plan/协作模式与 mailbox |
+| `collaboration-coordinator.ts` | 子 Agent 协作与 mailbox |
 | `runtime-compaction-turn-coordinator.ts` | 显式 compaction task |
 | `runtime-hook-coordinator.ts` | Session/UserPrompt/Stop/Compact hooks |
 | `runtime-thread-title-coordinator.ts` | 自动标题提交和竞争保护 |
@@ -163,7 +163,7 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 - 自动调度隔离旧 run 的迟到结算。
 - Cancel/error 后暂停自动发送。
 
-普通 send-now 可在可接收输入的 active normal/goal turn 上转 steer；Plan/Goal 不能被改写为 steer。详见 [设计文档](../../designs/queued-turn-inputs.md)。
+普通 send-now 可在可接收输入的 active normal/goal turn 上转 steer；Goal 不能被改写为 steer。详见 [设计文档](../../designs/queued-turn-inputs.md)。
 
 ## Goal
 
@@ -174,7 +174,6 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 - 按稳定 Goal ID 记录进展、计量、停止原因和安全状态。
 - 在当前 goal turn 正常结束后创建 continuation。
 - 用户队列优先于自动 continuation。
-- Awaiting Plan confirmation 时暂停 continuation。
 - Goal 完成/清除后停止；reload、取消、provider 错误和无进展循环进入显式暂停/阻塞状态。
 
 Goal continuation 复用 execution metadata，避免重复保存内联图片。
@@ -182,14 +181,12 @@ Goal continuation 复用 execution metadata，避免重复保存内联图片。
 `create_goal` 始终可用但只响应用户显式 Goal 请求。完整状态机和 renderer 控制见
 [持久化 Goal 设计](../../designs/persistent-goals.md)。
 
-## Collaboration / Plan
+## Collaboration / mailbox
 
-`RuntimeCollaborationCoordinator` 管理 collaboration mode 和 mailbox：
+`RuntimeCollaborationCoordinator` 管理子 Agent 协作和 mailbox：
 
-- Plan turn。
-- 需要用户确认的状态。
 - Mailbox input 到独立 turn 或当前协作任务。
-- Cancel/decision 后恢复调度。
+- Cancel 后恢复调度。
 
 协议展示可以通过 app-server mapper，但实际 thread 状态仍由 runtime event 表达。
 
