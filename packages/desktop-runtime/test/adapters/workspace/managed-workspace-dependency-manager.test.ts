@@ -101,6 +101,7 @@ describe('managed workspace dependency manager', () => {
         environment: testEnvironment(dataDir),
       });
       const dependencyRoot = path.join(dataDir, 'workspace-dependencies');
+      const installRoot = path.join(dependencyRoot, 'toolchain');
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       expect(shell).toMatchObject({
         environment: {
@@ -111,7 +112,7 @@ describe('managed workspace dependency manager', () => {
           UV_PYTHON: path.join(fakeBin, 'python3'),
           npm_config_registry: 'https://registry.example/npm/',
         },
-        readableRoots: expect.arrayContaining([dependencyRoot]),
+        readableRoots: expect.arrayContaining([installRoot]),
         writableCacheRoots: [path.join(dependencyRoot, 'cache')],
       });
       expect(shell?.readableRoots.some((root) => pathIsInside(process.execPath, root))).toBe(true);
