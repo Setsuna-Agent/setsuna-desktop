@@ -10,9 +10,10 @@ use windows_sys::Win32::Security::Authorization::{
 use windows_sys::Win32::Security::{
     AdjustTokenPrivileges, CopySid, CreateRestrictedToken, DuplicateToken, GetLengthSid,
     GetTokenInformation, LookupPrivilegeValueW, SecurityImpersonation, SetTokenInformation,
-    TokenDefaultDacl, TokenGroups, ACL, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
+    TokenDefaultDacl, TokenGroups, TokenUser, ACL, LUID_AND_ATTRIBUTES, SE_PRIVILEGE_ENABLED,
     SID_AND_ATTRIBUTES, TOKEN_ADJUST_DEFAULT, TOKEN_ADJUST_PRIVILEGES, TOKEN_ADJUST_SESSIONID,
     TOKEN_ASSIGN_PRIMARY, TOKEN_DEFAULT_DACL, TOKEN_DUPLICATE, TOKEN_PRIVILEGES, TOKEN_QUERY,
+    TOKEN_USER,
 };
 use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
 
@@ -50,14 +51,19 @@ impl Drop for LocalSid {
 pub fn create_restricted_token(capability_sid: &str) -> Result<OwnedHandle, SandboxError> {
     let base = current_process_token()?;
     let capability = LocalSid::parse(capability_sid)?;
+    let mut user_sid = token_user_sid_bytes(base.raw())?;
     let mut logon_sid = logon_sid_bytes(base.raw())?;
 
     // WRITE_RESTRICTED applies the second SID check only to write-like access.
-    // Keep that check execution-scoped: broad identities such as Everyone or
-    // the stable account SID would let host ACLs authorize unplanned writes.
+    // The dedicated account SID keeps its own Windows runtime objects usable;
+    // omit broad groups such as Everyone so host ACLs cannot authorize writes.
     let restricting_sids = [
         SID_AND_ATTRIBUTES {
             Sid: capability.0,
+            Attributes: 0,
+        },
+        SID_AND_ATTRIBUTES {
+            Sid: user_sid.as_mut_ptr().cast::<c_void>(),
             Attributes: 0,
         },
         SID_AND_ATTRIBUTES {
@@ -184,6 +190,38 @@ fn current_process_token() -> Result<OwnedHandle, SandboxError> {
             error,
         )
     })
+}
+
+fn token_user_sid_bytes(token: isize) -> Result<Vec<u8>, SandboxError> {
+    let mut required = 0_u32;
+    unsafe {
+        GetTokenInformation(token, TokenUser, std::ptr::null_mut(), 0, &mut required);
+    }
+    if required == 0 {
+        return Err(SandboxError::new(
+            SandboxErrorCode::SpawnFailed,
+            "sandbox account token has no user data",
+        ));
+    }
+    let mut buffer = vec![0_u8; required as usize];
+    if unsafe {
+        GetTokenInformation(
+            token,
+            TokenUser,
+            buffer.as_mut_ptr().cast::<c_void>(),
+            required,
+            &mut required,
+        )
+    } == 0
+    {
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "GetTokenInformation(TokenUser) failed",
+            std::io::Error::last_os_error(),
+        ));
+    }
+    let user = unsafe { std::ptr::read_unaligned(buffer.as_ptr().cast::<TOKEN_USER>()) };
+    copy_sid_bytes(user.User.Sid, "sandbox account user SID")
 }
 
 fn logon_sid_bytes(token: isize) -> Result<Vec<u8>, SandboxError> {

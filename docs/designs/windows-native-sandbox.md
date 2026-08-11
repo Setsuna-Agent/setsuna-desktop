@@ -93,10 +93,11 @@ Windows 本地 SAM 账户的 20 字符限制内。执行时：
 
 最终 shell 与上游 Codex 一样使用
 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，但 restricting SID 和默认 DACL
-进一步收窄为 policy capability 与本次 logon SID。这里有意不沿用上游 token 中的专用账户 SID 和 `Everyone`：
-如果宿主路径原本向这些稳定或宽泛身份开放写入，它们会满足 restricting SID 的第二次检查并绕过 read-only
-策略；默认 DACL 中的 `Everyone` 也会让其他本机账户访问沙箱进程新建的命名对象。外层 account runner 从
-机器级只读副本启动，并被放入不可 breakaway、close 即 kill 的 Job Object。
+列表收窄为 policy capability、专用隔离账户 SID 与本次 logon SID，默认 DACL 则只包含 capability 和 logon
+SID。账户 SID 保持该专用账户自己的 Windows 运行时对象可用；这里有意不沿用上游 token 中的 `Everyone`，
+否则宿主路径原有的宽泛写 ACE 会满足 restricting SID 的第二次检查并绕过策略，默认 DACL 中的 `Everyone`
+也会让其他本机账户访问沙箱进程新建的命名对象。外层 account runner 从机器级只读副本启动，并被放入不可
+breakaway、close 即 kill 的 Job Object。
 
 为保留普通 shell 的 `>NUL` / `2>NUL` 重定向，执行准备会沿用上游的窄授权方式：在全局 ACL 锁内，只向
 Windows `NUL` 设备对象上的当前 policy capability 添加读写执行 ACE。它不向 `Everyone` 放权，也不递归
