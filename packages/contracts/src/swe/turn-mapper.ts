@@ -371,7 +371,7 @@ export function runtimeMessageToSweItems(message: RuntimeMessage, options: { ski
     if (message.planMode) {
       items.push(planItem(message.id, message.content, message.planMode.status));
     } else {
-      items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null));
+      items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null, message.phase ?? null));
     }
   }
   for (const run of message.toolRuns ?? []) {
@@ -491,7 +491,7 @@ export function collabToolCallItemFromMailbox(delivery: RuntimeMailboxDeliveryRe
 }
 
 export function sweItemFromRuntimeStreamItem(item: RuntimeStreamItem): SweThreadItem | null {
-  if (item.kind === 'agent_message') return agentMessageItem(item.id, item.content ?? '');
+  if (item.kind === 'agent_message') return agentMessageItem(item.id, item.content ?? '', null, item.phase ?? null);
   if (item.kind === 'plan') return planItem(item.id, item.content ?? '');
   if (item.kind === 'reasoning') return reasoningItem(item.id, item.content ? [item.content] : []);
   if (item.kind === 'context_compaction') return contextCompactionItem(item.id);
@@ -542,10 +542,15 @@ export function dynamicSuccessFromStreamItem(status: RuntimeStreamItem['status']
   return null;
 }
 
-export function assistantContentItems(messageId: string, text: string, memoryCitation: RuntimeMessage['memoryCitation'] | null = null): SweThreadItem[] {
+export function assistantContentItems(
+  messageId: string,
+  text: string,
+  memoryCitation: RuntimeMessage['memoryCitation'] | null = null,
+  phase: RuntimeMessage['phase'] | null = null,
+): SweThreadItem[] {
   if (!text.trim()) return [];
   const segments = assistantContentSegments(text);
-  if (!segments.some((segment) => segment.type === 'think')) return [agentMessageItem(messageId, text, memoryCitation)];
+  if (!segments.some((segment) => segment.type === 'think')) return [agentMessageItem(messageId, text, memoryCitation, phase)];
 
   const items: SweThreadItem[] = [];
   let agentSegmentIndex = 0;
@@ -558,7 +563,7 @@ export function assistantContentItems(messageId: string, text: string, memoryCit
       reasoningSegmentIndex += 1;
       continue;
     }
-    items.push(agentMessageItem(agentMessageItemId(messageId, agentSegmentIndex), segment.content, citationPending));
+    items.push(agentMessageItem(agentMessageItemId(messageId, agentSegmentIndex), segment.content, citationPending, phase));
     citationPending = null;
     agentSegmentIndex += 1;
   }
@@ -572,8 +577,9 @@ export function completedAssistantContentNotifications(
   text: string,
   completedAtMs: number,
   memoryCitation: RuntimeMessage['memoryCitation'] | null = null,
+  phase: RuntimeMessage['phase'] | null = null,
 ): SweNotification[] {
-  return assistantContentItems(messageId, text, memoryCitation).map((item) => ({
+  return assistantContentItems(messageId, text, memoryCitation, phase).map((item) => ({
     method: 'item/completed',
     params: { threadId, turnId, item, completedAtMs },
   }));

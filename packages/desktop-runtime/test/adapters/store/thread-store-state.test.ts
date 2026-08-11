@@ -6,12 +6,81 @@ import {
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
+  normalizeThreadAfterEventReplay,
   normalizeThreadSnapshot,
   projectRuntimeTurnActivity,
   toSummary,
 } from '../../../src/adapters/store/thread-store-state.js';
 
 describe('thread snapshot provider metadata compatibility', () => {
+  it('normalizes legacy assistant phases after replaying a terminal event tail', () => {
+    const snapshot = threadWithMetadata({});
+    snapshot.messages = [
+      {
+        id: 'user_1',
+        turnId: 'turn_1',
+        role: 'user',
+        content: 'Inspect the project.',
+        createdAt: '2026-07-23T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_work',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: 'I will inspect it.',
+        createdAt: '2026-07-23T00:00:01.000Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_1', name: 'read_file', arguments: '{}' }],
+      },
+      {
+        id: 'assistant_final',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: 'Inspection complete.',
+        createdAt: '2026-07-23T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    snapshot.turns = [{
+      id: 'turn_1',
+      status: 'in_progress',
+      items: snapshot.messages.slice(1).map((message) => ({
+        id: message.id,
+        kind: 'agent_message' as const,
+        content: message.content,
+        status: 'completed' as const,
+        transcriptMessageId: message.id,
+      })),
+    }];
+
+    const snapshotNormalized = normalizeThreadSnapshot(snapshot);
+    expect(snapshotNormalized.thread.messages.slice(1).map((message) => message.phase)).toEqual([
+      undefined,
+      undefined,
+    ]);
+    const replayed = applyRuntimeEventToThread(snapshotNormalized.thread, {
+      id: 'event_turn_completed',
+      seq: 2,
+      threadId: snapshot.id,
+      turnId: 'turn_1',
+      type: 'turn.completed',
+      createdAt: '2026-07-23T00:00:03.000Z',
+      payload: { taskKind: 'regular' },
+    } satisfies RuntimeEvent);
+    const normalized = normalizeThreadAfterEventReplay(replayed);
+
+    expect(normalized.thread.messages.slice(1).map((message) => message.phase)).toEqual([
+      'commentary',
+      'final_answer',
+    ]);
+    expect(normalized.thread.turns?.[0]?.items.map((item) => item.phase)).toEqual([
+      'commentary',
+      'final_answer',
+    ]);
+    expect(normalized.thread.lastMessagePreview).toBe('Inspection complete.');
+  });
+
   it('keeps legacy Anthropic metadata readable without adding V2 source fields', () => {
     const snapshot = threadWithMetadata({
       anthropic: {
@@ -202,6 +271,7 @@ function threadWithMetadata(providerMetadata: NonNullable<RuntimeThread['message
       content: 'Portable answer',
       createdAt: '2026-07-23T00:00:00.000Z',
       status: 'complete',
+      phase: 'final_answer',
       providerMetadata,
     }],
   };

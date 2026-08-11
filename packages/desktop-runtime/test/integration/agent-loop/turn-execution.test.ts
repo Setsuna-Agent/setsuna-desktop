@@ -24,6 +24,7 @@ import {
   FailingCleanupToolHost,
   ProviderMetadataToolModelClient,
   RefreshingToolHost,
+  ResponsesPhaseToolModelClient,
   StepSnapshotConfigStore,
   stepSnapshotMcpStore,
   StepSnapshotModelClient,
@@ -76,6 +77,18 @@ describe('agent loop turn execution', () => {
       expect(completed?.payload.argumentsPreview).toContain('README.md');
       expect(completed?.payload.durationMs).toEqual(expect.any(Number));
       expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
+      expect(saved?.messages.filter((message) => message.role === 'assistant').map((message) => message.phase)).toEqual([
+        'commentary',
+        'final_answer',
+      ]);
+      expect(events.filter((event): event is Extract<RuntimeEvent, { type: 'item.completed' }> => (
+        event.type === 'item.completed' && event.payload.item.kind === 'agent_message'
+      )).map((event) => ({
+        content: event.payload.item.content,
+        phase: event.payload.item.phase,
+      }))).toEqual([
+        { content: 'I read the file.', phase: 'final_answer' },
+      ]);
       expect(saved?.messages.find((message) => message.role === 'assistant' && message.toolCalls?.length)?.toolRuns).toMatchObject([
         { id: 'call_1', name: 'workspace_read_file', status: 'success', argumentsPreview: expect.stringContaining('README.md'), durationMs: expect.any(Number) },
       ]);
@@ -129,8 +142,52 @@ describe('agent loop turn execution', () => {
       expect(continuedAssistant?.providerMetadata).toEqual(expectedMetadata);
       expect(events).toContainEqual(expect.objectContaining({
         type: 'message.completed',
-        payload: expect.objectContaining({ providerMetadata: expectedMetadata }),
+        payload: expect.objectContaining({ phase: 'commentary', providerMetadata: expectedMetadata }),
       }));
+      expect(saved?.messages.filter((message) => message.role === 'assistant').map((message) => message.phase)).toEqual([
+        'commentary',
+        'final_answer',
+      ]);
+    });
+
+  it('ignores provider phase and classifies canonical messages when runtime decides continuation', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Responses phase loop', projectId: 'project_1' });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient: new ResponsesPhaseToolModelClient(),
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'read with Responses phases' });
+
+      const saved = await threadStore.getThread(thread.id);
+      const events = await threadStore.listEvents(thread.id, 0);
+      const assistantMessages = saved?.messages.filter((message) => message.role === 'assistant') ?? [];
+      const completedAgentItems = events.filter((event): event is Extract<RuntimeEvent, { type: 'item.completed' }> => (
+        event.type === 'item.completed' && event.payload.item.kind === 'agent_message'
+      ));
+
+      expect(assistantMessages.map((message) => ({ content: message.content, phase: message.phase }))).toEqual([
+        { content: 'I will inspect the file.', phase: 'commentary' },
+        { content: 'The file is ready.', phase: 'final_answer' },
+      ]);
+      expect(completedAgentItems.map((event) => ({
+        content: event.payload.item.content,
+        id: event.payload.item.id,
+        phase: event.payload.item.phase,
+        transcriptMessageId: event.payload.item.transcriptMessageId,
+      }))).toEqual(assistantMessages.map((message) => ({
+        content: message.content,
+        id: message.id,
+        phase: message.phase,
+        transcriptMessageId: message.id,
+      })));
+      expect(completedAgentItems.some((event) => event.payload.item.id.startsWith('response_'))).toBe(false);
     });
   
   it('fails an empty model stream instead of completing a blank assistant message', async () => {

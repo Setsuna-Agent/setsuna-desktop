@@ -269,4 +269,63 @@ describe('MessageItem assistant tool history', () => {
     expect(renderAssistantMessage([toolSegment])).toContain(expectedSummary);
     expect(renderAssistantMessage([toolSegment, finalSegment], true)).toContain(expectedSummary);
   });
+
+  it('renders work that follows committed content below that content', () => {
+    const html = renderAssistantMessage([
+      {
+        id: 'assistant_body',
+        turnId: 'turn_order',
+        role: 'assistant',
+        content: '已经输出的正文。',
+        createdAt: '2026-08-11T00:00:00.000Z',
+        status: 'complete',
+        phase: 'final_answer',
+      },
+      {
+        id: 'assistant_followup',
+        turnId: 'turn_order',
+        role: 'assistant',
+        content: '我继续核对后续状态。<think>继续检查',
+        createdAt: '2026-08-11T00:00:01.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'read_followup', name: 'workspace_read_file', status: 'running' }],
+      },
+    ], true);
+    const contentIndex = html.indexOf('已经输出的正文。');
+    const laterWorkIndex = html.indexOf('chat-work-history', contentIndex);
+    const commentaryIndex = html.indexOf('我继续核对后续状态。', contentIndex);
+
+    expect(contentIndex).toBeGreaterThanOrEqual(0);
+    expect(laterWorkIndex).toBeGreaterThan(contentIndex);
+    expect(commentaryIndex).toBeGreaterThan(contentIndex);
+  });
+
+  it('keeps the preamble visible while adjacent tools share the work panel', () => {
+    const html = renderAssistantMessage([
+      {
+        id: 'assistant_status',
+        turnId: 'turn_compact',
+        role: 'assistant',
+        content: '我先看一下工作区的改动概况。',
+        createdAt: '2026-08-11T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [{ id: 'git_status', name: 'git_status', status: 'success' }],
+      },
+      {
+        id: 'assistant_diff',
+        turnId: 'turn_compact',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-11T00:00:01.000Z',
+        status: 'streaming',
+        phase: 'commentary',
+        toolRuns: [{ id: 'read_diff', name: 'workspace_read_file', status: 'running' }],
+      },
+    ], true);
+
+    expect(html).toContain('chat-work-history');
+    expect(html).toContain('我先看一下工作区的改动概况。');
+    expect(html).toContain('正在查看文件/目录');
+  });
 });

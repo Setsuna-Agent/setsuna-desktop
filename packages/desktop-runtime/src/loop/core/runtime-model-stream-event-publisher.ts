@@ -17,6 +17,18 @@ import type { LegacyModelStreamMirrorState } from './model-stream-output.js';
 
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
 
+type AssistantItemTextPart = {
+  sourceItemId?: string;
+  streamedText: string;
+  completedText?: string;
+};
+
+type AssistantItemStreamState = {
+  started: boolean;
+  text: string;
+  parts: AssistantItemTextPart[];
+};
+
 type RuntimeModelStreamEventPublisherOptions = {
   clock: Clock;
   ids: IdGenerator;
@@ -29,6 +41,8 @@ type RuntimeModelStreamEventPublisherOptions = {
 
 /** 写入模型采样期间产生的对话记录与条目流投影。 */
 export class RuntimeModelStreamEventPublisher {
+  private readonly assistantItems = new Map<string, AssistantItemStreamState>();
+
   constructor(private readonly options: RuntimeModelStreamEventPublisherOptions) {}
 
   async publishMessage(
@@ -50,6 +64,14 @@ export class RuntimeModelStreamEventPublisher {
     });
   }
 
+  prepareAssistantItem(threadId: string, turnId: string, messageId: string): void {
+    this.assistantItems.set(assistantItemKey(threadId, turnId, messageId), {
+      started: false,
+      text: '',
+      parts: [],
+    });
+  }
+
   /**
    * 发布 assistant 流式文本增量。
    *
@@ -59,6 +81,7 @@ export class RuntimeModelStreamEventPublisher {
    * @param text 本次追加的文本片段。
    */
   async publishAssistantDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
+    if (!text) return;
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -67,6 +90,62 @@ export class RuntimeModelStreamEventPublisher {
       createdAt: this.options.clock.now().toISOString(),
       payload: { messageId, text },
     });
+  }
+
+  /** App Server agentMessage items contain only assistant text, never transcript <think> tags. */
+  async publishAssistantItemDelta(
+    threadId: string,
+    turnId: string,
+    messageId: string,
+    text: string,
+    sourceItemId?: string,
+  ): Promise<void> {
+    if (!text) return;
+    const state = this.assistantItemState(threadId, turnId, messageId);
+    if (!state.started) {
+      await this.publishAssistantItemStarted(threadId, turnId, messageId);
+      state.started = true;
+    }
+    assistantItemTextPart(state, sourceItemId).streamedText += text;
+    state.text += text;
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'item.delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { itemId: messageId, delta: text },
+    });
+  }
+
+  async reconcileAssistantItemContent(
+    threadId: string,
+    turnId: string,
+    messageId: string,
+    sourceItemId: string,
+    content: string | undefined,
+  ): Promise<void> {
+    if (content === undefined) return;
+    const state = this.assistantItemState(threadId, turnId, messageId);
+    const part = assistantItemTextPart(state, sourceItemId);
+    if (content === part.streamedText) {
+      part.completedText = content;
+      return;
+    }
+    if (content.startsWith(part.streamedText)) {
+      await this.publishAssistantItemDelta(
+        threadId,
+        turnId,
+        messageId,
+        content.slice(part.streamedText.length),
+        sourceItemId,
+      );
+      part.completedText = content;
+      return;
+    }
+    // Provider completion is authoritative for its own text item. It must not replace text
+    // accumulated from earlier provider items that share the canonical transcript message.
+    part.completedText = content;
   }
 
   async publishSamplingStepSnapshot(
@@ -217,30 +296,6 @@ export class RuntimeModelStreamEventPublisher {
     return false;
   }
 
-  async mirrorLegacyAgentDelta(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, messageId: string, delta: string): Promise<void> {
-    if (!delta) return;
-    if (!state.agentItemStarted) {
-      state.agentItemStarted = true;
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'item.started',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { item: { id: messageId, kind: 'agent_message', status: 'in_progress', transcriptMessageId: messageId } },
-      });
-    }
-    state.agentText += delta;
-    await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      turnId,
-      type: 'item.delta',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: { itemId: messageId, delta },
-    });
-  }
-
   async mirrorLegacyReasoningDelta(state: LegacyModelStreamMirrorState, threadId: string, turnId: string, messageId: string, delta: string): Promise<void> {
     if (!delta) return;
     const itemId = `${messageId}:reasoning`;
@@ -325,16 +380,6 @@ export class RuntimeModelStreamEventPublisher {
         payload: { item: { id: `${messageId}:reasoning`, kind: 'reasoning', content: state.reasoningText, status: 'completed', transcriptMessageId: messageId } },
       });
     }
-    if (state.agentItemStarted) {
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'item.completed',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: { item: { id: messageId, kind: 'agent_message', content: state.agentText, status: 'completed', transcriptMessageId: messageId } },
-      });
-    }
   }
 
   /**
@@ -345,7 +390,14 @@ export class RuntimeModelStreamEventPublisher {
    * @param messageId 要完成的消息 ID。
    * @param payload 可选的 usage 和 toolCalls 补充数据。
    */
-  async completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
+  async completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; phase: NonNullable<RuntimeMessage['phase']>; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] }): Promise<void> {
+    const key = assistantItemKey(threadId, turnId, messageId);
+    const state = this.assistantItems.get(key);
+    const itemContent = state ? resolvedAssistantItemText(state) : (payload.content ?? '');
+    if (state && itemContent && !state.started) {
+      await this.publishAssistantItemStarted(threadId, turnId, messageId);
+      state.started = true;
+    }
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -354,8 +406,82 @@ export class RuntimeModelStreamEventPublisher {
       createdAt: this.options.clock.now().toISOString(),
       payload: { messageId, ...payload },
     });
+    if (state?.started) {
+      await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        turnId,
+        type: 'item.completed',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: {
+          item: {
+            id: messageId,
+            kind: 'agent_message',
+            content: itemContent,
+            status: 'completed',
+            transcriptMessageId: messageId,
+            phase: payload.phase,
+          },
+          content: itemContent,
+        },
+      });
+    }
+    this.assistantItems.delete(key);
     if (payload.memoryCitation) {
       await this.options.memoryStore?.recordMemoryCitationUsage(payload.memoryCitation).catch(() => undefined);
     }
   }
+
+  private async publishAssistantItemStarted(
+    threadId: string,
+    turnId: string,
+    messageId: string,
+  ): Promise<void> {
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'item.started',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: {
+        item: {
+          id: messageId,
+          kind: 'agent_message',
+          status: 'in_progress',
+          transcriptMessageId: messageId,
+        },
+      },
+    });
+  }
+
+  private assistantItemState(threadId: string, turnId: string, messageId: string): AssistantItemStreamState {
+    const key = assistantItemKey(threadId, turnId, messageId);
+    const state = this.assistantItems.get(key) ?? { started: false, text: '', parts: [] };
+    this.assistantItems.set(key, state);
+    return state;
+  }
+}
+
+function assistantItemTextPart(
+  state: AssistantItemStreamState,
+  sourceItemId: string | undefined,
+): AssistantItemTextPart {
+  const existing = state.parts.find((part) => part.sourceItemId === sourceItemId);
+  if (existing) return existing;
+  const part: AssistantItemTextPart = sourceItemId === undefined
+    ? { streamedText: '' }
+    : { sourceItemId, streamedText: '' };
+  state.parts.push(part);
+  return part;
+}
+
+function resolvedAssistantItemText(state: AssistantItemStreamState): string {
+  if (!state.parts.length) return state.text;
+  return state.parts
+    .map((part) => part.completedText ?? part.streamedText)
+    .join('');
+}
+
+function assistantItemKey(threadId: string, turnId: string, messageId: string): string {
+  return `${threadId}:${turnId}:${messageId}`;
 }

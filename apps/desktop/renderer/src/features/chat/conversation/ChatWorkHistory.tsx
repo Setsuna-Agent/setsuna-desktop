@@ -131,6 +131,10 @@ export function WorkHistoryPanel({
     onExpandedChange?.(panelId, expanded);
   }, [expanded, onExpandedChange, panelId]);
 
+  useEffect(() => () => {
+    if (panelId) onExpandedChange?.(panelId, false);
+  }, [onExpandedChange, panelId]);
+
   const title = active ? t('chat.work.active') : t('chat.work.completed');
   const durationEndMs = active ? nowMs : (capturedCompletedAtMs ?? completedAtMs ?? null);
   const durationLabel = formatDurationMs(

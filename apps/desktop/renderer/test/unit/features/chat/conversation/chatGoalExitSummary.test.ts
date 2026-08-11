@@ -54,6 +54,7 @@ function assistantMessage(id: string, content: string): RuntimeMessage {
     turnId: 'turn_goal',
     role: 'assistant',
     content,
+    phase: 'final_answer',
     createdAt: '2026-08-10T00:00:01.000Z',
     status: 'complete',
   };

@@ -12,6 +12,7 @@ import type { RuntimeInputMessageAttachment, RuntimeMessageAttachment } from './
 import type { RuntimeHookSource } from './hooks.js';
 import type { RuntimeMemoryCitation } from './memory.js';
 import type {
+  RuntimeAssistantMessagePhase,
   RuntimeMessagePromptSource,
   RuntimeMessageProviderMetadata,
   RuntimeMessageRole,
@@ -99,6 +100,8 @@ export type RuntimeMessage = {
   createdAt: string;
   completedAt?: string;
   status?: 'streaming' | 'complete' | 'error';
+  /** Missing while streaming means the runtime has not resolved presentation yet. */
+  phase?: RuntimeAssistantMessagePhase;
   visibility?: 'transcript' | 'model';
   error?: string;
   attachments?: RuntimeMessageAttachment[];

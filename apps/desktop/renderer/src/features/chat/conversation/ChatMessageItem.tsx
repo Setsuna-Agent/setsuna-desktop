@@ -9,7 +9,7 @@ import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
-import { collapseFileMutationRunsInSegments, fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
+import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
 import {
   FileChangesSummaryCard,
   RuntimeHookRuns,
@@ -127,7 +127,9 @@ export function MessageItem({
   const editing = editingMessageId === message.id;
   const steered = item.steered;
   const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
-  const workHistoryExpanded = assistantItemId ? expandedWorkHistoryItemIds.has(assistantItemId) : false;
+  const workHistoryExpanded = assistantItemId
+    ? hasExpandedWorkHistoryPanel(expandedWorkHistoryItemIds, assistantItemId)
+    : false;
   const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && item.guidanceProcessed && item.steerMessages.length && !workHistoryExpanded);
   if (editing) {
     return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
@@ -315,7 +317,9 @@ function AssistantRunContent({
   pluginUses: RuntimePluginUse[];
 }) {
   const { locale, t } = useI18n();
-  const displaySegments = useMemo(() => collapseFileMutationRunsInSegments(item.segments), [item.segments]);
+  // The transcript is append-only: collapsing a later write into an earlier row
+  // would remove or rewrite work that the user has already seen above it.
+  const displaySegments = item.segments;
   const planSegment = useMemo(() => [...displaySegments].reverse().find((segment) => segment.planMode), [displaySegments]);
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
@@ -569,11 +573,19 @@ function assistantWorkHistoryNode({
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const hasWorkDetails = workNodes.length > 0;
   if (!hasWorkDetails && !plan.active) return null;
+  const workHistoryKey = plan.blocks[0]?.id ?? itemId;
+  const panelId = `${itemId}:work-history:${workHistoryKey}`;
   return (
-    <WorkHistoryPanel active={plan.active} completedAtMs={workTiming.completedAtMs} defaultExpanded={workHistoryDefaultExpanded} hasDetails={hasWorkDetails} key="assistant-work-history" panelId={itemId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
+    <WorkHistoryPanel active={plan.active} completedAtMs={workTiming.completedAtMs} defaultExpanded={workHistoryDefaultExpanded} hasDetails={hasWorkDetails} key={panelId} panelId={panelId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
       {workNodes}
     </WorkHistoryPanel>
   );
+}
+
+function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boolean {
+  if (panelIds.has(itemId)) return true;
+  const prefix = `${itemId}:work-history:`;
+  return [...panelIds].some((panelId) => panelId.startsWith(prefix));
 }
 
 function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean, t: Translate): ReactNode {

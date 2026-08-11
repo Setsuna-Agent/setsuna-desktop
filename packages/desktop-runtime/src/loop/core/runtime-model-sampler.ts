@@ -1,6 +1,7 @@
 import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
   type ModelRequest,
+  type ModelStreamEvent,
   type RuntimeMemoryCitation,
   type RuntimeMessage,
   type RuntimeModelRequestStepSnapshot,
@@ -83,11 +84,13 @@ export class RuntimeModelSampler {
     };
     onAssistantStarted?.(assistantMessageId);
     await this.options.streamEvents.publishMessage(threadId, turnId, assistantMessage);
+    this.options.streamEvents.prepareAssistantItem(threadId, turnId, assistantMessageId);
 
     let toolCalls: RuntimeToolCall[] = [];
     let usage: RuntimeUsage | undefined;
     const partialToolCalls = new Map<string, RuntimeToolCall>();
     const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
+    const providerAgentItemIds = new Set<string>();
     const output = createAssistantOutputAccumulator((delta) =>
       this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
     );
@@ -130,6 +133,29 @@ export class RuntimeModelSampler {
         );
         continue;
       }
+      if (isProviderAgentMessageEvent(item, providerAgentItemIds)) {
+        if (item.type === 'item_delta') {
+          await this.options.streamEvents.publishAssistantItemDelta(
+            threadId,
+            turnId,
+            assistantMessageId,
+            item.delta,
+            item.itemId,
+          );
+        } else if (item.type === 'item_completed') {
+          await this.options.streamEvents.reconcileAssistantItemContent(
+            threadId,
+            turnId,
+            assistantMessageId,
+            item.item.id,
+            item.item.content,
+          );
+        }
+        // RuntimeMessage owns the canonical transcript item. Provider text items still feed
+        // the accumulator, but publishing both would duplicate App Server agentMessage items.
+        await streamBridge.consume(item);
+        continue;
+      }
       if (await this.options.streamEvents.publishModelStreamProtocolEvent(threadId, turnId, item)) {
         if (captureProtocolUsage && item.type === 'token_count') usage = item.usage;
         await streamBridge.consume(item);
@@ -142,7 +168,7 @@ export class RuntimeModelSampler {
         await streamBridge.appendReasoning(item.text);
       }
       if (item.type === 'text_delta') {
-        await this.options.streamEvents.mirrorLegacyAgentDelta(mirror, threadId, turnId, assistantMessageId, item.text);
+        await this.options.streamEvents.publishAssistantItemDelta(threadId, turnId, assistantMessageId, item.text);
         await streamBridge.appendAgent(item.text);
       }
       if (item.type === 'tool_call_delta') {
@@ -190,6 +216,20 @@ export class RuntimeModelSampler {
       usage,
     };
   }
+}
+
+function isProviderAgentMessageEvent(
+  event: ModelStreamEvent,
+  agentItemIds: Set<string>,
+): boolean {
+  if (
+    (event.type === 'item_started' || event.type === 'item_completed')
+    && event.item.kind === 'agent_message'
+  ) {
+    agentItemIds.add(event.item.id);
+    return true;
+  }
+  return event.type === 'item_delta' && agentItemIds.has(event.itemId);
 }
 
 function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {

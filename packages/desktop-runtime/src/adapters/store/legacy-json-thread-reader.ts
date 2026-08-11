@@ -7,6 +7,7 @@ import { isNodeError } from '../../shared/node-errors.js';
 import {
   assertThreadSnapshot,
   hydrateMessageCompletionTimesFromEvents,
+  normalizeThreadAfterEventReplay,
   normalizeThreadSnapshot,
 } from './thread-store-state.js';
 
@@ -83,6 +84,7 @@ export async function readLegacyJsonThreads(dataDir: string): Promise<LegacyJson
     for (const event of events) {
       if (event.seq > thread.lastSeq) thread = applyRuntimeEventToThread(thread, event);
     }
+    thread = normalizeThreadAfterEventReplay(thread).thread;
     thread = hydrateMessageCompletionTimesFromEvents(thread, events);
     records.push({
       duplicateSequenceRecoveries: eventLog.duplicateSequenceRecoveries,

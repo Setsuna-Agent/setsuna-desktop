@@ -134,10 +134,17 @@ describe('runtime server AppServer events and shell turns', () => {
         '"method":"thread/status/changed"',
         { format: 'swe' },
       );
+      const hasFinalAnswerPhase = await harness.readEventStreamContains(
+        thread.id,
+        0,
+        '"phase":"final_answer"',
+        { format: 'swe' },
+      );
   
       expect(started).toMatchObject({ accepted: true });
       expect(hasAppServerStarted).toBe(true);
       expect(hasThreadStatus).toBe(true);
+      expect(hasFinalAnswerPhase).toBe(true);
     });
   
   it('streams AppServer-style context compaction lifecycle notifications', async () => {

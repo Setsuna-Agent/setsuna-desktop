@@ -6,6 +6,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import {
   cloneRuntimeThreadGoal,
+  normalizeLegacyAssistantPhases,
   normalizeRuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
 import type { RuntimeTurnActivityProjection } from '../../ports/thread-store.js';
@@ -106,8 +107,17 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
   const metadataNormalized = normalizeThreadMessageProviderMetadata(normalized);
   normalized = metadataNormalized.thread;
   changed ||= metadataNormalized.changed;
-  const migrated = normalizeLegacyCancelledToolRuns(normalized);
-  return { changed: changed || migrated !== normalized, thread: migrated };
+  return { changed, thread: normalized };
+}
+
+/** Applies migrations whose result depends on the terminal state reconstructed from the event tail. */
+export function normalizeThreadAfterEventReplay(thread: RuntimeThread): { changed: boolean; thread: RuntimeThread } {
+  const phaseNormalized = normalizeLegacyAssistantPhases(thread);
+  const migrated = normalizeLegacyCancelledToolRuns(phaseNormalized.thread);
+  return {
+    changed: phaseNormalized.changed || migrated !== phaseNormalized.thread,
+    thread: migrated,
+  };
 }
 
 function normalizeThreadMessageProviderMetadata(

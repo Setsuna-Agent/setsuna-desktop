@@ -295,6 +295,7 @@ export class AgentLoop {
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       completeMessage: (threadId, turnId, messageId, payload) => this.completeMessage(threadId, turnId, messageId, payload),
       publishAssistantDelta: (threadId, turnId, messageId, text) => this.publishAssistantDelta(threadId, turnId, messageId, text),
+      publishAssistantItemDelta: (threadId, turnId, messageId, text) => this.modelStreamEvents.publishAssistantItemDelta(threadId, turnId, messageId, text),
       publishMessage: (threadId, turnId, message, publishOptions) =>
         this.publishMessage(threadId, turnId, message, publishOptions),
     });
@@ -364,7 +365,12 @@ export class AgentLoop {
       toolHost: options.toolHost,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       cleanupTurn: (context, outcome) => this.turnRunner.cleanupToolHostTurn(context, outcome),
-      completeMessage: (threadId, turnId, messageId) => this.completeMessage(threadId, turnId, messageId),
+      completeMessage: (threadId, turnId, messageId) => this.completeMessage(
+        threadId,
+        turnId,
+        messageId,
+        { phase: 'commentary' },
+      ),
       publishTurnCancelledOnce: (threadId, turnId, taskKind, reason, publishOptions) =>
         this.turnTermination.publishCancelledOnce(threadId, turnId, taskKind, reason, publishOptions),
     });
@@ -770,7 +776,7 @@ export class AgentLoop {
     return this.modelStreamEvents.publishAssistantDelta(threadId, turnId, messageId, text);
   }
 
-  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] } = {}): Promise<void> {
+  private completeMessage(threadId: string, turnId: string, messageId: string, payload: { content?: string; phase: NonNullable<RuntimeMessage['phase']>; usage?: RuntimeUsage; toolCalls?: RuntimeToolCall[]; memoryCitation?: RuntimeMemoryCitation; providerMetadata?: RuntimeMessage['providerMetadata'] }): Promise<void> {
     return this.modelStreamEvents.completeMessage(threadId, turnId, messageId, payload);
   }
   /**

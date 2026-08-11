@@ -42,6 +42,7 @@ import {
   cloneThread,
   eventCanUseDelayedCheckpoint,
   hydrateMessageCompletionTimesFromEvents,
+  normalizeThreadAfterEventReplay,
   normalizeThreadMemoryMode,
   normalizeThreadSnapshot,
   normalizeThreadSummary,
@@ -566,18 +567,17 @@ export class SqliteThreadStore implements ThreadStore {
       thread = applyRuntimeEventToThread(thread, event);
       expectedSeq += 1;
     }
-    if (thread.lastSeq !== lastSeq) {
-      throw new Error(`SQLite thread snapshot/event tail does not reach last_seq for ${threadId}.`);
-    }
-    thread = hydrateMessageCompletionTimesFromEvents(thread, events);
+    if (thread.lastSeq !== lastSeq) throw new Error(`SQLite thread snapshot/event tail does not reach last_seq for ${threadId}.`);
+    const replayNormalized = normalizeThreadAfterEventReplay(thread);
+    thread = hydrateMessageCompletionTimesFromEvents(replayNormalized.thread, events);
     this.threadCache.set(threadId, thread);
     const indexedMessageCount = numberColumn(this.requireDatabase().prepare(`
       SELECT COUNT(*) AS count FROM thread_messages WHERE thread_id = ?
     `).get(threadId), 'count');
     const messageIndexStale = numberColumn(row, 'message_index_seq') !== lastSeq
       || indexedMessageCount !== thread.messages.length;
-    if (normalized.changed || events.length || messageIndexStale) {
-      this.repairLoadedThread(thread, messageIndexStale);
+    if (normalized.changed || replayNormalized.changed || events.length || messageIndexStale) {
+      this.repairLoadedThread(thread, messageIndexStale || normalized.changed || replayNormalized.changed);
     }
     return thread;
   }

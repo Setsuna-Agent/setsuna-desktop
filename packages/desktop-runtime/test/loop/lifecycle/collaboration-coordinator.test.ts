@@ -1,3 +1,4 @@
+import type { RuntimeThread } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { RuntimeCollaborationCoordinator } from '../../../src/loop/lifecycle/collaboration-coordinator.js';
@@ -60,6 +61,7 @@ describe('runtime collaboration coordinator', () => {
             turnId: 'turn_child',
             role: 'assistant',
             content: fullOutput,
+            phase: 'final_answer',
             createdAt: '2026-07-11T00:00:01.000Z',
             status: 'complete',
           }],
@@ -75,6 +77,89 @@ describe('runtime collaboration coordinator', () => {
     expect(result.data).toMatchObject({ status: 'idle', output: fullOutput });
     expect(result.content).toContain('Research result end.');
     expect(result.content.length).toBeGreaterThan(fullOutput.length);
+  });
+
+  it('returns only the child final answer when commentary is also persisted', async () => {
+    const coordinator = createCoordinator({
+      threadStore: {
+        getThread: vi.fn(async () => ({
+          id: 'thread_child',
+          title: 'Research child',
+          createdAt: '2026-07-11T00:00:00.000Z',
+          updatedAt: '2026-07-11T00:00:02.000Z',
+          archived: false,
+          messageCount: 2,
+          lastMessagePreview: 'Final result.',
+          messages: [
+            {
+              id: 'message_child_status',
+              turnId: 'turn_child',
+              role: 'assistant',
+              content: 'I will inspect the repository.',
+              phase: 'commentary',
+              createdAt: '2026-07-11T00:00:01.000Z',
+              status: 'complete',
+            },
+            {
+              id: 'message_child_result',
+              turnId: 'turn_child',
+              role: 'assistant',
+              content: 'Final result.',
+              phase: 'final_answer',
+              createdAt: '2026-07-11T00:00:02.000Z',
+              status: 'complete',
+            },
+          ],
+          turns: [{ id: 'turn_child', items: [], status: 'completed' }],
+          lastSeq: 5,
+        })),
+      } as unknown as ThreadStore,
+      activeTask: () => null,
+    });
+
+    const result = await coordinator.execute('wait', { thread_id: 'thread_child' }, toolContext());
+
+    expect(result.data).toMatchObject({ status: 'idle', output: 'Final result.' });
+    expect(result.content).not.toContain('I will inspect the repository.');
+  });
+
+  it('reports a failed child outcome without reusing its stale thread preview', async () => {
+    const parent = runtimeThread('thread_parent', 'Parent');
+    const child = runtimeThread('thread_child', 'Failed child');
+    child.lastMessagePreview = 'Previous successful answer.';
+    child.messages = [{
+      id: 'message_child_status',
+      turnId: 'turn_child',
+      role: 'assistant',
+      content: 'I am still checking.',
+      phase: 'commentary',
+      createdAt: '2026-07-11T00:00:01.000Z',
+      status: 'complete',
+    }];
+    child.messageCount = 1;
+    child.turns = [{
+      id: 'turn_child',
+      items: [],
+      status: 'failed',
+      error: 'Repository became unavailable.',
+    }];
+    const coordinator = createCoordinator({
+      threadStore: {
+        createThread: vi.fn(async () => child),
+        getThread: vi.fn(async (threadId) => threadId === parent.id ? parent : child),
+      } as unknown as ThreadStore,
+    });
+
+    await coordinator.execute('spawn_agent', { prompt: 'Inspect the repository.' }, toolContext());
+    const [result] = await coordinator.collectPendingChildren(
+      parent.id,
+      'turn_parent',
+      new AbortController().signal,
+    );
+
+    expect(result?.content).toContain('Child turn failed: Repository became unavailable.');
+    expect(result?.content).not.toContain('Previous successful answer.');
+    expect(result?.content).not.toContain('I am still checking.');
   });
 });
 
@@ -104,5 +189,21 @@ function toolContext(signal = new AbortController().signal): RuntimeToolExecutio
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: undefined,
     signal,
+  };
+}
+
+function runtimeThread(id: string, title: string): RuntimeThread {
+  return {
+    id,
+    title,
+    createdAt: '2026-07-11T00:00:00.000Z',
+    updatedAt: '2026-07-11T00:00:00.000Z',
+    archived: false,
+    memoryMode: 'enabled',
+    messageCount: 0,
+    lastMessagePreview: '',
+    messages: [],
+    turns: [],
+    lastSeq: 0,
   };
 }

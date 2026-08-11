@@ -120,6 +120,37 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       }],
     });
   });
+
+  it('does not hoist later work above content that is already in the timeline', () => {
+    const before = assistantMessage('assistant_before', 'before');
+    const body = assistantMessage('assistant_body', '正文');
+    const after = assistantMessage('assistant_after', 'after');
+    const plan = createAssistantGuidanceTimelinePlan({
+      active: true,
+      blocks: [
+        workBlock('work_before', [before]),
+        { type: 'content', id: 'assistant_body:content', segment: body, content: body.content },
+        workBlock('work_after', [after]),
+      ],
+      guidanceMessages: [],
+      messageOrderIds: [before.id, body.id, after.id],
+      workHistoryActive: true,
+    });
+
+    expect(plan.nodes.map((node) => node.type)).toEqual([
+      'workHistory',
+      'block',
+      'workHistory',
+    ]);
+    expect(plan.nodes[0]).toMatchObject({
+      type: 'workHistory',
+      blocks: [{ id: 'work_before' }],
+    });
+    expect(plan.nodes[2]).toMatchObject({
+      type: 'workHistory',
+      blocks: [{ id: 'work_after' }],
+    });
+  });
 });
 
 function workBlock(id: string, messages: RuntimeMessage[]): Extract<AssistantRunTimelineBlock, { type: 'work' }> {

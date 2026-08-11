@@ -1,5 +1,6 @@
 import type { RuntimeEnvironment } from './environment.js';
 import type {
+  RuntimeAssistantMessagePhase,
   RuntimeMessagePromptSource,
   RuntimeMessageProviderMetadata,
   RuntimeMessageRole,
@@ -157,6 +158,7 @@ export type RuntimeStreamItem = {
   id: string;
   kind: RuntimeStreamItemKind;
   content?: string;
+  phase?: RuntimeAssistantMessagePhase;
   name?: string;
   role?: RuntimeMessageRole;
   status?: 'in_progress' | 'completed' | 'failed' | 'cancelled';

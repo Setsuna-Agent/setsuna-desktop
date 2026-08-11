@@ -32,42 +32,60 @@ export function createAssistantGuidanceTimelinePlan({
   messageOrderIds: string[];
   workHistoryActive: boolean;
 }): AssistantGuidanceTimelinePlan {
-  const firstWorkBlockIndex = blocks.findIndex((block) => block.type === 'work');
-  const hasWorkBlock = firstWorkBlockIndex >= 0;
   const blockIndexById = new Map(blocks.map((block, index) => [block.id, index]));
   const guidanceByBlockIndex = active ? groupGuidanceByPrecedingBlock(blocks, guidanceMessages, messageOrderIds) : new Map<number, RuntimeMessage[]>();
   const hasFollowingContent = blocks.some((block) => block.type === 'content' && block.content.trim());
-  const workBlocks = blocks.filter(isAssistantWorkBlock);
-  const workHistory = workBlocks.length
-    ? createWorkHistoryPlan({
+  const firstWorkBlockIndex = blocks.findIndex(isAssistantWorkBlock);
+  const lastWorkBlockIndex = blocks.reduce(
+    (lastIndex, block, index) => (isAssistantWorkBlock(block) ? index : lastIndex),
+    -1,
+  );
+  const nodes: AssistantGuidanceTimelinePlanNode[] = [];
+  let consumedGuidanceIds = new Set<string>();
+  let blockIndex = 0;
+
+  while (blockIndex < blocks.length) {
+    const block = blocks[blockIndex];
+    if (!block) break;
+    if (block.type === 'work') {
+      const workBlocks: AssistantWorkTimelineBlock[] = [];
+      while (blocks[blockIndex]?.type === 'work') {
+        workBlocks.push(blocks[blockIndex] as AssistantWorkTimelineBlock);
+        blockIndex += 1;
+      }
+      const groupEndIndex = blockIndex - 1;
+      const result = createWorkHistoryPlan({
         active,
         blockIndexById,
         blocks: workBlocks,
-        collapsedGuidanceMessages: active ? [] : guidanceMessages,
+        collapsedGuidanceMessages: !active && groupEndIndex === lastWorkBlockIndex ? guidanceMessages : [],
+        consumedGuidanceIds,
         guidanceByBlockIndex,
         guidanceMessages,
         messageOrderIds,
-        workHistoryActive,
-      })
-    : null;
-  const nodes: AssistantGuidanceTimelinePlanNode[] = [];
-
-  blocks.forEach((block, index) => {
-    if (block.type === 'work') {
-      if (index === firstWorkBlockIndex && workHistory) nodes.push(workHistory);
-      return;
+        workHistoryActive: workHistoryActive && groupEndIndex === lastWorkBlockIndex,
+      });
+      consumedGuidanceIds = result.consumedGuidanceIds;
+      nodes.push(result.plan);
+      continue;
     }
+
+    const guidanceAfter = active
+      ? withoutConsumedGuidance(guidanceByBlockIndex.get(blockIndex) ?? [], consumedGuidanceIds)
+      : [];
+    consumeGuidance(consumedGuidanceIds, guidanceAfter);
     nodes.push({
       type: 'block',
       block,
-      guidanceAfter: active ? (guidanceByBlockIndex.get(index) ?? []) : [],
+      guidanceAfter,
     });
-  });
+    blockIndex += 1;
+  }
 
   return {
     hasFollowingContent,
     nodes,
-    placeholderGuidance: active && !hasWorkBlock ? (guidanceByBlockIndex.get(-1) ?? []) : [],
+    placeholderGuidance: active && firstWorkBlockIndex < 0 ? (guidanceByBlockIndex.get(-1) ?? []) : [],
   };
 }
 
@@ -76,6 +94,7 @@ function createWorkHistoryPlan({
   blockIndexById,
   blocks,
   collapsedGuidanceMessages,
+  consumedGuidanceIds: initialConsumedGuidanceIds,
   guidanceByBlockIndex,
   guidanceMessages,
   messageOrderIds,
@@ -85,13 +104,17 @@ function createWorkHistoryPlan({
   blockIndexById: Map<string, number>;
   blocks: AssistantWorkTimelineBlock[];
   collapsedGuidanceMessages: RuntimeMessage[];
+  consumedGuidanceIds: Set<string>;
   guidanceByBlockIndex: Map<number, RuntimeMessage[]>;
   guidanceMessages: RuntimeMessage[];
   messageOrderIds: string[];
   workHistoryActive: boolean;
-}): Extract<AssistantGuidanceTimelinePlanNode, { type: 'workHistory' }> {
+}): {
+  consumedGuidanceIds: Set<string>;
+  plan: Extract<AssistantGuidanceTimelinePlanNode, { type: 'workHistory' }>;
+} {
   const entries: AssistantWorkHistoryPlanEntry[] = [];
-  let consumedGuidanceIds = new Set<string>();
+  let consumedGuidanceIds = new Set(initialConsumedGuidanceIds);
 
   for (const block of blocks) {
     const interleaved = active
@@ -111,24 +134,31 @@ function createWorkHistoryPlan({
 
     const originalBlockIndex = blockIndexById.get(block.id) ?? -1;
     const inlineGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(originalBlockIndex) ?? [], consumedGuidanceIds) : [];
-    if (inlineGuidanceMessages.length) entries.push(guidancePlanEntry(`${block.id}:guidance-inline`, inlineGuidanceMessages));
+    if (inlineGuidanceMessages.length) {
+      entries.push(guidancePlanEntry(`${block.id}:guidance-inline`, inlineGuidanceMessages));
+      consumeGuidance(consumedGuidanceIds, inlineGuidanceMessages);
+    }
   }
 
   const beforeFirstGuidanceMessages = active ? withoutConsumedGuidance(guidanceByBlockIndex.get(-1) ?? [], consumedGuidanceIds) : [];
   if (beforeFirstGuidanceMessages.length) {
     // steer 消息可能在下一个助手片段创建前到达。将它们保留在当前工作面板内，
     // 不要提升到轮次标题上方。
-    entries.push(guidancePlanEntry('active-guidance-before-first-inline', beforeFirstGuidanceMessages));
+    entries.unshift(guidancePlanEntry('active-guidance-before-first-inline', beforeFirstGuidanceMessages));
+    consumeGuidance(consumedGuidanceIds, beforeFirstGuidanceMessages);
   }
   if (!active && collapsedGuidanceMessages.length) {
     entries.push(guidancePlanEntry('completed-guidance-inline', collapsedGuidanceMessages));
   }
 
   return {
-    type: 'workHistory',
-    active: blocks.some((block) => block.active) || workHistoryActive,
-    blocks,
-    entries,
+    consumedGuidanceIds,
+    plan: {
+      type: 'workHistory',
+      active: blocks.some((block) => block.active) || workHistoryActive,
+      blocks,
+      entries,
+    },
   };
 }
 
@@ -190,6 +220,10 @@ function assistantWorkItemMessageId(item: AssistantWorkItem): string | undefined
 
 function withoutConsumedGuidance(messages: RuntimeMessage[], consumedIds: Set<string>): RuntimeMessage[] {
   return messages.filter((message) => !consumedIds.has(message.id));
+}
+
+function consumeGuidance(consumedIds: Set<string>, messages: RuntimeMessage[]): void {
+  messages.forEach((message) => consumedIds.add(message.id));
 }
 
 function isAssistantWorkBlock(block: AssistantRunTimelineBlock): block is AssistantWorkTimelineBlock {

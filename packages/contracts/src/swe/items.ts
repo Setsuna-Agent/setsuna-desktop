@@ -1,8 +1,13 @@
 import type { RuntimeMessage } from '../threads.js';
 import type { SweThreadItem } from './types.js';
 
-export function agentMessageItem(id: string, text: string, memoryCitation: RuntimeMessage['memoryCitation'] | null = null): SweThreadItem {
-  return { type: 'agentMessage', id, text, phase: null, memoryCitation };
+export function agentMessageItem(
+  id: string,
+  text: string,
+  memoryCitation: RuntimeMessage['memoryCitation'] | null = null,
+  phase: RuntimeMessage['phase'] | null = null,
+): SweThreadItem {
+  return { type: 'agentMessage', id, text, phase, memoryCitation };
 }
 
 export function planItem(id: string, text: string, status?: NonNullable<RuntimeMessage['planMode']>['status']): SweThreadItem {

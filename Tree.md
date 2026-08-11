@@ -184,9 +184,9 @@ apps/desktop/renderer/ — 0 direct / 612 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 73 total files
-├── src/ — 35 direct / 49 total files
-│   ├── event-projections/ — 2 direct / 2 total files
+packages/contracts/ — 4 direct / 74 total files
+├── src/ — 35 direct / 50 total files
+│   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── swe/ — 10 direct / 10 total files
 │   └── webdav-sync/ — 1 direct / 1 total files

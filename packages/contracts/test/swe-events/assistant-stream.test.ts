@@ -51,7 +51,7 @@ describe('runtime AppServer SWE assistant streaming', () => {
         turnId: 'turn_1',
         type: 'message.completed',
         createdAt: '2026-06-27T00:00:03.000Z',
-        payload: { messageId: 'msg_1' },
+        payload: { messageId: 'msg_1', phase: 'final_answer' },
       };
   
       expect(mapEvent(created)).toEqual([]);
@@ -82,7 +82,7 @@ describe('runtime AppServer SWE assistant streaming', () => {
           params: {
             threadId: 'thread_1',
             turnId: 'turn_1',
-            item: { type: 'agentMessage', id: 'msg_1', text: 'hello world', phase: null, memoryCitation: null },
+            item: { type: 'agentMessage', id: 'msg_1', text: 'hello world', phase: 'final_answer', memoryCitation: null },
             completedAtMs: Date.parse('2026-06-27T00:00:03.000Z'),
           },
         },

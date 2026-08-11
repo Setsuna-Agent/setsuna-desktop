@@ -357,6 +357,7 @@ export function assistantRunCopyText(
   locale: AppLocale = DEFAULT_APP_LOCALE,
 ): string {
   const content = item.segments
+    .filter((segment) => segment.phase === 'final_answer')
     .flatMap((segment) => [
       visibleMarkdownContent(segment.content).trim(),
       ...(segment.toolRuns ?? [])

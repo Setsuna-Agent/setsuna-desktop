@@ -9,11 +9,13 @@ import {
   ActiveMemorySettingsConfigStore,
   BlockingPassiveMemoryModelClient,
   CodexStage1MemoryModelClient,
+  CommentaryPassiveMemoryModelClient,
   ConsolidatingCodexMemoryModelClient,
   NoOutputStage1MemoryModelClient,
 } from '../../support/agent-loop/memory-extraction.js';
 import {
   appendCompletedExchange,
+  CapturingToolHost,
   CapturingUsageStore,
   MemorySettingsConfigStore,
   mkDataDir,
@@ -75,6 +77,31 @@ describe('agent loop memory extraction', () => {
           }),
         ],
       });
+    });
+
+  it('excludes assistant commentary from passive memory extraction input', async () => {
+      const ids = new RandomIdGenerator();
+      const dataDir = await mkDataDir();
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+      const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Commentary memory filtering', projectId: 'project_1' });
+      const modelClient = new CommentaryPassiveMemoryModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        memoryStore,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'Inspect this project and remember the durable result.' });
+
+      const extractionRequest = modelClient.requests.find((request) => request.model === 'passive-memory-extraction');
+      const extractionInput = extractionRequest?.messages.map((message) => message.content).join('\n') ?? '';
+      expect(extractionInput).toContain('The durable answer is complete.');
+      expect(extractionInput).not.toContain('I will inspect the project first.');
     });
   
   it('does not keep the active turn open while passive memory extraction is blocked', async () => {

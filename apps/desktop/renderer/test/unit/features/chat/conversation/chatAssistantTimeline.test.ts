@@ -12,7 +12,8 @@ describe('createAssistantRunTimeline', () => {
       role: 'assistant',
       content: '文档已经生成。',
       createdAt: '2026-07-17T00:00:00.000Z',
-      status: 'streaming',
+      status: 'complete',
+      phase: 'final_answer',
     }];
     const timeline = createAssistantRunTimeline(segments, [
       { id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' },
@@ -24,7 +25,7 @@ describe('createAssistantRunTimeline', () => {
     ]);
     expect(timeline[0]).toMatchObject({
       type: 'work',
-      active: true,
+      active: false,
       items: [{
         type: 'pluginUses',
         plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理', icon: 'documents' }],
@@ -40,6 +41,7 @@ describe('createAssistantRunTimeline', () => {
         content: 'I will inspect the project first.',
         createdAt: '2026-06-27T00:00:00.000Z',
         status: 'complete',
+        phase: 'commentary',
         toolRuns: [
           {
             id: 'call_shell',
@@ -56,6 +58,7 @@ describe('createAssistantRunTimeline', () => {
         content: 'The tests passed.',
         createdAt: '2026-06-27T00:00:01.000Z',
         status: 'complete',
+        phase: 'final_answer',
       },
     ];
 
@@ -67,7 +70,7 @@ describe('createAssistantRunTimeline', () => {
       type: 'work',
       contentSegments: [{ id: 'assistant_preamble:content', content: 'I will inspect the project first.' }],
       items: [
-        { type: 'content', segment: { id: 'assistant_preamble:content' } },
+        { type: 'content', segment: { content: 'I will inspect the project first.' } },
         { type: 'toolRuns', toolRuns: [{ id: 'call_shell' }] },
       ],
       toolRuns: [{ id: 'call_shell' }],
@@ -81,6 +84,7 @@ describe('createAssistantRunTimeline', () => {
       content: '分析已经完成，正文不应折叠。',
       createdAt: '2026-08-11T00:00:00.000Z',
       status: 'complete',
+      phase: 'final_answer',
       toolRuns: [
         { id: 'plan_update', name: 'update_plan', status: 'success' },
         { id: 'goal_update', name: 'update_goal', status: 'success' },
@@ -103,6 +107,7 @@ describe('createAssistantRunTimeline', () => {
         content: '<think>plan</think>Visible answer.',
         createdAt: '2026-06-27T00:00:00.000Z',
         status: 'complete',
+        phase: 'final_answer',
       },
     ];
 
@@ -213,6 +218,7 @@ describe('createAssistantRunTimeline', () => {
         content: 'I will update the file now.',
         createdAt: '2026-06-27T00:00:00.000Z',
         status: 'complete',
+        phase: 'commentary',
       },
       {
         id: 'assistant_edit',
@@ -220,6 +226,7 @@ describe('createAssistantRunTimeline', () => {
         content: '',
         createdAt: '2026-06-27T00:00:01.000Z',
         status: 'complete',
+        phase: 'commentary',
         toolRuns: [{ id: 'call_edit', name: 'workspace_write_file', status: 'success' }],
       },
       {
@@ -228,6 +235,7 @@ describe('createAssistantRunTimeline', () => {
         content: 'The file is updated.',
         createdAt: '2026-06-27T00:00:02.000Z',
         status: 'complete',
+        phase: 'final_answer',
       },
     ];
 
@@ -240,7 +248,7 @@ describe('createAssistantRunTimeline', () => {
         type: 'work',
         contentSegments: [{ id: 'assistant_first:content', content: 'I will update the file now.' }],
         items: [
-          { type: 'content', segment: { id: 'assistant_first:content' } },
+          { type: 'content', segment: { content: 'I will update the file now.' } },
           { type: 'toolRuns', toolRuns: [{ id: 'call_edit' }] },
         ],
         toolRuns: [{ id: 'call_edit' }],
@@ -252,7 +260,7 @@ describe('createAssistantRunTimeline', () => {
     ]);
   });
 
-  it('keeps process text and tool rows interleaved inside the top work block', () => {
+  it('preserves commentary and tool batches in source order', () => {
     const segments: RuntimeMessage[] = [
       {
         id: 'assistant_read',
@@ -260,6 +268,7 @@ describe('createAssistantRunTimeline', () => {
         content: '先看一下 quick_sort.py 的内容。',
         createdAt: '2026-06-27T00:00:00.000Z',
         status: 'complete',
+        phase: 'commentary',
         toolRuns: [{ id: 'call_read', name: 'workspace_read_file', status: 'success' }],
       },
       {
@@ -268,6 +277,7 @@ describe('createAssistantRunTimeline', () => {
         content: '好的，参考现有风格来写归并排序。',
         createdAt: '2026-06-27T00:00:01.000Z',
         status: 'complete',
+        phase: 'commentary',
         toolRuns: [{ id: 'call_edit', name: 'workspace_write_file', status: 'success' }],
       },
       {
@@ -276,6 +286,7 @@ describe('createAssistantRunTimeline', () => {
         content: '文件已创建好，来跑一下验证是否正常工作。',
         createdAt: '2026-06-27T00:00:02.000Z',
         status: 'complete',
+        phase: 'commentary',
         toolRuns: [{ id: 'call_run', name: 'run_shell_command', status: 'success' }],
       },
       {
@@ -284,6 +295,7 @@ describe('createAssistantRunTimeline', () => {
         content: '验证通过，文件已创建。',
         createdAt: '2026-06-27T00:00:03.000Z',
         status: 'complete',
+        phase: 'final_answer',
       },
     ];
     const blocks = createAssistantRunTimeline(segments);
@@ -291,11 +303,7 @@ describe('createAssistantRunTimeline', () => {
 
     expect(blocks.map((block) => block.id)).toEqual(['assistant_read:work', 'assistant_final:content']);
     if (work?.type !== 'work') throw new Error('expected a top work block');
-    expect(work.items.map((item) => {
-      if (item.type === 'toolRuns') return `tool:${item.toolRuns[0]?.id}`;
-      if (item.type === 'pluginUses') return `plugins:${item.plugins.map((plugin) => plugin.id).join(',')}`;
-      return `${item.type}:${item.segment.id}`;
-    })).toEqual([
+    expect(workItemOrder(work.items)).toEqual([
       'content:assistant_read:content',
       'tool:call_read',
       'content:assistant_edit:content',
@@ -303,6 +311,170 @@ describe('createAssistantRunTimeline', () => {
       'content:assistant_run:content',
       'tool:call_run',
     ]);
+  });
+
+  it('keeps completed and streaming commentary when their tools are visible', () => {
+    const segments: RuntimeMessage[] = [
+      {
+        id: 'assistant_read',
+        role: 'assistant',
+        content: '正在读取项目结构。',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [{ id: 'call_read', name: 'workspace_read_file', status: 'success' }],
+      },
+      {
+        id: 'assistant_test',
+        role: 'assistant',
+        content: '正在运行定向测试。',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        status: 'streaming',
+        phase: 'commentary',
+        toolRuns: [{ id: 'call_test', name: 'run_shell_command', status: 'running' }],
+      },
+    ];
+    const work = createAssistantRunTimeline(segments)[0];
+
+    if (work?.type !== 'work') throw new Error('expected an active work block');
+    expect(work.active).toBe(true);
+    expect(workItemOrder(work.items)).toEqual([
+      'content:assistant_read:content',
+      'tool:call_read',
+      'content:assistant_test:content',
+      'tool:call_test',
+    ]);
+  });
+
+  it('keeps a streaming preamble in place when its tool starts', () => {
+    const statusSegment: RuntimeMessage = {
+      id: 'assistant_test',
+      role: 'assistant',
+      content: '再看两个新增的测试文件。',
+      createdAt: '2026-06-27T00:00:01.000Z',
+      status: 'streaming',
+    };
+    const existingSegments: RuntimeMessage[] = [
+      {
+        id: 'assistant_read',
+        role: 'assistant',
+        content: '先确认当前改动。',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [{ id: 'call_status', name: 'git_status', status: 'success' }],
+      },
+      statusSegment,
+    ];
+    const before = createAssistantRunTimeline(existingSegments)[0];
+    const after = createAssistantRunTimeline([
+      existingSegments[0]!,
+      {
+        ...statusSegment,
+        phase: 'commentary',
+        status: 'complete',
+        toolRuns: [{ id: 'call_tests', name: 'workspace_read_file', status: 'running' }],
+      },
+    ])[0];
+
+    if (before?.type !== 'work' || after?.type !== 'work') throw new Error('expected work blocks');
+    expect(workItemOrder(before.items)).toEqual([
+      'content:assistant_read:content',
+      'tool:call_status',
+      'content:assistant_test:content',
+    ]);
+    expect(workItemOrder(after.items)).toEqual([
+      'content:assistant_read:content',
+      'tool:call_status',
+      'content:assistant_test:content',
+      'tool:call_tests',
+    ]);
+  });
+
+  it('does not promote an early Responses final hint above a later tool call', () => {
+    const streaming: RuntimeMessage = {
+      id: 'assistant_response',
+      role: 'assistant',
+      content: '先检查这两个文件。',
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'streaming',
+      phase: 'final_answer',
+    };
+    const before = createAssistantRunTimeline([streaming])[0];
+    const after = createAssistantRunTimeline([{
+      ...streaming,
+      status: 'complete',
+      phase: 'commentary',
+      toolRuns: [{ id: 'call_response', name: 'workspace_read_file', status: 'running' }],
+    }])[0];
+
+    if (before?.type !== 'work' || after?.type !== 'work') throw new Error('expected work blocks');
+    expect(workItemOrder(before.items)).toEqual(['content:assistant_response:content']);
+    expect(workItemOrder(after.items)).toEqual([
+      'content:assistant_response:content',
+      'tool:call_response',
+    ]);
+  });
+
+  it('preserves completed commentary while the next update is streaming', () => {
+    const work = createAssistantRunTimeline([
+      {
+        id: 'assistant_old_status',
+        role: 'assistant',
+        content: '旧状态。',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+      },
+      {
+        id: 'assistant_current_status',
+        role: 'assistant',
+        content: '当前状态。',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        status: 'streaming',
+        phase: 'commentary',
+      },
+    ])[0];
+
+    if (work?.type !== 'work') throw new Error('expected a work block');
+    expect(workItemOrder(work.items)).toEqual([
+      'content:assistant_old_status:content',
+      'content:assistant_current_status:content',
+    ]);
+  });
+
+  it('keeps later thinking and tools below committed content', () => {
+    const segments: RuntimeMessage[] = [
+      {
+        id: 'assistant_body',
+        role: 'assistant',
+        content: '已经输出的正文。',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        status: 'complete',
+        phase: 'final_answer',
+      },
+      {
+        id: 'assistant_followup',
+        role: 'assistant',
+        content: '我继续核对后续状态。<think>继续检查',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        status: 'streaming',
+        toolRuns: [{ id: 'call_followup', name: 'workspace_read_file', status: 'running' }],
+      },
+    ];
+
+    const blocks = createAssistantRunTimeline(segments);
+
+    expect(blocks.map((block) => block.type)).toEqual(['content', 'work']);
+    expect(blocks[0]).toMatchObject({ type: 'content', content: '已经输出的正文。' });
+    expect(blocks[1]).toMatchObject({
+      type: 'work',
+      items: [
+        { type: 'content', segment: { content: '我继续核对后续状态。' } },
+        { type: 'thinking', segment: { content: '继续检查' } },
+        { type: 'toolRuns', toolRuns: [{ id: 'call_followup' }] },
+      ],
+    });
   });
 
   it('merges adjacent tool and thinking work without crossing visible content', () => {
@@ -343,7 +515,7 @@ describe('createAssistantRunTimeline', () => {
     });
   });
 
-  it('hides active thinking items once the work block enters a file change flow', () => {
+  it('keeps earlier thinking visible when a later file change starts', () => {
     const segments: RuntimeMessage[] = [
       {
         id: 'assistant_thinking',
@@ -365,8 +537,8 @@ describe('createAssistantRunTimeline', () => {
 
     if (work?.type !== 'work') throw new Error('expected a work block');
     expect(work.thinkingSegments).toMatchObject([{ content: 'preparing the edit' }]);
-    expect(work.items.map((item) => item.type)).toEqual(['toolRuns']);
-    expect(work.items[0]).toMatchObject({
+    expect(work.items.map((item) => item.type)).toEqual(['thinking', 'toolRuns']);
+    expect(work.items[1]).toMatchObject({
       type: 'toolRuns',
       toolRuns: [{ id: 'call_patch' }],
     });
@@ -449,6 +621,7 @@ describe('createAssistantRunTimeline', () => {
         content: '已创建 `selection_sort.py`，并运行 `python3 selection_sort.py` 验证通过。',
         createdAt: '2026-06-27T00:00:03.000Z',
         status: 'complete',
+        phase: 'final_answer',
       },
     ];
 
@@ -465,3 +638,12 @@ describe('createAssistantRunTimeline', () => {
     });
   });
 });
+
+function workItemOrder(items: Extract<ReturnType<typeof createAssistantRunTimeline>[number], { type: 'work' }>['items']): string[] {
+  return items.flatMap((item) => {
+    if (item.type === 'content') return [`content:${item.segment.id}`];
+    if (item.type === 'thinking') return [`thinking:${item.segment.id}`];
+    if (item.type === 'pluginUses') return [`plugins:${item.id}`];
+    return item.toolRuns.map((run) => `tool:${run.id}`);
+  });
+}
