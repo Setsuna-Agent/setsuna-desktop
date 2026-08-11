@@ -15,11 +15,13 @@ use windows_sys::Win32::Security::Authorization::{
     REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
-    AccessCheck, EqualSid, GetAce, GetSecurityDescriptorControl, InitializeSecurityDescriptor,
+    AccessCheck, AclSizeInformation, EqualSid, GetAce, GetAclInformation,
+    GetSecurityDescriptorControl, InitializeSecurityDescriptor, IsValidAcl, IsValidSid,
     MapGenericMask, SetFileSecurityW, SetSecurityDescriptorDacl, ACCESS_ALLOWED_ACE,
-    ACCESS_DENIED_ACE, ACL, CONTAINER_INHERIT_ACE, DACL_SECURITY_INFORMATION, GENERIC_MAPPING,
-    GROUP_SECURITY_INFORMATION, OBJECT_INHERIT_ACE, OWNER_SECURITY_INFORMATION, PRIVILEGE_SET,
-    PROTECTED_DACL_SECURITY_INFORMATION, SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
+    ACCESS_DENIED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE,
+    DACL_SECURITY_INFORMATION, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
+    OWNER_SECURITY_INFORMATION, PRIVILEGE_SET, PROTECTED_DACL_SECURITY_INFORMATION,
+    SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA, FILE_DELETE_CHILD, FILE_GENERIC_EXECUTE,
@@ -821,7 +823,7 @@ fn path_has_effective_ace(
 ) -> Result<bool, SandboxError> {
     let mut path_wide = to_wide(path.as_os_str());
     let mut descriptor = std::ptr::null_mut();
-    let mut dacl = std::ptr::null_mut();
+    let mut dacl_out = std::mem::MaybeUninit::<*mut ACL>::uninit();
     let fetched = unsafe {
         GetNamedSecurityInfoW(
             path_wide.as_mut_ptr(),
@@ -829,12 +831,12 @@ fn path_has_effective_ace(
             DACL_SECURITY_INFORMATION,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut dacl,
+            dacl_out.as_mut_ptr(),
             std::ptr::null_mut(),
             &mut descriptor,
         )
     };
-    if fetched != ERROR_SUCCESS || descriptor.is_null() || dacl.is_null() {
+    if fetched != ERROR_SUCCESS || descriptor.is_null() {
         if !descriptor.is_null() {
             unsafe { LocalFree(descriptor as HLOCAL) };
         }
@@ -846,27 +848,77 @@ fn path_has_effective_ace(
             ),
         ));
     }
+    // GetNamedSecurityInfoW initializes every requested output on success. Keep
+    // the out-parameter uninitialized until then so no sentinel pointer can be
+    // mistaken for an ACL returned by Windows.
+    let dacl = unsafe { dacl_out.assume_init() };
+    if dacl.is_null() || unsafe { IsValidAcl(dacl) } == 0 {
+        unsafe { LocalFree(descriptor as HLOCAL) };
+        return Err(SandboxError::new(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("persistent ACL is invalid for {}", path.display()),
+        ));
+    }
+
+    let mut acl_info = ACL_SIZE_INFORMATION {
+        AceCount: 0,
+        AclBytesInUse: 0,
+        AclBytesFree: 0,
+    };
+    if unsafe {
+        GetAclInformation(
+            dacl,
+            std::ptr::addr_of_mut!(acl_info).cast::<c_void>(),
+            std::mem::size_of::<ACL_SIZE_INFORMATION>() as u32,
+            AclSizeInformation,
+        )
+    } == 0
+    {
+        unsafe { LocalFree(descriptor as HLOCAL) };
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("cannot inspect persistent ACL for {}", path.display()),
+            std::io::Error::last_os_error(),
+        ));
+    }
 
     let mut found = false;
     let desired_mask = map_file_mask(mask);
     let required_inheritance = inheritance as u8;
-    let ace_count = unsafe { (*dacl).AceCount };
-    for index in 0..u32::from(ace_count) {
-        let mut ace_pointer = std::ptr::null_mut();
-        if unsafe { GetAce(dacl, index, &mut ace_pointer) } == 0 || ace_pointer.is_null() {
+    for index in 0..acl_info.AceCount {
+        let mut ace_out = std::mem::MaybeUninit::<*mut c_void>::uninit();
+        if unsafe { GetAce(dacl, index, ace_out.as_mut_ptr()) } == 0 {
             continue;
         }
-        let ace = unsafe { &*ace_pointer.cast::<ACCESS_ALLOWED_ACE>() };
-        if ace.Header.AceType != ace_type || ace.Header.AceFlags & INHERIT_ONLY_ACE != 0 {
+        let ace_pointer = unsafe { ace_out.assume_init() };
+        if ace_pointer.is_null() {
+            continue;
+        }
+        let header = unsafe { ace_pointer.cast::<ACE_HEADER>().read_unaligned() };
+        if header.AceType != ace_type || header.AceFlags & INHERIT_ONLY_ACE != 0 {
             continue;
         }
         if required_inheritance != 0
-            && ace.Header.AceFlags & required_inheritance != required_inheritance
+            && header.AceFlags & required_inheritance != required_inheritance
         {
             continue;
         }
-        let ace_sid = std::ptr::addr_of!(ace.SidStart).cast_mut().cast::<c_void>();
-        if unsafe { EqualSid(ace_sid, sid) } == 0 {
+
+        let sid_offset = std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart);
+        let ace_size = usize::from(header.AceSize);
+        const MIN_SID_SIZE: usize = 8;
+        if ace_size < sid_offset + MIN_SID_SIZE {
+            continue;
+        }
+        let sub_authority_count =
+            unsafe { ace_pointer.cast::<u8>().add(sid_offset + 1).read() } as usize;
+        let sid_size = MIN_SID_SIZE + sub_authority_count * std::mem::size_of::<u32>();
+        if sid_offset + sid_size > ace_size {
+            continue;
+        }
+        let ace = unsafe { ace_pointer.cast::<ACCESS_ALLOWED_ACE>().read_unaligned() };
+        let ace_sid = unsafe { ace_pointer.cast::<u8>().add(sid_offset).cast::<c_void>() };
+        if unsafe { IsValidSid(ace_sid) } == 0 || unsafe { EqualSid(ace_sid, sid) } == 0 {
             continue;
         }
         let granted_mask = map_file_mask(ace.Mask);
