@@ -60,11 +60,31 @@ describe('desktop workspace panel sessions', () => {
       sidePanelSlot: addPanelToSlotState(current.sidePanelSlot, browser),
     }));
 
-    const whileViewingB = desktopWorkspaceBrowserPanelInstances(layouts, threadB, false);
-    const afterReturningToA = desktopWorkspaceBrowserPanelInstances(layouts, threadA, true);
+    const whileViewingB = desktopWorkspaceBrowserPanelInstances(layouts, threadB, {
+      bottomVisible: false,
+      sideVisible: false,
+    });
+    const afterReturningToA = desktopWorkspaceBrowserPanelInstances(layouts, threadA, {
+      bottomVisible: false,
+      sideVisible: true,
+    });
 
-    expect(whileViewingB).toEqual([{ active: false, panel: browser, targetIdentity: threadA }]);
-    expect(afterReturningToA).toEqual([{ active: true, panel: browser, targetIdentity: threadA }]);
+    expect(whileViewingB).toEqual([{ active: false, panel: browser, placement: 'side', targetIdentity: threadA }]);
+    expect(afterReturningToA).toEqual([{ active: true, panel: browser, placement: 'side', targetIdentity: threadA }]);
+  });
+
+  it('keeps a browser mounted and active in the bottom slot', () => {
+    const thread = 'thread:A' as const;
+    const browser = createBrowserPanel('browser-bottom', 'https://example.com');
+    const layouts = updateDesktopWorkspacePanelLayout({}, thread, (current) => ({
+      ...current,
+      bottomPanelSlot: addPanelToSlotState(current.bottomPanelSlot, browser),
+    }));
+
+    expect(desktopWorkspaceBrowserPanelInstances(layouts, thread, {
+      bottomVisible: true,
+      sideVisible: false,
+    })).toEqual([{ active: true, panel: browser, placement: 'bottom', targetIdentity: thread }]);
   });
 
   it('moves a new-thread layout to the created thread', () => {

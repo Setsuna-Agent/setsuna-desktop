@@ -85,6 +85,33 @@ export const createFilesPanel = (): DesktopPanelTab => ({ id: FILES_PANEL_ID, ty
 export const createFilePanel = (filePath: string): DesktopPanelTab => ({ id: `file:${filePath}`, type: 'file', title: fileName(filePath), filePath });
 export const activePanelInSlot = (slot: DesktopPanelSlotState) => slot.panels.find((panel) => panel.id === slot.active) ?? null;
 export const slotHasPanelType = (slot: DesktopPanelSlotState, type: DesktopPanelType) => slot.panels.some((panel) => panel.type === type);
+export const isFileWorkspacePanel = (panel: DesktopPanelTab): boolean => panel.type === 'files' || panel.type === 'file';
+export const findFileWorkspacePanelSlot = (
+  sidePanelSlot: DesktopPanelSlotState,
+  bottomPanelSlot: DesktopPanelSlotState,
+): DesktopPanelSlot | null => {
+  if (sidePanelSlot.panels.some(isFileWorkspacePanel)) return 'side';
+  return bottomPanelSlot.panels.some(isFileWorkspacePanel) ? 'bottom' : null;
+};
+export const fileWorkspacePanelTargetSlot = (
+  requestedSlot: DesktopPanelSlot,
+  sidePanelSlot: DesktopPanelSlotState,
+  bottomPanelSlot: DesktopPanelSlotState,
+): DesktopPanelSlot => findFileWorkspacePanelSlot(sidePanelSlot, bottomPanelSlot) ?? requestedSlot;
+export const canMoveDesktopPanelAcrossSlots = (
+  panel: DesktopPanelTab,
+  sourcePanels: readonly DesktopPanelTab[],
+): boolean => {
+  // Overview is the side panel's empty-state launcher. Moving it would let the
+  // same singleton be recreated in both slots when the side panel is reopened.
+  if (panel.type === 'overview') return false;
+  // File preview and draft state is workspace-scoped. Keep all file workspace
+  // tabs together so two slots cannot render or edit the same global draft.
+  if (isFileWorkspacePanel(panel)) {
+    return sourcePanels.filter(isFileWorkspacePanel).length === 1;
+  }
+  return true;
+};
 export const findDesktopPanelLocationByType = (
   sidePanelSlot: DesktopPanelSlotState,
   bottomPanelSlot: DesktopPanelSlotState,
@@ -163,6 +190,25 @@ export const reorderPanelInSlotState = (
   if (panels.every((item, index) => item.id === slot.panels[index]?.id)) return slot;
   return { ...slot, panels };
 };
+
+export const movePanelBetweenSlotStates = (
+  source: DesktopPanelSlotState,
+  target: DesktopPanelSlotState,
+  panelId: string,
+  targetPanelId?: string | null,
+  placement: DesktopPanelDropPlacement = 'after',
+): { source: DesktopPanelSlotState; target: DesktopPanelSlotState } => {
+  const panel = source.panels.find((item) => item.id === panelId);
+  if (!panel || !canMoveDesktopPanelAcrossSlots(panel, source.panels)) return { source, target };
+
+  const nextSource = removePanelFromSlotState(source, panelId);
+  let nextTarget = addPanelToSlotState(target, panel);
+  if (targetPanelId && targetPanelId !== panelId) {
+    nextTarget = reorderPanelInSlotState(nextTarget, panel.id, targetPanelId, placement);
+  }
+  return { source: nextSource, target: nextTarget };
+};
+
 export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: string): DesktopPanelSlotState => {
   const panelIndex = slot.panels.findIndex((panel) => panel.id === panelId);
   if (panelIndex < 0) return slot;

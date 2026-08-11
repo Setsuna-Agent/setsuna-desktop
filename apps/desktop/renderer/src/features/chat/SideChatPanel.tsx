@@ -12,6 +12,7 @@ import { useCallback, type Dispatch, type PointerEvent as ReactPointerEvent, typ
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { useThreadWorkspace } from '../workspace/hooks/useThreadWorkspace.js';
+import type { DesktopPanelSlot } from '../workspace/model.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ChatWorkspace } from './ChatWorkspace.js';
 import { useSideChat } from './hooks/useSideChat.js';
@@ -27,6 +28,7 @@ export function SideChatPanel({
   client,
   config,
   hidden,
+  placement = 'side',
   plugins,
   selectedWorkspaceApp,
   skills,
@@ -52,6 +54,7 @@ export function SideChatPanel({
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   hidden: boolean;
+  placement?: DesktopPanelSlot;
   plugins: RuntimePluginSummary[];
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   skills: RuntimeSkillSummary[];
@@ -134,14 +137,20 @@ export function SideChatPanel({
   }, [activeWorkspace?.id, onError, onOpenWorkspaceDirectory, sideWorkspace, t]);
 
   return (
-    <aside className="desktop-workspace-panel desktop-side-chat-panel" aria-label={t('chat.sideChat.label')} hidden={hidden}>
-      <WorkspaceResizeHandle
-        max={workspaceMaxWidth}
-        min={workspaceMinWidth}
-        value={workspaceWidth}
-        onResizeStart={onWorkspaceResizeStart}
-        onResizeStep={onWorkspaceResizeStep}
-      />
+    <aside
+      className={`desktop-workspace-panel desktop-side-chat-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
+      aria-label={t('chat.sideChat.label')}
+      hidden={hidden}
+    >
+      {placement === 'side' ? (
+        <WorkspaceResizeHandle
+          max={workspaceMaxWidth}
+          min={workspaceMinWidth}
+          value={workspaceWidth}
+          onResizeStart={onWorkspaceResizeStart}
+          onResizeStep={onWorkspaceResizeStep}
+        />
+      ) : null}
       <MarkdownNavigationProvider
         onOpenInAppBrowser={onOpenInAppBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}

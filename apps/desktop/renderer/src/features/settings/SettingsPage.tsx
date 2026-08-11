@@ -48,19 +48,49 @@ import { WebDavSyncSettings } from './webdav-sync/WebDavSyncSettings.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
-const settingsSections: Array<{ id: SettingsSectionId; labelKey: MessageKey; icon: ReactNode }> = [
-  { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
-  { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} /> },
-  { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
-  { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
-  { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
-  { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
-  { id: 'sync', labelKey: 'settings.section.sync', icon: <CloudCog size={14} /> },
-  { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
-  { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
-  { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
-  { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} /> },
-];
+type SettingsSidebarSection = {
+  id: SettingsSectionId;
+  labelKey: MessageKey;
+  icon: ReactNode;
+};
+
+type SettingsSidebarGroup = {
+  id: string;
+  labelKey: MessageKey;
+  sections: readonly SettingsSidebarSection[];
+};
+
+const settingsSectionGroups = [
+  {
+    id: 'preferences',
+    labelKey: 'settings.group.preferences',
+    sections: [
+      { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
+      { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} /> },
+      { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
+    ],
+  },
+  {
+    id: 'models-and-services',
+    labelKey: 'settings.group.modelsAndServices',
+    sections: [
+      { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
+      { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
+      { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
+      { id: 'sync', labelKey: 'settings.section.sync', icon: <CloudCog size={14} /> },
+      { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
+    ],
+  },
+  {
+    id: 'data-and-system',
+    labelKey: 'settings.group.dataAndSystem',
+    sections: [
+      { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
+      { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
+      { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} /> },
+    ],
+  },
+] satisfies readonly SettingsSidebarGroup[];
 
 const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   general: 'settings.section.general',
@@ -256,17 +286,32 @@ export function SettingsSidebar({
       />
       <div className="chat-user-settings__title">{t('settings.title')}</div>
       <div className="chat-user-settings__tabs">
-        {settingsSections.map((section) => (
-          <button
-            key={section.id}
-            className={activeSection === section.id ? 'is-active' : ''}
-            type="button"
-            onClick={() => onSelectSection(section.id)}
-          >
-            {section.icon}
-            <span>{t(section.labelKey)}</span>
-          </button>
-        ))}
+        {settingsSectionGroups.map((group) => {
+          const titleId = `settings-sidebar-group-${group.id}`;
+          return (
+            <div
+              key={group.id}
+              aria-labelledby={titleId}
+              className="chat-user-settings__tab-group"
+              role="group"
+            >
+              <div id={titleId} className="chat-user-settings__tab-group-title">
+                {t(group.labelKey)}
+              </div>
+              {group.sections.map((section) => (
+                <button
+                  key={section.id}
+                  className={activeSection === section.id ? 'is-active' : ''}
+                  type="button"
+                  onClick={() => onSelectSection(section.id)}
+                >
+                  {section.icon}
+                  <span>{t(section.labelKey)}</span>
+                </button>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </nav>
   );

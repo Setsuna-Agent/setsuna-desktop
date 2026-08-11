@@ -1,4 +1,5 @@
-import { Bell, CircleGauge, PanelRight, Terminal } from 'lucide-react';
+import { Bell, CircleGauge } from 'lucide-react';
+import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
@@ -8,7 +9,8 @@ import type { MainView } from '../types.js';
 export function AppTopbarActions({
   updater,
   activeView,
-  bottomTerminalPanelOpen,
+  bottomPanelVisible,
+  bottomTerminalPanelActive,
   conversationOverviewAvailable,
   conversationOverviewVisible,
   sidePanelVisible,
@@ -18,7 +20,8 @@ export function AppTopbarActions({
 }: {
   updater: DesktopUpdaterStateView;
   activeView: MainView;
-  bottomTerminalPanelOpen: boolean;
+  bottomPanelVisible: boolean;
+  bottomTerminalPanelActive: boolean;
   conversationOverviewAvailable: boolean;
   conversationOverviewVisible: boolean;
   sidePanelVisible: boolean;
@@ -60,22 +63,29 @@ export function AppTopbarActions({
       {activeView === 'chat' && !sidePanelVisible ? (
         <ShortcutTooltip
           commandId="layout.toggleTerminal"
-          label={bottomTerminalPanelOpen ? t('topbar.closeTerminal') : t('topbar.openTerminal')}
+          label={bottomTerminalPanelActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
         >
           <IconButton
-            label={bottomTerminalPanelOpen ? t('topbar.closeTerminal') : t('topbar.openTerminal')}
+            label={bottomTerminalPanelActive ? t('topbar.closeTerminal') : t('topbar.openBottomTerminal')}
             title=""
-            className={`app-shell-icon-control ${bottomTerminalPanelOpen ? 'is-active' : ''}`}
+            aria-pressed={bottomTerminalPanelActive}
+            className={`app-shell-icon-control ${bottomPanelVisible ? 'is-active' : ''}`}
             onClick={onToggleBottomTerminal}
           >
-            <Terminal size={16} />
+            <PanelPlacementIcon placement="bottom" size={16} />
           </IconButton>
         </ShortcutTooltip>
       ) : null}
       {activeView === 'chat' && !sidePanelVisible ? (
         <ShortcutTooltip commandId="layout.toggleWorkspace" label={t('topbar.openRightSidebar')}>
-          <IconButton title="" label={t('topbar.openRightSidebar')} className="app-shell-icon-control" onClick={onToggleSidePanel}>
-            <PanelRight size={16} />
+          <IconButton
+            title=""
+            label={t('topbar.openRightSidebar')}
+            aria-pressed={false}
+            className="app-shell-icon-control"
+            onClick={onToggleSidePanel}
+          >
+            <PanelPlacementIcon placement="side" size={16} />
           </IconButton>
         </ShortcutTooltip>
       ) : null}

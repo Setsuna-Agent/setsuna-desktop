@@ -3,6 +3,7 @@ import {
   DEFAULT_BROWSER_URL,
   WORKSPACE_OVERVIEW_PANEL_ID,
   addPanelToSlotState,
+  canMoveDesktopPanelAcrossSlots,
   createBrowserPanel,
   createConversationDebugPanel,
   createDefaultSidePanelSlot,
@@ -11,7 +12,10 @@ import {
   createReviewPanel,
   createSideChatPanel,
   createWorkspaceOverviewPanel,
+  fileWorkspacePanelTargetSlot,
+  findFileWorkspacePanelSlot,
   findDesktopPanelLocationByType,
+  movePanelBetweenSlotStates,
   removePanelFromSlotState,
   reorderPanelInSlotState,
   updatePanelInSlotState,
@@ -153,6 +157,67 @@ describe('desktop workspace panel model', () => {
     const next = reorderPanelInSlotState(slot, 'review', 'file:src/main.ts', 'after');
 
     expect(next.panels.map((panel) => panel.id)).toEqual(['files', 'file:src/main.ts', 'review']);
+  });
+
+  it('moves a panel between side and bottom slots at the requested position', () => {
+    const terminal = { id: 'terminal-1', type: 'terminal' as const, title: '终端' };
+    const source = { active: terminal.id, panels: [createFilesPanel(), terminal] };
+    const target = { active: 'review', panels: [createReviewPanel(), createFilePanel('src/main.ts')] };
+
+    const moved = movePanelBetweenSlotStates(source, target, terminal.id, 'file:src/main.ts', 'before');
+
+    expect(moved.source).toEqual({ active: 'files', panels: [createFilesPanel()] });
+    expect(moved.target.active).toBe(terminal.id);
+    expect(moved.target.panels.map((panel) => panel.id)).toEqual(['review', terminal.id, 'file:src/main.ts']);
+  });
+
+  it('keeps all workspace file tabs in the same panel slot', () => {
+    const files = createFilesPanel();
+    const file = createFilePanel('src/main.ts');
+    const source = { active: file.id, panels: [files, file] };
+    const target = { active: 'review', panels: [createReviewPanel()] };
+
+    expect(findFileWorkspacePanelSlot(source, target)).toBe('side');
+    expect(canMoveDesktopPanelAcrossSlots(file, source.panels)).toBe(false);
+    expect(movePanelBetweenSlotStates(source, target, file.id)).toEqual({ source, target });
+  });
+
+  it('routes new file tabs to a file workspace already in the bottom slot', () => {
+    const bottom = { active: 'files', panels: [createFilesPanel()] };
+
+    expect(findFileWorkspacePanelSlot({ active: null, panels: [] }, bottom)).toBe('bottom');
+    expect(fileWorkspacePanelTargetSlot('side', { active: null, panels: [] }, bottom)).toBe('bottom');
+    expect(canMoveDesktopPanelAcrossSlots(bottom.panels[0]!, bottom.panels)).toBe(true);
+  });
+
+  it('uses the requested slot when no file workspace exists yet', () => {
+    const empty = { active: null, panels: [] };
+
+    expect(fileWorkspacePanelTargetSlot('bottom', empty, empty)).toBe('bottom');
+  });
+
+  it('keeps the overview launcher in the side panel', () => {
+    const overview = createWorkspaceOverviewPanel();
+    const source = { active: overview.id, panels: [overview] };
+    const target = { active: null, panels: [] };
+
+    expect(canMoveDesktopPanelAcrossSlots(overview, source.panels)).toBe(false);
+    expect(movePanelBetweenSlotStates(source, target, overview.id)).toEqual({ source, target });
+  });
+
+  it('merges a legacy duplicate singleton while moving it between slots', () => {
+    const review = createReviewPanel();
+    const moved = movePanelBetweenSlotStates(
+      { active: review.id, panels: [review] },
+      { active: 'files', panels: [review, createFilesPanel()] },
+      review.id,
+      'files',
+      'after',
+    );
+
+    expect(moved.source).toEqual({ active: null, panels: [] });
+    expect(moved.target.panels.map((panel) => panel.id)).toEqual(['files', 'review']);
+    expect(moved.target.active).toBe(review.id);
   });
 
   it('keeps the same slot object when the requested order is unchanged', () => {

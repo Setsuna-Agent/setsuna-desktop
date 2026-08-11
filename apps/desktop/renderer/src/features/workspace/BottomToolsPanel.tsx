@@ -1,46 +1,24 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { DesktopPanelHeader } from './DesktopPanelHeader.js';
-import { DesktopReviewPanel } from './ReviewPanel.js';
-import { LazyTerminalPane } from './LazyTerminalPane.js';
 import type {
-  DesktopDiffSummary,
   DesktopPanelDropPlacement,
+  DesktopPanelSlot,
   DesktopPanelTab,
   DesktopPanelType,
-  DesktopReviewFocusRequest,
-  DesktopReviewLoadOptions,
-  DesktopReviewState,
-  DesktopTerminalSession,
-  DesktopWorkspaceApp,
 } from './model.js';
 
 export function BottomToolsPanel({
   activePanel,
+  availablePanelTypes,
+  children,
   panels,
-  activeProject,
-  latestReviewSummary,
-  reviewError,
-  reviewFocusRequest,
-  reviewLoading,
-  reviewState,
-  selectedWorkspaceApp,
-  workspaceApps,
-  terminalSession,
-  onAddFileToConversation,
   onActivatePanel,
   onClosePanel,
   onCloseSlot,
-  onCopyFilePath,
-  onExternalOpenFile,
-  onOpenFileWithApp,
-  onOpenProjectFile,
-  onOpenReviewPanel,
-  onOpenTerminalPanel,
+  onMovePanel,
+  onOpenPanel,
   onReorderPanels,
-  onReviewRefresh,
-  onRevealFile,
   onResizeStep,
   onResizeStart,
   resizeMax,
@@ -48,29 +26,20 @@ export function BottomToolsPanel({
   resizeValue,
 }: {
   activePanel: DesktopPanelTab;
+  availablePanelTypes: DesktopPanelType[];
+  children?: ReactNode;
   panels: DesktopPanelTab[];
-  activeProject?: WorkspaceProject;
-  latestReviewSummary: DesktopDiffSummary | null;
-  reviewError: string | null;
-  reviewFocusRequest: DesktopReviewFocusRequest | null;
-  reviewLoading: boolean;
-  reviewState: DesktopReviewState | null;
-  selectedWorkspaceApp: DesktopWorkspaceApp | null;
-  workspaceApps: DesktopWorkspaceApp[];
-  terminalSession: DesktopTerminalSession | null;
-  onAddFileToConversation: (filePath: string) => void;
   onActivatePanel: (panelId: string) => void;
   onClosePanel: (panelId: string) => void;
   onCloseSlot: () => void;
-  onCopyFilePath: (filePath: string) => void;
-  onExternalOpenFile: (filePath?: string | null, line?: number) => void;
-  onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
-  onOpenProjectFile: (filePath: string) => void;
-  onOpenReviewPanel: () => void;
-  onOpenTerminalPanel: () => void;
+  onMovePanel: (
+    panelId: string,
+    targetPlacement: DesktopPanelSlot,
+    targetPanelId: string | null,
+    placement: DesktopPanelDropPlacement,
+  ) => void;
+  onOpenPanel: (panel: DesktopPanelType) => void;
   onReorderPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
-  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
-  onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   resizeMax: number;
@@ -78,14 +47,6 @@ export function BottomToolsPanel({
   resizeValue: number;
 }) {
   const { t } = useI18n();
-  const availablePanelTypes: DesktopPanelType[] = [activeProject ? 'review' : null, 'terminal'].filter(Boolean) as DesktopPanelType[];
-  const handleOpenPanel = (panel: DesktopPanelType) => {
-    if (panel === 'review') {
-      onOpenReviewPanel();
-      return;
-    }
-    if (panel === 'terminal') onOpenTerminalPanel();
-  };
 
   return (
     <section className="bottom-panel" aria-label={t('workspace.bottom.tools')}>
@@ -118,35 +79,14 @@ export function BottomToolsPanel({
         placement="bottom"
         onClose={onCloseSlot}
         onClosePanel={onClosePanel}
-        onOpenPanel={handleOpenPanel}
+        onMovePanel={onMovePanel}
+        onOpenPanel={onOpenPanel}
         onReorderPanels={onReorderPanels}
         onSelectPanel={onActivatePanel}
       />
-      {activePanel.type === 'terminal' ? (
-        <div className="bottom-panel__body bottom-panel__body--terminal" role="tabpanel">
-          <LazyTerminalPane session={terminalSession} />
-        </div>
-      ) : (
-        <div className="bottom-panel__body bottom-panel__body--review" role="tabpanel">
-          <DesktopReviewPanel
-            activeProject={activeProject}
-            error={reviewError}
-            focusRequest={reviewFocusRequest}
-            latestSummary={latestReviewSummary}
-            loading={reviewLoading}
-            reviewState={reviewState}
-            workspaceApp={selectedWorkspaceApp}
-            workspaceApps={workspaceApps}
-            onAddFileToConversation={onAddFileToConversation}
-            onCopyFilePath={onCopyFilePath}
-            onExternalOpenFile={onExternalOpenFile}
-            onOpenFileWithApp={onOpenFileWithApp}
-            onOpenProjectFile={onOpenProjectFile}
-            onRefresh={onReviewRefresh}
-            onRevealFile={onRevealFile}
-          />
-        </div>
-      )}
+      <div className="bottom-panel__body" role="tabpanel">
+        {children}
+      </div>
     </section>
   );
 }

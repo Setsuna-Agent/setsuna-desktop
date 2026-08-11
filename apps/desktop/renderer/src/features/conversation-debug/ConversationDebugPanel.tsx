@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { EmptyState, SelectField } from '../../shared/ui/primitives.js';
+import type { DesktopPanelSlot } from '../workspace/model.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ConversationDebugEventList } from './ConversationDebugEventList.js';
 import { ConversationDebugFlow } from './ConversationDebugFlow.js';
@@ -34,6 +35,8 @@ import './conversation-debug.css';
 
 export function ConversationDebugPanel({
   client,
+  hidden = false,
+  placement = 'side',
   thread,
   onResizeStep,
   onResizeStart,
@@ -42,6 +45,8 @@ export function ConversationDebugPanel({
   resizeValue,
 }: {
   client: DesktopRuntimeClient;
+  hidden?: boolean;
+  placement?: DesktopPanelSlot;
   thread: RuntimeThread | null;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -103,14 +108,19 @@ export function ConversationDebugPanel({
   };
 
   return (
-    <aside className="desktop-workspace-panel conversation-debug-panel">
-      <WorkspaceResizeHandle
-        max={resizeMax}
-        min={resizeMin}
-        value={resizeValue}
-        onResizeStart={onResizeStart}
-        onResizeStep={onResizeStep}
-      />
+    <aside
+      className={`desktop-workspace-panel conversation-debug-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
+      hidden={hidden}
+    >
+      {placement === 'side' ? (
+        <WorkspaceResizeHandle
+          max={resizeMax}
+          min={resizeMin}
+          value={resizeValue}
+          onResizeStart={onResizeStart}
+          onResizeStep={onResizeStep}
+        />
+      ) : null}
       <section className="conversation-debug-panel__body" aria-label={t('conversationDebug.title')}>
         {thread ? (
           <>

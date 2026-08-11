@@ -3,6 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { DesktopUpdaterStateView } from '../../../../src/app/controller/useDesktopUpdater.js';
 import { AppTopbarActions } from '../../../../src/app/layout/AppTopbarActions.js';
+import { AppWorkspaceToolbar } from '../../../../src/app/layout/AppWorkspaceToolbar.js';
+import type { DesktopWorkspacePanelsState } from '../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
+import { createWorkspaceOverviewPanel } from '../../../../src/features/workspace/model.js';
+import type { ProjectWorkspaceState } from '../../../../src/features/workspace/hooks/useProjectWorkspace.js';
 
 describe('AppTopbarActions', () => {
   it('在普通对话中显示右侧栏入口', () => {
@@ -26,20 +30,70 @@ describe('AppTopbarActions', () => {
     expect(html).toContain('aria-pressed="false"');
   });
 
+  it('非终端底栏打开时保留选中背景但仍表达打开终端', () => {
+    const html = renderActions({ activeView: 'chat', bottomPanelVisible: true, sidePanelVisible: false });
+    const bottomPanelButton = html.match(/<button aria-label="打开底栏终端"[^>]*>/)?.[0] ?? '';
+
+    expect(bottomPanelButton).toContain('aria-pressed="false"');
+    expect(bottomPanelButton).toContain('is-active');
+    expect(html).toContain('app-panel-placement-icon--bottom');
+  });
+
+  it('底栏终端激活时表达关闭终端', () => {
+    const html = renderActions({
+      activeView: 'chat',
+      bottomPanelVisible: true,
+      bottomTerminalPanelActive: true,
+      sidePanelVisible: false,
+    });
+    const bottomPanelButton = html.match(/<button aria-label="关闭终端"[^>]*>/)?.[0] ?? '';
+
+    expect(bottomPanelButton).toContain('aria-pressed="true"');
+    expect(bottomPanelButton).toContain('is-active');
+  });
+
+});
+
+describe('AppWorkspaceToolbar', () => {
+  it('exposes the empty overview toolbar as a side-panel drop target', () => {
+    const overview = createWorkspaceOverviewPanel();
+    const workspacePanels = {
+      bottomPanelVisible: true,
+      bottomTerminalPanelActive: false,
+      sidePanelSlot: { active: overview.id, panels: [overview] },
+      sidePanelVisible: true,
+      toggleBottomTerminal: vi.fn(),
+      toggleSidePanel: vi.fn(),
+    } as unknown as DesktopWorkspacePanelsState;
+
+    const html = renderToStaticMarkup(createElement(AppWorkspaceToolbar, {
+      projectWorkspace: {} as ProjectWorkspaceState,
+      workspacePanels,
+    }));
+
+    expect(html).toContain('data-desktop-panel-placement="side"');
+    expect(html).toContain('chat-file-review-panel__tabs');
+    expect(html).not.toContain('data-desktop-panel-tab-id="workspace-overview"');
+  });
 });
 
 function renderActions({
   activeView,
+  bottomPanelVisible = false,
+  bottomTerminalPanelActive = false,
   conversationOverviewVisible = true,
   sidePanelVisible,
 }: {
   activeView: 'chat' | 'capabilities' | 'settings';
+  bottomPanelVisible?: boolean;
+  bottomTerminalPanelActive?: boolean;
   conversationOverviewVisible?: boolean;
   sidePanelVisible: boolean;
 }): string {
   return renderToStaticMarkup(createElement(AppTopbarActions, {
     activeView,
-    bottomTerminalPanelOpen: false,
+    bottomPanelVisible,
+    bottomTerminalPanelActive,
     conversationOverviewAvailable: true,
     conversationOverviewVisible,
     onToggleConversationOverview: vi.fn(),

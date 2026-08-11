@@ -14,11 +14,18 @@ import {
   terminalRestoreBuffer,
   terminalSessionExited,
 } from './terminalRestoreBuffer.js';
+import { terminalDisplayTitle } from './terminalTitle.js';
 
 const TERMINAL_URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+/gi;
 const TERMINAL_URL_TRAILING_PUNCTUATION_PATTERN = /[),.;:!?]+$/;
 
-export function TerminalPane({ session }: { session: DesktopTerminalSession | null }) {
+export function TerminalPane({
+  session,
+  onTitleChange,
+}: {
+  session: DesktopTerminalSession | null;
+  onTitleChange?: (title: string) => void;
+}) {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<XTermTerminal | null>(null);
@@ -26,6 +33,8 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
   const [exited, setExited] = useState(() => Boolean(session && terminalSessionExited(session.sessionId)));
   const [restarting, setRestarting] = useState(false);
   const [restartError, setRestartError] = useState<string | null>(null);
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -48,8 +57,12 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     const linkProviderDisposable = terminal.registerLinkProvider(createTerminalLinkProvider(terminal));
+    const titleDisposable = terminal.onTitleChange((title) => {
+      onTitleChangeRef.current?.(terminalDisplayTitle(title, session.shell));
+    });
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    onTitleChangeRef.current?.(terminalDisplayTitle('', session.shell));
 
     const fitTerminal = () => {
       fitAddon.fit();
@@ -112,6 +125,7 @@ export function TerminalPane({ session }: { session: DesktopTerminalSession | nu
       unsubscribe();
       dataDisposable.dispose();
       linkProviderDisposable.dispose();
+      titleDisposable.dispose();
       resizeObserver.disconnect();
       window.removeEventListener(CODE_APPEARANCE_CHANGE_EVENT_NAME, handleCodeAppearanceChange);
       terminal.dispose();

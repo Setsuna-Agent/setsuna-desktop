@@ -260,6 +260,7 @@ export function AppRouteContent({
       fileDraft={projectWorkspace.fileDraft}
       filePreview={projectWorkspace.filePreview}
       plugins={runtime.plugins}
+      panelLauncherTypes={workspacePanels.panelLauncherTypes}
       skillSelectionRequest={skillSelectionRequest}
       reviewError={workspacePanels.reviewError}
       reviewFocusRequest={reviewFocusRequest}
@@ -278,7 +279,15 @@ export function AppRouteContent({
       onSideChatError={runtime.setError}
       sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
-      onActivateBottomPanel={(panelId) => workspacePanels.activateDesktopPanel('bottom', panelId)}
+      onActivateBottomPanel={(panelId) => {
+        const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);
+        if (panel?.type === 'file' && panel.filePath) {
+          void projectWorkspace.openProjectFile(panel.filePath);
+          return;
+        }
+        if (panel?.type === 'files') projectWorkspace.setFilePreview(null);
+        workspacePanels.activateDesktopPanel('bottom', panelId);
+      }}
       onCancelActiveTurn={() => void chatActions.cancelActiveTurn()}
       onAccessModeChange={(selection) => void runtime.saveRuntimePreferences(selection)}
       onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
@@ -298,11 +307,10 @@ export function AppRouteContent({
       onOpenFileWithApp={(appId, filePath, line) => void workspacePanels.openFileWithWorkspaceApp(appId, filePath, line)}
       onSelectModel={(providerId, modelId) => void runtime.selectProviderModel(providerId, modelId)}
       onSearchProjectEntries={projectWorkspace.searchProjectEntries}
-      onOpenBottomReviewPanel={() => {
-        workspacePanels.openDesktopPanel('bottom', 'review');
-        void workspacePanels.loadReviewState();
+      onOpenBottomPanel={(panelType) => {
+        if (panelType === 'files') projectWorkspace.setFilePreview(null);
+        workspacePanels.openDesktopPanel('bottom', panelType);
       }}
-      onOpenBottomTerminalPanel={() => workspacePanels.openDesktopPanel('bottom', 'terminal')}
       onOpenBrowser={(url) => workspacePanels.openBrowserPanel(url)}
       onOpenConversationDebug={() => workspacePanels.openDesktopPanel('side', 'conversation-debug')}
       onOpenMarkdownWebLink={openMarkdownWebLink}
@@ -319,6 +327,9 @@ export function AppRouteContent({
       onOpenEntry={(entry) => void projectWorkspace.openEntry(entry)}
       onOpenProjectFile={projectWorkspace.openProjectFile}
       onOpenWorkspaceDirectory={(directoryPath) => void workspacePanels.openWorkspaceDirectory(directoryPath)}
+      onMoveBottomPanel={(panelId, targetPlacement, targetPanelId, placement) => {
+        workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);
+      }}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
       onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
       onRevealFile={(filePath) => void workspacePanels.revealWorkspaceFile(filePath)}
@@ -336,6 +347,7 @@ export function AppRouteContent({
       onTerminalResizeStep={onTerminalResizeStep}
       onTerminalResizeStart={onTerminalResizeStart}
       onUpdateBrowserPanel={workspacePanels.updateBrowserPanel}
+      onUpdateDesktopPanel={workspacePanels.updateDesktopPanel}
       terminalHeight={terminalHeight}
       terminalMaxHeight={terminalMaxHeight}
       terminalMinHeight={terminalMinHeight}

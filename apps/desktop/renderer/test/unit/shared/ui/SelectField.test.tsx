@@ -17,6 +17,23 @@ describe('SelectField form behavior', () => {
     expect(html).toContain('name="resolution"');
     expect(html).toContain('required=""');
   });
+
+  it('allows domain content without replacing the shared trigger chrome', () => {
+    const html = renderToStaticMarkup(
+      <SelectField
+        aria-label="权限策略"
+        value="full-access"
+        valueContent={<span className="permission-value">完全访问</span>}
+        onValueChange={() => undefined}
+      >
+        <option value="full-access">完全访问</option>
+      </SelectField>,
+    );
+
+    expect(html).toContain('class="sd-field sd-select-field');
+    expect(html).toContain('class="permission-value"');
+    expect(html).toContain('sd-select-field__chevron');
+  });
 });
 
 describe('SelectField menu positioning', () => {
@@ -42,5 +59,13 @@ describe('SelectField menu positioning', () => {
       8,
       { height: 720, width: 1280 },
     )).toEqual({ left: 1052, maxHeight: 280, top: 382, width: 220 });
+  });
+
+  it('supports a wider rich-content menu without changing the trigger width', () => {
+    expect(selectMenuPosition(
+      { bottom: 132, left: 240, top: 100, width: 180 },
+      3,
+      { height: 720, minWidth: 320, width: 1280 },
+    )).toEqual({ left: 240, maxHeight: 280, top: 138, width: 320 });
   });
 });

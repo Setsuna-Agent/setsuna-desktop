@@ -33,6 +33,7 @@ import { WorkspaceCodeViewScrollbar } from './editor/WorkspaceCodeViewScrollbar.
 import type { WorkspaceFileDraftState } from './hooks/useWorkspaceFileDraft.js';
 import type {
   DesktopDiffSummary,
+  DesktopPanelSlot,
   DesktopPanelTab,
   DesktopReviewFocusRequest,
   DesktopReviewLoadOptions,
@@ -60,6 +61,7 @@ const LazyEditableWorkspaceFile = lazy(async () => {
 
 export function WorkspacePanel({
   activePanel,
+  placement = 'side',
   activeProject,
   fileDraft,
   filePreview,
@@ -84,6 +86,7 @@ export function WorkspacePanel({
   onOpenReviewPanel,
   onOpenSideChat,
   onOpenTerminalPanel,
+  onTerminalTitleChange,
   onReviewRefresh,
   onRevealFile,
   onResizeStep,
@@ -93,6 +96,7 @@ export function WorkspacePanel({
   resizeValue,
 }: {
   activePanel: DesktopPanelTab;
+  placement?: DesktopPanelSlot;
   activeProject?: WorkspaceProject;
   fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
@@ -117,6 +121,7 @@ export function WorkspacePanel({
   onOpenReviewPanel?: () => void;
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
+  onTerminalTitleChange?: (panelId: string, title: string) => void;
   onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
   onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
@@ -311,7 +316,10 @@ export function WorkspacePanel({
       />
     ) : activePanel.type === 'terminal' ? (
       <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel, t)}>
-        <LazyTerminalPane session={terminalSession} />
+        <LazyTerminalPane
+          session={terminalSession}
+          onTitleChange={(title) => onTerminalTitleChange?.(activePanel.id, title)}
+        />
       </section>
     ) : (
       <section
@@ -398,14 +406,16 @@ export function WorkspacePanel({
 
   return (
     <>
-      <aside className="desktop-workspace-panel">
-        <WorkspaceResizeHandle
-          max={resizeMax}
-          min={resizeMin}
-          value={resizeValue}
-          onResizeStart={onResizeStart}
-          onResizeStep={onResizeStep}
-        />
+      <aside className={`desktop-workspace-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-embedded' : ''}`}>
+        {placement === 'side' ? (
+          <WorkspaceResizeHandle
+            max={resizeMax}
+            min={resizeMin}
+            value={resizeValue}
+            onResizeStart={onResizeStart}
+            onResizeStep={onResizeStep}
+          />
+        ) : null}
         <div
           className={`desktop-workspace-body ${showsFileExplorer ? '' : 'desktop-workspace-body--single'}`}
           style={showsFileExplorer ? ({ '--desktop-file-tree-width': `${treeVisible ? treeWidth : 0}px` } as CSSProperties) : undefined}

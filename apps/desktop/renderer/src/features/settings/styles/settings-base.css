@@ -15,7 +15,10 @@
   min-width: 0;
   min-height: 0;
   padding: 12px 12px 20px;
+  overflow-y: auto;
   background: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--chat-scrollbar-thumb) transparent;
 }
 
 .desktop-settings-sidebar .chat-user-settings__page-back.sd-page-back {
@@ -40,8 +43,26 @@
 
 .desktop-settings-sidebar .chat-user-settings__tabs {
   display: grid;
-  gap: 5px;
+  gap: 14px;
   min-width: 0;
+}
+
+.desktop-settings-sidebar .chat-user-settings__tab-group {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.desktop-settings-sidebar .chat-user-settings__tab-group-title {
+  min-width: 0;
+  padding: 0 8px 4px;
+  overflow: hidden;
+  color: var(--app-text-subtle);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desktop-settings-sidebar .chat-user-settings__tabs button {
@@ -1137,21 +1158,29 @@
 .desktop-settings-panel .chat-user-settings__runtime-policy-control {
   width: 180px;
   max-width: 180px;
-  min-height: 34px;
-  border-radius: 8px;
-  background-color: color-mix(in srgb, var(--app-surface) 92%, var(--app-bg));
-  font-weight: 500;
 }
 
-.desktop-settings-panel .runtime-access-mode-trigger--settings {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 12px;
+.desktop-settings-panel .runtime-access-mode-trigger__value {
+  display: flex;
   align-items: center;
   gap: 7px;
-  justify-content: stretch;
-  padding: 0 9px;
-  color: var(--app-text);
-  text-align: left;
+  min-width: 0;
+}
+
+.runtime-access-mode-menu__item--select {
+  grid-template-columns: 16px minmax(0, 1fr);
+  width: 100%;
+}
+
+.runtime-access-mode-menu-root--select .sd-select-menu__option {
+  min-height: 52px;
+  padding: 7px 9px;
+}
+
+.runtime-access-mode-menu-root--select .sd-select-menu__option > span {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .desktop-settings-panel .chat-user-settings__option-group {
