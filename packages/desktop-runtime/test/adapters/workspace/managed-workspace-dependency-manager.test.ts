@@ -382,9 +382,11 @@ describe('managed workspace dependency manager', () => {
       mkdir(packageManagerBin, { recursive: true }),
       mkdir(unrelatedPythonBin, { recursive: true }),
     ]);
+    const packageManagerExecutable = path.join(packageManagerBin, packageManagerName);
+    const pythonExecutable = path.join(unrelatedPythonBin, pythonName);
     await Promise.all([
-      writeExecutable(path.join(packageManagerBin, packageManagerName), 'test package manager'),
-      writeExecutable(path.join(unrelatedPythonBin, pythonName), 'test python'),
+      writeExecutable(packageManagerExecutable, 'test package manager'),
+      writeExecutable(pythonExecutable, 'test python'),
     ]);
 
     try {
@@ -397,6 +399,17 @@ describe('managed workspace dependency manager', () => {
       expect(shell.commands.python).toBeDefined();
       expect(shell.readableRoots).toContain(packageManagerBin);
       expect(shell.readableRoots).not.toContain(unrelatedPythonBin);
+
+      const nativeShell = await resolveShellToolchain(
+        'python --version',
+        [packageManagerBin, unrelatedPythonBin].join(path.delimiter),
+      );
+      const nativeReadableRootKeys = nativeShell.readableRoots.map((value) => value.toLowerCase());
+      expect(nativeReadableRootKeys).toEqual(expect.arrayContaining([
+        pythonExecutable,
+        unrelatedPythonBin,
+      ].map((value) => value.toLowerCase())));
+      expect(nativeReadableRootKeys).not.toContain(packageManagerBin.toLowerCase());
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

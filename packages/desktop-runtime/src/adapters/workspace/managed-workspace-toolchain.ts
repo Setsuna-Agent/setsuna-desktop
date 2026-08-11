@@ -111,6 +111,11 @@ export async function resolveShellToolchain(command: string, pathValue: string):
     const includeReadableRoots = process.platform !== 'win32'
       || requestedCommandNames.has(normalizedCommandName(commandName));
     if (includeReadableRoots) {
+      if (process.platform === 'win32') {
+        // Directory ACEs are intentionally non-recursive, so pre-existing native
+        // executables need their own grants before the sandbox can start them.
+        readableRoots.push(executablePath, canonicalPath);
+      }
       if (process.platform === 'win32' && /\.(?:bat|cmd)$/iu.test(executablePath)) {
         // PATH lookup and Corepack enumerate a few containing directories. Include
         // those objects plus the exact entrypoints; the native provider applies
