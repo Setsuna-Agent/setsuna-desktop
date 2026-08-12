@@ -12,17 +12,29 @@ import { normalizeReviewFocusPath } from './review-paths.js';
 
 export function latestCompletedReview(
   messages: RuntimeMessage[],
+  activeTurnId: string | null,
 ): RuntimeReviewModeNotice | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.toolRuns?.some((run) => (
-      run.status === 'success'
-      && (FILE_MUTATION_TOOL_NAMES.has(run.name) || SHELL_TOOL_NAMES.has(run.name))
+      (FILE_MUTATION_TOOL_NAMES.has(run.name) && run.status === 'success')
+      || (
+        SHELL_TOOL_NAMES.has(run.name)
+        && (
+          run.status === 'success'
+          || run.status === 'error'
+          || (
+            Boolean(run.startedAt)
+            && (run.status === 'running' || run.status === 'cancelled')
+          )
+        )
+      )
     ))) return null;
 
     const notice = message?.reviewMode;
     if (!notice) continue;
-    return notice.kind === 'exited' ? normalizeRuntimeReviewNotice(notice) : null;
+    if (notice.kind === 'exited') return normalizeRuntimeReviewNotice(notice);
+    if (activeTurnId && message.turnId === activeTurnId) return null;
   }
   return null;
 }

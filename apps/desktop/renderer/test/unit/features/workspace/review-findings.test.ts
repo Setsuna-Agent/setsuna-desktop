@@ -31,10 +31,11 @@ describe('reviewPathsMatch', () => {
 
 describe('latestCompletedReview', () => {
   it('hides stale findings while a newer review is running', () => {
-    expect(latestCompletedReview([
-      message('review_done', { kind: 'exited', review: 'Done', findings: [] }),
-      message('review_active', { kind: 'entered', review: 'current changes' }),
-    ])).toBeNull();
+    const completed = message('review_done', { kind: 'exited', review: 'Done', findings: [] });
+    const entered = message('review_active', { kind: 'entered', review: 'current changes' }, 'turn_active');
+
+    expect(latestCompletedReview([completed, entered], 'turn_active')).toBeNull();
+    expect(latestCompletedReview([completed, entered], null)).toMatchObject({ kind: 'exited' });
   });
 
   it('keeps findings across read-only turns and invalidates them after a potentially mutating tool', () => {
@@ -42,10 +43,12 @@ describe('latestCompletedReview', () => {
     const readOnlyTurn = assistantToolMessage('read_only', 'read_file');
     const mutationTurn = assistantToolMessage('mutation', 'write_file');
     const shellTurn = assistantToolMessage('shell', 'run_shell_command');
+    const failedShellTurn = assistantToolMessage('failed_shell', 'run_shell_command', 'error');
 
-    expect(latestCompletedReview([completed, readOnlyTurn])).toMatchObject({ kind: 'exited' });
-    expect(latestCompletedReview([completed, readOnlyTurn, mutationTurn])).toBeNull();
-    expect(latestCompletedReview([completed, readOnlyTurn, shellTurn])).toBeNull();
+    expect(latestCompletedReview([completed, readOnlyTurn], null)).toMatchObject({ kind: 'exited' });
+    expect(latestCompletedReview([completed, readOnlyTurn, mutationTurn], null)).toBeNull();
+    expect(latestCompletedReview([completed, readOnlyTurn, shellTurn], null)).toBeNull();
+    expect(latestCompletedReview([completed, failedShellTurn], null)).toBeNull();
   });
 });
 
@@ -148,6 +151,7 @@ function finding(
 function assistantToolMessage(
   id: string,
   toolName: string,
+  status: 'success' | 'error' = 'success',
 ): RuntimeMessage {
   return {
     id,
@@ -155,13 +159,19 @@ function assistantToolMessage(
     content: '',
     createdAt: '2026-08-12T00:00:00.000Z',
     status: 'complete',
-    toolRuns: [{ id: `${id}_run`, name: toolName, status: 'success' }],
+    toolRuns: [{
+      id: `${id}_run`,
+      name: toolName,
+      status,
+      startedAt: '2026-08-12T00:00:00.000Z',
+    }],
   };
 }
 
 function message(
   id: string,
   reviewMode: RuntimeReviewModeNotice,
+  turnId?: string,
 ): RuntimeMessage {
   return {
     id,
@@ -169,6 +179,7 @@ function message(
     content: '',
     createdAt: '2026-08-12T00:00:00.000Z',
     status: 'complete',
+    turnId,
     reviewMode,
   };
 }

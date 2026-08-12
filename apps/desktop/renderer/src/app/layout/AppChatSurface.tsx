@@ -313,8 +313,11 @@ export function AppChatSurface({
     [currentThread?.messages],
   );
   const latestReviewFindings = useMemo<RuntimeReviewFinding[]>(
-    () => latestCompletedReview(currentThread?.messages ?? [])?.findings ?? [],
-    [currentThread?.messages],
+    () => latestCompletedReview(
+      currentThread?.messages ?? [],
+      activeTurnId,
+    )?.findings ?? [],
+    [activeTurnId, currentThread?.messages],
   );
   const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
   const chatPanelInstances = [

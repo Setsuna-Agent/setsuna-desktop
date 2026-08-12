@@ -31,6 +31,11 @@ import { AppChatSurface } from './AppChatSurface.js';
 const SettingsPage = lazy(() => import('../../features/settings/SettingsRoute.js'));
 const CapabilitiesPage = lazy(() => import('../../features/capabilities/CapabilitiesRoute.js'));
 
+type ScopedReviewFocusRequest = {
+  ownerKey: string;
+  request: DesktopReviewFocusRequest;
+};
+
 export function AppRouteContent({
   activeProject,
   activeWorkspace,
@@ -112,7 +117,11 @@ export function AppRouteContent({
 }) {
   const { t } = useI18n();
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
-  const [reviewFocusRequest, setReviewFocusRequest] = useState<DesktopReviewFocusRequest | null>(null);
+  const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
+  const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
+  const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
+    ? scopedReviewFocusRequest.request
+    : null;
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
   const pendingBrowserOpenRequest = useMemo(
     () => latestBrowserOpenRequest(runtime.activityEvents),
@@ -152,13 +161,16 @@ export function AppRouteContent({
   ) => {
     if (!activeWorkspace) return;
     const normalizedFilePath = filePath?.trim();
-    setReviewFocusRequest((current) => (
+    setScopedReviewFocusRequest((current) => (
       normalizedFilePath
         ? {
-            path: normalizedFilePath,
-            ...(line && line > 0 ? { line } : {}),
-            ...(finding ? { finding: { ...finding } } : {}),
-            version: (current?.version ?? 0) + 1,
+            ownerKey: reviewFocusOwnerKey,
+            request: {
+              path: normalizedFilePath,
+              ...(line && line > 0 ? { line } : {}),
+              ...(finding ? { finding: { ...finding } } : {}),
+              version: (current?.request.version ?? 0) + 1,
+            },
           }
         : null
     ));
