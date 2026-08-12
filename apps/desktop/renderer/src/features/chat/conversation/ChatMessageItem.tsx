@@ -1,8 +1,13 @@
 import { Bubble } from '@ant-design/x';
-import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { BookOpen, Target } from 'lucide-react';
+import {
+  normalizeRuntimeReviewNotice,
+  type RuntimeMessage,
+  type RuntimeReviewModeNotice,
+} from '@setsuna-desktop/contracts';
+import { BookOpen, MessageSquare, ShieldCheck, Target } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
 import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
@@ -88,7 +93,7 @@ export function MessageItem({
   onCancelEdit: () => void;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
-  onOpenFileReview?: (filePath?: string) => void;
+  onOpenFileReview?: DesktopReviewOpenHandler;
   onStartEdit: (message: RuntimeMessage) => void;
   onStartDelete: (itemId: string) => void;
   onSubmitEdit: (messageId: string) => void;
@@ -120,7 +125,12 @@ export function MessageItem({
     return <ContextCompactionStatus message={item.message} />;
   }
   if (item.type === 'review') {
-    return <ReviewModeMarker message={item.message} />;
+    return (
+      <ReviewModeMarker
+        message={item.message}
+        onOpenFileReview={onOpenFileReview}
+      />
+    );
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
@@ -142,7 +152,7 @@ export function MessageItem({
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' || message.inputKind === 'review' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           placement="end"
           variant="filled"
         />
@@ -160,7 +170,8 @@ function UserMessageContent({
   message: RuntimeMessage;
   streaming: boolean;
 }) {
-  const hasSemanticKind = message.inputKind === 'goal';
+  const hasSemanticKind = message.inputKind === 'goal'
+    || message.inputKind === 'review';
   return (
     <div className="chat-user-message-content">
       {message.attachments?.length ? (
@@ -187,11 +198,14 @@ function UserMessageContent({
 
 function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
   const { t } = useI18n();
-  if (kind !== 'goal') return null;
-  const label = t('chat.message.kind.goal');
+  if (kind !== 'goal' && kind !== 'review') return null;
+  const label = t(kind === 'goal'
+    ? 'chat.message.kind.goal'
+    : 'chat.message.kind.review');
+  const Icon = kind === 'goal' ? Target : ShieldCheck;
   return (
     <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
-      <Target size={13} strokeWidth={1.9} aria-hidden="true" />
+      <Icon size={13} strokeWidth={1.9} aria-hidden="true" />
       <span>{label}</span>
     </span>
   );
@@ -217,7 +231,7 @@ function AssistantRunItem({
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenFileReview?: (filePath?: string) => void;
+  onOpenFileReview?: DesktopReviewOpenHandler;
   onStartDelete: (itemId: string) => void;
   onToggleDelete: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
@@ -284,19 +298,17 @@ function MessageSelectionControl({ checked, label, onChange }: { checked: boolea
   );
 }
 
-function ReviewModeMarker({ message }: { message: RuntimeMessage }) {
-  const { t } = useI18n();
+function ReviewModeMarker({
+  message,
+  onOpenFileReview,
+}: {
+  message: RuntimeMessage;
+  onOpenFileReview?: DesktopReviewOpenHandler;
+}) {
   const notice = message.reviewMode;
-  if (!notice) return null;
-  const label = notice.kind === 'entered'
-    ? t('chat.review.started', { review: notice.review })
-    : t('chat.review.completed');
-  return (
-    <div className="chat-review-mode-marker" aria-label={label}>
-      <span className="chat-review-mode-marker__line" />
-      <span className="chat-review-mode-marker__text">{label}</span>
-    </div>
-  );
+  return notice?.kind === 'exited'
+    ? <ReviewSummaryCard notice={notice} onOpenFile={onOpenFileReview} />
+    : null;
 }
 
 function AssistantRunContent({
@@ -312,7 +324,7 @@ function AssistantRunContent({
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenFileReview?: (filePath?: string) => void;
+  onOpenFileReview?: DesktopReviewOpenHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
 }) {
@@ -363,6 +375,7 @@ function AssistantRunContent({
   const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
   const artifacts = useMemo(() => runtimeArtifactsFromToolRuns(toolRuns), [toolRuns]);
   const goalExitSummary = item.goalExit ? formatGoalExitSummary(item.goalExit, t, locale) : null;
+  const reviewExit = item.reviewExit;
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return active ? (
       <div className="chat-assistant-run">
@@ -396,6 +409,7 @@ function AssistantRunContent({
         plan: timelinePlan,
         workHistoryDefaultExpanded: workHistoryState.expanded,
         t,
+        hideFinalContent: Boolean(reviewExit),
       })}
       {toolAttachments.length ? (
         <div className="chat-assistant-run__segment chat-assistant-run__attachments">
@@ -414,6 +428,11 @@ function AssistantRunContent({
         </div>
       ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
+      {!active && reviewExit ? (
+        <div className="chat-assistant-run__segment">
+          <ReviewSummaryCard notice={reviewExit} onOpenFile={onOpenFileReview} />
+        </div>
+      ) : null}
       {!active && goalExitSummary ? <div className="chat-assistant-run__segment">{goalExitSummary}</div> : null}
     </div>
   );
@@ -514,6 +533,7 @@ function renderAssistantTimelinePlan({
   plan,
   t,
   workHistoryDefaultExpanded,
+  hideFinalContent = false,
 }: {
   active: boolean;
   handledGuidanceMessageIds: Set<string>;
@@ -523,6 +543,7 @@ function renderAssistantTimelinePlan({
   plan: AssistantGuidanceTimelinePlan;
   t: Translate;
   workHistoryDefaultExpanded: boolean;
+  hideFinalContent?: boolean;
 }): ReactNode[] {
   const nodes: ReactNode[] = [];
 
@@ -541,13 +562,75 @@ function renderAssistantTimelinePlan({
       return;
     }
 
-    nodes.push(assistantTimelineNode(node.block, active, t));
+    if (!(hideFinalContent && node.block.type === 'content')) {
+      nodes.push(assistantTimelineNode(node.block, active, t));
+    }
     if (active && node.guidanceAfter.length) {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
     }
   });
 
   return nodes;
+}
+
+function ReviewSummaryCard({
+  notice,
+  onOpenFile,
+}: {
+  notice: RuntimeReviewModeNotice;
+  onOpenFile?: DesktopReviewOpenHandler;
+}) {
+  const { t } = useI18n();
+  const normalizedNotice = normalizeRuntimeReviewNotice(notice);
+  const findings = normalizedNotice.findings ?? [];
+  const summary = normalizedNotice.summary
+    || (!findings.length ? normalizedNotice.review : '');
+
+  return (
+    <section className="chat-review-summary-card" aria-label={t('chat.review.completed')}>
+      {summary ? <MarkdownRenderer content={summary} streaming={false} /> : null}
+      {findings.length ? (
+        <div className="chat-review-summary-card__panel">
+          <div className="chat-review-summary-card__header">
+            <MessageSquare aria-hidden="true" size={14} />
+            <span>{t('chat.review.comments', { count: findings.length })}</span>
+          </div>
+          <div className="chat-review-summary-card__findings">
+            {findings.map((finding, index) => {
+              const content = (
+                <>
+                  <span className="chat-review-summary-card__priority">{finding.priority}</span>
+                  <span className="chat-review-summary-card__title">{finding.title}</span>
+                </>
+              );
+              const key = `${finding.path}:${finding.startLine}:${index}`;
+              return onOpenFile ? (
+                <button
+                  className="chat-review-summary-card__finding"
+                  key={key}
+                  type="button"
+                  onClick={() => onOpenFile(
+                    finding.path,
+                    finding.startLine,
+                    finding,
+                  )}
+                >
+                  {content}
+                </button>
+              ) : (
+                <div
+                  className="chat-review-summary-card__finding chat-review-summary-card__finding--static"
+                  key={key}
+                >
+                  {content}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 function assistantWorkHistoryNode({

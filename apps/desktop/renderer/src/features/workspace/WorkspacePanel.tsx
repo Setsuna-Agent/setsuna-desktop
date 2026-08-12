@@ -6,6 +6,7 @@ import {
   type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
   type WorkspaceProject,
+  type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
 import {
@@ -41,6 +42,7 @@ import type {
   DesktopTerminalSession,
   DesktopWorkspaceApp,
   ProjectTreeNode,
+  WorkspaceFileFocusRequest,
 } from './model.js';
 import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
@@ -64,8 +66,10 @@ export function WorkspacePanel({
   placement = 'side',
   activeProject,
   fileDraft,
+  fileFocusRequest,
   filePreview,
   latestReviewSummary,
+  latestReviewFindings,
   reviewError,
   reviewFocusRequest,
   reviewLoading,
@@ -99,8 +103,10 @@ export function WorkspacePanel({
   placement?: DesktopPanelSlot;
   activeProject?: WorkspaceProject;
   fileDraft: WorkspaceFileDraftState;
+  fileFocusRequest: WorkspaceFileFocusRequest | null;
   filePreview: WorkspaceFileRead | null;
   latestReviewSummary: DesktopDiffSummary | null;
+  latestReviewFindings: RuntimeReviewFinding[];
   reviewError: string | null;
   reviewFocusRequest: DesktopReviewFocusRequest | null;
   reviewLoading: boolean;
@@ -114,7 +120,7 @@ export function WorkspacePanel({
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenEntry: (entry: WorkspaceEntry) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenFilesPanel: () => void;
   onOpenBrowser: () => void;
   onOpenConversationDebug?: () => void;
@@ -302,6 +308,7 @@ export function WorkspacePanel({
         error={reviewError}
         focusRequest={reviewFocusRequest}
         latestSummary={latestReviewSummary}
+        findings={latestReviewFindings}
         loading={reviewLoading}
         reviewState={reviewState}
         workspaceApp={selectedWorkspaceApp}
@@ -397,7 +404,11 @@ export function WorkspacePanel({
           </div>
         ) : null}
         {filePreview ? (
-          <WorkspaceFilePreviewContent file={filePreview} fileDraft={fileDraft} />
+          <WorkspaceFilePreviewContent
+            file={filePreview}
+            fileDraft={fileDraft}
+            fileFocusRequest={fileFocusRequest}
+          />
         ) : (
           <EmptyState title={t('workspace.files.noneOpen')} body={t('workspace.files.noneOpenDescription')} />
         )}
@@ -625,11 +636,16 @@ export function WorkspaceOverviewPanel({
 export function WorkspaceFilePreviewContent({
   file,
   fileDraft,
+  fileFocusRequest,
 }: {
   file: WorkspaceFileRead;
   fileDraft?: WorkspaceFileDraftState;
+  fileFocusRequest?: WorkspaceFileFocusRequest | null;
 }) {
   const { t } = useI18n();
+  const activeFocusRequest = fileFocusRequest?.path === file.path
+    ? fileFocusRequest
+    : undefined;
   if (file.preview?.kind === 'image') {
     return (
       <div className="desktop-file-preview desktop-file-preview--image">
@@ -655,23 +671,28 @@ export function WorkspaceFilePreviewContent({
   }
   if (fileDraft?.editing) {
     return (
-      <Suspense fallback={<CodeEditorPreview file={file} />}>
+      <Suspense fallback={(
+        <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />
+      )}>
         <LazyEditableWorkspaceFile
           content={fileDraft.content}
           file={file}
+          fileFocusRequest={activeFocusRequest}
           onChange={fileDraft.updateContent}
           onSave={fileDraft.save}
         />
       </Suspense>
     );
   }
-  return <CodeEditorPreview file={file} />;
+  return <CodeEditorPreview file={file} fileFocusRequest={activeFocusRequest} />;
 }
 
 function CodeEditorPreview({
   file,
+  fileFocusRequest,
 }: {
   file: WorkspaceFileRead;
+  fileFocusRequest?: WorkspaceFileFocusRequest;
 }) {
   const { t } = useI18n();
   const codeViewSurface = useWorkspaceCodeViewSurface();
@@ -688,6 +709,7 @@ function CodeEditorPreview({
           codeViewLayout={workspaceCodeViewLayout}
           containerRef={codeViewSurface.codeViewContainerRef}
           contents={file.content}
+          lineFocusRequest={fileFocusRequest}
           name={file.path}
           unsafeCSS={workspaceCodeViewUnsafeCSS}
           virtualized

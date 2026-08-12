@@ -1,5 +1,5 @@
 import { Virtualizer } from '@pierre/diffs/react';
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { RuntimeReviewFinding, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import {
   AlignJustify,
@@ -39,6 +39,7 @@ import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
+import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
 const reviewSourceLabelKeys: Record<DesktopReviewSource, MessageKey> = {
@@ -80,6 +81,7 @@ const noopWorkspaceFileAction = () => undefined;
 export function DesktopReviewPanel({
   activeProject,
   error,
+  findings = [],
   focusRequest,
   latestSummary,
   loading,
@@ -96,6 +98,7 @@ export function DesktopReviewPanel({
 }: {
   activeProject?: WorkspaceProject;
   error: string | null;
+  findings?: RuntimeReviewFinding[];
   focusRequest?: DesktopReviewFocusRequest | null;
   latestSummary: DesktopDiffSummary | null;
   loading: boolean;
@@ -106,7 +109,7 @@ export function DesktopReviewPanel({
   onCopyFilePath?: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp?: (appId: string, filePath: string, line?: number) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onRefresh: (options?: DesktopReviewLoadOptions) => void;
   onRevealFile?: (filePath: string) => void;
 }) {
@@ -157,16 +160,31 @@ export function DesktopReviewPanel({
   const reviewRefreshing = loading || refreshFeedbackVisible;
   const reviewRefreshTip = t(reviewRefreshing ? 'workspace.review.refreshing' : 'workspace.review.refresh');
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
-  const focusTargetSource = useMemo(
-    () => focusRequest?.path ? reviewSourceForFocusPath(focusRequest.path, {
+  const visibleFindings = useMemo(
+    () => mergeFocusedReviewFinding(findings, focusRequest?.finding),
+    [findings, focusRequest?.finding],
+  );
+  const focusTargetSource = useMemo(() => {
+    if (!focusRequest?.path) return null;
+    return reviewSourceForFocusPath(focusRequest.path, {
       activeSource,
       latestSummary,
       reviewState,
-    }) : null,
-    [activeSource, focusRequest?.path, latestSummary, reviewState],
-  );
+    }) ?? (focusRequest.finding ? activeSource : null);
+  }, [
+    activeSource,
+    focusRequest?.finding,
+    focusRequest?.path,
+    latestSummary,
+    reviewState,
+  ]);
   const focusRequestKey = focusRequest?.path
-    ? JSON.stringify([reviewSourceStorageKey, focusRequest.version, normalizeReviewFocusPath(focusRequest.path)])
+    ? JSON.stringify([
+        reviewSourceStorageKey,
+        focusRequest.version,
+        normalizeReviewFocusPath(focusRequest.path),
+        focusRequest.line,
+      ])
     : null;
 
   useEffect(() => {
@@ -409,6 +427,7 @@ export function DesktopReviewPanel({
           }}
           diffLayout={reviewDiffLayout}
           fileExpansionRequest={fileExpansionRequest}
+          findings={visibleFindings}
           focusRequest={focusTargetSource === activeSource ? focusRequest : null}
           lineWrap={reviewLineWrap}
           pathContext={pathContext}
@@ -451,7 +470,15 @@ function reviewSourceForFocusPath(
     reviewState: DesktopReviewState | null;
   },
 ): DesktopReviewSource | null {
-  const sourceOrder = uniqueReviewSources([activeSource, 'unstaged', 'staged', 'branch', 'latest']);
+  // The transcript's latest summary is intentionally sparse. Prefer the live
+  // Git diff for finding navigation so surrounding source context is retained.
+  const sourceOrder = uniqueReviewSources([
+    ...(activeSource === 'latest' ? [] : [activeSource]),
+    'unstaged',
+    'staged',
+    'branch',
+    'latest',
+  ]);
   return sourceOrder.find((source) => reviewSummaryHasPath(reviewSummaryForSource(reviewState, source, latestSummary), filePath)) ?? null;
 }
 
@@ -472,8 +499,23 @@ export function consumeReviewFocusRequest(
 }
 
 function reviewSummaryHasPath(summary: DesktopDiffSummary | null, filePath: string): boolean {
-  const normalizedTarget = normalizeReviewFocusPath(filePath);
-  return Boolean(normalizedTarget && summary?.files.some((file) => normalizeReviewFocusPath(file.path) === normalizedTarget));
+  return Boolean(summary?.files.some((file) => reviewPathsMatch(file.path, filePath)));
+}
+
+/**
+ * The user may click a historical review card while a newer review is the
+ * transcript's current projection. Carry that exact finding through the focus
+ * request so its annotation cannot disappear merely because "latest" changed.
+ */
+function mergeFocusedReviewFinding(
+  findings: RuntimeReviewFinding[],
+  focusedFinding: RuntimeReviewFinding | undefined,
+): RuntimeReviewFinding[] {
+  if (!focusedFinding) return findings;
+  const focusedKey = reviewFindingKey(focusedFinding);
+  return findings.some((finding) => reviewFindingKey(finding) === focusedKey)
+    ? findings
+    : [...findings, focusedFinding];
 }
 
 function reviewSourcePreferenceKey(project: WorkspaceProject): string {

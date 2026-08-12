@@ -33,7 +33,10 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
     memoryCitation: message.memoryCitation ? cloneMemoryCitation(message.memoryCitation) : undefined,
     planMode: message.planMode ? { ...message.planMode } : undefined,
     providerMetadata: message.providerMetadata ? cloneProviderMetadata(message.providerMetadata) : undefined,
-    reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
+    reviewMode: message.reviewMode ? {
+      ...message.reviewMode,
+      findings: message.reviewMode.findings?.map((finding) => ({ ...finding })),
+    } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map(cloneToolRun),
     hookRuns: message.hookRuns?.map(cloneHookRun),

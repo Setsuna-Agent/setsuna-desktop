@@ -382,7 +382,10 @@ export class RuntimeAgentTurnRunner {
             memoryCitation: roundMemoryCitation,
             providerMetadata: assistantMessage.providerMetadata,
             content: roundText,
-            review: options.review ? roundText : undefined,
+            review: options.review ? {
+              content: roundText,
+              language: options.review.language,
+            } : undefined,
             taskKind,
             threadTitle: threadTitleGeneration,
           },

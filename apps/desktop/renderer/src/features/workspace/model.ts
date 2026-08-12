@@ -8,6 +8,7 @@ import type {
   DesktopTerminalSession,
   DesktopWorkspaceApp,
   RuntimeEvent,
+  RuntimeReviewFinding,
   WorkspaceEntry,
 } from '@setsuna-desktop/contracts';
 
@@ -221,6 +222,21 @@ export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: s
 };
 
 export type DesktopReviewFocusRequest = {
+  /** Preserve the exact review card that initiated navigation. */
+  finding?: RuntimeReviewFinding;
+  line?: number;
+  path: string;
+  version: number;
+};
+
+export type DesktopReviewOpenHandler = (
+  filePath?: string,
+  line?: number,
+  finding?: RuntimeReviewFinding,
+) => void;
+
+export type WorkspaceFileFocusRequest = {
+  line: number;
   path: string;
   version: number;
 };

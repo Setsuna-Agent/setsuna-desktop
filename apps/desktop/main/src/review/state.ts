@@ -22,6 +22,7 @@ const execFileAsync = promisify(execFile);
 const MAX_DIFF_LINES_PER_FILE = 2500;
 const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
 const MAX_COMMIT_MESSAGE_SOURCE_CHARS = 24_000;
+const REVIEW_DIFF_CONTEXT_LINES = 6;
 
 export async function getDesktopReviewState(workspaceRoot: string, options: DesktopReviewStateOptions = {}): Promise<DesktopReviewState> {
   const root = await resolveWorkspaceDirectory(workspaceRoot);
@@ -472,7 +473,7 @@ function untrackedSummary(files: Array<DesktopDiffFile | null>): DesktopDiffSumm
 }
 
 async function diffSummary(gitRoot: string, diffArgs: string[]): Promise<DesktopDiffSummary> {
-  const output = await runGit(['diff', '--no-ext-diff', '--unified=3', ...diffArgs], gitRoot).catch(() => '');
+  const output = await runGit(['diff', '--no-ext-diff', `--unified=${REVIEW_DIFF_CONTEXT_LINES}`, ...diffArgs], gitRoot).catch(() => '');
   return parseUnifiedDiff(output);
 }
 

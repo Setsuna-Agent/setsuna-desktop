@@ -19,6 +19,7 @@ export type ChatSlashCommandItemsOptions = {
   contextCompacting: boolean;
   goalModeEnabled: boolean;
   hasCurrentThread: boolean;
+  hasReviewIncompatibleContent: boolean;
   multiAgentEnabled: boolean;
   query: string;
   selectedSkills: RuntimeSkillSummary[];
@@ -37,6 +38,7 @@ export function createChatSlashCommandItems({
   contextCompacting,
   goalModeEnabled,
   hasCurrentThread,
+  hasReviewIncompatibleContent,
   multiAgentEnabled,
   query,
   selectedSkills,
@@ -100,10 +102,12 @@ export function createChatSlashCommandItems({
       title: t('chat.composer.reviewChanges'),
       description: activeTurnId
         ? t('chat.composer.reviewWait')
+        : hasReviewIncompatibleContent
+          ? t('chat.composer.reviewClearExtras')
         : activeProjectSelected
           ? t('chat.composer.reviewDescription')
           : t('chat.composer.selectProjectFirst'),
-      disabled: Boolean(activeTurnId) || !activeProjectSelected,
+      disabled: Boolean(activeTurnId) || !activeProjectSelected || hasReviewIncompatibleContent,
     },
     {
       key: 'compact-context',

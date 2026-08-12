@@ -461,7 +461,10 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
     providerMetadata: message.providerMetadata
       ? normalizeRuntimeMessageProviderMetadata(message.providerMetadata)
       : undefined,
-    reviewMode: message.reviewMode ? { ...message.reviewMode } : undefined,
+    reviewMode: message.reviewMode ? {
+      ...message.reviewMode,
+      findings: message.reviewMode.findings?.map((finding) => ({ ...finding })),
+    } : undefined,
     toolCalls: message.toolCalls?.map((toolCall) => ({ ...toolCall })),
     toolRuns: message.toolRuns?.map((toolRun) => ({ ...toolRun })),
   };

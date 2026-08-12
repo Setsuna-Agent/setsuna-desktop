@@ -17,6 +17,10 @@ import type { SettingsSectionId } from '../../features/settings/settings-types.j
 import { latestBrowserOpenRequest } from '../../features/workspace/browser/runtimeBrowserActions.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
+import type {
+  DesktopReviewFocusRequest,
+  DesktopReviewOpenHandler,
+} from '../../features/workspace/model.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
@@ -26,6 +30,11 @@ import { AppChatSurface } from './AppChatSurface.js';
 
 const SettingsPage = lazy(() => import('../../features/settings/SettingsRoute.js'));
 const CapabilitiesPage = lazy(() => import('../../features/capabilities/CapabilitiesRoute.js'));
+
+type ScopedReviewFocusRequest = {
+  ownerKey: string;
+  request: DesktopReviewFocusRequest;
+};
 
 export function AppRouteContent({
   activeProject,
@@ -108,7 +117,11 @@ export function AppRouteContent({
 }) {
   const { t } = useI18n();
   const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
-  const [reviewFocusRequest, setReviewFocusRequest] = useState<{ path: string; version: number } | null>(null);
+  const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
+  const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
+  const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
+    ? scopedReviewFocusRequest.request
+    : null;
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
   const pendingBrowserOpenRequest = useMemo(
     () => latestBrowserOpenRequest(runtime.activityEvents),
@@ -141,16 +154,43 @@ export function AppRouteContent({
     handledBrowserOpenRequestIdRef.current = pendingBrowserOpenRequest.id;
     openBrowserPanel(pendingBrowserOpenRequest.url);
   }, [openBrowserPanel, pendingBrowserOpenRequest]);
-  const openFileReviewPanel = (filePath?: string) => {
+  const openFileReviewPanel: DesktopReviewOpenHandler = (
+    filePath,
+    line,
+    finding,
+  ) => {
     if (!activeWorkspace) return;
     const normalizedFilePath = filePath?.trim();
-    setReviewFocusRequest((current) => (
+    setScopedReviewFocusRequest((current) => (
       normalizedFilePath
-        ? { path: normalizedFilePath, version: (current?.version ?? 0) + 1 }
+        ? {
+            ownerKey: reviewFocusOwnerKey,
+            request: {
+              path: normalizedFilePath,
+              ...(line && line > 0 ? { line } : {}),
+              ...(finding ? { finding: { ...finding } } : {}),
+              version: (current?.request.version ?? 0) + 1,
+            },
+          }
         : null
     ));
-    workspacePanels.closeDesktopPanelItem('bottom', 'review');
-    workspacePanels.openDesktopPanel('side', 'review');
+    const bottomReviewPanel = workspacePanels.bottomPanelSlot.panels.find((panel) => (
+      panel.type === 'review'
+    ));
+    if (bottomReviewPanel) {
+      // Moving is one layout transaction. close + open races because the open
+      // callback still sees the pre-close bottom slot and activates a panel
+      // that the preceding update is about to remove.
+      workspacePanels.moveDesktopPanel(
+        'bottom',
+        bottomReviewPanel.id,
+        'side',
+        null,
+        'after',
+      );
+    } else {
+      workspacePanels.openDesktopPanel('side', 'review');
+    }
     void workspacePanels.loadReviewState();
   };
   const discardFileChanges = async (filePaths: string[]) => {
@@ -258,6 +298,7 @@ export function AppRouteContent({
       currentThread={runtime.currentThread}
       draft={draft}
       fileDraft={projectWorkspace.fileDraft}
+      fileFocusRequest={projectWorkspace.fileFocusRequest}
       filePreview={projectWorkspace.filePreview}
       plugins={runtime.plugins}
       panelLauncherTypes={workspacePanels.panelLauncherTypes}
@@ -340,7 +381,7 @@ export function AppRouteContent({
           multi_agent_v2: enabled,
         },
       })}
-      onStartThreadReview={() => startCurrentThreadReview({ type: 'uncommittedChanges' })}
+      onStartThreadReview={startCurrentThreadReview}
       onSend={(value, options) => chatActions.sendInput(value, options)}
       queuedTurnActions={chatActions}
       onSkillSelectionRequestConsumed={onSkillSelectionRequestConsumed}

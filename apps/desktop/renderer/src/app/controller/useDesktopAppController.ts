@@ -222,9 +222,15 @@ export function useDesktopAppController() {
 
   const startCurrentThreadReview = useCallback((target: RuntimeReviewTarget) => {
     const isCurrentRequest = reviewRequests.begin();
+    runtime.setError(null);
     return runtime.startCurrentThreadReview(target, {
       claimComposerForThread: claimConversationSessionForThread,
       isCurrentRequest,
+    }).catch((unknownError: unknown) => {
+      if (isCurrentRequest()) {
+        runtime.setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      }
+      throw unknownError;
     });
   }, [claimConversationSessionForThread, reviewRequests, runtime]);
 

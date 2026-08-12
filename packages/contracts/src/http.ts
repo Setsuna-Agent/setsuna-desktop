@@ -81,6 +81,7 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from './threads.js';
+import type { RuntimeInterfaceLanguage } from './config.js';
 import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
   RuntimeWorkspaceDependenciesStatus,
@@ -153,7 +154,7 @@ export type DesktopRuntimeClient = {
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;
   cancelTurn(threadId: string, turnId: string): Promise<void>;
-  startReview(threadId: string, target: RuntimeReviewTarget): Promise<SendTurnResponse>;
+  startReview(threadId: string, target: RuntimeReviewTarget, language?: RuntimeInterfaceLanguage): Promise<SendTurnResponse>;
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,

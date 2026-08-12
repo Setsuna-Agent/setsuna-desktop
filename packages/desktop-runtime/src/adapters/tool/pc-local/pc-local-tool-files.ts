@@ -21,7 +21,6 @@ import {
 import {
   DEFAULT_FIND_RESULTS,
   DEFAULT_SEARCH_RESULTS,
-  IGNORED_DIRS,
   MAX_FILE_READ_STATE_ENTRIES,
   MAX_FIND_RESULTS,
   MAX_LIST_ENTRIES,
@@ -148,7 +147,7 @@ export async function listDirectory(args: ToolArguments, state: PcLocalFileState
 
   const entries = await readdir(dirPath, { withFileTypes: true });
   const sorted = entries
-    .filter((entry) => !shouldIgnoreEntry(entry.name))
+    .filter((entry) => entry.name !== '.DS_Store')
     .sort((left, right) => {
       if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1;
       return left.name.localeCompare(right.name);
@@ -893,8 +892,4 @@ function boundedMapSet<Key, Value>(
 
 export function isEditToolName(name: string): boolean {
   return name === 'edit' || name === 'edit_file';
-}
-
-function shouldIgnoreEntry(name: string): boolean {
-  return IGNORED_DIRS.has(name) || name === '.DS_Store';
 }

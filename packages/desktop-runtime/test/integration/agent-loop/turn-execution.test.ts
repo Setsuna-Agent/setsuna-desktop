@@ -520,6 +520,11 @@ describe('agent loop turn execution', () => {
         role: 'user',
         content: 'Review the current uncommitted changes.',
       }));
+      expect((await threadStore.getThread(thread.id))?.messages).toContainEqual(expect.objectContaining({
+        role: 'user',
+        inputKind: 'review',
+        content: 'current changes',
+      }));
     });
   
 });

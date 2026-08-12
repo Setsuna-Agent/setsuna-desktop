@@ -94,6 +94,7 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     contextCompacting: false,
     goalModeEnabled: false,
     hasCurrentThread: true,
+    hasReviewIncompatibleContent: false,
     multiAgentEnabled: false,
     query: '',
     selectedSkills: [],

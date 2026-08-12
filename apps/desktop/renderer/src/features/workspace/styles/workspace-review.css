@@ -485,6 +485,19 @@
   padding: 0 0 10px;
 }
 
+.desktop-review-unanchored-findings {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+  background: var(--app-bg);
+}
+
+.desktop-review-unanchored-finding .desktop-review-finding {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
 .desktop-review-file-card {
   display: grid;
   min-width: 0;
@@ -644,6 +657,58 @@
   color: var(--app-text);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.desktop-review-finding {
+  box-sizing: border-box;
+  display: grid;
+  gap: 8px;
+  width: min(720px, calc(100% - 20px));
+  margin: 8px 10px 10px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
+  border-radius: 10px;
+  color: var(--app-text);
+  background: var(--app-surface);
+  font-family: var(--app-font-family);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: normal;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.desktop-review-finding.is-focused {
+  border-color: color-mix(in srgb, var(--desktop-review-focus) 76%, var(--app-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--desktop-review-focus) 22%, transparent);
+}
+
+.desktop-review-finding__header {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.desktop-review-finding__body,
+.desktop-review-finding__body .chat-markdown,
+.desktop-review-finding__body .chat-markdown > * {
+  min-width: 0;
+}
+
+.desktop-review-finding__body .chat-markdown {
+  color: var(--app-text-secondary);
+}
+
+.desktop-review-finding__body .chat-markdown p {
+  margin: 0;
+}
+
+.desktop-review-finding__location {
+  width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--app-font-mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
 }
 
 @media (hover: none) {

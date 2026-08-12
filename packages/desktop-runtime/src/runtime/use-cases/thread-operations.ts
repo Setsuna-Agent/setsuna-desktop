@@ -1,4 +1,5 @@
 import type {
+  RuntimeInterfaceLanguage,
   RuntimeReviewTarget,
   RuntimeThread,
   RuntimeThreadGoalClearResponse,
@@ -169,19 +170,37 @@ export async function clearRuntimeThreadGoal(
   });
 }
 
-export function runtimeReviewRequestFromTarget(value: unknown): RuntimeReviewTurnInput {
+export function runtimeReviewRequestFromTarget(
+  value: unknown,
+  languageValue?: unknown,
+): RuntimeReviewTurnInput {
   const target = runtimeReviewTarget(value);
+  const language = runtimeReviewLanguage(languageValue);
   if (target.type === 'uncommittedChanges') {
     return {
-      displayText: 'current changes',
-      prompt: runtimeReviewPrompt('Review the current uncommitted changes.'),
+      displayText: language === 'zh-CN'
+        ? '请审查当前项目中尚未提交的代码更改'
+        : 'Please review the uncommitted code changes in the current project',
+      language,
+      prompt: runtimeReviewPrompt(
+        language === 'zh-CN' ? '审查当前未提交的更改。' : 'Review the current uncommitted changes.',
+        language,
+      ),
     };
   }
   if (target.type === 'baseBranch') {
     const branch = requiredReviewText(target.branch, 'branch');
     return {
-      displayText: `changes against '${branch}'`,
-      prompt: runtimeReviewPrompt(`Review the changes between the current branch and '${branch}'.`),
+      displayText: language === 'zh-CN'
+        ? `请审查当前分支相对于“${branch}”的代码更改`
+        : `Please review the current branch's code changes against '${branch}'`,
+      language,
+      prompt: runtimeReviewPrompt(
+        language === 'zh-CN'
+          ? `审查当前分支与“${branch}”之间的更改。`
+          : `Review the changes between the current branch and '${branch}'.`,
+        language,
+      ),
     };
   }
   if (target.type === 'commit') {
@@ -189,21 +208,30 @@ export function runtimeReviewRequestFromTarget(value: unknown): RuntimeReviewTur
     const title = optionalReviewText(target.title);
     const shortSha = [...sha].slice(0, 7).join('');
     return {
-      displayText: title ? `commit ${shortSha}: ${title}` : `commit ${shortSha}`,
-      prompt: runtimeReviewPrompt(title ? `Review commit ${sha}: ${title}.` : `Review commit ${sha}.`),
+      displayText: language === 'zh-CN'
+        ? (title ? `请审查提交 ${shortSha}：${title}` : `请审查提交 ${shortSha}`)
+        : (title ? `Please review commit ${shortSha}: ${title}` : `Please review commit ${shortSha}`),
+      language,
+      prompt: runtimeReviewPrompt(
+        language === 'zh-CN'
+          ? (title ? `审查提交 ${sha}：${title}。` : `审查提交 ${sha}。`)
+          : (title ? `Review commit ${sha}: ${title}.` : `Review commit ${sha}.`),
+        language,
+      ),
     };
   }
   const instructions = requiredReviewText(target.instructions, 'instructions');
-  return { displayText: instructions, prompt: instructions };
+  return { displayText: instructions, language, prompt: runtimeReviewPrompt(instructions, language) };
 }
 
 export async function startRuntimeReview(
   runtime: RuntimeContainer,
   threadId: string,
   target: unknown,
+  language?: unknown,
 ): Promise<RuntimeReviewStartResult> {
   await requireRuntimeThread(runtime, threadId);
-  const review = runtimeReviewRequestFromTarget(target);
+  const review = runtimeReviewRequestFromTarget(target, language);
   try {
     return {
       response: await runtime.agentLoop.startReview(threadId, review),
@@ -240,8 +268,15 @@ function runtimeReviewTarget(value: unknown): RuntimeReviewTarget {
   throw new RuntimeUseCaseError('invalid_input', `Unsupported review target: ${type}`);
 }
 
-function runtimeReviewPrompt(scope: string): string {
-  return `${scope}\nInspect the relevant diff and return the review findings.`;
+function runtimeReviewPrompt(scope: string, language: RuntimeInterfaceLanguage): string {
+  const instruction = language === 'zh-CN'
+    ? '检查相关 diff 并返回审查结果。所有面向用户的内容必须使用简体中文。'
+    : 'Inspect the relevant diff and return the review findings. All user-facing content must be in English.';
+  return `${scope}\n${instruction}`;
+}
+
+function runtimeReviewLanguage(value: unknown): RuntimeInterfaceLanguage {
+  return value === 'zh-CN' ? 'zh-CN' : 'en-US';
 }
 
 function requiredReviewText(value: unknown, name: string): string {

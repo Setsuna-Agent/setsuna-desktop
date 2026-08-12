@@ -1,7 +1,7 @@
 import type { ReviewPathContext } from './review-types.js';
 
 export function normalizeReviewFocusPath(value: string): string | null {
-  return normalizeRelativeReviewPath(value)?.toLowerCase() ?? null;
+  return normalizeRelativeReviewPath(value);
 }
 
 export function reviewFilePathParts(path: string): { directory: string; filename: string } {

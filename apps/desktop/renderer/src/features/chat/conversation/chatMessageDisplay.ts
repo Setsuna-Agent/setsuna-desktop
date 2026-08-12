@@ -4,6 +4,7 @@ import type {
   RuntimeGoalLifecycleKind,
   RuntimeMessage,
   RuntimeMessageAttachment,
+  RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
 import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
 import {
@@ -20,7 +21,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
+  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -119,9 +120,17 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
           assistantItem.messageIds.push(message.id);
         }
       } else if (message.reviewMode) {
-        // 普通 system/developer 消息不进 transcript；显式生命周期标记作为 UI 事件。
         flushAssistantRun();
-        items.push({ type: 'review', id: message.id, message });
+        if (message.reviewMode.kind === 'exited') {
+          const assistantItem = lastAssistantItemForTurn(items, message.turnId);
+          if (assistantItem) {
+            assistantItem.reviewExit = message.reviewMode;
+            assistantItem.messageIds.push(message.id);
+          } else {
+            // Legacy or interrupted threads may have an exit notice without an assistant row.
+            items.push({ type: 'review', id: message.id, message });
+          }
+        }
       }
       continue;
     }
@@ -359,7 +368,7 @@ export function assistantRunCopyText(
   const content = item.segments
     .filter((segment) => segment.phase === 'final_answer')
     .flatMap((segment) => [
-      visibleMarkdownContent(segment.content).trim(),
+      item.reviewExit ? '' : visibleMarkdownContent(segment.content).trim(),
       ...(segment.toolRuns ?? [])
         .filter((run) => !isTranscriptHiddenRuntimeToolRun(run))
         .map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
@@ -367,6 +376,10 @@ export function assistantRunCopyText(
     ])
     .filter(Boolean);
   if (item.goalExit) content.push(formatGoalExitSummary(item.goalExit, t, locale));
+  if (item.reviewExit) {
+    const visibleReview = visibleMarkdownContent(item.reviewExit.review).trim();
+    if (visibleReview) content.push(visibleReview);
+  }
   return content.join('\n\n');
 }
 

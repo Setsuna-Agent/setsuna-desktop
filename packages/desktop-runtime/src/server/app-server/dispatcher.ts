@@ -605,7 +605,7 @@ export async function dispatchAppServerRpcRequest(
     const threadId = requiredString(input.threadId ?? input.thread_id, 'threadId');
     const delivery = stringInput(input.delivery) ?? 'inline';
     if (delivery !== 'inline') throw new AppServerRpcError(-32600, 'review/start detached delivery is not supported yet');
-    const started = await startRuntimeReview(runtime, threadId, input.target);
+    const started = await startRuntimeReview(runtime, threadId, input.target, input.language ?? input.locale);
     return {
       turn: sweTurn(started.response.turnId, 'inProgress', {
         items: [sweReviewUserMessageItem(started.response.turnId, started.review.displayText)],

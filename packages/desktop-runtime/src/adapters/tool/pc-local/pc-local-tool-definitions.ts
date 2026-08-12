@@ -26,7 +26,7 @@ export type LocalToolDefinition = {
 export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   localTool(
     'list_directory',
-    'List files and directories under the local workspace.',
+    'List immediate files and directories under the local workspace. Generated and VCS directories are reported when present; recursive search and project indexes may ignore their contents.',
     {
       path: {
         type: 'string',

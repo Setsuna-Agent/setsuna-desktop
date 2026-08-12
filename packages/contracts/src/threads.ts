@@ -26,6 +26,7 @@ import type {
   RuntimeToolCall,
 } from './provider.js';
 import type { RuntimeUsage } from './usage.js';
+import { thinkTagMatches } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 
@@ -89,8 +90,8 @@ export type RuntimeMessage = {
   clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
-  /** 用户输入的领域类型；普通消息可省略，Goal 由 transcript 使用独立标识展示。 */
-  inputKind?: RuntimeQueuedTurnInputKind;
+  /** 用户输入的领域类型；普通消息可省略，特殊任务由 transcript 使用独立标识展示。 */
+  inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
@@ -145,7 +146,261 @@ export type RuntimeContextCompactionNotice = {
 export type RuntimeReviewModeNotice = {
   kind: 'entered' | 'exited';
   review: string;
+  /** Parsed review output used by the transcript summary and diff annotations. */
+  findings?: RuntimeReviewFinding[];
+  summary?: string;
 };
+
+export type RuntimeReviewFinding = {
+  body: string;
+  endLine?: number;
+  path: string;
+  priority: 'P0' | 'P1' | 'P2' | 'P3';
+  startLine: number;
+  title: string;
+};
+
+export type RuntimeReviewResult = {
+  findings: RuntimeReviewFinding[];
+  summary: string;
+};
+
+/** Parse the stable review profile output into data shared by runtime and UI. */
+export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
+  const normalized = stripReviewThinking(review).trim();
+  if (!normalized) return { findings: [], summary: '' };
+
+  const lines = normalized.split(/\r?\n/u);
+  const findings: RuntimeReviewFinding[] = [];
+  const summaryLines: string[] = [];
+  let current: (RuntimeReviewFinding & { bodyLines: string[] }) | null = null;
+
+  const finishCurrent = () => {
+    if (!current) return;
+    const { bodyLines, ...finding } = current;
+    findings.push({ ...finding, body: bodyLines.join('\n').trim() });
+    current = null;
+  };
+
+  for (const line of lines) {
+    const header = parseReviewFindingHeader(normalizeReviewFindingHeader(line));
+    if (header) {
+      finishCurrent();
+      current = {
+        ...header,
+        body: '',
+        bodyLines: [],
+      };
+      continue;
+    }
+    if (current) current.bodyLines.push(line);
+    else summaryLines.push(line);
+  }
+  finishCurrent();
+
+  return {
+    findings,
+    summary: summaryLines.join('\n').trim(),
+  };
+}
+
+// Scan the stable `[P0-P3] title — path:line` header in one forward pass.
+// Model output is untrusted, and the former multi-greedy expression could
+// backtrack polynomially on long malformed lines. The latest valid delimiter
+// wins so titles may quote an em dash; the first location after that delimiter
+// remains the stable annotation target when providers append more locations.
+function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
+  const priority = reviewPriorityPrefix(line);
+  if (!priority) return null;
+
+  let cursor = priority.contentStart;
+  let delimiterVersion = 0;
+  let resolvedVersion = -1;
+  let titleEnd = -1;
+  let pathStart = -1;
+  let locationCandidate: {
+    endLine?: number;
+    pathEnd: number;
+    pathStart: number;
+    startLine: number;
+    titleEnd: number;
+  } | null = null;
+
+  while (cursor < line.length) {
+    if (isReviewWhitespace(line[cursor])) {
+      const whitespaceStart = cursor;
+      while (isReviewWhitespace(line[cursor])) cursor += 1;
+      if (isReviewFindingDelimiter(line[cursor]) && isReviewWhitespace(line[cursor + 1])) {
+        cursor += 1;
+        while (isReviewWhitespace(line[cursor])) cursor += 1;
+        delimiterVersion += 1;
+        titleEnd = whitespaceStart;
+        pathStart = cursor;
+        continue;
+      }
+      continue;
+    }
+
+    if (line[cursor] === ':' && pathStart >= 0 && resolvedVersion !== delimiterVersion) {
+      const location = reviewLocationAt(line, cursor);
+      if (location) {
+        locationCandidate = {
+          titleEnd,
+          pathStart,
+          pathEnd: cursor,
+          startLine: location.startLine,
+          ...(location.endLine !== undefined ? { endLine: location.endLine } : {}),
+        };
+        resolvedVersion = delimiterVersion;
+        cursor = location.end;
+        continue;
+      }
+    }
+
+    cursor += 1;
+  }
+
+  if (!locationCandidate) return null;
+  const title = line.slice(priority.contentStart, locationCandidate.titleEnd).trim();
+  const rawPath = line.slice(locationCandidate.pathStart, locationCandidate.pathEnd).trim();
+  const path = rawPath.startsWith('`')
+    ? rawPath.slice(1, rawPath.endsWith('`') ? -1 : undefined).trim()
+    : rawPath;
+  if (!title || !path) return null;
+
+  return {
+    priority: priority.priority,
+    title,
+    path,
+    startLine: locationCandidate.startLine,
+    ...(locationCandidate.endLine && locationCandidate.endLine !== locationCandidate.startLine
+      ? { endLine: locationCandidate.endLine }
+      : {}),
+    body: '',
+  };
+}
+
+function reviewPriorityPrefix(line: string): {
+  contentStart: number;
+  priority: RuntimeReviewFinding['priority'];
+} | null {
+  if (
+    line.length < 6
+    || line[0] !== '['
+    || line[1] !== 'P'
+    || line[2] < '0'
+    || line[2] > '3'
+    || line[3] !== ']'
+    || !isReviewWhitespace(line[4])
+  ) return null;
+
+  let contentStart = 5;
+  while (isReviewWhitespace(line[contentStart])) contentStart += 1;
+  return {
+    contentStart,
+    priority: `P${line[2]}` as RuntimeReviewFinding['priority'],
+  };
+}
+
+function reviewLocationAt(line: string, colonIndex: number): {
+  end: number;
+  endLine?: number;
+  startLine: number;
+} | null {
+  let cursor = colonIndex + 1;
+  const startDigits = cursor;
+  while (isAsciiDigit(line[cursor])) cursor += 1;
+  if (cursor === startDigits) return null;
+
+  const startLine = Number(line.slice(startDigits, cursor));
+  let endLine: number | undefined;
+  if (line[cursor] === '-') {
+    const endDigits = cursor + 1;
+    cursor = endDigits;
+    while (isAsciiDigit(line[cursor])) cursor += 1;
+    if (cursor === endDigits) return null;
+    endLine = Number(line.slice(endDigits, cursor));
+  }
+  if (line[cursor] === '`') cursor += 1;
+
+  const suffixStart = line[cursor];
+  if (
+    suffixStart !== undefined
+    && !isReviewWhitespace(suffixStart)
+    && suffixStart !== '（'
+    && suffixStart !== '('
+    && suffixStart !== '，'
+    && suffixStart !== ','
+    && suffixStart !== ';'
+  ) return null;
+  if (!Number.isSafeInteger(startLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) return null;
+
+  return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
+}
+
+function isReviewFindingDelimiter(value: string | undefined): boolean {
+  return value === '—' || value === '–' || value === '-';
+}
+
+function isReviewWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === '';
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
+}
+
+function stripReviewThinking(review: string): string {
+  const visible: string[] = [];
+  let cursor = 0;
+  let blockStart: number | null = null;
+  let foundThinkTag = false;
+
+  for (const match of thinkTagMatches(review)) {
+    if (!match.closing && blockStart === null) {
+      foundThinkTag = true;
+      blockStart = match.index;
+      continue;
+    }
+    if (!match.closing || blockStart === null) continue;
+
+    visible.push(review.slice(cursor, blockStart));
+    cursor = match.end;
+    blockStart = null;
+  }
+
+  if (blockStart !== null) {
+    visible.push(review.slice(cursor, blockStart));
+    cursor = review.length;
+  }
+
+  return foundThinkTag ? visible.join('') + review.slice(cursor) : review;
+}
+
+/** Reparse persisted raw text so historical notices benefit from parser fixes. */
+export function normalizeRuntimeReviewNotice(
+  notice: RuntimeReviewModeNotice,
+): RuntimeReviewModeNotice {
+  if (notice.kind !== 'exited') return notice;
+  const parsed = parseRuntimeReviewResult(notice.review);
+  if (parsed.findings.length || !notice.findings?.length) {
+    return { ...notice, ...parsed };
+  }
+  return notice;
+}
+
+function normalizeReviewFindingHeader(line: string): string {
+  let normalized = line.trim()
+    .replace(/^#{1,6}\s+/u, '')
+    .replace(/^[-+*]\s+/u, '');
+  if (
+    (normalized.startsWith('**') && normalized.endsWith('**'))
+    || (normalized.startsWith('__') && normalized.endsWith('__'))
+  ) {
+    normalized = normalized.slice(2, -2).trim();
+  }
+  return normalized;
+}
 
 /** 仅用于读取旧线程；runtime 不再创建或更新 Plan mode 消息。 */
 export type RuntimePlanModeNotice = {
@@ -315,7 +570,10 @@ export type RuntimeThreadGoalPatch = {
   status?: RuntimeThreadGoalStatus;
 };
 
-export type RuntimeQueuedTurnInputKind = 'message' | 'goal';
+export type RuntimeMessageInputKind = 'message' | 'goal' | 'review';
+
+/** Review 通过专用启动接口执行，不进入普通消息队列。 */
+export type RuntimeQueuedTurnInputKind = Exclude<RuntimeMessageInputKind, 'review'>;
 
 export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueuedTurnInputKind {
   // 已持久化的旧版 plan 队列项在升级后按普通消息继续执行，避免遗留队列卡住。

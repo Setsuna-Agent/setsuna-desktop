@@ -7,6 +7,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
+import type { WorkspaceFileFocusRequest } from '../model.js';
 import { useWorkspaceFileDraft } from './useWorkspaceFileDraft.js';
 
 type ProjectWorkspaceOptions = {
@@ -17,6 +18,7 @@ type ProjectWorkspaceOptions = {
 
 export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }: ProjectWorkspaceOptions) {
   const [filePreview, setFilePreview] = useState<WorkspaceFileRead | null>(null);
+  const [fileFocusRequest, setFileFocusRequest] = useState<WorkspaceFileFocusRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<WorkspaceSearchResult[]>([]);
   const previousProjectIdRef = useRef(activeProjectId);
@@ -36,6 +38,7 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     filePreviewRequests.invalidate();
     contentSearchRequests.invalidate();
     setFilePreview(null);
+    setFileFocusRequest(null);
     setSearchQuery('');
     setSearchResults([]);
   }, [contentSearchRequests, filePreviewRequests]);
@@ -53,9 +56,11 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
         if (!confirmDiscardChanges()) return;
         filePreviewRequests.invalidate();
         setFilePreview(null);
+        setFileFocusRequest(null);
         return;
       }
       if (filePreview?.path === entry.path && filePreview.projectId === activeProjectId) {
+        setFileFocusRequest(null);
         onOpenFilePanel(filePreview.path);
         return;
       }
@@ -65,15 +70,21 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
       const file = await client.readProjectFile(projectId, entry.path);
       if (!isLatest() || activeProjectIdRef.current !== projectId) return;
       setFilePreview(file);
+      setFileFocusRequest(null);
       onOpenFilePanel(file.path);
     },
     [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
   );
 
   const openProjectFile = useCallback(
-    async (filePath: string) => {
+    async (filePath: string, line?: number) => {
       if (!activeProjectId) return;
       if (filePreview?.path === filePath && filePreview.projectId === activeProjectId) {
+        setFileFocusRequest((current) => createFileFocusRequest(
+          filePreview.path,
+          line,
+          current,
+        ));
         onOpenFilePanel(filePreview.path);
         return;
       }
@@ -83,6 +94,11 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
       const file = await client.readProjectFile(projectId, filePath);
       if (!isLatest() || activeProjectIdRef.current !== projectId) return;
       setFilePreview(file);
+      setFileFocusRequest((current) => createFileFocusRequest(
+        file.path,
+        line,
+        current,
+      ));
       onOpenFilePanel(file.path);
     },
     [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
@@ -115,11 +131,13 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     }
     filePreviewRequests.invalidate();
     setFilePreview(file);
+    setFileFocusRequest(null);
   }, [confirmDiscardChanges, filePreview?.path, filePreview?.projectId, filePreviewRequests]);
 
   return {
     // Effects clear project-bound state after commit; derive visibility now so a switch never renders the previous file.
     filePreview: visibleWorkspaceFilePreview(filePreview, activeProjectId),
+    fileFocusRequest,
     fileDraft,
     openEntry,
     openProjectFile,
@@ -130,6 +148,19 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
     searchResults,
     setFilePreview: updateFilePreview,
     setSearchQuery,
+  };
+}
+
+function createFileFocusRequest(
+  path: string,
+  line: number | undefined,
+  current: WorkspaceFileFocusRequest | null,
+): WorkspaceFileFocusRequest | null {
+  if (typeof line !== 'number' || !Number.isSafeInteger(line) || line < 1) return null;
+  return {
+    line,
+    path,
+    version: (current?.version ?? 0) + 1,
   };
 }
 

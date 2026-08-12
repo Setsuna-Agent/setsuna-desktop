@@ -1,6 +1,7 @@
 import type {
   ModelRequest,
   RegenerateMessageInput,
+  RuntimeInterfaceLanguage,
   RuntimeMessage,
   RuntimeTaskKind,
   RuntimeThread,
@@ -19,6 +20,7 @@ export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reason
 
 export type RuntimeReviewTurnInput = {
   displayText: string;
+  language?: RuntimeInterfaceLanguage;
   prompt: string;
 };
 
@@ -29,7 +31,10 @@ export type RuntimeTurnExecutionOptions = {
   modelInput?: string;
   publishUserMessage?: boolean;
   queuedInputId?: string;
-  review?: { displayText: string };
+  review?: {
+    displayText: string;
+    language: RuntimeInterfaceLanguage;
+  };
   runtimeContextMessages?: RuntimeMessage[];
   taskKind?: RuntimeTaskKind;
   userMessage?: RuntimeMessage;
@@ -149,13 +154,17 @@ export class RuntimeTurnRunFactory {
       turnId,
       options: {
         modelInput: prompt,
-        review: { displayText },
-        runtimeContextMessages: [runtimeReviewPolicyMessage(turnId, this.options.clock.now().toISOString())],
+        review: {
+          displayText,
+          language: input.language ?? 'zh-CN',
+        },
+        runtimeContextMessages: [runtimeReviewPolicyMessage(turnId, this.options.clock.now().toISOString(), input.language ?? 'zh-CN')],
         taskKind: 'review',
         userMessage: {
           id: turnId,
           turnId,
           role: 'user',
+          inputKind: 'review',
           content: displayText,
           createdAt: this.options.clock.now().toISOString(),
           status: 'complete',
@@ -216,10 +225,9 @@ export class RuntimeTurnRunFactory {
     const originalMessage = originalThread.messages.find((message) => message.id === messageId);
     if (!originalMessage) throw new Error(`Message not found: ${messageId}`);
     if (originalMessage.role !== 'user' || originalMessage.contextCompaction) throw new Error('Only user messages can be regenerated.');
-    // Goal 是线程级持久状态，不允许借普通消息的“编辑并重试”旁路改写；否则 transcript
-    // 会变了，但 RuntimeThreadGoal 仍保留旧目标。Goal 的变更必须走专用目标/队列语义。
-    if (originalMessage.inputKind === 'goal') {
-      throw new Error('Goal messages cannot be regenerated as regular turns.');
+    // Goal 与 Review 都有普通轮次不具备的执行语义，不能借“编辑并重试”降级成 regular turn。
+    if (originalMessage.inputKind === 'goal' || originalMessage.inputKind === 'review') {
+      throw new Error(`${originalMessage.inputKind === 'goal' ? 'Goal' : 'Review'} messages cannot be regenerated as regular turns.`);
     }
 
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();

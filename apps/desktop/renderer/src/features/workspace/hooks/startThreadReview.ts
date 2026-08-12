@@ -1,5 +1,6 @@
 import type {
   DesktopRuntimeClient,
+  RuntimeInterfaceLanguage,
   RuntimeReviewTarget,
   RuntimeThread,
   SendTurnResponse,
@@ -14,6 +15,7 @@ type StartThreadReviewOptions = {
   activeProjectId: string | null;
   client: ThreadReviewClient;
   currentThread: RuntimeThread | null;
+  language: RuntimeInterfaceLanguage;
   onThreadCreated: (thread: RuntimeThread) => void | Promise<unknown>;
   t?: Translate;
   target: RuntimeReviewTarget;
@@ -27,6 +29,7 @@ export async function startThreadReview({
   activeProjectId,
   client,
   currentThread,
+  language,
   onThreadCreated,
   t = defaultTranslate,
   target,
@@ -38,5 +41,5 @@ export async function startThreadReview({
     await onThreadCreated(thread);
   }
 
-  return client.startReview(thread.id, target);
+  return client.startReview(thread.id, target, language);
 }

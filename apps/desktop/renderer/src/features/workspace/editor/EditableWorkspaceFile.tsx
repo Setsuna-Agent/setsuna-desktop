@@ -3,14 +3,17 @@ import { Editor, type EditorOptions } from '@pierre/diffs/edit';
 import {
   CodeView,
   EditProvider,
+  type CodeViewHandle,
   type CodeViewItem,
   type FileContents,
 } from '@pierre/diffs/react';
-import { useCallback, useMemo, useState, type KeyboardEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import {
   pierreSurfaceStyle,
+  useCodeViewLineFocus,
   usePierreFileOptions,
 } from '../../../shared/code/PierreCode.js';
+import type { WorkspaceFileFocusRequest } from '../model.js';
 import {
   useWorkspaceCodeViewSurface,
   workspaceCodeViewLayout,
@@ -21,6 +24,7 @@ import { WorkspaceCodeViewScrollbar } from './WorkspaceCodeViewScrollbar.js';
 type EditableWorkspaceFileProps = {
   content: string;
   file: WorkspaceFileRead;
+  fileFocusRequest?: WorkspaceFileFocusRequest;
   onChange: (content: string) => void;
   onSave: () => Promise<boolean>;
 };
@@ -28,9 +32,11 @@ type EditableWorkspaceFileProps = {
 export function EditableWorkspaceFile({
   content,
   file,
+  fileFocusRequest,
   onChange,
   onSave,
 }: EditableWorkspaceFileProps) {
+  const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
   const codeViewSurface = useWorkspaceCodeViewSurface();
   const options = usePierreFileOptions({
     layout: workspaceCodeViewLayout,
@@ -39,8 +45,9 @@ export function EditableWorkspaceFile({
   // CodeView owns the live editor document. Keep its controlled item stable
   // while parent state receives changes, otherwise each keystroke reconciles
   // and replaces the virtualized file.
+  const itemId = `${file.projectId}:${file.path}`;
   const [items] = useState<readonly CodeViewItem<undefined>[]>(() => [{
-    id: `${file.projectId}:${file.path}`,
+    id: itemId,
     type: 'file',
     edit: true,
     file: {
@@ -51,9 +58,11 @@ export function EditableWorkspaceFile({
   }]);
   const editorOptions = useMemo<Omit<EditorOptions<undefined>, 'onChange'>>(() => ({
     onAttach: (editor) => {
-      window.requestAnimationFrame(() => editor.focus({ lineNumber: 'first-visible' }));
+      window.requestAnimationFrame(() => editor.focus({
+        lineNumber: fileFocusRequest?.line ?? 'first-visible',
+      }));
     },
-  }), []);
+  }), [fileFocusRequest?.line]);
   const createEditor = useCallback((creationOptions: EditorOptions<undefined>) => new Editor({
     ...creationOptions,
     historyMaxEntries: 200,
@@ -68,6 +77,7 @@ export function EditableWorkspaceFile({
     _item: CodeViewItem<undefined>,
     nextFile: FileContents,
   ) => onChange(nextFile.contents), [onChange]);
+  useCodeViewLineFocus(codeViewRef, itemId, fileFocusRequest);
 
   return (
     <div
@@ -84,6 +94,7 @@ export function EditableWorkspaceFile({
             items={items}
             onItemEditChange={handleEditorChange}
             options={options}
+            ref={codeViewRef}
             style={pierreSurfaceStyle}
           />
         </EditProvider>

@@ -270,7 +270,7 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
-  it('keeps review mode markers in their runtime order', () => {
+  it('folds the completed review into the assistant row without lifecycle headings', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'user_review',
@@ -310,12 +310,15 @@ describe('createChatDisplayItems', () => {
       },
     ];
 
-    expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
+    const items = createChatDisplayItems(messages);
+    expect(items.map((item) => `${item.type}:${item.id}`)).toEqual([
       'user:user_review',
-      'review:review_entered',
       'assistant:assistant_review',
-      'review:review_exited',
     ]);
+    expect(items[1]).toMatchObject({
+      type: 'assistant',
+      reviewExit: { kind: 'exited', review: 'No findings.' },
+    });
   });
 
   it('splits adjacent assistant runs when their turn ids differ', () => {
@@ -716,12 +719,16 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
-  it('excludes completed thinking content from assistant copy text', () => {
+  it('copies a completed review once without hidden thinking content', () => {
     expect(assistantRunCopyText({
       type: 'assistant',
       id: 'assistant_1',
       handledSteerMessageIds: [],
       messageIds: ['assistant_1'],
+      reviewExit: {
+        kind: 'exited',
+        review: '<think>internal plan</think>visible answer',
+      },
       steerMessages: [],
       segments: [
         {
@@ -775,39 +782,6 @@ describe('createChatDisplayItems', () => {
       'assistant_5',
       'assistant_6',
     ]);
-  });
-
-  it('keeps active review markers inside the render window', () => {
-    const messages: RuntimeMessage[] = [
-      ...Array.from({ length: 4 }, (_, index): RuntimeMessage => ({
-        id: `user_${index + 1}`,
-        role: 'user',
-        content: `message ${index + 1}`,
-        createdAt: `2026-06-26T00:00:0${index}.000Z`,
-        status: 'complete',
-      })),
-      {
-        id: 'review_entered',
-        turnId: 'turn_review',
-        role: 'system',
-        content: '',
-        createdAt: '2026-06-26T00:00:04.000Z',
-        status: 'complete',
-        visibility: 'transcript',
-        reviewMode: { kind: 'entered', review: 'current changes' },
-      },
-      {
-        id: 'user_tail',
-        role: 'user',
-        content: 'tail',
-        createdAt: '2026-06-26T00:00:05.000Z',
-        status: 'complete',
-      },
-    ];
-
-    const windowed = createChatRenderWindow(createChatDisplayItems(messages), { activeTurnId: 'turn_review', tailItemLimit: 1 });
-
-    expect(windowed.items.map((item) => item.id)).toEqual(['review_entered', 'user_tail']);
   });
 
   it('does not window the transcript while disabled', () => {

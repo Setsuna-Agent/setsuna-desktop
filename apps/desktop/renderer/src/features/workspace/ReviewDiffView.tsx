@@ -1,15 +1,22 @@
+import type { DiffLineAnnotation } from '@pierre/diffs/react';
+import type { RuntimeReviewFinding } from '@setsuna-desktop/contracts';
 import { Code2, PanelRightOpen } from 'lucide-react';
 import {
+  useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type MouseEvent,
+  type ReactNode,
+  type RefCallback,
 } from 'react';
 import { CodePatchView } from '../../shared/code/PierreCode.js';
 import { codeDiffLinesToPatch } from '../../shared/code/diffPatch.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
+import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationProvider.js';
+import { MarkdownRenderer } from '../chat/markdown/MarkdownRenderer.js';
+import { WorkspaceFileLink } from '../chat/markdown/WorkspaceFileLink.js';
 import type {
   DesktopDiffFile,
   DesktopDiffSummary,
@@ -28,11 +35,26 @@ import {
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import {
+  reviewFindingKey,
+  reviewPathsMatch,
+  resolveReviewFile,
+  resolveReviewFindingTarget,
+  resolveReviewFindingTargets,
+  type ReviewFindingTarget,
+} from './review-findings.js';
+import {
+  reviewFileNavigationTargetKey,
+  reviewFindingNavigationTargetKey,
+  useReviewNavigation,
+  type ReviewDiffNavigationRegistration,
+} from './hooks/useReviewNavigation.js';
 
 const reviewFilePathCollator = new Intl.Collator('en', {
   numeric: true,
   sensitivity: 'base',
 });
+const REVIEW_FOCUS_HIGHLIGHT_MS = 1_400;
 
 function ReviewFilePath({ path }: { path: string }) {
   const { directory, filename } = reviewFilePathParts(path);
@@ -59,6 +81,7 @@ export function ReviewSummarySection({
   diffLayout,
   emptyText,
   fileExpansionRequest,
+  findings,
   focusRequest,
   lineWrap,
   pathContext,
@@ -75,6 +98,7 @@ export function ReviewSummarySection({
   diffLayout: DesktopReviewDiffLayout;
   emptyText: { title: string; description: string };
   fileExpansionRequest: ReviewFileExpansionRequest;
+  findings: RuntimeReviewFinding[];
   focusRequest?: DesktopReviewFocusRequest | null;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
@@ -89,14 +113,58 @@ export function ReviewSummarySection({
     filePath: string,
     line?: number,
   ) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onRevealFile: (filePath: string) => void;
 }) {
   const files = useMemo(() => [...(summary?.files ?? [])].sort((left, right) => (
     reviewFilePathCollator.compare(left.path, right.path)
   )), [summary?.files]);
+  const findingTargets = useMemo(
+    () => resolveReviewFindingTargets(summary, findings),
+    [findings, summary],
+  );
+  const focusedFindingTarget = useMemo(
+    () => focusRequest?.finding
+      ? resolveReviewFindingTarget(summary, focusRequest.finding)
+      : null,
+    [focusRequest?.finding, summary],
+  );
+  const { getDiffTargetRegistration, getTargetRef } = useReviewNavigation({
+    findingTarget: focusedFindingTarget,
+    focusRequest,
+  });
+  const unanchoredFindingTarget = focusedFindingTarget
+    && (!focusedFindingTarget.file || !focusedFindingTarget.anchor)
+    ? focusedFindingTarget
+    : null;
+  const openReviewFile = useCallback((filePath: string, line?: number) => {
+    // Provider output can be workspace-relative while git paths are rooted at
+    // the repository. Resolve through the displayed diff before translating
+    // the path into the active project's coordinate space.
+    const resolvedFilePath = resolveReviewFile(summary, filePath)?.path ?? filePath;
+    const targetPath = reviewWorkspaceFilePath(resolvedFilePath, pathContext);
+    if (!targetPath) return;
+    if (workspaceApp) {
+      onExternalOpenFile(targetPath, line);
+      return;
+    }
+    onOpenProjectFile(targetPath, line);
+  }, [onExternalOpenFile, onOpenProjectFile, pathContext, summary, workspaceApp]);
   return (
     <section className="desktop-review-section">
+      {unanchoredFindingTarget ? (
+        <div className="desktop-review-unanchored-findings">
+          <ReviewUnanchoredFindingCard
+            focusRequest={focusRequest}
+            onOpenWorkspaceFile={openReviewFile}
+            target={unanchoredFindingTarget}
+            targetRef={getTargetRef(
+              reviewFindingNavigationTargetKey(unanchoredFindingTarget),
+            )}
+            workspaceRoot={pathContext.workspaceRoot}
+          />
+        </div>
+      ) : null}
       {files.length ? (
         <div className="desktop-review-file-list">
           {files.map((file) => (
@@ -104,7 +172,13 @@ export function ReviewSummarySection({
               diffLayout={diffLayout}
               fileExpansionRequest={fileExpansionRequest}
               file={file}
+              findingTargets={findingTargets}
+              fileTargetRef={getTargetRef(
+                reviewFileNavigationTargetKey(file.path),
+              )}
               focusRequest={focusRequest}
+              getDiffTargetRegistration={getDiffTargetRegistration}
+              getNavigationTargetRef={getTargetRef}
               key={file.path}
               lineWrap={lineWrap}
               pathContext={pathContext}
@@ -115,6 +189,7 @@ export function ReviewSummarySection({
               onExternalOpenFile={onExternalOpenFile}
               onOpenFileWithApp={onOpenFileWithApp}
               onOpenProjectFile={onOpenProjectFile}
+              onOpenWorkspaceFile={openReviewFile}
               onRevealFile={onRevealFile}
             />
           ))}
@@ -133,7 +208,11 @@ function ReviewFileCard({
   diffLayout,
   fileExpansionRequest,
   file,
+  findingTargets,
+  fileTargetRef,
   focusRequest,
+  getDiffTargetRegistration,
+  getNavigationTargetRef,
   lineWrap,
   pathContext,
   workspaceApp,
@@ -143,12 +222,19 @@ function ReviewFileCard({
   onExternalOpenFile,
   onOpenFileWithApp,
   onOpenProjectFile,
+  onOpenWorkspaceFile,
   onRevealFile,
 }: {
   diffLayout: DesktopReviewDiffLayout;
   fileExpansionRequest: ReviewFileExpansionRequest;
   file: DesktopDiffFile;
+  findingTargets: ReviewFindingTarget[];
+  fileTargetRef: RefCallback<HTMLElement>;
   focusRequest?: DesktopReviewFocusRequest | null;
+  getDiffTargetRegistration: (
+    key: string,
+  ) => ReviewDiffNavigationRegistration;
+  getNavigationTargetRef: (key: string) => RefCallback<HTMLElement>;
   lineWrap: boolean;
   pathContext: ReviewPathContext;
   workspaceApp?: DesktopWorkspaceApp | null;
@@ -161,26 +247,66 @@ function ReviewFileCard({
     filePath: string,
     line?: number,
   ) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
+  onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   onRevealFile: (filePath: string) => void;
 }) {
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
-  const [focusHighlightVersion, setFocusHighlightVersion] = useState<
-    number | null
-  >(null);
   const [lineContextMenu, setLineContextMenu] = useState<
     WorkspaceFileContextTarget | null
   >(null);
-  const fileCardRef = useRef<HTMLElement | null>(null);
   const workspaceFilePath = reviewWorkspaceFilePath(file.path, pathContext);
   const canOpenFile = Boolean(workspaceFilePath);
   const focusedByRequest = Boolean(
     focusRequest
-      && normalizeReviewFocusPath(file.path)
-        === normalizeReviewFocusPath(focusRequest.path),
+      && reviewPathsMatch(file.path, focusRequest.path),
   );
+  const fileFocusHighlighted = useTransientReviewFocusHighlight(
+    focusedByRequest && !focusRequest?.finding
+      ? focusRequest?.version
+      : undefined,
+  );
+  const focusedFindingKey = focusRequest?.finding
+    ? reviewFindingKey(focusRequest.finding)
+    : null;
   const visibleLines = file.lines;
+  const fileFindingTargets = useMemo(
+    () => findingTargets.filter((target) => (
+      target.anchor && target.file
+        && target.file === file
+    )),
+    [file, findingTargets],
+  );
+  const lineAnnotations = useMemo<DiffLineAnnotation<ReactNode>[]>(() => (
+    fileFindingTargets.flatMap((target) => {
+      if (!target.anchor) return [];
+      return [{
+        ...target.anchor,
+        metadata: (
+          <ReviewFindingAnnotation
+            finding={target.finding}
+            focusVersion={focusedFindingKey === target.key
+              ? focusRequest?.version
+              : undefined}
+            key={target.key}
+            onOpenWorkspaceFile={onOpenWorkspaceFile}
+            targetRef={getNavigationTargetRef(
+              reviewFindingNavigationTargetKey(target),
+            )}
+            workspaceRoot={pathContext.workspaceRoot}
+          />
+        ),
+      }];
+    })
+  ), [
+    fileFindingTargets,
+    focusedFindingKey,
+    focusRequest?.version,
+    getNavigationTargetRef,
+    onOpenWorkspaceFile,
+    pathContext.workspaceRoot,
+  ]);
   // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
   const patch = useMemo(() => {
     if (!expanded) return '';
@@ -193,28 +319,12 @@ function ReviewFileCard({
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
   }, [fileExpansionRequest.expanded, fileExpansionRequest.version]);
-
   useEffect(() => {
     if (!focusedByRequest || focusRequest?.version === undefined) {
       return undefined;
     }
     setExpanded(true);
-    setFocusHighlightVersion(focusRequest.version);
-    const frame = window.requestAnimationFrame(() => {
-      fileCardRef.current?.scrollIntoView({
-        block: 'start',
-        behavior: 'smooth',
-      });
-    });
-    const timer = window.setTimeout(() => {
-      setFocusHighlightVersion((current) => (
-        current === focusRequest.version ? null : current
-      ));
-    }, 1400);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.clearTimeout(timer);
-    };
+    return undefined;
   }, [focusedByRequest, focusRequest?.version]);
 
   const openDiffLineContextMenu = (event: MouseEvent) => {
@@ -235,9 +345,10 @@ function ReviewFileCard({
         className={[
           'desktop-review-file-card',
           expanded ? 'is-open' : '',
-          focusHighlightVersion === focusRequest?.version ? 'is-focused' : '',
+          fileFocusHighlighted ? 'is-focused' : '',
         ].filter(Boolean).join(' ')}
-        ref={fileCardRef}
+        data-review-file-path={normalizeReviewFocusPath(file.path) ?? file.path}
+        ref={fileTargetRef}
       >
         <header
           className="desktop-review-file-card__summary"
@@ -319,6 +430,10 @@ function ReviewFileCard({
                 lineWrap ? 'desktop-review-diff--wrap' : '',
               ].filter(Boolean).join(' ')}
               layout={diffLayout}
+              lineAnnotations={lineAnnotations}
+              onPostRender={getDiffTargetRegistration(
+                reviewFileNavigationTargetKey(file.path),
+              )}
               patch={patch}
               wrap={lineWrap}
             />
@@ -342,6 +457,104 @@ function ReviewFileCard({
       />
     </>
   );
+}
+
+function ReviewUnanchoredFindingCard({
+  focusRequest,
+  onOpenWorkspaceFile,
+  target,
+  targetRef,
+  workspaceRoot,
+}: {
+  focusRequest?: DesktopReviewFocusRequest | null;
+  onOpenWorkspaceFile: (filePath: string, line?: number) => void;
+  target: ReviewFindingTarget;
+  targetRef: RefCallback<HTMLElement>;
+  workspaceRoot?: string | null;
+}) {
+  return (
+    <div className="desktop-review-unanchored-finding">
+      <ReviewFindingAnnotation
+        finding={target.finding}
+        focusVersion={focusRequest?.version}
+        onOpenWorkspaceFile={onOpenWorkspaceFile}
+        targetRef={targetRef}
+        workspaceRoot={workspaceRoot}
+      />
+    </div>
+  );
+}
+
+function ReviewFindingAnnotation({
+  finding,
+  focusVersion,
+  onOpenWorkspaceFile,
+  targetRef,
+  workspaceRoot,
+}: {
+  finding: RuntimeReviewFinding;
+  focusVersion?: number;
+  onOpenWorkspaceFile: (filePath: string, line?: number) => void;
+  targetRef: RefCallback<HTMLElement>;
+  workspaceRoot?: string | null;
+}) {
+  const focusHighlighted = useTransientReviewFocusHighlight(focusVersion);
+  const lineLabel = finding.endLine && finding.endLine !== finding.startLine
+    ? `${finding.startLine}-${finding.endLine}`
+    : String(finding.startLine);
+  return (
+    <MarkdownNavigationProvider
+      workspaceRoot={workspaceRoot ?? undefined}
+      onOpenWorkspaceFile={onOpenWorkspaceFile}
+    >
+      <article
+        className={[
+          'desktop-review-finding',
+          focusHighlighted ? 'is-focused' : '',
+        ].filter(Boolean).join(' ')}
+        data-review-finding-line={finding.startLine}
+        data-review-finding-path={
+          normalizeReviewFocusPath(finding.path) ?? finding.path
+        }
+        ref={targetRef}
+      >
+        <header className="desktop-review-finding__header">
+          <strong>[{finding.priority}] {finding.title}</strong>
+          <WorkspaceFileLink
+            className="desktop-review-finding__location"
+            filePath={finding.path}
+            href={`${finding.path}:${finding.startLine}`}
+            line={finding.startLine}
+            linkKind="workspace"
+          >
+            {reviewFilePathParts(finding.path).filename}:{lineLabel}
+          </WorkspaceFileLink>
+        </header>
+        {finding.body ? (
+          <div className="desktop-review-finding__body">
+            <MarkdownRenderer content={finding.body} streaming={false} />
+          </div>
+        ) : null}
+      </article>
+    </MarkdownNavigationProvider>
+  );
+}
+
+function useTransientReviewFocusHighlight(
+  focusVersion: number | undefined,
+): boolean {
+  const [highlightVersion, setHighlightVersion] = useState<number | null>(null);
+  useEffect(() => {
+    if (focusVersion === undefined) return undefined;
+    setHighlightVersion(focusVersion);
+    const timer = window.setTimeout(() => {
+      setHighlightVersion((current) => (
+        current === focusVersion ? null : current
+      ));
+    }, REVIEW_FOCUS_HIGHLIGHT_MS);
+    return () => window.clearTimeout(timer);
+  }, [focusVersion]);
+  return focusVersion !== undefined && highlightVersion === focusVersion;
 }
 
 function pierreLineNumberFromEvent(event: MouseEvent): number | undefined {

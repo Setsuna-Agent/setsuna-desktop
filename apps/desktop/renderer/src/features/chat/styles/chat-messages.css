@@ -251,25 +251,74 @@
   min-width: 0;
 }
 
-.chat-review-mode-marker {
+.chat-review-summary-card {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  width: min(760px, 100%);
+}
+
+.chat-review-summary-card__panel {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+}
+
+.chat-review-summary-card__header {
+  display: flex;
   align-items: center;
   gap: 8px;
-  width: min(760px, 100%);
-  padding: 1px 0 1px 4px;
-  color: color-mix(in srgb, var(--app-text-secondary) 78%, transparent);
-  font-size: 12px;
-  line-height: 18px;
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.chat-review-mode-marker__line {
-  height: 1px;
-  background: color-mix(in srgb, var(--app-primary) 36%, var(--app-border));
+.chat-review-summary-card__findings {
+  border-top: 1px solid var(--app-border);
 }
 
-.chat-review-mode-marker__text {
-  min-width: 0;
+.chat-review-summary-card__finding {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 72%, transparent);
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-review-summary-card__finding:last-child {
+  border-bottom: 0;
+}
+
+.chat-review-summary-card__finding:hover {
+  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+}
+
+.chat-review-summary-card__finding--static {
+  cursor: default;
+}
+
+.chat-review-summary-card__finding--static:hover {
+  background: transparent;
+}
+
+.chat-review-summary-card__priority {
+  padding: 1px 5px;
+  border: 1px solid var(--app-border);
+  border-radius: 4px;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.chat-review-summary-card__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -371,7 +420,8 @@
   color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
-.chat-user-message-kind--goal {
+.chat-user-message-kind--goal,
+.chat-user-message-kind--review {
   color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
