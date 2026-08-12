@@ -32,7 +32,10 @@ The security boundary is fail-closed:
 
 V1 protects write integrity and network egress; it is not a confidentiality
 boundary equivalent to a VM. Existing host DACLs may still make files readable
-to ordinary local users. As in upstream Codex, Windows compatibility requires
+to ordinary local users. Processes running outside the sandbox under the
+desktop account are trusted: they can rewrite managed DACLs, owners, or marker
+ACEs with the same authority as the sandbox manager itself. As in upstream
+Codex, Windows compatibility requires
 the World SID in the write-restricted compatibility list, so objects already
 writable by an explicit Everyone ACE remain writable to the dedicated account.
 The token default DACL likewise follows upstream and grants World access so

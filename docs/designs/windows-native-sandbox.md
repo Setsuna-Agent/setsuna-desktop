@@ -15,6 +15,9 @@
 这不是 microVM、容器或 Windows Sandbox。V1 不承诺：
 
 - 抵御 Windows 内核漏洞或本机管理员；
+- 抵御桌面账户或其他宿主进程在沙箱外重写受管路径的 DACL、owner 或 completion marker。它们拥有与
+  沙箱管理器相同或更高的宿主权限，属于信任边界外；沙箱内进程则由 mutation deny 中的 `WRITE_DAC` /
+  `WRITE_OWNER` 和进程创建 mitigation 约束；
 - 隐藏所有宿主可读文件。受限账户仍可能读取原 DACL 已向普通用户开放的路径；
 - 表达路径级 read deny 或 glob deny。请求包含 `deniedRoots` 或 `deniedGlobRegExpSources`
   时 provider 必须拒绝；

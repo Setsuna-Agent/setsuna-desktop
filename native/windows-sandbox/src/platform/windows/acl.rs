@@ -22,9 +22,9 @@ use windows_sys::Win32::Security::{
     GetSecurityDescriptorControl, InitializeSecurityDescriptor, IsValidAcl, IsValidSid,
     MapGenericMask, SetFileSecurityW, SetSecurityDescriptorDacl, ACCESS_ALLOWED_ACE,
     ACCESS_DENIED_ACE, ACE_HEADER, ACL, ACL_SIZE_INFORMATION, CONTAINER_INHERIT_ACE,
-    DACL_SECURITY_INFORMATION, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION, OBJECT_INHERIT_ACE,
-    OWNER_SECURITY_INFORMATION, PRIVILEGE_SET, PROTECTED_DACL_SECURITY_INFORMATION,
-    SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
+    DACL_SECURITY_INFORMATION, GENERIC_MAPPING, GROUP_SECURITY_INFORMATION,
+    NO_PROPAGATE_INHERIT_ACE, OBJECT_INHERIT_ACE, OWNER_SECURITY_INFORMATION, PRIVILEGE_SET,
+    PROTECTED_DACL_SECURITY_INFORMATION, SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FileAttributeTagInfo, GetFileInformationByHandleEx, DELETE, FILE_ALL_ACCESS,
@@ -1058,6 +1058,9 @@ fn dacl_has_effective_ace(
         {
             continue;
         }
+        if required_inheritance != 0 && header.AceFlags & NO_PROPAGATE_INHERIT_ACE as u8 != 0 {
+            continue;
+        }
 
         let sid_offset = std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart);
         let ace_size = usize::from(header.AceSize);
@@ -1135,7 +1138,28 @@ struct PersistentAclObject {
 
 impl PersistentAclObject {
     fn open(path: &Path, approved_root: &Path) -> Result<Self, SandboxError> {
-        Self::open_internal(path, approved_root, false)?.ok_or_else(|| {
+        Self::open_internal(
+            path,
+            approved_root,
+            false,
+            READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+        )?
+        .ok_or_else(|| {
+            SandboxError::new(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!("persistent ACL root disappeared: {}", path.display()),
+            )
+        })
+    }
+
+    fn open_for_validation(path: &Path, approved_root: &Path) -> Result<Self, SandboxError> {
+        Self::open_internal(
+            path,
+            approved_root,
+            false,
+            READ_CONTROL | FILE_READ_ATTRIBUTES,
+        )?
+        .ok_or_else(|| {
             SandboxError::new(
                 SandboxErrorCode::UnsupportedPolicy,
                 format!("persistent ACL root disappeared: {}", path.display()),
@@ -1144,13 +1168,19 @@ impl PersistentAclObject {
     }
 
     fn open_child(path: &Path, approved_root: &Path) -> Result<Option<Self>, SandboxError> {
-        Self::open_internal(path, approved_root, true)
+        Self::open_internal(
+            path,
+            approved_root,
+            true,
+            READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+        )
     }
 
     fn open_internal(
         path: &Path,
         approved_root: &Path,
         tolerate_missing: bool,
+        desired_access: u32,
     ) -> Result<Option<Self>, SandboxError> {
         let path_wide = to_wide(path.as_os_str());
         // Denying delete sharing pins this directory entry until the ACL update
@@ -1159,7 +1189,7 @@ impl PersistentAclObject {
         let handle = OwnedHandle::new(unsafe {
             CreateFileW(
                 path_wide.as_ptr(),
-                READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+                desired_access,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 std::ptr::null(),
                 OPEN_EXISTING,
@@ -1295,7 +1325,7 @@ fn persistent_acl_completion_is_valid(
             error,
         )
     })?;
-    let root = PersistentAclObject::open(path, &approved_root)?;
+    let root = PersistentAclObject::open_for_validation(path, &approved_root)?;
     let mut expected = Vec::with_capacity(required_entries.len() + 1);
     expected.push(completion_marker_entry(completion_marker));
     expected.extend_from_slice(required_entries);
@@ -1617,10 +1647,11 @@ fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Err
 mod tests {
     use super::{
         access_inspection_error, ancestor_read_paths, apply_non_recursive_acl_entries,
-        apply_persistent_acl_entries, ensure_persistent_allow_aces, ensure_persistent_deny_ace,
-        is_name_surrogate_reparse_tag, mutate_acl, path_has_effective_ace,
-        unreadable_access_inspection, LocalSid, TokenAccessInspection, ACCESS_ALLOWED_ACE_TYPE,
-        ACCESS_DENIED_ACE_TYPE, COMPLETION_MARKER_MASK, MUTATING_MASK, READ_MASK,
+        apply_persistent_acl_entries, completion_marker_entry, ensure_persistent_allow_aces,
+        ensure_persistent_deny_ace, is_name_surrogate_reparse_tag, mutate_acl,
+        path_has_effective_ace, unreadable_access_inspection, LocalSid, TokenAccessInspection,
+        ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE, COMPLETION_MARKER_MASK, MUTATING_MASK,
+        READ_MASK,
     };
     use crate::protocol::SandboxErrorCode;
     use std::fs;
@@ -1630,7 +1661,9 @@ mod tests {
     use windows_sys::Win32::Security::Authorization::{
         EXPLICIT_ACCESS_W, SET_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
     };
-    use windows_sys::Win32::Security::{CONTAINER_INHERIT_ACE, OBJECT_INHERIT_ACE};
+    use windows_sys::Win32::Security::{
+        CONTAINER_INHERIT_ACE, NO_PROPAGATE_INHERIT_ACE, OBJECT_INHERIT_ACE,
+    };
 
     #[test]
     fn workspace_root_keeps_its_private_ancestors_in_the_read_plan() {
@@ -1787,6 +1820,45 @@ mod tests {
             inheritance,
         )
         .expect("inspect repaired deny"));
+    }
+
+    #[test]
+    fn completion_marker_rejects_a_non_propagating_root_grant() {
+        let temporary = tempdir().expect("temporary ACL tree");
+        let group = LocalSid::parse("S-1-5-21-191919191-292929292-393939393-494949494")
+            .expect("test group SID");
+        let capability = LocalSid::parse("S-1-5-21-515151515-626262626-737373737-848484848")
+            .expect("test capability SID");
+        let completion = LocalSid::parse("S-1-5-21-959595959-868686868-777777777-686868686")
+            .expect("test completion SID");
+        let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
+        let non_propagating = inheritance | NO_PROPAGATE_INHERIT_ACE;
+
+        apply_non_recursive_acl_entries(
+            temporary.path(),
+            &[
+                allow_entry(&group, non_propagating),
+                allow_entry(&capability, non_propagating),
+                completion_marker_entry(&completion),
+            ],
+        )
+        .expect("install a stale marker over non-propagating root grants");
+
+        ensure_persistent_allow_aces(
+            temporary.path(),
+            &[(group.raw(), READ_MASK), (capability.raw(), READ_MASK)],
+            &completion,
+        )
+        .expect("replace the root grants with fully propagating entries");
+
+        let future_directory = temporary.path().join("future").join("nested");
+        fs::create_dir_all(&future_directory).expect("future nested directory");
+        let future_file = future_directory.join("future.txt");
+        fs::write(&future_file, "future").expect("future file");
+        assert!(has_read_allow(&future_directory, &group, inheritance));
+        assert!(has_read_allow(&future_file, &group, 0));
+        assert!(has_read_allow(&future_directory, &capability, inheritance));
+        assert!(has_read_allow(&future_file, &capability, 0));
     }
 
     #[test]
