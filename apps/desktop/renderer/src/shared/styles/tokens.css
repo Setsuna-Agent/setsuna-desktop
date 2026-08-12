@@ -116,6 +116,7 @@
   --chat-message-footer-gap: 3px;
   --chat-scrollbar-width: 8px;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
+  --desktop-inline-icon-size: 17px;
   --chat-send-bg: #15171a;
   --chat-send-bg-hover: #24272c;
   --chat-send-bg-active: #000000;

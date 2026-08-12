@@ -3,7 +3,7 @@
   "id": "web-search",
   "name": "网络搜索",
   "icon": "web-search",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "搜索公开网络并返回可引用的来源链接与内容片段；无需配置 API Key，匿名额度受 Tavily keyless 服务限流约束。",
   "publisher": "Setsuna",
   "tags": ["搜索", "联网", "实时信息"],
@@ -12,7 +12,20 @@
   "tools": [
     {
       "name": "web_search",
-      "description": "搜索公开网络，返回标题、URL、相关内容片段和可选时间信息。"
+      "description": "搜索公开网络，返回标题、URL、相关内容片段和可选时间信息。",
+      "exposure": "direct",
+      "supportsParallel": true,
+      "requiresApproval": false,
+      "requiresSandboxBypassApproval": false
     }
-  ]
+  ],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "network"],
+    "network": {
+      "allowedOrigins": ["https://api.tavily.com"]
+    }
+  }
 }

@@ -79,7 +79,16 @@ export const MAX_PLUGIN_FILES = 1_000;
 export const MAX_PLUGIN_TOTAL_BYTES = 32 * 1024 * 1024;
 export const MAX_PLUGIN_RESOURCE_BYTES = 8 * 1024 * 1024;
 export const MAX_PLUGIN_TEXT_RESOURCE_BYTES = 512 * 1024;
-const EXTENSION_CAPABILITIES = new Set<RuntimeExtensionCapability>(['tools', 'events', 'ui', 'state']);
+const EXTENSION_CAPABILITIES = new Set<RuntimeExtensionCapability>([
+  'tools',
+  'events',
+  'ui',
+  'state',
+  'network',
+  'image-generation',
+  'vision-recognition',
+]);
+const MAX_EXTENSION_NETWORK_ORIGINS = 32;
 export const HOOK_EVENTS = new Set<RuntimeHookEventName>([
   'PreToolUse',
   'PermissionRequest',
@@ -235,14 +244,60 @@ async function normalizePluginExtension(
     if (capabilities.includes(normalized)) throw new Error(`Duplicate plugin extension capability: ${normalized}`);
     capabilities.push(normalized);
   }
+  const network = normalizeExtensionNetworkPolicy(record.network, capabilities);
   return {
     extension: {
       apiVersion: RUNTIME_EXTENSION_API_VERSION,
       runtime: 'node-worker',
       capabilities,
+      ...(network ? { network } : {}),
       entry,
     },
   };
+}
+
+function normalizeExtensionNetworkPolicy(
+  value: unknown,
+  capabilities: RuntimeExtensionCapability[],
+): RuntimeExtensionManifest['network'] | undefined {
+  const networkEnabled = capabilities.includes('network');
+  if (!networkEnabled) {
+    if (value !== undefined) throw new Error('Plugin extension network policy requires the network capability.');
+    return undefined;
+  }
+  const record = objectRecord(value, 'Plugin extension network policy must be an object.');
+  if (!Array.isArray(record.allowedOrigins) || !record.allowedOrigins.length) {
+    throw new Error('Plugin extension network.allowedOrigins must be a non-empty array.');
+  }
+  if (record.allowedOrigins.length > MAX_EXTENSION_NETWORK_ORIGINS) {
+    throw new Error(`Plugin extension network.allowedOrigins cannot exceed ${MAX_EXTENSION_NETWORK_ORIGINS} entries.`);
+  }
+  const allowedOrigins: string[] = [];
+  for (const [index, origin] of record.allowedOrigins.entries()) {
+    const normalized = extensionNetworkOrigin(origin, index);
+    if (!allowedOrigins.includes(normalized)) allowedOrigins.push(normalized);
+  }
+  return { allowedOrigins };
+}
+
+function extensionNetworkOrigin(value: unknown, index: number): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`Plugin extension network.allowedOrigins[${index}] must be an HTTP(S) origin.`);
+  }
+  try {
+    const url = new URL(value.trim());
+    if ((url.protocol !== 'http:' && url.protocol !== 'https:')
+      || url.username
+      || url.password
+      || url.pathname !== '/'
+      || url.search
+      || url.hash) {
+      throw new Error('invalid origin');
+    }
+    return url.origin;
+  } catch {
+    throw new Error(`Plugin extension network.allowedOrigins[${index}] must be an HTTP(S) origin.`);
+  }
 }
 
 export function normalizePluginTools(value: unknown): RuntimePluginTool[] {
@@ -258,8 +313,37 @@ export function normalizePluginTools(value: unknown): RuntimePluginTool[] {
     if (seen.has(name)) throw new Error(`Duplicate plugin tool name: ${name}`);
     seen.add(name);
     const description = optionalString(record.description);
-    return { name, ...(description ? { description } : {}) };
+    const exposure = optionalString(record.exposure);
+    if (exposure !== undefined && exposure !== 'namespaced' && exposure !== 'direct') {
+      throw new Error(`Plugin tools[${index}].exposure must be namespaced or direct.`);
+    }
+    const supportsParallel = optionalPluginToolBoolean(
+      record.supportsParallel ?? record.supports_parallel,
+      `Plugin tools[${index}].supportsParallel`,
+    );
+    const requiresApproval = optionalPluginToolBoolean(
+      record.requiresApproval ?? record.requires_approval,
+      `Plugin tools[${index}].requiresApproval`,
+    );
+    const requiresSandboxBypassApproval = optionalPluginToolBoolean(
+      record.requiresSandboxBypassApproval ?? record.requires_sandbox_bypass_approval,
+      `Plugin tools[${index}].requiresSandboxBypassApproval`,
+    );
+    return {
+      name,
+      ...(description ? { description } : {}),
+      ...(exposure ? { exposure } : {}),
+      ...(supportsParallel !== undefined ? { supportsParallel } : {}),
+      ...(requiresApproval !== undefined ? { requiresApproval } : {}),
+      ...(requiresSandboxBypassApproval !== undefined ? { requiresSandboxBypassApproval } : {}),
+    };
   });
+}
+
+function optionalPluginToolBoolean(value: unknown, label: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error(`${label} must be a boolean.`);
+  return value;
 }
 
 export async function normalizePluginSkills(
@@ -509,8 +593,11 @@ export async function requiredBundleDirectory(value: unknown): Promise<string> {
 }
 
 export async function safeExistingPath(root: string, relativePath: string): Promise<string> {
-  const target = await realpath(path.resolve(root, relativePath));
-  if (!pathIsInside(root, target)) throw new Error(`Plugin path escapes the bundle: ${relativePath}`);
+  // macOS commonly exposes /var through a /private/var symlink. Compare real
+  // paths on both sides so a valid file is not mistaken for a bundle escape.
+  const resolvedRoot = await realpath(root);
+  const target = await realpath(path.resolve(resolvedRoot, relativePath));
+  if (!pathIsInside(resolvedRoot, target)) throw new Error(`Plugin path escapes the bundle: ${relativePath}`);
   return target;
 }
 
@@ -595,6 +682,9 @@ export function cloneInstalledRecord(plugin: InstalledPluginRecord): InstalledPl
       extension: {
         ...plugin.extension,
         capabilities: [...plugin.extension.capabilities],
+        ...(plugin.extension.network ? {
+          network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+        } : {}),
       },
     } : {}),
   };
@@ -610,6 +700,9 @@ export function publicPluginExtension(extension: InstalledPluginExtensionRecord)
     apiVersion: extension.apiVersion,
     runtime: extension.runtime,
     capabilities: [...extension.capabilities],
+    ...(extension.network ? {
+      network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
     trust,
   };
 }

@@ -51,6 +51,7 @@ import {
 import { createChatSlashCommandItems } from './composer/chatSlashCommandItems.js';
 import { useChatAttachments } from './composer/useChatAttachments.js';
 import { useChatCommandController } from './composer/useChatCommandController.js';
+import { useChatComposerClipboard } from './composer/useChatComposerClipboard.js';
 import { useChatComposerModeController } from './composer/useChatComposerModeController.js';
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
@@ -177,10 +178,24 @@ export function ChatComposer({
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
+  const addSelectedSkills = useCallback((nextSkills: RuntimeSkillSummary[]) => {
+    if (!nextSkills.length) return;
+    setSelectedSkills((current) => {
+      const selectedIds = new Set(current.map((skill) => skill.id));
+      const additions = nextSkills.filter((skill) => !selectedIds.has(skill.id));
+      return additions.length ? [...current, ...additions] : current;
+    });
+  }, []);
   const queuedTurnInputs = currentThread?.queuedTurnInputs ?? EMPTY_QUEUED_TURN_INPUTS;
   const deleteQueuedTurnInput = queuedTurnActions.deleteQueuedTurnInput;
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
-  const getComposerInputElement = useCallback(() => senderRef.current?.inputElement ?? null, []);
+  const getComposerEditor = useCallback(() => senderRef.current, []);
+  const getComposerInputElement = useCallback(() => getComposerEditor()?.inputElement ?? null, [getComposerEditor]);
+  const clipboardHandlers = useChatComposerClipboard({
+    getEditor: getComposerEditor,
+    onSkillsRestored: addSelectedSkills,
+    skills,
+  });
   const currentGoal = currentThread?.goal?.status === 'complete'
     ? null
     : currentThread?.goal ?? null;
@@ -346,12 +361,13 @@ export function ChatComposer({
         if (consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
         // Consume only after the tag survives Sender initialization and a full frame.
         consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
-        setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
+        addSelectedSkills([skill]);
         commandController.focusComposer();
         onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
       },
     });
   }, [
+    addSelectedSkills,
     commandController.focusComposer,
     onSkillSelectionRequestConsumed,
     skillSelectionRequest,
@@ -397,7 +413,7 @@ export function ChatComposer({
       true,
     );
     commandController.acceptSlashSelection();
-    setSelectedSkills((current) => (current.some((item) => item.id === skill.id) ? current : [...current, skill]));
+    addSelectedSkills([skill]);
   };
 
   const handleChange = (value: string, _event?: unknown, slotConfig?: SlotConfigType[]) => {
@@ -543,7 +559,10 @@ export function ChatComposer({
   };
 
   return (
-    <div className={`chat-sender ${starter ? 'chat-sender--starter' : ''}`}>
+    <div
+      className={`chat-sender ${starter ? 'chat-sender--starter' : ''}`}
+      {...clipboardHandlers}
+    >
       <input
         ref={fileInputRef}
         type="file"

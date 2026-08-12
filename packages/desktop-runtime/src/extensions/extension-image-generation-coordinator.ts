@@ -1,33 +1,23 @@
 import {
   isRuntimeGeneratedMessageAttachment,
-  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-  OPENAI_IMAGE_GENERATION_TOOL_NAME,
   RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
   type RuntimeImageGenerationTestInput,
   type RuntimeImageGenerationTestResult,
   type RuntimeMessageAttachment,
   type RuntimeThread,
-  type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { RuntimeImageGenerationProviderConfig } from '../../ports/config-store.js';
-import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
+import type { RuntimeImageGenerationProviderConfig } from '../ports/config-store.js';
+import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type {
   ToolExecutionContext,
-  ToolExecutionPreview,
-  ToolExecutionResult,
-  ToolHost,
   ToolTurnCleanupOutcome,
-} from '../../ports/tool-host.js';
-import type { WorkspaceProjectStore } from '../../ports/workspace-project-store.js';
-import { managedGeneratedImageAssetIdsFromStore } from '../../utils/generated-image-assets.js';
-import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
-import type { FetchImpl } from '../model/provider-http.js';
-import {
-  installedMarketplacePlugin,
-  type MarketplacePluginStateStore,
-} from './marketplace-plugin-state.js';
-import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from './tool-input.js';
-import { workspaceProjectIdForToolContext } from './workspace-tool-context.js';
+} from '../ports/tool-host.js';
+import type { WorkspaceProjectStore } from '../ports/workspace-project-store.js';
+import { managedGeneratedImageAssetIdsFromStore } from '../utils/generated-image-assets.js';
+import { detectSafeImageMimeType, type SafeImageMimeType } from '../utils/safe-image.js';
+import type { FetchImpl } from '../adapters/model/provider-http.js';
+import { boundedIntegerArg, objectInput, optionalStringArg, requiredStringArg } from '../adapters/tool/tool-input.js';
+import { workspaceProjectIdForToolContext } from '../adapters/tool/workspace-tool-context.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_TOTAL_IMAGE_BYTES = 50 * 1024 * 1024;
@@ -45,7 +35,7 @@ type GeneratedImageReferenceStore = {
   getThread(threadId: string): Promise<Pick<RuntimeThread, 'messages'> | null>;
 };
 
-type OpenAiImageGenerationToolHostOptions = {
+type ExtensionImageGenerationCoordinatorOptions = {
   fetchImpl?: FetchImpl;
   threadStore?: GeneratedImageReferenceStore;
   workspaceProjects?: Pick<WorkspaceProjectStore, 'deleteFile' | 'writeBinaryFile'>;
@@ -62,34 +52,19 @@ type OpenAiImageResponseItem = {
   revised_prompt?: unknown;
 };
 
-const IMAGE_GENERATION_TOOL: RuntimeToolDefinition = {
-  name: OPENAI_IMAGE_GENERATION_TOOL_NAME,
-  description: 'Generate one or more new images with the configured OpenAI-compatible Images API.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      prompt: { type: 'string', description: 'A detailed description of the image to generate.' },
-      model: { type: 'string', description: 'Optional model override. Use only when the user explicitly requests a model.' },
-      n: { type: 'integer', minimum: 1, maximum: 10, description: 'Number of variants for this same prompt. Omit for one image.' },
-      size: { type: 'string', description: 'Provider-supported image size, for example 1024x1024.' },
-      quality: { type: 'string', description: 'Provider-supported quality, for example auto, standard, hd, low, medium, or high.' },
-      background: { type: 'string', description: 'Provider-supported background mode, for example auto, transparent, or opaque.' },
-      output_format: { type: 'string', description: 'Provider-supported output format, for example png, jpeg, or webp.' },
-      output_compression: { type: 'integer', minimum: 0, maximum: 100, description: 'Compression level for supported output formats.' },
-      response_format: { type: 'string', description: 'Legacy response format, usually b64_json or url.' },
-      style: { type: 'string', description: 'Provider-supported style, for example vivid or natural.' },
-      moderation: { type: 'string', description: 'Provider-supported moderation level, for example auto or low.' },
-    },
-    required: ['prompt'],
-  },
+export type ExtensionImageGenerationResult = {
+  attachments: RuntimeMessageAttachment[];
+  workspaceFiles: GeneratedWorkspaceFile[];
+  revisedPrompts: string[];
+  model?: string;
+  size?: string;
 };
 
 /**
- * 图片生成由 runtime 直接调用服务，避免把 API key 或 HTTP 服务地址暴露给 renderer。
- * 插件本身只负责分发生图意图；卸载插件后本工具会立即从模型能力中消失。
+ * 为第一方扩展提供受控的 Images API 与受管资产桥。工具定义、输入语义和
+ * 面向模型的结果格式留在 Bundle；这里仅处理凭据、代理、二进制与工作区边界。
  */
-export class OpenAiImageGenerationToolHost implements ToolHost {
+export class ExtensionImageGenerationCoordinator {
   private readonly pendingAssetIdsByTurn = new Map<string, Set<string>>();
   private readonly quickTestAssetIds: string[] = [];
   private readonly fetchImpl: FetchImpl;
@@ -99,57 +74,16 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
   constructor(
     private readonly configStore: ImageGenerationConfigStore,
-    private readonly pluginStore: MarketplacePluginStateStore,
     private readonly generatedImageStore: GeneratedImageStore,
-    options: OpenAiImageGenerationToolHostOptions = {},
+    options: ExtensionImageGenerationCoordinatorOptions = {},
   ) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.threadStore = options.threadStore;
     this.workspaceProjects = options.workspaceProjects;
   }
 
-  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    if (context.features?.plugins === false) return [];
-    return await this.isAvailable() ? [IMAGE_GENERATION_TOOL] : [];
-  }
-
-  async toolRuntimeProfile(name: string) {
-    if (name !== OPENAI_IMAGE_GENERATION_TOOL_NAME) return null;
-    const plugin = await installedMarketplacePlugin(this.pluginStore, OPENAI_IMAGE_GENERATION_PLUGIN_ID);
-    return {
-      exposure: 'direct' as const,
-      supportsParallel: false,
-      ...(plugin ? {
-        plugin: {
-          id: plugin.id,
-          name: plugin.name,
-          ...(plugin.icon ? { icon: plugin.icon } : {}),
-        },
-      } : {}),
-    };
-  }
-
-  async systemPrompt(_context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
-    if (request && !request.tools.some((tool) => tool.name === OPENAI_IMAGE_GENERATION_TOOL_NAME)) return null;
-    return await this.isAvailable()
-      ? [
-          'Use generate_image only when the user explicitly asks to create a new image; it does not edit existing images.',
-          'Put the intended use, subject, scene, style, composition, lighting, exact requested text, and constraints into one concise prompt.',
-          'Use n only for variants of the same prompt. Generate distinct assets with separate calls.',
-          'When the result lists workspace files, use those exact paths for publish_artifact; never guess a generated filename or search for it.',
-          'Omit optional provider parameters unless the user requested them or support is known. Never ask for or reveal API keys.',
-        ].join(' ')
-      : null;
-  }
-
-  async previewToolCall(name: string, input: unknown): Promise<ToolExecutionPreview | null> {
-    if (name !== OPENAI_IMAGE_GENERATION_TOOL_NAME) return null;
-    const args = objectInput(input);
-    const prompt = requiredStringArg(args.prompt, 'prompt');
-    return {
-      argumentsPreview: prompt,
-      resultPreview: `生成 ${boundedIntegerArg(args.n, 1, 1, 10)} 张图片`,
-    };
+  async isAvailable(): Promise<boolean> {
+    return Boolean(await this.availableConfig());
   }
 
   /**
@@ -166,8 +100,7 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     }
     const startedAt = Date.now();
     this.quickTestSequence += 1;
-    const result = await this.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    const result = await this.generate(
       { prompt, n: 1 },
       {
         threadId: 'image_generation_quick_test',
@@ -176,22 +109,20 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
         signal,
       },
     );
-    const images = (result.attachments ?? []).filter(isRuntimeGeneratedMessageAttachment);
+    const images = result.attachments.filter(isRuntimeGeneratedMessageAttachment);
     if (!images.length) throw new Error('图片生成服务未返回可预览的图片。');
     await this.retainQuickTestAssets(images.map((image) => image.assetId));
-    const model = imageGenerationResultModel(result.data);
     return {
       images,
       durationMs: Math.max(0, Date.now() - startedAt),
-      ...(model ? { model } : {}),
+      ...(result.model ? { model: result.model } : {}),
     };
   }
 
-  async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
-    if (name !== OPENAI_IMAGE_GENERATION_TOOL_NAME) throw new Error(`Unknown tool: ${name}`);
+  async generate(input: unknown, context: ToolExecutionContext): Promise<ExtensionImageGenerationResult> {
     const config = await this.availableConfig();
     if (!config) {
-      throw new Error('图片生成插件未安装、未启用，或尚未配置服务地址与 API key。');
+      throw new Error('图片生成服务尚未配置服务地址与 API key。');
     }
 
     const args = objectInput(input);
@@ -250,27 +181,12 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
       .map((item) => typeof item.revised_prompt === 'string' ? item.revised_prompt.trim() : '')
       .filter(Boolean);
 
-    const result: ToolExecutionResult = {
-      content: [
-        `Generated ${attachments.length} image${attachments.length === 1 ? '' : 's'} successfully.`,
-        ...(workspaceFiles.length
-          ? [
-              'Workspace files ready for publish_artifact (use these exact paths):',
-              ...workspaceFiles.map((file) => `- ${file.path}`),
-            ]
-          : []),
-        ...(revisedPrompts.length ? [`Revised prompt: ${revisedPrompts.join('\n')}`] : []),
-      ].join('\n'),
+    const result: ExtensionImageGenerationResult = {
       attachments,
-      preview: `已生成 ${attachments.length} 张图片`,
-      data: {
-        pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-        imageCount: attachments.length,
-        ...(workspaceFiles.length ? { workspaceFiles } : {}),
-        ...(model ? { model } : {}),
-        ...(typeof body.size === 'string' ? { size: body.size } : {}),
-      },
-      containsExternalContext: true,
+      workspaceFiles,
+      revisedPrompts,
+      ...(model ? { model } : {}),
+      ...(typeof body.size === 'string' ? { size: body.size } : {}),
     };
     this.trackPendingAssets(context, storedAssetIds);
     return result;
@@ -289,16 +205,9 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
     await Promise.allSettled(orphanedAssetIds.map((assetId) => this.generatedImageStore.delete(assetId)));
   }
 
-  private async isAvailable(): Promise<boolean> {
-    return Boolean(await this.availableConfig());
-  }
-
   private async availableConfig(): Promise<RuntimeImageGenerationProviderConfig | null> {
-    const [plugin, config] = await Promise.all([
-      installedMarketplacePlugin(this.pluginStore, OPENAI_IMAGE_GENERATION_PLUGIN_ID),
-      this.configStore.getImageGenerationConfig(),
-    ]);
-    return plugin && Boolean(config.baseUrl.trim()) && Boolean(config.apiKey.trim())
+    const config = await this.configStore.getImageGenerationConfig();
+    return Boolean(config.baseUrl.trim()) && Boolean(config.apiKey.trim())
       ? config
       : null;
   }
@@ -390,12 +299,6 @@ export class OpenAiImageGenerationToolHost implements ToolHost {
 
 function generatedImageTurnKey(context: ToolExecutionContext): string | null {
   return context.turnId ? `${context.threadId}\u0000${context.turnId}` : null;
-}
-
-function imageGenerationResultModel(data: unknown): string | undefined {
-  if (!data || typeof data !== 'object') return undefined;
-  const model = (data as { model?: unknown }).model;
-  return typeof model === 'string' && model.trim() ? model.trim() : undefined;
 }
 
 export function imageGenerationEndpoint(baseUrl: string): string {

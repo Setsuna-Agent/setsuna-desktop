@@ -1,14 +1,12 @@
 import {
-  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-  OPENAI_IMAGE_GENERATION_TOOL_NAME,
   type RuntimeMessage,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
+  ExtensionImageGenerationCoordinator,
   imageGenerationEndpoint,
-  OpenAiImageGenerationToolHost,
-} from '../../../src/adapters/tool/openai-image-generation-tool-host.js';
-import type { RuntimeImageGenerationProviderConfig } from '../../../src/ports/config-store.js';
+} from '../../src/extensions/extension-image-generation-coordinator.js';
+import type { RuntimeImageGenerationProviderConfig } from '../../src/ports/config-store.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -16,33 +14,15 @@ const ONE_PIXEL_PNG = Buffer.from(
 );
 const MEBIBYTE = 1024 * 1024;
 
-describe('OpenAiImageGenerationToolHost', () => {
-  it('advertises the tool only when the plugin is installed and its private config is complete', async () => {
+describe('ExtensionImageGenerationCoordinator', () => {
+  it('requires a complete private provider configuration', async () => {
     const configured = config();
-    const installed = pluginStore(true);
-    const host = new OpenAiImageGenerationToolHost(
-      configStore(configured), installed, generatedImageStore(), { fetchImpl: unusedFetch },
-    );
-
-    await expect(host.listTools({ threadId: 'thread_1' })).resolves.toEqual([
-      expect.objectContaining({ name: OPENAI_IMAGE_GENERATION_TOOL_NAME }),
-    ]);
-    await expect(host.toolRuntimeProfile(OPENAI_IMAGE_GENERATION_TOOL_NAME)).resolves.toEqual({
-      exposure: 'direct',
-      supportsParallel: false,
-      plugin: {
-        id: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-        name: '图片生成',
-      },
-    });
-    await expect(new OpenAiImageGenerationToolHost(
-      configStore({ ...configured, apiKey: '' }), installed, generatedImageStore(), { fetchImpl: unusedFetch },
-    )
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
-    await expect(new OpenAiImageGenerationToolHost(
-      configStore(configured), pluginStore(false), generatedImageStore(), { fetchImpl: unusedFetch },
-    )
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
+    await expect(new ExtensionImageGenerationCoordinator(
+      configStore({ ...configured, apiKey: '' }), generatedImageStore(), { fetchImpl: unusedFetch },
+    ).generate({ prompt: 'test' }, { threadId: 'thread_1' })).rejects.toThrow('尚未配置');
+    await expect(new ExtensionImageGenerationCoordinator(
+      configStore({ ...configured, baseUrl: '' }), generatedImageStore(), { fetchImpl: unusedFetch },
+    ).generate({ prompt: 'test' }, { threadId: 'thread_1' })).rejects.toThrow('尚未配置');
   });
 
   it('calls an OpenAI-compatible generation endpoint and returns safe display-only attachments', async () => {
@@ -58,7 +38,7 @@ describe('OpenAiImageGenerationToolHost', () => {
     }) as typeof fetch;
     let storedImage: { name: string; type: string; data: Uint8Array } | null = null;
     let workspaceImage: { projectId: string; path: string; data: Uint8Array } | null = null;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create(input) {
         storedImage = input;
@@ -77,7 +57,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
     });
 
-    const result = await host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, {
+    const result = await host.generate({
       prompt: 'a small moon over the sea',
       n: 1,
       size: '1024x1024',
@@ -119,16 +99,13 @@ describe('OpenAiImageGenerationToolHost', () => {
         source: 'generated',
         assetId: 'generated_image_asset_1',
       }],
-      data: {
-        pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-        imageCount: 1,
-        model: 'gpt-image-1',
-        size: '1024x1024',
-        workspaceFiles: [{
-          projectId: 'temporary_workspace.2026-07-18.thread_1',
-          path: 'generated-images/call_1-1.png',
-        }],
-      },
+      model: 'gpt-image-1',
+      size: '1024x1024',
+      workspaceFiles: [{
+        projectId: 'temporary_workspace.2026-07-18.thread_1',
+        path: 'generated-images/call_1-1.png',
+      }],
+      revisedPrompts: ['a revised prompt'],
     });
     expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
     expect(Buffer.from(storedImage!.data)).toEqual(ONE_PIXEL_PNG);
@@ -139,15 +116,13 @@ describe('OpenAiImageGenerationToolHost', () => {
     expect(Buffer.from(workspaceImage!.data)).toEqual(ONE_PIXEL_PNG);
     expect(JSON.stringify(result.attachments)).not.toContain('data:image');
     expect(JSON.stringify(result.attachments)).not.toContain(ONE_PIXEL_PNG.toString('base64'));
-    expect(JSON.stringify(result.data)).not.toContain('image-secret');
-    expect(result.content).toContain('Workspace files ready for publish_artifact (use these exact paths):');
-    expect(result.content).toContain('- generated-images/call_1-1.png');
+    expect(JSON.stringify(result)).not.toContain('image-secret');
   });
 
   it('keeps the managed preview asset without mirroring it into a read-only workspace', async () => {
     let storedImage: { name: string; type: string; data: Uint8Array } | null = null;
     let workspaceWriteCount = 0;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create(input) {
         storedImage = input;
@@ -168,7 +143,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
     });
 
-    const result = await host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'read-only preview' }, {
+    const result = await host.generate({ prompt: 'read-only preview' }, {
       threadId: 'thread_1',
       toolCallId: 'call_read_only',
       permissionProfile: 'read-only',
@@ -182,13 +157,8 @@ describe('OpenAiImageGenerationToolHost', () => {
 
     expect(result).toMatchObject({
       attachments: [{ assetId: 'generated_image_asset_read_only', source: 'generated' }],
-      data: {
-        pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-        imageCount: 1,
-      },
+      workspaceFiles: [],
     });
-    expect(result.data).not.toHaveProperty('workspaceFiles');
-    expect(result.content).not.toContain('publish_artifact');
     expect(storedImage).toMatchObject({ name: 'generated-1.png', type: 'image/png' });
     expect(workspaceWriteCount).toBe(0);
   });
@@ -196,7 +166,7 @@ describe('OpenAiImageGenerationToolHost', () => {
   it('uses the same private provider path for a settings quick test without writing a workspace file', async () => {
     let requestInit: RequestInit | undefined;
     let workspaceWriteCount = 0;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create() { return { assetId: 'generated_image_asset_quick_test' }; },
       async delete() {},
@@ -236,7 +206,7 @@ describe('OpenAiImageGenerationToolHost', () => {
   it('bounds unreferenced quick-test assets during a runtime session', async () => {
     let nextAsset = 0;
     const deletedAssetIds: string[] = [];
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create() {
         nextAsset += 1;
@@ -260,7 +230,7 @@ describe('OpenAiImageGenerationToolHost', () => {
   it('rolls back already stored images when a later response item is invalid', async () => {
     const deletedAssetIds: string[] = [];
     let nextAsset = 0;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create() {
         nextAsset += 1;
@@ -279,8 +249,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       })) as typeof fetch,
     });
 
-    await expect(host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    await expect(host.generate(
       { prompt: 'two images' },
       { threadId: 'thread_1' },
     )).rejects.toThrow('不是受支持');
@@ -296,24 +265,23 @@ describe('OpenAiImageGenerationToolHost', () => {
       expect(url).toBe('https://images.example.test/generated/result.png');
       return new Response(ONE_PIXEL_PNG, { headers: { 'content-type': 'image/png' } });
     }) as typeof fetch;
-    const host = new OpenAiImageGenerationToolHost(
+    const host = new ExtensionImageGenerationCoordinator(
       configStore(config({ baseUrl: 'https://images.example.test/v1' })),
-      pluginStore(true),
       generatedImageStore(),
       { fetchImpl },
     );
-    await expect(host.runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'test' }, { threadId: 'thread_1' }))
+    await expect(host.generate({ prompt: 'test' }, { threadId: 'thread_1' }))
       .resolves.toMatchObject({ attachments: [{ type: 'image/png' }] });
 
     const failingFetch = (async () => Response.json(
       { error: { message: 'model is unavailable for image-secret' } },
       { status: 400 },
     )) as typeof fetch;
-    const failingHost = new OpenAiImageGenerationToolHost(
-      configStore(config()), pluginStore(true), generatedImageStore(), { fetchImpl: failingFetch },
+    const failingHost = new ExtensionImageGenerationCoordinator(
+      configStore(config()), generatedImageStore(), { fetchImpl: failingFetch },
     );
     const failure = await failingHost
-      .runTool(OPENAI_IMAGE_GENERATION_TOOL_NAME, { prompt: 'test' }, { threadId: 'thread_1' })
+      .generate({ prompt: 'test' }, { threadId: 'thread_1' })
       .catch((error: unknown) => error);
     expect(failure).toBeInstanceOf(Error);
     expect((failure as Error).message).toContain('model is unavailable for [REDACTED]');
@@ -338,24 +306,21 @@ describe('OpenAiImageGenerationToolHost', () => {
         },
       }));
     }) as typeof fetch;
-    const host = new OpenAiImageGenerationToolHost(
+    const host = new ExtensionImageGenerationCoordinator(
       configStore(config()),
-      pluginStore(true),
       generatedImageStore(),
       { fetchImpl },
     );
 
-    await expect(host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    await expect(host.generate(
       { prompt: 'oversized image' },
       { threadId: 'thread_1' },
     )).rejects.toThrow('20 MB');
   });
 
   it('rejects an announced JSON response above the bounded response limit', async () => {
-    const host = new OpenAiImageGenerationToolHost(
+    const host = new ExtensionImageGenerationCoordinator(
       configStore(config()),
-      pluginStore(true),
       generatedImageStore(),
       {
         fetchImpl: (async () => new Response('not json', {
@@ -364,8 +329,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
     );
 
-    await expect(host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    await expect(host.generate(
       { prompt: 'oversized JSON response' },
       { threadId: 'thread_1' },
     )).rejects.toThrow('图片生成服务响应超过大小限制');
@@ -387,7 +351,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       }
       return streamedPngResponse(imageBytes);
     }) as typeof fetch;
-    const host = new OpenAiImageGenerationToolHost(configStore(config()), pluginStore(true), {
+    const host = new ExtensionImageGenerationCoordinator(configStore(config()), {
       async clone() { return { assetId: 'unused_clone' }; },
       async create(input) {
         const assetId = `generated_image_asset_${createdAssets.length + 1}`;
@@ -400,8 +364,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       async recover() {},
     }, { fetchImpl });
 
-    await expect(host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    await expect(host.generate(
       { prompt: 'three large images' },
       { threadId: 'thread_1' },
     )).rejects.toThrow('50 MB');
@@ -419,9 +382,8 @@ describe('OpenAiImageGenerationToolHost', () => {
     const deletedAssetIds: string[] = [];
     let nextAsset = 0;
     let messages: RuntimeMessage[] = [];
-    const host = new OpenAiImageGenerationToolHost(
+    const host = new ExtensionImageGenerationCoordinator(
       configStore(config()),
-      pluginStore(true),
       {
         async clone() { return { assetId: 'unused_clone' }; },
         async create() {
@@ -444,8 +406,7 @@ describe('OpenAiImageGenerationToolHost', () => {
       },
     );
 
-    const committed = await host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    const committed = await host.generate(
       { prompt: 'committed image' },
       { threadId: 'thread_1', turnId: 'turn_committed' },
     );
@@ -462,8 +423,7 @@ describe('OpenAiImageGenerationToolHost', () => {
     );
     expect(deletedAssetIds).toEqual([]);
 
-    await host.runTool(
-      OPENAI_IMAGE_GENERATION_TOOL_NAME,
+    await host.generate(
       { prompt: 'uncommitted image' },
       { threadId: 'thread_1', turnId: 'turn_failed' },
     );
@@ -497,29 +457,6 @@ function config(overrides: Partial<RuntimeImageGenerationProviderConfig> = {}): 
 
 function configStore(value: RuntimeImageGenerationProviderConfig) {
   return { async getImageGenerationConfig() { return value; } };
-}
-
-function pluginStore(installed: boolean, installationSource: 'local' | 'marketplace' = 'marketplace') {
-  return {
-    async listInstalledRecords() {
-      return installed ? [{
-          id: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-          name: '图片生成',
-          installedAt: '2026-07-17T00:00:00.000Z',
-          installationSource,
-          sourcePath: '/catalog/openai-image-generation',
-          installPath: '/runtime/plugins/openai-image-generation',
-          manifestPath: '/runtime/plugins/openai-image-generation/.setsuna-plugin/plugin.json',
-          skills: [],
-          skillEntries: [],
-          mcpServers: [],
-          mcpServerInputs: [],
-          hooks: [],
-          hookCount: 0,
-          resources: [],
-        }] : [];
-    },
-  };
 }
 
 function generatedImageStore() {

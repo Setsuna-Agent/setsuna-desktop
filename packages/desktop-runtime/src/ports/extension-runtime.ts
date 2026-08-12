@@ -4,11 +4,20 @@ import type {
   RuntimePluginReference,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { ToolExecutionContext, ToolExecutionResult } from './tool-host.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionResult,
+  ToolTurnCleanupOutcome,
+} from './tool-host.js';
 
 export type ExtensionRegisteredTool = RuntimeToolDefinition & {
   localName: string;
   plugin: RuntimePluginReference;
+  execution: {
+    supportsParallel: boolean;
+    requiresApproval: boolean;
+    requiresSandboxBypassApproval: boolean;
+  };
 };
 
 export type ExtensionEventContext = {
@@ -41,6 +50,7 @@ export type ExtensionRuntime = {
   listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]>;
   runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult>;
   dispatch(eventName: RuntimeExtensionEventName, context: ExtensionEventContext): Promise<ExtensionEventOutcome>;
+  cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void>;
   listStatuses(): Promise<RuntimeExtensionStatusList>;
   beginPluginMutation(pluginId: string): Promise<() => Promise<void>>;
   shutdown(): Promise<void>;

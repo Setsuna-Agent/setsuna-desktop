@@ -27,9 +27,24 @@ type ExtensionHandlerContext = Record<string, unknown> & {
     select(input: unknown): Promise<string | null>;
     input(input: unknown): Promise<string | null>;
   };
+  network?: {
+    request(input: unknown): Promise<ExtensionNetworkResponse>;
+  };
+  imageGeneration?: {
+    generate(input: unknown): Promise<unknown>;
+  };
+  visionRecognition?: {
+    analyze(input: unknown): Promise<unknown>;
+  };
 };
 
 type ExtensionStateScope = 'global' | 'project' | 'thread';
+type ExtensionNetworkResponse = {
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
+};
 
 const MAX_PROTOCOL_LINE_BYTES = 1024 * 1024;
 const pluginId = process.argv[2] ?? '';
@@ -229,6 +244,40 @@ function handlerContext(requestId: string, value: unknown, signal: AbortSignal):
         input: (input: unknown) => hostCall(requestId, 'ui.input', input) as Promise<string | null>,
       },
     } : {}),
+    ...(capabilities.has('network') ? {
+      network: {
+        request: async (input: unknown) => normalizeNetworkResponse(
+          await hostCall(requestId, 'network.request', input),
+        ),
+      },
+    } : {}),
+    ...(capabilities.has('image-generation') ? {
+      imageGeneration: {
+        generate: (input: unknown) => hostCall(requestId, 'image-generation.generate', input),
+      },
+    } : {}),
+    ...(capabilities.has('vision-recognition') ? {
+      visionRecognition: {
+        analyze: (input: unknown) => hostCall(requestId, 'vision-recognition.analyze', input),
+      },
+    } : {}),
+  };
+}
+
+function normalizeNetworkResponse(value: unknown): ExtensionNetworkResponse {
+  const record = requiredRecord(value, 'Extension network response must be an object.');
+  if (!Number.isInteger(record.status)) throw new Error('Extension network response status is invalid.');
+  const headers = requiredRecord(record.headers, 'Extension network response headers are invalid.');
+  const normalizedHeaders: Record<string, string> = {};
+  for (const [name, headerValue] of Object.entries(headers)) {
+    if (typeof headerValue === 'string') normalizedHeaders[name] = headerValue;
+  }
+  if (typeof record.bodyBase64 !== 'string') throw new Error('Extension network response body is invalid.');
+  return {
+    status: record.status as number,
+    statusText: typeof record.statusText === 'string' ? record.statusText : '',
+    headers: normalizedHeaders,
+    body: Buffer.from(record.bodyBase64, 'base64').toString('utf8'),
   };
 }
 

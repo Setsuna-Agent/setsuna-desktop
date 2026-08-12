@@ -1,4 +1,8 @@
-import type { RuntimeExtensionCapability } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeEnvironment,
+  RuntimeExtensionCapability,
+  RuntimePermissionProfile,
+} from '@setsuna-desktop/contracts';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {
@@ -14,6 +18,8 @@ export type ExtensionWorkerRequestContext = {
   projectId?: string;
   toolCallId?: string;
   cwd?: string;
+  environment?: RuntimeEnvironment;
+  permissionProfile?: RuntimePermissionProfile;
   signal?: AbortSignal;
   onOutput?(message: string): void;
 };

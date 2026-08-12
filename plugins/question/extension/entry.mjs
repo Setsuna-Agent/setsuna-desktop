@@ -59,7 +59,7 @@ export default function activate(api) {
 
       if (selected === CUSTOM_ANSWER) {
         const answer = await context.ui.input({
-      title: 'Structured Question',
+          title: 'Structured Question',
           message: question,
           label: 'Your answer',
           placeholder: '输入你的回答',

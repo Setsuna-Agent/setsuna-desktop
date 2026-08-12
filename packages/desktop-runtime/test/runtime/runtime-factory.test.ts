@@ -11,6 +11,7 @@ import {
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createRuntimeFactory } from '../../src/runtime/runtime-factory.js';
 import { InMemoryDesktopNativeBridge } from '../support/in-memory-secret-store.js';
@@ -153,7 +154,12 @@ describe('runtime factory tool wiring', () => {
   it('routes image generation requests through the runtime network proxy adapter', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-image-proxy-test-'));
     const nativeBridge = new RejectingProxyBridge();
-    const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+    const runtime = createRuntimeFactory({
+      dataDir,
+      nativeBridge,
+      extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
+      extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
+    });
 
     try {
       await runtime.pluginMarketplace.installPlugin(OPENAI_IMAGE_GENERATION_PLUGIN_ID);
@@ -165,7 +171,7 @@ describe('runtime factory tool wiring', () => {
         },
       });
 
-      await expect(runtime.imageGenerationToolHost.runTool(
+      await expect(runtime.toolHost.runTool(
         OPENAI_IMAGE_GENERATION_TOOL_NAME,
         { prompt: 'proxy wiring test' },
         { threadId: 'thread_1' },
@@ -175,6 +181,7 @@ describe('runtime factory tool wiring', () => {
         override: undefined,
       }]);
     } finally {
+      await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -183,7 +190,11 @@ describe('runtime factory tool wiring', () => {
 
   it('adds and removes vision recognition with the marketplace plugin lifecycle', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-vision-plugin-test-'));
-    const runtime = createRuntimeFactory({ dataDir });
+    const runtime = createRuntimeFactory({
+      dataDir,
+      extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
+      extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
+    });
 
     try {
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
@@ -220,6 +231,7 @@ describe('runtime factory tool wiring', () => {
         expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
       );
     } finally {
+      await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -229,7 +241,12 @@ describe('runtime factory tool wiring', () => {
   it('adds keyless web search through the marketplace and routes it through the runtime proxy', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-web-search-test-'));
     const nativeBridge = new RejectingProxyBridge();
-    const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+    const runtime = createRuntimeFactory({
+      dataDir,
+      nativeBridge,
+      extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
+      extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
+    });
 
     try {
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
@@ -239,7 +256,7 @@ describe('runtime factory tool wiring', () => {
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );
-      await expect(runtime.webSearchToolHost.runTool(
+      await expect(runtime.toolHost.runTool(
         WEB_SEARCH_TOOL_NAME,
         { query: 'proxy wiring test' },
         { threadId: 'thread_1' },
@@ -254,6 +271,7 @@ describe('runtime factory tool wiring', () => {
         expect.arrayContaining([expect.objectContaining({ name: WEB_SEARCH_TOOL_NAME })]),
       );
     } finally {
+      await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();

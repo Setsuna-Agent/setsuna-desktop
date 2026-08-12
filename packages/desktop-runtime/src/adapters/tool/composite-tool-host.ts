@@ -14,6 +14,7 @@ export class CompositeToolHost implements ToolHost {
 
   async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     const toolGroups = await Promise.all(this.hosts.map((host) => host.listTools(context)));
+    assertUniqueToolNames(toolGroups);
     this.toolNamesByContext.set(context, new Map(this.hosts.map((host, index) => [
       host,
       new Set((toolGroups[index] ?? []).map((tool) => tool.name)),
@@ -114,4 +115,12 @@ function setsOverlap(left: ReadonlySet<string>, right: ReadonlySet<string>): boo
     if (right.has(value)) return true;
   }
   return false;
+}
+
+function assertUniqueToolNames(toolGroups: RuntimeToolDefinition[][]): void {
+  const seen = new Set<string>();
+  for (const tool of toolGroups.flat()) {
+    if (seen.has(tool.name)) throw new Error(`Tool name is registered by multiple hosts: ${tool.name}`);
+    seen.add(tool.name);
+  }
 }

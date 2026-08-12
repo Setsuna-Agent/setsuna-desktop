@@ -33,18 +33,15 @@ Factory 当前按顺序组合：
 
 1. `UserInputToolHost`
 2. `BrowserToolHost`
-3. `WebSearchToolHost`
-4. `McpManagementToolHost`
-5. `McpRuntimeToolHost`
-6. `PluginBundleToolHost`
-7. `ExtensionToolHost`
-8. `OpenAiImageGenerationToolHost`
-9. `OpenAiVisionRecognitionToolHost`
-10. `WorkspaceImageToolHost`
-11. `ArtifactToolHost`
-12. `PcLocalToolHost`
-13. `SkillManagementToolHost`
-14. `MemoryToolHost`
+3. `McpManagementToolHost`
+4. `McpRuntimeToolHost`
+5. `PluginBundleToolHost`
+6. `ExtensionToolHost`
+7. `WorkspaceImageToolHost`
+8. `ArtifactToolHost`
+9. `PcLocalToolHost`
+10. `SkillManagementToolHost`
+11. `MemoryToolHost`
 
 顺序影响模型看到的定义和 system prompt。新增 host 时检查：
 
@@ -214,11 +211,12 @@ Renderer 通过 runtime REST 查看后台进程；运行中心只读取生命周
 
 ## Web search
 
-`WebSearchToolHost` 提供随应用发布的 `web_search`：
+`plugins/web-search` 可执行 Bundle 提供 `web_search`：
 
-- 已安装 `web-search` Plugin 是能力开关，卸载后工具立即从模型能力面消失。
-- `TavilyWebSearchClient` 使用 Tavily keyless 请求模式，不读取或保存 API key；匿名额度由外部服务限流，不保证无限调用。
-- HTTP 请求复用 runtime 的系统代理链路，并支持 turn cancel 与 30 秒超时。
+- 工具 schema、输入校验、Tavily keyless 协议、结果归一化和格式化都位于 Bundle 的 `extension/` 内，runtime 不再包含搜索专用 ToolHost 或 client。
+- `ExtensionToolHost` 根据受控 marketplace manifest 保留稳定的 `web_search` 名称；卸载后 worker 和工具立即从模型能力面消失。
+- Bundle 通过通用 `ctx.network.request` 访问精确 allowlist origin，不读取或保存 API key；匿名额度由外部服务限流，不保证无限调用。
+- host-managed HTTP 请求复用 runtime 的系统代理链路，并支持 turn cancel、30 秒超时和 512 KiB 响应上限。
 - 只接收有界的 HTTP(S) 标题、URL、摘要和发布时间，去重后最多返回 10 条。
 - 查询和结果都会发送或来自外部搜索服务；返回内容统一标记为 external context，模型必须把标题和摘要视为不可信输入，并引用来源 URL。
 
@@ -277,21 +275,15 @@ MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/reso
 
 ## First-party Plugin tools
 
-普通 Bundle 不能注入任意 TypeScript 工具。需要凭据/本机实现的第一方能力由：
+所有 Plugin 工具都由受信 Node worker 从 Bundle 注册，runtime 不再按 Plugin ID 注册专用 ToolHost。工具 schema、输入校验和面向模型的结果语义必须位于 Bundle；卸载后 worker 与工具一起消失。
 
-- 已安装 Plugin ID 作为 enable gate。
-- Bundle Skill 说明用法。
-- Runtime 内置 ToolHost 执行。
+宿主只提供无法安全放进 worker 的窄能力：
 
-例如 `OpenAiImageGenerationToolHost`：
+- `web-search` 使用通用 allowlist network bridge，Bundle 自己实现 Tavily 协议和结果格式。
+- `openai-image-generation` 使用 marketplace 专用 image-generation bridge；Bundle 实现 `generate_image`，host 只处理私有配置、代理、二进制校验、受管 asset 和 workspace 写入。
+- `openai-vision-recognition` 使用 marketplace 专用 vision-recognition bridge；Bundle 实现 `analyze_image`，host 只处理 provider 凭据、模型调用、usage 和 thread 附件归属。
 
-- 读取 Plugin/config/secret。
-- 调用 OpenAI-compatible Images API。
-- 支持 `b64_json` 和 URL 响应。
-- 保存 managed image 和 workspace 可见文件。
-- 卸载/停用后不再出现在工具面。
-
-`WebSearchToolHost` 也使用同一模式：`web-search` Bundle 只提供市场元数据和安装开关，runtime 通过 Tavily keyless 协议执行无需 API key 的公开网络搜索，并把匿名限流错误直接返回给模型。
+私有 bridge 能力在安装阶段限制为应用内置 marketplace 来源，worker 只收到调用结果，不会获得 API key、provider 配置、本地附件路径或原始运行环境。
 
 ## Memory 与 artifacts
 

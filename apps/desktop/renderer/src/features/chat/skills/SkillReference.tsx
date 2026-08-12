@@ -1,7 +1,8 @@
 import type { RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { createContext, Fragment, memo, useContext, type ReactNode } from 'react';
+import { SkillIcon } from '../../../shared/ui/SkillIcon.js';
 import { WorkspaceMentionText } from '../mentions/WorkspaceMentionText.js';
-import { ChatCapabilityReferenceIcon } from '../references/ChatCapabilityReferenceIcon.js';
+import { ChatInlineReference } from '../references/ChatInlineReference.js';
 import { parseSkillReferenceText, skillDisplayText } from './skillReferenceParser.js';
 
 const SkillReferenceCatalogContext = createContext<RuntimeSkillSummary[]>([]);
@@ -30,6 +31,7 @@ export const SkillReferenceLabel = memo(function SkillReferenceLabel({
   return (
     <SkillReferencePresentation
       displayText={displayText ?? skillDisplayText(skill)}
+      skill={skill}
       title={skill.description || skill.id}
     />
   );
@@ -54,6 +56,7 @@ export const SkillReferenceText = memo(function SkillReferenceText({
           <SkillReferencePresentation
             key={`skill:${part.start}:${part.skillId}`}
             displayText={part.value}
+            skill={part.skill}
             title={part.skill?.description || part.skillId}
           />
         )
@@ -64,15 +67,19 @@ export const SkillReferenceText = memo(function SkillReferenceText({
 
 function SkillReferencePresentation({
   displayText,
+  skill,
   title,
 }: {
   displayText: string;
+  skill?: RuntimeSkillSummary;
   title: string;
 }) {
   return (
-    <span className="chat-skill-reference" title={title}>
-      <ChatCapabilityReferenceIcon />
-      <span>{displayText}</span>
-    </span>
+    <ChatInlineReference
+      className="chat-skill-reference"
+      icon={<SkillIcon skill={skill} />}
+      label={displayText}
+      title={title}
+    />
   );
 }

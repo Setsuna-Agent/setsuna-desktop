@@ -375,8 +375,7 @@
   color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
 }
 
-.chat-workspace-mention,
-.chat-skill-reference {
+.chat-inline-reference {
   appearance: none;
   display: inline;
   min-height: 0;
@@ -393,11 +392,11 @@
   white-space: nowrap;
 }
 
-.chat-workspace-mention--action {
+.chat-inline-reference--action {
   cursor: pointer;
 }
 
-.chat-workspace-mention--action:hover {
+.chat-inline-reference--action:hover {
   color: var(--app-primary-hover);
   text-decoration: underline;
   text-decoration-style: dashed;
@@ -405,39 +404,32 @@
   text-underline-offset: 3px;
 }
 
-.chat-workspace-mention--action:focus-visible {
+.chat-inline-reference--action:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--app-primary) 42%, transparent);
   outline-offset: 2px;
 }
 
-.chat-workspace-mention__icon {
-  display: inline-block;
-  width: 1em;
-  height: 1em;
-  margin-inline-end: 3px;
-  font-size: 1em;
-  line-height: 1;
-  vertical-align: -0.125em;
-}
-
-.chat-capability-reference-icon {
+.chat-inline-reference__icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 14px;
-  color: currentColor;
-  vertical-align: -0.125em;
-}
-
-.chat-capability-reference-icon svg {
-  width: 14px;
-  height: 14px;
-}
-
-.chat-skill-reference .chat-capability-reference-icon {
+  width: var(--desktop-inline-icon-size);
+  height: var(--desktop-inline-icon-size);
+  margin: 0;
   margin-inline-end: 3px;
+  line-height: 1;
+  transform: translateY(-1px);
+  vertical-align: middle;
+}
+
+.chat-inline-reference__icon > * {
+  width: 100%;
+  height: 100%;
+}
+
+.chat-inline-reference__label {
+  min-width: 0;
+  line-height: inherit;
 }
 
 .chat-user-bubble--with-attachments .chat-user-message-content {

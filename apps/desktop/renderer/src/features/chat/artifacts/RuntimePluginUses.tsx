@@ -1,5 +1,5 @@
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { ChatCapabilityReferenceIcon } from '../references/ChatCapabilityReferenceIcon.js';
+import { PluginIcon } from '../../../shared/ui/PluginIcon.js';
 import { useRuntimePluginNavigation } from './RuntimePluginNavigation.js';
 import type { RuntimePluginUse } from './runtimePluginUsage.js';
 
@@ -20,7 +20,7 @@ export function RuntimePluginUses({
       {plugins.map((plugin) => {
         const content = (
           <>
-            <ChatCapabilityReferenceIcon />
+            <PluginIcon name={plugin.icon} pluginId={plugin.id} variant="inline" />
             <span className="chat-plugin-use__name">{plugin.name}</span>
           </>
         );

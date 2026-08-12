@@ -11,6 +11,14 @@ import { entryLabel, skillDisplayText } from './chatCommandUtils.js';
 const workspaceMentionSlotKeyPrefix = 'workspace:';
 const selectedSkillSlotKeyPrefix = 'skill:';
 
+export type ChatComposerSlotReference =
+  | { type: 'skill'; skillId: string }
+  | { type: 'workspace'; entry: WorkspaceEntrySearchItem };
+
+export type ChatComposerReferenceSlot = Extract<SlotConfigType, { type: 'tag' }> & {
+  composerReference: ChatComposerSlotReference;
+};
+
 export type WorkspaceMentionInsertion = {
   replaceCharacters?: string;
   slots: SlotConfigType[];
@@ -20,11 +28,12 @@ export function createTextSlot(value: string): SlotConfigType {
   return { type: 'text', value };
 }
 
-export function createSelectedSkillSlot(skill: RuntimeSkillSummary): SlotConfigType {
+export function createSelectedSkillSlot(skill: RuntimeSkillSummary): ChatComposerReferenceSlot {
   const tokenText = skillDisplayText(skill);
   return {
     type: 'tag',
-    key: selectedSkillSlotKey(skill.id),
+    key: createReferenceSlotKey(selectedSkillSlotKeyPrefix),
+    composerReference: { type: 'skill', skillId: skill.id },
     props: {
       label: <SkillReferenceLabel skill={skill} />,
       value: tokenText,
@@ -37,15 +46,12 @@ export function filterSelectedSkillsBySlots(
   skills: RuntimeSkillSummary[],
   slotConfig: SlotConfigType[] | undefined,
 ): RuntimeSkillSummary[] {
-  const selectedSlotKeys = new Set(
+  const selectedSkillIds = new Set(
     (slotConfig ?? [])
-      .map((slot) => slot.key)
-      .filter((key): key is string => (
-        typeof key === 'string'
-        && key.startsWith(selectedSkillSlotKeyPrefix)
-      )),
+      .map(selectedSkillIdForSlot)
+      .filter((skillId): skillId is string => Boolean(skillId)),
   );
-  const filteredSkills = skills.filter((skill) => selectedSlotKeys.has(selectedSkillSlotKey(skill.id)));
+  const filteredSkills = skills.filter((skill) => selectedSkillIds.has(skill.id));
   return filteredSkills.length === skills.length ? skills : filteredSkills;
 }
 
@@ -53,8 +59,7 @@ export function hasSelectedSkillSlot(
   skillId: string,
   slotConfig: SlotConfigType[] | undefined,
 ): boolean {
-  const slotKey = selectedSkillSlotKey(skillId);
-  return (slotConfig ?? []).some((slot) => slot.key === slotKey);
+  return (slotConfig ?? []).some((slot) => selectedSkillIdForSlot(slot) === skillId);
 }
 
 /** Serialize exact Skill slot offsets after the same outer whitespace trim used by sendTurn. */
@@ -83,9 +88,38 @@ export function createSelectedSkillReferences(
 export function createWorkspaceMentionSlots(entry: WorkspaceEntrySearchItem, leadingText = ''): SlotConfigType[] {
   return [
     ...(leadingText ? [createTextSlot(leadingText)] : []),
-    createWorkspaceMentionSlot(entry),
+    createWorkspaceMentionReferenceSlot(entry),
     createTextSlot(' '),
   ];
+}
+
+export function createWorkspaceMentionReferenceSlot(
+  entry: WorkspaceEntrySearchItem,
+): ChatComposerReferenceSlot {
+  const resultText = `@${entryLabel(entry)}`;
+  return {
+    type: 'tag',
+    key: createReferenceSlotKey(workspaceMentionSlotKeyPrefix),
+    composerReference: { type: 'workspace', entry },
+    props: {
+      label: (
+        <WorkspaceMentionLabel
+          name={entry.name}
+          path={entry.path}
+          serializedText={resultText}
+          type={entry.kind}
+        />
+      ),
+      value: resultText,
+    },
+    formatResult: () => resultText,
+  };
+}
+
+export function getChatComposerSlotReference(
+  slot: SlotConfigType,
+): ChatComposerSlotReference | null {
+  return (slot as Partial<ChatComposerReferenceSlot>).composerReference ?? null;
 }
 
 export function createWorkspaceMentionInsertion(
@@ -105,17 +139,13 @@ export function createWorkspaceMentionInsertion(
   };
 }
 
-function selectedSkillSlotKey(skillId: string): string {
-  return `${selectedSkillSlotKeyPrefix}${skillId}`;
+function selectedSkillIdForSlot(slot: SlotConfigType): string | null {
+  const reference = getChatComposerSlotReference(slot);
+  return reference?.type === 'skill' ? reference.skillId : null;
 }
 
-function selectedSkillIdForSlot(slot: SlotConfigType): string | null {
-  if (
-    slot.type !== 'tag'
-    || typeof slot.key !== 'string'
-    || !slot.key.startsWith(selectedSkillSlotKeyPrefix)
-  ) return null;
-  return slot.key.slice(selectedSkillSlotKeyPrefix.length).trim() || null;
+function createReferenceSlotKey(prefix: string): string {
+  return `${prefix}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function serializedSlotValue(slot: SlotConfigType): string {
@@ -127,26 +157,6 @@ function serializedSlotValue(slot: SlotConfigType): string {
     && typeof slot.props.value === 'string'
   ) return slot.props.value;
   return '';
-}
-
-function createWorkspaceMentionSlot(entry: WorkspaceEntrySearchItem): SlotConfigType {
-  const resultText = `@${entryLabel(entry)}`;
-  return {
-    type: 'tag',
-    key: `${workspaceMentionSlotKeyPrefix}${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`,
-    props: {
-      label: (
-        <WorkspaceMentionLabel
-          name={entry.name}
-          path={entry.path}
-          serializedText={resultText}
-          type={entry.kind}
-        />
-      ),
-      value: resultText,
-    },
-    formatResult: () => resultText,
-  };
 }
 
 function hasWorkspaceMentionSlot(slots: SlotConfigType[], entry: WorkspaceEntrySearchItem): boolean {

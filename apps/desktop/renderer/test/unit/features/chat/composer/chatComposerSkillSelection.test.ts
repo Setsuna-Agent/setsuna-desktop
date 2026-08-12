@@ -6,6 +6,7 @@ import {
   startChatComposerSkillSelection,
   type ChatComposerSkillSelectionSession,
 } from '../../../../../src/features/chat/composer/chatComposerSkillSelection.js';
+import { createSelectedSkillSlot } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
 
 const skill: RuntimeSkillSummary = {
   id: 'create-plugin-in-chat',
@@ -36,7 +37,10 @@ describe('ensureChatComposerSkillSlot', () => {
     expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
     expect(focus).toHaveBeenCalledWith({ cursor: 'start', preventScroll: true });
     expect(insert).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ key: 'skill:create-plugin-in-chat' })]),
+      expect.arrayContaining([expect.objectContaining({
+        composerReference: { type: 'skill', skillId: skill.id },
+        key: expect.stringMatching(/^skill:/),
+      })]),
       'start',
       undefined,
       true,
@@ -49,11 +53,7 @@ describe('ensureChatComposerSkillSlot', () => {
 
   it('records the exact range when a prior effect already inserted the slot', () => {
     const session: ChatComposerSkillSelectionSession = {};
-    const slot = {
-      type: 'tag' as const,
-      key: 'skill:create-plugin-in-chat',
-      props: { label: '对话创建插件', value: '对话创建插件' },
-    };
+    const slot = createSelectedSkillSlot(skill);
 
     expect(ensureChatComposerSkillSlot({
       getValue: () => ({
@@ -93,7 +93,7 @@ describe('ensureChatComposerSkillSlot', () => {
     expect(ensureChatComposerSkillSlot(editor, skill, session)).toBe(true);
     expect(focus).toHaveBeenCalledWith({ cursor: 'all', preventScroll: true });
     expect(insert).toHaveBeenCalledWith([
-      expect.objectContaining({ key: 'skill:create-plugin-in-chat' }),
+      expect.objectContaining({ composerReference: { type: 'skill', skillId: skill.id } }),
       { type: 'text', value: ' existing draft' },
     ], 'cursor', undefined, true);
   });
@@ -112,7 +112,7 @@ describe('ensureChatComposerSkillSlot', () => {
 
     expect(ensureChatComposerSkillSlot(editor, skill)).toBe(true);
     expect(insert).toHaveBeenCalledWith([
-      expect.objectContaining({ key: 'skill:create-plugin-in-chat' }),
+      expect.objectContaining({ composerReference: { type: 'skill', skillId: skill.id } }),
       { type: 'text', value: ' ' },
     ], 'start', undefined, true);
   });

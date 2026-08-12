@@ -11,8 +11,11 @@ Setsuna 的可执行扩展允许插件动态注册工具、订阅 Agent 生命�
 - 结构化提问：使用 Setsuna 结构化选择和自由输入实现单问题交互。
 - 任务清单：通过 thread scope Extension State 保存任务。
 - Claude Rules 兼容：在 `session.start` 中发现 `.claude/rules` 路径并追加上下文。
+- 网络搜索：通过 host-managed network API 调用 Tavily keyless 服务并返回可引用来源。
+- 图片生成：Bundle 定义 `generate_image`，通过 marketplace 专用 host bridge 使用私有 Images API 配置并保存受管图片。
+- 视觉识别：Bundle 定义 `analyze_image`，通过 marketplace 专用 host bridge 复用视觉模型并校验线程附件归属。
 
-三个实现都使用 Setsuna 原生 v1 API。历史内部 ID 仅为兼容已安装记录而保留，不在产品 UI 中展示。设计参考与第三方许可统一记录在 `plugins/THIRD_PARTY_NOTICES.md`，不再作为插件能力资源。
+这些实现都使用 Setsuna 原生 v1 API。历史内部 ID 仅为兼容已安装记录而保留，不在产品 UI 中展示。设计参考与第三方许可统一记录在 `plugins/THIRD_PARTY_NOTICES.md`，不再作为插件能力资源。
 
 ## 最小 Bundle
 
@@ -44,7 +47,9 @@ worker-demo/
 约束：
 
 - `entry` 必须是 Bundle 内已存在的相对 `.mjs` 文件，不能越出 Bundle，也不能经过符号链接。
-- `capabilities` 至少声明一个能力，且只能使用 `tools`、`events`、`state`、`ui`；未声明的 API 不可用。
+- 普通 Bundle 的 `capabilities` 至少声明一个能力，且只能使用 `tools`、`events`、`state`、`ui`、`network`；未声明的 API 不可用。
+- `image-generation` 与 `vision-recognition` 是随应用 marketplace Bundle 专用的 host bridge 能力，本地侧载和 Agent 创建的 Bundle 安装时会被拒绝。
+- 声明 `network` 时必须同时提供 `extension.network.allowedOrigins`，每一项都是无路径、无凭据的精确 HTTP(S) origin。
 - v1 不运行安装脚本，也不替扩展执行包管理器。依赖应预先 bundle 到 `.mjs`，或作为 Bundle 内相对模块一同分发。
 - Bundle 仍受 1,000 个文件、总计 32 MiB 和 manifest 256 KiB 的现有限制。
 
@@ -81,7 +86,7 @@ export default function activate(api) {
 }
 ```
 
-激活函数完成后，worker 才向 runtime 公布工具和事件。工具在模型侧使用稳定命名空间 `extension__<plugin-id>__<tool-name>`；名称最长 64 个字符，必要时会规范化并追加哈希，避免不同原始名称碰撞。UI 和工作记录继续显示真实 Plugin 来源。
+激活函数完成后，worker 才向 runtime 公布工具和事件。普通本地扩展的工具在模型侧使用稳定命名空间 `extension__<plugin-id>__<tool-name>`；名称最长 64 个字符，必要时会规范化并追加哈希，避免不同原始名称碰撞。随应用发布的受控 marketplace Bundle 可以在顶层 `tools` 元数据中声明 `exposure: "direct"` 以及并行/审批提示，用于保留 `web_search` 这类第一方稳定工具名；这些放宽项对本地和 Agent 创建的插件一律忽略。UI 和工作记录继续显示真实 Plugin 来源。
 
 ## API
 
@@ -94,7 +99,7 @@ export default function activate(api) {
 - `inputSchema`：JSON Schema 对象；省略时使用开放的 object schema。
 - `execute(input, ctx)`：可以返回字符串，或 `{ content, preview?, data?, containsExternalContext? }`。
 
-扩展工具默认串行执行、支持 turn 取消，并进入 Setsuna 的标准工具审批。因为 worker 不在 OS 沙箱内，workspace-write 模式还会明确请求无沙箱执行授权；用户已经选择 `danger-full-access` 或完整免确认策略时，沿用该全局授权。
+扩展工具默认串行执行、支持 turn 取消，并进入 Setsuna 的标准工具审批。因为 worker 不在 OS 沙箱内，workspace-write 模式还会明确请求无沙箱执行授权；用户已经选择 `danger-full-access` 或完整免确认策略时，沿用该全局授权。只有应用控制的 marketplace Bundle 可以通过已校验 manifest 放宽单个工具的并行和审批策略。
 
 ### `api.on(eventName, handler)`
 
@@ -139,10 +144,23 @@ handler 可以返回：
   signal: AbortSignal;
   state?: ExtensionStateApi;
   ui?: ExtensionUiApi;
+  network?: ExtensionNetworkApi;
+  // 以下桥只向对应的内置 marketplace Bundle 提供：
+  imageGeneration?: ExtensionImageGenerationApi;
+  visionRecognition?: ExtensionVisionRecognitionApi;
 }
 ```
 
 不向 worker 传递 runtime token、native bridge token、模型凭据或完整进程环境。
+
+### 第一方私有能力桥
+
+图片生成和视觉识别的工具 schema、输入校验和面向模型的结果格式都在各自 Bundle 的 `extension/` 内。worker 只把规范化请求交给窄桥：
+
+- `ctx.imageGeneration.generate(input)`：host 从安全配置读取服务地址与 API key，经应用代理调用 Images API，并只返回受管 asset 引用、workspace 文件引用及必要元数据。
+- `ctx.visionRecognition.analyze(input)`：host 使用当前 thread ID 校验附件归属，复用选定 provider/model，再只返回文本结论及非敏感模型元数据。
+
+桥不会向 worker 返回 API key、本地附件路径、原始图片 Base64 或 provider 配置。扩展返回的 managed image attachment 还会由 host 再次校验 asset ID、类型、大小和数量，之后才能进入线程事件。
 
 ### 状态
 
@@ -155,6 +173,23 @@ await ctx.state.delete(key, scope);
 ```
 
 `scope` 为 `thread`、`project` 或 `global`，默认 `thread`。状态保存在 runtime 数据目录的独立文件中，不写回 Plugin 安装目录；值必须可 JSON 序列化，单值最多 64 KiB，单个 Plugin 最多 1 MiB。
+
+### 受控网络
+
+声明 `network` 后可通过 runtime 代理链路发起有界请求：
+
+```js
+const response = await ctx.network.request({
+  url: 'https://api.example.com/search',
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ query: 'Setsuna' }),
+  timeoutMs: 30_000,
+  maxResponseBytes: 512 * 1024,
+});
+```
+
+目标 origin 必须精确命中 `extension.network.allowedOrigins`。host 会复用应用的直连、系统代理或自定义代理设置，跟随父工具取消，强制超时、请求体和响应体上限，并禁止自动跨 origin 重定向。返回值包含 `status`、`statusText`、`headers` 和 UTF-8 `body`。该 API 是可审计的网络通道，不会把 runtime token、模型凭据或 native bridge token 交给 worker。
 
 ### 结构化 UI
 
@@ -183,7 +218,8 @@ const value = await ctx.ui.input({ message: 'Name', placeholder: 'example' });
 - 信任绑定整个 Bundle 的确定性 SHA-256：排序后的相对路径、文件大小和文件内容都参与计算。安装会比较源目录与 staged 副本；启动、事件分发和每次工具执行前还会重新校验。
 - 任意文件变化都会使状态变成 `modified` 并停止后续执行。本地侧载扩展必须再次明确授权当前哈希；内置扩展需要从受控市场更新或重新安装。信任切换、升级和卸载也会先停止 worker，再变更目录或索引。
 - 每个 Plugin 最多一个按需启动的 Node worker。host 与 worker 使用有 1 MiB 单行上限的 JSONL RPC，带启动/请求超时、取消传播、stderr 截断和异常退出回收。
-- worker 只继承 PATH、临时目录、locale 等显式允许的环境变量；`SETSUNA_DESKTOP_*`、`NODE_OPTIONS` 和凭据不会继承。
+- worker 只继承 PATH、临时目录、locale 等显式允许的环境变量；`SETSUNA_DESKTOP_*`、`NODE_OPTIONS` 和凭据不会继承。需要遵守应用代理和 origin 策略的代码必须使用 `ctx.network.request`。
+- marketplace 专用私有桥在 Bundle 安装和 worker 激活两层校验来源；本地扩展不能借用图片服务凭据、视觉模型或线程附件。
 
 独立进程是故障隔离，不是安全沙箱。被信任的扩展仍以当前用户权限运行，可以在激活、事件和工具 handler 中直接访问 Node 文件系统和网络。工具审批不会撤销激活代码已经拥有的 OS 权限，因此只应信任已审查的 Bundle。
 

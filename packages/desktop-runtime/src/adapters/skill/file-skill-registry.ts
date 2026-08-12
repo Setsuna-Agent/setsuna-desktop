@@ -552,6 +552,7 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
   return {
     id: skill.id,
     name: skill.name,
+    ...(skill.plugin?.icon ? { icon: skill.plugin.icon } : {}),
     contentVersion: skill.contentVersion,
     kind: skill.kind,
     enabled: skillState?.enabled ?? true,

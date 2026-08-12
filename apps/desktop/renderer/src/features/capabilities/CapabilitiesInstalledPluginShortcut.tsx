@@ -21,7 +21,7 @@ export function CapabilitiesInstalledPluginShortcut({
         aria-label={t('capabilities.market.openInstalled', { name: copy.name })}
         onClick={onOpen}
       >
-        <CapabilitiesPluginIcon name={plugin.icon} variant="installed" />
+        <CapabilitiesPluginIcon name={plugin.icon} pluginId={plugin.id} variant="installed" />
         {updateAvailable ? <span className="desktop-plugin-installed-shortcut__update" aria-hidden="true" /> : null}
       </button>
       <span className="desktop-plugin-installed-shortcut__name" aria-hidden="true">

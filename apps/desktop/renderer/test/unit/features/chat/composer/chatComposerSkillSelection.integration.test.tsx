@@ -2,15 +2,22 @@
 
 import { Sender } from '@ant-design/x';
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { StrictMode, useEffect, useRef, useState, type ComponentRef } from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { StrictMode, useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { CHAT_COMPOSER_CLIPBOARD_TYPE } from '../../../../../src/features/chat/composer/chatComposerClipboard.js';
 import { createComposerDraftSyncPlan } from '../../../../../src/features/chat/composer/chatComposerDraftSync.js';
 import {
   ensureChatComposerSkillSlot,
   startChatComposerSkillSelection,
 } from '../../../../../src/features/chat/composer/chatComposerSkillSelection.js';
-import { createTextSlot } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
+import {
+  createSelectedSkillSlot,
+  createTextSlot,
+  createWorkspaceMentionReferenceSlot,
+  filterSelectedSkillsBySlots,
+} from '../../../../../src/features/chat/composer/chatComposerSlots.js';
+import { useChatComposerClipboard } from '../../../../../src/features/chat/composer/useChatComposerClipboard.js';
 
 const skill: RuntimeSkillSummary = {
   id: 'create-plugin-in-chat',
@@ -38,7 +45,7 @@ describe('chat composer Skill selection with the real Sender', () => {
     );
 
     await waitFor(() => expect(screen.getByTestId('confirmed').textContent).toBe('true'));
-    expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key="skill:create-plugin-in-chat"]')).toHaveLength(1);
+    expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
     expect(screen.getByRole('textbox').getAttribute('value')).toBe('对话创建插件 对话创建插件 existing draft');
   });
 
@@ -50,7 +57,94 @@ describe('chat composer Skill selection with the real Sender', () => {
     );
 
     await waitFor(() => expect(screen.getByTestId('synced-draft').textContent).not.toBe(''));
-    expect(screen.getByRole('textbox').querySelector('[data-slot-key="skill:create-plugin-in-chat"]')).toBeTruthy();
+    expect(screen.getByRole('textbox').querySelector('[data-slot-key^="skill:"]')).toBeTruthy();
+  });
+
+  it('restores Skill and workspace slots after cutting and pasting them', async () => {
+    render(<StructuredClipboardHarness />);
+
+    const editor = screen.getByRole('textbox');
+    const clipboardData = createClipboardData();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+
+    fireEvent.cut(editor, { clipboardData });
+
+    expect(clipboardData.getData(CHAT_COMPOSER_CLIPBOARD_TYPE)).not.toBe('');
+    await waitFor(() => {
+      expect(editor.querySelector('[data-slot-key^="skill:"]')).toBeNull();
+      expect(editor.querySelector('[data-slot-key^="workspace:"]')).toBeNull();
+      expect(screen.getByTestId('selected-skills').textContent).toBe('');
+    });
+
+    fireEvent.paste(editor, { clipboardData });
+
+    await waitFor(() => {
+      expect(editor.querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
+      expect(editor.querySelectorAll('[data-slot-key^="workspace:"]')).toHaveLength(1);
+      expect(screen.getByTestId('selected-skills').textContent).toBe(skill.id);
+    });
+  });
+
+  it('uses distinct DOM slot identities when copied references are pasted again', async () => {
+    render(<StructuredClipboardHarness />);
+
+    const editor = screen.getByRole('textbox');
+    const clipboardData = createClipboardData();
+    const selectedContent = document.createRange();
+    selectedContent.selectNodeContents(editor);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(selectedContent);
+    fireEvent.copy(editor, { clipboardData });
+
+    const endCursor = document.createRange();
+    endCursor.selectNodeContents(editor);
+    endCursor.collapse(false);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(endCursor);
+    fireEvent.paste(editor, { clipboardData });
+
+    await waitFor(() => {
+      const skillSlots = Array.from(editor.querySelectorAll<HTMLElement>('[data-slot-key^="skill:"]'));
+      const workspaceSlots = Array.from(editor.querySelectorAll<HTMLElement>('[data-slot-key^="workspace:"]'));
+      expect(skillSlots).toHaveLength(2);
+      expect(workspaceSlots).toHaveLength(2);
+      expect(new Set(skillSlots.map((slot) => slot.dataset.slotKey)).size).toBe(2);
+      expect(new Set(workspaceSlots.map((slot) => slot.dataset.slotKey)).size).toBe(2);
+    });
+  });
+
+  it('preserves line breaks when structured references are cut and pasted', async () => {
+    const expectedDraft = '第一行\n对话创建插件 @package.json\n最后一行';
+    const expectedPlainText = '第一行\n对话创建插件 package.json\n最后一行';
+    render(
+      <StructuredClipboardHarness
+        leadingText={'第一行\n'}
+        trailingText={'\n最后一行'}
+      />,
+    );
+
+    const editor = screen.getByRole('textbox');
+    const clipboardData = createClipboardData();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+
+    fireEvent.cut(editor, { clipboardData });
+
+    expect(clipboardData.getData(CHAT_COMPOSER_CLIPBOARD_TYPE)).not.toBe('');
+    expect(clipboardData.getData('text/plain')).toBe(expectedPlainText);
+
+    fireEvent.paste(editor, { clipboardData });
+
+    await waitFor(() => {
+      expect(editor.getAttribute('value')).toBe(expectedDraft);
+      expect(editor.querySelectorAll('[data-slot-key^="skill:"]')).toHaveLength(1);
+      expect(editor.querySelectorAll('[data-slot-key^="workspace:"]')).toHaveLength(1);
+    });
   });
 });
 
@@ -146,6 +240,67 @@ function SkillSelectionDraftSyncHarness() {
       <output data-testid="synced-draft">{draft}</output>
     </>
   );
+}
+
+function StructuredClipboardHarness({
+  leadingText = '',
+  trailingText = '',
+}: {
+  leadingText?: string;
+  trailingText?: string;
+}) {
+  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const initialSlotsRef = useRef([
+    ...(leadingText ? [createTextSlot(leadingText)] : []),
+    createSelectedSkillSlot(skill),
+    createTextSlot(' '),
+    createWorkspaceMentionReferenceSlot({
+      kind: 'file',
+      name: 'package.json',
+      parent: '',
+      path: 'package.json',
+    }),
+    ...(trailingText ? [createTextSlot(trailingText)] : []),
+  ]);
+  const [draft, setDraft] = useState(`${leadingText}对话创建插件 @package.json${trailingText}`);
+  const [selectedSkills, setSelectedSkills] = useState([skill]);
+  const getEditor = useCallback(() => editorRef.current, []);
+  const addSelectedSkills = useCallback((restoredSkills: RuntimeSkillSummary[]) => {
+    setSelectedSkills((current) => {
+      const ids = new Set(current.map((item) => item.id));
+      return [...current, ...restoredSkills.filter((item) => !ids.has(item.id))];
+    });
+  }, []);
+  const clipboardHandlers = useChatComposerClipboard({
+    getEditor,
+    onSkillsRestored: addSelectedSkills,
+    skills: [skill],
+  });
+
+  return (
+    <div {...clipboardHandlers}>
+      <Sender
+        ref={editorRef}
+        slotConfig={initialSlotsRef.current}
+        value={draft}
+        onChange={(value, _event, slotConfig) => {
+          setDraft(value);
+          setSelectedSkills((current) => filterSelectedSkillsBySlots(current, slotConfig));
+        }}
+      />
+      <output data-testid="selected-skills">{selectedSkills.map((item) => item.id).join(',')}</output>
+    </div>
+  );
+}
+
+function createClipboardData(): DataTransfer {
+  const values = new Map<string, string>();
+  return {
+    getData: (type: string) => values.get(type) ?? '',
+    setData: (type: string, value: string) => {
+      values.set(type, value);
+    },
+  } as DataTransfer;
 }
 
 const timerFrameScheduler = {

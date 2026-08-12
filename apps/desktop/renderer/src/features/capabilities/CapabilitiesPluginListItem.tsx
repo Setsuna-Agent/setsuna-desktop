@@ -21,7 +21,7 @@ export function CapabilitiesPluginListItem({
   return (
     <article className="desktop-capability-list-item">
       <button className="desktop-capability-list-item__identity" type="button" onClick={() => onOpen(plugin)}>
-        <CapabilitiesPluginIcon name={plugin.icon} variant="list" />
+        <CapabilitiesPluginIcon name={plugin.icon} pluginId={plugin.id} variant="list" />
         <span className="desktop-capability-list-item__copy">
           <strong>{copy.name}</strong>
           <span>{copy.description || t('capabilities.market.listFallback')}</span>

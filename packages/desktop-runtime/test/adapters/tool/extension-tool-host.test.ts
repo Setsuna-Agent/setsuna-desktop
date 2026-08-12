@@ -12,6 +12,11 @@ describe('extension tool host', () => {
         description: 'Demo: echo',
         inputSchema: { type: 'object' },
         plugin: { id: 'demo', name: 'Demo' },
+        execution: {
+          supportsParallel: false,
+          requiresApproval: true,
+          requiresSandboxBypassApproval: true,
+        },
       }]),
       runTool,
     } as unknown as ExtensionRuntime;
@@ -39,5 +44,33 @@ describe('extension tool host', () => {
       content: 'extension result',
     });
     expect(runTool).toHaveBeenCalledWith('extension__demo__echo', { value: 1 }, context);
+  });
+
+  it('uses trusted marketplace execution hints without adding an approval', async () => {
+    const extensions = {
+      listTools: vi.fn(async () => [{
+        name: 'web_search',
+        localName: 'web_search',
+        description: 'Search the web.',
+        inputSchema: { type: 'object' },
+        plugin: { id: 'web-search', name: '网络搜索' },
+        execution: {
+          supportsParallel: true,
+          requiresApproval: false,
+          requiresSandboxBypassApproval: false,
+        },
+      }]),
+      runTool: vi.fn(async () => ({ content: 'search result' })),
+    } as unknown as ExtensionRuntime;
+    const host = new ExtensionToolHost(extensions);
+    const context = { threadId: 'thread_1' };
+
+    await host.listTools(context);
+    await expect(host.toolRuntimeProfile('web_search', context)).resolves.toMatchObject({
+      supportsParallel: true,
+      requiresSandboxBypassApproval: false,
+      plugin: { id: 'web-search' },
+    });
+    await expect(host.approvalForTool('web_search', {}, context)).resolves.toBeNull();
   });
 });

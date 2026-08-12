@@ -29,12 +29,11 @@ export class FilePluginMarketplace implements PluginMarketplace {
 
   async listPlugins(): Promise<RuntimePluginMarketplaceList> {
     const { catalog, installedPlugins } = await this.readCatalogState();
-    const installedById = new Map(installedPlugins.map((plugin) => [plugin.id, plugin]));
     const errors = [...catalog.errors];
     const plugins = catalog.plugins
       .sort(compareMarketplacePlugins)
       .flatMap((plugin): RuntimePluginMarketplaceItem[] => {
-        const installed = installedById.get(plugin.id);
+        const installed = installedPlugins.find((item) => item.id === plugin.id);
         if (installed && installed.installationSource !== 'marketplace') {
           errors.push(`${plugin.id}: bundled marketplace id conflicts with an installed local plugin`);
           return [];
@@ -53,7 +52,15 @@ export class FilePluginMarketplace implements PluginMarketplace {
           mcpServers: plugin.mcpServers.map((server) => ({ ...server })),
           hooks: plugin.hooks.map((hook) => ({ ...hook })),
           resources: plugin.resources.map((resource) => ({ ...resource })),
-          ...(plugin.extension ? { extension: { ...plugin.extension, capabilities: [...plugin.extension.capabilities] } } : {}),
+          ...(plugin.extension ? {
+            extension: {
+              ...plugin.extension,
+              capabilities: [...plugin.extension.capabilities],
+              ...(plugin.extension.network ? {
+                network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+              } : {}),
+            },
+          } : {}),
           capabilities: { ...plugin.capabilities },
           installed: Boolean(installed),
           ...(installed?.version ? { installedVersion: installed.version } : {}),
@@ -110,7 +117,11 @@ export class FilePluginMarketplace implements PluginMarketplace {
     }
     return this.bundles.updatePlugin(
       { path: plugin.sourcePath },
-      { installationSource: 'marketplace', trustHooks: true, trustExtension: true },
+      {
+        installationSource: 'marketplace',
+        trustHooks: true,
+        trustExtension: true,
+      },
     );
   }
 

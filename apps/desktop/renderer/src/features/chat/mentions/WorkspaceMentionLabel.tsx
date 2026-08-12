@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
 import { composerCursorOffsetAdjustment } from '../composer/chatComposerCursorOffset.js';
+import { ChatInlineReference } from '../references/ChatInlineReference.js';
 
 type WorkspaceMentionLabelProps = {
   name?: string;
@@ -24,35 +25,18 @@ export const WorkspaceMentionLabel = memo(function WorkspaceMentionLabel({
   const cursorOffsetAdjustment = serializedText === undefined
     ? undefined
     : composerCursorOffsetAdjustment(serializedText, displayText);
-  const content = (
-    <>
-      <WorkspaceEntryIcon className="chat-workspace-mention__icon" path={path} size={13} type={type} />
-      <span>{displayText}</span>
-    </>
-  );
-
-  if (onOpen) {
-    return (
-      <button
-        aria-label={t(type === 'directory' ? 'chat.mention.openDirectory' : 'chat.mention.openDefault', { path })}
-        className="chat-workspace-mention chat-workspace-mention--action"
-        title={path}
-        type="button"
-        onClick={() => onOpen(path)}
-      >
-        {content}
-      </button>
-    );
-  }
-
   return (
-    <span
+    <ChatInlineReference
+      actionLabel={onOpen
+        ? t(type === 'directory' ? 'chat.mention.openDirectory' : 'chat.mention.openDefault', { path })
+        : undefined}
       className="chat-workspace-mention"
+      composerCursorOffsetAdjustment={cursorOffsetAdjustment}
+      icon={<WorkspaceEntryIcon path={path} type={type} />}
+      label={displayText}
+      onActivate={onOpen ? () => onOpen(path) : undefined}
       title={path}
-      data-composer-cursor-offset-adjustment={cursorOffsetAdjustment}
-    >
-      {content}
-    </span>
+    />
   );
 });
 

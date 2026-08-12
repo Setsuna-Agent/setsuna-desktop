@@ -15,28 +15,26 @@ describe('RuntimePluginUses', () => {
       <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
         <RuntimePluginUses
           plugins={[{
-            id: 'context7-docs',
-            icon: 'context7',
+            id: 'web-search',
+            icon: 'web-search',
             installed: true,
-            name: 'Context7 文档查询',
+            name: '网络搜索',
           }]}
         />
       </RuntimePluginNavigationProvider>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: 'Context7 文档查询' }));
+    await userEvent.click(screen.getByRole('button', { name: '网络搜索' }));
     const uninstalled = render(
       <RuntimePluginUses
         plugins={[{ id: 'documents', installed: false, name: 'Word 文档处理' }]}
       />,
     );
 
-    expect(onOpenPlugin).toHaveBeenCalledWith('context7-docs');
-    expect(installed.container.querySelector('.chat-capability-reference-icon')).toBeTruthy();
-    expect(installed.container.querySelector('.chat-capability-reference-icon svg')?.getAttribute('width')).toBe('14');
-    expect(installed.container.querySelector('.chat-capability-reference-icon svg')?.getAttribute('height')).toBe('14');
-    expect(installed.container.querySelector('.desktop-plugin-icon')).toBeNull();
-    expect(uninstalled.container.querySelector('.chat-capability-reference-icon')).toBeTruthy();
+    expect(onOpenPlugin).toHaveBeenCalledWith('web-search');
+    expect(installed.container.querySelector('.desktop-plugin-icon')?.getAttribute('data-plugin-icon')).toBe('web-search');
+    expect(installed.container.querySelector('.desktop-plugin-icon--inline')).toBeTruthy();
+    expect(uninstalled.container.querySelector('.desktop-plugin-icon')?.getAttribute('data-plugin-icon')).toBe('documents');
     expect(screen.getAllByText('已使用插件')).toHaveLength(2);
     expect(screen.getByText('Word 文档处理')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Word 文档处理' })).toBeNull();

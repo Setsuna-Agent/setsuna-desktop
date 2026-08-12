@@ -54,6 +54,7 @@ describe('workspace mention slots', () => {
     expect(mention?.props?.value).toBe('@src/components/Tile.tsx');
     const labelHtml = renderToStaticMarkup(mention?.props?.label);
     expect(labelHtml).toContain('data-file-icon-theme="seti"');
+    expect(labelHtml).toContain('chat-inline-reference');
     expect(labelHtml).toContain('data-composer-cursor-offset-adjustment=');
     expect(labelHtml).toContain('>Tile.tsx</span>');
     expect(labelHtml).not.toContain('@Tile.tsx');
@@ -96,15 +97,37 @@ describe('workspace mention slots', () => {
     const slot = createSelectedSkillSlot(firstSkill);
 
     if (slot.type !== 'tag') throw new Error('Expected a selected Skill tag');
-    expect(slot.key).toBe('skill:first');
+    expect(slot.key).toMatch(/^skill:/);
+    expect(slot.composerReference).toEqual({ type: 'skill', skillId: firstSkill.id });
     expect(slot.props?.value).toBe('First skill');
     const labelHtml = renderToStaticMarkup(slot.props?.label);
+    expect(labelHtml).toContain('chat-inline-reference');
     expect(labelHtml).toContain('chat-skill-reference');
+    expect(labelHtml).toContain('data-skill-icon="skill"');
+    expect(labelHtml).toContain('desktop-skill-icon--inline');
     expect(labelHtml).toContain('First skill');
     expect(filterSelectedSkillsBySlots([firstSkill, secondSkill], [slot])).toEqual([firstSkill]);
     const unchangedSkills = [firstSkill];
     expect(filterSelectedSkillsBySlots(unchangedSkills, [slot])).toBe(unchangedSkills);
     expect(filterSelectedSkillsBySlots([firstSkill], undefined)).toEqual([]);
+  });
+
+  it('uses a Plugin Skill icon in the composer slot', () => {
+    const slot = createSelectedSkillSlot({
+      id: 'openai-vision-recognition.vision-recognition',
+      name: '视觉识别',
+      icon: 'vision-recognition',
+      kind: 'plugin',
+      enabled: true,
+      selected: false,
+      pluginId: 'openai-vision-recognition',
+    });
+
+    if (slot.type !== 'tag') throw new Error('Expected a selected Skill tag');
+    const labelHtml = renderToStaticMarkup(slot.props?.label);
+    expect(labelHtml).toContain('data-plugin-icon="vision-recognition"');
+    expect(labelHtml).toContain('desktop-plugin-icon--inline');
+    expect(labelHtml).not.toContain('data-skill-icon="skill"');
   });
 
   it('records exact trimmed offsets for Skills with identical labels', () => {

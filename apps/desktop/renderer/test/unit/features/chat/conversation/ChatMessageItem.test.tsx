@@ -189,10 +189,30 @@ describe('MessageItem user messages', () => {
       { skills: [skillCreator] },
     );
 
-    expect(selectedHtml).toContain('class="chat-skill-reference"');
-    expect(selectedHtml).toContain('chat-capability-reference-icon');
-    expect(selectedHtml).toMatch(/chat-user-message-content__body"><span class="chat-skill-reference"[^>]*>.*对话创建Skill<\/span><\/span> 你看下这个 skill<\/span>/u);
+    expect(selectedHtml).toContain('class="chat-inline-reference chat-skill-reference"');
+    expect(selectedHtml).toContain('data-skill-icon="skill"');
+    expect(selectedHtml).toMatch(/chat-user-message-content__body"><span class="chat-inline-reference chat-skill-reference"[^>]*>.*对话创建Skill<\/span><\/span> 你看下这个 skill<\/span>/u);
     expect(plainHtml).not.toContain('chat-skill-reference');
+  });
+
+  it('uses the owning Plugin icon for a Plugin Skill reference', () => {
+    const visionSkill: RuntimeSkillSummary = {
+      id: 'openai-vision-recognition.vision-recognition',
+      name: '视觉识别',
+      icon: 'vision-recognition',
+      kind: 'plugin',
+      enabled: true,
+      selected: false,
+      pluginId: 'openai-vision-recognition',
+    };
+    const html = renderUserMessage('message', false, '视觉识别 看下图片', {
+      skillReferences: [{ skillId: visionSkill.id, start: 0, end: visionSkill.name.length }],
+      skills: [visionSkill],
+    });
+
+    expect(html).toContain('data-plugin-icon="vision-recognition"');
+    expect(html).toContain('desktop-plugin-icon--inline');
+    expect(html).not.toContain('data-skill-icon="skill"');
   });
 
   it('renders the historical serialized Skill label after the Skill is renamed', () => {
@@ -201,7 +221,7 @@ describe('MessageItem user messages', () => {
       skills: [{ ...skillCreator, name: '新的 Skill 名称' }],
     });
 
-    expect(html).toContain('class="chat-skill-reference"');
+    expect(html).toContain('class="chat-inline-reference chat-skill-reference"');
     expect(html).toContain('对话创建Skill');
     expect(html).not.toContain('新的 Skill 名称');
   });
@@ -212,8 +232,8 @@ describe('MessageItem user messages', () => {
       skills: [],
     });
 
-    expect(html).toContain('class="chat-skill-reference"');
-    expect(html).toContain('chat-capability-reference-icon');
+    expect(html).toContain('class="chat-inline-reference chat-skill-reference"');
+    expect(html).toContain('data-skill-icon="skill"');
     expect(html).toContain('对话创建Skill');
   });
 

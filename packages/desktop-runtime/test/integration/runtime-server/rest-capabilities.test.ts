@@ -69,9 +69,9 @@ describe('runtime server REST skills and capabilities', () => {
             installed: false,
           }),
           expect.objectContaining({
-            id: 'pi-question',
+            id: 'question',
             name: '结构化提问',
-            icon: 'pi-question',
+            icon: 'question',
             publisher: 'Setsuna',
             tags: expect.arrayContaining(['交互', '工具']),
             tools: [expect.objectContaining({ name: 'question' })],
@@ -81,9 +81,9 @@ describe('runtime server REST skills and capabilities', () => {
             installed: false,
           }),
           expect.objectContaining({
-            id: 'pi-todo',
+            id: 'todo',
             name: '任务清单',
-            icon: 'pi-todo',
+            icon: 'todo',
             publisher: 'Setsuna',
             tags: expect.arrayContaining(['任务', '状态']),
             tools: [expect.objectContaining({ name: 'todo' })],
@@ -91,9 +91,9 @@ describe('runtime server REST skills and capabilities', () => {
             installed: false,
           }),
           expect.objectContaining({
-            id: 'pi-claude-rules',
+            id: 'claude-rules',
             name: 'Claude Rules 兼容',
-            icon: 'pi-claude-rules',
+            icon: 'claude-rules',
             publisher: 'Setsuna',
             tags: expect.arrayContaining(['Claude', '项目规则']),
             extension: { apiVersion: 1, runtime: 'node-worker', capabilities: ['events'] },
@@ -137,7 +137,20 @@ describe('runtime server REST skills and capabilities', () => {
               id: 'openai-image-generation.image-generation',
               name: '图片生成',
             })],
-            capabilities: { skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+            tools: [expect.objectContaining({ name: 'generate_image' })],
+            extension: {
+              apiVersion: 1,
+              runtime: 'node-worker',
+              capabilities: ['tools', 'image-generation'],
+            },
+            capabilities: {
+              extension: 1,
+              tools: 1,
+              skills: 1,
+              mcpServers: 0,
+              hooks: 0,
+              resources: 0,
+            },
           }),
           expect.objectContaining({
             id: 'openai-vision-recognition',
@@ -149,11 +162,23 @@ describe('runtime server REST skills and capabilities', () => {
               id: 'openai-vision-recognition.vision-recognition',
               name: '视觉识别',
             })],
-            tools: [{
+            tools: [expect.objectContaining({
               name: 'analyze_image',
               description: expect.stringContaining('视觉模型'),
-            }],
-            capabilities: { tools: 1, skills: 1, mcpServers: 0, hooks: 0, resources: 0 },
+            })],
+            extension: {
+              apiVersion: 1,
+              runtime: 'node-worker',
+              capabilities: ['tools', 'vision-recognition'],
+            },
+            capabilities: {
+              extension: 1,
+              tools: 1,
+              skills: 1,
+              mcpServers: 0,
+              hooks: 0,
+              resources: 0,
+            },
           }),
           expect.objectContaining({
             id: 'guard-dangerous-shell',
@@ -286,16 +311,16 @@ describe('runtime server REST skills and capabilities', () => {
         data: [{ hooks: [] }],
       });
 
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/pi-question/install', {
+      await expect(harness.runtimeFetch('/v1/plugin-marketplace/question/install', {
         method: 'POST',
       })).resolves.toMatchObject({
         plugin: {
-          id: 'pi-question',
+          id: 'question',
           extension: { trust: 'trusted' },
         },
       });
-      await expect(harness.runtimeFetch('/v1/plugins/pi-question', { method: 'DELETE' })).resolves.toMatchObject({
-        pluginId: 'pi-question',
+      await expect(harness.runtimeFetch('/v1/plugins/question', { method: 'DELETE' })).resolves.toMatchObject({
+        pluginId: 'question',
       });
     });
   
@@ -376,6 +401,21 @@ describe('runtime server REST skills and capabilities', () => {
       });
   
       expect(response.status).toBe(404);
+    });
+
+  it('does not run media quick tests when their marketplace plugins are not installed', async () => {
+      for (const pluginId of ['openai-image-generation', 'openai-vision-recognition']) {
+        const response = await fetch(`${harness.baseUrl}/v1/plugins/${pluginId}/test`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${harness.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prompt: 'quick test' }),
+        });
+        expect(response.status).toBe(404);
+        await expect(response.json()).resolves.toMatchObject({ code: 'plugin_not_installed' });
+      }
     });
   
   it('tests the installed image plugin through its configured private provider', async () => {

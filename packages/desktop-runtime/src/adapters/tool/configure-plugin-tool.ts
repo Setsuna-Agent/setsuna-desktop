@@ -115,7 +115,19 @@ export const configurePluginTool: RuntimeToolDefinition = {
               entry: { type: 'string', description: 'Relative JavaScript entry file present in files.' },
               capabilities: {
                 type: 'array',
-                items: { type: 'string', enum: ['tools', 'events', 'ui', 'state'] },
+                items: { type: 'string', enum: ['tools', 'events', 'ui', 'state', 'network'] },
+              },
+              network: {
+                type: 'object',
+                additionalProperties: false,
+                description: 'Required when network is declared. Requests use the runtime proxy and exact origin allowlist.',
+                properties: {
+                  allowedOrigins: {
+                    type: 'array',
+                    items: { type: 'string', description: 'Exact HTTP(S) origin, without a path.' },
+                  },
+                },
+                required: ['allowedOrigins'],
               },
             },
             required: ['apiVersion', 'runtime', 'entry', 'capabilities'],

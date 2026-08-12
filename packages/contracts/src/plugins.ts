@@ -17,11 +17,23 @@ export const RUNTIME_EXTENSION_EVENT_NAMES = [
 ] as const;
 
 export type RuntimeExtensionEventName = typeof RUNTIME_EXTENSION_EVENT_NAMES[number];
-export type RuntimeExtensionCapability = 'tools' | 'events' | 'ui' | 'state';
+export type RuntimeExtensionCapability =
+  | 'tools'
+  | 'events'
+  | 'ui'
+  | 'state'
+  | 'network'
+  | 'image-generation'
+  | 'vision-recognition';
+export type RuntimeExtensionNetworkPolicy = {
+  /** Exact HTTP(S) origins that the host-managed network client may contact. */
+  allowedOrigins: string[];
+};
 export type RuntimeExtensionManifest = {
   apiVersion: typeof RUNTIME_EXTENSION_API_VERSION;
   runtime: 'node-worker';
   capabilities: RuntimeExtensionCapability[];
+  network?: RuntimeExtensionNetworkPolicy;
 };
 export type RuntimeExtensionTrustState = 'trusted' | 'untrusted' | 'modified';
 export type RuntimeInstalledExtension = RuntimeExtensionManifest & { trust: RuntimeExtensionTrustState };
@@ -45,7 +57,6 @@ export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
 export const RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS = 4_000;
 export const WEB_SEARCH_PLUGIN_ID = 'web-search';
 export const WEB_SEARCH_TOOL_NAME = 'web_search';
-export const RUNTIME_WEB_SEARCH_QUERY_MAX_CHARS = 2_000;
 
 export type RuntimeImageGenerationTestInput = {
   prompt: string;
@@ -79,6 +90,12 @@ export type RuntimePluginSkill = {
 export type RuntimePluginTool = {
   name: string;
   description?: string;
+  /** Curated marketplace extensions may expose this stable name without an extension__ prefix. */
+  exposure?: 'namespaced' | 'direct';
+  /** Execution hints are honored only for extensions installed from the bundled marketplace. */
+  supportsParallel?: boolean;
+  requiresApproval?: boolean;
+  requiresSandboxBypassApproval?: boolean;
 };
 
 export type RuntimePluginMcpServerDescriptor = {

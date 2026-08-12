@@ -57,8 +57,32 @@ describe('capability catalog list items', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Docs Skill' }));
     await userEvent.click(screen.getByRole('checkbox', { name: '默认使用' }));
+    expect(document.querySelector('[data-skill-icon="skill"]')).toBeTruthy();
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onUpdate).toHaveBeenCalledWith({ selected: false });
+  });
+
+  it('uses the owning Plugin icon for Plugin Skills', () => {
+    renderWithI18n(
+      <CapabilitiesSkillListItem
+        dependencyPending={false}
+        skill={{
+          ...skill,
+          id: 'documents.documents',
+          icon: 'documents',
+          kind: 'plugin',
+          pluginId: 'documents',
+        }}
+        onAuthenticateDependency={() => undefined}
+        onEdit={() => undefined}
+        onInstallDependencies={() => undefined}
+        onOpen={() => undefined}
+        onUpdate={() => undefined}
+      />,
+    );
+
+    expect(document.querySelector('[data-plugin-icon="documents"]')).toBeTruthy();
+    expect(document.querySelector('[data-skill-icon="skill"]')).toBeNull();
   });
 
 });

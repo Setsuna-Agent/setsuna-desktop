@@ -22,6 +22,7 @@ import './shared/styles/tokens.css';
 import './app/styles/app.css';
 import './shared/styles/file-icons.css';
 import './shared/styles/brand-icons.css';
+import './shared/styles/plugin-icons.css';
 import './shared/styles/primitives.css';
 import './app/styles/sidebar.css';
 import './app/styles/project-editor.css';

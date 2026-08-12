@@ -62,7 +62,6 @@ export class FilePluginBundleStore implements PluginBundleStore {
   private runtimeMutation: PluginRuntimeMutationCoordinator = {
     beginPluginMutation: async () => async () => undefined,
   };
-
   constructor(
     dataDir: string,
     private readonly skills: PluginSkillRegistry,
@@ -184,6 +183,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         throw new Error('Plugin source and runtime plugin directory cannot contain one another.');
       }
       const manifest = await readPluginManifest(sourcePath);
+      assertExtensionCapabilitySource(manifest, options);
       const sourceBundle = await inspectBundleTree(sourcePath);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
@@ -333,6 +333,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await copyBundleTree(sourcePath, stagingPath);
         const stagedBundle = await inspectBundleTree(stagingPath);
         const manifest = await readPluginManifest(await realpath(stagingPath));
+        assertExtensionCapabilitySource(manifest, options);
         if (manifest.id !== sourceManifest.id) {
           throw new Error('Plugin manifest id changed while staging the update.');
         }
@@ -660,7 +661,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
 
       try {
-        let extension = { ...plugin.extension, capabilities: [...plugin.extension.capabilities] };
+        let extension = {
+          ...plugin.extension,
+          capabilities: [...plugin.extension.capabilities],
+          ...(plugin.extension.network ? {
+            network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+          } : {}),
+        };
         if (trusted) {
           const manifest = await readPluginManifest(await realpath(plugin.installPath));
           const bundle = await inspectBundleTree(plugin.installPath);
@@ -742,6 +749,9 @@ function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['ex
     apiVersion: extension.apiVersion,
     runtime: extension.runtime,
     capabilities: [...extension.capabilities],
+    ...(extension.network ? {
+      network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
   };
 }
 
@@ -756,6 +766,23 @@ function installedExtensionRecord(
     bundleHash,
     ...(trustedHash ? { trustedHash } : {}),
   };
+}
+
+const MARKETPLACE_ONLY_EXTENSION_CAPABILITIES = new Set([
+  'image-generation',
+  'vision-recognition',
+]);
+
+function assertExtensionCapabilitySource(
+  manifest: ParsedPluginManifest,
+  options: PluginBundleMutationOptions,
+): void {
+  const restricted = manifest.extension?.capabilities.find((capability) => (
+    MARKETPLACE_ONLY_EXTENSION_CAPABILITIES.has(capability)
+  ));
+  if (restricted && options.installationSource !== 'marketplace') {
+    throw new Error(`Plugin extension capability is reserved for the bundled marketplace: ${restricted}`);
+  }
 }
 
 function samePath(left: string, right: string): boolean {

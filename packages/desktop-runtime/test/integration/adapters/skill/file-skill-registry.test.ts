@@ -102,6 +102,15 @@ describe('file skill registry', () => {
     await installDocumentsPluginFixture(dataDir);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
+    await expect(registry.listSkills()).resolves.toMatchObject({
+      skills: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'documents.documents',
+          icon: 'documents',
+          pluginId: 'documents',
+        }),
+      ]),
+    });
     await expect(registry.selectedSkillInjections(['documents.documents'])).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({
