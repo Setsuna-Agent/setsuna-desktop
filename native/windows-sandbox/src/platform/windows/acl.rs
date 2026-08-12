@@ -5,9 +5,10 @@ use fs2::FileExt;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use windows_sys::Win32::Foundation::{
-    GetLastError, LocalFree, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HLOCAL,
+    GetLastError, LocalFree, ERROR_ACCESS_DENIED, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HLOCAL,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW,
@@ -24,8 +25,8 @@ use windows_sys::Win32::Security::{
     SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA, FILE_DELETE_CHILD, FILE_GENERIC_EXECUTE,
-    FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_READ_ATTRIBUTES, FILE_WRITE_ATTRIBUTES,
+    DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA, FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD,
+    FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_WRITE_ATTRIBUTES,
     FILE_WRITE_DATA, FILE_WRITE_EA,
 };
 
@@ -38,7 +39,10 @@ const WRITE_MASK: u32 =
 const PERSISTENT_WRITE_MASK: u32 =
     FILE_GENERIC_READ | FILE_GENERIC_EXECUTE | FILE_GENERIC_WRITE | DELETE;
 const READ_MASK: u32 = FILE_GENERIC_READ | FILE_GENERIC_EXECUTE;
-const ANCESTOR_METADATA_MASK: u32 = FILE_READ_ATTRIBUTES;
+// Node and esbuild walk upward to discover package/config boundaries. A non-inheriting
+// directory read grant lets them enumerate each exact ancestor without granting access
+// to any child file or sibling subtree.
+const ANCESTOR_READ_MASK: u32 = READ_MASK;
 const MUTATING_MASK: u32 = FILE_WRITE_DATA
     | FILE_APPEND_DATA
     | FILE_WRITE_EA
@@ -54,6 +58,12 @@ const WRITE_DAC_MASK: u32 = 0x0004_0000;
 const WRITE_OWNER_MASK: u32 = 0x0008_0000;
 const LOCAL_SYSTEM_SID: &str = "S-1-5-18";
 const BUILTIN_ADMINISTRATORS_SID: &str = "S-1-5-32-544";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TokenAccessInspection {
+    Known(bool),
+    SecurityDescriptorUnreadable,
+}
 
 struct LocalSid(*mut c_void);
 
@@ -526,18 +536,16 @@ pub fn prepare_execution(
         readable_roots.push(request.workspace_root.clone());
         readable_roots.push(request.cwd.clone());
         for root in unique_existing_paths(&readable_roots)? {
-            if !self_contained_roots
-                .iter()
-                .any(|contained| same_path(&root, contained))
-            {
-                grant_ancestor_metadata_if_needed(
-                    &root,
-                    read_access_token,
-                    &self_contained_roots,
-                    &mut logon,
-                )?;
-            }
-            grant_read_if_needed(&root, read_access_token, &mut logon)?;
+            // Codex authorizes readable roots through its stable sandbox-users group.
+            // Do the same here so runtime/toolchain access does not depend on one
+            // logon SID or a tree-wide ACL rewrite for every command.
+            ensure_ancestor_group_read_if_needed(
+                &root,
+                read_access_token,
+                &self_contained_roots,
+                sandbox_group.raw(),
+            )?;
+            ensure_group_read_if_needed(&root, read_access_token, sandbox_group.raw())?;
         }
 
         for root in &writable_roots {
@@ -545,11 +553,11 @@ pub fn prepare_execution(
                 .iter()
                 .any(|contained| same_path(root, contained))
             {
-                grant_ancestor_metadata_if_needed(
+                ensure_ancestor_group_read_if_needed(
                     root,
                     read_access_token,
                     &self_contained_roots,
-                    &mut logon,
+                    sandbox_group.raw(),
                 )?;
             }
             if ephemeral_roots
@@ -629,45 +637,65 @@ fn grant_temporary(
     grant.allow(path, mask, inheritance)
 }
 
-fn grant_read_if_needed(
+fn ensure_group_read_if_needed(
     path: &Path,
     access_token: isize,
-    grant: &mut TemporaryAclGrant,
+    sandbox_group_sid: *mut c_void,
 ) -> Result<(), SandboxError> {
     // PATH entries and system toolchains are commonly readable through an inherited
     // group ACE while remaining protected from ACL changes by an unprivileged caller.
     if token_has_access(path, access_token, READ_MASK)? {
         return Ok(());
     }
-    grant_temporary(path, grant, READ_MASK, inherited_for(path))
+    ensure_persistent_allow_aces(path, &[(sandbox_group_sid, READ_MASK)])
 }
 
-fn grant_ancestor_metadata_if_needed(
+fn ensure_ancestor_group_read_if_needed(
     path: &Path,
     access_token: isize,
     stop_boundaries: &[PathBuf],
-    grant: &mut TemporaryAclGrant,
+    sandbox_group_sid: *mut c_void,
 ) -> Result<(), SandboxError> {
+    for candidate in ancestor_read_paths(path, stop_boundaries) {
+        // SeChangeNotifyPrivilege bypasses directory traversal checks, but Node and
+        // esbuild still open or enumerate ancestors during realpath and package lookup.
+        // Grant the stable sandbox group read on this directory object only. This is
+        // the narrow equivalent of Codex's persistent profile/read-root ACLs: later
+        // commands can reuse it, while inheritance remains disabled.
+        match inspect_token_access(&candidate, access_token, ANCESTOR_READ_MASK)? {
+            TokenAccessInspection::Known(false) => {
+                ensure_persistent_allow_aces_with_inheritance(
+                    &candidate,
+                    &[(sandbox_group_sid, ANCESTOR_READ_MASK)],
+                    0,
+                )?;
+            }
+            TokenAccessInspection::Known(true)
+            | TokenAccessInspection::SecurityDescriptorUnreadable => {
+                // System-owned ancestors such as C:\Windows\Temp may deny READ_CONTROL
+                // to the desktop user. Skipping a grant is fail-closed: the restricted
+                // child still has to pass the existing filesystem ACL at access time.
+            }
+        }
+    }
+    Ok(())
+}
+
+fn ancestor_read_paths(path: &Path, stop_boundaries: &[PathBuf]) -> Vec<PathBuf> {
+    let mut output = Vec::new();
     let mut parent = path.parent();
     while let Some(candidate) = parent {
-        if candidate.parent().is_none() {
-            break;
-        }
-        if stop_boundaries
-            .iter()
-            .any(|boundary| same_path(candidate, boundary))
+        if candidate.parent().is_none()
+            || stop_boundaries
+                .iter()
+                .any(|boundary| same_path(candidate, boundary))
         {
             break;
         }
-        // SeChangeNotifyPrivilege bypasses directory traversal checks, but runtimes
-        // such as Node still open every ancestor for lstat/realpath metadata. Grant
-        // only non-inheriting metadata access, and only where the account needs it.
-        if !token_has_access(candidate, access_token, ANCESTOR_METADATA_MASK)? {
-            grant_temporary(candidate, grant, ANCESTOR_METADATA_MASK, 0)?;
-        }
+        output.push(candidate.to_path_buf());
         parent = candidate.parent();
     }
-    Ok(())
+    output
 }
 
 fn same_path(left: &Path, right: &Path) -> bool {
@@ -679,6 +707,19 @@ fn token_has_access(
     access_token: isize,
     requested: u32,
 ) -> Result<bool, SandboxError> {
+    match inspect_token_access(path, access_token, requested)? {
+        TokenAccessInspection::Known(allowed) => Ok(allowed),
+        TokenAccessInspection::SecurityDescriptorUnreadable => {
+            Err(access_inspection_error(path, ERROR_ACCESS_DENIED))
+        }
+    }
+}
+
+fn inspect_token_access(
+    path: &Path,
+    access_token: isize,
+    requested: u32,
+) -> Result<TokenAccessInspection, SandboxError> {
     let mut path_wide = to_wide(path.as_os_str());
     let mut owner = std::ptr::null_mut();
     let mut group = std::ptr::null_mut();
@@ -700,18 +741,29 @@ fn token_has_access(
         if !descriptor.is_null() {
             unsafe { LocalFree(descriptor as HLOCAL) };
         }
-        return Err(SandboxError::new(
-            SandboxErrorCode::UnsupportedPolicy,
-            format!(
-                "cannot inspect existing access for {}: {fetched}",
-                path.display()
-            ),
-        ));
+        if let Some(unreadable) = unreadable_access_inspection(fetched) {
+            return Ok(unreadable);
+        }
+        return Err(access_inspection_error(path, fetched));
     }
 
     let result = access_check(descriptor, access_token, requested, path);
     unsafe { LocalFree(descriptor as HLOCAL) };
-    result
+    result.map(TokenAccessInspection::Known)
+}
+
+fn unreadable_access_inspection(error: u32) -> Option<TokenAccessInspection> {
+    (error == ERROR_ACCESS_DENIED).then_some(TokenAccessInspection::SecurityDescriptorUnreadable)
+}
+
+fn access_inspection_error(path: &Path, error: u32) -> SandboxError {
+    SandboxError::new(
+        SandboxErrorCode::UnsupportedPolicy,
+        format!(
+            "cannot inspect existing access for {}: {error}",
+            path.display()
+        ),
+    )
 }
 
 fn access_check(
@@ -776,7 +828,14 @@ fn ensure_persistent_allow_aces(
     path: &Path,
     allows: &[(*mut c_void, u32)],
 ) -> Result<(), SandboxError> {
-    let inheritance = inherited_for(path);
+    ensure_persistent_allow_aces_with_inheritance(path, allows, inherited_for(path))
+}
+
+fn ensure_persistent_allow_aces_with_inheritance(
+    path: &Path,
+    allows: &[(*mut c_void, u32)],
+    inheritance: u32,
+) -> Result<(), SandboxError> {
     let missing = allows
         .iter()
         .filter_map(|(sid, mask)| {
@@ -960,6 +1019,104 @@ fn apply_persistent_acl_entries(
     path: &Path,
     entries: &[EXPLICIT_ACCESS_W],
 ) -> Result<(), SandboxError> {
+    let inherited_entries = entries
+        .iter()
+        .filter(|entry| entry.grfInheritance & (CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE) != 0)
+        .collect::<Vec<_>>();
+    if path.is_dir() && !inherited_entries.is_empty() {
+        apply_persistent_acl_entries_to_descendants(path, &inherited_entries)?;
+    }
+
+    // Apply the root last. If traversal is interrupted, the missing root ACE
+    // makes the next run retry instead of mistaking a partially-authorized tree
+    // for a completed grant.
+    apply_non_recursive_acl_entries(path, entries)
+}
+
+fn apply_persistent_acl_entries_to_descendants(
+    root: &Path,
+    entries: &[&EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let children = std::fs::read_dir(&directory).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!(
+                    "cannot enumerate persistent ACL root {}",
+                    directory.display()
+                ),
+                error,
+            )
+        })?;
+        for child in children {
+            let child = child.map_err(|error| {
+                SandboxError::with_source(
+                    SandboxErrorCode::UnsupportedPolicy,
+                    format!(
+                        "cannot enumerate persistent ACL root {}",
+                        directory.display()
+                    ),
+                    error,
+                )
+            })?;
+            let child_path = child.path();
+            let metadata = std::fs::symlink_metadata(&child_path).map_err(|error| {
+                SandboxError::with_source(
+                    SandboxErrorCode::UnsupportedPolicy,
+                    format!(
+                        "cannot inspect persistent ACL child {}",
+                        child_path.display()
+                    ),
+                    error,
+                )
+            })?;
+
+            // Never follow junctions or symlinks while materializing a root ACL.
+            // Package managers commonly create cyclic or external reparse graphs;
+            // Windows' recursive SetNamedSecurityInfoW propagation can spin there
+            // for minutes and can also escape the approved root.
+            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                continue;
+            }
+
+            let is_directory = metadata.is_dir();
+            let child_entries = entries
+                .iter()
+                .map(|entry| inherited_entry_for_child(entry, is_directory))
+                .collect::<Vec<_>>();
+            apply_non_recursive_acl_entries(&child_path, &child_entries)?;
+            if is_directory {
+                pending.push(child_path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn inherited_entry_for_child(entry: &EXPLICIT_ACCESS_W, is_directory: bool) -> EXPLICIT_ACCESS_W {
+    EXPLICIT_ACCESS_W {
+        grfAccessPermissions: entry.grfAccessPermissions,
+        grfAccessMode: entry.grfAccessMode,
+        grfInheritance: if is_directory {
+            entry.grfInheritance & (CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE)
+        } else {
+            0
+        },
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: entry.Trustee.pMultipleTrustee,
+            MultipleTrusteeOperation: entry.Trustee.MultipleTrusteeOperation,
+            TrusteeForm: entry.Trustee.TrusteeForm,
+            TrusteeType: entry.Trustee.TrusteeType,
+            ptstrName: entry.Trustee.ptstrName,
+        },
+    }
+}
+
+fn apply_non_recursive_acl_entries(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
     let mut path_wide = to_wide(path.as_os_str());
     let mut descriptor = std::ptr::null_mut();
     let mut old_dacl = std::ptr::null_mut();
@@ -1006,30 +1163,19 @@ fn apply_persistent_acl_entries(
             ),
         ));
     }
-    // This is intentionally the only propagating ACL operation. It runs only
-    // when stable workspace authorization is missing.
-    let applied = unsafe {
-        SetNamedSecurityInfoW(
-            path_wide.as_mut_ptr(),
-            SE_FILE_OBJECT,
-            DACL_SECURITY_INFORMATION,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            new_dacl,
-            std::ptr::null_mut(),
-        )
-    };
+    let applied = set_file_dacl(&path_wide, new_dacl);
     unsafe {
         LocalFree(new_dacl as HLOCAL);
         LocalFree(descriptor as HLOCAL);
     }
-    if applied != ERROR_SUCCESS {
-        return Err(SandboxError::new(
+    if let Err(error) = applied {
+        return Err(SandboxError::with_source(
             SandboxErrorCode::UnsupportedPolicy,
             format!(
-                "cannot apply persistent ACL for {}: {applied}",
+                "cannot apply non-recursive persistent ACL for {}",
                 path.display()
             ),
+            error,
         ));
     }
     Ok(())
@@ -1138,4 +1284,113 @@ fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Err
         return Err(std::io::Error::last_os_error());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        access_inspection_error, ancestor_read_paths, apply_persistent_acl_entries,
+        path_has_effective_ace, unreadable_access_inspection, LocalSid, TokenAccessInspection,
+        ACCESS_ALLOWED_ACE_TYPE, READ_MASK,
+    };
+    use crate::protocol::SandboxErrorCode;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::tempdir;
+    use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
+    use windows_sys::Win32::Security::Authorization::{
+        EXPLICIT_ACCESS_W, SET_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
+    };
+    use windows_sys::Win32::Security::{CONTAINER_INHERIT_ACE, OBJECT_INHERIT_ACE};
+
+    #[test]
+    fn workspace_root_keeps_its_private_ancestors_in_the_read_plan() {
+        let workspace = PathBuf::from(r"C:\Users\alice\Documents\project");
+
+        assert_eq!(
+            ancestor_read_paths(&workspace, std::slice::from_ref(&workspace)),
+            vec![
+                PathBuf::from(r"C:\Users\alice\Documents"),
+                PathBuf::from(r"C:\Users\alice"),
+                PathBuf::from(r"C:\Users"),
+            ],
+        );
+    }
+
+    #[test]
+    fn nested_root_stops_at_an_already_authorized_workspace() {
+        let workspace = PathBuf::from(r"C:\Users\alice\Documents\project");
+        let nested = workspace.join("apps").join("renderer");
+
+        assert_eq!(
+            ancestor_read_paths(&nested, std::slice::from_ref(&workspace)),
+            vec![workspace.join("apps")],
+        );
+    }
+
+    #[test]
+    fn unreadable_ancestor_security_descriptor_is_a_fail_closed_skip() {
+        assert_eq!(
+            unreadable_access_inspection(ERROR_ACCESS_DENIED),
+            Some(TokenAccessInspection::SecurityDescriptorUnreadable),
+        );
+        assert_eq!(unreadable_access_inspection(2), None);
+
+        let strict_error =
+            access_inspection_error(&PathBuf::from(r"C:\Windows\Temp"), ERROR_ACCESS_DENIED);
+        assert_eq!(strict_error.code, SandboxErrorCode::UnsupportedPolicy);
+        assert!(strict_error.message.ends_with(": 5"));
+    }
+
+    #[test]
+    fn persistent_tree_grant_materializes_on_existing_descendants() {
+        let temporary = tempdir().expect("temporary ACL tree");
+        let nested = temporary.path().join("node_modules").join("package");
+        fs::create_dir_all(&nested).expect("nested directory");
+        let existing_file = nested.join("index.js");
+        fs::write(&existing_file, "module.exports = true;").expect("existing file");
+        let capability = LocalSid::parse("S-1-5-21-101010101-202020202-303030303-404040404")
+            .expect("test capability SID");
+        let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
+        let entry = EXPLICIT_ACCESS_W {
+            grfAccessPermissions: READ_MASK,
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: inheritance,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: capability.raw().cast::<u16>(),
+            },
+        };
+
+        apply_persistent_acl_entries(temporary.path(), &[entry])
+            .expect("materialize persistent ACL tree");
+
+        assert!(path_has_effective_ace(
+            temporary.path(),
+            capability.raw(),
+            ACCESS_ALLOWED_ACE_TYPE,
+            READ_MASK,
+            inheritance,
+        )
+        .expect("root ACE"));
+        assert!(path_has_effective_ace(
+            &nested,
+            capability.raw(),
+            ACCESS_ALLOWED_ACE_TYPE,
+            READ_MASK,
+            inheritance,
+        )
+        .expect("nested directory ACE"));
+        assert!(path_has_effective_ace(
+            &existing_file,
+            capability.raw(),
+            ACCESS_ALLOWED_ACE_TYPE,
+            READ_MASK,
+            0,
+        )
+        .expect("existing file ACE"));
+    }
 }

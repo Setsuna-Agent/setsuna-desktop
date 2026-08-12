@@ -12,6 +12,9 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultProjectDir = path.resolve(scriptDir, '../..');
 const manifestPath = path.join(scriptDir, 'curl-manifest.json');
 const DOWNLOAD_TIMEOUT_MS = 60_000;
+// Dev startup owns this preparation, so brief proxy or network interruptions
+// should recover here instead of requiring a separate manual command.
+const DOWNLOAD_RETRY_DELAYS_MS = [1_000, 3_000];
 const TARGET_KEY = 'win-x64';
 const REQUIRED_FILES = [
   'curl.exe',
@@ -55,7 +58,7 @@ export async function prepareSandboxCurl(options = {}) {
     archive = null;
   }
   if (!archive) {
-    archive = await downloadArchive(target, options.fetchImpl);
+    archive = await downloadSandboxCurlArchive(target, { fetchImpl: options.fetchImpl });
     await writeFileAtomically(archivePath, archive);
   }
 
@@ -176,10 +179,40 @@ function cachedArchivePath(projectDir, target) {
   return path.join(projectDir, '.cache', 'sandbox-curl', 'downloads', `${target.archiveSha256}.zip`);
 }
 
-async function downloadArchive(target, fetchImpl) {
+export async function downloadSandboxCurlArchive(target, options = {}) {
+  const retryDelaysMs = options.retryDelaysMs ?? DOWNLOAD_RETRY_DELAYS_MS;
+  const totalAttempts = retryDelaysMs.length + 1;
+  const logger = options.logger ?? console;
+  let lastError;
+
+  for (let attempt = 1; attempt <= totalAttempts; attempt += 1) {
+    logger.info(`[sandbox-curl] Downloading ${target.url} (attempt ${attempt}/${totalAttempts})...`);
+    try {
+      return await downloadArchiveAttempt(target, options.fetchImpl, options.timeoutMs);
+    } catch (error) {
+      lastError = error;
+      const retryDelayMs = retryDelaysMs[attempt - 1];
+      if (retryDelayMs === undefined) break;
+      logger.warn(
+        `[sandbox-curl] Download attempt ${attempt}/${totalAttempts} failed: ${errorMessage(error)}. `
+        + `Retrying in ${retryDelayMs} ms...`,
+      );
+      await (options.delayImpl ?? delay)(retryDelayMs);
+    }
+  }
+
+  throw new Error(
+    `Failed to download sandbox curl from ${target.url} after ${totalAttempts} attempts: ${errorMessage(lastError)}`,
+    { cause: lastError },
+  );
+}
+
+async function downloadArchiveAttempt(target, fetchImpl, timeoutMs = DOWNLOAD_TIMEOUT_MS) {
   const abort = new globalThis.AbortController();
   const proxyAgent = fetchImpl ? null : new EnvHttpProxyAgent();
-  const timer = setTimeout(() => abort.abort(), DOWNLOAD_TIMEOUT_MS);
+  const timer = setTimeout(() => {
+    abort.abort(new Error(`Sandbox curl download timed out after ${timeoutMs} ms.`));
+  }, timeoutMs);
   try {
     const response = await (fetchImpl ?? undiciFetch)(target.url, {
       signal: abort.signal,
@@ -195,6 +228,14 @@ async function downloadArchive(target, fetchImpl) {
     clearTimeout(timer);
     await proxyAgent?.close();
   }
+}
+
+function delay(durationMs) {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function archiveMatchesTarget(archive, target) {

@@ -83,7 +83,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 624 total files
+apps/desktop/renderer/ — 0 direct / 625 total files
 ├── src/ — 2 direct / 460 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -143,14 +143,14 @@ apps/desktop/renderer/ — 0 direct / 624 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 164 files
-    └── unit/ — 164 files
+└── test/ — 165 files
+    └── unit/ — 165 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 125 files
+        ├── features/ — 126 files
         │   ├── capabilities/ — 6 direct / 7 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 67 total files
@@ -164,9 +164,10 @@ apps/desktop/renderer/ — 0 direct / 624 total files
         │   │   └── tool-runs/ — 7 direct / 7 total files
         │   ├── conversation-debug/ — 7 direct / 7 total files
         │   ├── runtime-activity/ — 3 direct / 3 total files
-        │   ├── settings/ — 12 direct / 17 total files
+        │   ├── settings/ — 12 direct / 18 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
-        │   │   └── usage/ — 3 direct / 3 total files
+        │   │   ├── usage/ — 3 direct / 3 total files
+        │   │   └── windows-sandbox/ — 1 direct / 1 total files
         │   └── workspace/ — 15 direct / 24 total files
         │       ├── browser/ — 1 direct / 1 total files
         │       ├── hooks/ — 7 direct / 7 total files

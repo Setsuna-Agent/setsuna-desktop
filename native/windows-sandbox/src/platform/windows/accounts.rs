@@ -15,10 +15,10 @@ use windows_sys::Win32::NetworkManagement::NetManagement::{
     UF_DONT_EXPIRE_PASSWD, UF_LOCKOUT, UF_NORMAL_ACCOUNT, UF_NOT_DELEGATED, UF_PASSWORD_EXPIRED,
     UF_SCRIPT, USER_INFO_1, USER_INFO_1007, USER_PRIV_GUEST, USER_PRIV_USER,
 };
-use windows_sys::Win32::Security::Authorization::ConvertSidToStringSidW;
+use windows_sys::Win32::Security::Authorization::{ConvertSidToStringSidW, ConvertStringSidToSidW};
 use windows_sys::Win32::Security::{
-    CopySid, GetLengthSid, GetTokenInformation, LookupAccountNameW, TokenElevation, TokenUser,
-    SID_NAME_USE, TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER,
+    CopySid, GetLengthSid, GetTokenInformation, LookupAccountNameW, LookupAccountSidW,
+    TokenElevation, TokenUser, SID_NAME_USE, TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER,
 };
 use windows_sys::Win32::System::Threading::{
     GetCurrentProcess, GetCurrentProcessId, OpenProcessToken,
@@ -50,8 +50,14 @@ pub fn provision_accounts() -> Result<ProvisionedAccounts, SandboxError> {
     let online_password = random_password();
     ensure_user(OFFLINE_USERNAME, &offline_password)?;
     ensure_user(ONLINE_USERNAME, &online_password)?;
-    ensure_group_member(SANDBOX_GROUP, OFFLINE_USERNAME)?;
-    ensure_group_member(SANDBOX_GROUP, ONLINE_USERNAME)?;
+    let builtin_users_group = resolve_account_name_for_sid_string(USERS_GROUP_SID)?;
+    for username in [OFFLINE_USERNAME, ONLINE_USERNAME] {
+        ensure_group_member(SANDBOX_GROUP, username)?;
+        // Match Codex's dedicated-account setup. Membership in the built-in Users
+        // group supplies the standard Windows runtime/toolchain read baseline;
+        // SetsunaSandboxUsers remains the principal used for managed ACL grants.
+        ensure_group_member(&builtin_users_group, username)?;
+    }
     Ok(ProvisionedAccounts {
         group_sid: resolve_account_sid_string(SANDBOX_GROUP)?,
         offline_sid: resolve_account_sid_string(OFFLINE_USERNAME)?,
@@ -181,26 +187,43 @@ pub fn verify_group_membership(username: &str, expected_group: &str) -> Result<(
     let expected_sid = resolve_account_sid_string(expected_group)?;
     let resolved_groups = groups
         .iter()
-        .map(|group| resolve_account_sid_string(group).map(|sid| (group, sid)))
+        .map(|group| resolve_account_sid_string(group).map(|sid| (group.clone(), sid)))
         .collect::<Result<Vec<_>, _>>()?;
+    verify_resolved_group_memberships(username, expected_group, &expected_sid, &resolved_groups)
+}
+
+fn verify_resolved_group_memberships(
+    username: &str,
+    expected_group: &str,
+    expected_sid: &str,
+    resolved_groups: &[(String, String)],
+) -> Result<(), SandboxError> {
     let member = resolved_groups
         .iter()
-        .any(|(_, sid)| sid.eq_ignore_ascii_case(&expected_sid));
+        .any(|(_, sid)| sid.eq_ignore_ascii_case(expected_sid));
+    let builtin_users_member = resolved_groups
+        .iter()
+        .any(|(_, sid)| sid.eq_ignore_ascii_case(USERS_GROUP_SID));
     let unexpected = resolved_groups.iter().find(|(_, sid)| {
-        !sid.eq_ignore_ascii_case(&expected_sid) && !sid.eq_ignore_ascii_case(USERS_GROUP_SID)
+        !sid.eq_ignore_ascii_case(expected_sid) && !sid.eq_ignore_ascii_case(USERS_GROUP_SID)
     });
     if let Some((group, _)) = unexpected {
         Err(SandboxError::new(
             SandboxErrorCode::NeedsRepair,
             format!("sandbox account {username} belongs to unexpected local group {group}"),
         ))
-    } else if member {
-        Ok(())
-    } else {
+    } else if !member {
         Err(SandboxError::new(
             SandboxErrorCode::NeedsRepair,
             format!("sandbox account {username} is no longer a member of {expected_group}"),
         ))
+    } else if !builtin_users_member {
+        Err(SandboxError::new(
+            SandboxErrorCode::NeedsRepair,
+            format!("sandbox account {username} is no longer a member of the built-in Users group"),
+        ))
+    } else {
+        Ok(())
     }
 }
 
@@ -697,6 +720,79 @@ fn resolve_account_sid_string(name: &str) -> Result<String, SandboxError> {
     sid_pointer_to_string(copied.as_ptr().cast_mut().cast::<c_void>())
 }
 
+fn resolve_account_name_for_sid_string(sid: &str) -> Result<String, SandboxError> {
+    let sid_wide = to_wide(sid);
+    let mut sid_pointer = std::ptr::null_mut::<c_void>();
+    if unsafe { ConvertStringSidToSidW(sid_wide.as_ptr(), &mut sid_pointer) } == 0 {
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::SetupFailed,
+            format!("ConvertStringSidToSidW failed for {sid}"),
+            std::io::Error::last_os_error(),
+        ));
+    }
+
+    let result = (|| {
+        let mut name_length = 0_u32;
+        let mut domain_length = 0_u32;
+        let mut use_type: SID_NAME_USE = 0;
+        let preflight = unsafe {
+            LookupAccountSidW(
+                std::ptr::null(),
+                sid_pointer,
+                std::ptr::null_mut(),
+                &mut name_length,
+                std::ptr::null_mut(),
+                &mut domain_length,
+                &mut use_type,
+            )
+        };
+        if preflight == 0 && unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER {
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::SetupFailed,
+                format!("LookupAccountSidW size query failed for {sid}"),
+                std::io::Error::last_os_error(),
+            ));
+        }
+        if name_length == 0 {
+            return Err(SandboxError::new(
+                SandboxErrorCode::SetupFailed,
+                format!("LookupAccountSidW returned an empty account name for {sid}"),
+            ));
+        }
+
+        let mut name = vec![0_u16; name_length as usize];
+        let mut domain = vec![0_u16; domain_length as usize];
+        if unsafe {
+            LookupAccountSidW(
+                std::ptr::null(),
+                sid_pointer,
+                name.as_mut_ptr(),
+                &mut name_length,
+                domain.as_mut_ptr(),
+                &mut domain_length,
+                &mut use_type,
+            )
+        } == 0
+        {
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::SetupFailed,
+                format!("LookupAccountSidW failed for {sid}"),
+                std::io::Error::last_os_error(),
+            ));
+        }
+        String::from_utf16(&name[..name_length as usize]).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::SetupFailed,
+                format!("Windows returned a non-Unicode account name for {sid}"),
+                error,
+            )
+        })
+    })();
+
+    unsafe { LocalFree(sid_pointer as HLOCAL) };
+    result
+}
+
 fn sid_pointer_to_string(sid: *mut c_void) -> Result<String, SandboxError> {
     let mut value = std::ptr::null_mut::<u16>();
     if unsafe { ConvertSidToStringSidW(sid, &mut value) } == 0 {
@@ -746,4 +842,86 @@ fn random_password() -> Zeroizing<String> {
     let mut bytes = Zeroizing::new([0_u8; 48]);
     OsRng.fill_bytes(bytes.as_mut());
     Zeroizing::new(format!("S!{}a9", BASE64_URL.encode(bytes.as_ref())))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_account_name_for_sid_string;
+    use super::resolve_account_sid_string;
+    use super::verify_resolved_group_memberships;
+    use crate::protocol::SandboxErrorCode;
+
+    const MANAGED_GROUP_SID: &str = "S-1-5-21-1-2-3-1001";
+    const BUILTIN_USERS_SID: &str = "S-1-5-32-545";
+
+    #[test]
+    fn builtin_users_sid_resolves_through_the_localized_group_name() {
+        let group = resolve_account_name_for_sid_string(BUILTIN_USERS_SID)
+            .expect("built-in Users group should resolve");
+        let resolved_sid = resolve_account_sid_string(&group)
+            .expect("localized built-in Users group should resolve back to a SID");
+
+        assert_eq!(resolved_sid, BUILTIN_USERS_SID);
+    }
+
+    #[test]
+    fn managed_accounts_require_both_managed_and_builtin_users_groups() {
+        let memberships = vec![
+            (
+                "SetsunaSandboxUsers".to_string(),
+                MANAGED_GROUP_SID.to_string(),
+            ),
+            ("Users".to_string(), BUILTIN_USERS_SID.to_string()),
+        ];
+
+        verify_resolved_group_memberships(
+            "SetsunaSbOffline",
+            "SetsunaSandboxUsers",
+            MANAGED_GROUP_SID,
+            &memberships,
+        )
+        .expect("expected memberships should be accepted");
+    }
+
+    #[test]
+    fn missing_builtin_users_membership_requires_repair() {
+        let memberships = vec![(
+            "SetsunaSandboxUsers".to_string(),
+            MANAGED_GROUP_SID.to_string(),
+        )];
+
+        let error = verify_resolved_group_memberships(
+            "SetsunaSbOffline",
+            "SetsunaSandboxUsers",
+            MANAGED_GROUP_SID,
+            &memberships,
+        )
+        .expect_err("missing built-in Users membership must fail readiness");
+
+        assert_eq!(error.code, SandboxErrorCode::NeedsRepair);
+        assert!(error.message.contains("built-in Users"));
+    }
+
+    #[test]
+    fn unexpected_local_group_membership_requires_repair() {
+        let memberships = vec![
+            (
+                "SetsunaSandboxUsers".to_string(),
+                MANAGED_GROUP_SID.to_string(),
+            ),
+            ("Users".to_string(), BUILTIN_USERS_SID.to_string()),
+            ("Administrators".to_string(), "S-1-5-32-544".to_string()),
+        ];
+
+        let error = verify_resolved_group_memberships(
+            "SetsunaSbOffline",
+            "SetsunaSandboxUsers",
+            MANAGED_GROUP_SID,
+            &memberships,
+        )
+        .expect_err("unexpected membership must fail readiness");
+
+        assert_eq!(error.code, SandboxErrorCode::NeedsRepair);
+        assert!(error.message.contains("Administrators"));
+    }
 }

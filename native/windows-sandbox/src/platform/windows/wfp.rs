@@ -37,7 +37,9 @@ const SUBLAYER_DESCRIPTION: &str =
     "Persistent WFP sublayer for Setsuna Windows sandbox network isolation";
 const PROVIDER_KEY: GUID = GUID::from_u128(0x5437d01b_8b38_4c87_b575_5534519728a1);
 const SUBLAYER_KEY: GUID = GUID::from_u128(0x437fbe51_8169_423d_8f53_4e2b5a076d43);
-const SUBLAYER_WEIGHT: u16 = u16::MAX;
+// BFE may persist a requested 0xffff sublayer weight as 0xfffe. Use that stable
+// high priority so install and post-install verification agree.
+const SUBLAYER_WEIGHT: u16 = u16::MAX - 1;
 const LOOPBACK_V4: u32 = 0x7f00_0001;
 const TCP_PROTOCOL: u8 = 6;
 
@@ -445,19 +447,40 @@ fn verify_provider(engine: HANDLE) -> Result<(), SandboxError> {
 fn verify_sublayer(engine: HANDLE) -> Result<(), SandboxError> {
     let sublayer = get_sublayer(engine)?;
     let sublayer = sublayer.as_ref();
+    let key_matches = guid_equal(&sublayer.subLayerKey, &SUBLAYER_KEY);
     let provider_matches = !sublayer.providerKey.is_null()
         && guid_equal(unsafe { &*sublayer.providerKey }, &PROVIDER_KEY);
-    if !guid_equal(&sublayer.subLayerKey, &SUBLAYER_KEY)
-        || sublayer.flags & FWPM_SUBLAYER_FLAG_PERSISTENT == 0
-        || !provider_matches
-        || sublayer.weight != SUBLAYER_WEIGHT
-    {
+    if !sublayer_metadata_matches(
+        key_matches,
+        sublayer.flags,
+        provider_matches,
+        sublayer.weight,
+    ) {
         return Err(SandboxError::new(
             SandboxErrorCode::NeedsRepair,
-            "Setsuna WFP sublayer metadata is invalid",
+            format!(
+                concat!(
+                    "Setsuna WFP sublayer metadata is invalid ",
+                    "(keyMatches={}, flags=0x{:08x}, providerMatches={}, ",
+                    "weight={}, expectedWeight={})",
+                ),
+                key_matches, sublayer.flags, provider_matches, sublayer.weight, SUBLAYER_WEIGHT,
+            ),
         ));
     }
     Ok(())
+}
+
+fn sublayer_metadata_matches(
+    key_matches: bool,
+    flags: u32,
+    provider_matches: bool,
+    weight: u16,
+) -> bool {
+    key_matches
+        && flags & FWPM_SUBLAYER_FLAG_PERSISTENT != 0
+        && provider_matches
+        && weight >= SUBLAYER_WEIGHT
 }
 
 fn verify_filter(
@@ -783,5 +806,28 @@ mod tests {
     fn rejects_invalid_proxy_ranges() {
         assert!(filter_specs(0, 10).is_err());
         assert!(filter_specs(10, 9).is_err());
+    }
+
+    #[test]
+    fn accepts_the_stable_high_priority_sublayer_weight() {
+        assert_eq!(SUBLAYER_WEIGHT, 0xfffe);
+        assert!(sublayer_metadata_matches(
+            true,
+            FWPM_SUBLAYER_FLAG_PERSISTENT,
+            true,
+            SUBLAYER_WEIGHT,
+        ));
+        assert!(sublayer_metadata_matches(
+            true,
+            FWPM_SUBLAYER_FLAG_PERSISTENT,
+            true,
+            u16::MAX,
+        ));
+        assert!(!sublayer_metadata_matches(
+            true,
+            FWPM_SUBLAYER_FLAG_PERSISTENT,
+            true,
+            SUBLAYER_WEIGHT - 1,
+        ));
     }
 }

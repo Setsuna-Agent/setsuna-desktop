@@ -12,6 +12,16 @@ type WindowsSandboxController = {
   status: DesktopWindowsSandboxStatus | null;
 };
 
+type WindowsSandboxApi = {
+  getStatus(): Promise<DesktopWindowsSandboxStatus>;
+  runAction(action: DesktopWindowsSandboxAction): Promise<DesktopWindowsSandboxStatus>;
+};
+
+type WindowsSandboxActionResult = {
+  error: string | null;
+  status: DesktopWindowsSandboxStatus | null;
+};
+
 export function useWindowsSandbox(): WindowsSandboxController {
   const requestSequence = useRef(0);
   const [status, setStatus] = useState<DesktopWindowsSandboxStatus | null>(null);
@@ -49,10 +59,11 @@ export function useWindowsSandbox(): WindowsSandboxController {
     setBusyAction(action);
     setError(null);
     try {
-      const nextStatus = await api.runAction(action);
-      if (requestId === requestSequence.current) setStatus(nextStatus);
-    } catch (unknownError) {
-      if (requestId === requestSequence.current) setError(errorMessage(unknownError));
+      const result = await runWindowsSandboxActionAndReconcile(api, action);
+      if (requestId === requestSequence.current) {
+        if (result.status) setStatus(result.status);
+        setError(result.error);
+      }
     } finally {
       if (requestId === requestSequence.current) setBusyAction(null);
     }
@@ -66,6 +77,34 @@ export function useWindowsSandbox(): WindowsSandboxController {
   }, [refresh]);
 
   return { busyAction, error, refresh, runAction, status };
+}
+
+/** Elevated setup may commit before its final validation fails; always reconcile the displayed state. */
+export async function runWindowsSandboxActionAndReconcile(
+  api: WindowsSandboxApi,
+  action: DesktopWindowsSandboxAction,
+): Promise<WindowsSandboxActionResult> {
+  try {
+    return { error: null, status: await api.runAction(action) };
+  } catch (unknownError) {
+    const actionError = errorMessage(unknownError);
+    try {
+      const status = await api.getStatus();
+      return {
+        error: actionReachedDesiredState(action, status) ? null : actionError,
+        status,
+      };
+    } catch {
+      return { error: actionError, status: null };
+    }
+  }
+}
+
+function actionReachedDesiredState(
+  action: DesktopWindowsSandboxAction,
+  status: DesktopWindowsSandboxStatus,
+): boolean {
+  return action === 'uninstall' ? status.state === 'not-installed' : status.state === 'ready';
 }
 
 function errorMessage(error: unknown): string {

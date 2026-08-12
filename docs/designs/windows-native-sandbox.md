@@ -78,19 +78,28 @@ Electron main 持有 sidecar 路径、UAC 生命周期和沙箱出口。preload 
 ## 文件系统权限
 
 安装创建 `SetsunaSandboxUsers`、`SetsunaSbOffline` 和 `SetsunaSbOnline`。两个用户名特意控制在
-Windows 本地 SAM 账户的 20 字符限制内。执行时：
+Windows 本地 SAM 账户的 20 字符限制内，并与上游 Codex 一样同时加入专用沙箱组和 Windows 内置
+`Users` 组：内置组提供系统 runtime/工具链的标准读取基线，专用组承载 Setsuna 管理的 root ACL。
+readiness 会同时验证这两个必要成员关系并拒绝其他本地组。执行时：
 
 1. 所有输入路径先 canonicalize，并限制为固定本机 NTFS 卷；
-2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；命令特有的工具链文件仅在必要时向本次 logon SID
-   临时授予 read/execute，且只修改所指对象，不向已有子树传播；
+2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；仅在现有 Windows ACL 不足时，向稳定
+   `SetsunaSandboxUsers` 组补 read/execute ACE。目录 root 使用可继承 ACE，文件只修改所指对象；后续命令
+   复用既有授权，不按 logon 重写已有子树。首次物化现有目录树时显式跳过 junction/symlink，逐对象使用
+   非递归 DACL 更新，避免 Windows `SetNamedSecurityInfoW` 在包管理器的 reparse graph 中无界传播；
 3. 每种稳定写策略生成一个 capability SID。新的 writable root 首次授权时安装可继承 capability ACE；后续命令
    先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加非递归 logon SID ACE；
 4. 如果隔离账户原本不能访问稳定 root，同时为稳定沙箱组安装对应 read 或 write ACE，让账户 token 检查和
    restricted SID 的写检查都能通过；
 5. read-only workspace 与已存在的 protected writable root 向 capability 安装稳定 mutation deny，覆盖宽泛宿主
    allow 或从 workspace 继承的 write allow，同时保留读取；
-6. Job Object 结束后只回收本次 logon SID 和 request-bootstrap ACE；稳定 capability、group 和 deny ACE 留作复用；
-7. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
+6. Job Object 结束后回收本次 logon SID 的临时目录 ACE 和 request-bootstrap ACE；稳定 capability、group
+   和 deny ACE 留作复用；
+7. workspace、cwd 与额外授权 root 的私有祖先仅向稳定沙箱组授予非继承的 read/execute，
+   供 Node、esbuild 等 runtime 执行 `lstat`/`realpath` 和向上枚举包边界；该权限只作用于祖先目录对象，
+   不继承到兄弟目录或文件；
+   若系统所有的祖先目录拒绝宿主读取其 DACL，则不追加 ACE，让受限进程按既有 ACL 在实际访问时 fail closed；
+8. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
 
 最终 shell 与上游 Codex 一样使用
 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，restricting SID 按顺序包含

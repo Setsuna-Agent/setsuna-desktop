@@ -7,12 +7,16 @@ uninstall.
 
 The security boundary is fail-closed:
 
-- two managed local accounts separate offline and online executions;
+- two managed local accounts separate offline and online executions; both are
+  members of the built-in Users group for the standard Windows runtime baseline
+  and of a dedicated Setsuna group for managed root ACLs;
 - Windows Firewall rules block direct egress and expose only the Setsuna proxy
   port range to the online account;
 - restricted tokens, per-execution logon SIDs, and policy-scoped capability SIDs
   constrain writes; temporary logon/request ACL entries are revoked after each
-  run, while reads remain governed by the dedicated account's host DACLs;
+  run, while stable readable roots use reusable dedicated-group ACLs; existing
+  trees are materialized with non-recursive per-object updates that never follow
+  junctions or symbolic links;
 - a hash-verified, machine-readable but sandbox-nonwritable runner copy removes
   dependencies on the per-user packaged executable ACL;
 - a non-breakaway Job Object terminates the whole process tree when the sidecar
