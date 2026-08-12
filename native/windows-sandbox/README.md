@@ -15,8 +15,9 @@ The security boundary is fail-closed:
 - restricted tokens, per-execution logon SIDs, and policy-scoped capability SIDs
   constrain writes; temporary logon/request ACL entries are revoked after each
   run, while stable readable roots use reusable dedicated-group ACLs; existing
-  trees are materialized with non-recursive per-object updates that never follow
-  junctions or symbolic links;
+  trees are materialized with pinned, non-recursive per-object updates; external
+  junctions/symbolic links fail closed, internal links are not followed, and a
+  distinct completion marker is committed only after tree reconciliation;
 - a hash-verified, machine-readable but sandbox-nonwritable runner copy removes
   dependencies on the per-user packaged executable ACL;
 - a non-breakaway Job Object terminates the whole process tree when the sidecar

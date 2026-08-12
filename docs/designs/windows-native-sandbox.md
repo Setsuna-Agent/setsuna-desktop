@@ -85,10 +85,13 @@ readiness 会同时验证这两个必要成员关系并拒绝其他本地组。�
 1. 所有输入路径先 canonicalize，并限制为固定本机 NTFS 卷；
 2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；仅在现有 Windows ACL 不足时，向稳定
    `SetsunaSandboxUsers` 组补 read/execute ACE。目录 root 使用可继承 ACE，文件只修改所指对象；后续命令
-   复用既有授权，不按 logon 重写已有子树。首次物化现有目录树时显式跳过 junction/symlink，逐对象使用
-   非递归 DACL 更新，避免 Windows `SetNamedSecurityInfoW` 在包管理器的 reparse graph 中无界传播；
+   复用既有授权，不按 logon 重写已有子树。首次物化时以不跟随 reparse point 且禁止 delete sharing 的句柄
+   钉住每个对象，再逐对象执行非递归 DACL 更新；junction/symlink 只允许指向同一授权 root 内部，外链直接
+   fail closed，OneDrive 等非 name-surrogate placeholder 仍按普通对象处理。目录树完成两轮并发缺口校正后才写入
+   独立 completion marker；命中 marker 的后续执行不重写 DACL，但仍重新校验当前 link graph；
 3. 每种稳定写策略生成一个 capability SID。新的 writable root 首次授权时安装可继承 capability ACE；后续命令
-   先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加非递归 logon SID ACE；
+   以独立 marker 判断完整物化是否完成，避免进程在 root ACE 写入后异常退出时把半完成子树误判为成功；每次执行
+   独有的空临时目录只加非递归 logon SID ACE；
 4. 如果隔离账户原本不能访问稳定 root，同时为稳定沙箱组安装对应 read 或 write ACE，让账户 token 检查和
    restricted SID 的写检查都能通过；
 5. read-only workspace 与已存在的 protected writable root 向 capability 安装稳定 mutation deny，覆盖宽泛宿主

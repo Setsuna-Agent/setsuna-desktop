@@ -179,7 +179,8 @@ function Assert-NoLogonSidAce {
 
 function Invoke-SandboxRequest(
   [System.Collections.IDictionary]$Request,
-  [scriptblock]$WhileRunning = {}
+  [scriptblock]$WhileRunning = {},
+  [string]$ExpectedErrorPattern = ''
 ) {
   Write-SandboxRequest $Request
   $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -216,6 +217,19 @@ function Invoke-SandboxRequest(
     Assert-PreExistingReadableAclsUnchanged
     Assert-ReparseTargetAclUnchanged
     Assert-TemporaryPathAclsUnchanged
+    if ($ExpectedErrorPattern) {
+      if ($exitCode -eq 0) {
+        throw "Sandbox request unexpectedly accepted an unsafe policy: $($Request.executionId)"
+      }
+      $failureOutput = "$stdout`n$stderr"
+      if ($failureOutput -notmatch $ExpectedErrorPattern) {
+        throw "Sandbox request failed for the wrong reason: $($Request.executionId)`nstdout: $stdout`nstderr: $stderr"
+      }
+      if (Test-Path -LiteralPath $requestPath) {
+        Remove-Item -LiteralPath $requestPath -Force
+      }
+      return
+    }
     if ($exitCode -ne 0) {
       throw "Sandbox request failed with exit code ${exitCode}: $($Request.executionId)`nstdout: $stdout`nstderr: $stderr"
     }
@@ -371,6 +385,20 @@ try {
     $temporaryPathSddls[$temporaryPath] = (Get-Acl -LiteralPath $temporaryPath).Sddl
   }
 
+  # A link outside the approved root must fail closed without touching its
+  # target. Removing it afterward lets the same policy repair any partial ACL
+  # work and proves the completion marker is written only after reconciliation.
+  $linkEscapeRequest = New-SandboxRequest `
+    -ExecutionId 'windows_ci_external_link_rejected' `
+    -Command 'exit /b 0' `
+    -NetworkAccess $false `
+    -Environment (New-SandboxEnvironment)
+  Invoke-SandboxRequest `
+    -Request $linkEscapeRequest `
+    -ExpectedErrorPattern 'contains a link that escapes'
+  Assert-ReparseTargetAclUnchanged
+  Remove-Item -LiteralPath $workspaceJunction -Force
+
   $readOnlyRequest = New-SandboxRequest `
     -ExecutionId 'windows_ci_read_only' `
     -Command 'read-only-probe.cmd' `
@@ -453,6 +481,19 @@ try {
     }
   }
   Assert-NoLogonSidAce
+
+  # The completed policy fast path must still validate the current link graph.
+  New-Item -ItemType Junction -Path $workspaceJunction -Target $externalReparseTarget | Out-Null
+  $markedLinkEscapeRequest = New-SandboxRequest `
+    -ExecutionId 'windows_ci_marked_external_link_rejected' `
+    -Command 'exit /b 0' `
+    -NetworkAccess $false `
+    -Environment (New-SandboxEnvironment)
+  Invoke-SandboxRequest `
+    -Request $markedLinkEscapeRequest `
+    -ExpectedErrorPattern 'contains a link that escapes'
+  Assert-ReparseTargetAclUnchanged
+  Remove-Item -LiteralPath $workspaceJunction -Force
 
   $proxyAccept = $null
   if ($ExistingProxyPort -ne 0) {

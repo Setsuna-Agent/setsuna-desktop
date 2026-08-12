@@ -1,3 +1,4 @@
+use super::handle::OwnedHandle;
 use super::paths::{canonical_existing, path_is_within};
 use super::wide::to_wide;
 use crate::protocol::{PermissionProfile, SandboxError, SandboxErrorCode, SandboxRunRequest};
@@ -5,16 +6,15 @@ use fs2::FileExt;
 use std::collections::{HashMap, HashSet};
 use std::ffi::c_void;
 use std::fs::{File, OpenOptions};
-use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use windows_sys::Win32::Foundation::{
     GetLastError, LocalFree, ERROR_ACCESS_DENIED, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HLOCAL,
-    INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW,
-    GetNamedSecurityInfoW, SetEntriesInAclW, SetNamedSecurityInfoW, DENY_ACCESS, EXPLICIT_ACCESS_W,
-    REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS, TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
+    GetNamedSecurityInfoW, GetSecurityInfo, SetEntriesInAclW, SetNamedSecurityInfoW, DENY_ACCESS,
+    EXPLICIT_ACCESS_W, REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS, TRUSTEE_IS_SID,
+    TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
     AccessCheck, AclSizeInformation, EqualSid, GetAce, GetAclInformation,
@@ -26,9 +26,12 @@ use windows_sys::Win32::Security::{
     SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    FindClose, FindFirstFileW, DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ,
-    FILE_GENERIC_WRITE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA, WIN32_FIND_DATAW,
+    CreateFileW, FileAttributeTagInfo, GetFileInformationByHandleEx, DELETE, FILE_ALL_ACCESS,
+    FILE_APPEND_DATA, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT,
+    FILE_ATTRIBUTE_TAG_INFO, FILE_DELETE_CHILD, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+    FILE_READ_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_WRITE_ATTRIBUTES,
+    FILE_WRITE_DATA, FILE_WRITE_EA, OPEN_EXISTING, READ_CONTROL, WRITE_DAC,
 };
 
 const SE_FILE_OBJECT: i32 = 1;
@@ -58,6 +61,10 @@ const INHERIT_ONLY_ACE: u8 = 0x08;
 const WRITE_DAC_MASK: u32 = 0x0004_0000;
 const WRITE_OWNER_MASK: u32 = 0x0008_0000;
 const REPARSE_TAG_NAME_SURROGATE: u32 = 0x2000_0000;
+const COMPLETION_MARKER_MASK: u32 = 0x0002_0000;
+const READ_COMPLETION_DISCRIMINATOR: u32 = 0x7f31_a2c5;
+const WRITE_COMPLETION_DISCRIMINATOR: u32 = 0xb4d8_091e;
+const DENY_COMPLETION_DISCRIMINATOR: u32 = 0xe26c_5f73;
 const LOCAL_SYSTEM_SID: &str = "S-1-5-18";
 const BUILTIN_ADMINISTRATORS_SID: &str = "S-1-5-32-544";
 
@@ -491,6 +498,9 @@ pub fn prepare_execution(
     let _mutation = AclMutationLock::acquire(lock_path)?;
     let sandbox_group = LocalSid::parse(sandbox_group_sid)?;
     let capability = LocalSid::parse(capability_sid)?;
+    let read_completion = completion_marker_sid(capability_sid, READ_COMPLETION_DISCRIMINATOR)?;
+    let write_completion = completion_marker_sid(capability_sid, WRITE_COMPLETION_DISCRIMINATOR)?;
+    let deny_completion = completion_marker_sid(capability_sid, DENY_COMPLETION_DISCRIMINATOR)?;
     let writable_roots = unique_existing_paths(&request.writable_roots)?;
     let ephemeral_roots = unique_existing_paths(&request.ephemeral_writable_roots)?;
 
@@ -500,12 +510,21 @@ pub fn prepare_execution(
             // A dedicated sandbox account cannot consume owner-only ACEs inherited
             // by an existing private workspace. Propagate one stable group read ACE
             // for that workspace; command-specific toolchain roots stay non-recursive.
-            ensure_persistent_allow_aces(&workspace_root, &[(sandbox_group.raw(), READ_MASK)])?;
+            ensure_persistent_allow_aces(
+                &workspace_root,
+                &[(sandbox_group.raw(), READ_MASK)],
+                &read_completion,
+            )?;
         }
         // The upstream-compatible World restricting SID is required by core
         // Windows objects. An explicit capability deny still makes read-only
         // authoritative even when the host workspace is broadly writable.
-        ensure_persistent_deny_ace(&workspace_root, capability.raw(), MUTATING_MASK)?;
+        ensure_persistent_deny_ace(
+            &workspace_root,
+            capability.raw(),
+            MUTATING_MASK,
+            &deny_completion,
+        )?;
     }
 
     // Stable roots are authorized once. Later commands observe the capability
@@ -522,10 +541,10 @@ pub fn prepare_execution(
         if !token_has_access(root, read_access_token, PERSISTENT_WRITE_MASK)? {
             allows.push((sandbox_group.raw(), PERSISTENT_WRITE_MASK));
         }
-        ensure_persistent_allow_aces(root, &allows)?;
+        ensure_persistent_allow_aces(root, &allows, &write_completion)?;
     }
     for root in unique_existing_paths(&request.protected_writable_roots)? {
-        ensure_persistent_deny_ace(&root, capability.raw(), MUTATING_MASK)?;
+        ensure_persistent_deny_ace(&root, capability.raw(), MUTATING_MASK, &deny_completion)?;
     }
 
     let mut logon = TemporaryAclGrant::new(logon_sid, lock_path)?;
@@ -547,7 +566,12 @@ pub fn prepare_execution(
                 &self_contained_roots,
                 sandbox_group.raw(),
             )?;
-            ensure_group_read_if_needed(&root, read_access_token, sandbox_group.raw())?;
+            ensure_group_read_if_needed(
+                &root,
+                read_access_token,
+                sandbox_group.raw(),
+                &read_completion,
+            )?;
         }
 
         for root in &writable_roots {
@@ -643,13 +667,14 @@ fn ensure_group_read_if_needed(
     path: &Path,
     access_token: isize,
     sandbox_group_sid: *mut c_void,
+    completion_marker: &LocalSid,
 ) -> Result<(), SandboxError> {
     // PATH entries and system toolchains are commonly readable through an inherited
     // group ACE while remaining protected from ACL changes by an unprivileged caller.
     if token_has_access(path, access_token, READ_MASK)? {
         return Ok(());
     }
-    ensure_persistent_allow_aces(path, &[(sandbox_group_sid, READ_MASK)])
+    ensure_persistent_allow_aces(path, &[(sandbox_group_sid, READ_MASK)], completion_marker)
 }
 
 fn ensure_ancestor_group_read_if_needed(
@@ -670,6 +695,7 @@ fn ensure_ancestor_group_read_if_needed(
                     &candidate,
                     &[(sandbox_group_sid, ANCESTOR_READ_MASK)],
                     0,
+                    None,
                 )?;
             }
             TokenAccessInspection::Known(true)
@@ -829,21 +855,34 @@ fn aligned_buffer(byte_length: usize) -> Vec<usize> {
 fn ensure_persistent_allow_aces(
     path: &Path,
     allows: &[(*mut c_void, u32)],
+    completion_marker: &LocalSid,
 ) -> Result<(), SandboxError> {
-    ensure_persistent_allow_aces_with_inheritance(path, allows, inherited_for(path))
+    ensure_persistent_allow_aces_with_inheritance(
+        path,
+        allows,
+        inherited_for(path),
+        Some(completion_marker),
+    )
 }
 
 fn ensure_persistent_allow_aces_with_inheritance(
     path: &Path,
     allows: &[(*mut c_void, u32)],
     inheritance: u32,
+    completion_marker: Option<&LocalSid>,
 ) -> Result<(), SandboxError> {
+    if let Some(marker) = completion_marker {
+        if persistent_acl_completion_is_valid(path, marker)? {
+            return Ok(());
+        }
+    }
+
     let mut all_present = true;
     for (sid, mask) in allows {
         all_present &=
             path_has_effective_ace(path, *sid, ACCESS_ALLOWED_ACE_TYPE, *mask, inheritance)?;
     }
-    if all_present {
+    if all_present && completion_marker.is_none() {
         return Ok(());
     }
 
@@ -865,16 +904,17 @@ fn ensure_persistent_allow_aces_with_inheritance(
             },
         })
         .collect::<Vec<_>>();
-    apply_persistent_acl_entries(path, &entries)
+    apply_persistent_acl_entries_with_marker(path, &entries, completion_marker)
 }
 
 fn ensure_persistent_deny_ace(
     path: &Path,
     sid: *mut c_void,
     mask: u32,
+    completion_marker: &LocalSid,
 ) -> Result<(), SandboxError> {
     let inheritance = inherited_for(path);
-    if path_has_effective_ace(path, sid, ACCESS_DENIED_ACE_TYPE, mask, inheritance)? {
+    if persistent_acl_completion_is_valid(path, completion_marker)? {
         return Ok(());
     }
     let entry = EXPLICIT_ACCESS_W {
@@ -889,7 +929,31 @@ fn ensure_persistent_deny_ace(
             ptstrName: sid.cast::<u16>(),
         },
     };
-    apply_persistent_acl_entries(path, &[entry])
+    apply_persistent_acl_entries_with_marker(path, &[entry], Some(completion_marker))
+}
+
+fn completion_marker_entry(marker: &LocalSid) -> EXPLICIT_ACCESS_W {
+    EXPLICIT_ACCESS_W {
+        grfAccessPermissions: COMPLETION_MARKER_MASK,
+        grfAccessMode: SET_ACCESS,
+        grfInheritance: 0,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: 0,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: marker.raw().cast::<u16>(),
+        },
+    }
+}
+
+fn completion_marker_sid(
+    capability_sid: &str,
+    discriminator: u32,
+) -> Result<LocalSid, SandboxError> {
+    // Appending a sub-authority keeps marker SIDs structurally distinct from
+    // every account/capability SID that the sandbox can place in a token.
+    LocalSid::parse(&format!("{capability_sid}-{discriminator}"))
 }
 
 fn path_has_effective_ace(
@@ -938,6 +1002,19 @@ fn path_has_effective_ace(
         ));
     }
 
+    let result = dacl_has_effective_ace(path, dacl, sid, ace_type, mask, inheritance);
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    result
+}
+
+fn dacl_has_effective_ace(
+    path: &Path,
+    dacl: *mut ACL,
+    sid: *mut c_void,
+    ace_type: u8,
+    mask: u32,
+    inheritance: u32,
+) -> Result<bool, SandboxError> {
     let mut acl_info = ACL_SIZE_INFORMATION {
         AceCount: 0,
         AclBytesInUse: 0,
@@ -952,7 +1029,6 @@ fn path_has_effective_ace(
         )
     } == 0
     {
-        unsafe { LocalFree(descriptor as HLOCAL) };
         return Err(SandboxError::with_source(
             SandboxErrorCode::UnsupportedPolicy,
             format!("cannot inspect persistent ACL for {}", path.display()),
@@ -1005,7 +1081,6 @@ fn path_has_effective_ace(
             break;
         }
     }
-    unsafe { LocalFree(descriptor as HLOCAL) };
     Ok(found)
 }
 
@@ -1020,70 +1095,197 @@ fn map_file_mask(mut mask: u32) -> u32 {
     mask
 }
 
+#[cfg(test)]
 fn apply_persistent_acl_entries(
     path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
+    apply_persistent_acl_entries_with_marker(path, entries, None)
+}
+
+fn apply_persistent_acl_entries_with_marker(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+    completion_marker: Option<&LocalSid>,
+) -> Result<(), SandboxError> {
+    let approved_root = std::fs::canonicalize(path).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("cannot canonicalize persistent ACL root {}", path.display()),
+            error,
+        )
+    })?;
+    let root = PersistentAclObject::open(path, &approved_root)?;
+    materialize_persistent_acl_object(&root, &approved_root, entries)?;
+    if let Some(marker) = completion_marker {
+        // Keep the root pinned until the marker is committed so a successful
+        // marker can only describe the exact tree root that was reconciled.
+        apply_missing_acl_entries_to_object(&root, &[completion_marker_entry(marker)])?;
+    }
+    Ok(())
+}
+
+struct PersistentAclObject {
+    path: PathBuf,
+    handle: OwnedHandle,
+    is_directory: bool,
+    is_name_surrogate: bool,
+}
+
+impl PersistentAclObject {
+    fn open(path: &Path, approved_root: &Path) -> Result<Self, SandboxError> {
+        let path_wide = to_wide(path.as_os_str());
+        // Denying delete sharing pins this directory entry until the ACL update
+        // finishes. SetFileSecurityW below therefore cannot be redirected to a
+        // replacement inserted after the reparse/containment checks.
+        let handle = OwnedHandle::new(unsafe {
+            CreateFileW(
+                path_wide.as_ptr(),
+                READ_CONTROL | WRITE_DAC | FILE_READ_ATTRIBUTES,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                std::ptr::null(),
+                OPEN_EXISTING,
+                FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                0,
+            )
+        })
+        .map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!("cannot pin persistent ACL object {}", path.display()),
+                error,
+            )
+        })?;
+        let mut tag_info = unsafe { std::mem::zeroed::<FILE_ATTRIBUTE_TAG_INFO>() };
+        if unsafe {
+            GetFileInformationByHandleEx(
+                handle.raw(),
+                FileAttributeTagInfo,
+                std::ptr::addr_of_mut!(tag_info).cast::<c_void>(),
+                std::mem::size_of::<FILE_ATTRIBUTE_TAG_INFO>() as u32,
+            )
+        } == 0
+        {
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!("cannot inspect persistent ACL object {}", path.display()),
+                std::io::Error::last_os_error(),
+            ));
+        }
+        let is_name_surrogate = tag_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            && is_name_surrogate_reparse_tag(tag_info.ReparseTag);
+        if is_name_surrogate {
+            let target = std::fs::canonicalize(path).map_err(|error| {
+                SandboxError::with_source(
+                    SandboxErrorCode::UnsupportedPolicy,
+                    format!("cannot resolve sandbox link {}", path.display()),
+                    error,
+                )
+            })?;
+            if !path_is_within(&target, approved_root) {
+                return Err(SandboxError::new(
+                    SandboxErrorCode::UnsupportedPolicy,
+                    format!(
+                        "sandbox root {} contains a link that escapes to {}",
+                        approved_root.display(),
+                        target.display()
+                    ),
+                ));
+            }
+        }
+        Ok(Self {
+            path: path.to_path_buf(),
+            handle,
+            is_directory: tag_info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0,
+            is_name_surrogate,
+        })
+    }
+}
+
+fn materialize_persistent_acl_object(
+    object: &PersistentAclObject,
+    approved_root: &Path,
     entries: &[EXPLICIT_ACCESS_W],
 ) -> Result<(), SandboxError> {
     let inherited_entries = entries
         .iter()
         .filter(|entry| entry.grfInheritance & (CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE) != 0)
         .collect::<Vec<_>>();
-    if path.is_dir() && !inherited_entries.is_empty() {
-        apply_persistent_acl_entries_to_descendants(path, &inherited_entries)?;
-    }
-
-    // Apply the root last. If traversal is interrupted, the missing root ACE
-    // makes the next run retry instead of mistaking a partially-authorized tree
-    // for a completed grant.
-    apply_missing_non_recursive_acl_entries(path, entries)?;
-
-    if path.is_dir() && !inherited_entries.is_empty() {
-        // A direct child can be created after the first root enumeration but
-        // before the inheritable root ACE is installed. Once the root is ready,
-        // reconcile only missing direct-child subtrees; later children inherit.
-        reconcile_persistent_acl_root_children(path, &inherited_entries)?;
-    }
-    Ok(())
-}
-
-fn apply_persistent_acl_entries_to_descendants(
-    root: &Path,
-    entries: &[&EXPLICIT_ACCESS_W],
-) -> Result<(), SandboxError> {
-    let mut pending = vec![root.to_path_buf()];
-    while let Some(directory) = pending.pop() {
-        for (child_path, is_directory) in persistent_acl_children(&directory)? {
-            let child_entries = entries
+    if object.is_directory && !object.is_name_surrogate && !inherited_entries.is_empty() {
+        for child_path in persistent_acl_child_paths(&object.path)? {
+            let child = PersistentAclObject::open(&child_path, approved_root)?;
+            let child_entries = inherited_entries
                 .iter()
-                .map(|entry| inherited_entry_for_child(entry, is_directory))
+                .map(|entry| inherited_entry_for_child(entry, child.is_directory))
                 .collect::<Vec<_>>();
-            apply_missing_non_recursive_acl_entries(&child_path, &child_entries)?;
-            if is_directory {
-                pending.push(child_path);
+            materialize_persistent_acl_object(&child, approved_root, &child_entries)?;
+        }
+    }
+    // Name-surrogate objects were already validated against the approved root.
+    // Do not pass their path to SetFileSecurityW because that API resolves the
+    // link and would mutate the target instead of the inspected link object.
+    if !object.is_name_surrogate {
+        apply_missing_acl_entries_to_object(object, entries)?;
+    }
+
+    if object.is_directory && !object.is_name_surrogate && !inherited_entries.is_empty() {
+        // Children created after the directory ACE was installed inherit it.
+        // A second enumeration repairs only objects that fell into the earlier
+        // traversal-to-parent-update window.
+        for child_path in persistent_acl_child_paths(&object.path)? {
+            let child = PersistentAclObject::open(&child_path, approved_root)?;
+            let child_entries = inherited_entries
+                .iter()
+                .map(|entry| inherited_entry_for_child(entry, child.is_directory))
+                .collect::<Vec<_>>();
+            if !persistent_acl_entries_are_effective_for_object(&child, &child_entries)? {
+                materialize_persistent_acl_object(&child, approved_root, &child_entries)?;
             }
         }
     }
     Ok(())
 }
 
-fn reconcile_persistent_acl_root_children(
-    root: &Path,
-    entries: &[&EXPLICIT_ACCESS_W],
+fn persistent_acl_completion_is_valid(
+    path: &Path,
+    completion_marker: &LocalSid,
+) -> Result<bool, SandboxError> {
+    let approved_root = std::fs::canonicalize(path).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("cannot canonicalize persistent ACL root {}", path.display()),
+            error,
+        )
+    })?;
+    let root = PersistentAclObject::open(path, &approved_root)?;
+    if !persistent_acl_entries_are_effective_for_object(
+        &root,
+        &[completion_marker_entry(completion_marker)],
+    )? {
+        return Ok(false);
+    }
+
+    // Completion markers avoid repeated DACL writes, but link safety is a
+    // property of the current tree and must be checked on every execution.
+    validate_persistent_acl_links(&root, &approved_root)?;
+    Ok(true)
+}
+
+fn validate_persistent_acl_links(
+    object: &PersistentAclObject,
+    approved_root: &Path,
 ) -> Result<(), SandboxError> {
-    for (child_path, is_directory) in persistent_acl_children(root)? {
-        let child_entries = entries
-            .iter()
-            .map(|entry| inherited_entry_for_child(entry, is_directory))
-            .collect::<Vec<_>>();
-        if persistent_acl_entries_are_effective(&child_path, &child_entries)? {
-            continue;
-        }
-        apply_persistent_acl_entries(&child_path, &child_entries)?;
+    if !object.is_directory || object.is_name_surrogate {
+        return Ok(());
+    }
+    for child_path in persistent_acl_child_paths(&object.path)? {
+        let child = PersistentAclObject::open(&child_path, approved_root)?;
+        validate_persistent_acl_links(&child, approved_root)?;
     }
     Ok(())
 }
 
-fn persistent_acl_children(directory: &Path) -> Result<Vec<(PathBuf, bool)>, SandboxError> {
+fn persistent_acl_child_paths(directory: &Path) -> Result<Vec<PathBuf>, SandboxError> {
     let children = std::fs::read_dir(directory).map_err(|error| {
         SandboxError::with_source(
             SandboxErrorCode::UnsupportedPolicy,
@@ -1106,46 +1308,9 @@ fn persistent_acl_children(directory: &Path) -> Result<Vec<(PathBuf, bool)>, San
                 error,
             )
         })?;
-        let child_path = child.path();
-        let metadata = std::fs::symlink_metadata(&child_path).map_err(|error| {
-            SandboxError::with_source(
-                SandboxErrorCode::UnsupportedPolicy,
-                format!(
-                    "cannot inspect persistent ACL child {}",
-                    child_path.display()
-                ),
-                error,
-            )
-        })?;
-
-        // Name-surrogate tags identify junctions and symbolic links that can
-        // leave the approved root. Other reparse points (for example hydrated
-        // OneDrive placeholders) remain ordinary in-root ACL targets.
-        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
-            && reparse_point_is_name_surrogate(&child_path)?
-        {
-            continue;
-        }
-        output.push((child_path, metadata.is_dir()));
+        output.push(child.path());
     }
     Ok(output)
-}
-
-fn reparse_point_is_name_surrogate(path: &Path) -> Result<bool, SandboxError> {
-    let path_wide = to_wide(path.as_os_str());
-    let mut data = unsafe { std::mem::zeroed::<WIN32_FIND_DATAW>() };
-    let find = unsafe { FindFirstFileW(path_wide.as_ptr(), &mut data) };
-    if find == INVALID_HANDLE_VALUE {
-        return Err(SandboxError::with_source(
-            SandboxErrorCode::UnsupportedPolicy,
-            format!("cannot inspect reparse tag for {}", path.display()),
-            std::io::Error::last_os_error(),
-        ));
-    }
-    unsafe {
-        FindClose(find);
-    }
-    Ok(is_name_surrogate_reparse_tag(data.dwReserved0))
 }
 
 fn is_name_surrogate_reparse_tag(tag: u32) -> bool {
@@ -1171,20 +1336,26 @@ fn inherited_entry_for_child(entry: &EXPLICIT_ACCESS_W, is_directory: bool) -> E
     }
 }
 
-fn persistent_acl_entries_are_effective(
-    path: &Path,
+fn persistent_acl_entries_are_effective_for_object(
+    object: &PersistentAclObject,
     entries: &[EXPLICIT_ACCESS_W],
 ) -> Result<bool, SandboxError> {
-    for entry in entries {
-        if !persistent_acl_entry_is_effective(path, entry)? {
-            return Ok(false);
+    let (descriptor, dacl) = persistent_acl_object_dacl(object)?;
+    let result = (|| {
+        for entry in entries {
+            if !persistent_acl_entry_is_effective(object, dacl, entry)? {
+                return Ok(false);
+            }
         }
-    }
-    Ok(true)
+        Ok(true)
+    })();
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    result
 }
 
 fn persistent_acl_entry_is_effective(
-    path: &Path,
+    object: &PersistentAclObject,
+    dacl: *mut ACL,
     entry: &EXPLICIT_ACCESS_W,
 ) -> Result<bool, SandboxError> {
     if entry.Trustee.TrusteeForm != TRUSTEE_IS_SID || entry.Trustee.ptstrName.is_null() {
@@ -1195,8 +1366,9 @@ fn persistent_acl_entry_is_effective(
         DENY_ACCESS => ACCESS_DENIED_ACE_TYPE,
         _ => return Ok(false),
     };
-    path_has_effective_ace(
-        path,
+    dacl_has_effective_ace(
+        &object.path,
+        dacl,
         entry.Trustee.ptstrName.cast::<c_void>(),
         ace_type,
         entry.grfAccessPermissions,
@@ -1204,88 +1376,115 @@ fn persistent_acl_entry_is_effective(
     )
 }
 
-fn apply_missing_non_recursive_acl_entries(
-    path: &Path,
+fn apply_missing_acl_entries_to_object(
+    object: &PersistentAclObject,
     entries: &[EXPLICIT_ACCESS_W],
 ) -> Result<bool, SandboxError> {
-    let mut missing = Vec::new();
-    for entry in entries {
-        if !persistent_acl_entry_is_effective(path, entry)? {
-            missing.push(*entry);
+    let (descriptor, old_dacl) = persistent_acl_object_dacl(object)?;
+    let result = (|| {
+        let mut missing = Vec::new();
+        for entry in entries {
+            if !persistent_acl_entry_is_effective(object, old_dacl, entry)? {
+                missing.push(*entry);
+            }
         }
-    }
-    if missing.is_empty() {
-        return Ok(false);
-    }
-    apply_non_recursive_acl_entries(path, &missing)?;
-    Ok(true)
+        if missing.is_empty() {
+            return Ok(false);
+        }
+
+        let mut new_dacl = std::ptr::null_mut();
+        let merged = unsafe {
+            SetEntriesInAclW(
+                missing.len() as u32,
+                missing.as_ptr(),
+                old_dacl,
+                &mut new_dacl,
+            )
+        };
+        if merged != ERROR_SUCCESS {
+            return Err(SandboxError::new(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!(
+                    "cannot construct persistent ACL for {}: {merged}",
+                    object.path.display()
+                ),
+            ));
+        }
+        let path_wide = to_wide(object.path.as_os_str());
+        let applied = set_file_dacl(&path_wide, new_dacl);
+        unsafe { LocalFree(new_dacl as HLOCAL) };
+        applied.map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!(
+                    "cannot apply pinned persistent ACL for {}",
+                    object.path.display()
+                ),
+                error,
+            )
+        })?;
+        Ok(true)
+    })();
+    unsafe { LocalFree(descriptor as HLOCAL) };
+    result
 }
 
-fn apply_non_recursive_acl_entries(
-    path: &Path,
-    entries: &[EXPLICIT_ACCESS_W],
-) -> Result<(), SandboxError> {
-    let mut path_wide = to_wide(path.as_os_str());
+fn persistent_acl_object_dacl(
+    object: &PersistentAclObject,
+) -> Result<(*mut c_void, *mut ACL), SandboxError> {
     let mut descriptor = std::ptr::null_mut();
-    let mut old_dacl = std::ptr::null_mut();
+    let mut dacl = std::ptr::null_mut();
     let fetched = unsafe {
-        GetNamedSecurityInfoW(
-            path_wide.as_mut_ptr(),
+        GetSecurityInfo(
+            object.handle.raw(),
             SE_FILE_OBJECT,
             DACL_SECURITY_INFORMATION,
             std::ptr::null_mut(),
             std::ptr::null_mut(),
-            &mut old_dacl,
+            &mut dacl,
             std::ptr::null_mut(),
             &mut descriptor,
         )
     };
-    if fetched != ERROR_SUCCESS {
+    if fetched != ERROR_SUCCESS || descriptor.is_null() || dacl.is_null() {
         if !descriptor.is_null() {
             unsafe { LocalFree(descriptor as HLOCAL) };
         }
         return Err(SandboxError::new(
             SandboxErrorCode::UnsupportedPolicy,
             format!(
-                "cannot read persistent ACL for {}: {fetched}",
-                path.display()
+                "cannot inspect pinned persistent ACL for {}: {fetched}",
+                object.path.display()
             ),
         ));
     }
-    let mut new_dacl = std::ptr::null_mut();
-    let merged = unsafe {
-        SetEntriesInAclW(
-            entries.len() as u32,
-            entries.as_ptr(),
-            old_dacl,
-            &mut new_dacl,
-        )
-    };
-    if merged != ERROR_SUCCESS {
+    if unsafe { IsValidAcl(dacl) } == 0 {
         unsafe { LocalFree(descriptor as HLOCAL) };
         return Err(SandboxError::new(
             SandboxErrorCode::UnsupportedPolicy,
-            format!(
-                "cannot construct persistent ACL for {}: {merged}",
-                path.display()
-            ),
+            format!("persistent ACL is invalid for {}", object.path.display()),
         ));
     }
-    let applied = set_file_dacl(&path_wide, new_dacl);
-    unsafe {
-        LocalFree(new_dacl as HLOCAL);
-        LocalFree(descriptor as HLOCAL);
-    }
-    if let Err(error) = applied {
-        return Err(SandboxError::with_source(
+    Ok((descriptor, dacl))
+}
+
+#[cfg(test)]
+fn apply_non_recursive_acl_entries(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
+    let approved_root = std::fs::canonicalize(path).map_err(|error| {
+        SandboxError::with_source(
             SandboxErrorCode::UnsupportedPolicy,
             format!(
-                "cannot apply non-recursive persistent ACL for {}",
+                "cannot canonicalize persistent ACL object {}",
                 path.display()
             ),
             error,
-        ));
-    }
+        )
+    })?;
+    let object = PersistentAclObject::open(path, &approved_root)?;
+    apply_missing_acl_entries_to_object(&object, entries)?;
     Ok(())
 }
 
@@ -1398,9 +1597,9 @@ fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Err
 mod tests {
     use super::{
         access_inspection_error, ancestor_read_paths, apply_non_recursive_acl_entries,
-        ensure_persistent_allow_aces, is_name_surrogate_reparse_tag, path_has_effective_ace,
-        reconcile_persistent_acl_root_children, unreadable_access_inspection, LocalSid,
-        TokenAccessInspection, ACCESS_ALLOWED_ACE_TYPE, READ_MASK,
+        apply_persistent_acl_entries, ensure_persistent_allow_aces, is_name_surrogate_reparse_tag,
+        path_has_effective_ace, unreadable_access_inspection, LocalSid, TokenAccessInspection,
+        ACCESS_ALLOWED_ACE_TYPE, COMPLETION_MARKER_MASK, READ_MASK,
     };
     use crate::protocol::SandboxErrorCode;
     use std::fs;
@@ -1452,7 +1651,7 @@ mod tests {
     }
 
     #[test]
-    fn fresh_capability_repairs_a_partial_legacy_group_grant() {
+    fn missing_completion_marker_repairs_a_partial_legacy_grant() {
         let temporary = tempdir().expect("temporary ACL tree");
         let nested = temporary.path().join("node_modules").join("package");
         fs::create_dir_all(&nested).expect("nested directory");
@@ -1462,25 +1661,37 @@ mod tests {
             .expect("test group SID");
         let capability = LocalSid::parse("S-1-5-21-101010101-202020202-303030303-404040404")
             .expect("test capability SID");
+        let completion = LocalSid::parse("S-1-5-21-505050505-606060606-707070707-808080808")
+            .expect("test completion SID");
         let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
         let group_entry = allow_entry(&group, inheritance);
+        let capability_entry = allow_entry(&capability, inheritance);
 
-        // Reproduce an interrupted legacy propagation: the stable group marker
-        // reached the root, but existing descendants did not receive it.
-        apply_non_recursive_acl_entries(temporary.path(), &[group_entry])
-            .expect("install legacy root-only group ACE");
+        // Reproduce termination after every access ACE reached the root but
+        // before descendants were reconciled and the completion SID was added.
+        apply_non_recursive_acl_entries(temporary.path(), &[group_entry, capability_entry])
+            .expect("install root-only access ACEs");
         assert!(!has_read_allow(&nested, &group, inheritance));
 
         ensure_persistent_allow_aces(
             temporary.path(),
             &[(group.raw(), READ_MASK), (capability.raw(), READ_MASK)],
+            &completion,
         )
-        .expect("materialize the new capability and repair the group grant");
+        .expect("repair the tree and install the completion marker");
 
         assert!(has_read_allow(&nested, &group, inheritance));
         assert!(has_read_allow(&existing_file, &group, 0));
         assert!(has_read_allow(&nested, &capability, inheritance));
         assert!(has_read_allow(&existing_file, &capability, 0));
+        assert!(path_has_effective_ace(
+            temporary.path(),
+            completion.raw(),
+            ACCESS_ALLOWED_ACE_TYPE,
+            COMPLETION_MARKER_MASK,
+            0,
+        )
+        .expect("completion marker"));
     }
 
     #[test]
@@ -1500,8 +1711,7 @@ mod tests {
         apply_non_recursive_acl_entries(temporary.path(), &[entry]).expect("complete root grant");
         assert!(!has_read_allow(&late_directory, &capability, inheritance));
 
-        reconcile_persistent_acl_root_children(temporary.path(), &[&entry])
-            .expect("reconcile root gap");
+        apply_persistent_acl_entries(temporary.path(), &[entry]).expect("reconcile root gap");
 
         assert!(has_read_allow(&late_directory, &capability, inheritance));
         assert!(has_read_allow(&late_file, &capability, 0));
