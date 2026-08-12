@@ -263,7 +263,9 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   if (!locationCandidate) return null;
   const title = line.slice(priority.contentStart, locationCandidate.titleEnd).trim();
   const rawPath = line.slice(locationCandidate.pathStart, locationCandidate.pathEnd).trim();
-  const path = rawPath.startsWith('`') ? rawPath.slice(1).trim() : rawPath;
+  const path = rawPath.startsWith('`')
+    ? rawPath.slice(1, rawPath.endsWith('`') ? -1 : undefined).trim()
+    : rawPath;
   if (!title || !path) return null;
 
   return {

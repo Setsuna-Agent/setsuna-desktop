@@ -79,7 +79,7 @@ describe('parseRuntimeReviewResult', () => {
       '<think>[P1] internal draft — src/internal.ts:1</think>',
       '本轮发现两个问题。',
       '',
-      '**[P2] 键盘监听吞掉 Enter — src/games/Minesweeper.tsx:84-117**',
+      '**[P2] 键盘监听吞掉 Enter — `src/games/Minesweeper.tsx`:84-117**',
       '按钮无法通过键盘触发。',
       '',
       '**[P3] 核心逻辑缺少测试 — src/games/useMinesweeper.ts:226（reducer 整体），src/stats.ts:41-51**',
