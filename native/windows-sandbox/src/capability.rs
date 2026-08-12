@@ -6,9 +6,8 @@ use std::collections::HashSet;
 use std::path::Path;
 
 // Changing the ACL materialization strategy must produce a fresh capability.
-// Otherwise an interrupted grant from an older build can leave the root ACE in
-// place while descendants are only partially authorized, and later runs would
-// incorrectly treat that policy as prepared.
+// Its missing root ACE triggers one migration pass that also rematerializes the
+// stable sandbox-group grant, repairing interrupted grants from older builds.
 const CAPABILITY_POLICY_VERSION: &[u8] = b"setsuna-windows-sandbox-acl-v2";
 
 pub fn policy_key(request: &SandboxRunRequest) -> String {

@@ -9,6 +9,7 @@ use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use windows_sys::Win32::Foundation::{
     GetLastError, LocalFree, ERROR_ACCESS_DENIED, ERROR_INSUFFICIENT_BUFFER, ERROR_SUCCESS, HLOCAL,
+    INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW,
@@ -25,9 +26,9 @@ use windows_sys::Win32::Security::{
     SECURITY_DESCRIPTOR, SE_DACL_PROTECTED,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA, FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD,
-    FILE_GENERIC_EXECUTE, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_WRITE_ATTRIBUTES,
-    FILE_WRITE_DATA, FILE_WRITE_EA,
+    FindClose, FindFirstFileW, DELETE, FILE_ALL_ACCESS, FILE_APPEND_DATA,
+    FILE_ATTRIBUTE_REPARSE_POINT, FILE_DELETE_CHILD, FILE_GENERIC_EXECUTE, FILE_GENERIC_READ,
+    FILE_GENERIC_WRITE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA, WIN32_FIND_DATAW,
 };
 
 const SE_FILE_OBJECT: i32 = 1;
@@ -56,6 +57,7 @@ const ACCESS_DENIED_ACE_TYPE: u8 = 1;
 const INHERIT_ONLY_ACE: u8 = 0x08;
 const WRITE_DAC_MASK: u32 = 0x0004_0000;
 const WRITE_OWNER_MASK: u32 = 0x0008_0000;
+const REPARSE_TAG_NAME_SURROGATE: u32 = 0x2000_0000;
 const LOCAL_SYSTEM_SID: &str = "S-1-5-18";
 const BUILTIN_ADMINISTRATORS_SID: &str = "S-1-5-32-544";
 
@@ -836,31 +838,34 @@ fn ensure_persistent_allow_aces_with_inheritance(
     allows: &[(*mut c_void, u32)],
     inheritance: u32,
 ) -> Result<(), SandboxError> {
-    let missing = allows
-        .iter()
-        .filter_map(|(sid, mask)| {
-            match path_has_effective_ace(path, *sid, ACCESS_ALLOWED_ACE_TYPE, *mask, inheritance) {
-                Ok(true) => None,
-                Ok(false) => Some(Ok(EXPLICIT_ACCESS_W {
-                    grfAccessPermissions: *mask,
-                    grfAccessMode: SET_ACCESS,
-                    grfInheritance: inheritance,
-                    Trustee: TRUSTEE_W {
-                        pMultipleTrustee: std::ptr::null_mut(),
-                        MultipleTrusteeOperation: 0,
-                        TrusteeForm: TRUSTEE_IS_SID,
-                        TrusteeType: TRUSTEE_IS_UNKNOWN,
-                        ptstrName: sid.cast::<u16>(),
-                    },
-                })),
-                Err(error) => Some(Err(error)),
-            }
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    if missing.is_empty() {
+    let mut all_present = true;
+    for (sid, mask) in allows {
+        all_present &=
+            path_has_effective_ace(path, *sid, ACCESS_ALLOWED_ACE_TYPE, *mask, inheritance)?;
+    }
+    if all_present {
         return Ok(());
     }
-    apply_persistent_acl_entries(path, &missing)
+
+    // A fresh capability also serves as the migration marker for the stable
+    // sandbox-group grant. Carry every principal through materialization so an
+    // interrupted legacy propagation cannot leave the group ACE root-only.
+    let entries = allows
+        .iter()
+        .map(|(sid, mask)| EXPLICIT_ACCESS_W {
+            grfAccessPermissions: *mask,
+            grfAccessMode: SET_ACCESS,
+            grfInheritance: inheritance,
+            Trustee: TRUSTEE_W {
+                pMultipleTrustee: std::ptr::null_mut(),
+                MultipleTrusteeOperation: 0,
+                TrusteeForm: TRUSTEE_IS_SID,
+                TrusteeType: TRUSTEE_IS_UNKNOWN,
+                ptstrName: sid.cast::<u16>(),
+            },
+        })
+        .collect::<Vec<_>>();
+    apply_persistent_acl_entries(path, &entries)
 }
 
 fn ensure_persistent_deny_ace(
@@ -1030,7 +1035,15 @@ fn apply_persistent_acl_entries(
     // Apply the root last. If traversal is interrupted, the missing root ACE
     // makes the next run retry instead of mistaking a partially-authorized tree
     // for a completed grant.
-    apply_non_recursive_acl_entries(path, entries)
+    apply_missing_non_recursive_acl_entries(path, entries)?;
+
+    if path.is_dir() && !inherited_entries.is_empty() {
+        // A direct child can be created after the first root enumeration but
+        // before the inheritable root ACE is installed. Once the root is ready,
+        // reconcile only missing direct-child subtrees; later children inherit.
+        reconcile_persistent_acl_root_children(path, &inherited_entries)?;
+    }
+    Ok(())
 }
 
 fn apply_persistent_acl_entries_to_descendants(
@@ -1039,7 +1052,51 @@ fn apply_persistent_acl_entries_to_descendants(
 ) -> Result<(), SandboxError> {
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
-        let children = std::fs::read_dir(&directory).map_err(|error| {
+        for (child_path, is_directory) in persistent_acl_children(&directory)? {
+            let child_entries = entries
+                .iter()
+                .map(|entry| inherited_entry_for_child(entry, is_directory))
+                .collect::<Vec<_>>();
+            apply_missing_non_recursive_acl_entries(&child_path, &child_entries)?;
+            if is_directory {
+                pending.push(child_path);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reconcile_persistent_acl_root_children(
+    root: &Path,
+    entries: &[&EXPLICIT_ACCESS_W],
+) -> Result<(), SandboxError> {
+    for (child_path, is_directory) in persistent_acl_children(root)? {
+        let child_entries = entries
+            .iter()
+            .map(|entry| inherited_entry_for_child(entry, is_directory))
+            .collect::<Vec<_>>();
+        if persistent_acl_entries_are_effective(&child_path, &child_entries)? {
+            continue;
+        }
+        apply_persistent_acl_entries(&child_path, &child_entries)?;
+    }
+    Ok(())
+}
+
+fn persistent_acl_children(directory: &Path) -> Result<Vec<(PathBuf, bool)>, SandboxError> {
+    let children = std::fs::read_dir(directory).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!(
+                "cannot enumerate persistent ACL root {}",
+                directory.display()
+            ),
+            error,
+        )
+    })?;
+    let mut output = Vec::new();
+    for child in children {
+        let child = child.map_err(|error| {
             SandboxError::with_source(
                 SandboxErrorCode::UnsupportedPolicy,
                 format!(
@@ -1049,49 +1106,50 @@ fn apply_persistent_acl_entries_to_descendants(
                 error,
             )
         })?;
-        for child in children {
-            let child = child.map_err(|error| {
-                SandboxError::with_source(
-                    SandboxErrorCode::UnsupportedPolicy,
-                    format!(
-                        "cannot enumerate persistent ACL root {}",
-                        directory.display()
-                    ),
-                    error,
-                )
-            })?;
-            let child_path = child.path();
-            let metadata = std::fs::symlink_metadata(&child_path).map_err(|error| {
-                SandboxError::with_source(
-                    SandboxErrorCode::UnsupportedPolicy,
-                    format!(
-                        "cannot inspect persistent ACL child {}",
-                        child_path.display()
-                    ),
-                    error,
-                )
-            })?;
+        let child_path = child.path();
+        let metadata = std::fs::symlink_metadata(&child_path).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::UnsupportedPolicy,
+                format!(
+                    "cannot inspect persistent ACL child {}",
+                    child_path.display()
+                ),
+                error,
+            )
+        })?;
 
-            // Never follow junctions or symlinks while materializing a root ACL.
-            // Package managers commonly create cyclic or external reparse graphs;
-            // Windows' recursive SetNamedSecurityInfoW propagation can spin there
-            // for minutes and can also escape the approved root.
-            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-                continue;
-            }
-
-            let is_directory = metadata.is_dir();
-            let child_entries = entries
-                .iter()
-                .map(|entry| inherited_entry_for_child(entry, is_directory))
-                .collect::<Vec<_>>();
-            apply_non_recursive_acl_entries(&child_path, &child_entries)?;
-            if is_directory {
-                pending.push(child_path);
-            }
+        // Name-surrogate tags identify junctions and symbolic links that can
+        // leave the approved root. Other reparse points (for example hydrated
+        // OneDrive placeholders) remain ordinary in-root ACL targets.
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+            && reparse_point_is_name_surrogate(&child_path)?
+        {
+            continue;
         }
+        output.push((child_path, metadata.is_dir()));
     }
-    Ok(())
+    Ok(output)
+}
+
+fn reparse_point_is_name_surrogate(path: &Path) -> Result<bool, SandboxError> {
+    let path_wide = to_wide(path.as_os_str());
+    let mut data = unsafe { std::mem::zeroed::<WIN32_FIND_DATAW>() };
+    let find = unsafe { FindFirstFileW(path_wide.as_ptr(), &mut data) };
+    if find == INVALID_HANDLE_VALUE {
+        return Err(SandboxError::with_source(
+            SandboxErrorCode::UnsupportedPolicy,
+            format!("cannot inspect reparse tag for {}", path.display()),
+            std::io::Error::last_os_error(),
+        ));
+    }
+    unsafe {
+        FindClose(find);
+    }
+    Ok(is_name_surrogate_reparse_tag(data.dwReserved0))
+}
+
+fn is_name_surrogate_reparse_tag(tag: u32) -> bool {
+    tag & REPARSE_TAG_NAME_SURROGATE != 0
 }
 
 fn inherited_entry_for_child(entry: &EXPLICIT_ACCESS_W, is_directory: bool) -> EXPLICIT_ACCESS_W {
@@ -1111,6 +1169,56 @@ fn inherited_entry_for_child(entry: &EXPLICIT_ACCESS_W, is_directory: bool) -> E
             ptstrName: entry.Trustee.ptstrName,
         },
     }
+}
+
+fn persistent_acl_entries_are_effective(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<bool, SandboxError> {
+    for entry in entries {
+        if !persistent_acl_entry_is_effective(path, entry)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn persistent_acl_entry_is_effective(
+    path: &Path,
+    entry: &EXPLICIT_ACCESS_W,
+) -> Result<bool, SandboxError> {
+    if entry.Trustee.TrusteeForm != TRUSTEE_IS_SID || entry.Trustee.ptstrName.is_null() {
+        return Ok(false);
+    }
+    let ace_type = match entry.grfAccessMode {
+        SET_ACCESS => ACCESS_ALLOWED_ACE_TYPE,
+        DENY_ACCESS => ACCESS_DENIED_ACE_TYPE,
+        _ => return Ok(false),
+    };
+    path_has_effective_ace(
+        path,
+        entry.Trustee.ptstrName.cast::<c_void>(),
+        ace_type,
+        entry.grfAccessPermissions,
+        entry.grfInheritance,
+    )
+}
+
+fn apply_missing_non_recursive_acl_entries(
+    path: &Path,
+    entries: &[EXPLICIT_ACCESS_W],
+) -> Result<bool, SandboxError> {
+    let mut missing = Vec::new();
+    for entry in entries {
+        if !persistent_acl_entry_is_effective(path, entry)? {
+            missing.push(*entry);
+        }
+    }
+    if missing.is_empty() {
+        return Ok(false);
+    }
+    apply_non_recursive_acl_entries(path, &missing)?;
+    Ok(true)
 }
 
 fn apply_non_recursive_acl_entries(
@@ -1289,13 +1397,14 @@ fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Err
 #[cfg(test)]
 mod tests {
     use super::{
-        access_inspection_error, ancestor_read_paths, apply_persistent_acl_entries,
-        path_has_effective_ace, unreadable_access_inspection, LocalSid, TokenAccessInspection,
-        ACCESS_ALLOWED_ACE_TYPE, READ_MASK,
+        access_inspection_error, ancestor_read_paths, apply_non_recursive_acl_entries,
+        ensure_persistent_allow_aces, is_name_surrogate_reparse_tag, path_has_effective_ace,
+        reconcile_persistent_acl_root_children, unreadable_access_inspection, LocalSid,
+        TokenAccessInspection, ACCESS_ALLOWED_ACE_TYPE, READ_MASK,
     };
     use crate::protocol::SandboxErrorCode;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use tempfile::tempdir;
     use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
     use windows_sys::Win32::Security::Authorization::{
@@ -1343,16 +1452,74 @@ mod tests {
     }
 
     #[test]
-    fn persistent_tree_grant_materializes_on_existing_descendants() {
+    fn fresh_capability_repairs_a_partial_legacy_group_grant() {
         let temporary = tempdir().expect("temporary ACL tree");
         let nested = temporary.path().join("node_modules").join("package");
         fs::create_dir_all(&nested).expect("nested directory");
         let existing_file = nested.join("index.js");
         fs::write(&existing_file, "module.exports = true;").expect("existing file");
+        let group = LocalSid::parse("S-1-5-21-111111111-222222222-333333333-444444444")
+            .expect("test group SID");
         let capability = LocalSid::parse("S-1-5-21-101010101-202020202-303030303-404040404")
             .expect("test capability SID");
         let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
-        let entry = EXPLICIT_ACCESS_W {
+        let group_entry = allow_entry(&group, inheritance);
+
+        // Reproduce an interrupted legacy propagation: the stable group marker
+        // reached the root, but existing descendants did not receive it.
+        apply_non_recursive_acl_entries(temporary.path(), &[group_entry])
+            .expect("install legacy root-only group ACE");
+        assert!(!has_read_allow(&nested, &group, inheritance));
+
+        ensure_persistent_allow_aces(
+            temporary.path(),
+            &[(group.raw(), READ_MASK), (capability.raw(), READ_MASK)],
+        )
+        .expect("materialize the new capability and repair the group grant");
+
+        assert!(has_read_allow(&nested, &group, inheritance));
+        assert!(has_read_allow(&existing_file, &group, 0));
+        assert!(has_read_allow(&nested, &capability, inheritance));
+        assert!(has_read_allow(&existing_file, &capability, 0));
+    }
+
+    #[test]
+    fn root_gap_reconciliation_repairs_a_late_child_subtree() {
+        let temporary = tempdir().expect("temporary ACL tree");
+        let late_directory = temporary.path().join("created-during-root-gap");
+        fs::create_dir(&late_directory).expect("late directory");
+        let late_file = late_directory.join("late.txt");
+        fs::write(&late_file, "late").expect("late file");
+        let capability = LocalSid::parse("S-1-5-21-121212121-232323232-343434343-454545454")
+            .expect("test capability SID");
+        let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
+        let entry = allow_entry(&capability, inheritance);
+
+        // The child predates the non-recursive root update, so it models an item
+        // created after the first enumeration and before root completion.
+        apply_non_recursive_acl_entries(temporary.path(), &[entry]).expect("complete root grant");
+        assert!(!has_read_allow(&late_directory, &capability, inheritance));
+
+        reconcile_persistent_acl_root_children(temporary.path(), &[&entry])
+            .expect("reconcile root gap");
+
+        assert!(has_read_allow(&late_directory, &capability, inheritance));
+        assert!(has_read_allow(&late_file, &capability, 0));
+    }
+
+    #[test]
+    fn reparse_filter_skips_name_surrogates_but_keeps_cloud_placeholders() {
+        const MOUNT_POINT: u32 = 0xA000_0003;
+        const SYMBOLIC_LINK: u32 = 0xA000_000C;
+        const CLOUD_PLACEHOLDER: u32 = 0x9000_001A;
+
+        assert!(is_name_surrogate_reparse_tag(MOUNT_POINT));
+        assert!(is_name_surrogate_reparse_tag(SYMBOLIC_LINK));
+        assert!(!is_name_surrogate_reparse_tag(CLOUD_PLACEHOLDER));
+    }
+
+    fn allow_entry(sid: &LocalSid, inheritance: u32) -> EXPLICIT_ACCESS_W {
+        EXPLICIT_ACCESS_W {
             grfAccessPermissions: READ_MASK,
             grfAccessMode: SET_ACCESS,
             grfInheritance: inheritance,
@@ -1361,36 +1528,19 @@ mod tests {
                 MultipleTrusteeOperation: 0,
                 TrusteeForm: TRUSTEE_IS_SID,
                 TrusteeType: TRUSTEE_IS_UNKNOWN,
-                ptstrName: capability.raw().cast::<u16>(),
+                ptstrName: sid.raw().cast::<u16>(),
             },
-        };
+        }
+    }
 
-        apply_persistent_acl_entries(temporary.path(), &[entry])
-            .expect("materialize persistent ACL tree");
-
-        assert!(path_has_effective_ace(
-            temporary.path(),
-            capability.raw(),
+    fn has_read_allow(path: &Path, sid: &LocalSid, inheritance: u32) -> bool {
+        path_has_effective_ace(
+            path,
+            sid.raw(),
             ACCESS_ALLOWED_ACE_TYPE,
             READ_MASK,
             inheritance,
         )
-        .expect("root ACE"));
-        assert!(path_has_effective_ace(
-            &nested,
-            capability.raw(),
-            ACCESS_ALLOWED_ACE_TYPE,
-            READ_MASK,
-            inheritance,
-        )
-        .expect("nested directory ACE"));
-        assert!(path_has_effective_ace(
-            &existing_file,
-            capability.raw(),
-            ACCESS_ALLOWED_ACE_TYPE,
-            READ_MASK,
-            0,
-        )
-        .expect("existing file ACE"));
+        .expect("inspect test ACL")
     }
 }
