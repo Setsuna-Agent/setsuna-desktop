@@ -126,7 +126,7 @@ describe('runtime server reviews and message mutations', () => {
     });
 
   it('starts reviews through the first-party REST route', async () => {
-      const capture = await createOpenAiCaptureServer();
+      const capture = await createOpenAiCaptureServer('<think>internal review only');
       try {
         await harness.configureOpenAiProvider('rest-review-provider', capture.baseUrl);
         const thread = await harness.runtimeFetch('/v1/threads', {
@@ -138,6 +138,7 @@ describe('runtime server reviews and message mutations', () => {
           {
             method: 'POST',
             body: JSON.stringify({
+              language: 'zh-CN',
               target: {
                 type: 'custom',
                 instructions: 'Review the runtime boundary only.',
@@ -156,15 +157,21 @@ describe('runtime server reviews and message mutations', () => {
           turnId: expect.any(String),
         });
         expect(JSON.stringify(body)).toContain('Review the runtime boundary only.');
-        await harness.waitForThread(
+        const updated = await harness.waitForThread(
           thread.id,
           (item) => item.messages.some(
             (message) =>
               message.turnId === started.turnId
-              && message.role === 'assistant'
-              && message.status === 'complete',
+              && message.reviewMode?.kind === 'exited',
           ),
         );
+        expect(updated.messages.find((message) => (
+          message.turnId === started.turnId && message.reviewMode?.kind === 'exited'
+        ))?.reviewMode).toMatchObject({
+          kind: 'exited',
+          review: '审查已完成。',
+          summary: '审查已完成。',
+        });
       } finally {
         await capture.close();
       }

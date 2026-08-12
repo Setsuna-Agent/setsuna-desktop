@@ -94,6 +94,12 @@ export function SideChatPanel({
     thread: sideChat.currentThread,
   });
   const sideWorkspace = sideWorkspaceState.workspace;
+  // Review state belongs to the main workspace panel. Keep findings static
+  // when a global side chat points elsewhere instead of opening the wrong diff.
+  const openSideWorkspaceReview = sideWorkspace && activeWorkspace
+    && sideWorkspace.id === activeWorkspace.id
+    ? onOpenFileReview
+    : undefined;
   const searchSideWorkspaceEntries = useCallback(
     async (query = '', parent?: string | null): Promise<WorkspaceEntrySearchResponse> => {
       if (!sideWorkspace) {
@@ -191,7 +197,7 @@ export function SideChatPanel({
           onDraftChange={sideChat.setDraft}
           onEditUserMessage={sideChat.actions.editUserMessage}
           onOpenSideChat={onOpenSideChat}
-          onOpenFileReview={onOpenFileReview}
+          onOpenFileReview={openSideWorkspaceReview}
           onOpenThread={() => undefined}
           onSearchProjectEntries={searchSideWorkspaceEntries}
           onSelectModel={onSelectModel}

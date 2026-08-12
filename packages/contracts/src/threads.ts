@@ -352,9 +352,11 @@ function stripReviewThinking(review: string): string {
   const visible: string[] = [];
   let cursor = 0;
   let blockStart: number | null = null;
+  let foundThinkTag = false;
 
   for (const match of thinkTagMatches(review)) {
     if (!match.closing && blockStart === null) {
+      foundThinkTag = true;
       blockStart = match.index;
       continue;
     }
@@ -365,9 +367,12 @@ function stripReviewThinking(review: string): string {
     blockStart = null;
   }
 
-  // Preserve an incomplete block exactly as before; a streaming fragment must
-  // not make the remaining review disappear merely because its close tag is late.
-  return visible.length === 0 ? review : visible.join('') + review.slice(cursor);
+  if (blockStart !== null) {
+    visible.push(review.slice(cursor, blockStart));
+    cursor = review.length;
+  }
+
+  return foundThinkTag ? visible.join('') + review.slice(cursor) : review;
 }
 
 /** Reparse persisted raw text so historical notices benefit from parser fixes. */

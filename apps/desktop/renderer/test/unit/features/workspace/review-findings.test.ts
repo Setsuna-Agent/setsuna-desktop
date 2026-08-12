@@ -37,13 +37,15 @@ describe('latestCompletedReview', () => {
     ])).toBeNull();
   });
 
-  it('keeps findings across read-only turns and invalidates them after a successful file mutation', () => {
+  it('keeps findings across read-only turns and invalidates them after a potentially mutating tool', () => {
     const completed = message('review_done', { kind: 'exited', review: 'Done', findings: [] });
     const readOnlyTurn = assistantToolMessage('read_only', 'read_file');
     const mutationTurn = assistantToolMessage('mutation', 'write_file');
+    const shellTurn = assistantToolMessage('shell', 'run_shell_command');
 
     expect(latestCompletedReview([completed, readOnlyTurn])).toMatchObject({ kind: 'exited' });
     expect(latestCompletedReview([completed, readOnlyTurn, mutationTurn])).toBeNull();
+    expect(latestCompletedReview([completed, readOnlyTurn, shellTurn])).toBeNull();
   });
 });
 
@@ -57,6 +59,17 @@ describe('resolveReviewFindingTarget', () => {
       additions: 0,
       deletions: 0,
     }, finding({ path: 'src/config.ts', startLine: 1 })).file).toBe(exact);
+  });
+
+  it('keeps case-distinct paths bound to the file named by the finding', () => {
+    const lowerCase = diffFile([], 'src/foo.ts');
+    const upperCase = diffFile([], 'src/Foo.ts');
+
+    expect(resolveReviewFindingTarget({
+      files: [lowerCase, upperCase],
+      additions: 0,
+      deletions: 0,
+    }, finding({ path: 'src/Foo.ts', startLine: 1 })).file).toBe(upperCase);
   });
 });
 

@@ -104,5 +104,10 @@ describe('parseRuntimeReviewResult', () => {
         },
       ],
     });
+
+    expect(parseRuntimeReviewResult('<think>internal review only')).toEqual({
+      findings: [],
+      summary: '',
+    });
   });
 });

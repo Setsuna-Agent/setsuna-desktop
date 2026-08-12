@@ -269,9 +269,9 @@ function ReviewFileCard({
   const fileFindingTargets = useMemo(
     () => findingTargets.filter((target) => (
       target.anchor && target.file
-        && reviewPathsMatch(target.file.path, file.path)
+        && target.file === file
     )),
-    [file.path, findingTargets],
+    [file, findingTargets],
   );
   const lineAnnotations = useMemo<DiffLineAnnotation<ReactNode>[]>(() => (
     fileFindingTargets.flatMap((target) => {

@@ -76,12 +76,18 @@ export class RuntimeTurnFinalizer {
     });
     await this.options.threadTitles.commit(threadId, turnId, finalization.threadTitle);
     if (finalization.review !== undefined) {
-      const review = finalization.review.content.trim() || (
+      const rawReview = finalization.review.content.trim();
+      const parsedReview = parseRuntimeReviewResult(rawReview);
+      const fallbackReview = (
         finalization.review.language === 'zh-CN'
           ? '审查已完成。'
           : 'Review completed.'
       );
-      const result = parseRuntimeReviewResult(review);
+      const hasVisibleReview = Boolean(parsedReview.summary || parsedReview.findings.length);
+      const review = hasVisibleReview ? rawReview : fallbackReview;
+      const result = hasVisibleReview
+        ? parsedReview
+        : parseRuntimeReviewResult(fallbackReview);
       await this.publishReviewModeMessage(threadId, turnId, 'exited', review, result);
     }
     await this.options.memory.rememberExplicitUserMemory(threadId, turnId, finalization.explicitMemory);

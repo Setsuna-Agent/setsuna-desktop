@@ -1,5 +1,6 @@
 import {
   FILE_MUTATION_TOOL_NAMES,
+  SHELL_TOOL_NAMES,
   normalizeRuntimeReviewNotice,
   type DesktopDiffFile,
   type DesktopDiffSummary,
@@ -15,7 +16,8 @@ export function latestCompletedReview(
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.toolRuns?.some((run) => (
-      run.status === 'success' && FILE_MUTATION_TOOL_NAMES.has(run.name)
+      run.status === 'success'
+      && (FILE_MUTATION_TOOL_NAMES.has(run.name) || SHELL_TOOL_NAMES.has(run.name))
     ))) return null;
 
     const notice = message?.reviewMode;
@@ -26,8 +28,8 @@ export function latestCompletedReview(
 }
 
 export function reviewPathsMatch(leftPath: string, rightPath: string): boolean {
-  const left = normalizeReviewFocusPath(leftPath);
-  const right = normalizeReviewFocusPath(rightPath);
+  const left = normalizeReviewFocusPath(leftPath)?.toLowerCase();
+  const right = normalizeReviewFocusPath(rightPath)?.toLowerCase();
   if (!left || !right) return false;
   if (left === right) return true;
   // Provider output and git patches may disagree about a workspace prefix or
@@ -65,20 +67,37 @@ export function resolveReviewFindingTarget(
   finding: RuntimeReviewFinding,
 ): ReviewFindingTarget {
   const normalizedFindingPath = normalizeReviewFocusPath(finding.path);
+  const files = summary?.files ?? [];
   const exactFile = normalizedFindingPath
-    ? summary?.files.find((candidate) => (
+    ? files.find((candidate) => (
       normalizeReviewFocusPath(candidate.path) === normalizedFindingPath
     ))
     : null;
-  const file = exactFile ?? summary?.files.find((candidate) => (
-    reviewPathsMatch(candidate.path, finding.path)
-  )) ?? null;
+  const suffixFile = exactFile
+    ? null
+    : uniqueReviewFile(files, (candidate) => (
+        reviewPathsMatch(candidate.path, finding.path)
+      ));
+  const file = exactFile ?? suffixFile;
   return {
     anchor: file ? reviewFindingAnnotationAnchor(file, finding) : null,
     file,
     finding,
     key: reviewFindingKey(finding),
   };
+}
+
+function uniqueReviewFile(
+  files: DesktopDiffFile[],
+  predicate: (file: DesktopDiffFile) => boolean,
+): DesktopDiffFile | null {
+  let match: DesktopDiffFile | null = null;
+  for (const file of files) {
+    if (!predicate(file)) continue;
+    if (match) return null;
+    match = file;
+  }
+  return match;
 }
 
 export function resolveReviewFindingTargets(
