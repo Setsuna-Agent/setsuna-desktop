@@ -1,4 +1,5 @@
 import {
+  FILE_MUTATION_TOOL_NAMES,
   normalizeRuntimeReviewNotice,
   type DesktopDiffFile,
   type DesktopDiffSummary,
@@ -12,7 +13,12 @@ export function latestCompletedReview(
   messages: RuntimeMessage[],
 ): RuntimeReviewModeNotice | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const notice = messages[index]?.reviewMode;
+    const message = messages[index];
+    if (message?.toolRuns?.some((run) => (
+      run.status === 'success' && FILE_MUTATION_TOOL_NAMES.has(run.name)
+    ))) return null;
+
+    const notice = message?.reviewMode;
     if (!notice) continue;
     return notice.kind === 'exited' ? normalizeRuntimeReviewNotice(notice) : null;
   }
@@ -58,7 +64,13 @@ export function resolveReviewFindingTarget(
   summary: DesktopDiffSummary | null,
   finding: RuntimeReviewFinding,
 ): ReviewFindingTarget {
-  const file = summary?.files.find((candidate) => (
+  const normalizedFindingPath = normalizeReviewFocusPath(finding.path);
+  const exactFile = normalizedFindingPath
+    ? summary?.files.find((candidate) => (
+      normalizeReviewFocusPath(candidate.path) === normalizedFindingPath
+    ))
+    : null;
+  const file = exactFile ?? summary?.files.find((candidate) => (
     reviewPathsMatch(candidate.path, finding.path)
   )) ?? null;
   return {
@@ -111,9 +123,13 @@ export function reviewFindingAnnotationAnchor(
     lineNumber >= rangeStart && lineNumber <= rangeEnd
   ));
   const pool = inRange.length ? inRange : candidates;
-  return pool.reduce((closest, candidate) => (
-    Math.abs(candidate.lineNumber - target) < Math.abs(closest.lineNumber - target)
+  return pool.reduce((closest, candidate) => {
+    const candidateDistance = Math.abs(candidate.lineNumber - target);
+    const closestDistance = Math.abs(closest.lineNumber - target);
+    if (candidateDistance < closestDistance) return candidate;
+    if (candidateDistance > closestDistance) return closest;
+    return candidate.side === 'additions' && closest.side === 'deletions'
       ? candidate
-      : closest
-  ));
+      : closest;
+  });
 }
