@@ -68,27 +68,27 @@ describe('chat composer mode state', () => {
 
   it('enables local Goal idempotently', () => {
     const empty: ChatComposerLocalModes = {
-      goalModeEnabled: false,
+      sendIntent: 'message',
     };
     const goal = enableChatComposerGoalMode(empty);
 
-    expect(goal).toEqual({ goalModeEnabled: true });
+    expect(goal).toEqual({ sendIntent: 'goal' });
     expect(enableChatComposerGoalMode(goal)).toBe(goal);
   });
 
-  it('resets thread-scoped Goal on identity changes and after send', () => {
+  it('resets thread-scoped send intents on identity changes and after send', () => {
     const modes = {
-      goalModeEnabled: true,
-    };
+      sendIntent: 'goal',
+    } as const;
 
     expect(resetThreadScopedChatComposerModes(modes)).toEqual({
-      goalModeEnabled: false,
+      sendIntent: 'message',
     });
     expect(clearChatComposerGoalMode(modes)).toEqual({
-      goalModeEnabled: false,
+      sendIntent: 'message',
     });
     expect(resetChatComposerModesAfterSend(modes)).toEqual({
-      goalModeEnabled: false,
+      sendIntent: 'message',
     });
   });
 

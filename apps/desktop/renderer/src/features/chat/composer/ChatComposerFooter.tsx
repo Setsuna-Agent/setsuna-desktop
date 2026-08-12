@@ -42,7 +42,9 @@ type ChatComposerFooterModeBadges = {
   collaborationEnabled: boolean;
   goalModeEnabled: boolean;
   onClearGoal: () => void;
+  onClearReview: () => void;
   onDisableCollaboration: () => void;
+  reviewModeEnabled: boolean;
 };
 
 type ChatComposerFooterPrimaryAction = {
@@ -146,6 +148,12 @@ export function ChatComposerFooter({
               ? t('chat.composer.badge.goalNext')
               : t('chat.composer.badge.goal')}
             onClose={modeBadges.onClearGoal}
+          />
+        ) : null}
+        {modeBadges.reviewModeEnabled ? (
+          <ChatModeBadge
+            label={t('chat.composer.badge.review')}
+            onClose={modeBadges.onClearReview}
           />
         ) : null}
       </div>

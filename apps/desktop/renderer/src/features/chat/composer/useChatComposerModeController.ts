@@ -12,10 +12,12 @@ import {
 } from 'react';
 import {
   clearChatComposerGoalMode,
+  clearChatComposerReviewMode,
   createChatComposerModelCapabilities,
   emptyChatComposerLocalModes,
   emptyChatThinkingSelection,
   enableChatComposerGoalMode,
+  enableChatComposerReviewMode,
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
@@ -78,6 +80,14 @@ export function useChatComposerModeController({
     if (!activeGoal) setLocalModes(enableChatComposerGoalMode);
   }, [activeGoal]);
 
+  const clearReviewMode = useCallback(() => {
+    setLocalModes(clearChatComposerReviewMode);
+  }, []);
+
+  const enableReviewMode = useCallback(() => {
+    setLocalModes(enableChatComposerReviewMode);
+  }, []);
+
   const openModelPicker = useCallback(() => {
     setModelOpenSignal((value) => value + 1);
   }, []);
@@ -104,7 +114,7 @@ export function useChatComposerModeController({
     selectedSkillReferences: RuntimeSkillReference[];
   }): ChatComposerSendOptions => createChatComposerSendOptions({
     attachments,
-    goalModeEnabled: localModes.goalModeEnabled,
+    goalModeEnabled: localModes.sendIntent === 'goal',
     selectedSkillIds,
     selectedSkillReferences,
     supportsImageInput: modelCapabilities.supportsImageInput,
@@ -112,7 +122,7 @@ export function useChatComposerModeController({
     thinkingEnabled: thinkingSelection.enabled,
     thinkingSupported: modelCapabilities.thinking.supported,
   }), [
-    localModes.goalModeEnabled,
+    localModes.sendIntent,
     modelCapabilities.supportsImageInput,
     modelCapabilities.thinking.supported,
     thinkingSelection.effort,
@@ -122,17 +132,20 @@ export function useChatComposerModeController({
   return {
     activeModelName: modelCapabilities.name,
     clearGoalMode,
+    clearReviewMode,
     closeUsagePanel,
     createSendOptions,
     enableGoalMode,
-    goalModeEnabled: localModes.goalModeEnabled,
+    enableReviewMode,
+    goalModeEnabled: localModes.sendIntent === 'goal',
     hasProtectedModeState: Boolean(
       thinkingSelection.enabled
-      || localModes.goalModeEnabled
+      || localModes.sendIntent !== 'message'
     ),
     modelOpenSignal,
     openModelPicker,
     resetAfterSend,
+    reviewModeEnabled: localModes.sendIntent === 'review',
     setThinkingEffort,
     setThinkingEnabled,
     setThinkingMenuOpen,

@@ -4,6 +4,7 @@ import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
   RuntimeQueuedTurnInput,
+  RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadGoalPatch,
@@ -161,7 +162,7 @@ export function ChatComposer({
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onStartThreadReview: () => void | Promise<unknown>;
+  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
@@ -191,11 +192,6 @@ export function ChatComposer({
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerEditor = useCallback(() => senderRef.current, []);
   const getComposerInputElement = useCallback(() => getComposerEditor()?.inputElement ?? null, [getComposerEditor]);
-  const clipboardHandlers = useChatComposerClipboard({
-    getEditor: getComposerEditor,
-    onSkillsRestored: addSelectedSkills,
-    skills,
-  });
   const currentGoal = currentThread?.goal?.status === 'complete'
     ? null
     : currentThread?.goal ?? null;
@@ -208,6 +204,12 @@ export function ChatComposer({
     config,
     currentThreadId: currentThread?.id,
     onClearThreadGoal,
+  });
+  const clipboardHandlers = useChatComposerClipboard({
+    allowStructuredPaste: !modeController.reviewModeEnabled,
+    getEditor: getComposerEditor,
+    onSkillsRestored: addSelectedSkills,
+    skills,
   });
   const {
     addExistingImage,
@@ -280,6 +282,7 @@ export function ChatComposer({
     contextCompacting,
     goalModeEnabled: modeController.goalModeEnabled,
     hasCurrentThread: Boolean(currentThread),
+    hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length),
     multiAgentEnabled,
     query: commandController.slashQuery,
     selectedSkills,
@@ -295,6 +298,7 @@ export function ChatComposer({
     contextCompacting,
     currentGoal,
     currentThread,
+    attachmentItems.length,
     modeController.activeModelName,
     modeController.goalModeEnabled,
     multiAgentEnabled,
@@ -346,6 +350,11 @@ export function ChatComposer({
 
   useEffect(() => {
     if (!skillSelectionRequest || consumedSkillSelectionRequestIdRef.current === skillSelectionRequest.requestId) return;
+    if (modeController.reviewModeEnabled) {
+      consumedSkillSelectionRequestIdRef.current = skillSelectionRequest.requestId;
+      onSkillSelectionRequestConsumed?.(skillSelectionRequest.requestId);
+      return;
+    }
     const skill = skills.find((item) => item.id === skillSelectionRequest.skillId);
     if (!skill || !skill.enabled) return;
 
@@ -369,6 +378,7 @@ export function ChatComposer({
   }, [
     addSelectedSkills,
     commandController.focusComposer,
+    modeController.reviewModeEnabled,
     onSkillSelectionRequestConsumed,
     skillSelectionRequest,
     skills,
@@ -376,6 +386,11 @@ export function ChatComposer({
 
   useEffect(() => {
     if (!imageAttachmentRequest || consumedImageAttachmentRequestIdRef.current === imageAttachmentRequest.requestId) return;
+    if (modeController.reviewModeEnabled) {
+      consumedImageAttachmentRequestIdRef.current = imageAttachmentRequest.requestId;
+      onImageAttachmentRequestConsumed?.(imageAttachmentRequest.requestId, 'unsupported');
+      return;
+    }
     consumedImageAttachmentRequestIdRef.current = imageAttachmentRequest.requestId;
     const outcome = addExistingImage(imageAttachmentRequest.attachment);
     if (outcome === 'added') {
@@ -386,6 +401,7 @@ export function ChatComposer({
     addExistingImage,
     commandController.focusComposer,
     imageAttachmentRequest,
+    modeController.reviewModeEnabled,
     onImageAttachmentRequestConsumed,
   ]);
 
@@ -403,6 +419,11 @@ export function ChatComposer({
   };
 
   const selectSkill = (skill?: RuntimeSkillSummary) => {
+    if (modeController.reviewModeEnabled) {
+      commandController.closeSlashMenu();
+      commandController.focusComposer();
+      return;
+    }
     const command = commandController.slashCommand
       ?? parseSlashCommand(draft, commandController.commandCursorOffset);
     if (!skill || (!command && !commandController.forcedSlashMenuOpen)) return;
@@ -474,10 +495,23 @@ export function ChatComposer({
       ?? parseSlashCommand(draft, commandController.commandCursorOffset);
     const nextDraft = command ? `${draft.slice(0, command.start)}${draft.slice(command.end)}`.trimStart() : draft;
     commandController.clearSlashDismissal();
+    const shouldPrefillReview = item.kind === 'action'
+      && item.type === 'review'
+      && !nextDraft.trim();
+    const selectedDraft = shouldPrefillReview
+      ? t('chat.composer.reviewPrompt')
+      : nextDraft;
     if (command) {
-      senderRef.current?.insert?.([createTextSlot('')], 'cursor', draft.slice(command.start, command.end), true);
+      // Replace the command with the review prompt in the editor itself. Sending
+      // only an external value update races Sender's delayed command-removal echo.
+      senderRef.current?.insert?.(
+        [createTextSlot(shouldPrefillReview ? selectedDraft : '')],
+        'cursor',
+        draft.slice(command.start, command.end),
+        true,
+      );
     }
-    onDraftChange(nextDraft);
+    onDraftChange(selectedDraft);
     if (item.kind === 'model') {
       modeController.openModelPicker();
       return;
@@ -497,7 +531,8 @@ export function ChatComposer({
       return;
     }
     if (item.kind === 'action' && item.type === 'review' && !item.disabled) {
-      void onStartThreadReview();
+      modeController.enableReviewMode();
+      commandController.focusComposer();
       return;
     }
     if (item.kind === 'action' && item.type === 'side-chat' && !item.disabled) {
@@ -517,6 +552,30 @@ export function ChatComposer({
     if (attachmentsBusy || submitting) return;
     if (queuedTurnEdit.editing) {
       await queuedTurnEdit.submit(value ?? draft);
+      return;
+    }
+    if (modeController.reviewModeEnabled) {
+      const instructions = (value ?? draft).trim();
+      if (!instructions) return;
+      // Clear the session before starting so a first-turn review can claim the
+      // newly created thread without carrying the submitted draft into it.
+      onDraftChange('');
+      setSubmitting(true);
+      let sent = false;
+      try {
+        await onStartThreadReview({ type: 'custom', instructions });
+        sent = true;
+      } catch {
+        if (mountedRef.current) {
+          onDraftChange(instructions);
+          modeController.enableReviewMode();
+        }
+      }
+      if (!mountedRef.current) return;
+      setSubmitting(false);
+      if (!sent) return;
+      modeController.resetAfterSend();
+      senderRef.current?.clear?.();
       return;
     }
     const skillReferences = createSelectedSkillReferences(senderRef.current?.getValue().slotConfig);
@@ -541,7 +600,7 @@ export function ChatComposer({
   };
 
   const addFiles = (files: File[]) => {
-    if (!files.length || submitting || queuedTurnEdit.retrieving) return;
+    if (!files.length || submitting || queuedTurnEdit.retrieving || modeController.reviewModeEnabled) return;
     void addAttachmentFiles(files);
   };
 
@@ -644,7 +703,10 @@ export function ChatComposer({
         footer={(actions) => (
           <ChatComposerFooter
             attachmentControl={{
-              disabled: attachmentLimitReached || submitting || queuedTurnEdit.retrieving,
+              disabled: attachmentLimitReached
+                || submitting
+                || queuedTurnEdit.retrieving
+                || modeController.reviewModeEnabled,
               onOpen: () => fileInputRef.current?.click(),
             }}
             commandControl={{
@@ -665,7 +727,9 @@ export function ChatComposer({
               collaborationEnabled: multiAgentEnabled,
               goalModeEnabled: modeController.goalModeEnabled,
               onClearGoal: modeController.clearGoalMode,
+              onClearReview: modeController.clearReviewMode,
               onDisableCollaboration: () => void onSetMultiAgentEnabled(false),
+              reviewModeEnabled: modeController.reviewModeEnabled,
             }}
             modelOpenSignal={modeController.modelOpenSignal}
             primaryAction={{

@@ -35,7 +35,7 @@ export function useSideChat({
   reloadThreads,
   setError,
 }: SideChatOptions) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -265,23 +265,32 @@ export function useSideChat({
 
   const startReview = useCallback(async (target: RuntimeReviewTarget) => {
     const isCurrentRequest = reviewRequests.begin();
-    const started = await startThreadReview({
-      activeProjectId,
-      client,
-      currentThread,
-      onThreadCreated: async (thread) => {
-        if (isCurrentRequest()) {
-          claimComposerForThread(thread.id);
-          setCurrentThread(thread);
-        }
-        await reloadThreads();
-      },
-      t,
-      target,
-    });
-    if (isCurrentRequest()) setActiveTurnId(started.turnId);
-    return started;
-  }, [activeProjectId, claimComposerForThread, client, currentThread, reloadThreads, reviewRequests, t]);
+    if (isCurrentRequest()) setError(null);
+    try {
+      const started = await startThreadReview({
+        activeProjectId,
+        client,
+        currentThread,
+        language: locale,
+        onThreadCreated: async (thread) => {
+          if (isCurrentRequest()) {
+            claimComposerForThread(thread.id);
+            setCurrentThread(thread);
+          }
+          await reloadThreads();
+        },
+        t,
+        target,
+      });
+      if (isCurrentRequest()) setActiveTurnId(started.turnId);
+      return started;
+    } catch (unknownError) {
+      if (isCurrentRequest()) {
+        setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
+      }
+      throw unknownError;
+    }
+  }, [activeProjectId, claimComposerForThread, client, currentThread, locale, reloadThreads, reviewRequests, setError, t]);
 
   return useMemo(() => ({
     actions,

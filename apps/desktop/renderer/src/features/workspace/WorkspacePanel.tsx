@@ -6,6 +6,7 @@ import {
   type WorkspaceEntrySearchResponse,
   type WorkspaceFileRead,
   type WorkspaceProject,
+  type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
 import {
@@ -66,6 +67,7 @@ export function WorkspacePanel({
   fileDraft,
   filePreview,
   latestReviewSummary,
+  latestReviewFindings,
   reviewError,
   reviewFocusRequest,
   reviewLoading,
@@ -101,6 +103,7 @@ export function WorkspacePanel({
   fileDraft: WorkspaceFileDraftState;
   filePreview: WorkspaceFileRead | null;
   latestReviewSummary: DesktopDiffSummary | null;
+  latestReviewFindings: RuntimeReviewFinding[];
   reviewError: string | null;
   reviewFocusRequest: DesktopReviewFocusRequest | null;
   reviewLoading: boolean;
@@ -302,6 +305,7 @@ export function WorkspacePanel({
         error={reviewError}
         focusRequest={reviewFocusRequest}
         latestSummary={latestReviewSummary}
+        findings={latestReviewFindings}
         loading={reviewLoading}
         reviewState={reviewState}
         workspaceApp={selectedWorkspaceApp}

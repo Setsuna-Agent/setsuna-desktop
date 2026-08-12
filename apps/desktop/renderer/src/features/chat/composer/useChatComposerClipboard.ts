@@ -10,12 +10,14 @@ import {
 } from './chatComposerClipboard.js';
 
 type ChatComposerClipboardOptions = {
+  allowStructuredPaste?: boolean;
   getEditor: () => SenderRef | null;
   onSkillsRestored: (skills: RuntimeSkillSummary[]) => void;
   skills: RuntimeSkillSummary[];
 };
 
 export function useChatComposerClipboard({
+  allowStructuredPaste = true,
   getEditor,
   onSkillsRestored,
   skills,
@@ -53,6 +55,7 @@ export function useChatComposerClipboard({
   }, [handleClipboardWrite]);
 
   const handlePasteCapture = useCallback((event: ReactClipboardEvent<HTMLDivElement>) => {
+    if (!allowStructuredPaste) return;
     const serializedPayload = event.clipboardData.getData(CHAT_COMPOSER_CLIPBOARD_TYPE);
     if (!serializedPayload) return;
 
@@ -68,7 +71,7 @@ export function useChatComposerClipboard({
     setNormalizedChatComposerSelection(input, editor.getValue().slotConfig);
     editor.insert(pastePlan.slots, 'cursor', undefined, true);
     onSkillsRestored(pastePlan.selectedSkills);
-  }, [getEditor, onSkillsRestored, skills]);
+  }, [allowStructuredPaste, getEditor, onSkillsRestored, skills]);
 
   return {
     onCopyCapture: handleCopyCapture,

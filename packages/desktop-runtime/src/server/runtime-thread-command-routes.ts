@@ -45,8 +45,8 @@ export async function handleRuntimeThreadCommandRequest(
   const reviewMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/reviews$/u);
   if (reviewMatch && request.method === 'POST') {
     const threadId = decodeRuntimeId(reviewMatch[1], 'Thread id');
-    const input = await readBody<{ target?: unknown }>(request);
-    const started = await startRuntimeReview(runtime, threadId, input.target);
+    const input = await readBody<{ language?: unknown; target?: unknown }>(request);
+    const started = await startRuntimeReview(runtime, threadId, input.target, input.language);
     sendJson(response, 200, started.response);
     return true;
   }

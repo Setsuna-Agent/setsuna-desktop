@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  listDirectory,
   rememberRead,
   rememberReadFileResult,
   writeLocalFile,
@@ -17,6 +18,32 @@ import {
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
 
 describe('PC local tool resource bounds', () => {
+  it('reports generated and dependency directories and permits listing their contents', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-list-directory-'));
+    try {
+      await Promise.all([
+        mkdir(path.join(root, 'dist')),
+        mkdir(path.join(root, 'node_modules', 'example-package'), { recursive: true }),
+      ]);
+      const result = await listDirectory(
+        { path: '.' },
+        { root, reads: new Map() },
+      );
+
+      expect(result).toMatchObject({ ok: true });
+      expect(result.content).toContain('[DIR] dist');
+      expect(result.content).toContain('[DIR] node_modules');
+
+      const packageListing = await listDirectory(
+        { path: 'node_modules' },
+        { root, reads: new Map() },
+      );
+      expect(packageListing.content).toContain('[DIR] example-package');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('bounds per-turn file read identity and range caches', () => {
     const state = { reads: new Map(), readFileResults: new Map() };
     const info = { mtimeMs: 1, size: 1 };

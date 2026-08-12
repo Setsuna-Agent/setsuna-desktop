@@ -4,6 +4,8 @@ import {
   type DesktopRuntimeClient,
   type RuntimeConfigState,
   type RuntimePluginSummary,
+  type RuntimeReviewFinding,
+  type RuntimeReviewTarget,
   type RuntimeSkillSummary,
   type RuntimeThread,
   type RuntimeThreadGoalPatch,
@@ -48,11 +50,13 @@ import type {
   DesktopPanelType,
   DesktopReviewFocusRequest,
   DesktopReviewLoadOptions,
+  DesktopReviewOpenHandler,
   DesktopReviewState,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
+import { latestCompletedReview } from '../../features/workspace/review-findings.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
   ChatSkillSelectionRequest,
@@ -243,7 +247,7 @@ export function AppChatSurface({
   onOpenFilesPanel: () => void;
   onOpenModelSettings: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
-  onOpenFileReviewPanel?: (filePath?: string) => void;
+  onOpenFileReviewPanel?: DesktopReviewOpenHandler;
   onOpenSideChat: () => void;
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
@@ -261,7 +265,7 @@ export function AppChatSurface({
   onRevealFile: (filePath: string) => void;
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onStartThreadReview: () => void | Promise<unknown>;
+  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
@@ -305,6 +309,10 @@ export function AppChatSurface({
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
     [currentThread?.messages],
   );
+  const latestReviewFindings = useMemo<RuntimeReviewFinding[]>(
+    () => latestCompletedReview(currentThread?.messages ?? [])?.findings ?? [],
+    [currentThread?.messages],
+  );
   const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
   const chatPanelInstances = [
     ...sidePanelSlot.panels
@@ -324,6 +332,7 @@ export function AppChatSurface({
     fileDraft,
     filePreview,
     latestReviewSummary,
+    latestReviewFindings,
     reviewError,
     reviewFocusRequest,
     reviewLoading,
@@ -480,6 +489,7 @@ export function AppChatSurface({
             onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
             onOpenMarkdownWebLink={onOpenMarkdownWebLink}
             onOpenInAppBrowser={onOpenBrowser}
+            onOpenFileReview={onOpenFileReviewPanel}
             onOpenSideChat={onOpenSideChat}
             onReloadThreads={onReloadThreads}
             onSelectModel={onSelectModel}

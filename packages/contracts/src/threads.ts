@@ -89,8 +89,8 @@ export type RuntimeMessage = {
   clientId?: string;
   turnId?: string;
   role: RuntimeMessageRole;
-  /** 用户输入的领域类型；普通消息可省略，Goal 由 transcript 使用独立标识展示。 */
-  inputKind?: RuntimeQueuedTurnInputKind;
+  /** 用户输入的领域类型；普通消息可省略，特殊任务由 transcript 使用独立标识展示。 */
+  inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
@@ -145,7 +145,101 @@ export type RuntimeContextCompactionNotice = {
 export type RuntimeReviewModeNotice = {
   kind: 'entered' | 'exited';
   review: string;
+  /** Parsed review output used by the transcript summary and diff annotations. */
+  findings?: RuntimeReviewFinding[];
+  summary?: string;
 };
+
+export type RuntimeReviewFinding = {
+  body: string;
+  endLine?: number;
+  path: string;
+  priority: 'P0' | 'P1' | 'P2' | 'P3';
+  startLine: number;
+  title: string;
+};
+
+export type RuntimeReviewResult = {
+  findings: RuntimeReviewFinding[];
+  summary: string;
+};
+
+// Titles can quote an em dash, so only a delimiter followed by a path and line
+// number may split the finding header. Providers occasionally append another
+// affected location after the primary anchor; the first location remains the
+// stable diff annotation target.
+const REVIEW_FINDING_HEADER = /^\[(P[0-3])\]\s+(.+)\s+(?:—|–|-)\s+`?(.+?):(\d+)(?:-(\d+))?`?(?:(?:\s|[（(，,;]).*)?$/u;
+const REVIEW_THINK_BLOCK = /<think>[\s\S]*?<\/think>/giu;
+
+/** Parse the stable review profile output into data shared by runtime and UI. */
+export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
+  const normalized = review.replace(REVIEW_THINK_BLOCK, '').trim();
+  if (!normalized) return { findings: [], summary: '' };
+
+  const lines = normalized.split(/\r?\n/u);
+  const findings: RuntimeReviewFinding[] = [];
+  const summaryLines: string[] = [];
+  let current: (RuntimeReviewFinding & { bodyLines: string[] }) | null = null;
+
+  const finishCurrent = () => {
+    if (!current) return;
+    const { bodyLines, ...finding } = current;
+    findings.push({ ...finding, body: bodyLines.join('\n').trim() });
+    current = null;
+  };
+
+  for (const line of lines) {
+    const match = REVIEW_FINDING_HEADER.exec(normalizeReviewFindingHeader(line));
+    if (match) {
+      finishCurrent();
+      const startLine = Number(match[4]);
+      const endLine = match[5] ? Number(match[5]) : undefined;
+      current = {
+        body: '',
+        bodyLines: [],
+        path: match[3].trim().replace(/^`|`$/gu, ''),
+        priority: match[1] as RuntimeReviewFinding['priority'],
+        startLine,
+        ...(endLine && endLine !== startLine ? { endLine } : {}),
+        title: match[2].trim(),
+      };
+      continue;
+    }
+    if (current) current.bodyLines.push(line);
+    else summaryLines.push(line);
+  }
+  finishCurrent();
+
+  return {
+    findings,
+    summary: summaryLines.join('\n').trim(),
+  };
+}
+
+/** Reparse persisted raw text so historical notices benefit from parser fixes. */
+export function normalizeRuntimeReviewNotice(
+  notice: RuntimeReviewModeNotice,
+): RuntimeReviewModeNotice {
+  if (notice.kind !== 'exited') return notice;
+  const parsed = parseRuntimeReviewResult(notice.review);
+  if (parsed.findings.length || !notice.findings?.length) {
+    return { ...notice, ...parsed };
+  }
+  return notice;
+}
+
+function normalizeReviewFindingHeader(line: string): string {
+  let normalized = line.trim()
+    .replace(/^#{1,6}\s+/u, '')
+    .replace(/^[-+*]\s+/u, '');
+  if (
+    (normalized.startsWith('**') && normalized.endsWith('**'))
+    || (normalized.startsWith('__') && normalized.endsWith('__'))
+  ) {
+    normalized = normalized.slice(2, -2).trim();
+  }
+  return normalized;
+}
 
 /** 仅用于读取旧线程；runtime 不再创建或更新 Plan mode 消息。 */
 export type RuntimePlanModeNotice = {
@@ -315,7 +409,10 @@ export type RuntimeThreadGoalPatch = {
   status?: RuntimeThreadGoalStatus;
 };
 
-export type RuntimeQueuedTurnInputKind = 'message' | 'goal';
+export type RuntimeMessageInputKind = 'message' | 'goal' | 'review';
+
+/** Review 通过专用启动接口执行，不进入普通消息队列。 */
+export type RuntimeQueuedTurnInputKind = Exclude<RuntimeMessageInputKind, 'review'>;
 
 export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueuedTurnInputKind {
   // 已持久化的旧版 plan 队列项在升级后按普通消息继续执行，避免遗留队列卡住。

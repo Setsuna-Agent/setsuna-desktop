@@ -1,4 +1,9 @@
-import { getSingularPatch, setLanguageOverride } from '@pierre/diffs';
+import {
+  getSingularPatch,
+  setLanguageOverride,
+  type FileDiff as PierreFileDiff,
+  type PostRenderPhase,
+} from '@pierre/diffs';
 import {
   CodeView,
   File,
@@ -7,6 +12,7 @@ import {
   type CodeViewItem,
   type CodeViewReactOptions,
   type FileContents,
+  type DiffLineAnnotation,
   type FileOptions,
   type FileDiffProps,
 } from '@pierre/diffs/react';
@@ -35,6 +41,12 @@ type CodePatchViewProps = {
   children?: ReactNode;
   className?: string;
   layout?: 'split' | 'unified';
+  lineAnnotations?: DiffLineAnnotation<ReactNode>[];
+  onPostRender?: (
+    node: HTMLElement,
+    instance: PierreFileDiff<ReactNode>,
+    phase: PostRenderPhase,
+  ) => unknown;
   patch: string;
   showHeader?: boolean;
   virtualized?: boolean;
@@ -117,12 +129,19 @@ export function CodePatchView({
   children,
   className,
   layout = 'unified',
+  lineAnnotations,
+  onPostRender,
   patch,
   showHeader = false,
   virtualized = false,
   wrap = false,
 }: CodePatchViewProps) {
-  const options = usePierreDiffOptions({ layout, showHeader, wrap });
+  const options = usePierreDiffOptions<ReactNode>({
+    layout,
+    onPostRender,
+    showHeader,
+    wrap,
+  });
   const fileDiff = useMemo(() => {
     const parsed = getSingularPatch(patch);
     const language = inferPatchLanguageOverride(parsed.name, patch);
@@ -133,7 +152,9 @@ export function CodePatchView({
       className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
       disableWorkerPool
       fileDiff={fileDiff}
+      lineAnnotations={lineAnnotations}
       options={options}
+      renderAnnotation={(annotation) => annotation.metadata}
       style={pierreSurfaceStyle}
     />
   );
@@ -183,15 +204,21 @@ export function usePierreFileOptions({
   }), [appearance.resolvedTheme, appearance.themes, disableBackground, layout, showHeader, showLineNumbers, unsafeCSS, wrap]);
 }
 
-export function usePierreDiffOptions({
+export function usePierreDiffOptions<LAnnotation = undefined>({
   layout = 'unified',
+  onPostRender,
   showHeader = false,
   wrap = false,
 }: {
   layout?: 'split' | 'unified';
+  onPostRender?: (
+    node: HTMLElement,
+    instance: PierreFileDiff<LAnnotation>,
+    phase: PostRenderPhase,
+  ) => unknown;
   showHeader?: boolean;
   wrap?: boolean;
-} = {}): NonNullable<FileDiffProps<undefined>['options']> {
+} = {}): NonNullable<FileDiffProps<LAnnotation>['options']> {
   const appearance = useCodeAppearance();
   return useMemo(() => ({
     diffIndicators: 'bars' as const,
@@ -200,10 +227,11 @@ export function usePierreDiffOptions({
     hunkSeparators: 'line-info' as const,
     lineDiffType: 'none' as const,
     lineHoverHighlight: 'both' as const,
+    onPostRender,
     overflow: wrap ? 'wrap' as const : 'scroll' as const,
     theme: appearance.themes,
     themeType: appearance.resolvedTheme,
-  }), [appearance.resolvedTheme, appearance.themes, layout, showHeader, wrap]);
+  }), [appearance.resolvedTheme, appearance.themes, layout, onPostRender, showHeader, wrap]);
 }
 
 function codeContentsVersion(contents: string): number {

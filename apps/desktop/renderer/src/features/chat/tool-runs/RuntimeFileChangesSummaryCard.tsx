@@ -1,6 +1,7 @@
 import { ChevronDown, FileDiff, Undo2 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import type { RuntimeFileChangeSummary } from './runtimeFileChanges.js';
 import {
   completedFileOperationActionLabel,
@@ -17,7 +18,7 @@ export function FileChangesSummaryCard({
 }: {
   summary: RuntimeFileChangeSummary;
   onDiscardChanges?: (filePaths: string[]) => void | Promise<void>;
-  onOpenReview?: (filePath?: string) => void;
+  onOpenReview?: DesktopReviewOpenHandler;
 }) {
   const { t } = useI18n();
   const [discarding, setDiscarding] = useState(false);

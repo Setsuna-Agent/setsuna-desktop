@@ -86,7 +86,7 @@ export function useRuntimeThreadState({
   onTurnSettled,
   setActiveProjectId,
 }: RuntimeThreadStateOptions) {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
@@ -506,6 +506,7 @@ export function useRuntimeThreadState({
       activeProjectId,
       client,
       currentThread,
+      language: locale,
       onThreadCreated: async (thread) => {
         if (isCurrentRequest()) {
           scope?.claimComposerForThread(thread.id);
@@ -522,6 +523,7 @@ export function useRuntimeThreadState({
     activeProjectId,
     client,
     currentThread,
+    locale,
     reloadThreads,
     setCurrentThread,
     t,

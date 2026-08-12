@@ -1,7 +1,9 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
 
+export type ChatComposerSendIntent = 'message' | 'goal' | 'review';
+
 export type ChatComposerLocalModes = {
-  goalModeEnabled: boolean;
+  sendIntent: ChatComposerSendIntent;
 };
 
 export type ChatThinkingConfig = {
@@ -22,7 +24,7 @@ export type ChatComposerModelCapabilities = {
 };
 
 export const emptyChatComposerLocalModes: ChatComposerLocalModes = {
-  goalModeEnabled: false,
+  sendIntent: 'message',
 };
 
 export const emptyChatThinkingSelection: ChatThinkingSelection = {
@@ -56,30 +58,48 @@ export function createChatComposerModelCapabilities(
 export function enableChatComposerGoalMode(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  if (modes.goalModeEnabled) return modes;
-  return { goalModeEnabled: true };
+  if (modes.sendIntent === 'goal') return modes;
+  return { sendIntent: 'goal' };
 }
 
 export function clearChatComposerGoalMode(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  if (!modes.goalModeEnabled) return modes;
-  return {
-    ...modes,
-    goalModeEnabled: false,
-  };
+  if (modes.sendIntent !== 'goal') return modes;
+  return emptyChatComposerLocalModes;
+}
+
+export function enableChatComposerReviewMode(
+  modes: ChatComposerLocalModes,
+): ChatComposerLocalModes {
+  if (modes.sendIntent === 'review') return modes;
+  return { sendIntent: 'review' };
+}
+
+export function clearChatComposerReviewMode(
+  modes: ChatComposerLocalModes,
+): ChatComposerLocalModes {
+  if (modes.sendIntent !== 'review') return modes;
+  return emptyChatComposerLocalModes;
 }
 
 export function resetThreadScopedChatComposerModes(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  return clearChatComposerGoalMode(modes);
+  return resetChatComposerIntentModes(modes);
 }
 
 export function resetChatComposerModesAfterSend(
   modes: ChatComposerLocalModes,
 ): ChatComposerLocalModes {
-  return clearChatComposerGoalMode(modes);
+  return resetChatComposerIntentModes(modes);
+}
+
+function resetChatComposerIntentModes(
+  modes: ChatComposerLocalModes,
+): ChatComposerLocalModes {
+  if (modes.sendIntent === 'message') return modes;
+  return emptyChatComposerLocalModes;
 }
 
 export function normalizeChatThinkingSelection(

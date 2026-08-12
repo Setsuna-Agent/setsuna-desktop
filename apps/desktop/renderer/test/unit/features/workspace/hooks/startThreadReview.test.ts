@@ -21,6 +21,7 @@ describe('startThreadReview', () => {
       activeProjectId: 'project_a',
       client,
       currentThread: null,
+      language: 'zh-CN',
       onThreadCreated: async (created) => {
         calls.push(`select:${created.id}`);
       },
@@ -43,13 +44,14 @@ describe('startThreadReview', () => {
       activeProjectId: 'project_a',
       client,
       currentThread,
+      language: 'en-US',
       onThreadCreated,
       target: { type: 'uncommittedChanges' },
     });
 
     expect(client.createThread).not.toHaveBeenCalled();
     expect(onThreadCreated).not.toHaveBeenCalled();
-    expect(client.startReview).toHaveBeenCalledWith('thread_existing', { type: 'uncommittedChanges' });
+    expect(client.startReview).toHaveBeenCalledWith('thread_existing', { type: 'uncommittedChanges' }, 'en-US');
   });
 });
 

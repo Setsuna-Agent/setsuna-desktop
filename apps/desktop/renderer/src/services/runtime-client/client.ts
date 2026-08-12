@@ -29,6 +29,7 @@ import type {
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
+  RuntimeInterfaceLanguage,
   RuntimeVisionRecognitionTestInput,
   RuntimeVisionRecognitionTestResult,
   RuntimeMcpResourceReadResult,
@@ -269,11 +270,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'POST',
       });
     },
-    startReview(threadId: string, target: RuntimeReviewTarget) {
+    startReview(threadId: string, target: RuntimeReviewTarget, language?: RuntimeInterfaceLanguage) {
       return request<SendTurnResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/reviews`,
         method: 'POST',
-        body: { target },
+        body: { target, ...(language ? { language } : {}) },
       });
     },
     subscribeEvents(threadId, sinceSeq, onBatch) {

@@ -4,6 +4,7 @@ import type {
   RuntimeGoalLifecycleKind,
   RuntimeMessage,
   RuntimeMessageAttachment,
+  RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
 import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
 import {
@@ -20,7 +21,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
+  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -119,9 +120,17 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
           assistantItem.messageIds.push(message.id);
         }
       } else if (message.reviewMode) {
-        // 普通 system/developer 消息不进 transcript；显式生命周期标记作为 UI 事件。
         flushAssistantRun();
-        items.push({ type: 'review', id: message.id, message });
+        if (message.reviewMode.kind === 'exited') {
+          const assistantItem = lastAssistantItemForTurn(items, message.turnId);
+          if (assistantItem) {
+            assistantItem.reviewExit = message.reviewMode;
+            assistantItem.messageIds.push(message.id);
+          } else {
+            // Legacy or interrupted threads may have an exit notice without an assistant row.
+            items.push({ type: 'review', id: message.id, message });
+          }
+        }
       }
       continue;
     }
@@ -367,6 +376,7 @@ export function assistantRunCopyText(
     ])
     .filter(Boolean);
   if (item.goalExit) content.push(formatGoalExitSummary(item.goalExit, t, locale));
+  if (item.reviewExit) content.push(item.reviewExit.review);
   return content.join('\n\n');
 }
 

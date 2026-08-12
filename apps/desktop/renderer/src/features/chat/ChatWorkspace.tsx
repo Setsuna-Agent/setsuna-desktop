@@ -3,6 +3,7 @@ import type {
   RuntimeConfigState,
   RuntimeMessage,
   RuntimePluginSummary,
+  RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadGoalPatch,
@@ -24,7 +25,11 @@ import type {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
-import type { DesktopReviewLoadOptions, DesktopReviewState } from '../workspace/model.js';
+import type {
+  DesktopReviewLoadOptions,
+  DesktopReviewOpenHandler,
+  DesktopReviewState,
+} from '../workspace/model.js';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
 import { runtimePluginUsesByTurn } from './artifacts/runtimePluginUsage.js';
@@ -189,7 +194,7 @@ export function ChatWorkspace({
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenSideChat?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
-  onOpenFileReview?: (filePath?: string) => void;
+  onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenModelSettings?: () => void;
   onSelectModel: (providerId: string, modelId: string) => void;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
@@ -197,7 +202,7 @@ export function ChatWorkspace({
   queuedTurnActions: ChatQueuedTurnActions;
   onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onStartThreadReview: () => void | Promise<unknown>;
+  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;

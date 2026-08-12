@@ -12,7 +12,10 @@ import { useCallback, type Dispatch, type PointerEvent as ReactPointerEvent, typ
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { useThreadWorkspace } from '../workspace/hooks/useThreadWorkspace.js';
-import type { DesktopPanelSlot } from '../workspace/model.js';
+import type {
+  DesktopPanelSlot,
+  DesktopReviewOpenHandler,
+} from '../workspace/model.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ChatWorkspace } from './ChatWorkspace.js';
 import { useSideChat } from './hooks/useSideChat.js';
@@ -36,6 +39,7 @@ export function SideChatPanel({
   onAccessModeChange,
   onError,
   onOpenInAppBrowser,
+  onOpenFileReview,
   onOpenMarkdownWebLink,
   onOpenWorkspaceDirectory,
   onOpenWorkspaceFile,
@@ -62,6 +66,7 @@ export function SideChatPanel({
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onError: Dispatch<SetStateAction<string | null>>;
   onOpenInAppBrowser: (url: string) => void;
+  onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenMarkdownWebLink: (url: string) => void;
   onOpenWorkspaceDirectory: (directoryPath: string) => void;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
@@ -186,13 +191,14 @@ export function SideChatPanel({
           onDraftChange={sideChat.setDraft}
           onEditUserMessage={sideChat.actions.editUserMessage}
           onOpenSideChat={onOpenSideChat}
+          onOpenFileReview={onOpenFileReview}
           onOpenThread={() => undefined}
           onSearchProjectEntries={searchSideWorkspaceEntries}
           onSelectModel={onSelectModel}
           onSend={(value, options) => sideChat.actions.sendInput(value, options)}
           queuedTurnActions={sideChat.actions}
           onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-          onStartThreadReview={() => sideChat.startReview({ type: 'uncommittedChanges' })}
+          onStartThreadReview={sideChat.startReview}
           onSkillSelectionRequestConsumed={() => undefined}
         />
       </MarkdownNavigationProvider>

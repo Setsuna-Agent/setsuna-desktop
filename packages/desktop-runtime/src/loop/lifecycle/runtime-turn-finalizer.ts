@@ -1,9 +1,11 @@
 import type {
   RuntimeMemoryCitation,
+  RuntimeInterfaceLanguage,
   RuntimeMessage,
   RuntimeTaskKind,
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import { parseRuntimeReviewResult } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
@@ -20,7 +22,10 @@ export type RuntimeAssistantTurnFinalization = {
   explicitMemory?: ExplicitMemoryInput;
   memoryCitation?: RuntimeMemoryCitation;
   providerMetadata?: RuntimeMessage['providerMetadata'];
-  review?: string;
+  review?: {
+    content: string;
+    language: RuntimeInterfaceLanguage;
+  };
   taskKind?: RuntimeTaskKind;
   threadTitle?: RuntimeThreadTitleGeneration | null;
 };
@@ -71,7 +76,13 @@ export class RuntimeTurnFinalizer {
     });
     await this.options.threadTitles.commit(threadId, turnId, finalization.threadTitle);
     if (finalization.review !== undefined) {
-      await this.publishReviewModeMessage(threadId, turnId, 'exited', finalization.review.trim() || 'Review completed.');
+      const review = finalization.review.content.trim() || (
+        finalization.review.language === 'zh-CN'
+          ? '审查已完成。'
+          : 'Review completed.'
+      );
+      const result = parseRuntimeReviewResult(review);
+      await this.publishReviewModeMessage(threadId, turnId, 'exited', review, result);
     }
     await this.options.memory.rememberExplicitUserMemory(threadId, turnId, finalization.explicitMemory);
     await this.options.appendEvent(threadId, {
@@ -91,6 +102,7 @@ export class RuntimeTurnFinalizer {
     turnId: string,
     kind: NonNullable<RuntimeMessage['reviewMode']>['kind'],
     review: string,
+    result?: ReturnType<typeof parseRuntimeReviewResult>,
   ): Promise<void> {
     await this.options.streamEvents.publishMessage(threadId, turnId, {
       id: this.options.ids.id('msg'),
@@ -100,7 +112,12 @@ export class RuntimeTurnFinalizer {
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
       visibility: 'transcript',
-      reviewMode: { kind, review },
+      reviewMode: {
+        kind,
+        review,
+        ...(result?.findings.length ? { findings: result.findings } : {}),
+        ...(result?.summary ? { summary: result.summary } : {}),
+      },
     });
   }
 }

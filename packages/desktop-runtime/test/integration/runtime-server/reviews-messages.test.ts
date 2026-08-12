@@ -64,7 +64,7 @@ describe('runtime server reviews and message mutations', () => {
               {
                 type: 'userMessage',
                 clientId: null,
-                content: [{ type: 'text', text: 'commit 1234567: Tidy UI colors' }],
+                content: [{ type: 'text', text: 'Please review commit 1234567: Tidy UI colors' }],
               },
             ],
           },
@@ -99,7 +99,7 @@ describe('runtime server reviews and message mutations', () => {
         expect(hasEnteredReviewItem).toBe(true);
         expect(hasExitedReviewItem).toBe(true);
         expect(activeTurn?.items).toEqual(expect.arrayContaining([
-          expect.objectContaining({ type: 'enteredReviewMode', id: turnId, review: 'commit 1234567: Tidy UI colors' }),
+          expect.objectContaining({ type: 'enteredReviewMode', id: turnId, review: 'Please review commit 1234567: Tidy UI colors' }),
           expect.objectContaining({ type: 'agentMessage', text: 'Captured.' }),
           expect.objectContaining({ type: 'exitedReviewMode', id: turnId, review: 'Captured.' }),
         ]));

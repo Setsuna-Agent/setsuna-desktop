@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeReviewModeNotice, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
@@ -114,7 +114,11 @@ function renderPlanMessage(pluginUses: RuntimePluginUse[]): string {
   );
 }
 
-function renderAssistantMessage(segments: RuntimeMessage[], active = false): string {
+function renderAssistantMessage(
+  segments: RuntimeMessage[],
+  active = false,
+  reviewExit?: RuntimeReviewModeNotice,
+): string {
   const turnId = segments[0]?.turnId ?? 'turn_assistant';
   return renderToStaticMarkup(
     <MessageItem
@@ -131,6 +135,7 @@ function renderAssistantMessage(segments: RuntimeMessage[], active = false): str
         id: 'assistant_item',
         handledSteerMessageIds: [],
         messageIds: segments.map((segment) => segment.id),
+        reviewExit,
         segments,
         steerMessages: [],
         turnId,
@@ -156,6 +161,19 @@ describe('MessageItem user messages', () => {
     expect(goalHtml).toContain('chat-user-message-kind--goal');
     expect(goalHtml).toContain('目标');
     expect(goalHtml).not.toContain('aria-label="编辑"');
+  });
+
+  it('marks Review inputs distinctly without offering message editing', () => {
+    const reviewHtml = renderUserMessage(
+      'review',
+      false,
+      '请审查当前项目中尚未提交的代码更改',
+    );
+
+    expect(reviewHtml).toContain('chat-user-message-kind--review');
+    expect(reviewHtml).toContain('审查');
+    expect(reviewHtml).toContain('请审查当前项目中尚未提交的代码更改');
+    expect(reviewHtml).not.toContain('aria-label="编辑"');
   });
 
   it('omits the message timestamp while editing', () => {
@@ -253,6 +271,60 @@ describe('MessageItem user messages', () => {
 });
 
 describe('MessageItem assistant tool history', () => {
+  it('replaces completed review prose with a compact findings card', () => {
+    const review = [
+      '发现 1 个需要修复的问题。',
+      '[P1] 复制不能吞掉换行 — apps/desktop/renderer/src/chat.ts:211',
+      '这段详细说明只应该出现在 diff 行内。',
+    ].join('\n');
+    const html = renderAssistantMessage([{
+      id: 'assistant_review',
+      turnId: 'turn_review',
+      role: 'assistant',
+      content: review,
+      createdAt: '2026-08-12T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }], false, {
+      kind: 'exited',
+      review,
+      summary: '发现 1 个需要修复的问题。',
+      findings: [{
+        priority: 'P1',
+        title: '复制不能吞掉换行',
+        body: '这段详细说明只应该出现在 diff 行内。',
+        path: 'apps/desktop/renderer/src/chat.ts',
+        startLine: 211,
+      }],
+    });
+
+    expect(html).toContain('chat-review-summary-card');
+    expect(html).toContain('1 条评论');
+    expect(html).toContain('复制不能吞掉换行');
+    expect(html).not.toContain('apps/desktop/renderer/src/chat.ts:211');
+    expect(html).not.toContain('这段详细说明只应该出现在 diff 行内。');
+  });
+
+  it('does not render an empty comments panel when review has no findings', () => {
+    const review = '本轮未发现需要修复的问题。';
+    const html = renderAssistantMessage([{
+      id: 'assistant_review_empty',
+      turnId: 'turn_review_empty',
+      role: 'assistant',
+      content: review,
+      createdAt: '2026-08-12T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }], false, {
+      kind: 'exited',
+      review,
+    });
+
+    expect(html).toContain('本轮未发现需要修复的问题。');
+    expect(html).not.toContain('chat-review-summary-card__panel');
+    expect(html).not.toContain('0 条评论');
+  });
+
   it('keeps a completed tool summary stable when later answer content appears', () => {
     const toolSegment: RuntimeMessage = {
       id: 'assistant_tools',
