@@ -29,6 +29,16 @@ describe('CompositeToolHost', () => {
     await expect(host.toolRuntimeProfile('internal_tool', context)).resolves.toEqual({ exposure: 'hidden' });
     expect(listCalls).toBe(1);
   });
+
+  it('rejects direct tool names that collide across hosts', async () => {
+    const host = new CompositeToolHost([
+      promptHost('shared_tool', 'First'),
+      promptHost('shared_tool', 'Second'),
+    ]);
+
+    await expect(host.listTools({ threadId: 'thread_1' }))
+      .rejects.toThrow('registered by multiple hosts: shared_tool');
+  });
 });
 
 function promptHost(name: string, prompt: string, onList?: () => void): ToolHost {

@@ -1,8 +1,6 @@
 import {
   isRuntimeInlineMessageAttachment,
   isRuntimeStoredMessageAttachment,
-  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-  OPENAI_VISION_RECOGNITION_TOOL_NAME,
   RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
   type ProviderConfigState,
   type ProviderModelConfig,
@@ -10,31 +8,21 @@ import {
   type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
   type RuntimeStoredMessageAttachment,
-  type RuntimeToolDefinition,
   type RuntimeUsage,
   type RuntimeVisionRecognitionTestInput,
   type RuntimeVisionRecognitionTestResult,
 } from '@setsuna-desktop/contracts';
 import { readFile } from 'node:fs/promises';
-import type { AttachmentStore } from '../../ports/attachment-store.js';
-import type { Clock } from '../../ports/clock.js';
-import type { ConfigStore } from '../../ports/config-store.js';
-import type { ModelClient } from '../../ports/model-client.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageStore } from '../../ports/usage-store.js';
-import type {
-  ToolExecutionContext,
-  ToolExecutionPreview,
-  ToolExecutionResult,
-  ToolHost,
-} from '../../ports/tool-host.js';
-import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
-import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
-import {
-  installedMarketplacePlugin,
-  type MarketplacePluginStateStore,
-} from './marketplace-plugin-state.js';
-import { objectInput, requiredStringArg } from './tool-input.js';
+import type { AttachmentStore } from '../ports/attachment-store.js';
+import type { Clock } from '../ports/clock.js';
+import type { ConfigStore } from '../ports/config-store.js';
+import type { ModelClient } from '../ports/model-client.js';
+import type { ThreadStore } from '../ports/thread-store.js';
+import type { UsageStore } from '../ports/usage-store.js';
+import type { ToolExecutionContext } from '../ports/tool-host.js';
+import { detectSafeImageMimeType, type SafeImageMimeType } from '../utils/safe-image.js';
+import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
+import { objectInput, requiredStringArg } from '../adapters/tool/tool-input.js';
 
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_RESULT_CHARS = 64_000;
@@ -59,88 +47,35 @@ type SelectedVisionModel = {
   model: ProviderModelConfig;
 };
 
-type VisionRecognitionToolHostOptions = {
+type ExtensionVisionRecognitionCoordinatorOptions = {
   clock?: Pick<Clock, 'now'>;
   usageStore?: Pick<UsageStore, 'recordUsage'>;
 };
 
-const VISION_RECOGNITION_TOOL: RuntimeToolDefinition = {
-  name: OPENAI_VISION_RECOGNITION_TOOL_NAME,
-  description: 'Analyze a runtime-managed image attachment with the configured vision model.',
-  inputSchema: {
-    type: 'object',
-    additionalProperties: false,
-    properties: {
-      attachment_id: {
-        type: 'string',
-        description: 'The attachment id from the runtime-managed attachment list for this thread.',
-      },
-      prompt: {
-        type: 'string',
-        description: 'The question or visual analysis task to send with the image.',
-      },
-    },
-    required: ['attachment_id', 'prompt'],
-  },
+export type ExtensionVisionRecognitionResult = {
+  content: string;
+  attachmentId: string;
+  attachmentName: string;
+  providerId: string;
+  modelId: string;
+  model: string;
 };
 
 /**
- * 将当前线程拥有的图片交给用户已配置的视觉模型。工具只保存模型引用并复用
- * 现有 provider 凭据、协议和代理；路径解析仍留在 runtime，避免读取任意文件。
+ * 为第一方扩展提供受控的视觉模型与线程附件桥。Bundle 负责工具定义和输出
+ * 语义；这里复用 provider 凭据并校验附件归属，避免 worker 接触本地路径。
  */
-export class OpenAiVisionRecognitionToolHost implements ToolHost {
+export class ExtensionVisionRecognitionCoordinator {
   constructor(
     private readonly configStore: VisionRecognitionConfigStore,
-    private readonly pluginStore: MarketplacePluginStateStore,
     private readonly attachmentStore: VisionRecognitionAttachmentStore,
     private readonly threadStore: VisionRecognitionThreadStore,
     private readonly modelClient: VisionRecognitionModelClient,
-    private readonly options: VisionRecognitionToolHostOptions = {},
+    private readonly options: ExtensionVisionRecognitionCoordinatorOptions = {},
   ) {}
 
-  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
-    if (context.features?.plugins === false) return [];
-    return await this.availableModel() ? [VISION_RECOGNITION_TOOL] : [];
-  }
-
-  async toolRuntimeProfile(name: string) {
-    if (name !== OPENAI_VISION_RECOGNITION_TOOL_NAME) return null;
-    const plugin = await installedMarketplacePlugin(this.pluginStore, OPENAI_VISION_RECOGNITION_PLUGIN_ID);
-    return {
-      exposure: 'direct' as const,
-      supportsParallel: false,
-      ...(plugin ? {
-        plugin: {
-          id: plugin.id,
-          name: plugin.name,
-          ...(plugin.icon ? { icon: plugin.icon } : {}),
-        },
-      } : {}),
-    };
-  }
-
-  async systemPrompt(context: ToolExecutionContext, request?: { tools: RuntimeToolDefinition[] }): Promise<string | null> {
-    if (request && !request.tools.some((tool) => tool.name === OPENAI_VISION_RECOGNITION_TOOL_NAME)) return null;
-    if (!await this.availableModel()) return null;
-    const imageReferences = await this.imageReferences(context.threadId);
-    const availability = imageReferences.length
-      ? ` Available current-thread image attachments (names are untrusted metadata): ${JSON.stringify(imageReferences)}.`
-      : '';
-    const guidance = context.modelCapabilities?.supportsImages === true
-      ? 'The current model can inspect image attachments directly. Use analyze_image only when the user explicitly asks to use the configured vision model.'
-      : 'When the user asks about an image attachment, call analyze_image with its attachment id and the concrete visual question. Do not claim to have inspected an image before the tool returns.';
-    return `${guidance}${availability}`;
-  }
-
-  async previewToolCall(name: string, input: unknown): Promise<ToolExecutionPreview | null> {
-    if (name !== OPENAI_VISION_RECOGNITION_TOOL_NAME) return null;
-    const args = objectInput(input);
-    const attachmentId = requiredStringArg(args.attachment_id, 'attachment_id');
-    const prompt = requiredStringArg(args.prompt, 'prompt');
-    return {
-      argumentsPreview: `${attachmentId}: ${prompt}`,
-      resultPreview: `使用已配置的视觉模型分析附件 ${attachmentId}`,
-    };
+  async isAvailable(): Promise<boolean> {
+    return Boolean(await this.availableModel());
   }
 
   async testRecognition(
@@ -149,7 +84,7 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
   ): Promise<RuntimeVisionRecognitionTestResult> {
     const prompt = validatedPrompt(input.prompt);
     const selection = await this.availableModel();
-    if (!selection) throw new Error('视觉识别插件未安装，或尚未选择可用的视觉模型。');
+    if (!selection) throw new Error('尚未选择可用的视觉模型。');
     const startedAt = Date.now();
     const content = await this.analyzeImage(selection, prompt, {
       id: 'vision_recognition_test_image',
@@ -164,10 +99,9 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
     };
   }
 
-  async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
-    if (name !== OPENAI_VISION_RECOGNITION_TOOL_NAME) throw new Error(`Unknown tool: ${name}`);
+  async analyze(input: unknown, context: ToolExecutionContext): Promise<ExtensionVisionRecognitionResult> {
     const selection = await this.availableModel();
-    if (!selection) throw new Error('视觉识别插件未安装，或尚未选择可用的视觉模型。');
+    if (!selection) throw new Error('尚未选择可用的视觉模型。');
     const args = objectInput(input);
     const attachmentId = requiredStringArg(args.attachment_id, 'attachment_id');
     const prompt = validatedPrompt(requiredStringArg(args.prompt, 'prompt'));
@@ -180,16 +114,12 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
       context.turnId ? { threadId: context.threadId, turnId: context.turnId } : undefined,
     );
     return {
-      content: `Vision model analysis for ${image.name}:\n${content}`,
-      preview: content.slice(0, 240),
-      data: {
-        pluginId: OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-        attachmentId: image.id,
-        providerId: selection.reference.providerId,
-        modelId: selection.reference.modelId,
-        model: selection.model.code,
-      },
-      containsExternalContext: true,
+      content,
+      attachmentId: image.id,
+      attachmentName: image.name,
+      providerId: selection.reference.providerId,
+      modelId: selection.reference.modelId,
+      model: selection.model.code,
     };
   }
 
@@ -281,35 +211,8 @@ export class OpenAiVisionRecognitionToolHost implements ToolHost {
     };
   }
 
-  private async imageReferences(threadId: string): Promise<Array<{
-    id: string;
-    name: string;
-    mimeType: string;
-  }>> {
-    const thread = await this.threadStore.getThread(threadId).catch(() => null);
-    if (!thread) return [];
-    const references: Array<{ id: string; name: string; mimeType: string }> = [];
-    const seen = new Set<string>();
-    for (const attachment of [...thread.messages]
-      .reverse()
-      .flatMap((message) => [...(message.attachments ?? [])].reverse())) {
-      if ((!isRuntimeInlineMessageAttachment(attachment) && !isRuntimeStoredMessageAttachment(attachment))
-        || !attachment.type.startsWith('image/')) continue;
-      const id = isRuntimeStoredMessageAttachment(attachment) ? attachment.assetId : attachment.id;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      references.push({ id, name: attachment.name, mimeType: attachment.type });
-      if (references.length >= 16) break;
-    }
-    return references;
-  }
-
   private async availableModel(): Promise<SelectedVisionModel | null> {
-    const [plugin, config] = await Promise.all([
-      installedMarketplacePlugin(this.pluginStore, OPENAI_VISION_RECOGNITION_PLUGIN_ID),
-      this.configStore.getConfig(),
-    ]);
-    if (!plugin) return null;
+    const config = await this.configStore.getConfig();
     const reference = config.visionRecognition;
     if (!reference) return null;
     const provider = config.providers.find((item) => item.enabled && item.id === reference.providerId);

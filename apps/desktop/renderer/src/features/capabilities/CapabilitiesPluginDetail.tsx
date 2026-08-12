@@ -189,7 +189,11 @@ export function CapabilitiesPluginDetail({
       {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
 
       <div className="desktop-capabilities-plugin-detail__hero">
-        <CapabilitiesPluginIcon name={marketplaceMetadata?.icon ?? installedPlugin?.icon} variant="detail" />
+        <CapabilitiesPluginIcon
+          name={marketplaceMetadata?.icon ?? installedPlugin?.icon}
+          pluginId={marketplaceMetadata?.id ?? installedPlugin?.id}
+          variant="detail"
+        />
         <div className="desktop-capabilities-plugin-detail__intro">
           <div className="desktop-capabilities-plugin-detail__badges">
             <span className={installed ? 'is-installed' : ''}>{t(installed ? 'capabilities.market.installed' : 'capabilities.detail.available')}</span>

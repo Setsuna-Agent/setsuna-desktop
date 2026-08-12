@@ -118,6 +118,64 @@ describe('file plugin bundle store', () => {
       .rejects.toThrow('must be an .mjs file');
   });
 
+  it('requires exact origins for host-managed extension networking', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    const runtime = await createPluginRuntime(fixture.root);
+    const extension = {
+      apiVersion: 1,
+      runtime: 'node-worker',
+      entry: 'extension/entry.mjs',
+      capabilities: ['tools', 'network'],
+    };
+
+    await patchPluginManifest(fixture.bundleDir, { extension });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('network policy must be an object');
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        ...extension,
+        network: { allowedOrigins: ['https://api.example.test/path'] },
+      },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('must be an HTTP(S) origin');
+
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        ...extension,
+        network: { allowedOrigins: ['https://api.example.test'] },
+      },
+    });
+    await expect(runtime.plugins.inspectPlugin({ path: fixture.bundleDir })).resolves.toMatchObject({
+      extension: { network: { allowedOrigins: ['https://api.example.test'] } },
+    });
+  });
+
+  it('reserves credential and attachment bridges for bundled marketplace extensions', async () => {
+    const fixture = await createPluginFixture();
+    await addExecutableExtension(fixture.bundleDir);
+    await patchPluginManifest(fixture.bundleDir, {
+      extension: {
+        apiVersion: 1,
+        runtime: 'node-worker',
+        entry: 'extension/entry.mjs',
+        capabilities: ['tools', 'image-generation'],
+      },
+    });
+    const runtime = await createPluginRuntime(fixture.root);
+
+    await expect(runtime.plugins.installPlugin({ path: fixture.bundleDir }))
+      .rejects.toThrow('reserved for the bundled marketplace');
+    await expect(runtime.plugins.installPlugin(
+      { path: fixture.bundleDir },
+      { installationSource: 'marketplace', trustExtension: true },
+    )).resolves.toMatchObject({
+      plugin: { extension: { trust: 'trusted' } },
+    });
+  });
+
   it('stops an extension worker before trust, update, and removal mutations', async () => {
     const fixture = await createPluginFixture();
     await addExecutableExtension(fixture.bundleDir);

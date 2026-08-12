@@ -489,7 +489,7 @@
 }
 
 .chat-skill-command-menu .chat-command-menu__item--skill {
-  grid-template-columns: 16px minmax(0, 1fr) auto;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
 }
 
 .chat-skill-command-menu .chat-command-menu__item-icon {
@@ -551,7 +551,7 @@
   line-height: 1;
 }
 
-.chat-selected-skill > span {
+.chat-selected-skill__label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -620,28 +620,7 @@
   overflow-wrap: anywhere;
 }
 
-.chat-sender .ant-sender-slot:has(.chat-workspace-mention) {
-  display: inline;
-  height: auto;
-  margin: 0;
-  vertical-align: baseline;
-  word-break: inherit;
-}
-
-.chat-sender .ant-sender-slot-tag:has(.chat-workspace-mention) {
-  display: inline;
-  height: auto;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  line-height: inherit;
-  vertical-align: baseline;
-}
-
-.chat-sender .ant-sender-slot:has(.chat-skill-reference) {
+.chat-sender .ant-sender-slot:has(.chat-inline-reference) {
   display: inline;
   height: auto;
   margin: 0;
@@ -650,7 +629,7 @@
   word-break: inherit;
 }
 
-.chat-sender .ant-sender-slot-tag:has(.chat-skill-reference) {
+.chat-sender .ant-sender-slot-tag:has(.chat-inline-reference) {
   display: inline;
   height: auto;
   padding: 0;

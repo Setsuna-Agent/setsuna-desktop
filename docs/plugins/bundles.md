@@ -71,14 +71,14 @@ my-plugin/
 }
 ```
 
-上面的 v2 manifest 可以只包含声明式能力。`tools` 仍只是应用内置工具的展示元数据，不会执行 Bundle 代码；需要动态工具或生命周期中间件时，再添加 [`extension`](extensions.md#最小-bundle)。这让所有内置插件共用同一份 Bundle schema 和安装生命周期，同时保持 Skill、MCP、Hook 与原生受信任工具各自合适的执行边界。
+上面的 v2 manifest 可以只包含声明式能力。`tools` 本身是工具展示和执行策略元数据，不会执行 Bundle 代码；需要动态工具或生命周期中间件时，再添加 [`extension`](extensions.md#最小-bundle)，由 Bundle 内的入口注册同名工具。这样 Skill、MCP、Hook 与可执行扩展共用同一份安装生命周期。
 
 字段规则：
 
 - `id` 会规范化为最多 80 字符的小写标识。
 - `icon` 是 renderer 管理的图标 token，只允许小写字母、数字和连字符；Bundle 不能注入 SVG、图片路径或任意 markup，未知 token 使用安全的通用插件图标。
 - `publisher`、`tags` 和 `featured` 用于市场展示，不影响运行权限；`featured: true` 的插件优先进入市场顶部编辑精选。可选的正整数 `featuredOrder` 控制精选位顺序，数字越小越靠前，且只能与 `featured: true` 一起使用。
-- `tools` 只声明应用内置 runtime 工具的名称和说明，供市场摘要与详情页在安装前后展示；它不会从 Bundle 加载或注册可执行代码。
+- `tools` 声明名称、说明和受控市场可用的 exposure/并行/审批策略，供市场展示并约束 extension 注册的同名工具；它本身不加载代码。
 - `skills` 是相对 Bundle 根目录的 Skill 目录列表；省略时自动发现 `skills/*/SKILL.md`。运行时 ID 为 `<plugin-id>.<skill-directory>`，Plugin Skill 只读。
 - `mcpServers` 支持 `stdio` 和 `streamable_http`。HTTP 必须是 HTTPS，或仅限 loopback 的 HTTP。
 - `hooks` 使用现有 Hook 事件与 matcher。`id`、`name`、`description`、触发事件和 matcher 会安全投影到插件详情页；命令和本地路径不会发送给 renderer。`{{pluginRoot}}` 安装时替换为私有安装目录，并按当前平台安全引用。
@@ -106,7 +106,11 @@ runtime 会用当前 turn 的用户文本、附件名和附件 MIME 类型匹配
 
 Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版本决定。没有 `extension` 的 v2 Bundle 仍是纯声明式插件；声明 `extension` 后，代码只在独立 Node worker 中运行，并受完整包哈希信任、能力声明、JSONL 协议和标准工具审批约束。它不进入 runtime 或 renderer 进程，也不等同于 OS 沙箱。完整契约见 [可执行扩展 API v1](extensions.md)。
 
-需要凭据、本机实现或受控网络协议的第一方插件仍可由 Bundle Skill、manifest `tools` 元数据与应用内置 ToolHost 配对，并以已安装插件 ID 作为能力开关。`openai-image-generation` 使用这一方式提供 `generate_image`，并保留独立的 Images API 配置；`openai-vision-recognition` 提供 `analyze_image`，只接受当前 thread 的受管附件 ID。视觉插件详情页只选择“模型服务”中已启用且标记为支持图片的模型，runtime 保存 provider/model 引用并复用该模型已有的协议、服务地址、API key 和代理设置。模型只接收图片和具体视觉问题，主模型只接收作为外部上下文返回的文本结果。`web-search` 提供 `web_search`，使用 Tavily keyless 模式，不需要用户配置 API key，但受匿名额度限制；查询会发给外部搜索服务，结果按不可信外部上下文处理。插件默认不安装，卸载后对应工具立即从模型能力列表消失，但不会限制普通图片发送。
+需要 runtime 凭据或受管附件的第一方插件也必须由 Bundle extension 注册和实现工具，不能在 runtime 里配一套隐藏 ToolHost。`openai-image-generation` 的 `generate_image` schema、输入校验、结果格式位于插件 `extension/`，只通过 marketplace 专用的 `image-generation` bridge 请求 host 使用私有 Images API 配置并保存受管资产；`openai-vision-recognition` 同样在 Bundle 内实现 `analyze_image`，通过 `vision-recognition` bridge 传递附件 ID 和问题。host 只负责密钥、代理、provider adapter、thread 归属校验和二进制落盘，不持有工具定义或面向模型的结果语义。
+
+这两个 bridge 只能由随应用发布的受控 marketplace Bundle 声明，本地侧载和 Agent 创建的 Bundle 会在安装阶段被拒绝。视觉插件详情页只选择“模型服务”中已启用且标记为支持图片的模型，runtime 保存 provider/model 引用并复用已有协议、服务地址、API key 和代理设置；扩展 worker 不会得到这些凭据或附件路径。
+
+`web-search` 已是完整可执行扩展：Bundle 内实现 `web_search` 的输入校验、Tavily keyless 请求、结果归一化和外部上下文格式化；runtime 只提供通用的精确 origin allowlist、代理、取消、超时和响应大小限制。它不需要用户配置 API key，但受匿名额度限制；查询会发给外部搜索服务，结果按不可信外部上下文处理。插件默认不安装，卸载后 worker 与工具都会立即消失。
 
 ## 安装和卸载
 

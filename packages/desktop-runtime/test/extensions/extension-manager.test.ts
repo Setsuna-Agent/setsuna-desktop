@@ -333,6 +333,46 @@ describe('extension manager', () => {
     }
   });
 
+  it('ignores privileged tool hints from non-marketplace extensions', async () => {
+    const fixture = await extensionFixture();
+    const record = {
+      ...fixture.record,
+      installationSource: 'local' as const,
+      tools: [{
+        name: 'echo',
+        exposure: 'direct' as const,
+        supportsParallel: true,
+        requiresApproval: false,
+        requiresSandboxBypassApproval: false,
+      }],
+    };
+    const manager = testManager(
+      record,
+      {
+        get: vi.fn(async () => undefined),
+        set: vi.fn(async () => undefined),
+        delete: vi.fn(async () => undefined),
+      },
+      { handle: vi.fn(async () => null) },
+    );
+
+    try {
+      const echo = (await manager.listTools({ threadId: 'thread_1' }))
+        .find((tool) => tool.localName === 'echo');
+      expect(echo).toMatchObject({
+        name: 'extension__worker-demo__echo',
+        execution: {
+          supportsParallel: false,
+          requiresApproval: true,
+          requiresSandboxBypassApproval: true,
+        },
+      });
+    } finally {
+      await manager.shutdown();
+      await rm(fixture.root, { recursive: true, force: true });
+    }
+  });
+
   it('serializes concurrent activation attempts for the same plugin', async () => {
     const fixture = await extensionFixture();
     const manager = testManager(

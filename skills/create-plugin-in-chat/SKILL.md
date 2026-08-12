@@ -25,7 +25,9 @@ description: "通过对话创建或更新 Setsuna Plugin Bundle，生成完整 m
 - 最多提交 64 个文本文件、合计 512 KiB。图片等二进制资源不能通过本工具创建。
 - Skill 目录必须包含完整 `SKILL.md`，不能保留 TODO、占位符或省略内容。
 - Hook 命令应引用 Bundle 内脚本，同时按需要提供 `commandWindows`。
-- extension 入口必须是 Bundle 内的 `.mjs`，使用 `apiVersion: 1`、`runtime: node-worker`，并只声明实际使用的 `tools`、`events`、`state`、`ui` 能力。
+- extension 入口必须是 Bundle 内的 `.mjs`，使用 `apiVersion: 1`、`runtime: node-worker`，并只声明实际使用的 `tools`、`events`、`state`、`ui`、`network` 能力。
+- 不要声明 `image-generation` 或 `vision-recognition`；它们是随应用 marketplace Bundle 专用的私有 host bridge，本地或对话创建的插件不能安装。
+- 使用 `network` 时必须在 `extension.network.allowedOrigins` 声明无路径、无凭据的精确 HTTP(S) origin，并通过 `context.network.request(...)` 发起请求，以复用应用代理、取消、超时和响应大小限制。
 - v1 不运行安装脚本或包管理器；依赖必须已包含在 Bundle 文本文件中。
 
 最小动态工具入口：

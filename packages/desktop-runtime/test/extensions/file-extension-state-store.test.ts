@@ -40,6 +40,27 @@ describe('file extension state store', () => {
     }
   });
 
+  it('renames all scopes for a plugin without overwriting existing state', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-state-rename-'));
+    const store = new FileExtensionStateStore(root);
+    try {
+      await store.set('pi-todo', 'thread:thread_1', 'todos', [{ id: 1, text: 'Keep me' }]);
+      await store.set('pi-todo', 'global', 'settings', { compact: true });
+
+      await store.renamePlugin('pi-todo', 'todo');
+
+      await expect(store.get('pi-todo', 'thread:thread_1', 'todos')).resolves.toBeUndefined();
+      await expect(store.get('todo', 'thread:thread_1', 'todos')).resolves.toEqual([{ id: 1, text: 'Keep me' }]);
+      await expect(store.get('todo', 'global', 'settings')).resolves.toEqual({ compact: true });
+
+      await store.set('occupied', 'global', 'value', 'existing');
+      await expect(store.renamePlugin('todo', 'occupied')).rejects.toThrow('already exists');
+      await expect(store.get('todo', 'global', 'settings')).resolves.toEqual({ compact: true });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('applies the aggregate quota per scope so old threads cannot block new state', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-extension-state-'));
     const store = new FileExtensionStateStore(root);

@@ -1,6 +1,4 @@
 import {
-  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-  OPENAI_VISION_RECOGNITION_TOOL_NAME,
   type ModelRequest,
   type ModelStreamEvent,
   type RuntimeConfigState,
@@ -14,53 +12,37 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { OpenAiVisionRecognitionToolHost } from '../../../src/adapters/tool/openai-vision-recognition-tool-host.js';
+import { ExtensionVisionRecognitionCoordinator } from '../../src/extensions/extension-vision-recognition-coordinator.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
   'base64',
 );
 
-describe('OpenAiVisionRecognitionToolHost', () => {
-  it('advertises the tool only for an installed plugin with an enabled image-capable model selection', async () => {
-    const installed = pluginStore(true);
-    const host = toolHost(configStore(runtimeConfig()), installed);
-
-    await expect(host.listTools({ threadId: 'thread_1' })).resolves.toEqual([
-      expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME }),
-    ]);
-    await expect(host.listTools({ threadId: 'thread_1', features: { plugins: false } })).resolves.toEqual([]);
-    await expect(host.toolRuntimeProfile(OPENAI_VISION_RECOGNITION_TOOL_NAME)).resolves.toEqual({
-      exposure: 'direct',
-      supportsParallel: false,
-      plugin: {
-        id: OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-        name: '视觉识别',
-        icon: 'vision-recognition',
-      },
-    });
-
-    await expect(toolHost(configStore(runtimeConfig({ selected: false })), installed)
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
-    await expect(toolHost(configStore(runtimeConfig({ supportsImages: false })), installed)
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
-    await expect(toolHost(configStore(runtimeConfig({ modelEnabled: false })), installed)
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
-    await expect(toolHost(configStore(runtimeConfig()), pluginStore(false))
-      .listTools({ threadId: 'thread_1' })).resolves.toEqual([]);
+describe('ExtensionVisionRecognitionCoordinator', () => {
+  it('requires an enabled image-capable model selection', async () => {
+    for (const config of [
+      runtimeConfig({ selected: false }),
+      runtimeConfig({ supportsImages: false }),
+      runtimeConfig({ modelEnabled: false }),
+    ]) {
+      await expect(visionCoordinator(configStore(config)).analyze({
+        attachment_id: 'missing',
+        prompt: 'Describe it.',
+      }, { threadId: 'thread_1' })).rejects.toThrow('尚未选择可用的视觉模型');
+    }
   });
 
   it('reuses the selected configured model for a current-thread attachment', async () => {
     const fixture = await imageFixture();
     const capturedRequests: ModelRequest[] = [];
-    const host = toolHost(
+    const host = visionCoordinator(
       configStore(runtimeConfig()),
-      pluginStore(true),
       fixture,
       modelClient((request) => { capturedRequests.push(request); }),
     );
 
-    const result = await host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+    const result = await host.analyze({
       attachment_id: fixture.attachment.assetId,
       prompt: 'Describe this image.',
     }, { threadId: 'thread_1', toolCallId: 'call_1' });
@@ -85,22 +67,18 @@ describe('OpenAiVisionRecognitionToolHost', () => {
     expect(capturedRequests[0]?.messages[0]?.attachments?.[0]?.url)
       .toBe(`data:image/png;base64,${ONE_PIXEL_PNG.toString('base64')}`);
     expect(result).toMatchObject({
-      content: expect.stringContaining('The image contains one small colored pixel.'),
-      preview: 'The image contains one small colored pixel.',
-      containsExternalContext: true,
-      data: {
-        pluginId: OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-        attachmentId: fixture.attachment.assetId,
-        providerId: 'vision-provider',
-        modelId: 'vision-model-id',
-        model: 'qwen-vl-max',
-      },
+      content: 'The image contains one small colored pixel.',
+      attachmentId: fixture.attachment.assetId,
+      attachmentName: 'diagram.png',
+      providerId: 'vision-provider',
+      modelId: 'vision-model-id',
+      model: 'qwen-vl-max',
     });
     expect(JSON.stringify(result)).not.toContain(ONE_PIXEL_PNG.toString('base64'));
     expect(JSON.stringify(result)).not.toContain(fixture.absolutePath);
   });
 
-  it('accepts a legacy inline image and exposes its id to the model prompt', async () => {
+  it('accepts a legacy inline image from the current thread', async () => {
     const inlineAttachment: RuntimeMessageAttachment = {
       id: 'inline_image_1',
       name: 'inline.png',
@@ -110,22 +88,17 @@ describe('OpenAiVisionRecognitionToolHost', () => {
       url: `data:image/png;base64,${ONE_PIXEL_PNG.toString('base64')}`,
     };
     const capturedRequests: ModelRequest[] = [];
-    const host = toolHost(
+    const host = visionCoordinator(
       configStore(runtimeConfig()),
-      pluginStore(true),
       { thread: runtimeThread([inlineAttachment]) },
       modelClient((request) => { capturedRequests.push(request); }),
     );
 
-    await expect(host.systemPrompt({
-      threadId: 'thread_1',
-      modelCapabilities: { supportsImages: true },
-    })).resolves.toContain('inline_image_1');
-    await expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+    await expect(host.analyze({
       attachment_id: 'inline_image_1',
       prompt: 'Use the configured vision model.',
     }, { threadId: 'thread_1', turnId: 'turn_1' })).resolves.toMatchObject({
-      data: { attachmentId: 'inline_image_1' },
+      attachmentId: 'inline_image_1',
     });
     expect(capturedRequests[0]?.messages[0]?.attachments?.[0]?.url).toBe(inlineAttachment.url);
   });
@@ -138,9 +111,8 @@ describe('OpenAiVisionRecognitionToolHost', () => {
       outputTokens: 8,
       totalTokens: 20,
     };
-    const host = toolHost(
+    const host = visionCoordinator(
       configStore(runtimeConfig()),
-      pluginStore(true),
       fixture,
       modelClient(() => undefined, 'Usage recorded.', usage),
       {
@@ -154,7 +126,7 @@ describe('OpenAiVisionRecognitionToolHost', () => {
       },
     );
 
-    await host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+    await host.analyze({
       attachment_id: fixture.attachment.assetId,
       prompt: 'Count usage.',
     }, { threadId: 'thread_1', turnId: 'turn_1' });
@@ -173,14 +145,13 @@ describe('OpenAiVisionRecognitionToolHost', () => {
   it('does not invoke the model for an attachment absent from the current thread', async () => {
     const fixture = await imageFixture();
     let requestCount = 0;
-    const host = toolHost(
+    const host = visionCoordinator(
       configStore(runtimeConfig()),
-      pluginStore(true),
       { ...fixture, thread: runtimeThread([]) },
       modelClient(() => { requestCount += 1; }),
     );
 
-    await expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+    await expect(host.analyze({
       attachment_id: fixture.attachment.assetId,
       prompt: 'Describe it.',
     }, { threadId: 'thread_1' })).rejects.toThrow('当前会话中没有可用的图片附件');
@@ -189,9 +160,8 @@ describe('OpenAiVisionRecognitionToolHost', () => {
 
   it('uses a built-in image with the selected configured model for the quick test', async () => {
     const capturedRequests: ModelRequest[] = [];
-    const host = toolHost(
+    const host = visionCoordinator(
       configStore(runtimeConfig()),
-      pluginStore(true),
       undefined,
       modelClient((request) => { capturedRequests.push(request); }, 'Image received.'),
     );
@@ -259,31 +229,6 @@ function configStore(value: RuntimeConfigState) {
   return { async getConfig() { return value; } };
 }
 
-function pluginStore(installed: boolean, installationSource: 'local' | 'marketplace' = 'marketplace') {
-  return {
-    async listInstalledRecords() {
-      return installed ? [{
-          id: OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-          name: '视觉识别',
-          icon: 'vision-recognition',
-          installedAt: '2026-08-08T00:00:00.000Z',
-          installationSource,
-          sourcePath: '/catalog/openai-vision-recognition',
-          installPath: '/runtime/plugins/openai-vision-recognition',
-          manifestPath: '/runtime/plugins/openai-vision-recognition/.setsuna-plugin/plugin.json',
-          tools: [{ name: OPENAI_VISION_RECOGNITION_TOOL_NAME }],
-          skills: [],
-          skillEntries: [],
-          mcpServers: [],
-          mcpServerInputs: [],
-          hooks: [],
-          hookCount: 0,
-          resources: [],
-        }] : [];
-    },
-  };
-}
-
 function modelClient(
   onRequest: (request: ModelRequest) => void = () => undefined,
   text = 'The image contains one small colored pixel.',
@@ -339,17 +284,15 @@ type VisionToolFixture = {
   thread: RuntimeThread;
 };
 
-function toolHost(
+function visionCoordinator(
   config: ReturnType<typeof configStore>,
-  plugins: ReturnType<typeof pluginStore>,
   fixture?: VisionToolFixture,
   client = modelClient(),
-  options: ConstructorParameters<typeof OpenAiVisionRecognitionToolHost>[5] = {},
+  options: ConstructorParameters<typeof ExtensionVisionRecognitionCoordinator>[4] = {},
 ) {
   const activeFixture = fixture;
-  return new OpenAiVisionRecognitionToolHost(
+  return new ExtensionVisionRecognitionCoordinator(
     config,
-    plugins,
     {
       async resolveForThread(threadId, attachments) {
         if (!activeFixture?.attachment

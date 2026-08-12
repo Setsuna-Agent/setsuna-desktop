@@ -63,11 +63,6 @@ button.desktop-capability-list-item__identity {
   border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-border));
 }
 
-.desktop-capability-list-item__icon[data-kind='skill'] {
-  color: #7b5bd6;
-  border-color: color-mix(in srgb, #7b5bd6 32%, var(--app-border));
-}
-
 .desktop-capability-list-item__copy {
   display: grid;
   gap: 1px;

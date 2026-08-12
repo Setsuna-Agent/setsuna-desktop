@@ -14,7 +14,6 @@ import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-
 import { FilePluginBundleStore } from '../adapters/plugin/file-plugin-bundle-store.js';
 import { FilePluginDraftStore } from '../adapters/plugin/file-plugin-draft-store.js';
 import { FilePluginMarketplace } from '../adapters/plugin/file-plugin-marketplace.js';
-import { TavilyWebSearchClient } from '../adapters/search/tavily-web-search-client.js';
 import { createWorkspaceSearchEngine } from '../adapters/search/create-workspace-search-engine.js';
 import { FileSkillRegistry } from '../adapters/skill/file-skill-registry.js';
 import { SkillMcpDependencyCoordinator } from '../adapters/skill/skill-mcp-dependency-coordinator.js';
@@ -34,13 +33,10 @@ import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
 import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
 import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
-import { OpenAiImageGenerationToolHost } from '../adapters/tool/openai-image-generation-tool-host.js';
-import { OpenAiVisionRecognitionToolHost } from '../adapters/tool/openai-vision-recognition-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local/pc-local-tool-host.js';
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
 import { SkillManagementToolHost } from '../adapters/tool/skill-management-tool-host.js';
 import { UserInputToolHost } from '../adapters/tool/user-input-tool-host.js';
-import { WebSearchToolHost } from '../adapters/tool/web-search-tool-host.js';
 import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-host.js';
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
@@ -48,7 +44,9 @@ import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-
 import { ManagedWorkspaceDependencyManager } from '../adapters/workspace/managed-workspace-dependency-manager.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
 import { ExtensionManager } from '../extensions/extension-manager.js';
+import { ExtensionImageGenerationCoordinator } from '../extensions/extension-image-generation-coordinator.js';
 import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
+import { ExtensionVisionRecognitionCoordinator } from '../extensions/extension-vision-recognition-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
@@ -63,6 +61,9 @@ export type RuntimeFactoryOptions = {
   nativeBridge?: DesktopNativeBridge;
   ripgrepPath?: string;
   requireBundledRipgrep?: boolean;
+  /** Overrides used by source-level tests or embedders that do not load the built worker entry. */
+  extensionWorkerEntryPath?: string;
+  extensionWorkerExecArgv?: string[];
 };
 
 export type RuntimeContainer = ReturnType<typeof createRuntimeFactory>;
@@ -127,9 +128,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     builtinPluginsDir,
   );
   const pluginDraftStore = new FilePluginDraftStore(path.join(runtimeDataDir, 'plugin-drafts'));
-  const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
-  const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi);
-  pluginStore.setRuntimeMutationCoordinator(extensionManager);
   const pluginMarketplace = new FilePluginMarketplace(builtinPluginsDir, pluginStore);
   const workspaceSearchEngine = createWorkspaceSearchEngine({
     ripgrepPath: options.ripgrepPath,
@@ -149,9 +147,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
   });
   const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
-  const imageGenerationToolHost = new OpenAiImageGenerationToolHost(
+  const imageGenerationCoordinator = new ExtensionImageGenerationCoordinator(
     configStore,
-    pluginStore,
     generatedImageStore,
     {
       fetchImpl: networkProxyFetch.forRoute(),
@@ -159,18 +156,22 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       workspaceProjects,
     },
   );
-  const visionRecognitionToolHost = new OpenAiVisionRecognitionToolHost(
+  const visionRecognitionCoordinator = new ExtensionVisionRecognitionCoordinator(
     configStore,
-    pluginStore,
     attachmentStore,
     threadStore,
     configuredModelClient,
     { clock, usageStore },
   );
-  const webSearchClient = new TavilyWebSearchClient({
-    fetchImpl: networkProxyFetch.forRoute(),
+  const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
+  const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
+    networkFetch: networkProxyFetch.forRoute(),
+    imageGeneration: imageGenerationCoordinator,
+    visionRecognition: visionRecognitionCoordinator,
+    ...(options.extensionWorkerEntryPath ? { workerEntryPath: options.extensionWorkerEntryPath } : {}),
+    ...(options.extensionWorkerExecArgv ? { workerExecArgv: options.extensionWorkerExecArgv } : {}),
   });
-  const webSearchToolHost = new WebSearchToolHost(pluginStore, webSearchClient);
+  pluginStore.setRuntimeMutationCoordinator(extensionManager);
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
     policyAmendmentStore,
@@ -194,13 +195,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     new BrowserToolHost(browserControl),
-    webSearchToolHost,
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
     new ExtensionToolHost(extensionManager),
-    imageGenerationToolHost,
-    visionRecognitionToolHost,
     new WorkspaceImageToolHost(workspaceProjects),
     new ArtifactToolHost(workspaceProjects),
     backgroundShellProcesses,
@@ -245,8 +243,8 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     environmentResolver,
     extensionManager,
     generatedImageStore,
-    imageGenerationToolHost,
-    visionRecognitionToolHost,
+    imageGenerationCoordinator,
+    visionRecognitionCoordinator,
     memoryStore,
     modelClient,
     networkProxyFetch,
@@ -263,8 +261,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolHost,
     threadStore,
     usageStore,
-    webSearchClient,
-    webSearchToolHost,
     workspaceDependencies,
     workspaceProjects,
     workspaceSearchEngine,

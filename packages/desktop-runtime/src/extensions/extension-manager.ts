@@ -3,6 +3,7 @@ import type {
   RuntimeExtensionEventName,
   RuntimeExtensionStatus,
   RuntimeExtensionStatusList,
+  RuntimeMessageAttachment,
   RuntimePluginReference,
 } from '@setsuna-desktop/contracts';
 import { RUNTIME_EXTENSION_EVENT_NAMES } from '@setsuna-desktop/contracts';
@@ -11,6 +12,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inspectBundleTree, pathIsInside } from '../adapters/plugin/file-plugin-bundle-model.js';
+import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import type {
   ExtensionEventContext,
   ExtensionEventOutcome,
@@ -18,8 +20,20 @@ import type {
   ExtensionRuntime,
   ExtensionStateStore,
 } from '../ports/extension-runtime.js';
-import type { InstalledPluginRecord, PluginBundleStore } from '../ports/plugin-bundle-store.js';
-import type { ToolExecutionContext, ToolExecutionResult } from '../ports/tool-host.js';
+import type {
+  InstalledPluginExtensionRecord,
+  InstalledPluginRecord,
+  PluginBundleStore,
+} from '../ports/plugin-bundle-store.js';
+import type {
+  ToolExecutionContext,
+  ToolExecutionResult,
+  ToolTurnCleanupOutcome,
+} from '../ports/tool-host.js';
+import {
+  ExtensionNetworkCoordinator,
+  type ExtensionNetworkFetch,
+} from './extension-network-coordinator.js';
 import { ExtensionUiCoordinator } from './extension-ui-coordinator.js';
 import {
   ExtensionWorkerClient,
@@ -40,10 +54,27 @@ type ExtensionManagerOptions = {
   workerEntryPath?: string;
   workerExecArgv?: string[];
   toolTimeoutMs?: number;
+  imageGenerationToolTimeoutMs?: number;
   eventTimeoutMs?: number;
+  networkFetch?: ExtensionNetworkFetch;
+  imageGeneration?: {
+    isAvailable(): Promise<boolean>;
+    generate(input: unknown, context: ToolExecutionContext): Promise<unknown>;
+    cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void>;
+  };
+  visionRecognition?: {
+    isAvailable(): Promise<boolean>;
+    analyze(input: unknown, context: ToolExecutionContext): Promise<unknown>;
+  };
 };
 
 const eventNames = new Set<string>(RUNTIME_EXTENSION_EVENT_NAMES);
+const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
+const DEFAULT_IMAGE_GENERATION_TOOL_TIMEOUT_MS = 5 * 60_000;
+const FIRST_PARTY_HOST_CAPABILITIES = new Set<RuntimeExtensionCapability>([
+  'image-generation',
+  'vision-recognition',
+]);
 
 export class ExtensionManager implements ExtensionRuntime {
   private readonly active = new Map<string, ActiveExtension>();
@@ -52,7 +83,11 @@ export class ExtensionManager implements ExtensionRuntime {
   private readonly workerEntryPath: string;
   private readonly workerExecArgv: string[];
   private readonly toolTimeoutMs: number;
+  private readonly imageGenerationToolTimeoutMs: number;
   private readonly eventTimeoutMs: number;
+  private readonly network: ExtensionNetworkCoordinator;
+  private readonly imageGeneration?: ExtensionManagerOptions['imageGeneration'];
+  private readonly visionRecognition?: ExtensionManagerOptions['visionRecognition'];
   private shuttingDown = false;
 
   constructor(
@@ -64,8 +99,13 @@ export class ExtensionManager implements ExtensionRuntime {
     this.workerEntryPath = options.workerEntryPath
       ?? fileURLToPath(new URL('./extension-worker-entry.js', import.meta.url));
     this.workerExecArgv = [...(options.workerExecArgv ?? [])];
-    this.toolTimeoutMs = options.toolTimeoutMs ?? 120_000;
+    this.toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
+    this.imageGenerationToolTimeoutMs = options.imageGenerationToolTimeoutMs
+      ?? DEFAULT_IMAGE_GENERATION_TOOL_TIMEOUT_MS;
     this.eventTimeoutMs = options.eventTimeoutMs ?? 10_000;
+    this.network = new ExtensionNetworkCoordinator(options.networkFetch);
+    this.imageGeneration = options.imageGeneration;
+    this.visionRecognition = options.visionRecognition;
   }
 
   async listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {
@@ -75,6 +115,7 @@ export class ExtensionManager implements ExtensionRuntime {
     for (const plugin of records) {
       if (!plugin.extension?.capabilities.includes('tools')) continue;
       try {
+        if (!await this.hostCapabilitiesAvailable(plugin)) continue;
         const active = await this.ensureActive(plugin);
         if (active) tools.push(...active.tools.map((tool) => ({ ...tool, inputSchema: { ...tool.inputSchema } })));
       } catch (error) {
@@ -118,9 +159,14 @@ export class ExtensionManager implements ExtensionRuntime {
           context: safeWorkerContext(context),
         },
         workerRequestContext(context),
-        this.toolTimeoutMs,
+        active.plugin.extension?.capabilities.includes('image-generation')
+          ? this.imageGenerationToolTimeoutMs
+          : this.toolTimeoutMs,
       );
-      return normalizeToolResult(result);
+      return normalizeToolResult(
+        result,
+        active.plugin.extension?.capabilities.includes('image-generation') === true,
+      );
     } catch (error) {
       if (context.signal?.aborted) {
         await this.markStoppedAfterCancellation(active.plugin.id, active.client);
@@ -174,6 +220,17 @@ export class ExtensionManager implements ExtensionRuntime {
       }
     }
     return aggregate;
+  }
+
+  async cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> {
+    await this.imageGeneration?.cleanupTurn(context, outcome);
+  }
+
+  private async hostCapabilitiesAvailable(plugin: InstalledPluginRecord): Promise<boolean> {
+    const capabilities = plugin.extension?.capabilities ?? [];
+    if (capabilities.includes('image-generation') && !await this.imageGeneration?.isAvailable()) return false;
+    if (capabilities.includes('vision-recognition') && !await this.visionRecognition?.isAvailable()) return false;
+    return true;
   }
 
   async listStatuses(): Promise<RuntimeExtensionStatusList> {
@@ -241,6 +298,7 @@ export class ExtensionManager implements ExtensionRuntime {
   private async ensureActiveLocked(plugin: InstalledPluginRecord): Promise<ActiveExtension | null> {
     const extension = plugin.extension;
     if (!extension) return null;
+    assertFirstPartyHostCapabilities(plugin);
     const bundle = await inspectBundleTree(plugin.installPath);
     if (!extension.trustedHash || extension.trustedHash !== bundle.bundleHash) {
       await this.stopActiveLocked(plugin.id);
@@ -251,6 +309,7 @@ export class ExtensionManager implements ExtensionRuntime {
       hash: bundle.bundleHash,
       entry: extension.entry,
       capabilities: extension.capabilities,
+      network: extension.network,
     });
     const existing = this.active.get(plugin.id);
     if (existing?.signature === signature && existing.client.isRunning()) return existing;
@@ -273,18 +332,26 @@ export class ExtensionManager implements ExtensionRuntime {
         params,
         context,
         reference,
-        extension.capabilities,
+        extension,
       ),
     });
     try {
       const ready = await client.start();
-      const tools = ready.tools.map((tool): ExtensionRegisteredTool => ({
-        name: extensionToolName(plugin.id, tool.name),
-        localName: tool.name,
-        description: `${plugin.name}: ${tool.description}`,
-        inputSchema: { ...tool.inputSchema },
-        plugin: reference,
-      }));
+      const tools = ready.tools.map((tool): ExtensionRegisteredTool => {
+        const policy = extensionToolPolicy(plugin, tool.name);
+        return {
+          name: policy.direct ? tool.name : extensionToolName(plugin.id, tool.name),
+          localName: tool.name,
+          description: `${plugin.name}: ${tool.description}`,
+          inputSchema: { ...tool.inputSchema },
+          plugin: reference,
+          execution: {
+            supportsParallel: policy.supportsParallel,
+            requiresApproval: policy.requiresApproval,
+            requiresSandboxBypassApproval: policy.requiresSandboxBypassApproval,
+          },
+        };
+      });
       assertUniqueToolNames(tools);
       const active = { client, plugin, ready, signature, tools };
       this.active.set(plugin.id, active);
@@ -306,10 +373,10 @@ export class ExtensionManager implements ExtensionRuntime {
     params: unknown,
     context: ExtensionWorkerRequestContext,
     plugin: RuntimePluginReference,
-    capabilities: RuntimeExtensionCapability[],
+    extension: InstalledPluginExtensionRecord,
   ): Promise<unknown> {
     if (method.startsWith('state.')) {
-      requireCapability(capabilities, 'state');
+      requireCapability(extension, 'state');
       const input = requiredRecord(params, 'Extension state request must be an object.');
       const key = requiredText(input.key, 'Extension state key');
       const scope = stateScope(input.scope, context);
@@ -324,11 +391,26 @@ export class ExtensionManager implements ExtensionRuntime {
       }
     }
     if (method.startsWith('ui.')) {
-      requireCapability(capabilities, 'ui');
+      requireCapability(extension, 'ui');
       if (method !== 'ui.notify' && method !== 'ui.confirm' && method !== 'ui.select' && method !== 'ui.input') {
         throw new Error(`Unsupported extension UI method: ${method}`);
       }
       return this.ui.handle(method, params, context, plugin);
+    }
+    if (method === 'network.request') {
+      requireCapability(extension, 'network');
+      if (!extension.network) throw new Error('Extension network policy is missing.');
+      return this.network.request(params, extension.network, context.signal);
+    }
+    if (method === 'image-generation.generate') {
+      requireCapability(extension, 'image-generation');
+      if (!this.imageGeneration) throw new Error('The image generation bridge is unavailable.');
+      return this.imageGeneration.generate(params, context);
+    }
+    if (method === 'vision-recognition.analyze') {
+      requireCapability(extension, 'vision-recognition');
+      if (!this.visionRecognition) throw new Error('The vision recognition bridge is unavailable.');
+      return this.visionRecognition.analyze(params, context);
     }
     throw new Error(`Unsupported extension host method: ${method}`);
   }
@@ -406,6 +488,21 @@ export class ExtensionManager implements ExtensionRuntime {
   }
 }
 
+function extensionToolPolicy(plugin: InstalledPluginRecord, localName: string) {
+  const declared = plugin.tools?.find((tool) => tool.name === localName);
+  // Only the application-controlled marketplace may relax extension defaults.
+  // Local and Agent-created bundles remain namespaced, serialized, and approved.
+  const curated = plugin.installationSource === 'marketplace';
+  return {
+    direct: curated && declared?.exposure === 'direct',
+    supportsParallel: curated && declared?.supportsParallel === true,
+    requiresApproval: !(curated && declared?.requiresApproval === false),
+    requiresSandboxBypassApproval: !(
+      curated && declared?.requiresSandboxBypassApproval === false
+    ),
+  };
+}
+
 function extensionToolName(pluginId: string, localName: string): string {
   const raw = `extension__${safeNamePart(pluginId)}__${safeNamePart(localName)}`;
   if (raw.length <= 64) return raw;
@@ -449,6 +546,8 @@ function workerRequestContext(context: ToolExecutionContext): ExtensionWorkerReq
     ...(context.projectId ? { projectId: context.projectId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
     ...(context.environment?.cwd ? { cwd: context.environment.cwd } : {}),
+    ...(context.environment ? { environment: context.environment } : {}),
+    ...(context.permissionProfile ? { permissionProfile: context.permissionProfile } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
     ...(context.onToolOutputDelta ? { onOutput: (message: string) => context.onToolOutputDelta?.({ delta: message }) } : {}),
   };
@@ -483,17 +582,58 @@ function extensionCancellationError(signal?: AbortSignal): Error {
   return signal?.reason instanceof Error ? signal.reason : new Error('Extension request was cancelled.');
 }
 
-function normalizeToolResult(value: unknown): ToolExecutionResult {
+function normalizeToolResult(value: unknown, allowGeneratedAttachments = false): ToolExecutionResult {
   if (typeof value === 'string') return { content: value };
   const record = protocolRecord(value);
   if (!record) return { content: JSON.stringify(value ?? null) };
   const content = typeof record.content === 'string' ? record.content : JSON.stringify(value);
+  const attachments = normalizeExtensionAttachments(record.attachments, allowGeneratedAttachments);
   return {
     content,
+    ...(attachments ? { attachments } : {}),
     ...(typeof record.preview === 'string' ? { preview: record.preview } : {}),
     ...('data' in record ? { data: record.data } : {}),
     ...(record.containsExternalContext === true ? { containsExternalContext: true } : {}),
   };
+}
+
+function normalizeExtensionAttachments(
+  value: unknown,
+  allowed: boolean,
+): RuntimeMessageAttachment[] | undefined {
+  if (value === undefined) return undefined;
+  if (!allowed) throw new Error('This extension is not allowed to return managed image attachments.');
+  if (!Array.isArray(value) || value.length > 10) {
+    throw new Error('Extension image attachments must be an array with at most 10 items.');
+  }
+  return value.map((item, index): RuntimeMessageAttachment => {
+    const record = requiredRecord(item, `Extension image attachment ${index + 1} must be an object.`);
+    if (record.source !== 'generated') {
+      throw new Error(`Extension image attachment ${index + 1} must be a managed generated asset.`);
+    }
+    const size = record.size;
+    if (!Number.isInteger(size) || (size as number) <= 0 || (size as number) > 20 * 1024 * 1024) {
+      throw new Error(`Extension image attachment ${index + 1} has an invalid size.`);
+    }
+    return {
+      id: boundedAttachmentText(record.id, `Extension image attachment ${index + 1} id`, 160),
+      name: boundedAttachmentText(record.name, `Extension image attachment ${index + 1} name`, 255),
+      type: boundedAttachmentText(record.type, `Extension image attachment ${index + 1} type`, 100),
+      size: size as number,
+      source: 'generated',
+      assetId: assertSafeRuntimeId(
+        boundedAttachmentText(record.assetId, `Extension image attachment ${index + 1} asset id`, 160),
+        'Extension image asset id',
+      ),
+      modelVisible: false,
+    };
+  });
+}
+
+function boundedAttachmentText(value: unknown, label: string, maxLength: number): string {
+  const text = requiredText(value, label);
+  if (text.length > maxLength) throw new Error(`${label} is too long.`);
+  return text;
 }
 
 function mergeEventResults(aggregate: ExtensionEventOutcome, value: unknown): void {
@@ -535,8 +675,22 @@ function stateScope(value: unknown, context: ExtensionWorkerRequestContext): str
   throw new Error(`Unsupported extension state scope: ${scope}`);
 }
 
-function requireCapability(capabilities: RuntimeExtensionCapability[], capability: RuntimeExtensionCapability): void {
-  if (!capabilities.includes(capability)) throw new Error(`Extension did not declare the ${capability} capability.`);
+function requireCapability(
+  extension: Pick<InstalledPluginExtensionRecord, 'capabilities'>,
+  capability: RuntimeExtensionCapability,
+): void {
+  if (!extension.capabilities.includes(capability)) {
+    throw new Error(`Extension did not declare the ${capability} capability.`);
+  }
+}
+
+function assertFirstPartyHostCapabilities(plugin: InstalledPluginRecord): void {
+  const restricted = plugin.extension?.capabilities.find((capability) => (
+    FIRST_PARTY_HOST_CAPABILITIES.has(capability)
+  ));
+  if (restricted && plugin.installationSource !== 'marketplace') {
+    throw new Error(`Extension capability ${restricted} is reserved for the bundled marketplace.`);
+  }
 }
 
 function requiredRecord(value: unknown, message: string): Record<string, unknown> {

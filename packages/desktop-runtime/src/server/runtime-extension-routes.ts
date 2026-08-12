@@ -94,6 +94,7 @@ export async function handleRuntimeExtensionRequest(
     request.method === 'POST'
     && url.pathname === `/v1/plugins/${OPENAI_IMAGE_GENERATION_PLUGIN_ID}/test`
   ) {
+    await assertInstalledMarketplacePlugin(runtime, OPENAI_IMAGE_GENERATION_PLUGIN_ID);
     const input = await readBody<RuntimeImageGenerationTestInput | null>(
       request,
       null,
@@ -115,7 +116,7 @@ export async function handleRuntimeExtensionRequest(
     sendJson(
       response,
       200,
-      await runtime.imageGenerationToolHost.testGeneration({ prompt: input.prompt }),
+      await runtime.imageGenerationCoordinator.testGeneration({ prompt: input.prompt }),
     );
     return true;
   }
@@ -124,6 +125,7 @@ export async function handleRuntimeExtensionRequest(
     request.method === 'POST'
     && url.pathname === `/v1/plugins/${OPENAI_VISION_RECOGNITION_PLUGIN_ID}/test`
   ) {
+    await assertInstalledMarketplacePlugin(runtime, OPENAI_VISION_RECOGNITION_PLUGIN_ID);
     const input = await readBody<RuntimeVisionRecognitionTestInput | null>(request, null);
     if (!input || typeof input !== 'object' || typeof input.prompt !== 'string' || !input.prompt.trim()) {
       throw new RuntimeHttpError(400, 'prompt must be a non-empty string.');
@@ -137,7 +139,7 @@ export async function handleRuntimeExtensionRequest(
     sendJson(
       response,
       200,
-      await runtime.visionRecognitionToolHost.testRecognition({ prompt: input.prompt }),
+      await runtime.visionRecognitionCoordinator.testRecognition({ prompt: input.prompt }),
     );
     return true;
   }
@@ -386,6 +388,22 @@ function normalizeMcpServerKey(value: string): string {
     );
   }
   return key;
+}
+
+async function assertInstalledMarketplacePlugin(
+  runtime: RuntimeFactory,
+  pluginId: string,
+): Promise<void> {
+  const installed = (await runtime.pluginStore.listInstalledRecords()).some(
+    (plugin) => plugin.id === pluginId && plugin.installationSource === 'marketplace',
+  );
+  if (!installed) {
+    throw new RuntimeHttpError(
+      404,
+      `Marketplace plugin is not installed: ${pluginId}`,
+      'plugin_not_installed',
+    );
+  }
 }
 
 async function withMcpAuthStatuses(

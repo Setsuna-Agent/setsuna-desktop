@@ -62,7 +62,6 @@ export class FilePluginBundleStore implements PluginBundleStore {
   private runtimeMutation: PluginRuntimeMutationCoordinator = {
     beginPluginMutation: async () => async () => undefined,
   };
-
   constructor(
     dataDir: string,
     private readonly skills: PluginSkillRegistry,
@@ -70,7 +69,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
     private readonly clock: Clock,
-    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin'>,
+    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin' | 'renamePlugin'>,
     private readonly bundledPluginsDir?: string,
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
@@ -184,6 +183,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         throw new Error('Plugin source and runtime plugin directory cannot contain one another.');
       }
       const manifest = await readPluginManifest(sourcePath);
+      assertExtensionCapabilitySource(manifest, options);
       const sourceBundle = await inspectBundleTree(sourcePath);
       const index = await this.readIndex();
       if (index.plugins.some((plugin) => plugin.id === manifest.id)) {
@@ -309,8 +309,21 @@ export class FilePluginBundleStore implements PluginBundleStore {
       await inspectBundleTree(sourcePath);
       const sourceManifest = await readPluginManifest(sourcePath);
       const index = await this.readIndex();
-      const plugin = index.plugins.find((item) => item.id === sourceManifest.id);
-      if (!plugin) throw new Error(`Plugin not found: ${sourceManifest.id}`);
+      const previousPluginId = options.previousPluginId
+        ? normalizePluginId(options.previousPluginId)
+        : sourceManifest.id;
+      const plugin = index.plugins.find((item) => item.id === previousPluginId);
+      if (!plugin) throw new Error(`Plugin not found: ${previousPluginId}`);
+      const changesPluginId = plugin.id !== sourceManifest.id;
+      if (changesPluginId && (
+        plugin.installationSource !== 'marketplace'
+        || options.installationSource !== 'marketplace'
+      )) {
+        throw new Error('Only a bundled marketplace update may migrate a plugin id.');
+      }
+      if (changesPluginId && index.plugins.some((item) => item.id === sourceManifest.id)) {
+        throw new Error(`Plugin id migration target is already installed: ${sourceManifest.id}`);
+      }
 
       const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
       if (!samePath(plugin.installPath, expectedInstallPath)) {
@@ -333,6 +346,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         await copyBundleTree(sourcePath, stagingPath);
         const stagedBundle = await inspectBundleTree(stagingPath);
         const manifest = await readPluginManifest(await realpath(stagingPath));
+        assertExtensionCapabilitySource(manifest, options);
         if (manifest.id !== sourceManifest.id) {
           throw new Error('Plugin manifest id changed while staging the update.');
         }
@@ -348,7 +362,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
           throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
         }
 
-        const installPath = plugin.installPath;
+        const installPath = strictPluginInstallPath(this.pluginsDir, manifest.id);
+        if (changesPluginId) {
+          const targetStat = await stat(installPath).catch(() => null);
+          if (targetStat) throw new Error(`Plugin id migration target already exists: ${manifest.id}`);
+        }
         const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
         const nextMcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
         const currentServers = await this.mcpStore.listServerInputs();
@@ -457,7 +475,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         let indexSaveStarted = false;
         const mcpActionsStarted: PluginMcpUpdateAction[] = [];
         try {
-          await renameWithRetry(installPath, backupPath);
+          await renameWithRetry(plugin.installPath, backupPath);
           oldDirectoryMoved = true;
           await renameWithRetry(stagingPath, installPath);
           staged = false;
@@ -485,6 +503,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             version: 1,
             plugins: index.plugins.map((item) => item.id === plugin.id ? record : item),
           } satisfies PluginIndexFile);
+          if (changesPluginId) await this.extensionState.renamePlugin(plugin.id, record.id);
         } catch (error) {
           const rollbackErrors: unknown[] = [];
           if (hookSaveStarted) {
@@ -509,7 +528,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             });
           }
           if (oldDirectoryMoved) {
-            await renameWithRetry(backupPath, installPath)
+            await renameWithRetry(backupPath, plugin.installPath)
               .catch((rollbackError) => rollbackErrors.push(rollbackError));
           }
           if (indexSaveStarted) {
@@ -660,7 +679,13 @@ export class FilePluginBundleStore implements PluginBundleStore {
       const finishRuntimeMutation = await this.runtimeMutation.beginPluginMutation(plugin.id);
 
       try {
-        let extension = { ...plugin.extension, capabilities: [...plugin.extension.capabilities] };
+        let extension = {
+          ...plugin.extension,
+          capabilities: [...plugin.extension.capabilities],
+          ...(plugin.extension.network ? {
+            network: { allowedOrigins: [...plugin.extension.network.allowedOrigins] },
+          } : {}),
+        };
         if (trusted) {
           const manifest = await readPluginManifest(await realpath(plugin.installPath));
           const bundle = await inspectBundleTree(plugin.installPath);
@@ -742,6 +767,9 @@ function publicManifestExtension(extension: NonNullable<ParsedPluginManifest['ex
     apiVersion: extension.apiVersion,
     runtime: extension.runtime,
     capabilities: [...extension.capabilities],
+    ...(extension.network ? {
+      network: { allowedOrigins: [...extension.network.allowedOrigins] },
+    } : {}),
   };
 }
 
@@ -756,6 +784,23 @@ function installedExtensionRecord(
     bundleHash,
     ...(trustedHash ? { trustedHash } : {}),
   };
+}
+
+const MARKETPLACE_ONLY_EXTENSION_CAPABILITIES = new Set([
+  'image-generation',
+  'vision-recognition',
+]);
+
+function assertExtensionCapabilitySource(
+  manifest: ParsedPluginManifest,
+  options: PluginBundleMutationOptions,
+): void {
+  const restricted = manifest.extension?.capabilities.find((capability) => (
+    MARKETPLACE_ONLY_EXTENSION_CAPABILITIES.has(capability)
+  ));
+  if (restricted && options.installationSource !== 'marketplace') {
+    throw new Error(`Plugin extension capability is reserved for the bundled marketplace: ${restricted}`);
+  }
 }
 
 function samePath(left: string, right: string): boolean {

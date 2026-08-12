@@ -83,22 +83,22 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 615 total files
-├── src/ — 2 direct / 453 total files
+apps/desktop/renderer/ — 0 direct / 621 total files
+├── src/ — 2 direct / 458 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 12 direct / 12 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── features/ — 330 files
+│   ├── features/ — 332 files
 │   │   ├── capabilities/ — 23 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 2 direct / 2 total files
 │   │   │   └── styles/ — 5 direct / 5 total files
-│   │   ├── chat/ — 6 direct / 128 total files
+│   │   ├── chat/ — 6 direct / 130 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
-│   │   │   ├── composer/ — 29 direct / 29 total files
+│   │   │   ├── composer/ — 31 direct / 31 total files
 │   │   │   ├── conversation/ — 34 direct / 34 total files
 │   │   │   ├── hooks/ — 9 direct / 9 total files
 │   │   │   ├── markdown/ — 11 direct / 11 total files
@@ -131,7 +131,7 @@ apps/desktop/renderer/ — 0 direct / 615 total files
 │   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 75 files
+│   └── shared/ — 78 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 2 direct / 2 total files
@@ -141,21 +141,21 @@ apps/desktop/renderer/ — 0 direct / 615 total files
 │       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
-│       ├── styles/ — 7 direct / 7 total files
-│       └── ui/ — 5 direct / 5 total files
-└── test/ — 162 files
-    └── unit/ — 162 files
+│       ├── styles/ — 8 direct / 8 total files
+│       └── ui/ — 7 direct / 7 total files
+└── test/ — 163 files
+    └── unit/ — 163 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 123 files
+        ├── features/ — 124 files
         │   ├── capabilities/ — 6 direct / 7 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 2 direct / 66 total files
+        │   ├── chat/ — 2 direct / 67 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
-        │   │   ├── composer/ — 19 direct / 19 total files
+        │   │   ├── composer/ — 20 direct / 20 total files
         │   │   ├── conversation/ — 21 direct / 21 total files
         │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
@@ -202,9 +202,9 @@ packages/contracts/ — 4 direct / 74 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 530 total files
-├── src/ — 2 direct / 307 total files
-│   ├── adapters/ — 136 files
+packages/desktop-runtime/ — 4 direct / 528 total files
+├── src/ — 2 direct / 304 total files
+│   ├── adapters/ — 131 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -217,13 +217,13 @@ packages/desktop-runtime/ — 4 direct / 530 total files
 │   │   ├── plugin/ — 6 direct / 6 total files
 │   │   ├── sandbox/ — 1 files
 │   │   │   └── windows-native/ — 1 direct / 1 total files
-│   │   ├── search/ — 6 direct / 6 total files
+│   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 2 direct / 2 total files
 │   │   ├── store/ — 28 direct / 28 total files
-│   │   ├── tool/ — 19 direct / 41 total files
+│   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
-│   ├── extensions/ — 6 direct / 6 total files
+│   ├── extensions/ — 9 direct / 9 total files
 │   ├── hooks/ — 3 direct / 3 total files
 │   ├── loop/ — 60 files
 │   │   ├── context/ — 14 direct / 14 total files
@@ -231,7 +231,7 @@ packages/desktop-runtime/ — 4 direct / 530 total files
 │   │   ├── lifecycle/ — 17 direct / 17 total files
 │   │   ├── memory/ — 5 direct / 5 total files
 │   │   └── tools/ — 10 direct / 10 total files
-│   ├── ports/ — 34 direct / 34 total files
+│   ├── ports/ — 33 direct / 33 total files
 │   ├── runtime/ — 3 direct / 9 total files
 │   │   └── use-cases/ — 6 direct / 6 total files
 │   ├── security/ — 5 direct / 5 total files
@@ -239,8 +239,8 @@ packages/desktop-runtime/ — 4 direct / 530 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 219 files
-    ├── adapters/ — 70 files
+└── test/ — 220 files
+    ├── adapters/ — 66 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -251,13 +251,13 @@ packages/desktop-runtime/ — 4 direct / 530 total files
     │   ├── plugin/ — 5 direct / 5 total files
     │   ├── sandbox/ — 1 files
     │   │   └── windows-native/ — 1 direct / 1 total files
-    │   ├── search/ — 5 direct / 5 total files
+    │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 14 direct / 14 total files
-    │   ├── tool/ — 14 direct / 18 total files
+    │   ├── tool/ — 11 direct / 15 total files
     │   │   └── pc-local/ — 4 direct / 4 total files
     │   └── workspace/ — 6 direct / 6 total files
-    ├── extensions/ — 4 direct / 4 total files
+    ├── extensions/ — 9 direct / 9 total files
     ├── fixtures/ — 7 files
     │   ├── history/ — 2 direct / 2 total files
     │   ├── legacy-thread-store/ — 3 files
@@ -314,10 +314,13 @@ skills/ — 0 direct / 6 total files
 ### `plugins/`
 
 ```text
-plugins/ — 1 direct / 54 total files
+plugins/ — 1 direct / 61 total files
 ├── audit-file-mutations/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
+├── claude-rules/ — 2 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   └── extension/ — 1 direct / 1 total files
 ├── compact-warning/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -342,12 +345,14 @@ plugins/ — 1 direct / 54 total files
 │   └── skills/ — 2 files
 │       └── openai-docs/ — 1 direct / 2 total files
 │           └── agents/ — 1 direct / 1 total files
-├── openai-image-generation/ — 2 files
+├── openai-image-generation/ — 4 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   ├── extension/ — 2 direct / 2 total files
 │   └── skills/ — 1 files
 │       └── image-generation/ — 1 direct / 1 total files
-├── openai-vision-recognition/ — 2 files
+├── openai-vision-recognition/ — 4 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   ├── extension/ — 2 direct / 2 total files
 │   └── skills/ — 1 files
 │       └── vision-recognition/ — 1 direct / 1 total files
 ├── pdf/ — 3 files
@@ -355,15 +360,6 @@ plugins/ — 1 direct / 54 total files
 │   └── skills/ — 2 files
 │       └── pdf/ — 1 direct / 2 total files
 │           └── agents/ — 1 direct / 1 total files
-├── pi-claude-rules/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── extension/ — 1 direct / 1 total files
-├── pi-question/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── extension/ — 1 direct / 1 total files
-├── pi-todo/ — 2 files
-│   ├── .setsuna-plugin/ — 1 direct / 1 total files
-│   └── extension/ — 1 direct / 1 total files
 ├── prompt-secret-detector/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
@@ -373,14 +369,21 @@ plugins/ — 1 direct / 54 total files
 ├── protect-secret-paths/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
+├── question/ — 2 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   └── extension/ — 1 direct / 1 total files
 ├── session-start-project-guidance/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
 ├── stop-todo-continuation/ — 2 files
 │   ├── .setsuna-plugin/ — 1 direct / 1 total files
 │   └── hooks/ — 1 direct / 1 total files
-└── web-search/ — 1 files
-    └── .setsuna-plugin/ — 1 direct / 1 total files
+├── todo/ — 2 files
+│   ├── .setsuna-plugin/ — 1 direct / 1 total files
+│   └── extension/ — 1 direct / 1 total files
+└── web-search/ — 4 files
+    ├── .setsuna-plugin/ — 1 direct / 1 total files
+    └── extension/ — 3 direct / 3 total files
 ```
 
 ### `docs/`

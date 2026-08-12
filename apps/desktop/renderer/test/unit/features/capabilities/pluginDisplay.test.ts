@@ -66,7 +66,7 @@ describe('plugin display helpers', () => {
     const openAi = marketplacePlugin({ id: 'openai-docs', name: 'OpenAI Docs' });
     const context = marketplacePlugin({ id: 'context7', name: 'Context7' });
     const question = marketplacePlugin({
-      id: 'pi-question',
+      id: 'question',
       name: 'Structured Question',
       publisher: 'Setsuna',
       capabilities: { extension: 1, skills: 0, mcpServers: 0, hooks: 0, resources: 0 },
@@ -81,7 +81,7 @@ describe('plugin display helpers', () => {
 
     expect(presentation.sections).toMatchObject([
       { id: 'featured', plugins: [{ id: 'documents' }, { id: 'pdf' }] },
-      { id: 'utilities', plugins: [{ id: 'pi-question' }] },
+      { id: 'utilities', plugins: [{ id: 'question' }] },
       { id: 'creation', plugins: [{ id: 'openai-docs' }, { id: 'context7' }] },
       { id: 'automation', plugins: [{ id: 'guard' }] },
     ]);

@@ -41,7 +41,7 @@ runtime/temporary-workspace/YYYY-MM-DD/<threadId>
 
 日期取 thread 创建时本地日期；同一 thread 跨天继续仍复用原目录。
 
-Workspace、shell、artifact 和内置图片生成共享该环境。Generated image 既有 managed preview asset，也会在当前 workspace 的 `generated-images/` 产生可见文件。
+Workspace、shell、artifact 和图片生成扩展的 host bridge 共享该环境。Generated image 既有 managed preview asset，也会在当前 workspace 的 `generated-images/` 产生可见文件。
 
 ## Environment resolver
 
@@ -157,7 +157,7 @@ Workflow 以 user/external fragment 注入，项目 script 不能提升为 runti
 - 只接受 AttachmentStore 已认领给 thread 的 asset。
 - 校验 MIME、大小和 provider vision 能力。
 - 图片在线程事件中始终保持为 runtime 托管引用；仅当当前模型支持图片时，runtime 才在 provider 请求边界读取、复验签名并临时转换为图片内容，Base64 不写入线程。
-- 用户安装视觉识别插件并选定已配置的视觉模型后，`analyze_image` 通过附件 ID 再次校验 thread 归属，再复用该模型的 provider client 发送图片；主模型只接收文本结果。
+- 用户安装视觉识别插件并选定已配置的视觉模型后，Bundle 内的 `analyze_image` 只把附件 ID 与问题交给 host bridge；host 再次校验 thread 归属并复用 provider client，扩展 worker 和主模型都不会获得本地附件路径，主模型只接收文本结果。
 - 文件名/MIME 可参与 Skill auto-activation。
 - composer 和排队编辑会把 legacy 内联图片归一化为托管附件；托管图片不受当前模型视觉能力限制，切换模型也不需要改写持久化消息。
 
@@ -248,4 +248,3 @@ Integration：
 - `history.test.ts`
 - `permissions.test.ts`
 - `sandbox-network.test.ts`
-

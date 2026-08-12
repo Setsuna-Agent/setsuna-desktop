@@ -3,7 +3,7 @@
   "id": "openai-vision-recognition",
   "name": "视觉识别",
   "icon": "vision-recognition",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "复用模型服务中已配置且支持图片的模型分析会话图片，让非视觉主模型也能获得识图结果。",
   "publisher": "Setsuna",
   "tags": ["图片", "视觉模型", "模型服务"],
@@ -12,8 +12,18 @@
   "tools": [
     {
       "name": "analyze_image",
-      "description": "使用用户选定的已配置视觉模型分析当前会话中的图片附件。"
+      "description": "使用用户选定的已配置视觉模型分析当前会话中的图片附件。",
+      "exposure": "direct",
+      "supportsParallel": false,
+      "requiresApproval": false,
+      "requiresSandboxBypassApproval": false
     }
   ],
-  "skills": ["skills/vision-recognition"]
+  "skills": ["skills/vision-recognition"],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "vision-recognition"]
+  }
 }

@@ -3,11 +3,27 @@
   "id": "openai-image-generation",
   "name": "图片生成",
   "icon": "image-generation",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "通过用户配置的 OpenAI 兼容 Images API 生成图片，支持 HTTP 或 HTTPS 自定义服务地址。",
   "publisher": "Setsuna",
   "tags": ["图片", "OpenAI", "Images API"],
   "featured": true,
   "featuredOrder": 3,
-  "skills": ["skills/image-generation"]
+  "tools": [
+    {
+      "name": "generate_image",
+      "description": "使用用户配置的 OpenAI-compatible Images API 生成图片。",
+      "exposure": "direct",
+      "supportsParallel": false,
+      "requiresApproval": false,
+      "requiresSandboxBypassApproval": false
+    }
+  ],
+  "skills": ["skills/image-generation"],
+  "extension": {
+    "apiVersion": 1,
+    "runtime": "node-worker",
+    "entry": "extension/entry.mjs",
+    "capabilities": ["tools", "image-generation"]
+  }
 }

@@ -27,7 +27,7 @@ type BundledHandler = (
 
 describe('bundled Setsuna utility extensions', () => {
   it('provides choices and free-form answers through structured Setsuna UI', async () => {
-    const { tools } = await loadBundledExtension('pi-question');
+    const { tools } = await loadBundledExtension('question');
     const question = tools.get('question');
     expect(question).toBeDefined();
 
@@ -64,7 +64,7 @@ describe('bundled Setsuna utility extensions', () => {
   });
 
   it('persists the todo list in thread-scoped extension state', async () => {
-    const { tools } = await loadBundledExtension('pi-todo');
+    const { tools } = await loadBundledExtension('todo');
     const todo = tools.get('todo');
     expect(todo).toBeDefined();
     const values = new Map<string, unknown>();
@@ -90,12 +90,12 @@ describe('bundled Setsuna utility extensions', () => {
   });
 
   it('discovers Claude rule paths at session start without embedding their contents', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pi-rules-'));
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-claude-rules-'));
     const ruleDirectory = path.join(root, '.claude', 'rules', 'frontend');
     await mkdir(ruleDirectory, { recursive: true });
     await writeFile(path.join(ruleDirectory, 'react.md'), '# React rules\nNever inline secrets.\n');
     try {
-      const { handlers } = await loadBundledExtension('pi-claude-rules');
+      const { handlers } = await loadBundledExtension('claude-rules');
       const sessionStart = handlers.get('session.start')?.[0];
       expect(sessionStart).toBeDefined();
       await expect(sessionStart!({ source: 'startup' }, { cwd: root })).resolves.toMatchObject({

@@ -73,17 +73,17 @@ const builtInPluginCopyKeys = {
     name: 'capabilities.plugin.stop-todo-continuation.name',
     description: 'capabilities.plugin.stop-todo-continuation.description',
   },
-  'pi-question': {
-    name: 'capabilities.plugin.pi-question.name',
-    description: 'capabilities.plugin.pi-question.description',
+  question: {
+    name: 'capabilities.plugin.question.name',
+    description: 'capabilities.plugin.question.description',
   },
-  'pi-todo': {
-    name: 'capabilities.plugin.pi-todo.name',
-    description: 'capabilities.plugin.pi-todo.description',
+  todo: {
+    name: 'capabilities.plugin.todo.name',
+    description: 'capabilities.plugin.todo.description',
   },
-  'pi-claude-rules': {
-    name: 'capabilities.plugin.pi-claude-rules.name',
-    description: 'capabilities.plugin.pi-claude-rules.description',
+  'claude-rules': {
+    name: 'capabilities.plugin.claude-rules.name',
+    description: 'capabilities.plugin.claude-rules.description',
   },
 } satisfies Record<string, PluginCopyKeys>;
 

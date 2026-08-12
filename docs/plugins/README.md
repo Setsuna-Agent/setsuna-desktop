@@ -35,7 +35,7 @@ Renderer 看不到：
 仓库内 Bundle 主要分为：
 
 - Skill 插件：OpenAI docs、Context7、PDF、Documents 等。
-- 第一方能力插件：网络搜索、图片生成和视觉识别，用市场 Bundle + runtime 内置 ToolHost 配对，并由用户从市场按需安装。
+- 第一方能力插件：网络搜索、图片生成和视觉识别都由可执行 Bundle 注册工具并实现工具级输入、输出语义；图片生成和视觉识别通过受限 host bridge 使用 runtime 私有凭据、模型、附件和资产存储。三者都由用户从市场按需安装。
 - Hook 插件：危险 shell、secret/path/generated folder 防护、审计和流程提示。
 - 可执行扩展：Bundle v2 在受管 Node worker 中注册动态工具和 Agent 生命周期中间件。
 - Setsuna 原生工具：结构化提问、会话任务清单和 Claude Rules 兼容；设计参考与许可记录保留在 Bundle 源码内部，不作为用户侧品牌或能力资源。

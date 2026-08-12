@@ -1,9 +1,9 @@
 {
   "schemaVersion": 2,
-  "id": "pi-claude-rules",
+  "id": "claude-rules",
   "name": "Claude Rules 兼容",
-  "icon": "pi-claude-rules",
-  "version": "1.0.2",
+  "icon": "claude-rules",
+  "version": "1.1.0",
   "description": "发现项目中的 .claude/rules Markdown 文件，并把可用规则路径加入会话上下文。",
   "publisher": "Setsuna",
   "tags": ["Claude", "项目规则"],

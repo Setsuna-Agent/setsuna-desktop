@@ -19,6 +19,7 @@ import {
   IconButton,
   SelectField,
 } from '../../shared/ui/primitives.js';
+import { SkillIcon } from '../../shared/ui/SkillIcon.js';
 import {
   mcpAuthStatusLabel,
   mcpToolStats,
@@ -81,8 +82,7 @@ export function CapabilitiesMcpListItem({
     <article className="desktop-capability-list-item desktop-capability-list-item--mcp">
       <CapabilityListIdentity
         description={endpoint || server.description || t('capabilities.mcp.noEndpoint')}
-        icon={<Plug size={18} />}
-        iconKind="mcp"
+        icon={<CapabilityListIcon kind="mcp"><Plug size={18} /></CapabilityListIcon>}
         meta={meta}
         title={server.label}
         onOpen={onEdit}
@@ -232,8 +232,7 @@ export function CapabilitiesSkillListItem({
     <article className="desktop-capability-list-item desktop-capability-list-item--skill">
       <CapabilityListIdentity
         description={skill.description || skill.id}
-        icon={<BookOpen size={17} />}
-        iconKind="skill"
+        icon={<SkillIcon skill={skill} variant="list" />}
         meta={meta}
         title={skill.name}
         onOpen={onOpen}
@@ -314,21 +313,19 @@ export function CapabilitiesSkillListItem({
 function CapabilityListIdentity({
   description,
   icon,
-  iconKind,
   meta,
   title,
   onOpen,
 }: {
   description: string;
   icon: ReactNode;
-  iconKind: 'mcp' | 'skill';
   meta: string;
   title: string;
   onOpen?: () => void;
 }) {
   const content = (
     <>
-      <span className="desktop-capability-list-item__icon" data-kind={iconKind}>{icon}</span>
+      {icon}
       <span className="desktop-capability-list-item__copy">
         <strong>{title}</strong>
         <span title={description}>{description}</span>
@@ -347,5 +344,19 @@ function CapabilityListIdentity({
     </button>
   ) : (
     <div className="desktop-capability-list-item__identity">{content}</div>
+  );
+}
+
+function CapabilityListIcon({
+  children,
+  kind,
+}: {
+  children: ReactNode;
+  kind: 'mcp';
+}) {
+  return (
+    <span className="desktop-capability-list-item__icon" data-kind={kind} aria-hidden="true">
+      {children}
+    </span>
   );
 }
