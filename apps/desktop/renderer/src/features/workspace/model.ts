@@ -235,6 +235,12 @@ export type DesktopReviewOpenHandler = (
   finding?: RuntimeReviewFinding,
 ) => void;
 
+export type WorkspaceFileFocusRequest = {
+  line: number;
+  path: string;
+  version: number;
+};
+
 export type DesktopReviewLoadOptions = DesktopReviewStateOptions;
 
 export type ProjectTreeNode = {

@@ -23,30 +23,43 @@ afterEach(() => {
 });
 
 describe('DesktopReviewPanel interactions', () => {
-  it('renders review findings as annotations on their diff lines', async () => {
+  it('renders annotations and opens resolved workspace lines', async () => {
     const openedFiles: Array<{ path?: string | null; line?: number }> = [];
     mockReviewScroller({
       deferFindingLayout: true,
-      diffs: [{ path: 'src/review.ts', top: 250 }],
+      diffs: [
+        { path: 'packages/app/src/review.ts', top: 250 },
+        { path: 'packages/app/src/helper.ts', top: 900 },
+      ],
       findings: [{ path: 'src/review.ts', line: 28, top: 550 }],
       linePositions: { 28: { top: 300, height: 20 } },
     });
     const summary: DesktopDiffSummary = {
       additions: 1,
       deletions: 0,
-      files: [{
-        path: 'src/review.ts',
-        action: 'Modified',
-        additions: 1,
-        deletions: 0,
-        truncated: false,
-        lines: [{ type: 'added', lineNumber: 28, newLine: 28, content: 'const reviewed = true;' }],
-      }],
+      files: [
+        {
+          path: 'packages/app/src/review.ts',
+          action: 'Modified',
+          additions: 1,
+          deletions: 0,
+          truncated: false,
+          lines: [{ type: 'added', lineNumber: 28, newLine: 28, content: 'const reviewed = true;' }],
+        },
+        {
+          path: 'packages/app/src/helper.ts',
+          action: 'Modified',
+          additions: 0,
+          deletions: 0,
+          truncated: false,
+          lines: [],
+        },
+      ],
     };
     const focusedFinding: RuntimeReviewFinding = {
       priority: 'P2',
       title: '行内评论标题',
-      body: '行内评论正文，参见 [runtime-turn-finalizer.ts:72](packages/desktop-runtime/src/loop/lifecycle/runtime-turn-finalizer.ts:72)。',
+      body: '行内评论正文，参见 [helper.ts:7](src/helper.ts:7)。',
       path: 'src/review.ts',
       startLine: 28,
     };
@@ -54,7 +67,7 @@ describe('DesktopReviewPanel interactions', () => {
     render(
       <I18nProvider initialLocale="zh-CN">
         <DesktopReviewPanel
-          activeProject={project}
+          activeProject={nestedProject}
           error={null}
           focusRequest={{
             finding: focusedFinding,
@@ -65,10 +78,14 @@ describe('DesktopReviewPanel interactions', () => {
           findings={[]}
           latestSummary={summary}
           loading={false}
-          reviewState={{ ...reviewState, unstagedSummary: summary }}
-          workspaceApp={{ id: 'vscode', label: 'VS Code', icon: '' }}
-          onExternalOpenFile={(path, line) => openedFiles.push({ path, line })}
-          onOpenProjectFile={() => undefined}
+          reviewState={{
+            ...reviewState,
+            workspaceRoot: nestedProject.path!,
+            gitRoot: project.path!,
+            unstagedSummary: summary,
+          }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={(path, line) => openedFiles.push({ path, line })}
           onRefresh={() => undefined}
         />
       </I18nProvider>,
@@ -80,7 +97,7 @@ describe('DesktopReviewPanel interactions', () => {
       )?.classList.contains('is-focused')).toBe(true);
     });
     expect(document.querySelector(
-      '[data-review-file-path="src/review.ts"]',
+      '[data-review-file-path="packages/app/src/review.ts"]',
     )?.classList.contains('is-focused')).toBe(false);
     await waitFor(() => {
       const diff = document.querySelector('diffs-container');
@@ -93,10 +110,10 @@ describe('DesktopReviewPanel interactions', () => {
     });
     await userEvent.click(screen.getByRole('link', { name: /review\.ts:28/u }));
     expect(openedFiles).toEqual([{ path: 'src/review.ts', line: 28 }]);
-    await userEvent.click(screen.getByRole('link', { name: /runtime-turn-finalizer\.ts:72/u }));
+    await userEvent.click(screen.getByRole('link', { name: /helper\.ts:7/u }));
     expect(openedFiles.at(-1)).toEqual({
-      path: 'packages/desktop-runtime/src/loop/lifecycle/runtime-turn-finalizer.ts',
-      line: 72,
+      path: 'src/helper.ts',
+      line: 7,
     });
   });
 
@@ -291,6 +308,12 @@ const project: WorkspaceProject = {
   path: '/tmp/fixture',
   createdAt: '2026-06-29T00:00:00.000Z',
   updatedAt: '2026-06-29T00:00:00.000Z',
+};
+
+const nestedProject: WorkspaceProject = {
+  ...project,
+  id: 'project_review_interaction_nested',
+  path: '/tmp/fixture/packages/app',
 };
 
 const emptySummary: DesktopDiffSummary = {

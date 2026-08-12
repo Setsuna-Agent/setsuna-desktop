@@ -109,7 +109,7 @@ export function DesktopReviewPanel({
   onCopyFilePath?: (filePath: string) => void;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp?: (appId: string, filePath: string, line?: number) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onRefresh: (options?: DesktopReviewLoadOptions) => void;
   onRevealFile?: (filePath: string) => void;
 }) {

@@ -38,6 +38,7 @@ import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
 import {
   reviewFindingKey,
   reviewPathsMatch,
+  resolveReviewFile,
   resolveReviewFindingTarget,
   resolveReviewFindingTargets,
   type ReviewFindingTarget,
@@ -112,7 +113,7 @@ export function ReviewSummarySection({
     filePath: string,
     line?: number,
   ) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onRevealFile: (filePath: string) => void;
 }) {
   const files = useMemo(() => [...(summary?.files ?? [])].sort((left, right) => (
@@ -137,14 +138,18 @@ export function ReviewSummarySection({
     ? focusedFindingTarget
     : null;
   const openReviewFile = useCallback((filePath: string, line?: number) => {
-    const targetPath = reviewWorkspaceFilePath(filePath, pathContext);
+    // Provider output can be workspace-relative while git paths are rooted at
+    // the repository. Resolve through the displayed diff before translating
+    // the path into the active project's coordinate space.
+    const resolvedFilePath = resolveReviewFile(summary, filePath)?.path ?? filePath;
+    const targetPath = reviewWorkspaceFilePath(resolvedFilePath, pathContext);
     if (!targetPath) return;
     if (workspaceApp) {
       onExternalOpenFile(targetPath, line);
       return;
     }
-    onOpenProjectFile(targetPath);
-  }, [onExternalOpenFile, onOpenProjectFile, pathContext, workspaceApp]);
+    onOpenProjectFile(targetPath, line);
+  }, [onExternalOpenFile, onOpenProjectFile, pathContext, summary, workspaceApp]);
   return (
     <section className="desktop-review-section">
       {unanchoredFindingTarget ? (
@@ -242,7 +247,7 @@ function ReviewFileCard({
     filePath: string,
     line?: number,
   ) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   onRevealFile: (filePath: string) => void;
 }) {

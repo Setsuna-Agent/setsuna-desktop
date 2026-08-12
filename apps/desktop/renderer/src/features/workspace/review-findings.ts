@@ -50,6 +50,24 @@ export type ReviewFindingTarget = {
   key: string;
 };
 
+/** Resolve a provider path to the single diff file it identifies. */
+export function resolveReviewFile(
+  summary: DesktopDiffSummary | null,
+  filePath: string,
+): DesktopDiffFile | null {
+  const normalizedPath = normalizeReviewFocusPath(filePath);
+  const files = summary?.files ?? [];
+  const exactFile = normalizedPath
+    ? files.find((candidate) => (
+      normalizeReviewFocusPath(candidate.path) === normalizedPath
+    ))
+    : null;
+  if (exactFile) return exactFile;
+  return uniqueReviewFile(files, (candidate) => (
+    reviewPathsMatch(candidate.path, filePath)
+  ));
+}
+
 export function reviewFindingKey(finding: RuntimeReviewFinding): string {
   return JSON.stringify([
     normalizeReviewFocusPath(finding.path) ?? finding.path.trim(),
@@ -66,19 +84,7 @@ export function resolveReviewFindingTarget(
   summary: DesktopDiffSummary | null,
   finding: RuntimeReviewFinding,
 ): ReviewFindingTarget {
-  const normalizedFindingPath = normalizeReviewFocusPath(finding.path);
-  const files = summary?.files ?? [];
-  const exactFile = normalizedFindingPath
-    ? files.find((candidate) => (
-      normalizeReviewFocusPath(candidate.path) === normalizedFindingPath
-    ))
-    : null;
-  const suffixFile = exactFile
-    ? null
-    : uniqueReviewFile(files, (candidate) => (
-        reviewPathsMatch(candidate.path, finding.path)
-      ));
-  const file = exactFile ?? suffixFile;
+  const file = resolveReviewFile(summary, finding.path);
   return {
     anchor: file ? reviewFindingAnnotationAnchor(file, finding) : null,
     file,

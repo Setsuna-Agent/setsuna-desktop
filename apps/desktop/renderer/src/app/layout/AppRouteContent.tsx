@@ -286,6 +286,7 @@ export function AppRouteContent({
       currentThread={runtime.currentThread}
       draft={draft}
       fileDraft={projectWorkspace.fileDraft}
+      fileFocusRequest={projectWorkspace.fileFocusRequest}
       filePreview={projectWorkspace.filePreview}
       plugins={runtime.plugins}
       panelLauncherTypes={workspacePanels.panelLauncherTypes}

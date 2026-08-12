@@ -368,7 +368,7 @@ export function assistantRunCopyText(
   const content = item.segments
     .filter((segment) => segment.phase === 'final_answer')
     .flatMap((segment) => [
-      visibleMarkdownContent(segment.content).trim(),
+      item.reviewExit ? '' : visibleMarkdownContent(segment.content).trim(),
       ...(segment.toolRuns ?? [])
         .filter((run) => !isTranscriptHiddenRuntimeToolRun(run))
         .map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
@@ -376,7 +376,10 @@ export function assistantRunCopyText(
     ])
     .filter(Boolean);
   if (item.goalExit) content.push(formatGoalExitSummary(item.goalExit, t, locale));
-  if (item.reviewExit) content.push(item.reviewExit.review);
+  if (item.reviewExit) {
+    const visibleReview = visibleMarkdownContent(item.reviewExit.review).trim();
+    if (visibleReview) content.push(visibleReview);
+  }
   return content.join('\n\n');
 }
 

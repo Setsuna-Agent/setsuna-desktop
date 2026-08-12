@@ -9,6 +9,7 @@ import {
   File,
   FileDiff,
   Virtualizer,
+  type CodeViewHandle,
   type CodeViewItem,
   type CodeViewReactOptions,
   type FileContents,
@@ -16,7 +17,15 @@ import {
   type FileOptions,
   type FileDiffProps,
 } from '@pierre/diffs/react';
-import { useMemo, type CSSProperties, type ReactNode, type Ref } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from 'react';
 import { useCodeAppearance } from './CodeAppearanceProvider.js';
 import { inferPatchLanguageOverride } from './patchLanguage.js';
 
@@ -28,6 +37,7 @@ type CodeFileViewProps = {
   contents: string;
   disableBackground?: boolean;
   language?: string;
+  lineFocusRequest?: { line: number; version: number };
   name: string;
   showHeader?: boolean;
   showLineNumbers?: boolean;
@@ -68,6 +78,7 @@ export function CodeFileView({
   contents,
   disableBackground = false,
   language,
+  lineFocusRequest,
   name,
   showHeader = false,
   showLineNumbers = true,
@@ -76,6 +87,7 @@ export function CodeFileView({
   virtualized = false,
   wrap = false,
 }: CodeFileViewProps) {
+  const codeViewRef = useRef<CodeViewHandle<undefined>>(null);
   const options = usePierreFileOptions({
     disableBackground,
     layout: codeViewLayout,
@@ -94,12 +106,14 @@ export function CodeFileView({
     () => cacheKey ? undefined : codeContentsVersion(contents),
     [cacheKey, contents],
   );
+  const itemId = cacheKey ?? name;
   const codeViewItems = useMemo<readonly CodeViewItem<undefined>[]>(() => [{
-    id: cacheKey ?? name,
+    id: itemId,
     type: 'file',
     file,
     version: codeViewVersion,
-  }], [cacheKey, codeViewVersion, file, name]);
+  }], [codeViewVersion, file, itemId]);
+  useCodeViewLineFocus(codeViewRef, itemId, lineFocusRequest, virtualized);
   const surface = (
     <File
       className={['setsuna-pierre-surface', className].filter(Boolean).join(' ')}
@@ -120,9 +134,28 @@ export function CodeFileView({
       disableWorkerPool
       items={codeViewItems}
       options={options}
+      ref={codeViewRef}
       style={style ? { ...pierreSurfaceStyle, ...style } : pierreSurfaceStyle}
     />
   ) : surface;
+}
+
+export function useCodeViewLineFocus(
+  codeViewRef: RefObject<CodeViewHandle<undefined> | null>,
+  itemId: string,
+  request: { line: number; version: number } | undefined,
+  enabled = true,
+) {
+  useEffect(() => {
+    if (!enabled || !request) return;
+    codeViewRef.current?.scrollTo({
+      type: 'line',
+      id: itemId,
+      lineNumber: request.line,
+      align: 'center',
+      behavior: 'instant',
+    });
+  }, [codeViewRef, enabled, itemId, request?.line, request?.version]);
 }
 
 export function CodePatchView({

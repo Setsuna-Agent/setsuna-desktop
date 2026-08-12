@@ -54,6 +54,7 @@ import type {
   DesktopReviewState,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
+  WorkspaceFileFocusRequest,
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
 import { latestCompletedReview } from '../../features/workspace/review-findings.js';
@@ -106,6 +107,7 @@ export function AppChatSurface({
   draft,
   focusComposerRequest,
   fileDraft,
+  fileFocusRequest,
   filePreview,
   plugins,
   panelLauncherTypes,
@@ -200,6 +202,7 @@ export function AppChatSurface({
   draft: string;
   focusComposerRequest: number;
   fileDraft: WorkspaceFileDraftState;
+  fileFocusRequest: WorkspaceFileFocusRequest | null;
   filePreview: WorkspaceFileRead | null;
   plugins: RuntimePluginSummary[];
   panelLauncherTypes: DesktopPanelType[];
@@ -251,7 +254,7 @@ export function AppChatSurface({
   onOpenSideChat: () => void;
   onOpenSideTerminalPanel: () => void;
   onOpenEntry: (entry: WorkspaceEntry) => void;
-  onOpenProjectFile: (filePath: string) => void;
+  onOpenProjectFile: (filePath: string, line?: number) => void;
   onOpenWorkspaceDirectory: (directoryPath: string) => void;
   onMoveBottomPanel: (
     panelId: string,
@@ -330,6 +333,7 @@ export function AppChatSurface({
   const workspacePanelProps = {
     activeProject: activeWorkspace,
     fileDraft,
+    fileFocusRequest,
     filePreview,
     latestReviewSummary,
     latestReviewFindings,

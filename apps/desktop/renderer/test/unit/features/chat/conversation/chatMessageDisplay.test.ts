@@ -719,12 +719,16 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
-  it('excludes completed thinking content from assistant copy text', () => {
+  it('copies a completed review once without hidden thinking content', () => {
     expect(assistantRunCopyText({
       type: 'assistant',
       id: 'assistant_1',
       handledSteerMessageIds: [],
       messageIds: ['assistant_1'],
+      reviewExit: {
+        kind: 'exited',
+        review: '<think>internal plan</think>visible answer',
+      },
       steerMessages: [],
       segments: [
         {
