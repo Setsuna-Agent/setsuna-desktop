@@ -7,12 +7,20 @@ uninstall.
 
 The security boundary is fail-closed:
 
-- two managed local accounts separate offline and online executions;
+- two managed local accounts separate offline and online executions; both are
+  members of the built-in Users group for the standard Windows runtime baseline
+  and of a dedicated Setsuna group for managed root ACLs;
 - Windows Firewall rules block direct egress and expose only the Setsuna proxy
   port range to the online account;
 - restricted tokens, per-execution logon SIDs, and policy-scoped capability SIDs
   constrain writes; temporary logon/request ACL entries are revoked after each
-  run, while reads remain governed by the dedicated account's host DACLs;
+  run, while stable readable roots use reusable dedicated-group ACLs; existing
+  trees are materialized with pinned, non-recursive per-object updates; external
+  junctions/symbolic links fail closed, internal links are not followed, and a
+  distinct completion marker is committed only after tree reconciliation; the
+  completed-policy hot path validates only root ACL state, while an immutable
+  FSCTL process mitigation prevents the restricted process tree from creating
+  junctions or symbolic links at runtime;
 - a hash-verified, machine-readable but sandbox-nonwritable runner copy removes
   dependencies on the per-user packaged executable ACL;
 - a non-breakaway Job Object terminates the whole process tree when the sidecar
@@ -24,7 +32,10 @@ The security boundary is fail-closed:
 
 V1 protects write integrity and network egress; it is not a confidentiality
 boundary equivalent to a VM. Existing host DACLs may still make files readable
-to ordinary local users. As in upstream Codex, Windows compatibility requires
+to ordinary local users. Processes running outside the sandbox under the
+desktop account are trusted: they can rewrite managed DACLs, owners, or marker
+ACEs with the same authority as the sandbox manager itself. As in upstream
+Codex, Windows compatibility requires
 the World SID in the write-restricted compatibility list, so objects already
 writable by an explicit Everyone ACE remain writable to the dedicated account.
 The token default DACL likewise follows upstream and grants World access so

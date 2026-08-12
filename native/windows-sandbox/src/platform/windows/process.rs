@@ -23,13 +23,18 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemDirectoryW;
 use windows_sys::Win32::System::Threading::{
-    CreateProcessAsUserW, CreateProcessWithLogonW, GetCurrentProcess, GetCurrentProcessId,
-    GetExitCodeProcess, OpenProcess, ResumeThread, TerminateProcess, WaitForMultipleObjects,
+    CreateProcessAsUserW, CreateProcessWithLogonW, DeleteProcThreadAttributeList,
+    GetCurrentProcess, GetCurrentProcessId, GetExitCodeProcess, InitializeProcThreadAttributeList,
+    OpenProcess, ResumeThread, TerminateProcess, UpdateProcThreadAttribute, WaitForMultipleObjects,
     WaitForSingleObject, CREATE_NO_WINDOW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, INFINITE,
     PROCESS_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
-    STARTF_USESTDHANDLES, STARTUPINFOW,
+    PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY, STARTF_USESTDHANDLES, STARTUPINFOEXW, STARTUPINFOW,
 };
 use zeroize::{Zeroize, Zeroizing};
+
+// windows-sys 0.52 does not expose these newer process-creation constants.
+const EXTENDED_STARTUPINFO_PRESENT: u32 = 0x0008_0000;
+const PROCESS_CREATION_MITIGATION_POLICY2_FSCTL_SYSTEM_CALL_DISABLE_ALWAYS_ON: u64 = 1_u64 << 56;
 
 pub struct AccountRunnerContext<'a> {
     pub executable: &'a Path,
@@ -235,13 +240,15 @@ pub fn spawn_restricted_shell(
     let environment_block = environment_block(&environment);
     let (stdin, stdout, stderr) = inheritable_standard_handles()?;
     let mut desktop_wide = to_wide("winsta0\\default");
-    let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
-    startup.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = stdin;
-    startup.hStdOutput = stdout;
-    startup.hStdError = stderr;
-    startup.lpDesktop = desktop_wide.as_mut_ptr();
+    let mut process_attributes = RestrictedProcessAttributes::new()?;
+    let mut startup: STARTUPINFOEXW = unsafe { std::mem::zeroed() };
+    startup.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
+    startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+    startup.StartupInfo.hStdInput = stdin;
+    startup.StartupInfo.hStdOutput = stdout;
+    startup.StartupInfo.hStdError = stderr;
+    startup.StartupInfo.lpDesktop = desktop_wide.as_mut_ptr();
+    startup.lpAttributeList = process_attributes.raw();
     let mut process_info: PROCESS_INFORMATION = unsafe { std::mem::zeroed() };
     let created = unsafe {
         CreateProcessAsUserW(
@@ -251,10 +258,10 @@ pub fn spawn_restricted_shell(
             std::ptr::null_mut(),
             std::ptr::null_mut(),
             1,
-            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT,
             environment_block.as_ptr().cast::<c_void>(),
             cwd_wide.as_ptr(),
-            &startup,
+            &startup.StartupInfo,
             &mut process_info,
         )
     };
@@ -266,6 +273,83 @@ pub fn spawn_restricted_shell(
         ));
     }
     wait_for_process(process_info)
+}
+
+struct RestrictedProcessAttributes {
+    storage: Vec<usize>,
+    // UpdateProcThreadAttribute retains this pointer through CreateProcessAsUserW.
+    _mitigation_policy: Box<[u64; 2]>,
+}
+
+impl RestrictedProcessAttributes {
+    fn new() -> Result<Self, SandboxError> {
+        let mut byte_length = 0_usize;
+        unsafe {
+            InitializeProcThreadAttributeList(std::ptr::null_mut(), 1, 0, &mut byte_length);
+        }
+        if byte_length == 0 {
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                "cannot size restricted process attributes",
+                std::io::Error::last_os_error(),
+            ));
+        }
+
+        // The Win32 structure is opaque and requires native pointer alignment.
+        let mut storage = vec![0_usize; byte_length.div_ceil(std::mem::size_of::<usize>())];
+        let attribute_list = storage.as_mut_ptr().cast::<c_void>();
+        if unsafe { InitializeProcThreadAttributeList(attribute_list, 1, 0, &mut byte_length) } == 0
+        {
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                "cannot initialize restricted process attributes",
+                std::io::Error::last_os_error(),
+            ));
+        }
+
+        // Policy2 occupies the second DWORD64. Blocking NtFsControlFile keeps
+        // sandboxed commands and descendants from manufacturing junctions or
+        // symlinks after the ACL tree has passed its one-time validation.
+        let mitigation_policy = Box::new([
+            0,
+            PROCESS_CREATION_MITIGATION_POLICY2_FSCTL_SYSTEM_CALL_DISABLE_ALWAYS_ON,
+        ]);
+        if unsafe {
+            UpdateProcThreadAttribute(
+                attribute_list,
+                0,
+                PROC_THREAD_ATTRIBUTE_MITIGATION_POLICY as usize,
+                mitigation_policy.as_ptr().cast::<c_void>(),
+                std::mem::size_of_val(mitigation_policy.as_ref()),
+                std::ptr::null_mut(),
+                std::ptr::null(),
+            )
+        } == 0
+        {
+            let error = std::io::Error::last_os_error();
+            unsafe { DeleteProcThreadAttributeList(attribute_list) };
+            return Err(SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                "cannot install restricted filesystem process mitigation",
+                error,
+            ));
+        }
+
+        Ok(Self {
+            storage,
+            _mitigation_policy: mitigation_policy,
+        })
+    }
+
+    fn raw(&mut self) -> *mut c_void {
+        self.storage.as_mut_ptr().cast::<c_void>()
+    }
+}
+
+impl Drop for RestrictedProcessAttributes {
+    fn drop(&mut self) {
+        unsafe { DeleteProcThreadAttributeList(self.raw()) };
+    }
 }
 
 fn wait_for_contained_process(

@@ -31,10 +31,13 @@ $tempBase = if ($RootBase) {
   (Resolve-Path -LiteralPath ([System.IO.Path]::GetTempPath())).Path
 }
 $root = Join-Path $tempBase ("setsuna-sandbox-smoke-{0}" -f [Guid]::NewGuid().ToString('N'))
-$workspace = Join-Path $root 'workspace'
+$privateWorkspaceParent = Join-Path $root 'private-workspace-parent'
+$workspace = Join-Path $privateWorkspaceParent 'workspace'
 $readOnlyWorkspace = Join-Path $root 'read-only-workspace'
 $protected = Join-Path $workspace 'protected'
 $externalWritable = Join-Path $root 'external-broad-write'
+$externalReparseTarget = Join-Path $root 'external-reparse-target'
+$workspaceJunction = Join-Path $workspace 'external-reparse-junction'
 $commandTemp = Join-Path $root 'command-temp\work'
 $requestPath = Join-Path $root 'request.json'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
@@ -44,13 +47,14 @@ $nodeBinary = (Get-Command node.exe -CommandType Application -ErrorAction Stop |
 $nodeBinaryPath = (& $nodeBinary -p "require('node:fs').realpathSync(process.execPath)").Trim()
 $nodeBinaryPath = (Resolve-Path -LiteralPath $nodeBinaryPath).Path
 $preExistingReadableRoots = @($readOnlyToolchainRoot)
-$temporarilyGrantedReadableRoots = @($nodeBinaryPath)
+$managedReadableRoots = @($nodeBinaryPath)
 foreach ($candidate in $AdditionalReadableRoots) {
   $preExistingReadableRoots += (Resolve-Path -LiteralPath $candidate).Path
 }
 $preExistingReadableRoots = @($preExistingReadableRoots | Sort-Object -Unique)
 $preExistingReadableRootSddls = @{}
 $temporaryPathSddls = @{}
+$externalReparseTargetSddl = $null
 foreach ($readableRoot in $preExistingReadableRoots) {
   $preExistingReadableRootSddls[$readableRoot] = (Get-Acl -LiteralPath $readableRoot).Sddl
 }
@@ -75,7 +79,7 @@ function New-SandboxRequest(
     cwd = $workspace
     workspaceRoot = $workspace
     permissionProfile = 'workspace-write'
-    readableRoots = @($workspace, $commandTemp) + $preExistingReadableRoots + $temporarilyGrantedReadableRoots
+    readableRoots = @($workspace, $commandTemp) + $preExistingReadableRoots + $managedReadableRoots
     writableRoots = @($workspace, $commandTemp)
     ephemeralWritableRoots = @($commandTemp)
     deniedRoots = @()
@@ -138,6 +142,31 @@ function Normalize-ManagedSddl([string]$Sddl) {
   })
 }
 
+function Assert-ReparseTargetAclUnchanged {
+  if ($null -eq $externalReparseTargetSddl) { return }
+  $current = (Get-Acl -LiteralPath $externalReparseTarget).Sddl
+  if ($current -ne $externalReparseTargetSddl) {
+    throw "Sandbox ACL materialization followed a workspace junction: $workspaceJunction"
+  }
+}
+
+function Set-DirectoryDacl(
+  [string]$Path,
+  [System.Security.AccessControl.DirectorySecurity]$Acl
+) {
+  # Set-Acl can request SeSecurityPrivilege when a DirectorySecurity instance
+  # is reused, even though this fixture only changes the DACL. The filesystem
+  # APIs write only the requested directory access rules without touching SACLs.
+  if ($PSVersionTable.PSEdition -eq 'Core') {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl(
+      [System.IO.DirectoryInfo]::new($Path),
+      $Acl
+    )
+    return
+  }
+  [System.IO.Directory]::SetAccessControl($Path, $Acl)
+}
+
 function Assert-NoLogonSidAce {
   $paths = @(Get-Item -LiteralPath $root) + @(Get-ChildItem -LiteralPath $root -Force -Recurse)
   foreach ($path in $paths) {
@@ -150,7 +179,8 @@ function Assert-NoLogonSidAce {
 
 function Invoke-SandboxRequest(
   [System.Collections.IDictionary]$Request,
-  [scriptblock]$WhileRunning = {}
+  [scriptblock]$WhileRunning = {},
+  [string]$ExpectedErrorPattern = ''
 ) {
   Write-SandboxRequest $Request
   $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -173,6 +203,7 @@ function Invoke-SandboxRequest(
       & $WhileRunning
       Assert-SharedParentUnchanged
       Assert-PreExistingReadableAclsUnchanged
+      Assert-ReparseTargetAclUnchanged
       if ($watch.Elapsed.TotalSeconds -ge 30) {
         throw "Sandbox request timed out: $($Request.executionId)"
       }
@@ -184,7 +215,21 @@ function Invoke-SandboxRequest(
     & $WhileRunning
     Assert-SharedParentUnchanged
     Assert-PreExistingReadableAclsUnchanged
+    Assert-ReparseTargetAclUnchanged
     Assert-TemporaryPathAclsUnchanged
+    if ($ExpectedErrorPattern) {
+      if ($exitCode -eq 0) {
+        throw "Sandbox request unexpectedly accepted an unsafe policy: $($Request.executionId)"
+      }
+      $failureOutput = "$stdout`n$stderr"
+      if ($failureOutput -notmatch $ExpectedErrorPattern) {
+        throw "Sandbox request failed for the wrong reason: $($Request.executionId)`nstdout: $stdout`nstderr: $stderr"
+      }
+      if (Test-Path -LiteralPath $requestPath) {
+        Remove-Item -LiteralPath $requestPath -Force
+      }
+      return
+    }
     if ($exitCode -ne 0) {
       throw "Sandbox request failed with exit code ${exitCode}: $($Request.executionId)`nstdout: $stdout`nstderr: $stderr"
     }
@@ -272,18 +317,28 @@ try {
   New-Item -ItemType Directory -Force -Path $workspace | Out-Null
   New-Item -ItemType Directory -Force -Path $readOnlyWorkspace | Out-Null
   $currentUserSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+  # Reproduce workspaces below user-private folders such as Documents. The sandbox
+  # account may traverse this parent, but Node realpath also needs metadata access.
+  $privateWorkspaceParentAcl = [System.Security.AccessControl.DirectorySecurity]::new()
+  $privateWorkspaceParentAcl.SetSecurityDescriptorSddlForm(
+    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)",
+    [System.Security.AccessControl.AccessControlSections]::Access
+  )
+  Set-DirectoryDacl -Path $privateWorkspaceParent -Acl $privateWorkspaceParentAcl
   $readOnlyWorkspaceAcl = [System.Security.AccessControl.DirectorySecurity]::new()
   $readOnlyWorkspaceAcl.SetSecurityDescriptorSddlForm(
-    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)"
+    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)",
+    [System.Security.AccessControl.AccessControlSections]::Access
   )
-  Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyWorkspaceAcl
+  Set-DirectoryDacl -Path $readOnlyWorkspace -Acl $readOnlyWorkspaceAcl
   # Preserve private traversal while making inherited child writes broad. The
   # read-only capability deny must outrank this inherited host allow.
   $readOnlyBroadAcl = [System.Security.AccessControl.DirectorySecurity]::new()
   $readOnlyBroadAcl.SetSecurityDescriptorSddlForm(
-    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)(A;OICI;GW;;;WD)"
+    "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)(A;OICI;FA;;;$currentUserSid)(A;OICI;GW;;;WD)",
+    [System.Security.AccessControl.AccessControlSections]::Access
   )
-  Set-Acl -LiteralPath $readOnlyWorkspace -AclObject $readOnlyBroadAcl
+  Set-DirectoryDacl -Path $readOnlyWorkspace -Acl $readOnlyBroadAcl
   $readOnlyNested = Join-Path $readOnlyWorkspace 'nested'
   New-Item -ItemType Directory -Force -Path $readOnlyNested | Out-Null
   $readOnlyExisting = Join-Path $readOnlyNested 'existing.txt'
@@ -295,8 +350,17 @@ try {
   )
   New-Item -ItemType Directory -Force -Path $protected | Out-Null
   New-Item -ItemType Directory -Force -Path $externalWritable | Out-Null
+  New-Item -ItemType Directory -Force -Path $externalReparseTarget | Out-Null
   New-Item -ItemType Directory -Force -Path $commandTemp | Out-Null
-  Set-Acl -LiteralPath $externalWritable -AclObject $readOnlyWorkspaceAcl
+  Set-DirectoryDacl -Path $externalWritable -Acl $readOnlyWorkspaceAcl
+  Set-DirectoryDacl -Path $externalReparseTarget -Acl $readOnlyWorkspaceAcl
+  [System.IO.File]::WriteAllText(
+    (Join-Path $externalReparseTarget 'must-remain-private.txt'),
+    'private',
+    $utf8NoBom
+  )
+  $externalReparseTargetSddl = (Get-Acl -LiteralPath $externalReparseTarget).Sddl
+  New-Item -ItemType Junction -Path $workspaceJunction -Target $externalReparseTarget | Out-Null
 
   Copy-Item -LiteralPath $probeBinaryPath -Destination (Join-Path $workspace 'windows-network-probe.exe')
   $outsideFile = Join-Path $protected 'forbidden.txt'
@@ -307,13 +371,38 @@ try {
     "@echo off`r`ncurl.exe --version >curl-version.txt 2>&1`r`n>curl-exit.txt echo %ERRORLEVEL%`r`nexit /b 0`r`n",
     $utf8NoBom
   )
+  [System.IO.File]::WriteAllText(
+    (Join-Path $workspace 'node-workspace-realpath-probe.cjs'),
+    "const fs = require('node:fs'); fs.realpathSync(__filename); fs.readdirSync('..'); fs.readdirSync('../..'); fs.writeFileSync('node-realpath-ok.txt', 'ok');`r`n",
+    $utf8NoBom
+  )
+  [System.IO.File]::WriteAllText(
+    (Join-Path $workspace 'runtime-junction-probe.cmd'),
+    "@echo off`r`ncmd.exe /d /c mklink /J `"runtime-created-junction`" `"$externalReparseTarget`" >`"runtime-junction-debug.txt`" 2>&1`r`nif errorlevel 1 (`r`n  >`"runtime-junction-status.txt`" echo blocked`r`n  exit /b 0`r`n)`r`n>`"runtime-junction-status.txt`" echo created`r`n>`"runtime-created-junction\must-remain-private.txt`" echo compromised`r`nexit /b 0`r`n",
+    $utf8NoBom
+  )
+  # Private ancestors and managed read roots receive reusable sandbox-group ACEs.
+  # Only execution-scoped write/request grants belong in the restoration baseline.
   foreach ($temporaryPath in @(
     $externalWritable,
-    $commandTemp,
-    $nodeBinaryPath
+    $commandTemp
   )) {
     $temporaryPathSddls[$temporaryPath] = (Get-Acl -LiteralPath $temporaryPath).Sddl
   }
+
+  # A link outside the approved root must fail closed without touching its
+  # target. Removing it afterward lets the same policy repair any partial ACL
+  # work and proves the completion marker is written only after reconciliation.
+  $linkEscapeRequest = New-SandboxRequest `
+    -ExecutionId 'windows_ci_external_link_rejected' `
+    -Command 'exit /b 0' `
+    -NetworkAccess $false `
+    -Environment (New-SandboxEnvironment)
+  Invoke-SandboxRequest `
+    -Request $linkEscapeRequest `
+    -ExpectedErrorPattern 'contains a link that escapes'
+  Assert-ReparseTargetAclUnchanged
+  Remove-Item -LiteralPath $workspaceJunction -Force
 
   $readOnlyRequest = New-SandboxRequest `
     -ExecutionId 'windows_ci_read_only' `
@@ -339,13 +428,13 @@ try {
   $offlineListener = Start-BlockedLoopbackListener
   $offlinePort = ([System.Net.IPEndPoint]$offlineListener.LocalEndpoint).Port
   $offlineAccept = $offlineListener.AcceptTcpClientAsync()
-  $nodeRealpathProbe = "require('node:fs').realpathSync(process.execPath);require('node:fs').writeFileSync('node-realpath-ok.txt','ok')"
   $offlineCommand = @(
     'whoami>identity-offline.txt'
-    "(`"$nodeBinaryPath`" -e `"$nodeRealpathProbe`" >node-realpath-debug.txt 2>&1 && echo ready>node-realpath-status.txt || echo failed>node-realpath-status.txt)"
+    "(`"$nodeBinaryPath`" node-workspace-realpath-probe.cjs >node-realpath-debug.txt 2>&1 && echo ready>node-realpath-status.txt || echo failed>node-realpath-status.txt)"
     'echo workspace-ok>offline-write.txt'
     'echo existing-ok>existing.txt'
     'call curl-start-smoke.cmd'
+    'call runtime-junction-probe.cmd'
     "echo forbidden>$outsideFile 2>NUL"
     "echo forbidden>$externalFile 2>NUL"
     "(windows-network-probe.exe tcp 127.0.0.1 $offlinePort 2000 >NUL 2>&1 && echo reached>offline-loopback.txt || echo blocked>offline-loopback.txt)"
@@ -378,7 +467,7 @@ try {
     (Get-Content -LiteralPath (Join-Path $workspace 'node-realpath-ok.txt') -Raw).Trim() -ne 'ok'
   ) {
     $nodeRealpathDebug = (@(Get-Content -LiteralPath (Join-Path $workspace 'node-realpath-debug.txt')) -join "`n").Trim()
-    throw "Node could not resolve a user-private readable toolchain: $nodeRealpathDebug"
+    throw "Node could not resolve a workspace below a user-private ancestor: $nodeRealpathDebug"
   }
   if ((Get-Content -LiteralPath (Join-Path $workspace 'offline-write.txt') -Raw).Trim() -ne 'workspace-ok') {
     throw 'Offline sandbox could not write to its workspace'
@@ -386,6 +475,15 @@ try {
   if ((Get-Content -LiteralPath (Join-Path $workspace 'existing.txt') -Raw).Trim() -ne 'existing-ok') {
     throw 'Offline sandbox could not modify an existing workspace file'
   }
+  $runtimeJunctionStatus = (Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-status.txt') -Raw).Trim()
+  if ($runtimeJunctionStatus -ne 'blocked' -or (Test-Path -LiteralPath (Join-Path $workspace 'runtime-created-junction'))) {
+    $runtimeJunctionDebug = (@(Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-debug.txt')) -join "`n").Trim()
+    throw "Restricted process tree created a runtime junction (status=$runtimeJunctionStatus): $runtimeJunctionDebug"
+  }
+  if ((Get-Content -LiteralPath (Join-Path $externalReparseTarget 'must-remain-private.txt') -Raw).Trim() -ne 'private') {
+    throw 'Restricted process tree escaped through a runtime-created junction'
+  }
+  Assert-ReparseTargetAclUnchanged
   if (Test-Path -LiteralPath $outsideFile) {
     throw 'Offline sandbox wrote inside a protected writable root'
   }

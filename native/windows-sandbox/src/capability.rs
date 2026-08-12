@@ -5,8 +5,15 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::path::Path;
 
+// Changing the ACL materialization strategy must produce a fresh capability.
+// Its missing root ACE triggers one migration pass that also rematerializes the
+// stable sandbox-group grant, repairing interrupted grants from older builds.
+const CAPABILITY_POLICY_VERSION: &[u8] = b"setsuna-windows-sandbox-acl-v2";
+
 pub fn policy_key(request: &SandboxRunRequest) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(CAPABILITY_POLICY_VERSION);
+    hasher.update([0]);
     hasher.update(request.workspace_root.to_string_lossy().to_lowercase());
     hasher.update([0]);
     hasher.update(format!("{:?}", request.permission_profile));

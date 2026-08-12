@@ -15,6 +15,9 @@
 这不是 microVM、容器或 Windows Sandbox。V1 不承诺：
 
 - 抵御 Windows 内核漏洞或本机管理员；
+- 抵御桌面账户或其他宿主进程在沙箱外重写受管路径的 DACL、owner 或 completion marker。它们拥有与
+  沙箱管理器相同或更高的宿主权限，属于信任边界外；沙箱内进程则由 mutation deny 中的 `WRITE_DAC` /
+  `WRITE_OWNER` 和进程创建 mitigation 约束；
 - 隐藏所有宿主可读文件。受限账户仍可能读取原 DACL 已向普通用户开放的路径；
 - 表达路径级 read deny 或 glob deny。请求包含 `deniedRoots` 或 `deniedGlobRegExpSources`
   时 provider 必须拒绝；
@@ -78,19 +81,32 @@ Electron main 持有 sidecar 路径、UAC 生命周期和沙箱出口。preload 
 ## 文件系统权限
 
 安装创建 `SetsunaSandboxUsers`、`SetsunaSbOffline` 和 `SetsunaSbOnline`。两个用户名特意控制在
-Windows 本地 SAM 账户的 20 字符限制内。执行时：
+Windows 本地 SAM 账户的 20 字符限制内，并与上游 Codex 一样同时加入专用沙箱组和 Windows 内置
+`Users` 组：内置组提供系统 runtime/工具链的标准读取基线，专用组承载 Setsuna 管理的 root ACL。
+readiness 会同时验证这两个必要成员关系并拒绝其他本地组。执行时：
 
 1. 所有输入路径先 canonicalize，并限制为固定本机 NTFS 卷；
-2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；命令特有的工具链文件仅在必要时向本次 logon SID
-   临时授予 read/execute，且只修改所指对象，不向已有子树传播；
+2. readable roots 先用隔离账户 token 做真实 `AccessCheck`；仅在现有 Windows ACL 不足时，向稳定
+   `SetsunaSandboxUsers` 组补 read/execute ACE。目录 root 使用可继承 ACE，文件只修改所指对象；后续命令
+   复用既有授权，不按 logon 重写已有子树。首次物化时以不跟随 reparse point 且禁止 delete sharing 的句柄
+   钉住每个对象，再逐对象执行非递归 DACL 更新；junction/symlink 只允许指向同一授权 root 内部，外链直接
+   fail closed，OneDrive 等非 name-surrogate placeholder 仍按普通对象处理。目录树完成两轮并发缺口校正后才写入
+   独立 completion marker；命中 marker 的后续执行只校验根对象上的 marker 与策略 ACE，不递归重扫目录树；最终命令
+   进程树在创建时启用不可变的 FSCTL system-call disable mitigation，禁止命令在物化完成后创建 junction/symlink；
 3. 每种稳定写策略生成一个 capability SID。新的 writable root 首次授权时安装可继承 capability ACE；后续命令
-   先检查 ACE，命中缓存后不再改写目录树；每次执行独有的空临时目录只加非递归 logon SID ACE；
+   以独立 marker 判断完整物化是否完成，避免进程在 root ACE 写入后异常退出时把半完成子树误判为成功；每次执行
+   独有的空临时目录只加非递归 logon SID ACE；
 4. 如果隔离账户原本不能访问稳定 root，同时为稳定沙箱组安装对应 read 或 write ACE，让账户 token 检查和
    restricted SID 的写检查都能通过；
 5. read-only workspace 与已存在的 protected writable root 向 capability 安装稳定 mutation deny，覆盖宽泛宿主
    allow 或从 workspace 继承的 write allow，同时保留读取；
-6. Job Object 结束后只回收本次 logon SID 和 request-bootstrap ACE；稳定 capability、group 和 deny ACE 留作复用；
-7. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
+6. Job Object 结束后回收本次 logon SID 的临时目录 ACE 和 request-bootstrap ACE；稳定 capability、group
+   和 deny ACE 留作复用；
+7. workspace、cwd 与额外授权 root 的私有祖先仅向稳定沙箱组授予非继承的 read/execute，
+   供 Node、esbuild 等 runtime 执行 `lstat`/`realpath` 和向上枚举包边界；该权限只作用于祖先目录对象，
+   不继承到兄弟目录或文件；
+   若系统所有的祖先目录拒绝宿主读取其 DACL，则不追加 ACE，让受限进程按既有 ACL 在实际访问时 fail closed；
+8. 受限 token 保留 `SeChangeNotifyPrivilege` 完成祖先遍历，但不会得到宿主用户的权限或凭据。
 
 最终 shell 与上游 Codex 一样使用
 `CreateRestrictedToken(DISABLE_MAX_PRIVILEGE | LUA_TOKEN | WRITE_RESTRICTED)`，restricting SID 按顺序包含
@@ -173,6 +189,7 @@ Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-
 - [OpenAI：Building a safe, effective sandbox to enable Codex on Windows](https://openai.com/index/building-codex-windows-sandbox/)
 - [OpenAI Codex：windows-sandbox-rs/token.rs](https://github.com/openai/codex/blob/main/codex-rs/windows-sandbox-rs/src/token.rs)
 - [Microsoft：CreateRestrictedToken](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken)
+- [Microsoft：UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
 - [Microsoft：Application Layer Enforcement](https://learn.microsoft.com/en-us/windows/win32/fwp/application-layer-enforcement--ale-)
 - [Microsoft：FwpmFilterAdd0](https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmfilteradd0)
 - [Microsoft：New-NetFirewallRule](https://learn.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule)
