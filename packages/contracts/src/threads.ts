@@ -26,6 +26,7 @@ import type {
   RuntimeToolCall,
 } from './provider.js';
 import type { RuntimeUsage } from './usage.js';
+import { thinkTagMatches } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 
@@ -169,11 +170,10 @@ export type RuntimeReviewResult = {
 // affected location after the primary anchor; the first location remains the
 // stable diff annotation target.
 const REVIEW_FINDING_HEADER = /^\[(P[0-3])\]\s+(.+)\s+(?:—|–|-)\s+`?(.+?):(\d+)(?:-(\d+))?`?(?:(?:\s|[（(，,;]).*)?$/u;
-const REVIEW_THINK_BLOCK = /<think>[\s\S]*?<\/think>/giu;
 
 /** Parse the stable review profile output into data shared by runtime and UI. */
 export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
-  const normalized = review.replace(REVIEW_THINK_BLOCK, '').trim();
+  const normalized = stripReviewThinking(review).trim();
   if (!normalized) return { findings: [], summary: '' };
 
   const lines = normalized.split(/\r?\n/u);
@@ -214,6 +214,28 @@ export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
     findings,
     summary: summaryLines.join('\n').trim(),
   };
+}
+
+function stripReviewThinking(review: string): string {
+  const visible: string[] = [];
+  let cursor = 0;
+  let blockStart: number | null = null;
+
+  for (const match of thinkTagMatches(review)) {
+    if (!match.closing && blockStart === null) {
+      blockStart = match.index;
+      continue;
+    }
+    if (!match.closing || blockStart === null) continue;
+
+    visible.push(review.slice(cursor, blockStart));
+    cursor = match.end;
+    blockStart = null;
+  }
+
+  // Preserve an incomplete block exactly as before; a streaming fragment must
+  // not make the remaining review disappear merely because its close tag is late.
+  return visible.length === 0 ? review : visible.join('') + review.slice(cursor);
 }
 
 /** Reparse persisted raw text so historical notices benefit from parser fixes. */
