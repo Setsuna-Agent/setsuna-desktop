@@ -165,12 +165,6 @@ export type RuntimeReviewResult = {
   summary: string;
 };
 
-// Titles can quote an em dash, so only a delimiter followed by a path and line
-// number may split the finding header. Providers occasionally append another
-// affected location after the primary anchor; the first location remains the
-// stable diff annotation target.
-const REVIEW_FINDING_HEADER = /^\[(P[0-3])\]\s+(.+)\s+(?:—|–|-)\s+`?(.+?):(\d+)(?:-(\d+))?`?(?:(?:\s|[（(，,;]).*)?$/u;
-
 /** Parse the stable review profile output into data shared by runtime and UI. */
 export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
   const normalized = stripReviewThinking(review).trim();
@@ -189,19 +183,13 @@ export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
   };
 
   for (const line of lines) {
-    const match = REVIEW_FINDING_HEADER.exec(normalizeReviewFindingHeader(line));
-    if (match) {
+    const header = parseReviewFindingHeader(normalizeReviewFindingHeader(line));
+    if (header) {
       finishCurrent();
-      const startLine = Number(match[4]);
-      const endLine = match[5] ? Number(match[5]) : undefined;
       current = {
+        ...header,
         body: '',
         bodyLines: [],
-        path: match[3].trim().replace(/^`|`$/gu, ''),
-        priority: match[1] as RuntimeReviewFinding['priority'],
-        startLine,
-        ...(endLine && endLine !== startLine ? { endLine } : {}),
-        title: match[2].trim(),
       };
       continue;
     }
@@ -214,6 +202,150 @@ export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
     findings,
     summary: summaryLines.join('\n').trim(),
   };
+}
+
+// Scan the stable `[P0-P3] title — path:line` header in one forward pass.
+// Model output is untrusted, and the former multi-greedy expression could
+// backtrack polynomially on long malformed lines. The latest valid delimiter
+// wins so titles may quote an em dash; the first location after that delimiter
+// remains the stable annotation target when providers append more locations.
+function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
+  const priority = reviewPriorityPrefix(line);
+  if (!priority) return null;
+
+  let cursor = priority.contentStart;
+  let delimiterVersion = 0;
+  let resolvedVersion = -1;
+  let titleEnd = -1;
+  let pathStart = -1;
+  let locationCandidate: {
+    endLine?: number;
+    pathEnd: number;
+    pathStart: number;
+    startLine: number;
+    titleEnd: number;
+  } | null = null;
+
+  while (cursor < line.length) {
+    if (isReviewWhitespace(line[cursor])) {
+      const whitespaceStart = cursor;
+      while (isReviewWhitespace(line[cursor])) cursor += 1;
+      if (isReviewFindingDelimiter(line[cursor]) && isReviewWhitespace(line[cursor + 1])) {
+        cursor += 1;
+        while (isReviewWhitespace(line[cursor])) cursor += 1;
+        delimiterVersion += 1;
+        titleEnd = whitespaceStart;
+        pathStart = cursor;
+        continue;
+      }
+      continue;
+    }
+
+    if (line[cursor] === ':' && pathStart >= 0 && resolvedVersion !== delimiterVersion) {
+      const location = reviewLocationAt(line, cursor);
+      if (location) {
+        locationCandidate = {
+          titleEnd,
+          pathStart,
+          pathEnd: cursor,
+          startLine: location.startLine,
+          ...(location.endLine !== undefined ? { endLine: location.endLine } : {}),
+        };
+        resolvedVersion = delimiterVersion;
+        cursor = location.end;
+        continue;
+      }
+    }
+
+    cursor += 1;
+  }
+
+  if (!locationCandidate) return null;
+  const title = line.slice(priority.contentStart, locationCandidate.titleEnd).trim();
+  const rawPath = line.slice(locationCandidate.pathStart, locationCandidate.pathEnd).trim();
+  const path = rawPath.startsWith('`') ? rawPath.slice(1).trim() : rawPath;
+  if (!title || !path) return null;
+
+  return {
+    priority: priority.priority,
+    title,
+    path,
+    startLine: locationCandidate.startLine,
+    ...(locationCandidate.endLine && locationCandidate.endLine !== locationCandidate.startLine
+      ? { endLine: locationCandidate.endLine }
+      : {}),
+    body: '',
+  };
+}
+
+function reviewPriorityPrefix(line: string): {
+  contentStart: number;
+  priority: RuntimeReviewFinding['priority'];
+} | null {
+  if (
+    line.length < 6
+    || line[0] !== '['
+    || line[1] !== 'P'
+    || line[2] < '0'
+    || line[2] > '3'
+    || line[3] !== ']'
+    || !isReviewWhitespace(line[4])
+  ) return null;
+
+  let contentStart = 5;
+  while (isReviewWhitespace(line[contentStart])) contentStart += 1;
+  return {
+    contentStart,
+    priority: `P${line[2]}` as RuntimeReviewFinding['priority'],
+  };
+}
+
+function reviewLocationAt(line: string, colonIndex: number): {
+  end: number;
+  endLine?: number;
+  startLine: number;
+} | null {
+  let cursor = colonIndex + 1;
+  const startDigits = cursor;
+  while (isAsciiDigit(line[cursor])) cursor += 1;
+  if (cursor === startDigits) return null;
+
+  const startLine = Number(line.slice(startDigits, cursor));
+  let endLine: number | undefined;
+  if (line[cursor] === '-') {
+    const endDigits = cursor + 1;
+    cursor = endDigits;
+    while (isAsciiDigit(line[cursor])) cursor += 1;
+    if (cursor === endDigits) return null;
+    endLine = Number(line.slice(endDigits, cursor));
+  }
+  if (line[cursor] === '`') cursor += 1;
+
+  const suffixStart = line[cursor];
+  if (
+    suffixStart !== undefined
+    && !isReviewWhitespace(suffixStart)
+    && suffixStart !== '（'
+    && suffixStart !== '('
+    && suffixStart !== '，'
+    && suffixStart !== ','
+    && suffixStart !== ';'
+  ) return null;
+  if (!Number.isSafeInteger(startLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) return null;
+
+  return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
+}
+
+function isReviewFindingDelimiter(value: string | undefined): boolean {
+  return value === '—' || value === '–' || value === '-';
+}
+
+function isReviewWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === '';
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
 }
 
 function stripReviewThinking(review: string): string {
