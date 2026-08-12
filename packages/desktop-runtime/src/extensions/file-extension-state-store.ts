@@ -76,21 +76,6 @@ export class FileExtensionStateStore implements ExtensionStateStore {
     });
   }
 
-  async renamePlugin(previousPluginId: string, nextPluginId: string): Promise<void> {
-    if (previousPluginId === nextPluginId) return;
-    await withFileStateUpdate(this.statePath, async () => {
-      const state = await this.read();
-      const previous = state.plugins[previousPluginId];
-      if (!previous) return;
-      if (Object.hasOwn(state.plugins, nextPluginId)) {
-        throw new Error(`Extension state already exists for ${nextPluginId}.`);
-      }
-      const plugins = { ...state.plugins, [nextPluginId]: previous };
-      delete plugins[previousPluginId];
-      await writeJsonFile(this.statePath, { version: 1, plugins } satisfies ExtensionStateFile);
-    });
-  }
-
   private async read(): Promise<ExtensionStateFile> {
     const value = await readJsonFile<Partial<ExtensionStateFile>>(this.statePath, {});
     const plugins = value.plugins && typeof value.plugins === 'object' && !Array.isArray(value.plugins)

@@ -44,8 +44,6 @@ export type ExtensionStateStore = {
   set(pluginId: string, scope: string, key: string, value: unknown): Promise<void>;
   delete(pluginId: string, scope: string, key: string): Promise<void>;
   deletePlugin(pluginId: string): Promise<void>;
-  /** Rename an installed plugin's state without exposing the state file to plugin code. */
-  renamePlugin(previousPluginId: string, nextPluginId: string): Promise<void>;
 };
 
 export type ExtensionRuntime = {

@@ -55,6 +55,7 @@ type ExtensionManagerOptions = {
   workerExecArgv?: string[];
   toolTimeoutMs?: number;
   imageGenerationToolTimeoutMs?: number;
+  visionRecognitionToolTimeoutMs?: number;
   eventTimeoutMs?: number;
   networkFetch?: ExtensionNetworkFetch;
   imageGeneration?: {
@@ -71,6 +72,9 @@ type ExtensionManagerOptions = {
 const eventNames = new Set<string>(RUNTIME_EXTENSION_EVENT_NAMES);
 const DEFAULT_TOOL_TIMEOUT_MS = 120_000;
 const DEFAULT_IMAGE_GENERATION_TOOL_TIMEOUT_MS = 5 * 60_000;
+// The configured model client may stream for 15 minutes. Keep the worker alive
+// long enough for that deadline to settle and return its final error/result.
+const DEFAULT_VISION_RECOGNITION_TOOL_TIMEOUT_MS = 16 * 60_000;
 const FIRST_PARTY_HOST_CAPABILITIES = new Set<RuntimeExtensionCapability>([
   'image-generation',
   'vision-recognition',
@@ -84,6 +88,7 @@ export class ExtensionManager implements ExtensionRuntime {
   private readonly workerExecArgv: string[];
   private readonly toolTimeoutMs: number;
   private readonly imageGenerationToolTimeoutMs: number;
+  private readonly visionRecognitionToolTimeoutMs: number;
   private readonly eventTimeoutMs: number;
   private readonly network: ExtensionNetworkCoordinator;
   private readonly imageGeneration?: ExtensionManagerOptions['imageGeneration'];
@@ -102,6 +107,8 @@ export class ExtensionManager implements ExtensionRuntime {
     this.toolTimeoutMs = options.toolTimeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS;
     this.imageGenerationToolTimeoutMs = options.imageGenerationToolTimeoutMs
       ?? DEFAULT_IMAGE_GENERATION_TOOL_TIMEOUT_MS;
+    this.visionRecognitionToolTimeoutMs = options.visionRecognitionToolTimeoutMs
+      ?? DEFAULT_VISION_RECOGNITION_TOOL_TIMEOUT_MS;
     this.eventTimeoutMs = options.eventTimeoutMs ?? 10_000;
     this.network = new ExtensionNetworkCoordinator(options.networkFetch);
     this.imageGeneration = options.imageGeneration;
@@ -159,9 +166,7 @@ export class ExtensionManager implements ExtensionRuntime {
           context: safeWorkerContext(context),
         },
         workerRequestContext(context),
-        active.plugin.extension?.capabilities.includes('image-generation')
-          ? this.imageGenerationToolTimeoutMs
-          : this.toolTimeoutMs,
+        this.toolTimeoutFor(active.plugin),
       );
       return normalizeToolResult(
         result,
@@ -220,6 +225,13 @@ export class ExtensionManager implements ExtensionRuntime {
       }
     }
     return aggregate;
+  }
+
+  private toolTimeoutFor(plugin: InstalledPluginRecord): number {
+    const capabilities = plugin.extension?.capabilities ?? [];
+    if (capabilities.includes('vision-recognition')) return this.visionRecognitionToolTimeoutMs;
+    if (capabilities.includes('image-generation')) return this.imageGenerationToolTimeoutMs;
+    return this.toolTimeoutMs;
   }
 
   async cleanupTurn(context: ToolExecutionContext, outcome: ToolTurnCleanupOutcome): Promise<void> {

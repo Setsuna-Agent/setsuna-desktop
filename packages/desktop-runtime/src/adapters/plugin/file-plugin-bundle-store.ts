@@ -69,7 +69,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
     private readonly mcpClient: PluginMcpClient,
     private readonly configStore: ConfigStore,
     private readonly clock: Clock,
-    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin' | 'renamePlugin'>,
+    private readonly extensionState: Pick<ExtensionStateStore, 'deletePlugin'>,
     private readonly bundledPluginsDir?: string,
   ) {
     this.indexPath = path.join(dataDir, 'plugins.json');
@@ -309,21 +309,8 @@ export class FilePluginBundleStore implements PluginBundleStore {
       await inspectBundleTree(sourcePath);
       const sourceManifest = await readPluginManifest(sourcePath);
       const index = await this.readIndex();
-      const previousPluginId = options.previousPluginId
-        ? normalizePluginId(options.previousPluginId)
-        : sourceManifest.id;
-      const plugin = index.plugins.find((item) => item.id === previousPluginId);
-      if (!plugin) throw new Error(`Plugin not found: ${previousPluginId}`);
-      const changesPluginId = plugin.id !== sourceManifest.id;
-      if (changesPluginId && (
-        plugin.installationSource !== 'marketplace'
-        || options.installationSource !== 'marketplace'
-      )) {
-        throw new Error('Only a bundled marketplace update may migrate a plugin id.');
-      }
-      if (changesPluginId && index.plugins.some((item) => item.id === sourceManifest.id)) {
-        throw new Error(`Plugin id migration target is already installed: ${sourceManifest.id}`);
-      }
+      const plugin = index.plugins.find((item) => item.id === sourceManifest.id);
+      if (!plugin) throw new Error(`Plugin not found: ${sourceManifest.id}`);
 
       const expectedInstallPath = strictPluginInstallPath(this.pluginsDir, plugin.id);
       if (!samePath(plugin.installPath, expectedInstallPath)) {
@@ -362,11 +349,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
           throw new Error(`Plugin skill id conflicts with an existing skill: ${conflictingSkill.id}`);
         }
 
-        const installPath = strictPluginInstallPath(this.pluginsDir, manifest.id);
-        if (changesPluginId) {
-          const targetStat = await stat(installPath).catch(() => null);
-          if (targetStat) throw new Error(`Plugin id migration target already exists: ${manifest.id}`);
-        }
+        const installPath = plugin.installPath;
         const installedManifestPath = path.join(installPath, PLUGIN_MANIFEST_RELATIVE_PATH);
         const nextMcpInputs = manifest.mcpServers.map((server) => materializePluginMcpServer(server, installPath));
         const currentServers = await this.mcpStore.listServerInputs();
@@ -475,7 +458,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
         let indexSaveStarted = false;
         const mcpActionsStarted: PluginMcpUpdateAction[] = [];
         try {
-          await renameWithRetry(plugin.installPath, backupPath);
+          await renameWithRetry(installPath, backupPath);
           oldDirectoryMoved = true;
           await renameWithRetry(stagingPath, installPath);
           staged = false;
@@ -503,7 +486,6 @@ export class FilePluginBundleStore implements PluginBundleStore {
             version: 1,
             plugins: index.plugins.map((item) => item.id === plugin.id ? record : item),
           } satisfies PluginIndexFile);
-          if (changesPluginId) await this.extensionState.renamePlugin(plugin.id, record.id);
         } catch (error) {
           const rollbackErrors: unknown[] = [];
           if (hookSaveStarted) {
@@ -528,7 +510,7 @@ export class FilePluginBundleStore implements PluginBundleStore {
             });
           }
           if (oldDirectoryMoved) {
-            await renameWithRetry(backupPath, plugin.installPath)
+            await renameWithRetry(backupPath, installPath)
               .catch((rollbackError) => rollbackErrors.push(rollbackError));
           }
           if (indexSaveStarted) {

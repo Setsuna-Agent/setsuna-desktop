@@ -2,7 +2,11 @@ const PROMPT_MAX_CHARS = 4_000;
 
 export const VISION_RECOGNITION_TOOL = {
   name: 'analyze_image',
-  description: 'Analyze a runtime-managed image attachment with the configured vision model.',
+  description: [
+    'Analyze a runtime-managed image attachment with the separately configured vision model.',
+    'If you can inspect image attachments directly, do that instead and call this tool only when the user explicitly asks to use the configured vision model.',
+    'If you cannot inspect images directly, call this tool before making claims about the image.',
+  ].join(' '),
   inputSchema: {
     type: 'object',
     additionalProperties: false,

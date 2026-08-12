@@ -20,12 +20,6 @@ type MarketplaceBundleStore = Pick<
   | 'updatePlugin'
 >;
 
-const BUNDLED_PLUGIN_ID_MIGRATIONS = [
-  { previousId: 'pi-question', nextId: 'question' },
-  { previousId: 'pi-todo', nextId: 'todo' },
-  { previousId: 'pi-claude-rules', nextId: 'claude-rules' },
-] as const;
-
 /** 暴露应用内置的精选插件，同时不向渲染进程泄露其文件系统位置。 */
 export class FilePluginMarketplace implements PluginMarketplace {
   constructor(
@@ -39,7 +33,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const plugins = catalog.plugins
       .sort(compareMarketplacePlugins)
       .flatMap((plugin): RuntimePluginMarketplaceItem[] => {
-        const installed = installedPluginForCatalog(plugin.id, installedPlugins);
+        const installed = installedPlugins.find((item) => item.id === plugin.id);
         if (installed && installed.installationSource !== 'marketplace') {
           errors.push(`${plugin.id}: bundled marketplace id conflicts with an installed local plugin`);
           return [];
@@ -85,7 +79,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
-    const installed = installedPluginForCatalog(id, installedPlugins);
+    const installed = installedPlugins.find((item) => item.id === id);
     if (installed && installed.installationSource !== 'marketplace') {
       throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
     }
@@ -97,12 +91,9 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
-    const installed = installedPluginForCatalog(id, installedPlugins);
+    const installed = installedPlugins.find((item) => item.id === id);
     if (installed && installed.installationSource !== 'marketplace') {
       throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
-    }
-    if (installed && installed.id !== id) {
-      throw new Error(`Marketplace plugin update is available: ${pluginId}`);
     }
     // readCatalog 已把来源限制在应用内置目录；用户点击安装就是对这份随包插件的授权。
     return this.bundles.installPlugin(
@@ -116,7 +107,7 @@ export class FilePluginMarketplace implements PluginMarketplace {
     const { catalog, installedPlugins } = await this.readCatalogState();
     const plugin = catalog.plugins.find((item) => item.id === id);
     if (!plugin) throw new Error(`Marketplace plugin not found: ${pluginId}`);
-    const installed = installedPluginForCatalog(id, installedPlugins);
+    const installed = installedPlugins.find((item) => item.id === id);
     if (!installed) throw new Error(`Marketplace plugin is not installed: ${pluginId}`);
     if (installed.installationSource !== 'marketplace') {
       throw new Error(`Marketplace plugin id conflicts with an installed local plugin: ${pluginId}`);
@@ -130,7 +121,6 @@ export class FilePluginMarketplace implements PluginMarketplace {
         installationSource: 'marketplace',
         trustHooks: true,
         trustExtension: true,
-        ...(installed.id !== id ? { previousPluginId: installed.id } : {}),
       },
     );
   }
@@ -169,18 +159,6 @@ export class FilePluginMarketplace implements PluginMarketplace {
     }
     return { plugins, errors };
   }
-}
-
-function installedPluginForCatalog(
-  pluginId: string,
-  installedPlugins: Awaited<ReturnType<MarketplaceBundleStore['listPlugins']>>['plugins'],
-) {
-  const exact = installedPlugins.find((plugin) => plugin.id === pluginId);
-  if (exact) return exact;
-  const previousId = BUNDLED_PLUGIN_ID_MIGRATIONS.find((migration) => migration.nextId === pluginId)?.previousId;
-  if (!previousId) return undefined;
-  const previous = installedPlugins.find((plugin) => plugin.id === previousId);
-  return previous?.installationSource === 'marketplace' ? previous : undefined;
 }
 
 function compareMarketplacePlugins(left: PluginBundleInspection, right: PluginBundleInspection): number {

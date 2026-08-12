@@ -127,11 +127,19 @@ describe('bundled media extensions', () => {
       },
     });
     const host = new ExtensionToolHost(manager);
-    const context = { threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call_1' };
+    const context = {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      toolCallId: 'call_1',
+      modelCapabilities: { supportsImages: true },
+    };
 
     try {
       await expect(host.listTools(context)).resolves.toEqual([
-        expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME }),
+        expect.objectContaining({
+          name: OPENAI_VISION_RECOGNITION_TOOL_NAME,
+          description: expect.stringContaining('call this tool only when the user explicitly asks'),
+        }),
       ]);
       await expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
         attachment_id: 'attachment_asset_1',
@@ -154,6 +162,43 @@ describe('bundled media extensions', () => {
       await manager.shutdown();
     }
   });
+
+  it('lets vision recognition outlive the generic extension timeout', async () => {
+    const root = path.resolve('plugins/openai-vision-recognition');
+    const manager = await extensionManager(root, {
+      visionRecognition: {
+        isAvailable: async () => true,
+        analyze: async () => {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return {
+            content: 'Slow but healthy vision result.',
+            attachmentId: 'attachment_asset_1',
+            attachmentName: 'settings.png',
+            providerId: 'vision-provider',
+            modelId: 'vision-model',
+            model: 'qwen-vl-max',
+          };
+        },
+      },
+    }, {
+      toolTimeoutMs: 10,
+      visionRecognitionToolTimeoutMs: 1_000,
+    });
+    const host = new ExtensionToolHost(manager);
+    const context = { threadId: 'thread_1', turnId: 'turn_1', toolCallId: 'call_1' };
+
+    try {
+      await host.listTools(context);
+      await expect(host.runTool(OPENAI_VISION_RECOGNITION_TOOL_NAME, {
+        attachment_id: 'attachment_asset_1',
+        prompt: 'Describe the dialog.',
+      }, context)).resolves.toMatchObject({
+        content: expect.stringContaining('Slow but healthy vision result.'),
+      });
+    } finally {
+      await manager.shutdown();
+    }
+  });
 });
 
 async function extensionManager(
@@ -169,6 +214,10 @@ async function extensionManager(
       analyze(input: unknown, context: ToolExecutionContext): Promise<unknown>;
     };
   },
+  timeouts: {
+    toolTimeoutMs?: number;
+    visionRecognitionToolTimeoutMs?: number;
+  } = {},
 ): Promise<ExtensionManager> {
   const manifest = await readPluginManifest(root);
   const record = await installedRecord(root, manifest);
@@ -184,7 +233,10 @@ async function extensionManager(
       ...bridges,
       workerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
       workerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
-      toolTimeoutMs: 2_000,
+      toolTimeoutMs: timeouts.toolTimeoutMs ?? 2_000,
+      ...(timeouts.visionRecognitionToolTimeoutMs !== undefined
+        ? { visionRecognitionToolTimeoutMs: timeouts.visionRecognitionToolTimeoutMs }
+        : {}),
     },
   );
 }

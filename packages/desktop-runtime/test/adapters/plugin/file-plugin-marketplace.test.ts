@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -91,83 +91,6 @@ describe('file plugin marketplace', () => {
     await expect(marketplace.updatePlugin('docs')).resolves.toMatchObject({
       plugin: { id: 'docs', version: '1.1.0', installationSource: 'marketplace' },
     });
-  });
-
-  it('offers renamed bundled plugins as updates and migrates only after the user updates', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-id-migration-'));
-    const catalogDir = path.join(root, 'catalog');
-    await createBareExtensionPlugin(catalogDir, 'pi-todo', '1.0.2');
-    const runtime = await createPluginRuntime(root, catalogDir);
-    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
-    await marketplace.installPlugin('pi-todo');
-    await runtime.extensionState.set('pi-todo', 'thread:thread_1', 'todos', [{
-      id: 1,
-      text: 'Preserve this task',
-      done: false,
-    }]);
-
-    await rm(path.join(catalogDir, 'pi-todo'), { recursive: true, force: true });
-    await createBareExtensionPlugin(catalogDir, 'todo', '1.1.0');
-
-    await expect(runtime.plugins.listInstalledRecords()).resolves.toEqual([
-      expect.objectContaining({ id: 'pi-todo', installationSource: 'marketplace' }),
-    ]);
-    await expect(marketplace.listPlugins()).resolves.toMatchObject({
-      errors: [],
-      plugins: [{
-        id: 'todo',
-        installed: true,
-        installedVersion: '1.0.2',
-        updateAvailable: true,
-      }],
-    });
-    await expect(runtime.extensionState.get('pi-todo', 'thread:thread_1', 'todos')).resolves.toHaveLength(1);
-    await expect(runtime.extensionState.get('todo', 'thread:thread_1', 'todos')).resolves.toBeUndefined();
-    await expect(marketplace.installPlugin('todo')).rejects.toThrow('update is available');
-    await expect(marketplace.updatePlugin('todo')).resolves.toMatchObject({
-      plugin: { id: 'todo', version: '1.1.0' },
-    });
-
-    const replacementSourcePath = await realpath(path.join(catalogDir, 'todo'));
-    await expect(runtime.plugins.listInstalledRecords()).resolves.toEqual([
-      expect.objectContaining({
-        id: 'todo',
-        installationSource: 'marketplace',
-        installPath: path.join(root, 'runtime', 'plugins', 'todo'),
-        sourcePath: replacementSourcePath,
-      }),
-    ]);
-    await expect(runtime.extensionState.get('pi-todo', 'thread:thread_1', 'todos')).resolves.toBeUndefined();
-    await expect(runtime.extensionState.get('todo', 'thread:thread_1', 'todos')).resolves.toEqual([{
-      id: 1,
-      text: 'Preserve this task',
-      done: false,
-    }]);
-    await expect(readFile(
-      path.join(root, 'runtime', 'plugins', 'todo', '.setsuna-plugin', 'plugin.json'),
-      'utf8',
-    )).resolves.toContain('"id": "todo"');
-  });
-
-  it('does not rename a local plugin that happens to use a legacy bundled id', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-local-id-migration-'));
-    const catalogDir = path.join(root, 'catalog');
-    const localDir = path.join(root, 'local');
-    await Promise.all([
-      createBareExtensionPlugin(catalogDir, 'todo', '1.1.0'),
-      createBareExtensionPlugin(localDir, 'pi-todo', '1.0.2'),
-    ]);
-    const runtime = await createPluginRuntime(root, catalogDir);
-    const marketplace = new FilePluginMarketplace(catalogDir, runtime.plugins);
-    await runtime.plugins.installPlugin({ path: path.join(localDir, 'pi-todo') });
-
-    await expect(marketplace.listPlugins()).resolves.toMatchObject({
-      errors: [],
-      plugins: [{ id: 'todo', installed: false }],
-    });
-    await expect(runtime.plugins.listInstalledRecords()).resolves.toEqual([
-      expect.objectContaining({ id: 'pi-todo', installationSource: 'local' }),
-    ]);
   });
 
   it('migrates legacy marketplace provenance across AppImage mount paths', async () => {
@@ -409,7 +332,6 @@ async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
   const skills = new FileSkillRegistry(builtinDir, dataDir);
   const mcp = new FileMcpStore(dataDir, new InMemoryDesktopNativeBridge());
   const config = new FileConfigStore(dataDir);
-  const extensionState = new FileExtensionStateStore(dataDir);
   const plugins = new FilePluginBundleStore(
     dataDir,
     skills,
@@ -417,33 +339,10 @@ async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
     { invalidateServer: vi.fn(async () => undefined) },
     config,
     systemClock,
-    extensionState,
+    new FileExtensionStateStore(dataDir),
     bundledPluginsDir,
   );
-  return { config, extensionState, plugins };
-}
-
-async function createBareExtensionPlugin(catalogDir: string, id: string, version: string): Promise<void> {
-  const root = path.join(catalogDir, id);
-  await Promise.all([
-    mkdir(path.join(root, '.setsuna-plugin'), { recursive: true }),
-    mkdir(path.join(root, 'extension'), { recursive: true }),
-  ]);
-  await writeFile(path.join(root, 'extension', 'entry.mjs'), 'export default function activate() {}\n');
-  await writeFile(path.join(root, '.setsuna-plugin', 'plugin.json'), JSON.stringify({
-    schemaVersion: 2,
-    id,
-    name: id,
-    icon: id,
-    version,
-    publisher: 'Setsuna',
-    extension: {
-      apiVersion: 1,
-      runtime: 'node-worker',
-      entry: 'extension/entry.mjs',
-      capabilities: ['state'],
-    },
-  }, null, 2));
+  return { config, plugins };
 }
 
 async function createCatalogPlugin(

@@ -56,8 +56,6 @@ export type PluginBundleMutationOptions = {
   trustHooks?: boolean;
   /** Trust the exact staged bundle hash after a controlled-source check or content-bound approval. */
   trustExtension?: boolean;
-  /** Internal marketplace migration hook; local bundle updates cannot use it to replace another id. */
-  previousPluginId?: string;
 };
 
 export type PluginRuntimeMutationCoordinator = {
