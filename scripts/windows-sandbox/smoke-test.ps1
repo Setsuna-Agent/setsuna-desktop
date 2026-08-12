@@ -156,7 +156,14 @@ function Set-DirectoryDacl(
 ) {
   # Set-Acl can request SeSecurityPrivilege when a DirectorySecurity instance
   # is reused, even though this fixture only changes the DACL. The filesystem
-  # extension writes the requested directory access rules without touching SACLs.
+  # APIs write only the requested directory access rules without touching SACLs.
+  if ($PSVersionTable.PSEdition -eq 'Core') {
+    [System.IO.FileSystemAclExtensions]::SetAccessControl(
+      [System.IO.DirectoryInfo]::new($Path),
+      $Acl
+    )
+    return
+  }
   [System.IO.Directory]::SetAccessControl($Path, $Acl)
 }
 
