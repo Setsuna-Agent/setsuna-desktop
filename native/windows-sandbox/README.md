@@ -17,7 +17,10 @@ The security boundary is fail-closed:
   run, while stable readable roots use reusable dedicated-group ACLs; existing
   trees are materialized with pinned, non-recursive per-object updates; external
   junctions/symbolic links fail closed, internal links are not followed, and a
-  distinct completion marker is committed only after tree reconciliation;
+  distinct completion marker is committed only after tree reconciliation; the
+  completed-policy hot path validates only root ACL state, while an immutable
+  FSCTL process mitigation prevents the restricted process tree from creating
+  junctions or symbolic links at runtime;
 - a hash-verified, machine-readable but sandbox-nonwritable runner copy removes
   dependencies on the per-user packaged executable ACL;
 - a non-breakaway Job Object terminates the whole process tree when the sidecar

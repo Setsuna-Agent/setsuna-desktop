@@ -88,7 +88,8 @@ readiness 会同时验证这两个必要成员关系并拒绝其他本地组。�
    复用既有授权，不按 logon 重写已有子树。首次物化时以不跟随 reparse point 且禁止 delete sharing 的句柄
    钉住每个对象，再逐对象执行非递归 DACL 更新；junction/symlink 只允许指向同一授权 root 内部，外链直接
    fail closed，OneDrive 等非 name-surrogate placeholder 仍按普通对象处理。目录树完成两轮并发缺口校正后才写入
-   独立 completion marker；命中 marker 的后续执行不重写 DACL，但仍重新校验当前 link graph；
+   独立 completion marker；命中 marker 的后续执行只校验根对象上的 marker 与策略 ACE，不递归重扫目录树；最终命令
+   进程树在创建时启用不可变的 FSCTL system-call disable mitigation，禁止命令在物化完成后创建 junction/symlink；
 3. 每种稳定写策略生成一个 capability SID。新的 writable root 首次授权时安装可继承 capability ACE；后续命令
    以独立 marker 判断完整物化是否完成，避免进程在 root ACE 写入后异常退出时把半完成子树误判为成功；每次执行
    独有的空临时目录只加非递归 logon SID ACE；
@@ -185,6 +186,7 @@ Windows native sandbox 执行计划会把固定版本、固定 SHA-256 的 curl-
 - [OpenAI：Building a safe, effective sandbox to enable Codex on Windows](https://openai.com/index/building-codex-windows-sandbox/)
 - [OpenAI Codex：windows-sandbox-rs/token.rs](https://github.com/openai/codex/blob/main/codex-rs/windows-sandbox-rs/src/token.rs)
 - [Microsoft：CreateRestrictedToken](https://learn.microsoft.com/en-us/windows/win32/api/securitybaseapi/nf-securitybaseapi-createrestrictedtoken)
+- [Microsoft：UpdateProcThreadAttribute](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)
 - [Microsoft：Application Layer Enforcement](https://learn.microsoft.com/en-us/windows/win32/fwp/application-layer-enforcement--ale-)
 - [Microsoft：FwpmFilterAdd0](https://learn.microsoft.com/en-us/windows/win32/api/fwpmu/nf-fwpmu-fwpmfilteradd0)
 - [Microsoft：New-NetFirewallRule](https://learn.microsoft.com/en-us/powershell/module/netsecurity/new-netfirewallrule)

@@ -376,6 +376,11 @@ try {
     "const fs = require('node:fs'); fs.realpathSync(__filename); fs.readdirSync('..'); fs.readdirSync('../..'); fs.writeFileSync('node-realpath-ok.txt', 'ok');`r`n",
     $utf8NoBom
   )
+  [System.IO.File]::WriteAllText(
+    (Join-Path $workspace 'runtime-junction-probe.cmd'),
+    "@echo off`r`ncmd.exe /d /c mklink /J `"runtime-created-junction`" `"$externalReparseTarget`" >`"runtime-junction-debug.txt`" 2>&1`r`nif errorlevel 1 (`r`n  >`"runtime-junction-status.txt`" echo blocked`r`n  exit /b 0`r`n)`r`n>`"runtime-junction-status.txt`" echo created`r`n>`"runtime-created-junction\must-remain-private.txt`" echo compromised`r`nexit /b 0`r`n",
+    $utf8NoBom
+  )
   # Private ancestors and managed read roots receive reusable sandbox-group ACEs.
   # Only execution-scoped write/request grants belong in the restoration baseline.
   foreach ($temporaryPath in @(
@@ -429,6 +434,7 @@ try {
     'echo workspace-ok>offline-write.txt'
     'echo existing-ok>existing.txt'
     'call curl-start-smoke.cmd'
+    'call runtime-junction-probe.cmd'
     "echo forbidden>$outsideFile 2>NUL"
     "echo forbidden>$externalFile 2>NUL"
     "(windows-network-probe.exe tcp 127.0.0.1 $offlinePort 2000 >NUL 2>&1 && echo reached>offline-loopback.txt || echo blocked>offline-loopback.txt)"
@@ -469,6 +475,15 @@ try {
   if ((Get-Content -LiteralPath (Join-Path $workspace 'existing.txt') -Raw).Trim() -ne 'existing-ok') {
     throw 'Offline sandbox could not modify an existing workspace file'
   }
+  $runtimeJunctionStatus = (Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-status.txt') -Raw).Trim()
+  if ($runtimeJunctionStatus -ne 'blocked' -or (Test-Path -LiteralPath (Join-Path $workspace 'runtime-created-junction'))) {
+    $runtimeJunctionDebug = (@(Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-debug.txt')) -join "`n").Trim()
+    throw "Restricted process tree created a runtime junction (status=$runtimeJunctionStatus): $runtimeJunctionDebug"
+  }
+  if ((Get-Content -LiteralPath (Join-Path $externalReparseTarget 'must-remain-private.txt') -Raw).Trim() -ne 'private') {
+    throw 'Restricted process tree escaped through a runtime-created junction'
+  }
+  Assert-ReparseTargetAclUnchanged
   if (Test-Path -LiteralPath $outsideFile) {
     throw 'Offline sandbox wrote inside a protected writable root'
   }
@@ -481,19 +496,6 @@ try {
     }
   }
   Assert-NoLogonSidAce
-
-  # The completed policy fast path must still validate the current link graph.
-  New-Item -ItemType Junction -Path $workspaceJunction -Target $externalReparseTarget | Out-Null
-  $markedLinkEscapeRequest = New-SandboxRequest `
-    -ExecutionId 'windows_ci_marked_external_link_rejected' `
-    -Command 'exit /b 0' `
-    -NetworkAccess $false `
-    -Environment (New-SandboxEnvironment)
-  Invoke-SandboxRequest `
-    -Request $markedLinkEscapeRequest `
-    -ExpectedErrorPattern 'contains a link that escapes'
-  Assert-ReparseTargetAclUnchanged
-  Remove-Item -LiteralPath $workspaceJunction -Force
 
   $proxyAccept = $null
   if ($ExistingProxyPort -ne 0) {
