@@ -23,6 +23,7 @@ import type {
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
 import {
+  AlertTriangle,
   FilePlus2,
   Info,
   MessageSquare,
@@ -615,11 +616,12 @@ export function CapabilitiesPage({
               {pluginError ? <div className="desktop-capabilities-errors" role="alert">{pluginError}</div> : null}
               {pluginMarketplaceErrors.length ? (
                 <div
-                  className="desktop-capabilities-errors"
+                  className="desktop-capabilities-market-warning"
                   role="status"
                   title={pluginMarketplaceErrors.join('\n')}
                 >
-                  {t('capabilities.market.partialUnavailable')}
+                  <AlertTriangle aria-hidden="true" size={14} />
+                  <span>{t('capabilities.market.partialUnavailable')}</span>
                 </div>
               ) : null}
             </div>
