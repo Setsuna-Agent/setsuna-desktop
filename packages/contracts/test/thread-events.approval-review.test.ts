@@ -43,11 +43,26 @@ describe('approval review event projection', () => {
           riskLevel: 'high',
           userAuthorization: 'unknown',
           rationale: 'The destination is not authorized.',
+          exactRetryAvailable: true,
           model: 'approval-review-model',
         },
       },
     } satisfies RuntimeEvent);
-    const overrideRegistered = applyRuntimeEventToThread(resolved, {
+    const withLaterAssistantSegment: RuntimeThread = {
+      ...resolved,
+      messages: [
+        ...resolved.messages,
+        {
+          id: 'assistant_2',
+          role: 'assistant',
+          turnId: 'turn_1',
+          content: 'I could not complete the denied action.',
+          createdAt: '2026-08-13T00:00:02.500Z',
+          status: 'complete',
+        },
+      ],
+    };
+    const overrideRegistered = applyRuntimeEventToThread(withLaterAssistantSegment, {
       id: 'event_override',
       seq: 3,
       threadId: 'thread_1',
@@ -66,9 +81,11 @@ describe('approval review event projection', () => {
         status: 'denied',
         riskLevel: 'high',
         rationale: 'The destination is not authorized.',
+        exactRetryAvailable: true,
       },
       approvalReviewOverrideRegistered: true,
     });
+    expect(overrideRegistered.messages[1]?.toolRuns).toBeUndefined();
     expect(overrideRegistered.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
 
     const retryCompleted = applyRuntimeEventToThread(overrideRegistered, {

@@ -74,6 +74,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       approvalReviewAssessment: {
         status: 'denied',
         rationale: '该操作超出用户授权范围。',
+        exactRetryAvailable: true,
         riskLevel: 'critical',
       },
     }]);
@@ -149,6 +150,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       approvalReviewAssessment: {
         status: 'denied',
         rationale: 'The multi-file write was not authorized.',
+        exactRetryAvailable: true,
         riskLevel: 'high',
       },
     }]);
@@ -169,6 +171,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       approvalReviewAssessment: {
         status: 'denied',
         rationale: `Writing ${filePath} was not authorized.`,
+        exactRetryAvailable: true,
         riskLevel: 'high',
       },
     });
@@ -197,6 +200,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       approvalReviewAssessment: {
         status: 'denied',
         rationale: 'The MCP destination was not authorized.',
+        exactRetryAvailable: true,
         riskLevel: 'high',
       },
     };
@@ -207,6 +211,10 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       id: 'mcp_denied_truncated',
       approvalId: 'approval_mcp_denied_truncated',
       argumentsPreview: 'x'.repeat(1_200),
+      approvalReviewAssessment: {
+        ...deniedMcpRun.approvalReviewAssessment!,
+        exactRetryAvailable: false,
+      },
     }]);
 
     expect(text).toContain('工具参数');

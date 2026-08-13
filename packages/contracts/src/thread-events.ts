@@ -450,7 +450,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'approval.override_registered') {
-    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
+    const target = [...next.messages].reverse().find((message) => (
+      message.role === 'assistant'
+      && (!event.turnId || message.turnId === event.turnId)
+      && message.toolRuns?.some((item) => item.approvalId === event.payload.approvalId)
+    ));
+    const message = draft.mutableMessage(target);
     const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
     if (run) run.approvalReviewOverrideRegistered = true;
     return next;

@@ -98,7 +98,7 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
       && (message.role === 'user' || message.role === 'assistant' || message.role === 'tool')
     ))
     .slice(-MAX_TRANSCRIPT_MESSAGES);
-  const userInputRequests = userInputRequestsByToolCallId(thread);
+  const userInputRequests = userInputRequestsByResultMessageId(thread);
 
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const message = candidates[index]!;
@@ -113,7 +113,7 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
       ...(trustedSource === 'request_user_input' && message.toolCallId
         ? {
             toolCallId: message.toolCallId,
-            userInputRequest: userInputRequests.get(message.toolCallId),
+            userInputRequest: userInputRequests.get(message.id),
           }
         : {}),
       ...(message.toolRuns?.length
@@ -164,23 +164,41 @@ function stableTrustedReviewEvidence(
       ...(source === 'request_user_input' && message.toolCallId
         ? {
             toolCallId: message.toolCallId,
-            userInputRequest: userInputRequests.get(message.toolCallId),
+            userInputRequest: userInputRequests.get(message.id),
           }
         : {}),
     }];
   });
 }
 
-function userInputRequestsByToolCallId(thread: RuntimeThread): Map<string, RuntimeUserInputRequest> {
+function userInputRequestsByResultMessageId(thread: RuntimeThread): Map<string, RuntimeUserInputRequest> {
+  const pending = new Map<string, RuntimeUserInputRequest[]>();
   const requests = new Map<string, RuntimeUserInputRequest>();
   for (const message of thread.messages) {
     for (const run of message.toolRuns ?? []) {
       if (run.name === 'request_user_input' && run.userInput) {
-        requests.set(run.id, run.userInput);
+        const key = userInputTransactionKey(message.turnId, run.id);
+        const stack = pending.get(key) ?? [];
+        stack.push(run.userInput);
+        pending.set(key, stack);
       }
     }
+    if (
+      message.role !== 'tool'
+      || message.toolName !== 'request_user_input'
+      || !message.toolCallId
+    ) continue;
+    const key = userInputTransactionKey(message.turnId, message.toolCallId);
+    const queue = pending.get(key);
+    const request = queue?.shift();
+    if (request) requests.set(message.id, request);
+    if (queue?.length === 0) pending.delete(key);
   }
   return requests;
+}
+
+function userInputTransactionKey(turnId: string | undefined, toolCallId: string): string {
+  return `${turnId ?? ''}\u0000${toolCallId}`;
 }
 
 function trustedEvidenceFingerprint(entries: Array<Record<string, unknown>>): string {

@@ -14,6 +14,8 @@ export type RuntimeApprovalReviewStatus = 'allowed' | 'denied' | 'failed' | 'tim
 export type RuntimeApprovalReviewAssessment = {
   status: RuntimeApprovalReviewStatus;
   rationale: string;
+  /** True only when the user-visible preview contains the complete retained action. */
+  exactRetryAvailable?: boolean;
   riskLevel?: RuntimeApprovalReviewRiskLevel;
   userAuthorization?: RuntimeApprovalUserAuthorization;
   providerId?: string;

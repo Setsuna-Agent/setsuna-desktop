@@ -17,8 +17,6 @@ import {
   structuredInputDefaults,
 } from './RuntimeStructuredInputField.js';
 
-const MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH = 1_200;
-
 export function RuntimeToolApprovalControl({
   approvalId,
   run,
@@ -49,7 +47,7 @@ export function RuntimeToolApprovalControl({
               <AutomaticApprovalReviewResult run={run} />
               {assessment?.status === 'denied'
                 && approvalId
-                && exactRetryActionIsVisible(run)
+                && assessment.exactRetryAvailable === true
                 ? <DeniedActionOverride approvalId={approvalId} run={run} />
                 : null}
             </div>
@@ -66,11 +64,6 @@ export function RuntimeToolApprovalControl({
         : null}
     </>
   );
-}
-
-function exactRetryActionIsVisible(run: RuntimeToolRun): boolean {
-  const preview = run.argumentsPreview ?? '';
-  return preview.length > 0 && preview.length < MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH;
 }
 
 function AutomaticApprovalReviewResult({
@@ -132,6 +125,7 @@ function DeniedActionOverride({
     try {
       await approveDeniedAction(approvalId);
       setRegistered(true);
+      setSubmitting(false);
     } catch (unknownError) {
       setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
       setSubmitting(false);

@@ -104,6 +104,61 @@ describe('automatic approval reviewer', () => {
     );
   });
 
+  it('binds repeated user-input call ids to their own prompt and answer transaction', () => {
+    const thread = threadFixture();
+    thread.messages.push(
+      {
+        id: 'assistant_reused_call',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-13T00:00:02.000Z',
+        status: 'complete',
+        toolRuns: [{
+          id: 'call_user_input',
+          name: 'request_user_input',
+          status: 'success',
+          userInput: {
+            message: 'Approve deleting the production database?',
+            requestedSchema: {
+              type: 'object',
+              properties: { confirm: { type: 'string', enum: ['yes', 'no'] } },
+              required: ['confirm'],
+            },
+          },
+        }],
+      },
+      {
+        id: 'tool_reused_call',
+        role: 'tool',
+        content: 'User declined to provide this input.',
+        toolCallId: 'call_user_input',
+        toolName: 'request_user_input',
+        createdAt: '2026-08-13T00:00:02.100Z',
+        status: 'complete',
+      },
+    );
+
+    const prompt = buildApprovalReviewPrompt(
+      reviewInput({ cmd: 'pnpm test' }),
+      thread,
+      '2026-08-13T00:00:03.000Z',
+    );
+
+    expect('messages' in prompt).toBe(true);
+    if (!('messages' in prompt)) return;
+    const evidence = taggedJson(prompt.messages[1]?.content ?? '', 'trusted_user_evidence_json') as Array<Record<string, unknown>>;
+    expect(evidence.filter((entry) => entry.source === 'request_user_input')).toEqual([
+      expect.objectContaining({
+        messageId: 'tool_user_input',
+        userInputRequest: expect.objectContaining({ message: 'Approve running the exact test command?' }),
+      }),
+      expect.objectContaining({
+        messageId: 'tool_reused_call',
+        userInputRequest: expect.objectContaining({ message: 'Approve deleting the production database?' }),
+      }),
+    ]);
+  });
+
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
     const secret = 'sk-review-secret-value';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
@@ -421,7 +476,7 @@ describe('automatic approval reviewer', () => {
     expect(retryRegistration).toMatchObject({ alreadyRegistered: false });
   });
 
-  it('does not retain an exact retry action when the visible preview may be truncated', async () => {
+  it('does not retain an exact retry action for truncated or summarized previews', async () => {
     const modelClient = new ReviewModelClient(() => JSON.stringify({
       outcome: 'deny',
       riskLevel: 'high',
@@ -431,10 +486,18 @@ describe('automatic approval reviewer', () => {
     const reviewer = createReviewer(modelClient);
     const input = reviewInput({ payload: `visible-${'x'.repeat(2_000)}-hidden-suffix` }, 'call_long');
     input.request.argumentsPreview = 'x'.repeat(1_200);
+    const summarized = reviewInput({ text: 'secret browser input' }, 'call_summarized');
+    summarized.request.argumentsPreview = '{"textLength":20}';
 
-    await reviewer.review(input);
+    const [truncatedResult, summarizedResult] = await Promise.all([
+      reviewer.review(input),
+      reviewer.review(summarized),
+    ]);
 
+    expect(truncatedResult.assessment.exactRetryAvailable).toBe(false);
+    expect(summarizedResult.assessment.exactRetryAvailable).toBe(false);
     expect(reviewer.approveDeniedAction('approval_call_long')).toBeNull();
+    expect(reviewer.approveDeniedAction('approval_call_summarized')).toBeNull();
   });
 });
 
@@ -525,7 +588,9 @@ function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalRe
       toolCallId,
       toolName: 'exec_command',
       reason: 'Command requires elevated execution.',
-      argumentsPreview: '{"cmd":"truncated"}',
+      argumentsPreview: typeof argumentsValue === 'string'
+        ? argumentsValue
+        : JSON.stringify(argumentsValue),
       environmentId: 'local',
     },
     signal: new AbortController().signal,

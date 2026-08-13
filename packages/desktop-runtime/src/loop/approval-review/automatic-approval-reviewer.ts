@@ -33,7 +33,6 @@ const APPROVAL_REVIEW_MAX_OUTPUT_TOKENS = 1_200;
 const MAX_TRACKED_TURNS = 100;
 const MAX_REVIEW_HISTORY = 50;
 const MAX_DENIED_APPROVALS = 500;
-const MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH = 1_200;
 const CONSECUTIVE_DENIAL_LIMIT = 3;
 const ROLLING_DENIAL_LIMIT = 10;
 
@@ -140,8 +139,10 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       && !overrideApprovalId
       && priorDenial.trustedEvidenceFingerprint === prompt.trustedEvidenceFingerprint
     ) {
+      const retryAction = exactRetryAction(input, serializedAction);
       const assessment: RuntimeApprovalReviewAssessment = {
         ...priorDenial.assessment,
+        exactRetryAvailable: retryAction !== null,
         rationale: `This exact action was already denied. ${priorDenial.assessment.rationale}`,
       };
       return {
@@ -149,7 +150,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         ...(this.recordOutcome(input.request.turnId, true, true, actionIdentity
           ? {
               approvalId: input.approvalId,
-              action: exactRetryAction(input, serializedAction),
+              action: retryAction,
               identity: actionIdentity,
               assessment,
               threadId: input.request.threadId,
@@ -189,15 +190,17 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         const outcome = policyConstrainedApprovalReviewOutcome(parsed);
         const rationale = approvalReviewAuditRationale(parsed, outcome);
         const auditModel = approvalReviewAuditModel(config, modelRequest, usage);
+        const denied = outcome === 'deny';
+        const retryAction = denied ? exactRetryAction(input, serializedAction) : null;
         const assessment: RuntimeApprovalReviewAssessment = {
           status: outcome === 'allow' ? 'allowed' : 'denied',
           riskLevel: parsed.riskLevel,
           userAuthorization: parsed.userAuthorization,
           rationale,
+          ...(denied ? { exactRetryAvailable: retryAction !== null } : {}),
           ...(auditModel.providerId ? { providerId: auditModel.providerId } : {}),
           model: auditModel.model,
         };
-        const denied = outcome === 'deny';
         return {
           assessment,
           ...(this.recordOutcome(
@@ -207,7 +210,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
             actionIdentity
               ? {
                   approvalId: input.approvalId,
-                  action: exactRetryAction(input, serializedAction),
+                  action: retryAction,
                   identity: actionIdentity,
                   ...(denied ? { assessment } : {}),
                   threadId: input.request.threadId,
@@ -480,6 +483,13 @@ function deniedActionOverrideKey(threadId: string, identity: string): string {
 }
 
 function exactRetryAction(input: ApprovalReviewInput, action: string | null): string | null {
-  if (input.request.argumentsPreview.length >= MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH) return null;
-  return action;
+  if (!action) return null;
+  try {
+    const exactPreview = typeof input.arguments === 'string'
+      ? input.arguments
+      : JSON.stringify(input.arguments);
+    return exactPreview === input.request.argumentsPreview ? action : null;
+  } catch {
+    return null;
+  }
 }
