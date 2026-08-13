@@ -15,6 +15,7 @@ import {
   MemoryCapturingModelClient,
   mkDataDir,
   stepSnapshotSkillRegistry,
+  TestConfigStore,
   ToolCallingModelClient,
   waitForTurnCompleted,
   WORKSPACE_READ_FILE_TOOL
@@ -526,6 +527,37 @@ describe('agent loop turn execution', () => {
         content: 'current changes',
       }));
     });
+
+  it('routes review sampling through its dedicated task model', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Dedicated review model' });
+      const modelClient = new MemoryCapturingModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        configStore: new TestConfigStore(reviewTaskModelConfig()),
+      });
+
+      const started = await loop.startReview(thread.id, {
+        displayText: 'current changes',
+        prompt: 'Review the current uncommitted changes.',
+      });
+      await waitForTurnCompleted(threadStore, thread.id, started.turnId);
+
+      expect(modelClient.requests[0]).toMatchObject({
+        model: 'review-model-code',
+        providerId: 'review-provider',
+        stepSnapshot: {
+          contextWindow: {
+            maxContextTokens: 32_000,
+          },
+        },
+      });
+    });
   
 });
 
@@ -546,5 +578,70 @@ function developerFeaturesConfig(): RuntimeConfigState {
     providers: [],
     setsunaStyle: 'developer',
     storagePath: '/tmp/memories',
+  };
+}
+
+function reviewTaskModelConfig(): RuntimeConfigState {
+  return {
+    approvalPolicy: 'on-request',
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp',
+    globalPrompt: '',
+    memory: {
+      disableOnExternalContext: true,
+      generateMemories: false,
+      useMemories: false,
+    },
+    memoryEnabled: false,
+    permissionProfile: 'workspace-write',
+    activeProviderId: 'chat-provider',
+    providers: [
+      {
+        id: 'chat-provider',
+        name: 'Chat provider',
+        provider: 'openai-compatible',
+        baseUrl: 'https://chat.example/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'chat-model',
+          name: 'Chat model',
+          code: 'chat-model-code',
+          enabled: true,
+          contextWindowTokens: 256_000,
+          maxOutputTokens: 8_192,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+        }],
+      },
+      {
+        id: 'review-provider',
+        name: 'Review provider',
+        provider: 'anthropic',
+        baseUrl: 'https://review.example',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'review-model',
+          name: 'Review model',
+          code: 'review-model-code',
+          enabled: true,
+          contextWindowTokens: 32_000,
+          maxOutputTokens: 16_384,
+          thinkingEnabled: true,
+          thinkingEfforts: ['high'],
+        }],
+      },
+    ],
+    setsunaStyle: 'developer',
+    storagePath: '/tmp/memories',
+    taskModels: {
+      review: {
+        providerId: 'review-provider',
+        modelId: 'review-model',
+      },
+    },
   };
 }

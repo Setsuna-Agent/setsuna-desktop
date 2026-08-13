@@ -965,6 +965,32 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   gap: 6px;
 }
 
+.chat-tool-run__approval-review {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 22px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 1px 2px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.chat-tool-run__approval-review-label {
+  flex: 0 0 auto;
+  color: currentColor;
+  font-weight: 500;
+}
+
+.chat-tool-run__approval-review-detail {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--app-text-muted);
+  overflow-wrap: anywhere;
+}
+
 .chat-tool-run__elicitation {
   display: flex;
   width: min(560px, 100%);

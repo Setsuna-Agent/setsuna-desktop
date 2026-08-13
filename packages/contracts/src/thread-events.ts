@@ -406,6 +406,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         resultPreview: approval.retryKind === 'sandbox_bypass' ? '' : undefined,
         approvalId: approval.id,
         approvalReason: approval.reason,
+        approvalReviewer: approval.reviewer ?? 'user',
         approvalRetryKind: approval.retryKind,
         approvalStatus: approval.status,
         availableApprovalDecisions: approval.availableDecisions,
@@ -417,6 +418,11 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         userInput: approval.userInput,
         startedAt: approval.createdAt,
       });
+      const pendingRun = message.toolRuns?.find((item) => item.id === approval.toolCallId);
+      // A technical automatic-review failure is followed by a new user
+      // approval for the same tool call. Preserve the failure assessment for
+      // display, but the replacement pending request is no longer completed.
+      if (pendingRun?.status === 'pending_approval') delete pendingRun.completedAt;
     }
     return next;
   }
@@ -429,12 +435,15 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       const cancelled = event.payload.decision === 'cancel';
       run.approvalStatus = cancelled ? 'cancelled' : rejected ? 'rejected' : 'approved';
       run.approvalMessage = event.payload.message;
+      run.approvalResolutionSource = event.payload.source;
+      run.approvalReviewAssessment = event.payload.assessment;
       if (!rejected && !cancelled) {
         run.status = 'running';
       } else {
         run.status = cancelled ? 'cancelled' : 'rejected';
         run.completedAt = event.createdAt;
-        run.resultPreview = event.payload.message || (cancelled ? 'Tool call cancelled.' : 'Tool call rejected.');
+        // Approval messages describe why execution did not proceed; they are
+        // audit metadata, not stdout/stderr from the tool itself.
       }
     }
     return next;

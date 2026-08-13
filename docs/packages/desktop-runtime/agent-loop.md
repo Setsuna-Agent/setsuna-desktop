@@ -124,6 +124,20 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 
 工具链不按固定调用次数硬截断；直到模型正常结束、取消、hook 阻断或 provider/resource 错误。每次 sampling 前仍可因上下文边界触发压缩。
 
+#### 自动审批审查
+
+“替我审批”保持既有 policy、sandbox、filesystem、network 和 hook 边界，只替代原本等待用户回答的交互审批：
+
+- `AutomaticApprovalReviewer` 使用 `taskModels.approvalReview` 发起无工具、低温、结构化的独立模型请求；未配置时跟随当前对话模型。
+- Reviewer 接收精确工具参数和紧凑的可见对话记录。用户原话与 runtime 验证过的 `request_user_input` 回答作为可建立授权的可信证据单独传递；assistant、其他 tool output、文件内容和审批理由只能用于判断风险，不能扩大用户授权。精确参数仅存在于本次调用内，不写入 thread event；持久化审计只包含 reviewer、来源、风险、授权判断、理由和模型标识。
+- Reviewer 先分别判断 `riskLevel` 与 `userAuthorization`，再按矩阵决策：低/中风险默认允许，高风险仅在授权至少为中且范围明确时允许，严重风险始终拒绝。`require_escalated`、`sudo`、工作区外路径或危险命令名本身不直接决定风险，必须判断精确目标和副作用。
+- 允许只批准当前这一项精确操作，不创建 session/persistent grant，也不能放宽确定性的安全策略。
+- 无沙箱 shell 进程的空 stdin 轮询仍按只读处理；任何非空 stdin 都作为新的精确动作重新审批，避免一次批准意外覆盖后续 root/admin shell 命令。
+- 明确拒绝会作为不可绕过的工具拒绝返回主 Agent；同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
+- 超时、无效结构化输出、模型或配置故障均先记录失败审计，再创建新的人工审批请求；用户输入和 MCP elicitation 始终由用户回答。
+
+外部 API 只能调用 `ApprovalGate.answerApproval()` 回答人工请求；自动请求使用 runtime 内部 resolver，防止 renderer 或 app-server 抢答。
+
 ### 6. Finalize
 
 `RuntimeTurnFinalizer` 按固定顺序：
@@ -199,6 +213,7 @@ Review turn 分离：
 - Review target。
 
 Review 使用同一 Agent loop/tool/context 基础设施，但有独立 task kind 和 profile。完成/取消后要退出 review state。
+`taskModels.review` 可以把 review 路由到独立 provider/model；未配置或引用失效时继续跟随当前对话模型。
 
 ## Title
 

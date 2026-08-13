@@ -1,5 +1,6 @@
 import type {
   RuntimeApprovalDecision,
+  RuntimeApprovalReviewer,
   RuntimeConfigState,
   RuntimeHookRun,
   RuntimePermissionGrantResponse,
@@ -12,6 +13,7 @@ import type {
   RuntimeToolHookRunner,
 } from '../../hooks/runtime-hooks.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
+import type { ApprovalReviewer } from '../../ports/approval-reviewer.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
@@ -80,6 +82,8 @@ export type ToolOrchestratorEvents =
 export type ToolOrchestratorOptions = {
   toolHost: ToolHost;
   approvalGate?: ApprovalGate;
+  approvalReviewer?: ApprovalReviewer;
+  approvalReviewerMode?: RuntimeApprovalReviewer;
   approvalStore?: ToolApprovalStore;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
@@ -409,6 +413,7 @@ export class ToolOrchestrator {
 
     let decision: RuntimeApprovalDecision = 'approve';
     let permissionGrant: RuntimePermissionGrantResponse | undefined;
+    let automaticReviewMessage: string | undefined;
     if (isEmptySandboxWorkspaceWrite(request.sandboxWorkspaceWrite)) {
       decision = 'reject';
     } else if (approvalPolicy === 'full') {
@@ -418,6 +423,8 @@ export class ToolOrchestrator {
     } else {
       const answer = await requestToolApproval({
         approvalGate: this.options.approvalGate,
+        automaticReview: { arguments: parsedArguments },
+        automaticReviewer: this.options.approvalReviewer,
         events: this.options.events,
         request: {
           threadId: context.threadId,
@@ -445,10 +452,14 @@ export class ToolOrchestrator {
             requestedPermissions: request.requestedPermissions,
           },
         },
+        reviewer: this.options.approvalReviewerMode ?? 'user',
         signal: context.signal,
       });
       decision = answer.decision;
       permissionGrant = answer.permissionGrant;
+      if (answer.resolution?.source === 'automatic' && answer.decision === 'reject') {
+        automaticReviewMessage = answer.message;
+      }
     }
 
     const permissionResponse = requestPermissionResponseForDecision(decision, permissionGrant, request, context, environment);
@@ -456,6 +467,7 @@ export class ToolOrchestrator {
       permissions: permissionResponse.permissions,
       scope: permissionResponse.scope,
       strict_auto_review: permissionResponse.strictAutoReview,
+      ...(automaticReviewMessage ? { review_message: automaticReviewMessage } : {}),
     };
 
     if (!isEmptySandboxWorkspaceWrite(permissionResponse.sandboxWorkspaceWrite)) {

@@ -29,7 +29,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `GeneralSettings.tsx` | 主题、字体、缩放、外观 |
 | `PersonalizationSettings.tsx` | Global prompt、Setsuna style、memory |
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
-| `TaskModelSettings.tsx` | 不同 task kind 的模型选择 |
+| `TaskModelSettings.tsx` | 标题、代码审查、审批审查、记忆和上下文压缩等任务的模型选择 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 | `AboutSettings.tsx` | 版本与 updater |
 
@@ -50,6 +50,16 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 - Provider capabilities 来自 contract/discovery，不在 UI 写死厂商私有 payload。
 - Base URL normalize 和 provider validation 最终仍由 runtime store 执行。
 - 删除/替换被 task model 引用的模型要先显式迁移引用。
+
+### 访问模式与审批审查
+
+聊天输入区的三个访问模式会原子保存审批策略、审批主体和权限配置：
+
+- “请求批准”：`strict + user + workspace-write`，所有需要确认的操作由用户决定。
+- “替我审批”：`on-request + automatic + workspace-write`，只把 policy 检出的交互审批交给独立审查模型。
+- “完全访问”：`full + user + danger-full-access`，不运行审批审查。
+
+`TaskModelSettings.tsx` 中的 `taskModels.approvalReview` 可为审批审查选择独立 provider/model；未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态由 tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
 
 ### Data root
 

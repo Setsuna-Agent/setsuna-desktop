@@ -124,7 +124,10 @@ export class ToolRetryStrategy {
     if (approvalAnswer.decision === 'reject') {
       return {
         kind: 'terminal',
-        content: `Tool ${toolCall.name} network retry was rejected.`,
+        content: rejectionMessage(
+          `Tool ${toolCall.name} network retry was rejected.`,
+          approvalAnswer.message,
+        ),
         processed: false,
         status: 'rejected',
       };
@@ -185,7 +188,7 @@ export class ToolRetryStrategy {
 
     if (suggestedReadableRoots.length) {
       const narrowReason = `Sandbox could not read the resolved toolchain for ${toolCall.name}. Approve read-only access to: ${suggestedReadableRoots.join(', ')}.`;
-      const narrowDecision = await this.options.approvals.approveSandboxReadableRootsRetry(
+      const narrowAnswer = await this.options.approvals.approveSandboxReadableRootsRetry(
         toolCall,
         parsedArguments,
         context,
@@ -194,10 +197,13 @@ export class ToolRetryStrategy {
         environment,
         suggestedReadableRoots,
       );
-      if (narrowDecision === 'reject') {
+      if (narrowAnswer.decision === 'reject') {
         return {
           kind: 'terminal',
-          content: `Tool ${toolCall.name} sandbox readable-root retry was rejected.`,
+          content: rejectionMessage(
+            `Tool ${toolCall.name} sandbox readable-root retry was rejected.`,
+            narrowAnswer.message,
+          ),
           processed: false,
           status: 'rejected',
         };
@@ -240,17 +246,20 @@ export class ToolRetryStrategy {
 
     // The first-attempt output is already retained; approval text stays concise.
     const retryReason = `The OS sandbox blocked the first ${toolCall.name} attempt. Approve retry without the OS sandbox.`;
-    const decision = await this.options.approvals.approveSandboxBypassRetry(
+    const answer = await this.options.approvals.approveSandboxBypassRetry(
       toolCall,
       parsedArguments,
       context,
       retryReason,
       environment,
     );
-    if (decision === 'reject') {
+    if (answer.decision === 'reject') {
       return {
         kind: 'terminal',
-        content: `Tool ${toolCall.name} sandbox retry was rejected.`,
+        content: rejectionMessage(
+          `Tool ${toolCall.name} sandbox retry was rejected.`,
+          answer.message,
+        ),
         processed: false,
         status: 'rejected',
       };
@@ -331,4 +340,8 @@ export class ToolRetryStrategy {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function rejectionMessage(fallback: string, rationale: string | undefined): string {
+  return rationale ? `${fallback} ${rationale}` : fallback;
 }

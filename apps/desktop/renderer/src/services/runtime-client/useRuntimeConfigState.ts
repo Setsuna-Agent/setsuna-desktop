@@ -20,6 +20,7 @@ export type RuntimeConfigClient = Pick<
 export type RuntimePreferenceInput = Pick<
   RuntimeConfigInput,
   | 'approvalPolicy'
+  | 'approvalReviewer'
   | 'bypassHookTrust'
   | 'desktopSettings'
   | 'features'

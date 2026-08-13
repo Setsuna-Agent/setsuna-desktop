@@ -105,6 +105,7 @@ import {
   readShellProcess,
   removeShellSession,
   runShellCommand,
+  shellStdinApprovalReason,
   shellSessionsForStateClose,
   shellSessionsMap,
   terminateBackgroundShellProcess,
@@ -145,6 +146,7 @@ export {
   createShellProcessStore,
   listAllBackgroundShellProcesses,
   listBackgroundShellProcesses,
+  shellStdinApprovalReason,
   terminateBackgroundShellProcess,
 };
 

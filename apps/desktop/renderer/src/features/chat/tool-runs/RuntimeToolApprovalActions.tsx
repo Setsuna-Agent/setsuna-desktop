@@ -16,6 +16,86 @@ import {
   structuredInputDefaults,
 } from './RuntimeStructuredInputField.js';
 
+export function RuntimeToolApprovalControl({
+  approvalId,
+  run,
+  onAnswerApproval,
+}: {
+  approvalId?: string;
+  run: RuntimeToolRun;
+  onAnswerApproval: AnswerApprovalHandler;
+}) {
+  const assessment = run.approvalReviewAssessment;
+  const approvalPending = run.approvalStatus === 'pending'
+    || (!run.approvalStatus && run.status === 'pending_approval');
+  const showAutomaticReview = assessment?.status === 'failed'
+    || assessment?.status === 'timed_out';
+  const showUserActions = Boolean(
+    approvalId
+    && run.approvalReviewer !== 'automatic'
+    && approvalPending,
+  );
+  if (!showAutomaticReview && !showUserActions) return null;
+
+  return (
+    <>
+      {showAutomaticReview
+        ? (
+            <div className="chat-tool-run__approval">
+              <AutomaticApprovalReviewResult run={run} />
+            </div>
+          )
+        : null}
+      {showUserActions && approvalId
+        ? (
+            <ApprovalActions
+              approvalId={approvalId}
+              availableDecisions={run.availableApprovalDecisions}
+              onAnswerApproval={onAnswerApproval}
+            />
+          )
+        : null}
+    </>
+  );
+}
+
+function AutomaticApprovalReviewResult({
+  run,
+}: {
+  run: RuntimeToolRun;
+}) {
+  const { t } = useI18n();
+  const assessment = run.approvalReviewAssessment;
+  if (!assessment || (assessment.status !== 'failed' && assessment.status !== 'timed_out')) return null;
+  const status = assessment.status;
+  const label = status === 'timed_out'
+    ? t('toolRun.approvalReview.timedOut')
+    : t('toolRun.approvalReview.failed');
+  const technicalDetail = approvalReviewTechnicalDetail(assessment.rationale);
+
+  return (
+    <div
+      className={`chat-tool-run__approval-review chat-tool-run__approval-review--${status}`}
+      role="status"
+    >
+      <span className="chat-tool-run__approval-review-label">{label}</span>
+      {technicalDetail
+        ? (
+            <span className="chat-tool-run__approval-review-detail">
+              {t('toolRun.approvalReview.detail', { detail: technicalDetail })}
+            </span>
+          )
+        : null}
+    </div>
+  );
+}
+
+function approvalReviewTechnicalDetail(rationale: string): string {
+  return rationale
+    .replace(/^Automatic approval review failed:\s*/u, '')
+    .trim();
+}
+
 export function ApprovalActions({
   approvalId,
   availableDecisions,

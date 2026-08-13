@@ -174,6 +174,8 @@ export type RuntimeMemorySettings = {
 
 export const RUNTIME_TASK_MODEL_IDS = [
   'threadTitle',
+  'review',
+  'approvalReview',
   'memoryExtraction',
   'memoryConsolidation',
   'contextCompaction',
@@ -197,6 +199,8 @@ export type RuntimeTaskModelSettingsInput = Partial<
   Record<RuntimeTaskModelId, RuntimeConfiguredModelReference | null>
 >;
 
+export type RuntimeApprovalReviewer = 'user' | 'automatic';
+
 export type RuntimeConfigState = {
   configPath: string;
   dataPath: string;
@@ -209,6 +213,11 @@ export type RuntimeConfigState = {
   taskModels?: RuntimeTaskModelSettings;
   setsunaStyle: RuntimeSetsunaStyle;
   approvalPolicy: 'strict' | 'on-request' | 'full';
+  /**
+   * Selects who resolves interactive approval requests. Older snapshots omit
+   * this field and are normalized by the config store during migration.
+   */
+  approvalReviewer?: RuntimeApprovalReviewer;
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
   hooks?: RuntimeHooksConfig;
@@ -226,7 +235,7 @@ export type RuntimeAccessMode =
 
 export type RuntimeAccessModeConfig = Pick<
   RuntimeConfigState,
-  'approvalPolicy' | 'permissionProfile'
+  'approvalPolicy' | 'approvalReviewer' | 'permissionProfile'
 >;
 
 /**
@@ -238,7 +247,11 @@ export function runtimeAccessModeForConfig(config: RuntimeAccessModeConfig): Run
   if (config.approvalPolicy === 'full' && config.permissionProfile === 'danger-full-access') {
     return 'full-access';
   }
-  if (config.approvalPolicy === 'strict' && config.permissionProfile === 'workspace-write') {
+  if (
+    config.approvalPolicy === 'strict'
+    && config.permissionProfile === 'workspace-write'
+    && config.approvalReviewer !== 'automatic'
+  ) {
     return 'request-approval';
   }
   return 'agent-approval';
@@ -246,12 +259,24 @@ export function runtimeAccessModeForConfig(config: RuntimeAccessModeConfig): Run
 
 export function runtimeAccessModeSelection(mode: RuntimeAccessMode): RuntimeAccessModeConfig {
   if (mode === 'full-access') {
-    return { approvalPolicy: 'full', permissionProfile: 'danger-full-access' };
+    return {
+      approvalPolicy: 'full',
+      approvalReviewer: 'user',
+      permissionProfile: 'danger-full-access',
+    };
   }
   if (mode === 'agent-approval') {
-    return { approvalPolicy: 'on-request', permissionProfile: 'workspace-write' };
+    return {
+      approvalPolicy: 'on-request',
+      approvalReviewer: 'automatic',
+      permissionProfile: 'workspace-write',
+    };
   }
-  return { approvalPolicy: 'strict', permissionProfile: 'workspace-write' };
+  return {
+    approvalPolicy: 'strict',
+    approvalReviewer: 'user',
+    permissionProfile: 'workspace-write',
+  };
 }
 
 export function normalizeRuntimeAccessModeConfig(config: RuntimeAccessModeConfig): RuntimeAccessModeConfig {
@@ -309,6 +334,7 @@ export type RuntimeConfigInput = {
   taskModels?: RuntimeTaskModelSettingsInput;
   setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];
+  approvalReviewer?: RuntimeApprovalReviewer;
   permissionProfile?: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
   hooks?: RuntimeHooksConfig;

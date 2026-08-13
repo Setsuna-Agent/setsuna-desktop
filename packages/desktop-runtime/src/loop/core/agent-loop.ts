@@ -43,6 +43,7 @@ import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolHost } from '../../ports/tool-host.js';
 import type { UsageStore } from '../../ports/usage-store.js';
+import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import { runtimeEnvironmentResolver } from '../context/runtime-environment-resolver.js';
@@ -53,11 +54,7 @@ import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js
 import { RuntimeQueuedTurnCoordinator } from '../lifecycle/runtime-queued-turn-coordinator.js';
 import { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
-import {
-  RuntimeTurnInputCoordinator,
-  type DeliverMailboxInput,
-  type DeliverMailboxResponse,
-} from '../lifecycle/runtime-turn-input-coordinator.js';
+import { RuntimeTurnInputCoordinator, type DeliverMailboxInput, type DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 import { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
 import { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
@@ -163,6 +160,7 @@ export class AgentLoop {
     });
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
+      approvalReviewer: createAutomaticApprovalReviewer(options),
       appServerNotificationBus: options.appServerNotificationBus,
       clock: options.clock,
       ids: options.ids,

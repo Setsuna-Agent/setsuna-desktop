@@ -4,6 +4,26 @@ import type { Clock } from '../../../src/ports/clock.js';
 import type { IdGenerator } from '../../../src/ports/id-generator.js';
 
 describe('InMemoryApprovalGate', () => {
+  it('does not let an external answer replace an automatic reviewer decision', async () => {
+    const ids: IdGenerator = { id: (prefix) => `${prefix}_1` };
+    const clock: Clock = { now: () => new Date('2026-08-13T00:00:00.000Z') };
+    const gate = new InMemoryApprovalGate(clock, ids);
+    const approval = await gate.createApproval({
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      toolCallId: 'call_1',
+      toolName: 'exec_command',
+      reason: 'Automatic review required.',
+      argumentsPreview: '{}',
+      reviewer: 'automatic',
+    });
+
+    await expect(gate.answerApproval(approval.id, { decision: 'approve' }))
+      .rejects.toThrow('can only be resolved by the runtime reviewer');
+    await expect(gate.resolveApproval(approval.id, { decision: 'reject' }))
+      .resolves.toMatchObject({ status: 'rejected', decision: 'reject' });
+  });
+
   it('bounds resolved approval history while retaining pending approvals', async () => {
     let sequence = 0;
     const ids: IdGenerator = { id: (prefix) => `${prefix}_${++sequence}` };

@@ -126,6 +126,7 @@ export function ChatComposerFooter({
         />
         <ChatApprovalPolicyMenu
           approvalPolicy={config?.approvalPolicy ?? 'on-request'}
+          approvalReviewer={config?.approvalReviewer}
           permissionProfile={config?.permissionProfile ?? 'workspace-write'}
           onChange={onAccessModeChange}
         />

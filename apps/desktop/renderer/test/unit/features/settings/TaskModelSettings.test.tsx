@@ -20,13 +20,18 @@ describe('TaskModelSettings', () => {
     ]);
   });
 
-  it('renders all four task-model selectors with configured choices', () => {
+  it('renders all six task-model selectors with configured choices', () => {
     const html = renderToStaticMarkup(
       <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
     );
 
-    expect(html.match(/task-model-settings__select/gu)).toHaveLength(4);
-    for (const label of ['标题生成', '记忆提取', '记忆整理', '上下文压缩']) {
+    expect(html.match(/task-model-settings__select/gu)).toHaveLength(6);
+    expect(html.match(/task-model-settings__card/gu)).toHaveLength(3);
+    for (const groupLabel of ['对话辅助', '审查与安全', '记忆与上下文']) {
+      expect(html).toContain(`>${groupLabel}</h3>`);
+    }
+    expect(html).not.toContain('专用任务模型');
+    for (const label of ['标题生成', '代码审查', '审批审查', '记忆提取', '记忆整理', '上下文压缩']) {
       expect(html).toContain(`aria-label="${label}"`);
     }
     expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
@@ -98,6 +103,14 @@ const configFixture: RuntimeConfigState = {
   memoryEnabled: true,
   taskModels: {
     threadTitle: {
+      providerId: 'provider-kimi',
+      modelId: 'kimi-k2',
+    },
+    review: {
+      providerId: 'provider-kimi',
+      modelId: 'kimi-k2',
+    },
+    approvalReview: {
       providerId: 'provider-kimi',
       modelId: 'kimi-k2',
     },

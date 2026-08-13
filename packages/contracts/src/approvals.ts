@@ -1,4 +1,24 @@
+import type { RuntimeApprovalReviewer } from './config.js';
+
 export type RuntimeApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export type RuntimeApprovalResolutionSource = 'user' | 'automatic' | 'system';
+
+export type RuntimeApprovalReviewRiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
+export type RuntimeApprovalUserAuthorization = 'unknown' | 'low' | 'medium' | 'high';
+
+export type RuntimeApprovalReviewStatus = 'allowed' | 'denied' | 'failed' | 'timed_out';
+
+/** Persisted, audit-safe result. Exact tool arguments are deliberately omitted. */
+export type RuntimeApprovalReviewAssessment = {
+  status: RuntimeApprovalReviewStatus;
+  rationale: string;
+  riskLevel?: RuntimeApprovalReviewRiskLevel;
+  userAuthorization?: RuntimeApprovalUserAuthorization;
+  providerId?: string;
+  model?: string;
+};
 
 export type RuntimeApprovalRetryKind = 'sandbox_bypass';
 
@@ -145,6 +165,7 @@ export type RuntimeApprovalRequest = {
   toolName: string;
   reason: string;
   argumentsPreview: string;
+  reviewer?: RuntimeApprovalReviewer;
   retryKind?: RuntimeApprovalRetryKind;
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkApprovalContext?: RuntimeNetworkApprovalContext;

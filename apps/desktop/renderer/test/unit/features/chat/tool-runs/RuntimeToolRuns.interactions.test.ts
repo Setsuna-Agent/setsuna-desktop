@@ -35,6 +35,102 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(text).not.toContain('$shell');
   });
 
+  it('shows automatic review progress and technical fallback without decision badges', () => {
+    const automaticPendingRun: RuntimeToolRun = {
+      id: 'exec_automatic',
+      name: 'exec_command',
+      status: 'pending_approval',
+      argumentsPreview: '{"cmd":"pnpm dev"}',
+      approvalId: 'approval_automatic',
+      approvalReviewer: 'automatic',
+      approvalStatus: 'pending',
+    };
+    const automaticPendingHtml = renderedHtml([automaticPendingRun]);
+    const automaticPending = renderedTextFromHtml(automaticPendingHtml);
+    const automaticAllowedHtml = renderedHtml([{
+      id: 'exec_allowed',
+      name: 'exec_command',
+      status: 'success',
+      argumentsPreview: '{"cmd":"pwd"}',
+      resultPreview: 'stdout: /Users/dev/project\nexit: 0',
+      approvalReviewer: 'automatic',
+      approvalStatus: 'approved',
+      approvalReviewAssessment: {
+        status: 'allowed',
+        rationale: '这段模型解释不应出现在界面上。',
+        riskLevel: 'low',
+      },
+    }]);
+    const automaticAllowed = renderedTextFromHtml(automaticAllowedHtml);
+    const automaticDeniedHtml = renderedHtml([{
+      id: 'exec_denied',
+      name: 'exec_command',
+      status: 'rejected',
+      argumentsPreview: '{"cmd":"sudo su"}',
+      resultPreview: 'Tool exec_command was rejected by runtime policy.',
+      approvalReviewer: 'automatic',
+      approvalStatus: 'rejected',
+      approvalReviewAssessment: {
+        status: 'denied',
+        rationale: '该操作超出用户授权范围。',
+        riskLevel: 'critical',
+      },
+    }]);
+    const automaticDenied = renderedTextFromHtml(automaticDeniedHtml);
+    const manualFallbackHtml = renderedHtml([{
+      id: 'exec_fallback',
+      name: 'exec_command',
+      status: 'pending_approval',
+      argumentsPreview: '{"cmd":"pnpm dev"}',
+      approvalId: 'approval_manual',
+      approvalReviewer: 'user',
+      approvalStatus: 'pending',
+      approvalMessage: 'Automatic approval review failed: Cannot connect to API: connect ECONNREFUSED 127.0.0.1:11434',
+      resultPreview: 'Automatic approval review failed: Cannot connect to API: connect ECONNREFUSED 127.0.0.1:11434',
+      approvalReviewAssessment: {
+        status: 'failed',
+        rationale: 'Automatic approval review failed: Cannot connect to API: connect ECONNREFUSED 127.0.0.1:11434',
+      },
+    }]);
+    const manualFallback = renderedTextFromHtml(manualFallbackHtml);
+
+    expect(automaticPending).toContain('自动审查中：运行 pnpm dev');
+    expect(automaticPending.split('自动审查中')).toHaveLength(2);
+    expect(automaticPending).not.toContain('运行中');
+    expect(automaticPending).not.toContain('允许');
+    expect(automaticPending).not.toContain('拒绝');
+    expect(automaticPendingHtml).toContain('chat-tool-run__icon');
+    expect(automaticPendingHtml).not.toContain('is-spinning');
+    expect(automaticPendingHtml).not.toContain('chat-tool-run__approval-review--pending');
+    expect(automaticPendingHtml).not.toContain('chat-mcp-terminal__footer');
+    for (const html of [
+      renderedHtml([
+        toolRun('exec_previous', 'exec_command', { cmd: 'pnpm typecheck' }),
+        automaticPendingRun,
+      ]),
+      renderedHtml([
+        fileRun('edit_previous', 'edit_file', 'src/App.tsx', 'Modified'),
+        automaticPendingRun,
+      ]),
+    ]) {
+      expect(renderedTextFromHtml(firstToolRunSummaryHtml(html)))
+        .toContain('自动审查中：运行 pnpm dev');
+      expect(html).not.toContain('chat-tool-run__approval-review--pending');
+    }
+    expect(automaticAllowed).not.toContain('已通过审查');
+    expect(automaticAllowed).not.toContain('风险：低');
+    expect(automaticAllowed).not.toContain('这段模型解释不应出现在界面上');
+    expect(automaticAllowedHtml).not.toContain('chat-tool-run__approval-review');
+    expect(automaticDenied).not.toContain('未通过审查');
+    expect(automaticDenied).not.toContain('风险：严重');
+    expect(automaticDeniedHtml).not.toContain('chat-tool-run__approval-review');
+    expect(manualFallback).toContain('自动审查不可用：Cannot connect to API');
+    expect(manualFallbackHtml).toContain('chat-tool-run__approval-review-detail');
+    expect(manualFallbackHtml).not.toContain('chat-mcp-terminal__output');
+    expect(manualFallback).toContain('允许');
+    expect(manualFallback).toContain('拒绝');
+  });
+
   it('shows a single pending approval summary only once inside grouped tool history', () => {
     const pendingRun: RuntimeToolRun = {
       id: 'exec_pending',
