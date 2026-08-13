@@ -41,7 +41,7 @@ export type RequestToolApprovalInput = {
   request: CreateApprovalInput;
   reviewer?: RuntimeApprovalReviewer;
   automaticReviewer?: ApprovalReviewer;
-  automaticReview?: { arguments: unknown };
+  automaticReview?: { arguments: unknown; executionRoot?: string };
   signal: AbortSignal;
 };
 
@@ -141,6 +141,7 @@ async function requestAutomaticApproval({
     const result = await automaticReviewer.review({
       approvalId: approval.id,
       arguments: automaticReview.arguments,
+      executionRoot: automaticReview.executionRoot,
       request,
       signal,
     });

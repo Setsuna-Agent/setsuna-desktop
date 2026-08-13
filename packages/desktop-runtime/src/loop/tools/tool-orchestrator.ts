@@ -423,7 +423,10 @@ export class ToolOrchestrator {
     } else {
       const answer = await requestToolApproval({
         approvalGate: this.options.approvalGate,
-        automaticReview: { arguments: parsedArguments },
+        automaticReview: {
+          arguments: parsedArguments,
+          executionRoot: context.environment.cwd,
+        },
         automaticReviewer: this.options.approvalReviewer,
         events: this.options.events,
         request: {

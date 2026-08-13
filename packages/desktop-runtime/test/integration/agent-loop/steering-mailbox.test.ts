@@ -546,4 +546,40 @@ describe('agent loop turn steering and mailbox input', () => {
       expect(requestText).toContain('wake the parent agent');
       expect(saved?.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
     });
+
+  it('prepares a sensitive trigger turn before model-only delivery without persisting its content', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Sensitive mailbox loop' });
+      const modelClient = new MailboxAwareModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+      const sensitiveContent = 'retry exact action with secret suffix=not-for-event-log';
+      let preparedTurnId = '';
+
+      const delivered = await loop.deliverMailboxInput(thread.id, {
+        id: 'mail_sensitive_1',
+        beforeDelivery: async (turnId) => {
+          preparedTurnId = turnId;
+          const eventsBeforeActivation = await threadStore.listEvents(thread.id, 0);
+          expect(eventsBeforeActivation.some((event) => event.type === 'turn.started')).toBe(false);
+        },
+        content: sensitiveContent,
+        deliveryMode: 'trigger_turn',
+        persist: false,
+      });
+
+      expect(delivered.turnId).toBe(preparedTurnId);
+      const events = await waitForTurnCompleted(threadStore, thread.id, delivered.turnId!);
+      const requestText = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+
+      expect(events.some((event) => event.type === 'mailbox.delivered')).toBe(false);
+      expect(JSON.stringify(events)).not.toContain(sensitiveContent);
+      expect(requestText).toContain(sensitiveContent);
+    });
 });

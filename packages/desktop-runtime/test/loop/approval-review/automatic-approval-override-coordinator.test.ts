@@ -16,12 +16,20 @@ describe('automatic approval override coordinator', () => {
         alreadyRegistered: true,
         threadId: 'thread_1',
         turnId: 'turn_denied',
-      });
+    });
     const append = vi.fn(async () => null);
+    const prepareDeniedActionApproval = vi.fn(() => true);
     const activateDeniedActionApproval = vi.fn(() => true);
-    let resolveDelivery!: (value: { turnId: string }) => void;
-    const deliverRetryInstruction = vi.fn(() => new Promise<{ turnId: string }>((resolve) => {
-      resolveDelivery = resolve;
+    let completeDelivery!: () => Promise<void>;
+    const deliverRetryInstruction = vi.fn((_threadId, _content, beforeDelivery) => new Promise<{ turnId: string }>((resolve, reject) => {
+      completeDelivery = async () => {
+        try {
+          await beforeDelivery('turn_retry');
+          resolve({ turnId: 'turn_retry' });
+        } catch (error) {
+          reject(error);
+        }
+      };
     }));
     const coordinator = new AutomaticApprovalOverrideCoordinator({
       clock: { now: () => new Date('2026-08-13T00:00:00.000Z') },
@@ -30,6 +38,7 @@ describe('automatic approval override coordinator', () => {
       reviewer: {
         approveDeniedAction,
         activateDeniedActionApproval,
+        prepareDeniedActionApproval,
         review: vi.fn(),
       } as unknown as ApprovalReviewer,
       deliverRetryInstruction,
@@ -38,7 +47,7 @@ describe('automatic approval override coordinator', () => {
     const first = coordinator.approveDeniedAction('approval_1');
     const overlapping = coordinator.approveDeniedAction('approval_1');
     expect(approveDeniedAction).toHaveBeenCalledOnce();
-    resolveDelivery({ turnId: 'turn_retry' });
+    await completeDelivery();
     await expect(Promise.all([first, overlapping])).resolves.toEqual([true, true]);
     await expect(coordinator.approveDeniedAction('approval_1')).resolves.toBe(true);
 
@@ -53,8 +62,12 @@ describe('automatic approval override coordinator', () => {
     expect(deliverRetryInstruction).toHaveBeenCalledWith(
       'thread_1',
       expect.stringMatching(/Retry only that exact action[\s\S]*"cmd":"sudo su"/u),
+      expect.any(Function),
     );
+    expect(prepareDeniedActionApproval).toHaveBeenCalledWith('approval_1', 'turn_retry');
     expect(activateDeniedActionApproval).toHaveBeenCalledWith('approval_1', 'turn_retry');
+    expect(prepareDeniedActionApproval.mock.invocationCallOrder[0]).toBeLessThan(append.mock.invocationCallOrder[0]!);
+    expect(append.mock.invocationCallOrder[0]).toBeLessThan(activateDeniedActionApproval.mock.invocationCallOrder[0]!);
   });
 
   it('returns the one-time token when the retry turn cannot be queued', async () => {
@@ -74,6 +87,7 @@ describe('automatic approval override coordinator', () => {
         approveDeniedAction,
         activateDeniedActionApproval: vi.fn(() => true),
         cancelDeniedActionApproval,
+        prepareDeniedActionApproval: vi.fn(() => true),
         review: vi.fn(),
       } as unknown as ApprovalReviewer,
       deliverRetryInstruction: async () => {

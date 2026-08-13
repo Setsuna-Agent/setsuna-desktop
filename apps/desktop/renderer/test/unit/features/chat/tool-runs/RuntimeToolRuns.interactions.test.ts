@@ -186,7 +186,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
   });
 
   it('shows generic MCP arguments before offering an exact retry', () => {
-    const html = renderedHtml([{
+    const deniedMcpRun: RuntimeToolRun = {
       id: 'mcp_denied',
       name: 'mcp__search__search',
       status: 'rejected',
@@ -199,13 +199,21 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
         rationale: 'The MCP destination was not authorized.',
         riskLevel: 'high',
       },
-    }]);
+    };
+    const html = renderedHtml([deniedMcpRun]);
     const text = renderedTextFromHtml(html);
+    const truncatedHtml = renderedHtml([{
+      ...deniedMcpRun,
+      id: 'mcp_denied_truncated',
+      approvalId: 'approval_mcp_denied_truncated',
+      argumentsPreview: 'x'.repeat(1_200),
+    }]);
 
     expect(text).toContain('工具参数');
     expect(text).toContain('approval retry semantics');
     expect(html).toContain('&quot;limit&quot;: 5');
     expect(text).toContain('仍然批准并精确重试一次');
+    expect(renderedTextFromHtml(truncatedHtml)).not.toContain('仍然批准并精确重试一次');
   });
 
   it('shows a single pending approval summary only once inside grouped tool history', () => {

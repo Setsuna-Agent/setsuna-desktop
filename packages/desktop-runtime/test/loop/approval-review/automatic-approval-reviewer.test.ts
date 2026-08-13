@@ -337,6 +337,7 @@ describe('automatic approval reviewer', () => {
     const reviewer = createReviewer(modelClient);
     const denied = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_denied'));
     const registered = reviewer.approveDeniedAction('approval_call_denied');
+    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
     expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
 
     const different = await reviewer.review(reviewInput({ cmd: 'sudo -i' }, 'call_different'));
@@ -377,6 +378,7 @@ describe('automatic approval reviewer', () => {
     const reviewer = createReviewer(modelClient);
     await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_denied'));
     expect(reviewer.approveDeniedAction('approval_call_denied')).not.toBeNull();
+    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
     expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
 
     const bypassRetry = reviewInput({ cmd: 'sudo su' }, 'call_bypass');
@@ -391,6 +393,48 @@ describe('automatic approval reviewer', () => {
     expect(modelClient.requests).toHaveLength(3);
     expect(modelClient.requests[1]!.messages.some((message) => message.role === 'developer')).toBe(false);
     expect(modelClient.requests[2]!.messages.some((message) => message.role === 'developer')).toBe(true);
+  });
+
+  it('binds an override to its resolved root and releases it when the retry turn settles', async () => {
+    const modelClient = new ReviewModelClient(() => JSON.stringify({
+      outcome: 'deny',
+      riskLevel: 'high',
+      userAuthorization: 'unknown',
+      rationale: 'The action is not authorized.',
+    }));
+    const reviewer = createReviewer(modelClient);
+    const denied = reviewInput({ cmd: 'write relative.txt' }, 'call_denied');
+    denied.executionRoot = '/workspace/first';
+    await reviewer.review(denied);
+    expect(reviewer.approveDeniedAction('approval_call_denied')).not.toBeNull();
+    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
+    expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
+
+    const moved = reviewInput({ cmd: 'write relative.txt' }, 'call_moved');
+    moved.executionRoot = '/workspace/second';
+    moved.request.turnId = 'turn_2';
+    await reviewer.review(moved);
+    reviewer.finishTurn('turn_2');
+
+    const retryRegistration = reviewer.approveDeniedAction('approval_call_denied');
+    expect(modelClient.requests[1]!.messages.some((message) => message.role === 'developer')).toBe(false);
+    expect(retryRegistration).toMatchObject({ alreadyRegistered: false });
+  });
+
+  it('does not retain an exact retry action when the visible preview may be truncated', async () => {
+    const modelClient = new ReviewModelClient(() => JSON.stringify({
+      outcome: 'deny',
+      riskLevel: 'high',
+      userAuthorization: 'unknown',
+      rationale: 'The action is not authorized.',
+    }));
+    const reviewer = createReviewer(modelClient);
+    const input = reviewInput({ payload: `visible-${'x'.repeat(2_000)}-hidden-suffix` }, 'call_long');
+    input.request.argumentsPreview = 'x'.repeat(1_200);
+
+    await reviewer.review(input);
+
+    expect(reviewer.approveDeniedAction('approval_call_long')).toBeNull();
   });
 });
 

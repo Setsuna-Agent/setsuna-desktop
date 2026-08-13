@@ -245,11 +245,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventWriter,
     ids,
     reviewer: approvalReviewer,
-    deliverRetryInstruction: (threadId, content) => agentLoop.deliverMailboxInput(threadId, {
+    deliverRetryInstruction: (threadId, content, beforeDelivery) => agentLoop.deliverMailboxInput(threadId, {
+      beforeDelivery,
       content,
       deliveryMode: 'trigger_turn',
       fromAgentId: 'runtime-auto-review',
       queueIfBusy: false,
+      persist: false,
       triggerTurn: true,
     }),
   });

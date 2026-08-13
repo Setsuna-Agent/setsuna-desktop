@@ -550,6 +550,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'runtime.error') {
+    clearApprovalReviewOverrides(draft);
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
     const turn = draft.mutableTurn(event.turnId, event.createdAt);
@@ -574,6 +575,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.cancelled') {
+    clearApprovalReviewOverrides(draft);
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
@@ -598,6 +600,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.completed') {
+    clearApprovalReviewOverrides(draft);
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
     const turn = draft.mutableTurn(event.turnId, event.createdAt);
@@ -610,6 +613,17 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;
   return assertNeverRuntimeEvent(event);
+}
+
+function clearApprovalReviewOverrides(draft: RuntimeThreadEventDraft): void {
+  for (const candidate of draft.thread.messages) {
+    if (!candidate.toolRuns?.some((run) => run.approvalReviewOverrideRegistered)) continue;
+    const message = draft.mutableMessageById(candidate.id);
+    if (!message) continue;
+    for (const run of message.toolRuns ?? []) {
+      if (run.approvalReviewOverrideRegistered) delete run.approvalReviewOverrideRegistered;
+    }
+  }
 }
 
 function assertNeverRuntimeEvent(event: never): never {

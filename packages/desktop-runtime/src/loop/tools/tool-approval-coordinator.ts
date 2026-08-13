@@ -342,7 +342,10 @@ export class ToolApprovalCoordinator {
   ): Promise<ResolvedToolApprovalAnswer> {
     return requestToolApproval({
       approvalGate,
-      automaticReview: { arguments: parsedArguments },
+      automaticReview: {
+        arguments: parsedArguments,
+        executionRoot: context.environment.cwd,
+      },
       automaticReviewer: this.options.approvalReviewer,
       events: this.options.events,
       request,

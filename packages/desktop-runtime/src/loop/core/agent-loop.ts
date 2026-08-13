@@ -268,8 +268,8 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      createMailboxTriggeredRun: (threadId, thread, turnId, content) => {
-        const run = this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content);
+      createMailboxTriggeredRun: (threadId, thread, turnId, prepare) => {
+        const run = this.turnRuns.createMailboxTriggered(threadId, thread, turnId, prepare);
         this.observeRun(threadId, run.turnId, 'regular', run.done);
         return run;
       },

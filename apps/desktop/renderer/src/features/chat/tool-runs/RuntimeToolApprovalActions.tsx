@@ -17,6 +17,8 @@ import {
   structuredInputDefaults,
 } from './RuntimeStructuredInputField.js';
 
+const MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH = 1_200;
+
 export function RuntimeToolApprovalControl({
   approvalId,
   run,
@@ -45,7 +47,9 @@ export function RuntimeToolApprovalControl({
         ? (
             <div className="chat-tool-run__approval">
               <AutomaticApprovalReviewResult run={run} />
-              {assessment?.status === 'denied' && approvalId
+              {assessment?.status === 'denied'
+                && approvalId
+                && exactRetryActionIsVisible(run)
                 ? <DeniedActionOverride approvalId={approvalId} run={run} />
                 : null}
             </div>
@@ -62,6 +66,11 @@ export function RuntimeToolApprovalControl({
         : null}
     </>
   );
+}
+
+function exactRetryActionIsVisible(run: RuntimeToolRun): boolean {
+  const preview = run.argumentsPreview ?? '';
+  return preview.length > 0 && preview.length < MAX_EXACT_RETRY_ARGUMENTS_PREVIEW_LENGTH;
 }
 
 function AutomaticApprovalReviewResult({
@@ -112,7 +121,7 @@ function DeniedActionOverride({
   );
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    if (run.approvalReviewOverrideRegistered) setRegistered(true);
+    setRegistered(run.approvalReviewOverrideRegistered === true);
   }, [run.approvalReviewOverrideRegistered]);
   if (!approveDeniedAction) return null;
 

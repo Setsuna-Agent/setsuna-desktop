@@ -16,6 +16,8 @@ import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
 
 export type DeliverMailboxInput = {
+  /** Runtime-only hook used to persist audit state before an instruction becomes visible. */
+  beforeDelivery?: (turnId: string) => Promise<void>;
   content: string;
   deliveryMode?: RuntimeMailboxDelivery['deliveryMode'];
   expectedTurnId?: string;
@@ -24,6 +26,8 @@ export type DeliverMailboxInput = {
   id?: string;
   /** Internal callers can reject delivery instead of leaving a retry in the idle queue. */
   queueIfBusy?: boolean;
+  /** Internal sensitive instructions can stay model-only instead of entering the event log. */
+  persist?: boolean;
   toAgentId?: string;
   triggerTurn?: boolean;
 };
@@ -43,7 +47,12 @@ type RuntimeTurnInputCoordinatorOptions = {
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): { done: Promise<void> };
+  createMailboxTriggeredRun(
+    threadId: string,
+    thread: RuntimeThread,
+    turnId: string,
+    prepare: () => Promise<void>,
+  ): { done: Promise<void>; ready: Promise<void> };
   publishMessage(
     threadId: string,
     turnId: string,
@@ -169,14 +178,17 @@ export class RuntimeTurnInputCoordinator {
       active.inputQueue.beginWrite();
       try {
         if (active.controller.signal.aborted) throw new Error('no active turn to deliver mailbox input');
-        await this.options.appendEvent(threadId, {
-          id: this.options.ids.id('event'),
-          threadId,
-          turnId: active.turnId,
-          type: 'mailbox.delivered',
-          createdAt: this.options.clock.now().toISOString(),
-          payload: delivery,
-        });
+        if (input.persist !== false) {
+          await this.options.appendEvent(threadId, {
+            id: this.options.ids.id('event'),
+            threadId,
+            turnId: active.turnId,
+            type: 'mailbox.delivered',
+            createdAt: this.options.clock.now().toISOString(),
+            payload: delivery,
+          });
+        }
+        await input.beforeDelivery?.(active.turnId);
         active.inputQueue.enqueueMailbox(delivery);
         return { accepted: true, turnId: active.turnId };
       } finally {
@@ -186,32 +198,42 @@ export class RuntimeTurnInputCoordinator {
 
     if (triggerTurn && !active) {
       const turnId = this.options.ids.id('turn');
-      this.queueIdleMailbox(threadId, delivery);
-      await this.options.appendEvent(threadId, {
-        id: this.options.ids.id('event'),
-        threadId,
-        turnId,
-        type: 'mailbox.delivered',
-        createdAt: this.options.clock.now().toISOString(),
-        payload: delivery,
+      const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, async () => {
+        if (input.persist !== false) {
+          await this.options.appendEvent(threadId, {
+            id: this.options.ids.id('event'),
+            threadId,
+            turnId,
+            type: 'mailbox.delivered',
+            createdAt: this.options.clock.now().toISOString(),
+            payload: delivery,
+          });
+        }
+        await input.beforeDelivery?.(turnId);
+        this.queueIdleMailbox(threadId, delivery);
       });
-      const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
       void run.done.catch(() => undefined);
+      await run.ready;
       return { accepted: true, turnId };
     }
 
     if (input.queueIfBusy === false) {
       throw new Error('mailbox input cannot be queued while the thread is busy');
     }
+    if (input.beforeDelivery) {
+      throw new Error('mailbox input requires a target turn before delivery');
+    }
 
     this.queueIdleMailbox(threadId, delivery);
-    await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
-      threadId,
-      type: 'mailbox.delivered',
-      createdAt: this.options.clock.now().toISOString(),
-      payload: delivery,
-    });
+    if (input.persist !== false) {
+      await this.options.appendEvent(threadId, {
+        id: this.options.ids.id('event'),
+        threadId,
+        type: 'mailbox.delivered',
+        createdAt: this.options.clock.now().toISOString(),
+        payload: delivery,
+      });
+    }
     return { accepted: true, queued: true, turnId: null };
   }
 

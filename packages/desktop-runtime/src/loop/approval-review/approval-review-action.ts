@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import path from 'node:path';
 import type { ApprovalReviewInput } from '../../ports/approval-reviewer.js';
 
 export function serializeApprovalReviewAction(input: ApprovalReviewInput): string | null {
@@ -10,6 +11,7 @@ export function serializeApprovalReviewAction(input: ApprovalReviewInput): strin
       },
       reason: input.request.reason,
       environmentId: input.request.environmentId,
+      executionRoot: normalizedExecutionRoot(input.executionRoot),
       retryKind: input.request.retryKind,
       arguments: input.arguments,
       additionalPermissions: input.request.additionalPermissions,
@@ -28,6 +30,7 @@ export function approvalReviewActionIdentity(input: ApprovalReviewInput): string
   const canonical = canonicalJson({
     toolName: input.request.toolName,
     environmentId: input.request.environmentId,
+    executionRoot: normalizedExecutionRoot(input.executionRoot),
     retryKind: input.request.retryKind,
     arguments: input.arguments,
     additionalPermissions: input.request.additionalPermissions,
@@ -39,6 +42,10 @@ export function approvalReviewActionIdentity(input: ApprovalReviewInput): string
   return canonical
     ? `sha256:${createHash('sha256').update(canonical).digest('hex')}`
     : null;
+}
+
+function normalizedExecutionRoot(value: string | undefined): string | undefined {
+  return value?.trim() ? path.resolve(value) : undefined;
 }
 
 function materialPermissionApprovalContext(input: ApprovalReviewInput): unknown {

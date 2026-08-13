@@ -70,6 +70,17 @@ describe('approval review event projection', () => {
       approvalReviewOverrideRegistered: true,
     });
     expect(overrideRegistered.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
+
+    const retryCompleted = applyRuntimeEventToThread(overrideRegistered, {
+      id: 'event_retry_completed',
+      seq: 4,
+      threadId: 'thread_1',
+      turnId: 'turn_retry',
+      type: 'turn.completed',
+      createdAt: '2026-08-13T00:00:04.000Z',
+      payload: {},
+    } satisfies RuntimeEvent);
+    expect(retryCompleted.messages[0]?.toolRuns?.[0]?.approvalReviewOverrideRegistered).toBeUndefined();
   });
 
   it('keeps a technical failure visible while replacing it with a pending user approval', () => {
