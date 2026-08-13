@@ -46,20 +46,16 @@ export function UsageSettings({ providers, usage, onQueryUsage }: UsageSettingsP
   const loadRange = async (range: UsageTimeRangeId, query: RuntimeUsageQuery) => {
     const requestVersion = requestVersionRef.current + 1;
     requestVersionRef.current = requestVersion;
-    const previousRange = activeRange;
-    const previousQuery = activeQuery;
-    setActiveRange(range);
-    setActiveQuery(query);
     setFilterLoading(true);
     setFilterError(null);
     try {
       const nextUsage = await onQueryUsage(query);
       if (requestVersionRef.current !== requestVersion) return;
+      setActiveRange(range);
+      setActiveQuery(query);
       setFilteredUsage(nextUsage);
     } catch {
       if (requestVersionRef.current !== requestVersion) return;
-      setActiveRange(previousRange);
-      setActiveQuery(previousQuery);
       setFilterError(t('settings.usage.rangeLoadFailed'));
     } finally {
       if (requestVersionRef.current === requestVersion) setFilterLoading(false);

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   RuntimeUsageBucket,
@@ -46,6 +46,35 @@ describe('UsageSettings', () => {
     expect((toInput as HTMLInputElement).value).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}$/u);
     expect(screen.getByLabelText('统计时段').querySelector('input')).toBeNull();
     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
+    expect(screen.getByText('过去一年的每日消耗')).toBeTruthy();
+  });
+
+  it('keeps the last completed range when a newer request fails', async () => {
+    const user = userEvent.setup();
+    const firstRequest = deferred<RuntimeUsageResponse>();
+    const secondRequest = deferred<RuntimeUsageResponse>();
+    const onQueryUsage = vi.fn()
+      .mockImplementationOnce(() => firstRequest.promise)
+      .mockImplementationOnce(() => secondRequest.promise);
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <UsageSettings
+          providers={[]}
+          usage={usageResponse(100)}
+          onQueryUsage={onQueryUsage}
+        />
+      </I18nProvider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: '7d' }));
+    await user.click(screen.getByRole('button', { name: '30d' }));
+    await act(async () => secondRequest.reject(new Error('request failed')));
+
+    await screen.findByText('无法加载所选时段的用量，请稍后重试。');
+    expect(screen.getByRole('button', { name: '全部时间' }).getAttribute('aria-pressed')).toBe('true');
+    await act(async () => firstRequest.resolve(usageResponse(42)));
+    expect(onQueryUsage).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('42')).toBeNull();
   });
 
   it('loads the requested records page with a server-side offset', async () => {
@@ -128,4 +157,14 @@ function localDateKey(value: Date): string {
   const month = String(value.getMonth() + 1).padStart(2, '0');
   const day = String(value.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }

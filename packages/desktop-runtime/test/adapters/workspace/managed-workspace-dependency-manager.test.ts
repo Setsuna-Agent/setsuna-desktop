@@ -184,6 +184,17 @@ describe('managed workspace dependency manager', () => {
         stdout: expect.stringContaining('Python 3.12.13'),
       });
       await expect(manager.getStatus()).resolves.toMatchObject({ state: 'ready' });
+
+      if (!status.python.path) throw new Error('Expected managed Python path.');
+      await writeExecutable(status.python.path, '#!/bin/sh\necho "Python 3.9.0"\n');
+      await expect(manager.getStatus()).resolves.toMatchObject({
+        state: 'not-installed',
+        python: { available: false, version: 'Python 3.9.0' },
+      });
+      await expect(manager.repair()).resolves.toMatchObject({
+        state: 'ready',
+        python: { available: true, version: 'Python 3.12.13' },
+      });
     } finally {
       process.env.PATH = previousPath;
       await rm(dataDir, { recursive: true, force: true });

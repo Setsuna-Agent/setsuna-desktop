@@ -40,6 +40,7 @@ import {
   versionText,
   type ManagedToolManifest,
   type WorkspaceDependencyManifest,
+  type WorkspaceDependencyVersionRequirements,
 } from './managed-workspace-manifest.js';
 import {
   ManagedWorkspaceDependencyNetwork,
@@ -78,6 +79,10 @@ const MINIMUM_PYTHON_VERSION = [3, 10] as const;
 const MINIMUM_NODE_MAJOR = 18;
 const UV_VERSION = '0.11.28';
 const FALLBACK_PNPM_VERSION = '7.33.7';
+const TOOL_VERSION_REQUIREMENTS: WorkspaceDependencyVersionRequirements = {
+  node: (version) => versionMajor(version) >= MINIMUM_NODE_MAJOR,
+  python: (version) => versionAtLeast(version, MINIMUM_PYTHON_VERSION),
+};
 type PackageManagerShims = {
   binDir: string | null;
   readableRoots: string[];
@@ -281,9 +286,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       };
     }
     const [node, python, uv] = await Promise.all([
-      checkedToolStatus(nodeTool, ['--version']),
-      checkedToolStatus(manifest.python, ['--version']),
-      checkedToolStatus(manifest.uv, ['--version']),
+      checkedToolStatus(nodeTool, ['--version'], TOOL_VERSION_REQUIREMENTS.node),
+      checkedToolStatus(manifest.python, ['--version'], TOOL_VERSION_REQUIREMENTS.python),
+      checkedToolStatus(manifest.uv, ['--version'], TOOL_VERSION_REQUIREMENTS.uv),
     ]);
     return { node, python, uv };
   }
@@ -309,7 +314,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     if (this.installPromise) return this.installPromise;
     if (!force) {
       const manifest = await this.readManifest();
-      if (manifest?.bundleVersion === BUNDLE_VERSION && await manifestIsUsable(manifest)) {
+      if (
+        manifest?.bundleVersion === BUNDLE_VERSION
+        && await manifestIsUsable(manifest, TOOL_VERSION_REQUIREMENTS)
+      ) {
         this.lastError = undefined;
         return;
       }
@@ -442,7 +450,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       }
       await rename(stagingRoot, this.installRoot);
       installationMoved = true;
-      if (!await manifestIsUsable(manifest)) {
+      if (!await manifestIsUsable(manifest, TOOL_VERSION_REQUIREMENTS)) {
         throw new Error('工作空间依赖项安装后的健康检查失败。');
       }
       if (previousMoved) await rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);
