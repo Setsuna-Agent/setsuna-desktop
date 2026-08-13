@@ -68,6 +68,7 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       status: 'rejected',
       argumentsPreview: '{"cmd":"sudo su"}',
       resultPreview: 'Tool exec_command was rejected by runtime policy.',
+      approvalId: 'approval_denied',
       approvalReviewer: 'automatic',
       approvalStatus: 'rejected',
       approvalReviewAssessment: {
@@ -121,9 +122,9 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(automaticAllowed).not.toContain('风险：低');
     expect(automaticAllowed).not.toContain('这段模型解释不应出现在界面上');
     expect(automaticAllowedHtml).not.toContain('chat-tool-run__approval-review');
-    expect(automaticDenied).not.toContain('未通过审查');
-    expect(automaticDenied).not.toContain('风险：严重');
-    expect(automaticDeniedHtml).not.toContain('chat-tool-run__approval-review');
+    expect(automaticDenied).toContain('自动审查已拒绝：该操作超出用户授权范围。');
+    expect(automaticDenied).toContain('仍然批准并精确重试一次');
+    expect(automaticDeniedHtml).toContain('chat-tool-run__approval-review--denied');
     expect(manualFallback).toContain('自动审查不可用：Cannot connect to API');
     expect(manualFallbackHtml).toContain('chat-tool-run__approval-review-detail');
     expect(manualFallbackHtml).not.toContain('chat-mcp-terminal__output');

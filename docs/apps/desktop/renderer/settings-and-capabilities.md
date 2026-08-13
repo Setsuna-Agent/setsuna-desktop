@@ -59,7 +59,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 - “替我审批”：`on-request + automatic + workspace-write`，只把 policy 检出的交互审批交给独立审查模型。
 - “完全访问”：`full + user + danger-full-access`，不运行审批审查。
 
-`TaskModelSettings.tsx` 中的 `taskModels.approvalReview` 可为审批审查选择独立 provider/model；未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态由 tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
+`TaskModelSettings.tsx` 中的 `taskModels.approvalReview` 可为审批审查选择独立 provider/model；未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态由 tool run 投影展示。拒绝卡片可登记一次精确重试，renderer 只提交拒绝审批 ID；参数哈希匹配、单次消费和重新审查全部由 runtime 完成。renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
 
 ### Data root
 

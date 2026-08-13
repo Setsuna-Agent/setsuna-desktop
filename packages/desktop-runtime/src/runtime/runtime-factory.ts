@@ -49,6 +49,8 @@ import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.j
 import { ExtensionVisionRecognitionCoordinator } from '../extensions/extension-vision-recognition-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
+import { AutomaticApprovalOverrideCoordinator } from '../loop/approval-review/automatic-approval-override-coordinator.js';
+import { createAutomaticApprovalReviewer } from '../loop/approval-review/automatic-approval-reviewer.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../ports/clock.js';
 import type { DesktopNativeBridge } from '../ports/secret-store.js';
@@ -205,6 +207,13 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     new MemoryToolHost(memoryStore, configStore),
   ]);
+  const approvalReviewer = createAutomaticApprovalReviewer({
+    clock,
+    configStore,
+    modelClient,
+    threadStore,
+    usageStore,
+  });
   const agentLoop = new AgentLoop({
     attachmentStore,
     threadStore,
@@ -216,6 +225,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     ids,
     imageStore: generatedImageStore,
     approvalGate,
+    approvalReviewer,
     appServerNotificationBus,
     configStore,
     debugTrace: debugTraceStore,
@@ -230,8 +240,16 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     projectWorkflow,
     eventWriter,
   });
+  const approvalOverrides = new AutomaticApprovalOverrideCoordinator({
+    clock,
+    eventWriter,
+    ids,
+    reviewer: approvalReviewer,
+    startTurn: (threadId, input) => agentLoop.startTurn(threadId, input),
+  });
   return {
     agentLoop,
+    approvalOverrides,
     attachmentStore,
     approvalGate,
     appServerNotificationBus,

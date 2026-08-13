@@ -129,14 +129,15 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 “替我审批”保持既有 policy、sandbox、filesystem、network 和 hook 边界，只替代原本等待用户回答的交互审批：
 
 - `AutomaticApprovalReviewer` 使用 `taskModels.approvalReview` 发起无工具、低温、结构化的独立模型请求；未配置时跟随当前对话模型。
-- Reviewer 接收精确工具参数和紧凑的可见对话记录。用户原话与 runtime 验证过的 `request_user_input` 回答作为可建立授权的可信证据单独传递；assistant、其他 tool output、文件内容和审批理由只能用于判断风险，不能扩大用户授权。精确参数仅存在于本次调用内，不写入 thread event；持久化审计只包含 reviewer、来源、风险、授权判断、理由和模型标识。
+- Reviewer 接收精确工具参数和紧凑的可见对话记录。用户原话与 runtime 验证过的 `request_user_input` 问题/回答对作为可建立授权的可信证据单独传递；assistant、其他 tool output、文件内容和审批理由只能用于判断风险，不能扩大用户授权。精确参数仅存在于本次调用内，不写入 thread event；持久化审计只包含 reviewer、来源、风险、授权判断、理由和模型标识。
 - Reviewer 先分别判断 `riskLevel` 与 `userAuthorization`，再按矩阵决策：低/中风险默认允许，高风险仅在授权至少为中且范围明确时允许，严重风险始终拒绝。`require_escalated`、`sudo`、工作区外路径或危险命令名本身不直接决定风险，必须判断精确目标和副作用。
 - 允许只批准当前这一项精确操作，不创建 session/persistent grant，也不能放宽确定性的安全策略。
 - 无沙箱 shell 进程的空 stdin 轮询仍按只读处理；任何非空 stdin 都作为新的精确动作重新审批，避免一次批准意外覆盖后续 root/admin shell 命令。
-- 明确拒绝会作为不可绕过的工具拒绝返回主 Agent；同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
+- 明确拒绝会作为不可绕过的工具拒绝返回主 Agent。完全相同的动作只有在可信用户证据没有变化时才复用拒绝；新增直接确认或 runtime 验证过的结构化回答后必须重新采样 reviewer。同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
+- 用户可在拒绝卡片登记一次精确重试。`AutomaticApprovalOverrideCoordinator` 写入 `approval.override_registered` 并启动或排队新的 turn；reviewer 只保存动作哈希，用下一次工具请求的完整参数做同线程精确匹配，再注入 runtime 生成的单次 developer 授权标记。参数、目标或权限变化不会命中，标记消费后不能复用，且重试仍经过风险矩阵，`critical` 始终拒绝。
 - 超时、无效结构化输出、模型或配置故障均先记录失败审计，再创建新的人工审批请求；用户输入和 MCP elicitation 始终由用户回答。
 
-外部 API 只能调用 `ApprovalGate.answerApproval()` 回答人工请求；自动请求使用 runtime 内部 resolver，防止 renderer 或 app-server 抢答。
+外部 API 只能调用 `ApprovalGate.answerApproval()` 回答人工请求；自动请求使用 runtime 内部 resolver，防止 renderer 或 app-server 抢答。拒绝后的用户 override 使用独立的 `/v1/approvals/:id/approve-denied-action` 端点；app-server 同时兼容 Codex 的 `thread/approveGuardianDeniedAction` `{ threadId, event }` 形状，但只读取 `event.id` 并用服务端拒绝记录校验线程和动作，客户端回传的 action 不参与授权。两条入口都不能把已经完成的自动审批伪装成人工回答。
 
 ### 6. Finalize
 

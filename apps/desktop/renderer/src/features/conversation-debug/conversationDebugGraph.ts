@@ -291,6 +291,8 @@ export function runtimeEventDebugSummary(event: RuntimeEvent): string {
       return compactText(`${event.payload.approval.toolName} · ${event.payload.approval.reason}`);
     case 'approval.resolved':
       return compactText(event.payload.decision);
+    case 'approval.override_registered':
+      return compactText(`exact retry · ${event.payload.approvalId}`);
     case 'turn.completed':
       return event.payload.usage
         ? tokenUsageSummary(event.payload.usage.inputTokens, event.payload.usage.outputTokens)
@@ -413,6 +415,13 @@ function debugNodeIdentity(
           : undefined,
       };
     case 'approval.resolved':
+      return nodeIdentity(
+        `approval:${transactionScope}:${event.payload.approvalId}`,
+        'approval',
+        'user',
+        runtimeEventDebugSummary(event),
+      );
+    case 'approval.override_registered':
       return nodeIdentity(
         `approval:${transactionScope}:${event.payload.approvalId}`,
         'approval',
@@ -571,6 +580,8 @@ function statusForEvent(
       return event.payload.decision === 'reject' || event.payload.decision === 'cancel'
         ? 'cancelled'
         : 'success';
+    case 'approval.override_registered':
+      return 'success';
     case 'turn.cancelled':
       return 'cancelled';
     case 'runtime.warning':

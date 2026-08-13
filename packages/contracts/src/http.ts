@@ -216,4 +216,5 @@ export type DesktopRuntimeClient = {
   setSkillExtraRoots(extraRoots: string[]): Promise<void>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;
+  approveDeniedAction(approvalId: string): Promise<void>;
 };

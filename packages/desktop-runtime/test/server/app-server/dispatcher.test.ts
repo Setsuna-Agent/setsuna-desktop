@@ -275,6 +275,31 @@ describe('AppServer dispatcher direct thread mutation', () => {
   });
 });
 
+describe('AppServer automatic-review override', () => {
+  it('accepts the Codex event envelope but authorizes by its server-owned review id', async () => {
+    const approveDeniedAction = vi.fn(async () => true);
+    const runtime = { approvalOverrides: { approveDeniedAction } };
+
+    await expect(dispatchAppServerRpcRequest(
+      runtime as any,
+      'thread/approveGuardianDeniedAction',
+      {
+        threadId: 'thread_1',
+        event: {
+          id: 'approval_1',
+          status: 'denied',
+          action: { type: 'mcp_tool_call', server: 'untrusted-client-value' },
+        },
+      },
+      { dataDir: '/tmp/setsuna-test', token: 'token', version: 'test' },
+      {} as any,
+      {} as any,
+    )).resolves.toEqual({});
+
+    expect(approveDeniedAction).toHaveBeenCalledWith('approval_1', 'thread_1');
+  });
+});
+
 function runtimeThread(messages: RuntimeMessage[]): RuntimeThread {
   return {
     id: 'thread_1',

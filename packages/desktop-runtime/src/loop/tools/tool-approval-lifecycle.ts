@@ -139,6 +139,7 @@ async function requestAutomaticApproval({
   let interruptTurn = false;
   try {
     const result = await automaticReviewer.review({
+      approvalId: approval.id,
       arguments: automaticReview.arguments,
       request,
       signal,
@@ -209,7 +210,7 @@ function automaticApprovalMessage(assessment: RuntimeApprovalReviewAssessment): 
   return [
     `Automatic approval review denied this exact action: ${assessment.rationale}`,
     'Do not pursue the same outcome through a workaround, indirect execution, or policy circumvention.',
-    'Continue only with a materially safer alternative; otherwise stop and ask the user.',
+    'Continue only with a materially safer alternative; otherwise stop and ask the user. If the user explicitly approves after seeing the risk, retry the exact action once so it can be reviewed again.',
   ].join(' ');
 }
 

@@ -449,6 +449,13 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
+  if (event.type === 'approval.override_registered') {
+    const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
+    const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
+    if (run) run.approvalReviewOverrideRegistered = true;
+    return next;
+  }
+
   if (event.type === 'tool.preview') {
     const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {

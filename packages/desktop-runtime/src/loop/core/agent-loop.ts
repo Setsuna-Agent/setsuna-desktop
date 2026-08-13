@@ -23,6 +23,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
+import type { ApprovalReviewer } from '../../ports/approval-reviewer.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
@@ -77,6 +78,7 @@ export type AgentLoopOptions = {
   ids: IdGenerator;
   imageStore?: GeneratedImageStore;
   approvalGate?: ApprovalGate;
+  approvalReviewer?: ApprovalReviewer;
   appServerNotificationBus?: AppServerNotificationBus;
   configStore?: ConfigStore;
   debugTrace?: RuntimeDebugTraceSink;
@@ -160,7 +162,7 @@ export class AgentLoop {
     });
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
-      approvalReviewer: createAutomaticApprovalReviewer(options),
+      approvalReviewer: options.approvalReviewer ?? createAutomaticApprovalReviewer(options),
       appServerNotificationBus: options.appServerNotificationBus,
       clock: options.clock,
       ids: options.ids,

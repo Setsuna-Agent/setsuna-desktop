@@ -231,7 +231,7 @@ function conversationDebugEventIsVisible(
   if (event.type === 'approval.requested') {
     return visibleToolCall(event.payload.approval.toolCallId, event, visibility);
   }
-  if (event.type === 'approval.resolved') {
+  if (event.type === 'approval.resolved' || event.type === 'approval.override_registered') {
     const toolCallId = relations.approvalToolCallIds.get(event.payload.approvalId);
     return toolCallId
       ? visibleToolCall(toolCallId, event, visibility)

@@ -47,8 +47,17 @@ describe('approval review event projection', () => {
         },
       },
     } satisfies RuntimeEvent);
+    const overrideRegistered = applyRuntimeEventToThread(resolved, {
+      id: 'event_override',
+      seq: 3,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.override_registered',
+      createdAt: '2026-08-13T00:00:03.000Z',
+      payload: { approvalId: 'approval_1' },
+    } satisfies RuntimeEvent);
 
-    expect(resolved.messages[0]?.toolRuns?.[0]).toMatchObject({
+    expect(overrideRegistered.messages[0]?.toolRuns?.[0]).toMatchObject({
       approvalReviewer: 'automatic',
       approvalStatus: 'rejected',
       approvalMessage: 'The destination is not authorized.',
@@ -58,8 +67,9 @@ describe('approval review event projection', () => {
         riskLevel: 'high',
         rationale: 'The destination is not authorized.',
       },
+      approvalReviewOverrideRegistered: true,
     });
-    expect(resolved.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
+    expect(overrideRegistered.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
   });
 
   it('keeps a technical failure visible while replacing it with a pending user approval', () => {

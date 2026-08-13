@@ -70,6 +70,18 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
+  it('uses the dedicated exact-retry endpoint for an automatic denial override', async () => {
+    const request = installRuntimeBridge(() => ({ ok: true }));
+    const client = createDesktopRuntimeClient();
+
+    await client.approveDeniedAction('approval / 1');
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/approvals/approval%20%2F%201/approve-denied-action',
+      method: 'POST',
+    });
+  });
+
   it('uses a separate complete-content request when a file enters edit mode', async () => {
     const request = installRuntimeBridge(() => ({}));
     const client = createDesktopRuntimeClient();

@@ -263,6 +263,20 @@ export async function handleRuntimeExtensionRequest(
     return true;
   }
 
+  const deniedActionApprovalMatch = url.pathname.match(
+    /^\/v1\/approvals\/([^/]+)\/approve-denied-action$/u,
+  );
+  if (deniedActionApprovalMatch && request.method === 'POST') {
+    const approved = await runtime.approvalOverrides.approveDeniedAction(
+      decodeURIComponent(deniedActionApprovalMatch[1]),
+    );
+    if (!approved) {
+      throw new RuntimeHttpError(404, 'Denied action is no longer available for an exact retry.');
+    }
+    sendJson(response, 200, { ok: true });
+    return true;
+  }
+
   const approvalMatch = url.pathname.match(/^\/v1\/approvals\/([^/]+)$/u);
   if (approvalMatch && request.method === 'POST') {
     await runtime.approvalGate.answerApproval(

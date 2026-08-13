@@ -203,8 +203,7 @@ function ToolRunDisplayPanel({
 }
 
 function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalHandler, t: Translate): JSX.Element {
-  const pendingApproval = isPendingApprovalRun(run);
-  const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
+  const pendingApprovalId = approvalControlId(run);
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
   const fileChanges = kind === 'fileMutation' ? fileChangesFromToolRun(run) : [];
@@ -288,7 +287,7 @@ function toolRunGroupPanelNode(
           <ToolRunDetails
             run={focusedActiveRun}
             onAnswerApproval={onAnswerApproval}
-            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+            pendingApprovalId={approvalControlId(focusedActiveRun)}
           />
         ) : group.kind === 'inspection' ? (
           <>
@@ -310,8 +309,7 @@ function toolRunGroupPanelNode(
           ))
         ) : (
           visibleRuns.map((run) => {
-            const pendingApproval = isPendingApprovalRun(run);
-            const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
+            const pendingApprovalId = approvalControlId(run);
             const runSummary = toolRunSummary(run, t);
             return (
               <div className="chat-tool-run__group-item" key={run.id}>
@@ -380,7 +378,7 @@ function mixedToolRunGroupPanelNode(
           <ToolRunDetails
             run={focusedActiveRun}
             onAnswerApproval={onAnswerApproval}
-            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+            pendingApprovalId={approvalControlId(focusedActiveRun)}
           />
         ) : (
           visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
@@ -460,7 +458,7 @@ function FileMutationRunRow({
   onAnswerApproval: AnswerApprovalHandler;
 }) {
   const { t } = useI18n();
-  const pendingApprovalId = isPendingApprovalRun(run) ? run.approvalId : undefined;
+  const pendingApprovalId = approvalControlId(run);
   const target = fileOperationTarget(run, t);
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
   const totals = fileOperationChangeTotals(run);
@@ -672,6 +670,13 @@ function ToolRunDetails({
       {approvalActions}
     </>
   );
+}
+
+function approvalControlId(run: RuntimeToolRun): string | undefined {
+  if (isPendingApprovalRun(run)) return run.approvalId;
+  return run.approvalReviewAssessment?.status === 'denied'
+    ? run.approvalId
+    : undefined;
 }
 
 function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {
