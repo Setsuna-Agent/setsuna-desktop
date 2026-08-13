@@ -535,7 +535,7 @@ describe('runtime AppServer SWE approvals and file changes', () => {
       }]);
     });
 
-  it('exposes runtime-owned review ids without creating interactive AppServer requests', () => {
+  it('keeps runtime-owned approvals out of interactive AppServer requests', () => {
       const requested: RuntimeEvent = {
         id: 'event_automatic_requested',
         seq: 1,
@@ -567,184 +567,17 @@ describe('runtime AppServer SWE approvals and file changes', () => {
         createdAt: '2026-06-27T00:00:01.000Z',
         payload: {
           approvalId: 'approval_automatic',
-          decision: 'reject',
-          source: 'automatic',
-          assessment: {
-            status: 'denied',
-            riskLevel: 'high',
-            userAuthorization: 'unknown',
-            rationale: 'The command was not authorized.',
-          },
+          decision: 'cancel',
+          source: 'system',
         },
       };
 
-      expect(runtimeEventsToSweNotifications([requested, resolved])).toEqual([
-        {
-          method: 'item/autoApprovalReview/started',
-          params: {
-            action: {
-              type: 'command',
-              command: 'pwd',
-              cwd: '.',
-              source: 'shell',
-            },
-            review: { status: 'inProgress' },
-            reviewId: 'approval_automatic',
-            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
-            targetItemId: 'call_automatic',
-            threadId: 'thread_1',
-            turnId: 'turn_1',
-          },
-        },
-        {
-          method: 'item/autoApprovalReview/completed',
-          params: {
-            action: {
-              type: 'command',
-              command: 'pwd',
-              cwd: '.',
-              source: 'shell',
-            },
-            completedAtMs: Date.parse('2026-06-27T00:00:01.000Z'),
-            decisionSource: 'agent',
-            review: {
-              status: 'denied',
-              riskLevel: 'high',
-              userAuthorization: 'unknown',
-              rationale: 'The command was not authorized.',
-            },
-            reviewId: 'approval_automatic',
-            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
-            targetItemId: 'call_automatic',
-            threadId: 'thread_1',
-            turnId: 'turn_1',
-          },
-        },
-      ]);
-      expect(runtimeEventToSweNotifications(requested)).toEqual([
-        expect.objectContaining({
-          method: 'item/autoApprovalReview/started',
-          params: expect.objectContaining({ reviewId: 'approval_automatic' }),
-        }),
-      ]);
+      expect(runtimeEventsToSweNotifications([requested, resolved])).toEqual([]);
+      expect(runtimeEventToSweNotifications(requested)).toEqual([]);
       expect(runtimeEventToSweNotifications({
         ...resolved,
-        payload: { ...resolved.payload, source: 'automatic' },
+        payload: { ...resolved.payload, decision: 'reject', source: 'automatic' },
       })).toEqual([]);
-    });
-
-  it('includes concrete file targets in automatic file-review actions', () => {
-      const event: RuntimeEvent = {
-        id: 'event_patch_review',
-        seq: 1,
-        threadId: 'thread_1',
-        turnId: 'turn_1',
-        type: 'approval.requested',
-        createdAt: '2026-06-27T00:00:00.000Z',
-        payload: {
-          approval: {
-            id: 'approval_patch',
-            threadId: 'thread_1',
-            turnId: 'turn_1',
-            toolCallId: 'call_patch',
-            toolName: 'apply_patch',
-            reason: 'Runtime review is required.',
-            argumentsPreview: JSON.stringify({
-              workdir: 'packages/app',
-              patch: [
-                '*** Begin Patch',
-                '*** Update File: src/App.tsx',
-                '*** Move to: src/Main.tsx',
-                '*** Add File: src/theme.css',
-                '*** End Patch',
-              ].join('\n'),
-            }),
-            reviewer: 'automatic',
-            status: 'pending',
-            createdAt: '2026-06-27T00:00:00.000Z',
-          },
-        },
-      };
-
-      expect(runtimeEventToSweNotifications(event)).toEqual([
-        expect.objectContaining({
-          method: 'item/autoApprovalReview/started',
-          params: expect.objectContaining({
-            action: {
-              type: 'applyPatch',
-              cwd: 'packages/app',
-              files: [
-                'packages/app/src/App.tsx',
-                'packages/app/src/Main.tsx',
-                'packages/app/src/theme.css',
-              ],
-            },
-          }),
-        }),
-      ]);
-
-      const directFileEvent: RuntimeEvent = {
-        ...event,
-        id: 'event_write_review',
-        payload: {
-          approval: {
-            ...event.payload.approval,
-            id: 'approval_write',
-            toolCallId: 'call_write',
-            toolName: 'write_file',
-            argumentsPreview: JSON.stringify({ file_path: 'src/generated.ts' }),
-          },
-        },
-      };
-      expect(runtimeEventToSweNotifications(directFileEvent)).toEqual([
-        expect.objectContaining({
-          params: expect.objectContaining({
-            action: expect.objectContaining({ files: ['src/generated.ts'] }),
-          }),
-        }),
-      ]);
-    });
-
-  it('identifies the session and payload for automatic stdin reviews', () => {
-      const event: RuntimeEvent = {
-        id: 'event_stdin_review',
-        seq: 1,
-        threadId: 'thread_1',
-        turnId: 'turn_1',
-        type: 'approval.requested',
-        createdAt: '2026-06-27T00:00:00.000Z',
-        payload: {
-          approval: {
-            id: 'approval_stdin',
-            threadId: 'thread_1',
-            turnId: 'turn_1',
-            toolCallId: 'call_stdin',
-            toolName: 'write_stdin',
-            reason: 'Runtime review is required.',
-            argumentsPreview: JSON.stringify({
-              session_id: 42,
-              chars: 'sudo systemctl restart example\n',
-            }),
-            reviewer: 'automatic',
-            status: 'pending',
-            createdAt: '2026-06-27T00:00:00.000Z',
-          },
-        },
-      };
-
-      expect(runtimeEventToSweNotifications(event)).toEqual([
-        expect.objectContaining({
-          method: 'item/autoApprovalReview/started',
-          params: expect.objectContaining({
-            action: {
-              type: 'command',
-              command: '[session 42] sudo systemctl restart example\n',
-              cwd: '.',
-              source: 'unifiedExec',
-            },
-          }),
-        }),
-      ]);
     });
   
   it('emits AppServer thread status changes for turn and approval activity', () => {

@@ -52,11 +52,6 @@ export class RuntimeTurnTaskRegistry {
 
   run<T = void>(input: RuntimeTurnTaskStartInput, runner: (task: RuntimeTurnTask) => Promise<T>): RuntimeTurnTaskRun<T> {
     const task = this.start(input);
-    return this.runStarted(task, runner);
-  }
-
-  runStarted<T = void>(task: RuntimeTurnTask, runner: (task: RuntimeTurnTask) => Promise<T>): RuntimeTurnTaskRun<T> {
-    if (task.done) throw new Error(`turn ${task.turnId} has already started`);
     const done = runner(task).finally(() => this.finish(task));
     task.done = done;
     return { done, task, turnId: task.turnId };
@@ -142,12 +137,6 @@ export class RuntimeTurnTaskRegistry {
     const task = this.activeForThread(threadId);
     if (!task || task.turnId !== turnId) return;
     task.acceptingSteers = false;
-  }
-
-  resumeAcceptingSteers(threadId: string, turnId: string): void {
-    const task = this.activeForThread(threadId);
-    if (!task || task.turnId !== turnId) return;
-    task.acceptingSteers = true;
   }
 
   async waitForFinalizingRegularTurn(threadId: string): Promise<void> {

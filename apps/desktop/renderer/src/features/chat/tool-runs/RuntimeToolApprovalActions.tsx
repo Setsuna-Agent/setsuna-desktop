@@ -4,13 +4,12 @@ import type {
   RuntimeStructuredInputValue,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   useI18n,
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
 import type { AnswerApprovalHandler } from './runtime-tool-run-types.js';
-import { useApproveDeniedAction } from './RuntimeApprovalActionsContext.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
@@ -30,8 +29,7 @@ export function RuntimeToolApprovalControl({
   const approvalPending = run.approvalStatus === 'pending'
     || (!run.approvalStatus && run.status === 'pending_approval');
   const showAutomaticReview = assessment?.status === 'failed'
-    || assessment?.status === 'timed_out'
-    || assessment?.status === 'denied';
+    || assessment?.status === 'timed_out';
   const showUserActions = Boolean(
     approvalId
     && run.approvalReviewer !== 'automatic'
@@ -45,11 +43,6 @@ export function RuntimeToolApprovalControl({
         ? (
             <div className="chat-tool-run__approval">
               <AutomaticApprovalReviewResult run={run} />
-              {assessment?.status === 'denied'
-                && approvalId
-                && assessment.exactRetryAvailable === true
-                ? <DeniedActionOverride approvalId={approvalId} run={run} />
-                : null}
             </div>
           )
         : null}
@@ -73,13 +66,11 @@ function AutomaticApprovalReviewResult({
 }) {
   const { t } = useI18n();
   const assessment = run.approvalReviewAssessment;
-  if (!assessment || assessment.status === 'allowed') return null;
+  if (!assessment || (assessment.status !== 'failed' && assessment.status !== 'timed_out')) return null;
   const status = assessment.status;
   const label = status === 'timed_out'
     ? t('toolRun.approvalReview.timedOut')
-    : status === 'denied'
-      ? t('toolRun.approvalReview.denied')
-      : t('toolRun.approvalReview.failed');
+    : t('toolRun.approvalReview.failed');
   const technicalDetail = approvalReviewTechnicalDetail(assessment.rationale);
 
   return (
@@ -96,59 +87,6 @@ function AutomaticApprovalReviewResult({
           )
         : null}
     </div>
-  );
-}
-
-function DeniedActionOverride({
-  approvalId,
-  run,
-}: {
-  approvalId: string;
-  run: RuntimeToolRun;
-}) {
-  const { t } = useI18n();
-  const approveDeniedAction = useApproveDeniedAction();
-  const [submitting, setSubmitting] = useState(false);
-  const [registered, setRegistered] = useState(
-    run.approvalReviewOverrideRegistered === true,
-  );
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    setRegistered(run.approvalReviewOverrideRegistered === true);
-  }, [run.approvalReviewOverrideRegistered]);
-  if (!approveDeniedAction) return null;
-
-  const submit = async () => {
-    if (submitting || registered) return;
-    setSubmitting(true);
-    setError(null);
-    try {
-      await approveDeniedAction(approvalId);
-      setRegistered(true);
-      setSubmitting(false);
-    } catch (unknownError) {
-      setError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <>
-      <div className="chat-tool-run__actions">
-        <button
-          type="button"
-          disabled={submitting || registered}
-          onClick={() => void submit()}
-        >
-          {registered
-            ? t('toolRun.approvalReview.overrideRegistered')
-            : submitting
-              ? t('toolRun.approvalReview.overrideSubmitting')
-              : t('toolRun.approvalReview.override')}
-        </button>
-      </div>
-      {error ? <div className="chat-tool-run__action-error">{error}</div> : null}
-    </>
   );
 }
 

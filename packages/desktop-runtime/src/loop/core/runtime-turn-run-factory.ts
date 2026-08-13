@@ -108,39 +108,27 @@ export class RuntimeTurnRunFactory {
     return { turnId, done: run.done };
   }
 
-  createMailboxTriggered(
-    threadId: string,
-    thread: RuntimeThread,
-    turnId: string,
-    prepare: () => Promise<void>,
-  ): { turnId: string; done: Promise<void>; ready: Promise<void> } {
-    // Reserve the thread before awaiting audit I/O so another turn cannot race
-    // between selecting the retry turn id and activating its one-time token.
-    const task = this.options.turnTasks.start({
+  createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string): { turnId: string; done: Promise<void> } {
+    const run = this.options.turnTasks.run({
       turnId,
       threadId,
       taskKind: 'regular',
       acceptingSteers: true,
-    });
-    const ready = Promise.resolve().then(prepare);
-    const run = this.options.turnTasks.runStarted(task, async (startedTask) => {
-      await ready;
-      return this.options.runTurn({
-        attachments: [],
-        signal: startedTask.controller.signal,
-        skillIds: [],
-        text: 'Mailbox message received.',
-        thread,
-        threadId,
-        turnId,
-        options: {
-          includeUserMessageInModel: true,
-          publishUserMessage: false,
-          taskKind: 'regular',
-        },
-      });
-    });
-    return { turnId, done: run.done, ready };
+    }, (task) => this.options.runTurn({
+      attachments: [],
+      signal: task.controller.signal,
+      skillIds: [],
+      text: `Mailbox message received: ${content.slice(0, 160)}`,
+      thread,
+      threadId,
+      turnId,
+      options: {
+        includeUserMessageInModel: true,
+        publishUserMessage: false,
+        taskKind: 'regular',
+      },
+    }));
+    return { turnId, done: run.done };
   }
 
   async createReview(threadId: string, input: RuntimeReviewTurnInput): Promise<{ turnId: string; done: Promise<void> }> {

@@ -43,36 +43,12 @@ describe('approval review event projection', () => {
           riskLevel: 'high',
           userAuthorization: 'unknown',
           rationale: 'The destination is not authorized.',
-          exactRetryAvailable: true,
           model: 'approval-review-model',
         },
       },
     } satisfies RuntimeEvent);
-    const withLaterAssistantSegment: RuntimeThread = {
-      ...resolved,
-      messages: [
-        ...resolved.messages,
-        {
-          id: 'assistant_2',
-          role: 'assistant',
-          turnId: 'turn_1',
-          content: 'I could not complete the denied action.',
-          createdAt: '2026-08-13T00:00:02.500Z',
-          status: 'complete',
-        },
-      ],
-    };
-    const overrideRegistered = applyRuntimeEventToThread(withLaterAssistantSegment, {
-      id: 'event_override',
-      seq: 3,
-      threadId: 'thread_1',
-      turnId: 'turn_1',
-      type: 'approval.override_registered',
-      createdAt: '2026-08-13T00:00:03.000Z',
-      payload: { approvalId: 'approval_1' },
-    } satisfies RuntimeEvent);
 
-    expect(overrideRegistered.messages[0]?.toolRuns?.[0]).toMatchObject({
+    expect(resolved.messages[0]?.toolRuns?.[0]).toMatchObject({
       approvalReviewer: 'automatic',
       approvalStatus: 'rejected',
       approvalMessage: 'The destination is not authorized.',
@@ -81,23 +57,9 @@ describe('approval review event projection', () => {
         status: 'denied',
         riskLevel: 'high',
         rationale: 'The destination is not authorized.',
-        exactRetryAvailable: true,
       },
-      approvalReviewOverrideRegistered: true,
     });
-    expect(overrideRegistered.messages[1]?.toolRuns).toBeUndefined();
-    expect(overrideRegistered.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
-
-    const retryCompleted = applyRuntimeEventToThread(overrideRegistered, {
-      id: 'event_retry_completed',
-      seq: 4,
-      threadId: 'thread_1',
-      turnId: 'turn_retry',
-      type: 'turn.completed',
-      createdAt: '2026-08-13T00:00:04.000Z',
-      payload: {},
-    } satisfies RuntimeEvent);
-    expect(retryCompleted.messages[0]?.toolRuns?.[0]?.approvalReviewOverrideRegistered).toBeUndefined();
+    expect(resolved.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
   });
 
   it('keeps a technical failure visible while replacing it with a pending user approval', () => {

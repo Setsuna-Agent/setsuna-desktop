@@ -675,8 +675,6 @@ export type RuntimeToolRun = {
   approvalMessage?: string;
   approvalResolutionSource?: RuntimeApprovalResolutionSource;
   approvalReviewAssessment?: RuntimeApprovalReviewAssessment;
-  /** The user registered one exact retry after an automatic denial. */
-  approvalReviewOverrideRegistered?: boolean;
   availableApprovalDecisions?: RuntimeApprovalAvailableDecision[];
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkApprovalContext?: RuntimeNetworkApprovalContext;

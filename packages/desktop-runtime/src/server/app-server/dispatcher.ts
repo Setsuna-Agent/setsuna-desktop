@@ -568,24 +568,6 @@ export async function dispatchAppServerRpcRequest(
     return {};
   }
 
-  if (method === 'thread/approveGuardianDeniedAction') {
-    const input = recordInput(params);
-    const threadId = requiredString(input.threadId, 'threadId');
-    const event = recordInput(input.event);
-    const approvalId = requiredString(event.id, 'event.id');
-    const approved = await runtime.approvalOverrides.approveDeniedAction(
-      approvalId,
-      threadId,
-    );
-    if (!approved) {
-      throw new AppServerRpcError(
-        -32602,
-        'Denied action is no longer available for an exact retry.',
-      );
-    }
-    return {};
-  }
-
   if (method === 'thread/unsubscribe') {
     return { status: 'notLoaded' };
   }

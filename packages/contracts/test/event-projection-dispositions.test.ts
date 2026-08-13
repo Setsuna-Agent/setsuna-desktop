@@ -31,7 +31,6 @@ const SWE_IGNORED_EVENT_TYPES = [
   'messages.truncated',
   'hook.started',
   'hook.completed',
-  'approval.override_registered',
   'runtime.warning',
 ] satisfies RuntimeEventType[];
 
@@ -46,7 +45,6 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
   'hook.completed',
   'approval.requested',
   'approval.resolved',
-  'approval.override_registered',
   'turn.completed',
   'turn.cancelled',
   'runtime.warning',
@@ -55,7 +53,7 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
 
 describe('runtime event projection dispositions', () => {
   it('classifies every runtime event exactly once for each consumer', () => {
-    expect(RUNTIME_EVENT_TYPES).toHaveLength(47);
+    expect(RUNTIME_EVENT_TYPES).toHaveLength(46);
 
     for (const dispositions of [
       RUNTIME_THREAD_EVENT_DISPOSITIONS,

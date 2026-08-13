@@ -1,5 +1,8 @@
-import { createHash } from 'node:crypto';
-import type { RuntimeMessage, RuntimeThread, RuntimeUserInputRequest } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeMessage,
+  RuntimeThread,
+  RuntimeUserInputRequest,
+} from '@setsuna-desktop/contracts';
 import type { ApprovalReviewInput } from '../../ports/approval-reviewer.js';
 import { serializeApprovalReviewAction } from './approval-review-action.js';
 import { approvalReviewPolicy } from './approval-review-policy.js';
@@ -11,7 +14,6 @@ const MAX_TRANSCRIPT_MESSAGES = 24;
 
 export type ApprovalReviewPrompt = {
   messages: RuntimeMessage[];
-  trustedEvidenceFingerprint: string;
 } | {
   unavailableReason: string;
 };
@@ -20,7 +22,6 @@ export function buildApprovalReviewPrompt(
   input: ApprovalReviewInput,
   thread: RuntimeThread,
   now: string,
-  manualOverride = false,
 ): ApprovalReviewPrompt {
   const serializedAction = serializeApprovalReviewAction(input);
   const action = serializedAction
@@ -33,7 +34,6 @@ export function buildApprovalReviewPrompt(
   }
   const evidence = compactReviewEvidence(thread);
   return {
-    trustedEvidenceFingerprint: evidence.trustedEvidenceFingerprint,
     messages: [
       {
         id: 'approval_review_system',
@@ -43,22 +43,6 @@ export function buildApprovalReviewPrompt(
         status: 'complete',
         visibility: 'model',
       },
-      ...(manualOverride
-        ? [{
-            id: 'approval_review_manual_override',
-            role: 'developer' as const,
-            content: [
-              'The user has manually approved a specific action that was previously rejected.',
-              'This approval applies to one retry of only the exact action below, not to similar actions or payloads.',
-              '<manually_approved_action_json>',
-              action,
-              '</manually_approved_action_json>',
-            ].join('\n'),
-            createdAt: now,
-            status: 'complete' as const,
-            visibility: 'model' as const,
-          }]
-        : []),
       {
         id: 'approval_review_user',
         role: 'user',
@@ -83,7 +67,6 @@ export function buildApprovalReviewPrompt(
 }
 
 type CompactReviewEvidence = {
-  trustedEvidenceFingerprint: string;
   trustedUserEvidence: string;
   untrustedContext: string;
 };
@@ -137,51 +120,28 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
     totalChars += serialized.length;
   }
   return {
-    // The cache key must not depend on prompt window truncation: untrusted tool
-    // chatter cannot manufacture a reason to resample a previously denied action.
-    trustedEvidenceFingerprint: trustedEvidenceFingerprint(
-      stableTrustedReviewEvidence(thread, userInputRequests),
-    ),
     trustedUserEvidence: escapePromptEnvelopeJson(JSON.stringify(trustedUserEvidence)),
     untrustedContext: escapePromptEnvelopeJson(JSON.stringify(untrustedContext)),
   };
 }
 
-function stableTrustedReviewEvidence(
+/**
+ * A verified answer is only meaningful together with the question the runtime
+ * displayed. Pair both halves by turn and call id; the FIFO handles replayed
+ * histories where a provider reused a call id later in the same turn.
+ */
+function userInputRequestsByResultMessageId(
   thread: RuntimeThread,
-  userInputRequests: Map<string, RuntimeUserInputRequest>,
-): Array<Record<string, unknown>> {
-  return thread.messages.flatMap((message) => {
-    if (message.visibility === 'model') return [];
-    const source = trustedUserEvidenceSource(message);
-    if (!source) return [];
-    return [{
-      messageId: message.id,
-      role: message.role,
-      source,
-      content: message.content,
-      ...(message.toolName ? { toolName: message.toolName } : {}),
-      ...(source === 'request_user_input' && message.toolCallId
-        ? {
-            toolCallId: message.toolCallId,
-            userInputRequest: userInputRequests.get(message.id),
-          }
-        : {}),
-    }];
-  });
-}
-
-function userInputRequestsByResultMessageId(thread: RuntimeThread): Map<string, RuntimeUserInputRequest> {
+): Map<string, RuntimeUserInputRequest> {
   const pending = new Map<string, RuntimeUserInputRequest[]>();
   const requests = new Map<string, RuntimeUserInputRequest>();
   for (const message of thread.messages) {
     for (const run of message.toolRuns ?? []) {
-      if (run.name === 'request_user_input' && run.userInput) {
-        const key = userInputTransactionKey(message.turnId, run.id);
-        const stack = pending.get(key) ?? [];
-        stack.push(run.userInput);
-        pending.set(key, stack);
-      }
+      if (run.name !== 'request_user_input' || !run.userInput) continue;
+      const key = userInputTransactionKey(message.turnId, run.id);
+      const queue = pending.get(key) ?? [];
+      queue.push(run.userInput);
+      pending.set(key, queue);
     }
     if (
       message.role !== 'tool'
@@ -199,10 +159,6 @@ function userInputRequestsByResultMessageId(thread: RuntimeThread): Map<string, 
 
 function userInputTransactionKey(turnId: string | undefined, toolCallId: string): string {
   return `${turnId ?? ''}\u0000${toolCallId}`;
-}
-
-function trustedEvidenceFingerprint(entries: Array<Record<string, unknown>>): string {
-  return `sha256:${createHash('sha256').update(JSON.stringify(entries)).digest('hex')}`;
 }
 
 /** Keeps serialized JSON valid while preventing payloads from closing prompt envelope tags. */

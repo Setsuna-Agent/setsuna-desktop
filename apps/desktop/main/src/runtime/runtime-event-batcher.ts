@@ -70,7 +70,6 @@ export class RuntimeEventBatcher {
 function isImmediateRuntimeEvent(event: RuntimeEvent): boolean {
   return event.type === 'approval.requested'
     || event.type === 'approval.resolved'
-    || event.type === 'approval.override_registered'
     || event.type === 'runtime.error'
     || event.type === 'turn.cancelled'
     || event.type === 'turn.completed';

@@ -2,7 +2,6 @@ import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
-import { RuntimeApprovalActionsProvider } from '../../../../../src/features/chat/tool-runs/RuntimeApprovalActionsContext.js';
 import { RuntimeToolRuns, groupToolRuns } from '../../../../../src/features/chat/tool-runs/RuntimeToolRuns.js';
 
 export function shellRun(status: RuntimeToolRun['status']): RuntimeToolRun {
@@ -144,10 +143,7 @@ export function firstToolRunSummaryHtml(html: string): string {
 }
 
 export function renderedHtml(runs: RuntimeToolRun[], summaryMode?: 'aggregate' | 'latest'): string {
-  const children = createElement(RuntimeApprovalActionsProvider, {
-    children: createElement(RuntimeToolRuns, { runs, summaryMode, onAnswerApproval: () => undefined }),
-    onApproveDeniedAction: () => undefined,
-  });
+  const children = createElement(RuntimeToolRuns, { runs, summaryMode, onAnswerApproval: () => undefined });
   const html = renderToStaticMarkup(createElement(MarkdownNavigationProvider, {
     children,
     onOpenWorkspaceFile: () => undefined,

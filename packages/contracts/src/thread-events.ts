@@ -449,18 +449,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     return next;
   }
 
-  if (event.type === 'approval.override_registered') {
-    const target = [...next.messages].reverse().find((message) => (
-      message.role === 'assistant'
-      && (!event.turnId || message.turnId === event.turnId)
-      && message.toolRuns?.some((item) => item.approvalId === event.payload.approvalId)
-    ));
-    const message = draft.mutableMessage(target);
-    const run = message?.toolRuns?.find((item) => item.approvalId === event.payload.approvalId);
-    if (run) run.approvalReviewOverrideRegistered = true;
-    return next;
-  }
-
   if (event.type === 'tool.preview') {
     const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
@@ -555,7 +543,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'runtime.error') {
-    clearApprovalReviewOverrides(draft);
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
     const turn = draft.mutableTurn(event.turnId, event.createdAt);
@@ -580,7 +567,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.cancelled') {
-    clearApprovalReviewOverrides(draft);
     const reason = event.payload.reason || 'Turn cancelled.';
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
@@ -605,7 +591,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.completed') {
-    clearApprovalReviewOverrides(draft);
     if (!event.turnId || next.activeTurnId === event.turnId) next.activeTurnId = null;
     clearRunningContextCompaction(next, event.turnId);
     const turn = draft.mutableTurn(event.turnId, event.createdAt);
@@ -618,17 +603,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;
   return assertNeverRuntimeEvent(event);
-}
-
-function clearApprovalReviewOverrides(draft: RuntimeThreadEventDraft): void {
-  for (const candidate of draft.thread.messages) {
-    if (!candidate.toolRuns?.some((run) => run.approvalReviewOverrideRegistered)) continue;
-    const message = draft.mutableMessageById(candidate.id);
-    if (!message) continue;
-    for (const run of message.toolRuns ?? []) {
-      if (run.approvalReviewOverrideRegistered) delete run.approvalReviewOverrideRegistered;
-    }
-  }
 }
 
 function assertNeverRuntimeEvent(event: never): never {

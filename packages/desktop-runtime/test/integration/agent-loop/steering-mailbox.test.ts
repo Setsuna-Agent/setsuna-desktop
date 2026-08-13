@@ -5,9 +5,6 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
-  AutoCompactionModelClient,
-} from '../../support/agent-loop/compaction.js';
-import {
   ContextWindowConfigStore,
   mkDataDir,
   stepSnapshotSkillRegistry,
@@ -107,14 +104,7 @@ describe('agent loop turn steering and mailbox input', () => {
         fromAgentId: 'agent_child',
         content: 'this should not attach to a shell task',
       })).rejects.toThrow('active user_shell turn cannot receive mailbox input');
-
-      await expect(loop.deliverMailboxInput(thread.id, {
-        id: 'mail_shell_no_queue',
-        fromAgentId: 'runtime-auto-review',
-        content: 'do not let this retry outlive its authorization',
-        queueIfBusy: false,
-      })).rejects.toThrow('active user_shell turn cannot receive mailbox input');
-
+  
       await expect(loop.deliverMailboxInput(thread.id, {
         id: 'mail_shell_queue',
         fromAgentId: 'agent_child',
@@ -548,68 +538,5 @@ describe('agent loop turn steering and mailbox input', () => {
       expect(requestText).toContain('<mailbox_message id="mail_trigger_1" from_agent_id="agent_child" delivery_mode="trigger_turn" trigger_turn="true">');
       expect(requestText).toContain('wake the parent agent');
       expect(saved?.messages.filter((message) => message.turnId === delivered.turnId && message.role === 'user')).toHaveLength(0);
-    });
-
-  it('prepares a sensitive trigger turn before model-only delivery without persisting its content', async () => {
-      const ids = new RandomIdGenerator();
-      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Sensitive mailbox loop' });
-      for (let index = 0; index < 12; index += 1) {
-        await threadStore.appendEvent(thread.id, {
-          id: ids.id('event'),
-          threadId: thread.id,
-          type: 'message.created',
-          createdAt: `2026-08-13T00:00:${String(index).padStart(2, '0')}.000Z`,
-          payload: {
-            message: {
-              id: `history_${index}`,
-              role: index % 2 ? 'assistant' : 'user',
-              content: `Persistent history ${index}: ${'context '.repeat(80)}`,
-              createdAt: `2026-08-13T00:00:${String(index).padStart(2, '0')}.000Z`,
-              status: 'complete',
-            },
-          },
-        });
-      }
-      const modelClient = new AutoCompactionModelClient();
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient,
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        configStore: new ContextWindowConfigStore(1_000),
-        ids,
-      });
-      const sensitiveContent = 'retry exact action with secret suffix=not-for-event-log';
-      let preparedTurnId = '';
-
-      const delivered = await loop.deliverMailboxInput(thread.id, {
-        id: 'mail_sensitive_1',
-        beforeDelivery: async (turnId) => {
-          preparedTurnId = turnId;
-          const eventsBeforeActivation = await threadStore.listEvents(thread.id, 0);
-          expect(eventsBeforeActivation.some((event) => event.type === 'turn.started')).toBe(false);
-        },
-        content: sensitiveContent,
-        deliveryMode: 'trigger_turn',
-        persist: false,
-      });
-
-      expect(delivered.turnId).toBe(preparedTurnId);
-      const events = await waitForTurnCompleted(threadStore, thread.id, delivered.turnId!);
-      const compactionRequests = modelClient.requests
-        .filter((request) => request.model === 'context-compaction');
-      const compactionRequestText = compactionRequests
-        .map((request) => request.messages.map((message) => message.content).join('\n'))
-        .join('\n');
-      const requestText = modelClient.requests
-        .find((request) => request.model === 'local-runtime-smoke')
-        ?.messages.map((message) => message.content).join('\n') ?? '';
-
-      expect(events.some((event) => event.type === 'mailbox.delivered')).toBe(false);
-      expect(JSON.stringify(events)).not.toContain(sensitiveContent);
-      expect(compactionRequests.length).toBeGreaterThan(0);
-      expect(compactionRequestText).not.toContain(sensitiveContent);
-      expect(requestText).toContain(sensitiveContent);
     });
 });

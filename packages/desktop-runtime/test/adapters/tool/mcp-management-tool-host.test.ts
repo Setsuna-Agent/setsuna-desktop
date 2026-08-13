@@ -21,13 +21,6 @@ describe('mcp management tool host', () => {
     try {
       const tools = await host.listTools(context);
       expect(tools.map((tool) => tool.name)).toEqual(['configure_mcp_server']);
-      const safeInput = {
-        key: 'Public Search',
-        transport: 'streamableHttp',
-        url: mcpServer.baseUrl,
-      };
-      const safeApproval = await host.approvalForTool('configure_mcp_server', safeInput);
-      expect(safeApproval?.argumentsPreview).toBe(JSON.stringify(safeInput));
       const approval = await host.approvalForTool('configure_mcp_server', {
         key: 'Search MCP',
         label: 'Search MCP',

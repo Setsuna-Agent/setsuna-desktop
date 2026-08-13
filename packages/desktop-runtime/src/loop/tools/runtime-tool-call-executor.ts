@@ -384,7 +384,6 @@ export class RuntimeToolCallExecutor {
 
   cleanupTurn(turnId: string): void {
     this.toolApprovalStore.clearTurn(turnId);
-    this.options.approvalReviewer?.finishTurn?.(turnId);
   }
 
   /**

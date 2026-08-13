@@ -11,7 +11,6 @@ import {
   planItem,
   reviewModeItem
 } from './items.js';
-import { guardianApprovalReview, guardianApprovalReviewAction } from './guardian-approval.js';
 import type {
   RuntimeSweTurnEntry,
   SweMapperState
@@ -92,7 +91,7 @@ export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotif
     threadRuntime: new Map(),
     planMessageIds: new Set(),
     planItemsByMessageId: new Map(),
-    runtimeOwnedApprovals: new Map(),
+    runtimeOwnedApprovalIds: new Map(),
     turnPlanItemIds: new Map(),
   };
   return (event) => runtimeEventToSweNotifications(event, state);
@@ -198,8 +197,8 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
       for (const [key, pending] of state.pendingGoalSourceMessages) {
         if (pending.threadId === event.threadId) state.pendingGoalSourceMessages.delete(key);
       }
-      for (const [approvalId, approval] of state.runtimeOwnedApprovals) {
-        if (approval.threadId === event.threadId) state.runtimeOwnedApprovals.delete(approvalId);
+      for (const [approvalId, threadId] of state.runtimeOwnedApprovalIds) {
+        if (threadId === event.threadId) state.runtimeOwnedApprovalIds.delete(approvalId);
       }
     }
     return [{ method: 'thread/deleted', params: { threadId: event.threadId } }];
@@ -660,21 +659,10 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'approval.requested' && event.payload.approval.reviewer === 'automatic') {
-    const approval = event.payload.approval;
-    // Runtime-owned reviews are observable, but never become client-owned approval requests.
-    state?.runtimeOwnedApprovals.set(approval.id, approval);
-    return [{
-      method: 'item/autoApprovalReview/started',
-      params: {
-        action: guardianApprovalReviewAction(approval),
-        review: { status: 'inProgress' },
-        reviewId: approval.id,
-        startedAtMs: toEpochMs(approval.createdAt),
-        targetItemId: approval.toolCallId,
-        threadId: event.threadId,
-        turnId: approval.turnId,
-      },
-    }];
+    // Runtime-owned approvals are audit events, not client-owned requests. Remember
+    // the id so their resolution is suppressed even when cancellation is system-owned.
+    state?.runtimeOwnedApprovalIds.set(event.payload.approval.id, event.threadId);
+    return [];
   }
 
   if (event.type === 'approval.requested' && FILE_MUTATION_TOOL_NAMES.has(event.payload.approval.toolName)) {
@@ -763,25 +751,8 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'approval.resolved') {
-    const runtimeOwned = state?.runtimeOwnedApprovals.get(event.payload.approvalId);
-    if (runtimeOwned) {
-      state?.runtimeOwnedApprovals.delete(event.payload.approvalId);
-      return [{
-        method: 'item/autoApprovalReview/completed',
-        params: {
-          action: guardianApprovalReviewAction(runtimeOwned),
-          completedAtMs: toEpochMs(event.createdAt),
-          decisionSource: 'agent',
-          review: guardianApprovalReview(event.payload.assessment, event.payload.decision),
-          reviewId: runtimeOwned.id,
-          startedAtMs: toEpochMs(runtimeOwned.createdAt),
-          targetItemId: runtimeOwned.toolCallId,
-          threadId: event.threadId,
-          turnId: runtimeOwned.turnId,
-        },
-      }];
-    }
-    if (event.payload.source === 'automatic') return [];
+    const runtimeOwned = state?.runtimeOwnedApprovalIds.delete(event.payload.approvalId) === true;
+    if (runtimeOwned || event.payload.source === 'automatic') return [];
     markApprovalResolved(state, event.threadId, event.payload.approvalId);
     return [
       {

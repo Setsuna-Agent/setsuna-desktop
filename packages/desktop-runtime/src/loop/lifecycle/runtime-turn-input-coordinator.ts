@@ -12,22 +12,16 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { escapeSkillAttribute, neutralizeMailboxTags } from '../context/prompt-utils.js';
 import type { RuntimeModelInputGuard } from '../core/runtime-model-input-guard.js';
-import type { RuntimeQueuedMailbox, RuntimeQueuedSteer } from './turn-input-queue.js';
+import type { RuntimeQueuedSteer } from './turn-input-queue.js';
 import { RuntimeTurnTaskRegistry, type RuntimeTurnTask } from './turn-task-registry.js';
 
 export type DeliverMailboxInput = {
-  /** Runtime-only hook used to persist audit state before an instruction becomes visible. */
-  beforeDelivery?: (turnId: string) => Promise<void>;
   content: string;
   deliveryMode?: RuntimeMailboxDelivery['deliveryMode'];
   expectedTurnId?: string;
   fromAgentId?: string;
   fromThreadId?: string;
   id?: string;
-  /** Internal callers can reject delivery instead of leaving a retry in the idle queue. */
-  queueIfBusy?: boolean;
-  /** Internal sensitive instructions can stay model-only instead of entering the event log. */
-  persist?: boolean;
   toAgentId?: string;
   triggerTurn?: boolean;
 };
@@ -36,11 +30,6 @@ export type DeliverMailboxResponse = {
   accepted: true;
   queued?: boolean;
   turnId: string | null;
-};
-
-export type RuntimeMailboxModelInput = {
-  message: RuntimeMessage;
-  transient: boolean;
 };
 
 type RuntimeTurnInputCoordinatorOptions = {
@@ -52,12 +41,7 @@ type RuntimeTurnInputCoordinatorOptions = {
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  createMailboxTriggeredRun(
-    threadId: string,
-    thread: RuntimeThread,
-    turnId: string,
-    prepare: () => Promise<void>,
-  ): { done: Promise<void>; ready: Promise<void> };
+  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): { done: Promise<void> };
   publishMessage(
     threadId: string,
     turnId: string,
@@ -68,7 +52,7 @@ type RuntimeTurnInputCoordinatorOptions = {
 
 /** 管理活动轮次的 steer 与邮箱队列及其持久化边界。 */
 export class RuntimeTurnInputCoordinator {
-  private readonly idleMailboxByThread = new Map<string, RuntimeQueuedMailbox[]>();
+  private readonly idleMailboxByThread = new Map<string, RuntimeMailboxDelivery[]>();
 
   constructor(private readonly options: RuntimeTurnInputCoordinatorOptions) {}
 
@@ -154,18 +138,12 @@ export class RuntimeTurnInputCoordinator {
   async deliverMailbox(threadId: string, input: DeliverMailboxInput): Promise<DeliverMailboxResponse> {
     const content = input.content.trim();
     if (!content) throw new Error('mailbox content must not be empty');
-    let active = this.options.turnTasks.activeForThread(threadId);
+    const active = this.options.turnTasks.activeForThread(threadId);
     if (input.expectedTurnId && (!active || active.turnId !== input.expectedTurnId)) {
       throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active?.turnId ?? 'none'}\``);
     }
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
-    // The previous task may have finished while the thread snapshot was loading.
-    // Re-resolve it before admitting input so a stale queue cannot accept work.
-    active = this.options.turnTasks.activeForThread(threadId);
-    if (input.expectedTurnId && (!active || active.turnId !== input.expectedTurnId)) {
-      throw new Error(`expected active turn id \`${input.expectedTurnId}\` but found \`${active?.turnId ?? 'none'}\``);
-    }
     const triggerTurn = input.triggerTurn === true || input.deliveryMode === 'trigger_turn';
     const delivery: RuntimeMailboxDelivery = {
       id: input.id?.trim() || this.options.ids.id('mailbox'),
@@ -176,35 +154,23 @@ export class RuntimeTurnInputCoordinator {
       toAgentId: input.toAgentId?.trim() || undefined,
       triggerTurn: triggerTurn || undefined,
     };
-    const queuedDelivery: RuntimeQueuedMailbox = {
-      delivery,
-      transient: input.persist === false,
-    };
 
-    if (
-      active
-      && !active.controller.signal.aborted
-      && !turnTaskCanReceiveMailbox(active)
-      && (input.expectedTurnId || input.queueIfBusy === false)
-    ) {
+    if (active && !active.controller.signal.aborted && !turnTaskCanReceiveMailbox(active) && input.expectedTurnId) {
       throw new Error(`active ${active.taskKind} turn cannot receive mailbox input`);
     }
     if (active && !active.controller.signal.aborted && turnTaskCanReceiveMailbox(active)) {
       active.inputQueue.beginWrite();
       try {
         if (active.controller.signal.aborted) throw new Error('no active turn to deliver mailbox input');
-        if (input.persist !== false) {
-          await this.options.appendEvent(threadId, {
-            id: this.options.ids.id('event'),
-            threadId,
-            turnId: active.turnId,
-            type: 'mailbox.delivered',
-            createdAt: this.options.clock.now().toISOString(),
-            payload: delivery,
-          });
-        }
-        await input.beforeDelivery?.(active.turnId);
-        active.inputQueue.enqueueMailbox(queuedDelivery);
+        await this.options.appendEvent(threadId, {
+          id: this.options.ids.id('event'),
+          threadId,
+          turnId: active.turnId,
+          type: 'mailbox.delivered',
+          createdAt: this.options.clock.now().toISOString(),
+          payload: delivery,
+        });
+        active.inputQueue.enqueueMailbox(delivery);
         return { accepted: true, turnId: active.turnId };
       } finally {
         active.inputQueue.settleWrite();
@@ -213,42 +179,28 @@ export class RuntimeTurnInputCoordinator {
 
     if (triggerTurn && !active) {
       const turnId = this.options.ids.id('turn');
-      const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, async () => {
-        if (input.persist !== false) {
-          await this.options.appendEvent(threadId, {
-            id: this.options.ids.id('event'),
-            threadId,
-            turnId,
-            type: 'mailbox.delivered',
-            createdAt: this.options.clock.now().toISOString(),
-            payload: delivery,
-          });
-        }
-        await input.beforeDelivery?.(turnId);
-        this.queueIdleMailbox(threadId, queuedDelivery);
-      });
-      void run.done.catch(() => undefined);
-      await run.ready;
-      return { accepted: true, turnId };
-    }
-
-    if (input.queueIfBusy === false) {
-      throw new Error('mailbox input cannot be queued while the thread is busy');
-    }
-    if (input.beforeDelivery) {
-      throw new Error('mailbox input requires a target turn before delivery');
-    }
-
-    this.queueIdleMailbox(threadId, queuedDelivery);
-    if (input.persist !== false) {
+      this.queueIdleMailbox(threadId, delivery);
       await this.options.appendEvent(threadId, {
         id: this.options.ids.id('event'),
         threadId,
+        turnId,
         type: 'mailbox.delivered',
         createdAt: this.options.clock.now().toISOString(),
         payload: delivery,
       });
+      const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId };
     }
+
+    this.queueIdleMailbox(threadId, delivery);
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      type: 'mailbox.delivered',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: delivery,
+    });
     return { accepted: true, queued: true, turnId: null };
   }
 
@@ -258,17 +210,14 @@ export class RuntimeTurnInputCoordinator {
     return active?.inputQueue.takeSteers() ?? [];
   }
 
-  async drainMailboxMessages(threadId: string, turnId: string): Promise<RuntimeMailboxModelInput[]> {
+  async drainMailboxMessages(threadId: string, turnId: string): Promise<RuntimeMessage[]> {
     await this.waitForPendingWrites(threadId, turnId);
     const pendingIdle = this.takeIdleMailbox(threadId);
     const active = this.activeTask(threadId, turnId);
     return [
       ...pendingIdle,
       ...(active?.inputQueue.takeMailbox() ?? []),
-    ].map((input) => ({
-      message: this.mailboxMessageForModel(turnId, input.delivery),
-      transient: input.transient,
-    }));
+    ].map((delivery) => this.mailboxMessageForModel(turnId, delivery));
   }
 
   private activeTask(threadId: string, turnId: string): RuntimeTurnTask | null {
@@ -284,13 +233,13 @@ export class RuntimeTurnInputCoordinator {
     if (this.activeTask(threadId, turnId) !== active || active.controller.signal.aborted) return;
   }
 
-  private queueIdleMailbox(threadId: string, input: RuntimeQueuedMailbox): void {
+  private queueIdleMailbox(threadId: string, input: RuntimeMailboxDelivery): void {
     const pending = this.idleMailboxByThread.get(threadId) ?? [];
     pending.push(input);
     this.idleMailboxByThread.set(threadId, pending);
   }
 
-  private takeIdleMailbox(threadId: string): RuntimeQueuedMailbox[] {
+  private takeIdleMailbox(threadId: string): RuntimeMailboxDelivery[] {
     const pending = this.idleMailboxByThread.get(threadId);
     if (!pending?.length) return [];
     this.idleMailboxByThread.delete(threadId);

@@ -41,7 +41,7 @@ export type RequestToolApprovalInput = {
   request: CreateApprovalInput;
   reviewer?: RuntimeApprovalReviewer;
   automaticReviewer?: ApprovalReviewer;
-  automaticReview?: { arguments: unknown; executionRoot?: string };
+  automaticReview?: { arguments: unknown };
   signal: AbortSignal;
 };
 
@@ -139,9 +139,7 @@ async function requestAutomaticApproval({
   let interruptTurn = false;
   try {
     const result = await automaticReviewer.review({
-      approvalId: approval.id,
       arguments: automaticReview.arguments,
-      executionRoot: automaticReview.executionRoot,
       request,
       signal,
     });
@@ -211,7 +209,7 @@ function automaticApprovalMessage(assessment: RuntimeApprovalReviewAssessment): 
   return [
     `Automatic approval review denied this exact action: ${assessment.rationale}`,
     'Do not pursue the same outcome through a workaround, indirect execution, or policy circumvention.',
-    'Continue only with a materially safer alternative; otherwise stop and ask the user. If the user explicitly approves after seeing the risk, retry the exact action once so it can be reviewed again.',
+    'Continue only with a materially safer alternative; otherwise stop and ask the user.',
   ].join(' ');
 }
 

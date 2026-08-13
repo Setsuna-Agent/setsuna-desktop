@@ -78,7 +78,6 @@ export const RUNTIME_EVENT_TYPES = [
   'hook.completed',
   'approval.requested',
   'approval.resolved',
-  'approval.override_registered',
   'turn.completed',
   'turn.cancelled',
   'runtime.warning',
@@ -195,7 +194,6 @@ export type RuntimeEvent =
         assessment?: RuntimeApprovalReviewAssessment;
       }
     >
-  | RuntimeEventBase<'approval.override_registered', { approvalId: string }>
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>

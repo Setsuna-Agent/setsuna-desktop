@@ -17,10 +17,7 @@ import type { RuntimeCollaborationCoordinator } from '../lifecycle/collaboration
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import type { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
-import type {
-  RuntimeMailboxModelInput,
-  RuntimeTurnInputCoordinator,
-} from '../lifecycle/runtime-turn-input-coordinator.js';
+import type { RuntimeTurnInputCoordinator } from '../lifecycle/runtime-turn-input-coordinator.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import type { RuntimeQueuedSteer } from '../lifecycle/turn-input-queue.js';
 import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
@@ -46,7 +43,7 @@ type RuntimeAgentTurnRunnerOptions = {
   toolHost?: ToolHost;
   turnFinalizer: Pick<RuntimeTurnFinalizer, 'finish' | 'publishReviewModeMessage'>;
   turnInputs: Pick<RuntimeTurnInputCoordinator, 'drainMailboxMessages' | 'drainSteers'>;
-  turnTasks: Pick<RuntimeTurnTaskRegistry, 'resumeAcceptingSteers' | 'stopAcceptingSteers'>;
+  turnTasks: Pick<RuntimeTurnTaskRegistry, 'stopAcceptingSteers'>;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -187,7 +184,6 @@ export class RuntimeAgentTurnRunner {
       // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
       // 工具模式和输出预留空间。
       let conversationMessages = [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])];
-      let transientConversationMessages: RuntimeMessage[] = [];
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
       let explicitMemoryUserContent = userMessage.content;
@@ -214,10 +210,9 @@ export class RuntimeAgentTurnRunner {
         if (steerText) explicitMemoryUserContent = [explicitMemoryUserContent, steerText].filter(Boolean).join('\n\n');
         return true;
       };
-      const appendMailboxMessagesToConversation = (inputs: RuntimeMailboxModelInput[]) => {
-        if (!inputs.length) return false;
-        conversationMessages.push(...inputs.filter((input) => !input.transient).map((input) => input.message));
-        transientConversationMessages.push(...inputs.filter((input) => input.transient).map((input) => input.message));
+      const appendMailboxMessagesToConversation = (messages: RuntimeMessage[]) => {
+        if (!messages.length) return false;
+        conversationMessages.push(...messages);
         return true;
       };
       let memorySavedByTool = false;
@@ -239,15 +234,11 @@ export class RuntimeAgentTurnRunner {
           thread,
           threadId,
           taskKind,
-          transientConversationMessages,
           turnId,
           toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
-        // Sensitive mailbox instructions are one-shot sampling input. Once the
-        // immutable step owns them, they must not enter later turn context.
-        transientConversationMessages = [];
         runtimeConfig = stepContext.runtimeConfig;
         const newModelHistoryWarnings = (stepContext.modelHistoryWarnings ?? [])
           .filter((warning) => !publishedModelHistoryWarnings.has(warning));
@@ -314,13 +305,9 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
-        // Close admission before the final drain so a retry cannot be accepted
-        // after the last sampling opportunity. Reopen it only on a continuation.
-        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
-          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
@@ -337,7 +324,6 @@ export class RuntimeAgentTurnRunner {
 
         const pendingChildren = this.options.collaborationCoordinator.pendingChildren(threadId);
         if (pendingChildren.total > 0) {
-          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           if (pendingChildren.active > 0) {
             roundText += COLLABORATION_WAIT_NOTE;
             await this.options.publishAssistantItemDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
@@ -364,7 +350,6 @@ export class RuntimeAgentTurnRunner {
           stopHookActive,
         });
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
-          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
@@ -379,6 +364,7 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
+        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
         settledContent = roundText;
         await this.options.turnFinalizer.finish({
           threadId,

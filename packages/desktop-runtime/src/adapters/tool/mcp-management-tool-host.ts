@@ -217,8 +217,7 @@ export class McpManagementToolHost implements ToolHost {
     const preview = await this.mcpPreview(input);
     return {
       reason: `${preview.action === 'update' ? '更新' : '创建'} MCP 服务：${preview.label || preview.key}`,
-      argumentsPreview: exactMcpApprovalArguments(input)
-        ?? JSON.stringify(preview).slice(0, 1200),
+      argumentsPreview: JSON.stringify(preview).slice(0, 1200),
     };
   }
 
@@ -270,21 +269,6 @@ export class McpManagementToolHost implements ToolHost {
     const list = await this.mcpStore.listServers();
     const existing = list.servers.find((server) => server.key === normalized.key);
     return mcpPreviewPayload(existing ? 'update' : 'create', normalized, list.configPath, existing);
-  }
-}
-
-function exactMcpApprovalArguments(input: unknown): string | null {
-  const record = recordInput(input);
-  // Inline environment variables and headers may contain credentials. Keep the
-  // existing key-only preview for those requests and disable exact retry.
-  if (Object.hasOwn(record, 'env') || Object.hasOwn(record, 'headers')) return null;
-  try {
-    const serialized = JSON.stringify(input);
-    return typeof serialized === 'string' && serialized.length < 1_200
-      ? serialized
-      : null;
-  } catch {
-    return null;
   }
 }
 

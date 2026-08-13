@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { access } from 'node:fs/promises';
-import { join } from 'node:path';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
@@ -18,8 +16,7 @@ import {
   HooksConfigStore,
   mkDataDir,
   nodeEvalHook,
-  ToolCallingModelClient,
-  waitForTestState,
+  ToolCallingModelClient
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop hook lifecycle', () => {
@@ -375,45 +372,5 @@ describe('agent loop hook lifecycle', () => {
           status: 'completed',
         },
       ]);
-    });
-
-  it('rejects mailbox retries after the final drain while a stop hook finishes', async () => {
-      const ids = new RandomIdGenerator();
-      const dataDir = await mkDataDir();
-      const markerPath = join(dataDir, 'stop-hook-started');
-      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
-      const thread = await threadStore.createThread({ title: 'Final mailbox admission', projectId: 'project_1' });
-      const loop = new AgentLoop({
-        threadStore,
-        modelClient: new StopHookModelClient(),
-        eventBus: new InMemoryEventBus(),
-        clock: systemClock,
-        ids,
-        configStore: new HooksConfigStore({
-          Stop: [{
-            hooks: [{
-              type: 'command',
-              command: nodeEvalHook(`require('node:fs').writeFileSync(${JSON.stringify(markerPath)}, 'ready'); setTimeout(() => process.exit(0), 800);`),
-              timeoutSec: 5,
-            }],
-          }],
-        }),
-      });
-
-      const turn = loop.sendTurn(thread.id, { input: 'finish after the stop hook' });
-      await waitForTestState(
-        () => access(markerPath).then(() => true, () => false),
-        Boolean,
-        () => 'stop hook did not start',
-      );
-
-      await expect(loop.deliverMailboxInput(thread.id, {
-        content: 'retry a denied action after the final drain',
-        deliveryMode: 'trigger_turn',
-        fromAgentId: 'runtime-auto-review',
-        queueIfBusy: false,
-        triggerTurn: true,
-      })).rejects.toThrow('active regular turn cannot receive mailbox input');
-      await turn;
     });
 });

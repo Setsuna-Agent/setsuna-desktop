@@ -68,7 +68,6 @@ import {
 } from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useChatMessageOperations } from './hooks/useChatMessageOperations.js';
-import { RuntimeApprovalActionsProvider } from './tool-runs/RuntimeApprovalActionsContext.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
@@ -436,10 +435,7 @@ export function ChatWorkspace({
     ? t('chat.starter.projectTitle', { project: activeProject.name })
     : t('chat.starter.title');
   return (
-    <RuntimeApprovalActionsProvider
-      onApproveDeniedAction={(approvalId) => client.approveDeniedAction(approvalId)}
-    >
-      <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
+    <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
         <div className={conversationClassName} ref={conversationRef}>
           <div className={`chat-messages ${showEmptyStarter ? 'chat-messages--starter' : ''}`} ref={scrollRef} onKeyDownCapture={handleScrollKeyDown} onPointerDownCapture={markScrollbarDragIntent} onScroll={handleScroll} onTouchMoveCapture={handleScrollTouchMove} onWheelCapture={handleScrollWheel}>
@@ -565,8 +561,7 @@ export function ChatWorkspace({
           )}
         </div>
       </div>
-      </main>
-    </RuntimeApprovalActionsProvider>
+    </main>
   );
 }
 

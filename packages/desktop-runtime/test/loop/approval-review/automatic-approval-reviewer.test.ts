@@ -104,61 +104,6 @@ describe('automatic approval reviewer', () => {
     );
   });
 
-  it('binds repeated user-input call ids to their own prompt and answer transaction', () => {
-    const thread = threadFixture();
-    thread.messages.push(
-      {
-        id: 'assistant_reused_call',
-        role: 'assistant',
-        content: '',
-        createdAt: '2026-08-13T00:00:02.000Z',
-        status: 'complete',
-        toolRuns: [{
-          id: 'call_user_input',
-          name: 'request_user_input',
-          status: 'success',
-          userInput: {
-            message: 'Approve deleting the production database?',
-            requestedSchema: {
-              type: 'object',
-              properties: { confirm: { type: 'string', enum: ['yes', 'no'] } },
-              required: ['confirm'],
-            },
-          },
-        }],
-      },
-      {
-        id: 'tool_reused_call',
-        role: 'tool',
-        content: 'User declined to provide this input.',
-        toolCallId: 'call_user_input',
-        toolName: 'request_user_input',
-        createdAt: '2026-08-13T00:00:02.100Z',
-        status: 'complete',
-      },
-    );
-
-    const prompt = buildApprovalReviewPrompt(
-      reviewInput({ cmd: 'pnpm test' }),
-      thread,
-      '2026-08-13T00:00:03.000Z',
-    );
-
-    expect('messages' in prompt).toBe(true);
-    if (!('messages' in prompt)) return;
-    const evidence = taggedJson(prompt.messages[1]?.content ?? '', 'trusted_user_evidence_json') as Array<Record<string, unknown>>;
-    expect(evidence.filter((entry) => entry.source === 'request_user_input')).toEqual([
-      expect.objectContaining({
-        messageId: 'tool_user_input',
-        userInputRequest: expect.objectContaining({ message: 'Approve running the exact test command?' }),
-      }),
-      expect.objectContaining({
-        messageId: 'tool_reused_call',
-        userInputRequest: expect.objectContaining({ message: 'Approve deleting the production database?' }),
-      }),
-    ]);
-  });
-
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
     const secret = 'sk-review-secret-value';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
@@ -262,7 +207,8 @@ describe('automatic approval reviewer', () => {
     expect(third.interruptTurn).toBe(true);
   });
 
-  it('keeps a denied exact action denied across new tool-call ids without resampling', async () => {
+  it('re-reviews the same action after a verified user confirmation', async () => {
+    const thread = threadFixture();
     let responseIndex = 0;
     const modelClient = new ReviewModelClient(() => {
       responseIndex += 1;
@@ -275,231 +221,77 @@ describe('automatic approval reviewer', () => {
           }
         : {
             outcome: 'allow',
-            riskLevel: 'low',
+            riskLevel: 'high',
             userAuthorization: 'high',
-            rationale: 'A later sample attempted to reverse the denial.',
+            rationale: 'The user explicitly approved this exact command.',
           });
     });
-    const reviewer = createReviewer(modelClient);
+    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
 
     const first = await reviewer.review(reviewInput(
       { cmd: 'sudo su', workdir: '/work' },
       'call_1',
     ));
+    thread.messages.push(
+      {
+        id: 'assistant_confirmation',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-13T00:00:02.000Z',
+        status: 'complete',
+        toolRuns: [{
+          id: 'call_confirmation',
+          name: 'request_user_input',
+          status: 'success',
+          userInput: {
+            message: 'Approve running sudo su once in /work?',
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                confirm: { type: 'string', enum: ['yes', 'no'] },
+              },
+              required: ['confirm'],
+            },
+          },
+        }],
+      },
+      {
+        id: 'tool_confirmation',
+        turnId: 'turn_1',
+        role: 'tool',
+        content: 'User submitted structured input:\n{"confirm":"yes"}',
+        toolCallId: 'call_confirmation',
+        toolName: 'request_user_input',
+        createdAt: '2026-08-13T00:00:02.100Z',
+        status: 'complete',
+      },
+    );
     const retryInput = reviewInput(
       { workdir: '/work', cmd: 'sudo su' },
       'call_2',
     );
-    retryInput.request.reason = 'A different description of the same command.';
     const retried = await reviewer.review(retryInput);
 
     expect(first.assessment.status).toBe('denied');
     expect(retried.assessment).toMatchObject({
-      status: 'denied',
-      rationale: expect.stringContaining('This exact action was already denied.'),
-    });
-    expect(modelClient.requests).toHaveLength(1);
-  });
-
-  it('does not resample a denial when only untrusted transcript entries change', async () => {
-    const thread = threadFixture();
-    const modelClient = new ReviewModelClient(() => JSON.stringify({
-      outcome: 'deny',
+      status: 'allowed',
       riskLevel: 'high',
-      userAuthorization: 'unknown',
-      rationale: 'The exact privileged command was not authorized.',
-    }));
-    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
-    await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_first'));
-
-    thread.messages.push(...Array.from({ length: 30 }, (_, index) => ({
-      id: `assistant_noise_${index}`,
-      role: 'assistant' as const,
-      content: `Untrusted tool discussion ${index}: ${'x'.repeat(900)}`,
-      createdAt: `2026-08-13T00:01:${String(index).padStart(2, '0')}.000Z`,
-      status: 'complete' as const,
-    })));
-    thread.messages.push({
-      id: 'runtime_model_only_instruction',
-      role: 'user',
-      content: 'Runtime-generated model-only text is not user authorization.',
-      createdAt: '2026-08-13T00:02:00.000Z',
-      status: 'complete',
-      visibility: 'model',
+      userAuthorization: 'high',
     });
-    const retryInput = reviewInput({ cmd: 'sudo su' }, 'call_retry');
-    retryInput.request.turnId = 'turn_2';
-    const retried = await reviewer.review(retryInput);
-
-    expect(retried.assessment).toMatchObject({
-      status: 'denied',
-      rationale: expect.stringContaining('This exact action was already denied.'),
-    });
-    expect(modelClient.requests).toHaveLength(1);
-  });
-
-  it('resamples an exact retry when new trusted user evidence is recorded', async () => {
-    const thread = threadFixture();
-    let responseIndex = 0;
-    const modelClient = new ReviewModelClient(() => JSON.stringify(
-      responseIndex++ === 0
-        ? {
-            outcome: 'deny',
-            riskLevel: 'high',
-            userAuthorization: 'unknown',
-            rationale: 'The exact action was not yet authorized.',
-          }
-        : {
-            outcome: 'allow',
-            riskLevel: 'high',
-            userAuthorization: 'high',
-            rationale: 'The user explicitly approved the exact action after the denial.',
-          },
-    ));
-    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
-    const first = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_first'));
-
-    thread.messages.push({
-      id: 'user_reapproval',
-      role: 'user',
-      content: 'I saw that sudo su was denied. Approve that exact command once.',
-      createdAt: '2026-08-13T00:00:02.000Z',
-      status: 'complete',
-    });
-    const retried = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_retry'));
-
-    expect(first.assessment.status).toBe('denied');
-    expect(retried.assessment.status).toBe('allowed');
-    expect(reviewer.approveDeniedAction('approval_call_first')).toBeNull();
     expect(modelClient.requests).toHaveLength(2);
-  });
-
-  it('applies a manual override once to only the denied exact action and still denies critical risk', async () => {
-    let responseIndex = 0;
-    const modelClient = new ReviewModelClient(() => JSON.stringify(
-      responseIndex++ < 2
-        ? {
-            outcome: 'deny',
-            riskLevel: 'high',
-            userAuthorization: 'unknown',
-            rationale: 'The action is not authorized.',
-          }
-        : {
-            outcome: 'allow',
-            riskLevel: 'critical',
-            userAuthorization: 'high',
-            rationale: 'The model attempted to allow critical risk after an override.',
-          },
-    ));
-    const reviewer = createReviewer(modelClient);
-    const denied = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_denied'));
-    const registered = reviewer.approveDeniedAction('approval_call_denied');
-    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-    expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-
-    const different = await reviewer.review(reviewInput({ cmd: 'sudo -i' }, 'call_different'));
-    const exactRetry = reviewInput({ cmd: 'sudo su' }, 'call_exact_retry');
-    exactRetry.request.turnId = 'turn_2';
-    const retried = await reviewer.review(exactRetry);
-    const duplicateRetry = reviewInput({ cmd: 'sudo su' }, 'call_duplicate_retry');
-    duplicateRetry.request.turnId = 'turn_2';
-    const duplicated = await reviewer.review(duplicateRetry);
-
-    expect(denied.assessment.status).toBe('denied');
-    expect(registered).toMatchObject({
-      action: expect.stringContaining('"cmd":"sudo su"'),
-      alreadyRegistered: false,
-      threadId: 'thread_1',
-    });
-    expect(different.assessment.status).toBe('denied');
-    expect(retried.assessment).toMatchObject({ status: 'denied', riskLevel: 'critical' });
-    expect(duplicated.assessment.rationale).toContain('This exact action was already denied.');
-    expect(modelClient.requests).toHaveLength(3);
-    expect(modelClient.requests[1]!.messages.some((message) => message.role === 'developer')).toBe(false);
-    expect(modelClient.requests[2]!.messages).toEqual(expect.arrayContaining([
+    const retryEvidence = taggedJson(
+      modelClient.requests[1]?.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    );
+    expect(retryEvidence).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        role: 'developer',
-        content: expect.stringContaining('"cmd":"sudo su"'),
+        messageId: 'tool_confirmation',
+        userInputRequest: expect.objectContaining({
+          message: 'Approve running sudo su once in /work?',
+        }),
       }),
     ]));
-    expect(reviewer.approveDeniedAction('approval_call_denied')).toBeNull();
-  });
-
-  it('does not spend a normal-action override on a sandbox-bypass retry', async () => {
-    const modelClient = new ReviewModelClient(() => JSON.stringify({
-      outcome: 'deny',
-      riskLevel: 'high',
-      userAuthorization: 'unknown',
-      rationale: 'The action is not authorized.',
-    }));
-    const reviewer = createReviewer(modelClient);
-    await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_denied'));
-    expect(reviewer.approveDeniedAction('approval_call_denied')).not.toBeNull();
-    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-    expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-
-    const bypassRetry = reviewInput({ cmd: 'sudo su' }, 'call_bypass');
-    bypassRetry.request.turnId = 'turn_2';
-    bypassRetry.request.retryKind = 'sandbox_bypass';
-    await reviewer.review(bypassRetry);
-
-    const exactRetry = reviewInput({ cmd: 'sudo su' }, 'call_exact');
-    exactRetry.request.turnId = 'turn_2';
-    await reviewer.review(exactRetry);
-
-    expect(modelClient.requests).toHaveLength(3);
-    expect(modelClient.requests[1]!.messages.some((message) => message.role === 'developer')).toBe(false);
-    expect(modelClient.requests[2]!.messages.some((message) => message.role === 'developer')).toBe(true);
-  });
-
-  it('binds an override to its resolved root and releases it when the retry turn settles', async () => {
-    const modelClient = new ReviewModelClient(() => JSON.stringify({
-      outcome: 'deny',
-      riskLevel: 'high',
-      userAuthorization: 'unknown',
-      rationale: 'The action is not authorized.',
-    }));
-    const reviewer = createReviewer(modelClient);
-    const denied = reviewInput({ cmd: 'write relative.txt' }, 'call_denied');
-    denied.executionRoot = '/workspace/first';
-    await reviewer.review(denied);
-    expect(reviewer.approveDeniedAction('approval_call_denied')).not.toBeNull();
-    expect(reviewer.prepareDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-    expect(reviewer.activateDeniedActionApproval('approval_call_denied', 'turn_2')).toBe(true);
-
-    const moved = reviewInput({ cmd: 'write relative.txt' }, 'call_moved');
-    moved.executionRoot = '/workspace/second';
-    moved.request.turnId = 'turn_2';
-    await reviewer.review(moved);
-    reviewer.finishTurn('turn_2');
-
-    const retryRegistration = reviewer.approveDeniedAction('approval_call_denied');
-    expect(modelClient.requests[1]!.messages.some((message) => message.role === 'developer')).toBe(false);
-    expect(retryRegistration).toMatchObject({ alreadyRegistered: false });
-  });
-
-  it('does not retain an exact retry action for truncated or summarized previews', async () => {
-    const modelClient = new ReviewModelClient(() => JSON.stringify({
-      outcome: 'deny',
-      riskLevel: 'high',
-      userAuthorization: 'unknown',
-      rationale: 'The action is not authorized.',
-    }));
-    const reviewer = createReviewer(modelClient);
-    const input = reviewInput({ payload: `visible-${'x'.repeat(2_000)}-hidden-suffix` }, 'call_long');
-    input.request.argumentsPreview = 'x'.repeat(1_200);
-    const summarized = reviewInput({ text: 'secret browser input' }, 'call_summarized');
-    summarized.request.argumentsPreview = '{"textLength":20}';
-
-    const [truncatedResult, summarizedResult] = await Promise.all([
-      reviewer.review(input),
-      reviewer.review(summarized),
-    ]);
-
-    expect(truncatedResult.assessment.exactRetryAvailable).toBe(false);
-    expect(summarizedResult.assessment.exactRetryAvailable).toBe(false);
-    expect(reviewer.approveDeniedAction('approval_call_long')).toBeNull();
-    expect(reviewer.approveDeniedAction('approval_call_summarized')).toBeNull();
   });
 });
 
@@ -582,7 +374,6 @@ function createReviewer(
 
 function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalReviewInput {
   return {
-    approvalId: `approval_${toolCallId}`,
     arguments: argumentsValue,
     request: {
       threadId: 'thread_1',
@@ -590,9 +381,7 @@ function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalRe
       toolCallId,
       toolName: 'exec_command',
       reason: 'Command requires elevated execution.',
-      argumentsPreview: typeof argumentsValue === 'string'
-        ? argumentsValue
-        : JSON.stringify(argumentsValue),
+      argumentsPreview: '{"cmd":"truncated"}',
       environmentId: 'local',
     },
     signal: new AbortController().signal,

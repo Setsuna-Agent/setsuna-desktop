@@ -553,11 +553,5 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput) {
       return request<void>({ path: `/v1/approvals/${encodeURIComponent(approvalId)}`, method: 'POST', body: input });
     },
-    approveDeniedAction(approvalId: string) {
-      return request<void>({
-        path: `/v1/approvals/${encodeURIComponent(approvalId)}/approve-denied-action`,
-        method: 'POST',
-      });
-    },
   };
 }

@@ -27,18 +27,12 @@ describe('runtime turn input queue', () => {
     const queue = new RuntimeTurnInputQueue();
     const steer = runtimeUserMessage('msg_steer', 'new user input');
 
-    queue.enqueueMailbox({
-      delivery: { id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' },
-      transient: false,
-    });
+    queue.enqueueMailbox({ id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' });
     queue.enqueueSteer({ message: steer, skillIds: [] });
 
     expect(queue.hasPending()).toBe(true);
     expect(queue.takeSteers()).toEqual([{ message: steer, skillIds: [] }]);
-    expect(queue.takeMailbox()).toEqual([{
-      delivery: { id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' },
-      transient: false,
-    }]);
+    expect(queue.takeMailbox()).toEqual([{ id: 'mail_1', fromAgentId: 'agent_1', content: 'agent update' }]);
     expect(queue.hasPending()).toBe(false);
   });
 });

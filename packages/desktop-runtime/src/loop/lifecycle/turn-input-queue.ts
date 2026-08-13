@@ -7,14 +7,9 @@ export type RuntimeQueuedSteer = {
   thinkingEffort?: string;
 };
 
-export type RuntimeQueuedMailbox = {
-  delivery: RuntimeMailboxDelivery;
-  transient: boolean;
-};
-
 export type RuntimeQueuedTurnInput =
   | { type: 'steer'; input: RuntimeQueuedSteer }
-  | { type: 'mailbox'; input: RuntimeQueuedMailbox };
+  | { type: 'mailbox'; input: RuntimeMailboxDelivery };
 
 /**
  * 用于任务启动后到达、且模型可见输入的轮次本地队列。
@@ -48,7 +43,7 @@ export class RuntimeTurnInputQueue {
     this.pending.push({ type: 'steer', input });
   }
 
-  enqueueMailbox(input: RuntimeQueuedMailbox): void {
+  enqueueMailbox(input: RuntimeMailboxDelivery): void {
     this.pending.push({ type: 'mailbox', input });
   }
 
@@ -62,8 +57,8 @@ export class RuntimeTurnInputQueue {
     return steers;
   }
 
-  takeMailbox(): RuntimeQueuedMailbox[] {
-    const inputs: RuntimeQueuedMailbox[] = [];
+  takeMailbox(): RuntimeMailboxDelivery[] {
+    const inputs: RuntimeMailboxDelivery[] = [];
     this.takeMatching((item) => {
       if (item.type !== 'mailbox') return false;
       inputs.push(item.input);

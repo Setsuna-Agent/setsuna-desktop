@@ -68,13 +68,11 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       status: 'rejected',
       argumentsPreview: '{"cmd":"sudo su"}',
       resultPreview: 'Tool exec_command was rejected by runtime policy.',
-      approvalId: 'approval_denied',
       approvalReviewer: 'automatic',
       approvalStatus: 'rejected',
       approvalReviewAssessment: {
         status: 'denied',
         rationale: '该操作超出用户授权范围。',
-        exactRetryAvailable: true,
         riskLevel: 'critical',
       },
     }]);
@@ -123,105 +121,14 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(automaticAllowed).not.toContain('风险：低');
     expect(automaticAllowed).not.toContain('这段模型解释不应出现在界面上');
     expect(automaticAllowedHtml).not.toContain('chat-tool-run__approval-review');
-    expect(automaticDenied).toContain('自动审查已拒绝：该操作超出用户授权范围。');
-    expect(automaticDenied).toContain('仍然批准并精确重试一次');
-    expect(automaticDeniedHtml).toContain('chat-tool-run__approval-review--denied');
+    expect(automaticDenied).not.toContain('未通过审查');
+    expect(automaticDenied).not.toContain('风险：严重');
+    expect(automaticDeniedHtml).not.toContain('chat-tool-run__approval-review');
     expect(manualFallback).toContain('自动审查不可用：Cannot connect to API');
     expect(manualFallbackHtml).toContain('chat-tool-run__approval-review-detail');
     expect(manualFallbackHtml).not.toContain('chat-mcp-terminal__output');
     expect(manualFallback).toContain('允许');
     expect(manualFallback).toContain('拒绝');
-  });
-
-  it('keeps the exact-retry control for a completed multi-file denial', () => {
-    const html = renderedHtml([{
-      id: 'patch_denied',
-      name: 'apply_patch',
-      status: 'rejected',
-      argumentsPreview: JSON.stringify({
-        files: [
-          { file_path: 'src/App.tsx', action: 'edit' },
-          { file_path: 'src/app.css', action: 'edit' },
-        ],
-      }),
-      approvalId: 'approval_patch_denied',
-      approvalReviewer: 'automatic',
-      approvalStatus: 'rejected',
-      approvalReviewAssessment: {
-        status: 'denied',
-        rationale: 'The multi-file write was not authorized.',
-        exactRetryAvailable: true,
-        riskLevel: 'high',
-      },
-    }]);
-
-    expect(html).toContain('chat-tool-run--group');
-    expect(renderedTextFromHtml(html)).toContain('仍然批准并精确重试一次');
-  });
-
-  it('associates each grouped retry with its own file target', () => {
-    const deniedRun = (id: string, filePath: string): RuntimeToolRun => ({
-      id,
-      name: 'write_file',
-      status: 'rejected',
-      argumentsPreview: JSON.stringify({ file_path: filePath, content: 'updated' }),
-      approvalId: `approval_${id}`,
-      approvalReviewer: 'automatic',
-      approvalStatus: 'rejected',
-      approvalReviewAssessment: {
-        status: 'denied',
-        rationale: `Writing ${filePath} was not authorized.`,
-        exactRetryAvailable: true,
-        riskLevel: 'high',
-      },
-    });
-    const html = renderedHtml([
-      deniedRun('write_first', 'src/first.ts'),
-      deniedRun('write_second', 'src/second.ts'),
-    ]);
-    const controls = html.split('<div class="chat-tool-run__grouped-approval">').slice(1);
-
-    expect(controls).toHaveLength(2);
-    expect(controls[0]).toContain('first.ts');
-    expect(controls[0]).not.toContain('second.ts');
-    expect(controls[1]).toContain('second.ts');
-    expect(controls[1]).not.toContain('first.ts');
-  });
-
-  it('shows generic MCP arguments before offering an exact retry', () => {
-    const deniedMcpRun: RuntimeToolRun = {
-      id: 'mcp_denied',
-      name: 'mcp__search__search',
-      status: 'rejected',
-      argumentsPreview: JSON.stringify({ query: 'approval retry semantics', limit: 5 }),
-      approvalId: 'approval_mcp_denied',
-      approvalReviewer: 'automatic',
-      approvalStatus: 'rejected',
-      approvalReviewAssessment: {
-        status: 'denied',
-        rationale: 'The MCP destination was not authorized.',
-        exactRetryAvailable: true,
-        riskLevel: 'high',
-      },
-    };
-    const html = renderedHtml([deniedMcpRun]);
-    const text = renderedTextFromHtml(html);
-    const truncatedHtml = renderedHtml([{
-      ...deniedMcpRun,
-      id: 'mcp_denied_truncated',
-      approvalId: 'approval_mcp_denied_truncated',
-      argumentsPreview: 'x'.repeat(1_200),
-      approvalReviewAssessment: {
-        ...deniedMcpRun.approvalReviewAssessment!,
-        exactRetryAvailable: false,
-      },
-    }]);
-
-    expect(text).toContain('工具参数');
-    expect(text).toContain('approval retry semantics');
-    expect(html).toContain('&quot;limit&quot;: 5');
-    expect(text).toContain('仍然批准并精确重试一次');
-    expect(renderedTextFromHtml(truncatedHtml)).not.toContain('仍然批准并精确重试一次');
   });
 
   it('shows a single pending approval summary only once inside grouped tool history', () => {
