@@ -137,10 +137,38 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
     totalChars += serialized.length;
   }
   return {
-    trustedEvidenceFingerprint: trustedEvidenceFingerprint(trustedUserEvidence),
+    // The cache key must not depend on prompt window truncation: untrusted tool
+    // chatter cannot manufacture a reason to resample a previously denied action.
+    trustedEvidenceFingerprint: trustedEvidenceFingerprint(
+      stableTrustedReviewEvidence(thread, userInputRequests),
+    ),
     trustedUserEvidence: escapePromptEnvelopeJson(JSON.stringify(trustedUserEvidence)),
     untrustedContext: escapePromptEnvelopeJson(JSON.stringify(untrustedContext)),
   };
+}
+
+function stableTrustedReviewEvidence(
+  thread: RuntimeThread,
+  userInputRequests: Map<string, RuntimeUserInputRequest>,
+): Array<Record<string, unknown>> {
+  return thread.messages.flatMap((message) => {
+    if (message.visibility === 'model') return [];
+    const source = trustedUserEvidenceSource(message);
+    if (!source) return [];
+    return [{
+      messageId: message.id,
+      role: message.role,
+      source,
+      content: message.content,
+      ...(message.toolName ? { toolName: message.toolName } : {}),
+      ...(source === 'request_user_input' && message.toolCallId
+        ? {
+            toolCallId: message.toolCallId,
+            userInputRequest: userInputRequests.get(message.toolCallId),
+          }
+        : {}),
+    }];
+  });
 }
 
 function userInputRequestsByToolCallId(thread: RuntimeThread): Map<string, RuntimeUserInputRequest> {
@@ -156,8 +184,7 @@ function userInputRequestsByToolCallId(thread: RuntimeThread): Map<string, Runti
 }
 
 function trustedEvidenceFingerprint(entries: Array<Record<string, unknown>>): string {
-  const stableEvidence = entries.map(({ order: _order, ...entry }) => entry);
-  return `sha256:${createHash('sha256').update(JSON.stringify(stableEvidence)).digest('hex')}`;
+  return `sha256:${createHash('sha256').update(JSON.stringify(entries)).digest('hex')}`;
 }
 
 /** Keeps serialized JSON valid while preventing payloads from closing prompt envelope tags. */

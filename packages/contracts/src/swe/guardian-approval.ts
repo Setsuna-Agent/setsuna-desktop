@@ -26,7 +26,7 @@ export function guardianApprovalReviewAction(
     return {
       type: 'applyPatch',
       cwd: guardianActionCwd(approval, args),
-      files: fileUpdateChangesFromPreview(approval.argumentsPreview).map((change) => change.path),
+      files: guardianFileTargets(args, approval.argumentsPreview),
     };
   }
   if (approval.toolName === 'request_permissions') {
@@ -36,6 +36,15 @@ export function guardianApprovalReviewAction(
         approval.permissionApprovalContext?.requestedPermissions,
       ),
       reason: approval.permissionApprovalContext?.reason ?? approval.reason ?? null,
+    };
+  }
+  if (approval.toolName === 'write_stdin') {
+    const args = recordFromJson(approval.argumentsPreview);
+    return {
+      type: 'command',
+      command: guardianInteractiveInput(args),
+      cwd: guardianActionCwd(approval, args),
+      source: 'unifiedExec',
     };
   }
   if (SHELL_TOOL_NAMES.has(approval.toolName)) {
@@ -53,6 +62,63 @@ export function guardianApprovalReviewAction(
     server: parsedMcpName?.server ?? 'setsuna-runtime',
     toolName: parsedMcpName?.toolName ?? approval.toolName,
   };
+}
+
+function guardianFileTargets(
+  args: Record<string, unknown>,
+  argumentsPreview: string,
+): string[] {
+  const workdir = stringField(args.workdir ?? args.cwd);
+  const directTargets = [args.file_path, args.path, args.target_path, args.file]
+    .filter((value): value is string => typeof value === 'string');
+  const listedTargets = Array.isArray(args.files)
+    ? args.files.flatMap((value) => {
+        if (typeof value === 'string') return [value];
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+        const record = value as Record<string, unknown>;
+        const target = record.file_path ?? record.path ?? record.target_path ?? record.file;
+        return typeof target === 'string' ? [target] : [];
+      })
+    : [];
+  const diffTargets = fileUpdateChangesFromPreview(argumentsPreview).map((change) => change.path);
+  const patch = typeof args.patch === 'string' ? args.patch : '';
+  const patchTargets = [...patch.matchAll(
+    /^\*\*\* (?:Add|Delete|Update) File: (.+)$|^\*\*\* Move to: (.+)$/gmu,
+  )].map((match) => match[1] ?? match[2] ?? '');
+  return [...new Set([
+    ...directTargets,
+    ...listedTargets,
+    ...diffTargets,
+    ...patchTargets.map((target) => guardianPathInWorkdir(target, workdir)),
+  ].map(normalizeGuardianPath).filter(Boolean))];
+}
+
+function guardianInteractiveInput(args: Record<string, unknown>): string {
+  const input = args.chars ?? args.input;
+  const content = typeof input === 'string' ? input : '';
+  const sessionValue = args.session_id ?? args.sessionId ?? args.process_id ?? args.processId;
+  const sessionId = typeof sessionValue === 'string' || typeof sessionValue === 'number'
+    ? String(sessionValue).trim()
+    : '';
+  if (sessionId && content) return `[session ${sessionId}] ${content}`;
+  if (content) return content;
+  return sessionId ? `[session ${sessionId}] write_stdin` : 'write_stdin';
+}
+
+function guardianPathInWorkdir(target: string, workdir: string): string {
+  const normalizedTarget = normalizeGuardianPath(target);
+  if (!normalizedTarget || !workdir || isAbsoluteGuardianPath(normalizedTarget)) {
+    return normalizedTarget;
+  }
+  return `${normalizeGuardianPath(workdir)}/${normalizedTarget}`;
+}
+
+function normalizeGuardianPath(value: string): string {
+  return value.trim().replace(/\\/gu, '/').replace(/^\.\//u, '');
+}
+
+function isAbsoluteGuardianPath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:\//u.test(value);
 }
 
 export function guardianApprovalReview(

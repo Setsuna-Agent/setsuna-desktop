@@ -298,6 +298,7 @@ function toolRunGroupPanelNode(
           <>
             <FileOperationTargetList runs={visibleRuns} />
             <GroupedHookRunList runs={visibleRuns} />
+            <GroupedApprovalControls runs={visibleRuns} onAnswerApproval={onAnswerApproval} />
           </>
         ) : shellGroup ? (
           visibleRuns.map((run) => (
@@ -399,6 +400,7 @@ function renderMixedToolRunChildGroup(
       <div className="chat-tool-run__mixed-file-operation" key={toolRunGroupId(group)}>
         <FileOperationTargetList runs={runs} />
         <GroupedHookRunList runs={runs} />
+        <GroupedApprovalControls runs={runs} onAnswerApproval={onAnswerApproval} />
       </div>
     );
   }
@@ -677,6 +679,26 @@ function approvalControlId(run: RuntimeToolRun): string | undefined {
   return run.approvalReviewAssessment?.status === 'denied'
     ? run.approvalId
     : undefined;
+}
+
+function GroupedApprovalControls({
+  runs,
+  onAnswerApproval,
+}: {
+  runs: RuntimeToolRun[];
+  onAnswerApproval: AnswerApprovalHandler;
+}) {
+  return runs.map((run) => {
+    const approvalId = approvalControlId(run);
+    return approvalId ? (
+      <RuntimeToolApprovalControl
+        approvalId={approvalId}
+        key={run.id}
+        run={run}
+        onAnswerApproval={onAnswerApproval}
+      />
+    ) : null;
+  });
 }
 
 function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {

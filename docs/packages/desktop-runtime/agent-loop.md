@@ -133,7 +133,7 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 - Reviewer 先分别判断 `riskLevel` 与 `userAuthorization`，再按矩阵决策：低/中风险默认允许，高风险仅在授权至少为中且范围明确时允许，严重风险始终拒绝。`require_escalated`、`sudo`、工作区外路径或危险命令名本身不直接决定风险，必须判断精确目标和副作用。
 - 允许只批准当前这一项精确操作，不创建 session/persistent grant，也不能放宽确定性的安全策略。
 - 无沙箱 shell 进程的空 stdin 轮询仍按只读处理；任何非空 stdin 都作为新的精确动作重新审批，避免一次批准意外覆盖后续 root/admin shell 命令。
-- 明确拒绝会作为不可绕过的工具拒绝返回主 Agent。完全相同的动作只有在可信用户证据没有变化时才复用拒绝；新增直接确认或 runtime 验证过的结构化回答后必须重新采样 reviewer。同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
+- 明确拒绝会作为不可绕过的工具拒绝返回主 Agent。完全相同的动作只有在可信用户证据没有变化时才复用拒绝；拒绝指纹基于未截断的稳定可信证据，不会因 assistant/tool 消息挤出 prompt 窗口而变化。新增直接确认或 runtime 验证过的结构化回答后必须重新采样 reviewer。同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
 - 用户可在拒绝卡片登记一次精确重试。`AutomaticApprovalOverrideCoordinator` 写入 `approval.override_registered`，并向当前普通 turn 注入 model-only 运行时指令；线程空闲时启动一个不持久化用户消息的内部续轮。Reviewer 只保存动作哈希，并把单次 token 绑定到该续轮的 turn ID；只有该 turn 内完整参数、重试类型、目标和权限都精确匹配时，才注入 runtime 生成的 developer 授权标记。标记消费后不能复用，续轮结束也不能被其他 turn 消费，且重试仍经过风险矩阵，`critical` 始终拒绝。
 - 超时、无效结构化输出、模型或配置故障均先记录失败审计，再创建新的人工审批请求；用户输入和 MCP elicitation 始终由用户回答。
 

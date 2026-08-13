@@ -13,12 +13,23 @@ type AutomaticApprovalOverrideCoordinatorOptions = {
 
 /** Bridges a user override into one audited retry while the reviewer owns exact-action matching. */
 export class AutomaticApprovalOverrideCoordinator {
+  private readonly inFlightRegistrations = new Map<
+    string,
+    { promise: Promise<boolean>; threadId: string }
+  >();
+
   constructor(private readonly options: AutomaticApprovalOverrideCoordinatorOptions) {}
 
   async approveDeniedAction(
     approvalId: string,
     expectedThreadId?: string,
   ): Promise<boolean> {
+    const inFlight = this.inFlightRegistrations.get(approvalId);
+    if (inFlight) {
+      return expectedThreadId && expectedThreadId !== inFlight.threadId
+        ? false
+        : inFlight.promise;
+    }
     const registered = this.options.reviewer?.approveDeniedAction?.(approvalId);
     if (!registered) return false;
     if (expectedThreadId && registered.threadId !== expectedThreadId) {
@@ -29,6 +40,24 @@ export class AutomaticApprovalOverrideCoordinator {
     }
     if (registered.alreadyRegistered) return true;
 
+    const registration = this.deliverAndActivate(approvalId, registered);
+    this.inFlightRegistrations.set(approvalId, {
+      promise: registration,
+      threadId: registered.threadId,
+    });
+    try {
+      return await registration;
+    } finally {
+      if (this.inFlightRegistrations.get(approvalId)?.promise === registration) {
+        this.inFlightRegistrations.delete(approvalId);
+      }
+    }
+  }
+
+  private async deliverAndActivate(
+    approvalId: string,
+    registered: { threadId: string; turnId: string },
+  ): Promise<boolean> {
     try {
       const delivered = await this.options.deliverRetryInstruction(
         registered.threadId,

@@ -246,6 +246,41 @@ describe('automatic approval reviewer', () => {
     expect(modelClient.requests).toHaveLength(1);
   });
 
+  it('does not resample a denial when only untrusted transcript entries change', async () => {
+    const thread = threadFixture();
+    const modelClient = new ReviewModelClient(() => JSON.stringify({
+      outcome: 'deny',
+      riskLevel: 'high',
+      userAuthorization: 'unknown',
+      rationale: 'The exact privileged command was not authorized.',
+    }));
+    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
+    await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_first'));
+
+    thread.messages.push(...Array.from({ length: 30 }, (_, index) => ({
+      id: `assistant_noise_${index}`,
+      role: 'assistant' as const,
+      content: `Untrusted tool discussion ${index}: ${'x'.repeat(900)}`,
+      createdAt: `2026-08-13T00:01:${String(index).padStart(2, '0')}.000Z`,
+      status: 'complete' as const,
+    })));
+    thread.messages.push({
+      id: 'runtime_model_only_instruction',
+      role: 'user',
+      content: 'Runtime-generated model-only text is not user authorization.',
+      createdAt: '2026-08-13T00:02:00.000Z',
+      status: 'complete',
+      visibility: 'model',
+    });
+    const retried = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_retry'));
+
+    expect(retried.assessment).toMatchObject({
+      status: 'denied',
+      rationale: expect.stringContaining('This exact action was already denied.'),
+    });
+    expect(modelClient.requests).toHaveLength(1);
+  });
+
   it('resamples an exact retry when new trusted user evidence is recorded', async () => {
     const thread = threadFixture();
     let responseIndex = 0;

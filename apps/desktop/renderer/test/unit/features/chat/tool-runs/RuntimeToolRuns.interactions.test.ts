@@ -132,6 +132,31 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(manualFallback).toContain('拒绝');
   });
 
+  it('keeps the exact-retry control for a completed multi-file denial', () => {
+    const html = renderedHtml([{
+      id: 'patch_denied',
+      name: 'apply_patch',
+      status: 'rejected',
+      argumentsPreview: JSON.stringify({
+        files: [
+          { file_path: 'src/App.tsx', action: 'edit' },
+          { file_path: 'src/app.css', action: 'edit' },
+        ],
+      }),
+      approvalId: 'approval_patch_denied',
+      approvalReviewer: 'automatic',
+      approvalStatus: 'rejected',
+      approvalReviewAssessment: {
+        status: 'denied',
+        rationale: 'The multi-file write was not authorized.',
+        riskLevel: 'high',
+      },
+    }]);
+
+    expect(html).toContain('chat-tool-run--group');
+    expect(renderedTextFromHtml(html)).toContain('仍然批准并精确重试一次');
+  });
+
   it('shows a single pending approval summary only once inside grouped tool history', () => {
     const pendingRun: RuntimeToolRun = {
       id: 'exec_pending',
