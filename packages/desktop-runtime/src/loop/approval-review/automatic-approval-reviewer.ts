@@ -323,6 +323,10 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     );
   }
 
+  hasDeniedAction(approvalId: string): boolean {
+    return this.deniedApprovals.has(approvalId);
+  }
+
   approveDeniedAction(approvalId: string) {
     const denied = this.deniedApprovals.get(approvalId);
     if (!denied) return null;

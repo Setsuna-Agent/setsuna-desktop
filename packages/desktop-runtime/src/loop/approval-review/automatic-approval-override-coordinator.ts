@@ -24,6 +24,10 @@ export class AutomaticApprovalOverrideCoordinator {
 
   constructor(private readonly options: AutomaticApprovalOverrideCoordinatorOptions) {}
 
+  hasDeniedAction(approvalId: string): boolean {
+    return this.options.reviewer?.hasDeniedAction?.(approvalId) === true;
+  }
+
   async approveDeniedAction(
     approvalId: string,
     expectedThreadId?: string,

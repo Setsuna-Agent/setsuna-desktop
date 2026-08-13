@@ -4,6 +4,7 @@ import type {
   MessagePatch,
   RegenerateMessageInput,
   RuntimeConfigState,
+  RuntimeMessage,
   RuntimeThread,
   RuntimeThreadSummary,
   ThreadMemoryModePatch,
@@ -202,7 +203,7 @@ export async function handleRuntimeThreadRequest(
       return true;
     }
     sendJson(response, 200, {
-      messages: thread.messages,
+      messages: withAvailableApprovalRetries(runtime, thread.messages),
       nextBefore: thread.messagePage?.nextBefore ?? null,
       total: thread.messagePage?.total ?? thread.messages.length,
     });
@@ -303,8 +304,41 @@ function withActiveTurn<TThread extends RuntimeThread | RuntimeThreadSummary>(
   runtime: RuntimeFactory,
   thread: TThread,
 ): TThread {
-  return {
+  const active = {
     ...thread,
     activeTurnId: runtime.agentLoop.activeTurnId(thread.id),
   };
+  if (!('messages' in active)) return active;
+  return {
+    ...active,
+    messages: withAvailableApprovalRetries(runtime, active.messages),
+  };
+}
+
+export function withAvailableApprovalRetries(
+  runtime: Pick<RuntimeFactory, 'approvalOverrides'>,
+  messages: RuntimeMessage[],
+): RuntimeMessage[] {
+  let messagesChanged = false;
+  const next = messages.map((message) => {
+    let runsChanged = false;
+    const toolRuns = message.toolRuns?.map((run) => {
+      if (
+        run.approvalReviewAssessment?.exactRetryAvailable !== true
+        || (run.approvalId && runtime.approvalOverrides.hasDeniedAction(run.approvalId))
+      ) return run;
+      runsChanged = true;
+      return {
+        ...run,
+        approvalReviewAssessment: {
+          ...run.approvalReviewAssessment,
+          exactRetryAvailable: false,
+        },
+      };
+    });
+    if (!runsChanged) return message;
+    messagesChanged = true;
+    return { ...message, toolRuns };
+  });
+  return messagesChanged ? next : messages;
 }

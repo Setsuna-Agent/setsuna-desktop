@@ -21,6 +21,8 @@ export type ApprovalReviewResult = {
 
 export type ApprovalReviewer = {
   review(input: ApprovalReviewInput): Promise<ApprovalReviewResult>;
+  /** Reports whether the runtime still retains the exact action for this denial. */
+  hasDeniedAction?(approvalId: string): boolean;
   /** Reserves one user-authorized retry and returns its runtime-only exact action payload. */
   approveDeniedAction?(approvalId: string): ApprovalDeniedActionOverride | null;
   /** Binds the reserved retry to a turn without making the token consumable yet. */
