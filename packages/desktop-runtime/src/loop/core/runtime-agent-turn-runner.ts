@@ -43,7 +43,7 @@ type RuntimeAgentTurnRunnerOptions = {
   toolHost?: ToolHost;
   turnFinalizer: Pick<RuntimeTurnFinalizer, 'finish' | 'publishReviewModeMessage'>;
   turnInputs: Pick<RuntimeTurnInputCoordinator, 'drainMailboxMessages' | 'drainSteers'>;
-  turnTasks: Pick<RuntimeTurnTaskRegistry, 'stopAcceptingSteers'>;
+  turnTasks: Pick<RuntimeTurnTaskRegistry, 'resumeAcceptingSteers' | 'stopAcceptingSteers'>;
   turnTermination: Pick<RuntimeTurnTerminationCoordinator, 'publishCancelledOnce'>;
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -305,9 +305,13 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
+        // Close admission before the final drain so a retry cannot be accepted
+        // after the last sampling opportunity. Reopen it only on a continuation.
+        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
         const pendingMailboxMessages = await this.options.turnInputs.drainMailboxMessages(threadId, turnId);
         const pendingSteers = await this.options.turnInputs.drainSteers(threadId, turnId);
         if (pendingMailboxMessages.length || pendingSteers.length) {
+          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
@@ -324,6 +328,7 @@ export class RuntimeAgentTurnRunner {
 
         const pendingChildren = this.options.collaborationCoordinator.pendingChildren(threadId);
         if (pendingChildren.total > 0) {
+          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           if (pendingChildren.active > 0) {
             roundText += COLLABORATION_WAIT_NOTE;
             await this.options.publishAssistantItemDelta(threadId, turnId, assistantMessageId, COLLABORATION_WAIT_NOTE);
@@ -350,6 +355,7 @@ export class RuntimeAgentTurnRunner {
           stopHookActive,
         });
         if (stopHookOutcome.shouldBlock && stopHookOutcome.blockReason) {
+          this.options.turnTasks.resumeAcceptingSteers(threadId, turnId);
           await this.options.completeMessage(threadId, turnId, assistantMessageId, { content: roundText, phase: 'commentary', usage: sampled.usage, memoryCitation: roundMemoryCitation, providerMetadata: assistantMessage.providerMetadata });
           activeAssistantMessageId = null;
           conversationMessages.push({
@@ -364,7 +370,6 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
-        this.options.turnTasks.stopAcceptingSteers(threadId, turnId);
         settledContent = roundText;
         await this.options.turnFinalizer.finish({
           threadId,

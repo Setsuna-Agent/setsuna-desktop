@@ -139,6 +139,12 @@ export class RuntimeTurnTaskRegistry {
     task.acceptingSteers = false;
   }
 
+  resumeAcceptingSteers(threadId: string, turnId: string): void {
+    const task = this.activeForThread(threadId);
+    if (!task || task.turnId !== turnId) return;
+    task.acceptingSteers = true;
+  }
+
   async waitForFinalizingRegularTurn(threadId: string): Promise<void> {
     const active = this.activeForThread(threadId);
     if (active?.taskKind !== 'regular' || active.acceptingSteers || !active.done) return;

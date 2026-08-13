@@ -134,7 +134,7 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 - 允许只批准当前这一项精确操作，不创建 session/persistent grant，也不能放宽确定性的安全策略。
 - 无沙箱 shell 进程的空 stdin 轮询仍按只读处理；任何非空 stdin 都作为新的精确动作重新审批，避免一次批准意外覆盖后续 root/admin shell 命令。
 - 明确拒绝会作为不可绕过的工具拒绝返回主 Agent。完全相同的动作只有在可信用户证据没有变化时才复用拒绝；拒绝指纹基于未截断的稳定可信证据，不会因 assistant/tool 消息挤出 prompt 窗口而变化。新增直接确认或 runtime 验证过的结构化回答后必须重新采样 reviewer。同一 turn 连续拒绝 3 次或最近 50 次中拒绝 10 次时中止 turn，避免改写命令反复试探。
-- 用户可在拒绝卡片登记一次精确重试。`AutomaticApprovalOverrideCoordinator` 写入 `approval.override_registered`，并向当前普通 turn 注入 model-only 运行时指令；线程空闲时启动一个不持久化用户消息的内部续轮。Reviewer 只保存动作哈希，并把单次 token 绑定到该续轮的 turn ID；只有该 turn 内完整参数、重试类型、目标和权限都精确匹配时，才注入 runtime 生成的 developer 授权标记。标记消费后不能复用，续轮结束也不能被其他 turn 消费，且重试仍经过风险矩阵，`critical` 始终拒绝。
+- 用户可在拒绝卡片查看被拒绝动作的安全预览并登记一次精确重试。`AutomaticApprovalOverrideCoordinator` 写入 `approval.override_registered`，并向当前普通 turn 注入 model-only 运行时指令；线程空闲时启动一个不持久化用户消息的内部续轮。Reviewer 保存动作哈希和仅驻内存的精确动作 JSON，使原工具调用离开模型上下文后仍能重试，但不会把参数写入审计事件；单次 token 绑定到该续轮的 turn ID，只有该 turn 内完整参数、重试类型、目标和权限都精确匹配时，才注入 runtime 生成的 developer 授权标记。最终 mailbox drain 前会关闭输入接收，避免把 token 绑定到已无法再次采样的 turn。标记消费后不能复用，续轮结束也不能被其他 turn 消费，且重试仍经过风险矩阵，`critical` 始终拒绝。
 - 超时、无效结构化输出、模型或配置故障均先记录失败审计，再创建新的人工审批请求；用户输入和 MCP elicitation 始终由用户回答。
 
 外部 API 只能调用 `ApprovalGate.answerApproval()` 回答人工请求；自动请求使用 runtime 内部 resolver，防止 renderer 或 app-server 抢答。拒绝后的用户 override 使用独立的 `/v1/approvals/:id/approve-denied-action` 端点；app-server 通过官方 `item/autoApprovalReview/started` 与 `item/autoApprovalReview/completed` 通知暴露服务端签发的 review ID，同时兼容 Codex 的 `thread/approveGuardianDeniedAction` `{ threadId, event }` 形状，但只读取 `event.id` 并用服务端拒绝记录校验线程和动作，客户端回传的 action 不参与授权。两条入口都不能把已经完成的自动审批伪装成人工回答。

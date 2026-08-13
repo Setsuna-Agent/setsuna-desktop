@@ -21,7 +21,10 @@ import {
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
 } from './approval-review-output.js';
-import { approvalReviewActionIdentity } from './approval-review-action.js';
+import {
+  approvalReviewActionIdentity,
+  serializeApprovalReviewAction,
+} from './approval-review-action.js';
 import { buildApprovalReviewPrompt } from './approval-review-prompt.js';
 
 const APPROVAL_REVIEW_TIMEOUT_MS = 60_000;
@@ -60,6 +63,7 @@ type DeniedActionReview = {
 };
 
 type DeniedApprovalAction = {
+  action: string;
   identity: string;
   overrideRegistered: boolean;
   threadId: string;
@@ -82,6 +86,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
   async review(input: ApprovalReviewInput): Promise<ApprovalReviewResult> {
     if (input.signal.aborted) throw abortReason(input.signal);
     const actionIdentity = approvalReviewActionIdentity(input);
+    const serializedAction = serializeApprovalReviewAction(input);
     const [config, thread] = await Promise.all([
       this.options.configStore.getConfig().catch(() => null),
       this.options.threadStore.getThread(input.request.threadId).catch(() => null),
@@ -141,6 +146,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         ...(this.recordOutcome(input.request.turnId, true, true, actionIdentity
           ? {
               approvalId: input.approvalId,
+              action: serializedAction,
               identity: actionIdentity,
               assessment,
               threadId: input.request.threadId,
@@ -198,6 +204,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
             actionIdentity
               ? {
                   approvalId: input.approvalId,
+                  action: serializedAction,
                   identity: actionIdentity,
                   ...(denied ? { assessment } : {}),
                   threadId: input.request.threadId,
@@ -260,6 +267,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     denied: boolean,
     includeInHistory = true,
     reviewedAction?: {
+      action: string | null;
       approvalId: string;
       identity: string;
       assessment?: RuntimeApprovalReviewAssessment;
@@ -278,7 +286,12 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         assessment: { ...reviewedAction.assessment },
         trustedEvidenceFingerprint: reviewedAction.trustedEvidenceFingerprint,
       });
-      this.recordDeniedApproval(reviewedAction, turnId);
+      if (reviewedAction.action) this.recordDeniedApproval({
+        action: reviewedAction.action,
+        approvalId: reviewedAction.approvalId,
+        identity: reviewedAction.identity,
+        threadId: reviewedAction.threadId,
+      }, turnId);
     } else if (reviewedAction) {
       state.deniedActions.delete(reviewedAction.identity);
       this.retireDeniedApprovals(reviewedAction.threadId, reviewedAction.identity);
@@ -309,6 +322,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     if (!denied) return null;
     if (denied.overrideRegistered) {
       return {
+        action: denied.action,
         alreadyRegistered: true,
         threadId: denied.threadId,
         turnId: denied.turnId,
@@ -316,6 +330,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     }
     denied.overrideRegistered = true;
     return {
+      action: denied.action,
       alreadyRegistered: false,
       threadId: denied.threadId,
       turnId: denied.turnId,
@@ -343,12 +358,14 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
   }
 
   private recordDeniedApproval(input: {
+    action: string;
     approvalId: string;
     identity: string;
     threadId: string;
   }, turnId: string): void {
     this.deniedApprovals.delete(input.approvalId);
     this.deniedApprovals.set(input.approvalId, {
+      action: input.action,
       identity: input.identity,
       overrideRegistered: false,
       threadId: input.threadId,

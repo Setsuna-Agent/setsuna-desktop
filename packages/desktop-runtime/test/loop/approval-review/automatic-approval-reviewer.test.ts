@@ -348,7 +348,11 @@ describe('automatic approval reviewer', () => {
     const duplicated = await reviewer.review(duplicateRetry);
 
     expect(denied.assessment.status).toBe('denied');
-    expect(registered).toMatchObject({ alreadyRegistered: false, threadId: 'thread_1' });
+    expect(registered).toMatchObject({
+      action: expect.stringContaining('"cmd":"sudo su"'),
+      alreadyRegistered: false,
+      threadId: 'thread_1',
+    });
     expect(different.assessment.status).toBe('denied');
     expect(retried.assessment).toMatchObject({ status: 'denied', riskLevel: 'critical' });
     expect(duplicated.assessment.rationale).toContain('This exact action was already denied.');

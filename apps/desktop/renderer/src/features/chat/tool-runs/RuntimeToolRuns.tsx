@@ -658,6 +658,9 @@ function ToolRunDetails({
     );
   }
   const diagnostic = genericToolRunDiagnostic(run);
+  const argumentsPreview = run.approvalReviewAssessment?.status === 'denied' && pendingApprovalId
+    ? formatPreview(run.argumentsPreview ?? '')
+    : '';
   return (
     <>
       {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
@@ -668,6 +671,9 @@ function ToolRunDetails({
         : run.status === 'rejected'
           ? 'toolRun.preview.rejected'
           : 'toolRun.preview.error')} value={diagnostic} /> : null}
+      {argumentsPreview
+        ? <ToolPreview code label={t('toolRun.preview.arguments')} value={argumentsPreview} />
+        : null}
       {hookRuns}
       {approvalActions}
     </>

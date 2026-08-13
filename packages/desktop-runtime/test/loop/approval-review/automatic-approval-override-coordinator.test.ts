@@ -6,11 +6,13 @@ describe('automatic approval override coordinator', () => {
   it('records one override event and binds one model-only retry turn idempotently', async () => {
     const approveDeniedAction = vi.fn()
       .mockReturnValueOnce({
+        action: '{"tool":{"name":"exec_command"},"arguments":{"cmd":"sudo su"}}',
         alreadyRegistered: false,
         threadId: 'thread_1',
         turnId: 'turn_denied',
       })
       .mockReturnValueOnce({
+        action: '{"tool":{"name":"exec_command"},"arguments":{"cmd":"sudo su"}}',
         alreadyRegistered: true,
         threadId: 'thread_1',
         turnId: 'turn_denied',
@@ -50,7 +52,7 @@ describe('automatic approval override coordinator', () => {
     expect(deliverRetryInstruction).toHaveBeenCalledOnce();
     expect(deliverRetryInstruction).toHaveBeenCalledWith(
       'thread_1',
-      expect.stringContaining('Retry only that exact action.'),
+      expect.stringMatching(/Retry only that exact action[\s\S]*"cmd":"sudo su"/u),
     );
     expect(activateDeniedActionApproval).toHaveBeenCalledWith('approval_1', 'turn_retry');
   });
@@ -59,6 +61,7 @@ describe('automatic approval override coordinator', () => {
     const cancelDeniedActionApproval = vi.fn();
     const append = vi.fn(async () => null);
     const approveDeniedAction = vi.fn(() => ({
+      action: '{"tool":{"name":"exec_command"},"arguments":{"cmd":"sudo su"}}',
       alreadyRegistered: false,
       threadId: 'thread_1',
       turnId: 'turn_denied',
@@ -100,6 +103,7 @@ describe('automatic approval override coordinator', () => {
       ids: { id: () => 'event_override' },
       reviewer: {
         approveDeniedAction: () => ({
+          action: '{"tool":{"name":"exec_command"},"arguments":{"cmd":"sudo su"}}',
           alreadyRegistered: false,
           threadId: 'thread_owner',
           turnId: 'turn_denied',
