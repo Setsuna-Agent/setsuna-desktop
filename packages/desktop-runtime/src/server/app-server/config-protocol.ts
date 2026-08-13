@@ -2,6 +2,7 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeMcpServerStatus,
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
@@ -90,13 +91,13 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
   const reasoningEffort = activeModelReasoningEffort(config);
   return {
     model: activeModelCode(config),
-    review_model: null,
+    review_model: appServerReviewModel(config),
     model_context_window: activeModelConfig(config)?.contextWindowTokens ?? null,
     model_auto_compact_token_limit: appServerModelAutoCompactTokenLimit(config),
     model_auto_compact_token_limit_scope: null,
     model_provider: activeModelProvider(config),
     approval_policy: appServerApprovalPolicy(config.approvalPolicy),
-    approvals_reviewer: 'user',
+    approvals_reviewer: config.approvalReviewer ?? 'user',
     sandbox_mode: sweSandboxMode(config.permissionProfile),
     sandbox_workspace_write: sweSandboxWorkspaceWrite(config, cwd),
     forced_chatgpt_workspace_id: null,
@@ -248,6 +249,17 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
       case 'approval_policy':
         next.approvalPolicy = appServerApprovalPolicyToRuntime(requiredRawString(edit.value, 'approval_policy'));
         break;
+      case 'approvals_reviewer':
+        next.approvalReviewer = appServerApprovalReviewerToRuntime(
+          requiredRawString(edit.value, 'approvals_reviewer'),
+        );
+        break;
+      case 'review_model':
+        next.taskModels = {
+          ...(next.taskModels ?? {}),
+          review: appServerReviewModelInput(config, edit.value),
+        };
+        break;
       case 'sandbox_mode':
         next.permissionProfile = sweSandboxModeToRuntime(requiredRawString(edit.value, 'sandbox_mode'));
         break;
@@ -394,6 +406,55 @@ function appServerApprovalPolicyToRuntime(value: string): RuntimeConfigState['ap
   if (value === 'untrusted') return 'strict';
   if (value === 'on-request') return 'on-request';
   throw appServerConfigWriteError('configValidationError', `Unsupported approval_policy: ${value}`);
+}
+
+function appServerApprovalReviewerToRuntime(
+  value: string,
+): NonNullable<RuntimeConfigState['approvalReviewer']> {
+  if (value === 'user' || value === 'automatic') return value;
+  throw appServerConfigWriteError(
+    'configValidationError',
+    `Unsupported approvals_reviewer: ${value}`,
+  );
+}
+
+function appServerReviewModel(config: RuntimeConfigState): string | null {
+  const reference = config.taskModels?.review;
+  if (!reference) return null;
+  const provider = config.providers.find((item) => (
+    item.enabled && item.id === reference.providerId
+  ));
+  const model = provider?.models.find((item) => (
+    item.id === reference.modelId && Boolean(item.code.trim())
+  ));
+  return model?.code.trim() || null;
+}
+
+function appServerReviewModelInput(
+  config: RuntimeConfigState,
+  value: unknown,
+): RuntimeConfiguredModelReference | null {
+  if (value === null) return null;
+  const modelCode = requiredRawString(value, 'review_model');
+  const candidates = config.providers.flatMap((provider) => (
+    provider.enabled
+      ? provider.models
+        .filter((model) => (
+          model.code === modelCode || model.id === modelCode || model.name === modelCode
+        ))
+        .map((model) => ({ providerId: provider.id, modelId: model.id }))
+      : []
+  ));
+  const current = config.taskModels?.review;
+  const selected = candidates.find((candidate) => (
+    candidate.providerId === current?.providerId && candidate.modelId === current.modelId
+  )) ?? candidates.find((candidate) => candidate.providerId === config.activeProviderId)
+    ?? (candidates.length === 1 ? candidates[0] : undefined);
+  if (selected) return selected;
+  throw appServerConfigWriteError(
+    'configValidationError',
+    `Unknown or ambiguous review_model: ${modelCode}`,
+  );
 }
 
 function sweSandboxModeToRuntime(value: string): RuntimeConfigState['permissionProfile'] {

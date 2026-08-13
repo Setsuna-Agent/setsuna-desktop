@@ -20,8 +20,12 @@ describe('runtime server AppServer config', () => {
           globalPrompt: 'Prefer terse answers.',
           memoryEnabled: false,
           approvalPolicy: 'strict',
+          approvalReviewer: 'automatic',
           permissionProfile: 'workspace-write',
           setsunaStyle: 'daily',
+          taskModels: {
+            review: { providerId: 'config-openai', modelId: 'reviewer' },
+          },
           providers: [
             {
               id: 'config-openai',
@@ -42,6 +46,15 @@ describe('runtime server AppServer config', () => {
                   thinkingEfforts: ['low', 'high'],
                   defaultThinkingEffort: 'high',
                 },
+                {
+                  id: 'reviewer',
+                  name: 'Review Model',
+                  code: 'review-model',
+                  enabled: false,
+                  maxOutputTokens: 4000,
+                  thinkingEnabled: false,
+                  thinkingEfforts: [],
+                },
               ],
             },
           ],
@@ -51,10 +64,11 @@ describe('runtime server AppServer config', () => {
       const response = await harness.appServerRpc('config/read', { includeLayers: true, cwd: process.cwd() });
       expect(response.config).toMatchObject({
         model: 'gpt-alpha',
+        review_model: 'review-model',
         model_context_window: 128000,
         model_provider: 'config-openai',
         approval_policy: 'untrusted',
-        approvals_reviewer: 'user',
+        approvals_reviewer: 'automatic',
         sandbox_mode: 'workspace-write',
         instructions: 'Prefer terse answers.',
         model_reasoning_effort: 'high',
@@ -156,6 +170,8 @@ describe('runtime server AppServer config', () => {
       await expect(harness.appServerRpc('config/batchWrite', {
         edits: [
           { keyPath: 'approval_policy', value: 'never', mergeStrategy: 'replace' },
+          { keyPath: 'approvals_reviewer', value: 'automatic', mergeStrategy: 'replace' },
+          { keyPath: 'review_model', value: 'gpt-alpha', mergeStrategy: 'replace' },
           { keyPath: 'sandbox_mode', value: 'workspace-write', mergeStrategy: 'replace' },
           {
             keyPath: 'sandbox_workspace_write',
@@ -175,6 +191,8 @@ describe('runtime server AppServer config', () => {
         model_context_window: 32000,
         model_auto_compact_token_limit: 28000,
         approval_policy: 'never',
+        approvals_reviewer: 'automatic',
+        review_model: 'gpt-alpha',
         sandbox_mode: 'workspace-write',
         sandbox_workspace_write: {
           writable_roots: ['D:/work'],

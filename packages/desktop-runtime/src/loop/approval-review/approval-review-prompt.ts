@@ -1,5 +1,6 @@
 import type { RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewInput } from '../../ports/approval-reviewer.js';
+import { serializeApprovalReviewAction } from './approval-review-action.js';
 import { approvalReviewPolicy } from './approval-review-policy.js';
 
 const MAX_ACTION_CHARS = 32_000;
@@ -18,8 +19,8 @@ export function buildApprovalReviewPrompt(
   thread: RuntimeThread,
   now: string,
 ): ApprovalReviewPrompt {
-  const action = serializeAction(input);
-  if (!action) {
+  const action = serializeApprovalReviewAction(input);
+  if (!action || action.length > MAX_ACTION_CHARS) {
     return {
       unavailableReason: 'The exact approval request is too large or cannot be serialized safely.',
     };
@@ -56,29 +57,6 @@ export function buildApprovalReviewPrompt(
       },
     ],
   };
-}
-
-function serializeAction(input: ApprovalReviewInput): string | null {
-  try {
-    const serialized = JSON.stringify({
-      tool: {
-        id: input.request.toolCallId,
-        name: input.request.toolName,
-      },
-      reason: input.request.reason,
-      environmentId: input.request.environmentId,
-      retryKind: input.request.retryKind,
-      arguments: input.arguments,
-      additionalPermissions: input.request.additionalPermissions,
-      permissionApprovalContext: input.request.permissionApprovalContext,
-      networkApprovalContext: input.request.networkApprovalContext,
-      proposedNetworkPolicyAmendments: input.request.proposedNetworkPolicyAmendments,
-      proposedExecPolicyAmendment: input.request.proposedExecPolicyAmendment,
-    });
-    return serialized.length <= MAX_ACTION_CHARS ? serialized : null;
-  } catch {
-    return null;
-  }
 }
 
 type CompactReviewEvidence = {
@@ -135,7 +113,9 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
 function trustedUserEvidenceSource(
   message: RuntimeMessage,
 ): 'user_message' | 'request_user_input' | null {
-  if (message.role === 'user') return 'user_message';
+  // Compaction summaries use the user role for provider compatibility, but
+  // their content is model-generated from mixed-trust history.
+  if (message.role === 'user' && !message.contextCompaction) return 'user_message';
   if (
     message.role === 'tool'
     && message.toolName === 'request_user_input'

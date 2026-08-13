@@ -15,6 +15,7 @@ export type SweMapperState = {
   threadRuntime: Map<string, ThreadRuntimeState>;
   planMessageIds: Set<string>;
   planItemsByMessageId: Map<string, SweThreadItem>;
+  runtimeOwnedApprovalIds: Map<string, string>;
   turnPlanItemIds: Map<string, string>;
 };
 

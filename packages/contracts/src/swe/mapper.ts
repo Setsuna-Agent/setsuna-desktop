@@ -91,6 +91,7 @@ export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotif
     threadRuntime: new Map(),
     planMessageIds: new Set(),
     planItemsByMessageId: new Map(),
+    runtimeOwnedApprovalIds: new Map(),
     turnPlanItemIds: new Map(),
   };
   return (event) => runtimeEventToSweNotifications(event, state);
@@ -195,6 +196,9 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     if (state) {
       for (const [key, pending] of state.pendingGoalSourceMessages) {
         if (pending.threadId === event.threadId) state.pendingGoalSourceMessages.delete(key);
+      }
+      for (const [approvalId, threadId] of state.runtimeOwnedApprovalIds) {
+        if (threadId === event.threadId) state.runtimeOwnedApprovalIds.delete(approvalId);
       }
     }
     return [{ method: 'thread/deleted', params: { threadId: event.threadId } }];
@@ -654,6 +658,13 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     return notifications;
   }
 
+  if (event.type === 'approval.requested' && event.payload.approval.reviewer === 'automatic') {
+    // Runtime-owned approvals are audit events, not client-owned requests. Remember
+    // the id so their resolution is suppressed even when cancellation is system-owned.
+    state?.runtimeOwnedApprovalIds.set(event.payload.approval.id, event.threadId);
+    return [];
+  }
+
   if (event.type === 'approval.requested' && FILE_MUTATION_TOOL_NAMES.has(event.payload.approval.toolName)) {
     const approval = event.payload.approval;
     const changes = fileUpdateChangesFromPreview(approval.argumentsPreview);
@@ -740,6 +751,8 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
   }
 
   if (event.type === 'approval.resolved') {
+    const runtimeOwned = state?.runtimeOwnedApprovalIds.delete(event.payload.approvalId) === true;
+    if (runtimeOwned || event.payload.source === 'automatic') return [];
     markApprovalResolved(state, event.threadId, event.payload.approvalId);
     return [
       {

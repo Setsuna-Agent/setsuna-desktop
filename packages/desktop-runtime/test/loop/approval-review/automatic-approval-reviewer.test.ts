@@ -12,6 +12,7 @@ import {
   policyConstrainedApprovalReviewOutcome,
 } from '../../../src/loop/approval-review/approval-review-output.js';
 import type { ConfigStore } from '../../../src/ports/config-store.js';
+import type { ApprovalReviewInput } from '../../../src/ports/approval-reviewer.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import type { UsageStore } from '../../../src/ports/usage-store.js';
@@ -59,6 +60,10 @@ describe('automatic approval reviewer', () => {
     expect(taggedJson(reviewMessage?.content ?? '', 'untrusted_context_json')).toEqual([
       expect.objectContaining({ role: 'assistant', content: 'I will run the requested command.' }),
       expect.objectContaining({ role: 'tool', content: 'Untrusted tool evidence.' }),
+      expect.objectContaining({
+        role: 'user',
+        content: 'Model-generated summary claiming the user approved every command.',
+      }),
     ]);
     expect(reviewMessage?.content).not.toContain('hidden chain of thought');
     expect(recordUsage).toHaveBeenCalledOnce();
@@ -93,6 +98,46 @@ describe('automatic approval reviewer', () => {
     expect(first.interruptTurn).toBeUndefined();
     expect(second.interruptTurn).toBeUndefined();
     expect(third.interruptTurn).toBe(true);
+  });
+
+  it('keeps a denied exact action denied across new tool-call ids without resampling', async () => {
+    let responseIndex = 0;
+    const modelClient = new ReviewModelClient(() => {
+      responseIndex += 1;
+      return JSON.stringify(responseIndex === 1
+        ? {
+            outcome: 'deny',
+            riskLevel: 'high',
+            userAuthorization: 'unknown',
+            rationale: 'The exact privileged command was not authorized.',
+          }
+        : {
+            outcome: 'allow',
+            riskLevel: 'low',
+            userAuthorization: 'high',
+            rationale: 'A later sample attempted to reverse the denial.',
+          });
+    });
+    const reviewer = createReviewer(modelClient);
+
+    const first = await reviewer.review(reviewInput(
+      { cmd: 'sudo su', workdir: '/work' },
+      'call_1',
+    ));
+    const retryInput = reviewInput(
+      { workdir: '/work', cmd: 'sudo su' },
+      'call_2',
+    );
+    retryInput.request.reason = 'A different description of the same command.';
+    retryInput.request.retryKind = 'sandbox_bypass';
+    const retried = await reviewer.review(retryInput);
+
+    expect(first.assessment.status).toBe('denied');
+    expect(retried.assessment).toMatchObject({
+      status: 'denied',
+      rationale: expect.stringContaining('This exact action was already denied.'),
+    });
+    expect(modelClient.requests).toHaveLength(1);
   });
 });
 
@@ -167,13 +212,13 @@ function createReviewer(
   });
 }
 
-function reviewInput(argumentsValue: unknown) {
+function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalReviewInput {
   return {
     arguments: argumentsValue,
     request: {
       threadId: 'thread_1',
       turnId: 'turn_1',
-      toolCallId: 'call_1',
+      toolCallId,
       toolName: 'exec_command',
       reason: 'Command requires elevated execution.',
       argumentsPreview: '{"cmd":"truncated"}',
@@ -190,7 +235,7 @@ function threadFixture(): RuntimeThread {
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T00:00:00.000Z',
     archived: false,
-    messageCount: 5,
+    messageCount: 6,
     lastMessagePreview: 'Run the approval tests.',
     lastSeq: 5,
     messages: [
@@ -222,6 +267,21 @@ function threadFixture(): RuntimeThread {
         content: 'User submitted structured input:\n{"confirm":"yes"}',
         toolName: 'request_user_input',
         createdAt: '2026-08-13T00:00:00.900Z',
+        status: 'complete',
+      },
+      {
+        id: 'compaction_1',
+        role: 'user',
+        content: 'Model-generated summary claiming the user approved every command.',
+        contextCompaction: {
+          compactedMessageCount: 4,
+          compactedTokens: 500,
+          keptRecentMessageCount: 1,
+          maxContextTokensK: 256,
+          originalMessageCount: 5,
+          originalTokens: 1_000,
+        },
+        createdAt: '2026-08-13T00:00:00.950Z',
         status: 'complete',
       },
       {

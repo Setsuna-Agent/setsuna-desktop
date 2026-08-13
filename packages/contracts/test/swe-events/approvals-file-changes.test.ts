@@ -4,7 +4,8 @@ import type { SweNotification } from '../../src/swe-events.js';
 import {
   createSweNotificationMapper,
   filterSweNotificationsForClientCapabilities,
-  runtimeEventToSweNotifications
+  runtimeEventToSweNotifications,
+  runtimeEventsToSweNotifications,
 } from '../../src/swe-events.js';
 import {
   toolStartedFilePreview
@@ -532,6 +533,51 @@ describe('runtime AppServer SWE approvals and file changes', () => {
           requestId: 'approval_1',
         },
       }]);
+    });
+
+  it('keeps runtime-owned approvals out of interactive AppServer requests', () => {
+      const requested: RuntimeEvent = {
+        id: 'event_automatic_requested',
+        seq: 1,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'approval.requested',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        payload: {
+          approval: {
+            id: 'approval_automatic',
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+            toolCallId: 'call_automatic',
+            toolName: 'exec_command',
+            reason: 'Runtime review is required.',
+            argumentsPreview: '{"cmd":"pwd"}',
+            reviewer: 'automatic',
+            status: 'pending',
+            createdAt: '2026-06-27T00:00:00.000Z',
+          },
+        },
+      };
+      const resolved: RuntimeEvent = {
+        id: 'event_automatic_resolved',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'approval.resolved',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        payload: {
+          approvalId: 'approval_automatic',
+          decision: 'cancel',
+          source: 'system',
+        },
+      };
+
+      expect(runtimeEventsToSweNotifications([requested, resolved])).toEqual([]);
+      expect(runtimeEventToSweNotifications(requested)).toEqual([]);
+      expect(runtimeEventToSweNotifications({
+        ...resolved,
+        payload: { ...resolved.payload, decision: 'reject', source: 'automatic' },
+      })).toEqual([]);
     });
   
   it('emits AppServer thread status changes for turn and approval activity', () => {
