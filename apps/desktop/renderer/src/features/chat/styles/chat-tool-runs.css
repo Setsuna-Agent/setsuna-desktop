@@ -164,6 +164,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-change-counts {
+  --chat-change-count-line-height: 18px;
+
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -175,7 +177,7 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
     'zero' 0;
   font-variant-numeric: tabular-nums;
   font-size: 12px;
-  line-height: 18px;
+  line-height: var(--chat-change-count-line-height);
   white-space: nowrap;
 }
 
@@ -199,12 +201,17 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 .chat-change-counts__number {
   display: inline-block;
   min-width: 1ch;
-  height: 18px;
-  overflow: hidden;
+  flex: 0 0 auto;
+  height: var(--chat-change-count-line-height);
   font-variant-numeric: tabular-nums;
-  line-height: 18px;
+  line-height: var(--chat-change-count-line-height);
   text-align: left;
   vertical-align: bottom;
+}
+
+/* Only clip while two values roll; a permanent clip can shave glyph edges at fractional panel widths. */
+.chat-change-counts__number.is-rolling {
+  overflow: hidden;
 }
 
 .chat-change-counts__number-stack {
@@ -213,19 +220,14 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 }
 
 .chat-change-counts__number-stack > span {
-  height: 18px;
-  line-height: 18px;
+  height: var(--chat-change-count-line-height);
+  line-height: var(--chat-change-count-line-height);
 }
 
 .chat-tool-runs .chat-change-counts {
-  font-size: var(--chat-tool-run-font-size);
-  line-height: var(--chat-tool-run-line-height);
-}
+  --chat-change-count-line-height: var(--chat-tool-run-line-height);
 
-.chat-tool-runs .chat-change-counts__number,
-.chat-tool-runs .chat-change-counts__number-stack > span {
-  height: var(--chat-tool-run-line-height);
-  line-height: var(--chat-tool-run-line-height);
+  font-size: var(--chat-tool-run-font-size);
 }
 
 .chat-change-counts__number.is-up .chat-change-counts__number-stack {
@@ -539,8 +541,9 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 /* 文件变更卡片与工具运行各自按所在正文档位覆盖全局 12px 统计字号。 */
 .chat-file-changes .chat-change-counts {
+  --chat-change-count-line-height: 20px;
+
   font-size: 13px;
-  line-height: 20px;
 }
 
 .chat-file-changes__more {

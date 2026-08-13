@@ -106,6 +106,7 @@
     },
     "files": [
       "dist/**/*",
+      "assets/build/icon.png",
       "package.json",
       "packages/contracts/package.json",
       "packages/desktop-runtime/package.json",

@@ -419,8 +419,30 @@
   display: grid;
   grid-row: 2;
   gap: 6px;
+  width: min(calc(var(--desktop-capabilities-content-width) + var(--desktop-capabilities-page-padding-inline)), 100%);
   min-width: 0;
+  margin: 0 auto;
   padding-right: var(--desktop-capabilities-page-padding-inline);
+}
+
+.desktop-capabilities-market-warning {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 30%, var(--app-border));
+  border-radius: var(--app-radius-sm);
+  color: color-mix(in srgb, var(--app-warning) 82%, var(--app-text));
+  background: color-mix(in srgb, var(--app-warning) 7%, transparent);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capabilities-market-warning > svg {
+  flex: 0 0 auto;
 }
 
 .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-market-notices {
