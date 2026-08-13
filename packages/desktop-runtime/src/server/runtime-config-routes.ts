@@ -1,7 +1,4 @@
-import type {
-  RuntimeFetchModelsInput,
-  RuntimeWorkspaceDependenciesToggleInput,
-} from '@setsuna-desktop/contracts';
+import type { RuntimeFetchModelsInput } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
@@ -49,21 +46,6 @@ export async function handleRuntimeConfigRequest(
     return true;
   }
 
-  if (request.method === 'PUT' && url.pathname === '/v1/workspace-dependencies') {
-    const input = await readBody<RuntimeWorkspaceDependenciesToggleInput | null>(
-      request,
-    );
-    if (!input || typeof input !== 'object' || typeof input.enabled !== 'boolean') {
-      throw new RuntimeHttpError(400, 'enabled must be a boolean.');
-    }
-    sendJson(
-      response,
-      200,
-      await runtime.workspaceDependencies.setEnabled({ enabled: input.enabled }),
-    );
-    return true;
-  }
-
   if (
     request.method === 'POST'
     && url.pathname === '/v1/workspace-dependencies/diagnose'
@@ -74,9 +56,9 @@ export async function handleRuntimeConfigRequest(
 
   if (
     request.method === 'POST'
-    && url.pathname === '/v1/workspace-dependencies/reinstall'
+    && url.pathname === '/v1/workspace-dependencies/repair'
   ) {
-    sendJson(response, 200, await runtime.workspaceDependencies.reinstall());
+    sendJson(response, 200, await runtime.workspaceDependencies.repair());
     return true;
   }
 

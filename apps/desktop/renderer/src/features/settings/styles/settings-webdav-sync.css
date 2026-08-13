@@ -239,7 +239,6 @@
 
 .settings-webdav__recovery-key .sd-field {
   min-width: 0;
-  font-family: var(--app-code-font-family);
 }
 
 .settings-webdav__connection-details {
@@ -283,7 +282,6 @@
 }
 
 .settings-webdav__connection-details code {
-  font-family: var(--app-code-font-family);
   font-size: 10px;
 }
 
@@ -968,7 +966,6 @@
 
 .settings-webdav-restore-change-item__body code {
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   line-height: 14px;
 }

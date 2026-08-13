@@ -365,7 +365,6 @@
 .chat-usage-panel__metrics strong {
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
   font-size: 14px;
   text-overflow: ellipsis;
 }

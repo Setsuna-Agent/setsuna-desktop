@@ -39,6 +39,7 @@ describe('chat composer mode state', () => {
     ], 'active'));
 
     expect(capabilities).toEqual({
+      preferenceKey: 'active:reasoner',
       name: 'Reasoner',
       supportsImageInput: true,
       thinking: {

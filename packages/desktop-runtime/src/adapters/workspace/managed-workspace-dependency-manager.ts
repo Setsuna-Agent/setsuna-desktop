@@ -1,6 +1,5 @@
 import type {
   RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependenciesToggleInput,
   RuntimeWorkspaceDependencyToolStatus,
 } from '@setsuna-desktop/contracts';
 import {
@@ -41,6 +40,7 @@ import {
   versionText,
   type ManagedToolManifest,
   type WorkspaceDependencyManifest,
+  type WorkspaceDependencyVersionRequirements,
 } from './managed-workspace-manifest.js';
 import {
   ManagedWorkspaceDependencyNetwork,
@@ -79,6 +79,10 @@ const MINIMUM_PYTHON_VERSION = [3, 10] as const;
 const MINIMUM_NODE_MAJOR = 18;
 const UV_VERSION = '0.11.28';
 const FALLBACK_PNPM_VERSION = '7.33.7';
+const TOOL_VERSION_REQUIREMENTS: WorkspaceDependencyVersionRequirements = {
+  node: (version) => versionMajor(version) >= MINIMUM_NODE_MAJOR,
+  python: (version) => versionAtLeast(version, MINIMUM_PYTHON_VERSION),
+};
 type PackageManagerShims = {
   binDir: string | null;
   readableRoots: string[];
@@ -120,41 +124,21 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   }
 
   async getPromptContext(): Promise<WorkspaceDependencyPromptContext> {
-    const config = await this.configStore.getConfig();
-    return {
-      enabled: config.desktopSettings?.workspaceDependenciesEnabled === true,
-    };
+    return { enabled: true };
   }
 
   async diagnose(): Promise<RuntimeWorkspaceDependenciesStatus> {
     return this.status(true);
   }
 
-  async setEnabled(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus> {
-    const current = await this.configStore.getConfig();
-    await this.configStore.saveConfig({
-      desktopSettings: {
-        ...(current.desktopSettings ?? {}),
-        workspaceDependenciesEnabled: input.enabled,
-      },
-    });
-    if (!input.enabled) this.lastError = undefined;
-    if (input.enabled) await this.ensureInstalled(false).catch(() => undefined);
-    return this.status(true);
-  }
-
-  async reinstall(): Promise<RuntimeWorkspaceDependenciesStatus> {
-    const config = await this.configStore.getConfig();
-    if (config.desktopSettings?.workspaceDependenciesEnabled !== true) {
-      throw new Error('请先启用工作空间依赖项，再重新安装。');
-    }
-    await this.ensureInstalled(true);
+  async repair(): Promise<RuntimeWorkspaceDependenciesStatus> {
+    // 健康的现有清单会直接复用；只有缺失、损坏或版本过期时才重建私有工具链。
+    await this.ensureInstalled(false);
     return this.status(true);
   }
 
   async prepareShellToolchain({ command, environment }: PrepareShellToolchainInput): Promise<ShellToolchain> {
     const config = await this.configStore.getConfig();
-    const enabled = config.desktopSettings?.workspaceDependenciesEnabled === true;
     const packageIndexUrl = config.desktopSettings?.pythonPackageIndexUrl?.trim()
       || DEFAULT_PYTHON_PACKAGE_INDEX_URL;
     const npmRegistryUrl = config.desktopSettings?.npmRegistryUrl?.trim()
@@ -163,51 +147,44 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     const hostNode = await this.findSystemNode();
     const bundledNode = await this.resolveNode();
     const selectedNode = preferredToolForVersion(hostNode, bundledNode, hints.nodeVersion);
-    const useBundledNodeFallback = enabled && selectedNode?.source === 'bundled';
+    const useBundledNodeFallback = selectedNode?.source === 'bundled';
     if (useBundledNodeFallback && selectedNode) await this.ensureNodeShim(selectedNode);
 
-    if (enabled) {
-      await Promise.all([
-        mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
-        mkdir(path.join(this.cacheRoot, 'pip'), { recursive: true }),
-        mkdir(path.join(this.cacheRoot, 'npm'), { recursive: true }),
-        mkdir(path.join(this.cacheRoot, 'corepack'), { recursive: true }),
-      ]);
-    }
+    await Promise.all([
+      mkdir(path.join(this.cacheRoot, 'uv'), { recursive: true }),
+      mkdir(path.join(this.cacheRoot, 'pip'), { recursive: true }),
+      mkdir(path.join(this.cacheRoot, 'npm'), { recursive: true }),
+      mkdir(path.join(this.cacheRoot, 'corepack'), { recursive: true }),
+    ]);
 
-    const existingManifest = enabled ? await this.readManifest() : null;
-    // 默认开启的设置不能让无关的首条 Shell 命令触发 Python 下载。
-    // 只有请求受管理命令时才延迟配置。
+    const existingManifest = await this.readManifest();
+    // 无关的首条 Shell 命令不应触发 Python 下载；只有请求 Python 依赖命令时才延迟配置。
     const needsPython = usesPythonDependencyCommand(command);
-    if (enabled && needsPython) await this.ensureInstalled(false);
-    const manifest = enabled && needsPython ? await this.readManifest() : existingManifest;
-    if (enabled && needsPython && !manifest) throw new Error('工作空间依赖项安装结果缺少清单。');
+    if (needsPython) await this.ensureInstalled(false);
+    const manifest = needsPython ? await this.readManifest() : existingManifest;
+    if (needsPython && !manifest) throw new Error('工作空间依赖项安装结果缺少清单。');
     const toolchainBinDir = manifest ? path.join(this.installRoot, 'bin') : null;
-    const packageManagerShims = enabled
-      ? await this.ensureProjectPackageManagerShims(hints.packageManager, process.env.PATH)
-      : { binDir: null, readableRoots: [] };
+    const packageManagerShims = await this.ensureProjectPackageManagerShims(hints.packageManager, process.env.PATH);
     const environmentOverrides = {
       PATH: composePaths([
         packageManagerShims.binDir,
         useBundledNodeFallback ? this.nodeBinDir : null,
       ], process.env.PATH, [toolchainBinDir]),
-      ...(enabled ? {
-        COREPACK_DEFAULT_TO_LATEST: '0',
-        COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
-        COREPACK_HOME: path.join(this.cacheRoot, 'corepack'),
-        PIP_CACHE_DIR: path.join(this.cacheRoot, 'pip'),
-        PIP_DISABLE_PIP_VERSION_CHECK: '1',
-        PIP_REQUIRE_VIRTUALENV: '1',
-        PYTHONDONTWRITEBYTECODE: '1',
-        UV_CACHE_DIR: path.join(this.cacheRoot, 'uv'),
-        UV_NO_MODIFY_PATH: '1',
-        npm_config_cache: path.join(this.cacheRoot, 'npm'),
-      } : {}),
-      ...(enabled && packageIndexUrl ? {
+      COREPACK_DEFAULT_TO_LATEST: '0',
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0',
+      COREPACK_HOME: path.join(this.cacheRoot, 'corepack'),
+      PIP_CACHE_DIR: path.join(this.cacheRoot, 'pip'),
+      PIP_DISABLE_PIP_VERSION_CHECK: '1',
+      PIP_REQUIRE_VIRTUALENV: '1',
+      PYTHONDONTWRITEBYTECODE: '1',
+      UV_CACHE_DIR: path.join(this.cacheRoot, 'uv'),
+      UV_NO_MODIFY_PATH: '1',
+      npm_config_cache: path.join(this.cacheRoot, 'npm'),
+      ...(packageIndexUrl ? {
         PIP_INDEX_URL: packageIndexUrl,
         UV_DEFAULT_INDEX: packageIndexUrl,
       } : {}),
-      ...(enabled && npmRegistryUrl ? {
+      ...(npmRegistryUrl ? {
         COREPACK_NPM_REGISTRY: npmRegistryUrl,
         npm_config_registry: npmRegistryUrl,
       } : {}),
@@ -218,7 +195,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       } : {}),
     };
     const resolvedToolchain = await resolveShellToolchain(command, environmentOverrides.PATH);
-    const cachedPnpmFiles = enabled && usesPnpmCommand(command)
+    const cachedPnpmFiles = usesPnpmCommand(command)
       ? await existingCorepackPnpmFiles(
         path.join(this.cacheRoot, 'corepack'),
         hints.packageManager?.name === 'pnpm' && hints.packageManager.version
@@ -237,7 +214,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       commands: resolvedToolchain.commands,
       environment: environmentOverrides,
       readableRoots: uniqueSafeRoots([...resolvedToolchain.readableRoots, ...managedRoots]),
-      writableCacheRoots: enabled ? [this.cacheRoot] : [],
+      writableCacheRoots: [this.cacheRoot],
     };
   }
 
@@ -246,7 +223,6 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     inspectHostWhenMissing = verifyManifest,
   ): Promise<RuntimeWorkspaceDependenciesStatus> {
     const config = await this.configStore.getConfig();
-    const enabled = config.desktopSettings?.workspaceDependenciesEnabled === true;
     const manifest = await this.readManifest();
     const installing = Boolean(this.installPromise);
     const tools = manifest
@@ -273,19 +249,16 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       && tools.node.available
       && tools.python.available
       && tools.uv.available;
-    const state: RuntimeWorkspaceDependenciesStatus['state'] = !enabled
-      ? 'disabled'
-      : installing
-        ? 'installing'
-        : this.lastError
-          ? 'error'
-          : ready
-            ? 'ready'
-            : 'not-installed';
+    const state: RuntimeWorkspaceDependenciesStatus['state'] = installing
+      ? 'installing'
+      : this.lastError
+        ? 'error'
+        : ready
+          ? 'ready'
+          : 'not-installed';
     return {
       bundleVersion: BUNDLE_VERSION,
       checks,
-      enabled,
       ...(this.lastError ? { error: this.lastError } : {}),
       installPath: this.workspaceDependencyRoot,
       node: tools.node,
@@ -313,9 +286,9 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       };
     }
     const [node, python, uv] = await Promise.all([
-      checkedToolStatus(nodeTool, ['--version']),
-      checkedToolStatus(manifest.python, ['--version']),
-      checkedToolStatus(manifest.uv, ['--version']),
+      checkedToolStatus(nodeTool, ['--version'], TOOL_VERSION_REQUIREMENTS.node),
+      checkedToolStatus(manifest.python, ['--version'], TOOL_VERSION_REQUIREMENTS.python),
+      checkedToolStatus(manifest.uv, ['--version'], TOOL_VERSION_REQUIREMENTS.uv),
     ]);
     return { node, python, uv };
   }
@@ -341,7 +314,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     if (this.installPromise) return this.installPromise;
     if (!force) {
       const manifest = await this.readManifest();
-      if (manifest?.bundleVersion === BUNDLE_VERSION && await manifestIsUsable(manifest)) {
+      if (
+        manifest?.bundleVersion === BUNDLE_VERSION
+        && await manifestIsUsable(manifest, TOOL_VERSION_REQUIREMENTS)
+      ) {
         this.lastError = undefined;
         return;
       }
@@ -474,7 +450,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       }
       await rename(stagingRoot, this.installRoot);
       installationMoved = true;
-      if (!await manifestIsUsable(manifest)) {
+      if (!await manifestIsUsable(manifest, TOOL_VERSION_REQUIREMENTS)) {
         throw new Error('工作空间依赖项安装后的健康检查失败。');
       }
       if (previousMoved) await rm(backupRoot, { recursive: true, force: true }).catch(() => undefined);

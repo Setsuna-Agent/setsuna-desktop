@@ -191,7 +191,8 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-secondary);
-  font: 11px/16px var(--app-code-font-family);
+  font-size: 11px;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -280,7 +281,8 @@
 .desktop-settings-panel .windows-sandbox-settings__version {
   flex: 0 0 auto;
   color: var(--app-text-muted);
-  font: 10px/14px var(--app-code-font-family);
+  font-size: 10px;
+  line-height: 14px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -300,20 +302,6 @@
 
 .desktop-settings-panel .windows-sandbox-settings__card > .chat-user-settings__runtime-error {
   margin: 10px 14px 12px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__toggle-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__toggle-control {
-  display: inline-flex;
-  align-items: center;
-  justify-self: end;
-  gap: 9px;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  white-space: nowrap;
 }
 
 .desktop-settings-panel .workspace-dependencies-settings .workspace-dependencies-settings__leading-icon {
@@ -361,7 +349,8 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-muted);
-  font: 11px/16px var(--app-code-font-family);
+  font-size: 11px;
+  line-height: 16px;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -382,7 +371,6 @@
 
 .desktop-settings-panel .workspace-dependencies-settings__source-editor .sd-field {
   min-width: 0;
-  font-family: var(--app-code-font-family);
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__source-cancel {
@@ -398,6 +386,24 @@
 
 .desktop-settings-panel .workspace-dependencies-settings__status-row {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__status-tags .sd-status {
+  height: 20px;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
+.desktop-settings-panel .workspace-dependencies-settings__repair-description {
+  margin-top: 2px;
 }
 
 .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
@@ -428,7 +434,6 @@
 }
 
 @media (max-width: 780px) {
-  .desktop-settings-panel .workspace-dependencies-settings__toggle-row,
   .desktop-settings-panel .workspace-dependencies-settings__source-row,
   .desktop-settings-panel .workspace-dependencies-settings__status-row {
     grid-template-columns: minmax(0, 1fr);
@@ -442,10 +447,6 @@
   .desktop-settings-panel .windows-sandbox-settings__actions {
     justify-self: start;
     justify-content: flex-start;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__toggle-control {
-    justify-self: start;
   }
 
   .desktop-settings-panel .workspace-dependencies-settings__source-display {

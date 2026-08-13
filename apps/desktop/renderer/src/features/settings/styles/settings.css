@@ -1,4 +1,5 @@
 @import './settings-base.css';
+@import './settings-usage-filter.css';
 @import './settings-personalization.css';
 @import './settings-task-models.css';
 @import './settings-providers.css';

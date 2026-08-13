@@ -23,6 +23,10 @@ export type WorkspaceDependencyManifest = {
   uv: ManagedToolManifest;
 };
 
+export type WorkspaceDependencyVersionRequirements = Partial<
+  Record<'node' | 'python' | 'uv', (version: string) => boolean>
+>;
+
 export function unavailableTool(): RuntimeWorkspaceDependencyToolStatus {
   return { available: false };
 }
@@ -34,14 +38,19 @@ export function manifestToolStatus(tool: ManagedToolManifest): RuntimeWorkspaceD
 export async function checkedToolStatus(
   tool: ManagedToolManifest,
   args: string[],
+  versionSupported: (version: string) => boolean = () => true,
 ): Promise<RuntimeWorkspaceDependencyToolStatus> {
   const result = await runCommand(tool.path, args, tool.source === 'bundled' ? {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
   } : undefined).catch(() => null);
-  return result?.exitCode === 0
-    ? { available: true, path: tool.path, source: tool.source, version: versionText(result) || tool.version }
-    : { available: false, path: tool.path, source: tool.source, version: tool.version };
+  const version = result ? versionText(result) || tool.version : tool.version;
+  return {
+    available: result?.exitCode === 0 && versionSupported(version),
+    path: tool.path,
+    source: tool.source,
+    version,
+  };
 }
 
 export function toolCheck(
@@ -60,11 +69,14 @@ export function toolCheck(
   };
 }
 
-export async function manifestIsUsable(manifest: WorkspaceDependencyManifest): Promise<boolean> {
+export async function manifestIsUsable(
+  manifest: WorkspaceDependencyManifest,
+  requirements: WorkspaceDependencyVersionRequirements = {},
+): Promise<boolean> {
   const results = await Promise.all([
-    checkedToolStatus(manifest.node, ['--version']),
-    checkedToolStatus(manifest.python, ['--version']),
-    checkedToolStatus(manifest.uv, ['--version']),
+    checkedToolStatus(manifest.node, ['--version'], requirements.node),
+    checkedToolStatus(manifest.python, ['--version'], requirements.python),
+    checkedToolStatus(manifest.uv, ['--version'], requirements.uv),
   ]);
   return results.every((tool) => tool.available);
 }

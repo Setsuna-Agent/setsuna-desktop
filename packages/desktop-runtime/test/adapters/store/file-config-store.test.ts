@@ -6,12 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 
 describe('file config store', () => {
-  it('enables workspace sandbox networking and managed dependencies by default', async () => {
+  it('enables workspace sandbox networking by default', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 
     await expect(store.getConfig()).resolves.toMatchObject({
       approvalReviewer: 'automatic',
-      desktopSettings: { workspaceDependenciesEnabled: true },
+      desktopSettings: {},
       sandboxWorkspaceWrite: { networkAccess: true },
     });
     await expect(store.saveConfig({ sandboxWorkspaceWrite: { networkAccess: false } })).resolves.toMatchObject({
@@ -344,7 +344,7 @@ describe('file config store', () => {
     });
     const invalidDesktopSettings = { markdownLinkOpenMode: 'unsupported' } as unknown as RuntimeConfigInput['desktopSettings'];
     await expect(store.saveConfig({ desktopSettings: invalidDesktopSettings })).resolves.toMatchObject({
-      desktopSettings: { workspaceDependenciesEnabled: true },
+      desktopSettings: {},
     });
   });
 
@@ -357,7 +357,7 @@ describe('file config store', () => {
     const invalidDesktopSettings = { interfaceLanguage: 'fr-FR' } as unknown as RuntimeConfigInput['desktopSettings'];
     const normalized = await store.saveConfig({ desktopSettings: invalidDesktopSettings });
     expect(normalized).toMatchObject({
-      desktopSettings: { workspaceDependenciesEnabled: true },
+      desktopSettings: {},
     });
     expect(normalized.desktopSettings?.interfaceLanguage).toBeUndefined();
   });
@@ -374,7 +374,6 @@ describe('file config store', () => {
       desktopSettings: {
         npmRegistryUrl: 'https://registry.example/npm/',
         pythonPackageIndexUrl: 'https://mirror.example/simple',
-        workspaceDependenciesEnabled: true,
       },
     });
     await expect(store.saveConfig({
@@ -383,7 +382,7 @@ describe('file config store', () => {
         pythonPackageIndexUrl: 'file:///tmp/simple',
       },
     })).resolves.toMatchObject({
-      desktopSettings: { workspaceDependenciesEnabled: true },
+      desktopSettings: {},
     });
   });
 

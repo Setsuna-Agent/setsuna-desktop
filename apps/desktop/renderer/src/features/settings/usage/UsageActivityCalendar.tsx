@@ -1,5 +1,4 @@
 import type { RuntimeUsageBucket } from '@setsuna-desktop/contracts';
-import { CalendarDays } from 'lucide-react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { formatTokens } from '../../workspace/model.js';
@@ -20,10 +19,7 @@ export function UsageActivityCalendar({ buckets }: UsageActivityCalendarProps) {
 
   return (
     <section className="settings-usage-card settings-usage-calendar" aria-labelledby="settings-usage-calendar-title">
-      <header className="settings-usage-card__header settings-usage-calendar__header">
-        <span className="settings-usage-card__icon" aria-hidden="true">
-          <CalendarDays size={16} strokeWidth={1.8} />
-        </span>
+      <header className="settings-usage-card__header settings-usage-card__header--plain settings-usage-calendar__header">
         <div>
           <strong id="settings-usage-calendar-title">{t('settings.usage.activity')}</strong>
           <span>{t('settings.usage.activitySubtitle')}</span>

@@ -53,6 +53,26 @@ describe('file usage store', () => {
     expect(threadOnly.summary).toMatchObject({ totalTokens: 30, recordCount: 1 });
   });
 
+  it('paginates records without narrowing the complete usage summary', async () => {
+    const store = new FileUsageStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-usage-pagination-test-')),
+      new RandomIdGenerator(),
+    );
+    for (let index = 0; index < 3; index += 1) {
+      await store.recordUsage({
+        threadId: 'thread_page',
+        turnId: `turn_${index}`,
+        createdAt: `2026-08-13T00:00:0${index}.000Z`,
+        totalTokens: index + 1,
+      });
+    }
+
+    const usage = await store.getUsage({ limit: 1, offset: 1 });
+
+    expect(usage.records.map((record) => record.turnId)).toEqual(['turn_1']);
+    expect(usage.summary).toMatchObject({ recordCount: 3, totalTokens: 6 });
+  });
+
   it('resolves legacy protocol labels to configured provider names', async () => {
     const store = new FileUsageStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-usage-legacy-test-')),
@@ -126,5 +146,37 @@ describe('file usage store', () => {
       totalTokens: 1000,
       recordCount: 2,
     }]);
+  });
+
+  it('filters records and every summary breakdown by an inclusive-exclusive time range', async () => {
+    const store = new FileUsageStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-usage-range-test-')),
+      new RandomIdGenerator(),
+    );
+    for (const [turnId, createdAt, totalTokens] of [
+      ['before', '2026-08-12T23:59:59.999Z', 10],
+      ['start', '2026-08-13T00:00:00.000Z', 20],
+      ['inside', '2026-08-13T00:30:00.000Z', 30],
+      ['end', '2026-08-13T01:00:00.000Z', 40],
+    ] as const) {
+      await store.recordUsage({
+        threadId: 'thread_range',
+        turnId,
+        createdAt,
+        provider: 'provider-a',
+        model: 'model-a',
+        totalTokens,
+      });
+    }
+
+    const usage = await store.getUsage({
+      from: '2026-08-13T00:00:00.000Z',
+      to: '2026-08-13T01:00:00.000Z',
+    });
+
+    expect(usage.records.map((record) => record.turnId)).toEqual(['inside', 'start']);
+    expect(usage.summary).toMatchObject({ totalTokens: 50, recordCount: 2 });
+    expect(usage.summary.byProvider).toMatchObject([{ key: 'provider-a', totalTokens: 50, recordCount: 2 }]);
+    expect(usage.summary.byModel).toMatchObject([{ key: 'model-a', totalTokens: 50, recordCount: 2 }]);
   });
 });

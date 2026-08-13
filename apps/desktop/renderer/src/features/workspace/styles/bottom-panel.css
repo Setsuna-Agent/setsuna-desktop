@@ -186,7 +186,6 @@ body.desktop-terminal-resizing .bottom-panel__resize-handle::after {
   min-width: 0;
   padding: 12px 10px;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 16px;
 }

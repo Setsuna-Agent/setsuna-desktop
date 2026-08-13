@@ -132,7 +132,6 @@
 
 .desktop-settings-panel .settings-network-proxy__server-card-identity code {
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   line-height: 15px;
 }

@@ -153,7 +153,7 @@ describe('WebDAV restore planning and commit', () => {
       approvalPolicy: 'full',
       permissionProfile: 'danger-full-access',
       hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'local-hook' }] }] },
-      desktopSettings: { interfaceLanguage: 'en-US', workspaceDependenciesEnabled: false },
+      desktopSettings: { interfaceLanguage: 'en-US' },
       providers: [
         {
           id: 'openai',
@@ -188,7 +188,7 @@ describe('WebDAV restore planning and commit', () => {
         globalPrompt: 'restored prompt',
         approvalPolicy: 'strict',
         hooks: {},
-        desktopSettings: { interfaceLanguage: 'zh-CN', workspaceDependenciesEnabled: true },
+        desktopSettings: { interfaceLanguage: 'zh-CN' },
         providers: [
           {
             id: 'openai',
@@ -222,7 +222,7 @@ describe('WebDAV restore planning and commit', () => {
       approvalPolicy: 'full',
       permissionProfile: 'danger-full-access',
       hooks: { PreToolUse: [{ hooks: [{ command: 'local-hook' }] }] },
-      desktopSettings: { interfaceLanguage: 'zh-CN', workspaceDependenciesEnabled: false },
+      desktopSettings: { interfaceLanguage: 'zh-CN' },
     });
     expect(restoredConfig.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({

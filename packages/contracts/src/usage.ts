@@ -21,6 +21,12 @@ export type RuntimeUsageRecord = RuntimeUsage & {
 export type RuntimeUsageQuery = {
   threadId?: string;
   limit?: number;
+  /** Zero-based record offset. Summaries still cover the complete filtered range. */
+  offset?: number;
+  /** Inclusive ISO-8601 timestamp boundary for usage record creation time. */
+  from?: string;
+  /** Exclusive ISO-8601 timestamp boundary for usage record creation time. */
+  to?: string;
 };
 
 export type RuntimeUsageBucket = {

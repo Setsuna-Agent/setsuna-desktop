@@ -17,6 +17,7 @@ import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/prim
 import { WorkspaceDependenciesSettings } from '../WorkspaceDependenciesSettings.js';
 import { WindowsSandboxSettings } from '../windows-sandbox/WindowsSandboxSettings.js';
 import { MemorySettingToggle } from '../components/SettingsControls.js';
+import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { errorMessage } from '../settings-utils.js';
@@ -65,7 +66,7 @@ export function RuntimePolicySettings({
   const accessModeOptions = localizedRuntimeAccessModeOptions(t);
   const accessModeOption = accessModeOptions.find((option) => option.value === accessMode) ?? accessModeOptions[1];
   const persistWorkspaceDependencySettings = (
-    settings: Partial<Pick<RuntimeDesktopSettings, 'npmRegistryUrl' | 'pythonPackageIndexUrl' | 'workspaceDependenciesEnabled'>>,
+    settings: Partial<Pick<RuntimeDesktopSettings, 'npmRegistryUrl' | 'pythonPackageIndexUrl'>>,
   ) => onSave({
     desktopSettings: {
       ...(config.desktopSettings ?? {}),
@@ -98,7 +99,6 @@ export function RuntimePolicySettings({
       <WorkspaceDependenciesSettings
         npmRegistryUrl={typeof config.desktopSettings?.npmRegistryUrl === 'string' ? config.desktopSettings.npmRegistryUrl : ''}
         pythonPackageIndexUrl={typeof config.desktopSettings?.pythonPackageIndexUrl === 'string' ? config.desktopSettings.pythonPackageIndexUrl : ''}
-        onEnabledPersist={(enabled) => persistWorkspaceDependencySettings({ workspaceDependenciesEnabled: enabled })}
         onNpmRegistryUrlPersist={(npmRegistryUrl) => persistWorkspaceDependencySettings({ npmRegistryUrl })}
         onPythonPackageIndexUrlPersist={(pythonPackageIndexUrl) => persistWorkspaceDependencySettings({ pythonPackageIndexUrl })}
       />
@@ -123,9 +123,7 @@ export function RuntimePolicySettings({
                 {isOpeningConfig ? t('common.opening') : t('common.open')}
               </Button>
             </div>
-            <code className="chat-user-settings__path-value" title={config.configPath}>
-              {config.configPath}
-            </code>
+            <SettingsPathValue path={config.configPath} />
           </div>
           <DataLocationSettings fallbackRoot={config.dataPath} />
         </div>

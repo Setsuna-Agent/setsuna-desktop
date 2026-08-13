@@ -266,7 +266,6 @@ describe('pc local shell execution', () => {
       .filter((entry) => entry && path.resolve(entry) !== runtimePackageBin)
       .join(path.delimiter);
     const configStore = new FileConfigStore(dependencyDataDir);
-    await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
     const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
     const { host } = await createHost({ workspaceDependencies });
 
@@ -307,7 +306,6 @@ describe('pc local shell execution', () => {
   )('allows the active macOS temp directory when the workspace is elsewhere', async () => {
     const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-temp-sandbox-'));
     const configStore = new FileConfigStore(dependencyDataDir);
-    await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
     const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
     const { host, projectDir, fixtureRoot } = await createHost({
       fixtureRootParent: homedir(),

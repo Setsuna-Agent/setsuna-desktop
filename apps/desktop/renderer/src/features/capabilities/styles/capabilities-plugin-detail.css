@@ -106,7 +106,6 @@
 
 .desktop-plugin-item-dialog__metadata dd {
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
 }
 
 .desktop-plugin-item-dialog__section,
@@ -146,7 +145,6 @@
 .desktop-plugin-item-dialog__file-heading > small {
   flex: 0 0 auto;
   color: var(--app-text-subtle);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
 }
 
@@ -339,7 +337,6 @@
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: color-mix(in srgb, var(--app-bg) 82%, var(--app-text) 5%);
-  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 16px;
   text-overflow: ellipsis;

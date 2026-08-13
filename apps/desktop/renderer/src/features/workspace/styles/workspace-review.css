@@ -304,7 +304,6 @@
   color: var(--app-text-muted) !important;
   background: transparent !important;
   box-shadow: none !important;
-  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
@@ -435,7 +434,6 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
-  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
 }
@@ -706,7 +704,6 @@
   width: fit-content;
   max-width: 100%;
   overflow: hidden;
-  font-family: var(--app-font-mono);
   font-size: 12px;
   text-overflow: ellipsis;
 }

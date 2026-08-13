@@ -1,4 +1,7 @@
-import type { RuntimeWorkspaceDependenciesStatus } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeWorkspaceDependenciesStatus,
+  RuntimeWorkspaceDependencyToolStatus,
+} from '@setsuna-desktop/contracts';
 import {
   DEFAULT_NPM_REGISTRY_URL,
   DEFAULT_PYTHON_PACKAGE_INDEX_URL,
@@ -8,21 +11,20 @@ import {
 import {
   CircleGauge,
   Code2,
-  Download,
   Pencil,
   RefreshCw,
   RotateCcw,
+  Wrench,
   X,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
-import { Button, IconButton, TextField } from '../../shared/ui/primitives.js';
+import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { Button, IconButton, StatusBadge, TextField } from '../../shared/ui/primitives.js';
 import { useWorkspaceDependencies } from '../workspace/hooks/useWorkspaceDependencies.js';
 import { planPackageSourceSave } from './packageSourceEditor.js';
 
 type WorkspaceDependenciesSettingsProps = {
   npmRegistryUrl: string;
-  onEnabledPersist: (enabled: boolean) => Promise<void>;
   onNpmRegistryUrlPersist: (registryUrl: string | undefined) => Promise<void>;
   onPythonPackageIndexUrlPersist: (packageIndexUrl: string | undefined) => Promise<void>;
   pythonPackageIndexUrl: string;
@@ -30,32 +32,21 @@ type WorkspaceDependenciesSettingsProps = {
 
 export function WorkspaceDependenciesSettings({
   npmRegistryUrl,
-  onEnabledPersist,
   onNpmRegistryUrlPersist,
   onPythonPackageIndexUrlPersist,
   pythonPackageIndexUrl,
 }: WorkspaceDependenciesSettingsProps) {
   const { t } = useI18n();
   const dependencies = useWorkspaceDependencies();
-  const [persistError, setPersistError] = useState<string | null>(null);
   const busy = dependencies.busyAction !== null;
   const status = dependencies.status;
-  const setEnabled = async (enabled: boolean) => {
-    setPersistError(null);
-    const nextStatus = await dependencies.setEnabled(enabled);
-    if (!nextStatus) return;
-    try {
-      await onEnabledPersist(nextStatus.enabled);
-    } catch (unknownError) {
-      setPersistError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    }
-  };
+  const environmentReady = status?.state === 'ready';
 
   return (
     <div className="chat-user-settings__section-block workspace-dependencies-settings">
       <div className="chat-user-settings__group-title">{t('settings.dependencies.title')}</div>
       <div className="chat-user-settings__group chat-user-settings__runtime-card workspace-dependencies-settings__card">
-        <div className="chat-user-settings__row chat-user-settings__runtime-policy-row workspace-dependencies-settings__toggle-row">
+        <div className="chat-user-settings__row chat-user-settings__runtime-policy-row">
           <span className="chat-user-settings__runtime-policy-copy">
             <Code2 className="workspace-dependencies-settings__leading-icon" aria-hidden="true" />
             <span>
@@ -63,18 +54,6 @@ export function WorkspaceDependenciesSettings({
               <small>{t('settings.dependencies.toolsDescription')}</small>
             </span>
           </span>
-          <div className="workspace-dependencies-settings__toggle-control">
-            <span>{status ? (status.enabled ? t('settings.dependencies.automatic') : t('settings.dependencies.disabled')) : t('settings.dependencies.reading')}</span>
-            <label className="sd-check" title={t('settings.dependencies.automaticLabel')}>
-              <input
-                aria-label={t('settings.dependencies.automaticLabel')}
-                checked={status?.enabled === true}
-                disabled={busy}
-                type="checkbox"
-                onChange={(event) => void setEnabled(event.currentTarget.checked)}
-              />
-            </label>
-          </div>
         </div>
 
         <PackageSourceForm
@@ -103,7 +82,10 @@ export function WorkspaceDependenciesSettings({
             <CircleGauge className="workspace-dependencies-settings__leading-icon" aria-hidden="true" />
             <span>
               <strong>{t('settings.dependencies.environment')}</strong>
-              <small>{environmentStatusCopy(status, t)}</small>
+              <EnvironmentStatusTags error={dependencies.error} status={status} />
+              <small className="workspace-dependencies-settings__repair-description">
+                {t('settings.dependencies.repairDescription')}
+              </small>
             </span>
           </span>
           <div className="workspace-dependencies-settings__action-buttons">
@@ -117,19 +99,19 @@ export function WorkspaceDependenciesSettings({
               {dependencies.busyAction === 'diagnose' ? t('settings.dependencies.checking') : t('settings.dependencies.check')}
             </Button>
             <Button
-              icon={dependencies.busyAction === 'reinstall'
+              icon={dependencies.busyAction === 'repair'
                 ? <RefreshCw className="is-spinning" size={14} />
-                : <Download size={14} />}
-              disabled={busy || status?.enabled !== true}
-              onClick={() => void dependencies.reinstall()}
+                : <Wrench size={14} />}
+              disabled={busy || environmentReady}
+              onClick={() => void dependencies.repair()}
             >
-              {dependencies.busyAction === 'reinstall' ? t('settings.dependencies.installing') : t('settings.dependencies.reinstall')}
+              {dependencies.busyAction === 'repair' ? t('settings.dependencies.repairing') : t('settings.dependencies.repair')}
             </Button>
           </div>
         </div>
 
-        {dependencies.error || persistError ? (
-          <div className="chat-user-settings__runtime-error" role="alert">{dependencies.error ?? persistError}</div>
+        {dependencies.error ? (
+          <div className="chat-user-settings__runtime-error" role="alert">{dependencies.error}</div>
         ) : null}
       </div>
     </div>
@@ -319,16 +301,66 @@ function PackageSourceIcon({ kind }: { kind: PackageSourceKind }) {
   );
 }
 
-function environmentStatusCopy(status: RuntimeWorkspaceDependenciesStatus | null, t: Translate): string {
-  if (!status) return t('settings.dependencies.status.reading');
-  return [
-    { available: status.node.available, tool: 'Node.js' },
-    { available: status.python.available, tool: 'Python' },
-    { available: status.uv.available, tool: 'uv' },
-  ].map(({ available, tool }) => t('settings.dependencies.status.item', {
-    status: t(available
-      ? 'settings.dependencies.status.available'
-      : 'settings.dependencies.status.unavailable'),
-    tool,
-  })).join(' · ');
+function EnvironmentStatusTags({
+  error,
+  status,
+}: {
+  error: string | null;
+  status: RuntimeWorkspaceDependenciesStatus | null;
+}) {
+  const { t } = useI18n();
+  const tools: Array<{
+    id: 'node' | 'python' | 'uv';
+    label: string;
+    value: RuntimeWorkspaceDependencyToolStatus | null;
+  }> = [
+    { id: 'node', label: 'Node.js', value: status?.node ?? null },
+    { id: 'python', label: 'Python', value: status?.python ?? null },
+    { id: 'uv', label: 'uv', value: status?.uv ?? null },
+  ];
+
+  return (
+    <span className="workspace-dependencies-settings__status-tags">
+      {tools.map((tool) => {
+        const state = environmentToolTagState(status, tool.value, Boolean(error));
+        const check = status?.checks.find((item) => item.id === tool.id);
+        return (
+          <StatusBadge key={tool.id} title={error ?? check?.message} tone={state.tone}>
+            {t('settings.dependencies.status.item', {
+              status: t(state.messageKey),
+              tool: tool.label,
+            })}
+          </StatusBadge>
+        );
+      })}
+    </span>
+  );
+}
+
+function environmentToolTagState(
+  status: RuntimeWorkspaceDependenciesStatus | null,
+  tool: RuntimeWorkspaceDependencyToolStatus | null,
+  requestFailed: boolean,
+): {
+  messageKey:
+    | 'settings.dependencies.status.available'
+    | 'settings.dependencies.status.checking'
+    | 'settings.dependencies.status.failed'
+    | 'settings.dependencies.status.installing'
+    | 'settings.dependencies.status.unavailable';
+  tone: 'neutral' | 'success' | 'warning' | 'danger';
+} {
+  if (tool?.available) {
+    return { messageKey: 'settings.dependencies.status.available', tone: 'success' };
+  }
+  if (requestFailed || status?.state === 'error') {
+    return { messageKey: 'settings.dependencies.status.failed', tone: 'danger' };
+  }
+  if (status?.state === 'installing') {
+    return { messageKey: 'settings.dependencies.status.installing', tone: 'warning' };
+  }
+  if (!status) {
+    return { messageKey: 'settings.dependencies.status.checking', tone: 'neutral' };
+  }
+  return { messageKey: 'settings.dependencies.status.unavailable', tone: 'warning' };
 }

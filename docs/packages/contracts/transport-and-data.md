@@ -111,6 +111,10 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 
 不要把这份概览当路由注册真源。
 
+`GET /v1/usage` 支持 `threadId`、`limit`、`offset` 以及 ISO-8601 `from`/`to` 查询参数；
+`limit`/`offset` 只分页明细，汇总仍覆盖完整筛选结果。时间范围采用 inclusive start、exclusive end，
+确保汇总与最近记录使用相同边界。
+
 ## Input、State 与 Secret
 
 配置 contract 常有三类：

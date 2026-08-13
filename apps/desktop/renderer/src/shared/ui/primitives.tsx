@@ -181,6 +181,14 @@ export function EmptyState({ title, body, action }: { title: string; body?: stri
   );
 }
 
-export function StatusBadge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'warning' | 'danger' }) {
-  return <span className={`sd-status sd-status--${tone}`}>{children}</span>;
+export function StatusBadge({
+  children,
+  title,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  title?: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'danger';
+}) {
+  return <span className={`sd-status sd-status--${tone}`} title={title}>{children}</span>;
 }

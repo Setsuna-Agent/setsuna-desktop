@@ -2,6 +2,7 @@ import type {
   DesktopRuntimeClient,
   RuntimeMemoryPreview,
   RuntimeMemoryRecord,
+  RuntimeUsageQuery,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -80,6 +81,11 @@ export function useRuntimeMemoryUsageState({
       return null;
     }
   }, [client, usageRequests]);
+
+  const queryUsage = useCallback(
+    (query: RuntimeUsageQuery): Promise<RuntimeUsageResponse> => client.getUsage(query),
+    [client],
+  );
 
   const refreshThreadUsage = useCallback(
     async (threadId: string): Promise<RuntimeUsageResponse | null> => {
@@ -173,6 +179,7 @@ export function useRuntimeMemoryUsageState({
     memoryPreview,
     memoryPreviewLoading,
     previewMemories,
+    queryUsage,
     refreshThreadUsage,
     refreshUsage,
     threadUsage,

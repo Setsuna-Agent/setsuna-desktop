@@ -45,10 +45,16 @@ export class FileUsageStore implements UsageStore {
     const storedRecords = await this.readRecords();
     const providers = await this.loadProviders?.().catch(() => []);
     const allRecords = providers?.length ? resolveLegacyProviders(storedRecords, providers) : storedRecords;
-    const filtered = query.threadId ? allRecords.filter((record) => record.threadId === query.threadId) : allRecords;
+    const from = timestampBoundary(query.from);
+    const to = timestampBoundary(query.to);
+    const filtered = allRecords.filter((record) => (
+      (!query.threadId || record.threadId === query.threadId)
+      && isWithinTimeRange(record.createdAt, from, to)
+    ));
     const limit = clampLimit(query.limit);
+    const offset = clampOffset(query.offset);
     return {
-      records: filtered.slice(0, limit),
+      records: filtered.slice(offset, offset + limit),
       summary: summarizeUsage(filtered),
     };
   }
@@ -260,4 +266,26 @@ function localUsageDateKey(value: string): string | undefined {
 function clampLimit(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_USAGE_LIMIT;
   return Math.max(1, Math.min(MAX_USAGE_LIMIT, Math.floor(value)));
+}
+
+function clampOffset(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
+function timestampBoundary(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function isWithinTimeRange(
+  createdAt: string,
+  from: number | undefined,
+  to: number | undefined,
+): boolean {
+  if (from === undefined && to === undefined) return true;
+  const timestamp = Date.parse(createdAt);
+  if (Number.isNaN(timestamp)) return false;
+  return (from === undefined || timestamp >= from) && (to === undefined || timestamp < to);
 }

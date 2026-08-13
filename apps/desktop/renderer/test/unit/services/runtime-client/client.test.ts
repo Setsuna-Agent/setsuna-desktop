@@ -170,6 +170,23 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({ path: '/v1/runtime-activities' });
   });
 
+  it('serializes usage time boundaries without losing their offsets', async () => {
+    const request = installRuntimeBridge(() => ({ records: [], summary: {} }));
+    const client = createDesktopRuntimeClient();
+
+    await client.getUsage({
+      threadId: 'thread / 1',
+      limit: 25,
+      offset: 50,
+      from: '2026-08-13T08:30:00.000+08:00',
+      to: '2026-08-14T08:30:00.000+08:00',
+    });
+
+    expect(request).toHaveBeenCalledWith({
+      path: '/v1/usage?threadId=thread+%2F+1&limit=25&offset=50&from=2026-08-13T08%3A30%3A00.000%2B08%3A00&to=2026-08-14T08%3A30%3A00.000%2B08%3A00',
+    });
+  });
+
   it('lists incremental developer traces through an encoded thread path', async () => {
     const request = installRuntimeBridge(() => ({ nextSeq: 8, traces: [] }));
     const client = createDesktopRuntimeClient();
@@ -406,20 +423,18 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('routes workspace dependency status, toggle, diagnosis, and reinstall requests', async () => {
-    const request = installRuntimeBridge(() => ({ enabled: false, state: 'disabled' }));
+  it('routes workspace dependency status, diagnosis, and repair requests', async () => {
+    const request = installRuntimeBridge(() => ({ state: 'ready' }));
     const client = createDesktopRuntimeClient();
 
     await client.getWorkspaceDependencies();
-    await client.setWorkspaceDependencies({ enabled: false });
     await client.diagnoseWorkspaceDependencies();
-    await client.reinstallWorkspaceDependencies();
+    await client.repairWorkspaceDependencies();
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       { path: '/v1/workspace-dependencies' },
-      { path: '/v1/workspace-dependencies', method: 'PUT', body: { enabled: false } },
       { path: '/v1/workspace-dependencies/diagnose', method: 'POST' },
-      { path: '/v1/workspace-dependencies/reinstall', method: 'POST' },
+      { path: '/v1/workspace-dependencies/repair', method: 'POST' },
     ]);
   });
 

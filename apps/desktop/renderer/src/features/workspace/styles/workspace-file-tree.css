@@ -154,7 +154,6 @@ body.desktop-file-tree-resizing .desktop-file-tree__resize-handle::after {
 
 .desktop-file-row__loading {
   color: var(--app-text-subtle);
-  font-family: var(--app-code-font-family);
 }
 
 .desktop-file-row__spacer {

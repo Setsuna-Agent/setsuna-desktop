@@ -2,7 +2,7 @@ import type { RuntimeWorkspaceDependenciesStatus } from '@setsuna-desktop/contra
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createDesktopRuntimeClient } from '../../../services/runtime-client/client.js';
 
-export type WorkspaceDependencyAction = 'loading' | 'toggle' | 'diagnose' | 'reinstall';
+export type WorkspaceDependencyAction = 'loading' | 'diagnose' | 'repair';
 
 export function useWorkspaceDependencies() {
   const client = useMemo(() => createDesktopRuntimeClient(), []);
@@ -46,10 +46,6 @@ export function useWorkspaceDependencies() {
     }
   }, []);
 
-  const setEnabled = useCallback(
-    (enabled: boolean) => run('toggle', () => client.setWorkspaceDependencies({ enabled })),
-    [client, run],
-  );
   const diagnose = useCallback(
     async () => {
       const nextStatus = await run('diagnose', () => client.diagnoseWorkspaceDependencies());
@@ -58,8 +54,8 @@ export function useWorkspaceDependencies() {
     },
     [client, run],
   );
-  const reinstall = useCallback(
-    () => run('reinstall', () => client.reinstallWorkspaceDependencies()),
+  const repair = useCallback(
+    () => run('repair', () => client.repairWorkspaceDependencies()),
     [client, run],
   );
 
@@ -68,8 +64,7 @@ export function useWorkspaceDependencies() {
     diagnose,
     error,
     hasDiagnosed,
-    reinstall,
-    setEnabled,
+    repair,
     status,
   };
 }

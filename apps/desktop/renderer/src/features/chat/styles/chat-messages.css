@@ -89,7 +89,6 @@
 .chat-memory-citations__list code {
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

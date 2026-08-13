@@ -97,7 +97,6 @@ export type RuntimeDesktopSettings = {
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
   npmRegistryUrl?: string;
   pythonPackageIndexUrl?: string;
-  workspaceDependenciesEnabled?: boolean;
 };
 
 export type RuntimeImageGenerationConfigState = {

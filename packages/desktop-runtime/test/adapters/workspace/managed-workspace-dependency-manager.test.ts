@@ -40,14 +40,12 @@ describe('managed workspace dependency manager', () => {
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
 
       await expect(manager.getStatus()).resolves.toMatchObject({
-        enabled: true,
         state: 'ready',
         node: { available: true, source: 'bundled' },
         python: { available: true, source: 'system' },
         uv: { available: true, source: 'system' },
       });
       await expect(manager.diagnose()).resolves.toMatchObject({
-        enabled: true,
         state: 'ready',
         node: { available: true, source: 'bundled' },
         python: { available: true, source: 'system' },
@@ -82,20 +80,20 @@ describe('managed workspace dependency manager', () => {
         desktopSettings: {
           npmRegistryUrl: 'https://registry.example/npm/',
           pythonPackageIndexUrl: 'https://mirror.example/simple',
-          workspaceDependenciesEnabled: true,
         },
       });
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
       await expect(manager.getPromptContext()).resolves.toEqual({ enabled: true });
-      const status = await manager.setEnabled({ enabled: true });
+      const status = await manager.repair();
 
       expect(status).toMatchObject({
-        enabled: true,
         state: 'ready',
         node: { available: true, source: 'system' },
         python: { available: true, source: 'system', version: 'Python 3.12.9' },
         uv: { available: true, source: 'system', version: 'uv 0.11.28' },
       });
+      const repairedAgain = await manager.repair();
+      expect(repairedAgain.updatedAt).toBe(status.updatedAt);
       const shell = await manager.prepareShellToolchain({
         command: 'python --version',
         environment: testEnvironment(dataDir),
@@ -171,7 +169,7 @@ describe('managed workspace dependency manager', () => {
     try {
       const configStore = new FileConfigStore(dataDir);
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
-      const status = await manager.reinstall();
+      const status = await manager.repair();
       const dependencyRoot = path.join(dataDir, 'workspace-dependencies');
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
       const pythonBinLink = path.join(dependencyRoot, 'toolchain', 'python-bin', 'python3');
@@ -186,6 +184,17 @@ describe('managed workspace dependency manager', () => {
         stdout: expect.stringContaining('Python 3.12.13'),
       });
       await expect(manager.getStatus()).resolves.toMatchObject({ state: 'ready' });
+
+      if (!status.python.path) throw new Error('Expected managed Python path.');
+      await writeExecutable(status.python.path, '#!/bin/sh\necho "Python 3.9.0"\n');
+      await expect(manager.getStatus()).resolves.toMatchObject({
+        state: 'not-installed',
+        python: { available: false, version: 'Python 3.9.0' },
+      });
+      await expect(manager.repair()).resolves.toMatchObject({
+        state: 'ready',
+        python: { available: true, version: 'Python 3.12.13' },
+      });
     } finally {
       process.env.PATH = previousPath;
       await rm(dataDir, { recursive: true, force: true });
@@ -225,7 +234,7 @@ describe('managed workspace dependency manager', () => {
         }),
       });
 
-      await expect(manager.reinstall()).rejects.toThrow('proxy-environment-applied');
+      await expect(manager.repair()).rejects.toThrow('proxy-environment-applied');
       expect(requestedUrl).toBe('https://astral.sh/uv/0.11.28/install.sh');
     } finally {
       process.env.PATH = previousPath;
@@ -255,7 +264,6 @@ describe('managed workspace dependency manager', () => {
       expect(shell.environment.UV_PYTHON).toBeUndefined();
       expect(shell.environment.UV_PYTHON_BIN_DIR).toBeUndefined();
       expect(shell.environment.UV_PYTHON_INSTALL_DIR).toBeUndefined();
-      await expect(manager.getStatus()).resolves.toMatchObject({ enabled: true });
       await expect(access(path.join(dataDir, 'workspace-dependencies', 'toolchain', 'manifest.json')))
         .rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
@@ -332,7 +340,7 @@ describe('managed workspace dependency manager', () => {
     }
   });
 
-  it.skipIf(process.platform === 'win32')('resolves explicit command and installation roots even when managed downloads are disabled', async () => {
+  it.skipIf(process.platform === 'win32')('resolves explicit command and installation roots alongside managed caches', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-explicit-toolchain-'));
     const fakeBin = path.join(dataDir, 'session-bin');
     const installationRoot = path.join(dataDir, 'installation');
@@ -346,7 +354,6 @@ describe('managed workspace dependency manager', () => {
 
     try {
       const configStore = new FileConfigStore(dataDir);
-      await configStore.saveConfig({ desktopSettings: { workspaceDependenciesEnabled: false } });
       const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
       const shell = await manager.prepareShellToolchain({
         command: 'setsuna-explicit-tool --version',
@@ -358,7 +365,9 @@ describe('managed workspace dependency manager', () => {
         installationRoot: await realpath(installationRoot),
       });
       expect(shell.readableRoots).toEqual(expect.arrayContaining([fakeBin, await realpath(installationRoot)]));
-      expect(shell.writableCacheRoots).toEqual([]);
+      expect(shell.writableCacheRoots).toEqual([
+        path.join(dataDir, 'workspace-dependencies', 'cache'),
+      ]);
     } finally {
       process.env.PATH = previousPath;
       await rm(dataDir, { recursive: true, force: true });
