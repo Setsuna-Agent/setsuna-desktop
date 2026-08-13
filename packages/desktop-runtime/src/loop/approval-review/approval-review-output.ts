@@ -60,6 +60,18 @@ export function policyConstrainedApprovalReviewOutcome(
   return 'allow';
 }
 
+/** Produces persistence-safe audit text without copying model-authored action details. */
+export function approvalReviewAuditRationale(
+  review: ParsedApprovalReview,
+  outcome: ParsedApprovalReview['outcome'],
+): string {
+  if (outcome !== review.outcome) {
+    return `Runtime policy denied a ${review.riskLevel}-risk action with ${review.userAuthorization} user authorization.`;
+  }
+  const verb = outcome === 'allow' ? 'allowed' : 'denied';
+  return `Automatic approval review ${verb} a ${review.riskLevel}-risk action with ${review.userAuthorization} user authorization.`;
+}
+
 function stripThinking(value: string): string {
   return value.replace(/<think>[\s\S]*?<\/think>/giu, '');
 }

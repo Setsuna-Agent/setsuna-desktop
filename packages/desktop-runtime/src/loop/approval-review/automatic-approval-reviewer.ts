@@ -16,6 +16,7 @@ import { createModelStreamTextCollector } from '../../utils/model-stream-text-co
 import { abortReason } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
+  approvalReviewAuditRationale,
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
 } from './approval-review-output.js';
@@ -126,9 +127,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
           continue;
         }
         const outcome = policyConstrainedApprovalReviewOutcome(parsed);
-        const rationale = outcome === parsed.outcome
-          ? parsed.rationale
-          : `Runtime policy matrix denied an inconsistent ${parsed.riskLevel}-risk/${parsed.userAuthorization}-authorization decision. ${parsed.rationale}`;
+        const rationale = approvalReviewAuditRationale(parsed, outcome);
         const providerId = usage?.providerId ?? modelRequest.providerId;
         const assessment: RuntimeApprovalReviewAssessment = {
           status: outcome === 'allow' ? 'allowed' : 'denied',

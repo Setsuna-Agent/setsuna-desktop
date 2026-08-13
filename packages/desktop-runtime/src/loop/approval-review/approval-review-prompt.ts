@@ -19,7 +19,10 @@ export function buildApprovalReviewPrompt(
   thread: RuntimeThread,
   now: string,
 ): ApprovalReviewPrompt {
-  const action = serializeApprovalReviewAction(input);
+  const serializedAction = serializeApprovalReviewAction(input);
+  const action = serializedAction
+    ? escapePromptEnvelopeJson(serializedAction)
+    : null;
   if (!action || action.length > MAX_ACTION_CHARS) {
     return {
       unavailableReason: 'The exact approval request is too large or cannot be serialized safely.',
@@ -105,9 +108,14 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
     totalChars += serialized.length;
   }
   return {
-    trustedUserEvidence: JSON.stringify(trustedUserEvidence),
-    untrustedContext: JSON.stringify(untrustedContext),
+    trustedUserEvidence: escapePromptEnvelopeJson(JSON.stringify(trustedUserEvidence)),
+    untrustedContext: escapePromptEnvelopeJson(JSON.stringify(untrustedContext)),
   };
+}
+
+/** Keeps serialized JSON valid while preventing payloads from closing prompt envelope tags. */
+function escapePromptEnvelopeJson(value: string): string {
+  return value.replaceAll('<', '\\u003c');
 }
 
 function trustedUserEvidenceSource(
