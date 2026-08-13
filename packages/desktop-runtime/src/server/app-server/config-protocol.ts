@@ -2,6 +2,7 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeMcpServerStatus,
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
@@ -90,13 +91,13 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
   const reasoningEffort = activeModelReasoningEffort(config);
   return {
     model: activeModelCode(config),
-    review_model: null,
+    review_model: appServerReviewModel(config),
     model_context_window: activeModelConfig(config)?.contextWindowTokens ?? null,
     model_auto_compact_token_limit: appServerModelAutoCompactTokenLimit(config),
     model_auto_compact_token_limit_scope: null,
     model_provider: activeModelProvider(config),
     approval_policy: appServerApprovalPolicy(config.approvalPolicy),
-    approvals_reviewer: 'user',
+    approvals_reviewer: config.approvalReviewer ?? 'user',
     sandbox_mode: sweSandboxMode(config.permissionProfile),
     sandbox_workspace_write: sweSandboxWorkspaceWrite(config, cwd),
     forced_chatgpt_workspace_id: null,
@@ -227,14 +228,30 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
     }));
     return providers;
   };
+  const activeProviderIdForEdit = () => (
+    next.activeProviderId ?? config.activeProviderId ?? ensureProviders()[0]?.id
+  );
+  const currentReviewModelForEdit = () => (
+    next.taskModels && hasOwn(next.taskModels, 'review')
+      ? next.taskModels.review
+      : config.taskModels?.review
+  );
 
   for (const edit of edits) {
     switch (edit.keyPath) {
       case 'model':
-        providers = sweProvidersWithActiveModel(config, ensureProviders(), requiredRawString(edit.value, 'model'));
+        providers = sweProvidersWithActiveModel(
+          activeProviderIdForEdit(),
+          ensureProviders(),
+          requiredRawString(edit.value, 'model'),
+        );
         break;
       case 'model_context_window':
-        providers = sweProvidersWithModelContextWindow(config, ensureProviders(), edit.value);
+        providers = sweProvidersWithModelContextWindow(
+          activeProviderIdForEdit(),
+          ensureProviders(),
+          edit.value,
+        );
         break;
       case 'model_auto_compact_token_limit':
         next.desktopSettings = {
@@ -243,10 +260,28 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         };
         break;
       case 'model_provider':
-        next.activeProviderId = sweProviderIdForWrite(config, requiredRawString(edit.value, 'model_provider'));
+        next.activeProviderId = sweProviderIdForWrite(
+          ensureProviders(),
+          requiredRawString(edit.value, 'model_provider'),
+        );
         break;
       case 'approval_policy':
         next.approvalPolicy = appServerApprovalPolicyToRuntime(requiredRawString(edit.value, 'approval_policy'));
+        break;
+      case 'approvals_reviewer':
+        next.approvalReviewer = appServerApprovalReviewerToRuntime(
+          requiredRawString(edit.value, 'approvals_reviewer'),
+        );
+        break;
+      case 'review_model':
+        next.taskModels = {
+          ...(next.taskModels ?? {}),
+          review: appServerReviewModelInput(edit.value, {
+            activeProviderId: activeProviderIdForEdit(),
+            current: currentReviewModelForEdit(),
+            providers: ensureProviders(),
+          }),
+        };
         break;
       case 'sandbox_mode':
         next.permissionProfile = sweSandboxModeToRuntime(requiredRawString(edit.value, 'sandbox_mode'));
@@ -258,7 +293,11 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         next.globalPrompt = edit.value === null ? '' : requiredRawString(edit.value, 'instructions');
         break;
       case 'model_reasoning_effort':
-        providers = sweProvidersWithReasoningEffort(config, ensureProviders(), edit.value);
+        providers = sweProvidersWithReasoningEffort(
+          activeProviderIdForEdit(),
+          ensureProviders(),
+          edit.value,
+        );
         break;
       case 'features':
         next.features = sweMergeObject(next.features ?? {}, sweBooleanRecord(edit.value, 'features'), edit.mergeStrategy);
@@ -307,13 +346,13 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
 }
 
 function sweProvidersWithActiveModel(
-  config: RuntimeConfigState,
+  activeProviderId: string | undefined,
   providers: NonNullable<RuntimeConfigInput['providers']>,
   modelCode: string,
 ): NonNullable<RuntimeConfigInput['providers']> {
-  const activeProviderId = config.activeProviderId ?? providers[0]?.id;
+  const selectedProviderId = activeProviderId ?? providers[0]?.id;
   return providers.map((provider) => {
-    if (provider.id !== activeProviderId) return provider;
+    if (provider.id !== selectedProviderId) return provider;
     const models = provider.models?.length ? provider.models.map((model) => ({ ...model })) : [];
     const existing = models.find((model) => model.code === modelCode || model.id === modelCode || model.name === modelCode);
     if (existing) {
@@ -333,14 +372,14 @@ function sweProvidersWithActiveModel(
 }
 
 function sweProvidersWithReasoningEffort(
-  config: RuntimeConfigState,
+  activeProviderId: string | undefined,
   providers: NonNullable<RuntimeConfigInput['providers']>,
   value: unknown,
 ): NonNullable<RuntimeConfigInput['providers']> {
-  const activeProviderId = config.activeProviderId ?? providers[0]?.id;
+  const selectedProviderId = activeProviderId ?? providers[0]?.id;
   const effort = value === null ? undefined : requiredRawString(value, 'model_reasoning_effort');
   return providers.map((provider) => {
-    if (provider.id !== activeProviderId) return provider;
+    if (provider.id !== selectedProviderId) return provider;
     return {
       ...provider,
       models: provider.models?.map((model) => (
@@ -360,14 +399,14 @@ function sweProvidersWithReasoningEffort(
 }
 
 function sweProvidersWithModelContextWindow(
-  config: RuntimeConfigState,
+  activeProviderId: string | undefined,
   providers: NonNullable<RuntimeConfigInput['providers']>,
   value: unknown,
 ): NonNullable<RuntimeConfigInput['providers']> {
-  const activeProviderId = config.activeProviderId ?? providers[0]?.id;
+  const selectedProviderId = activeProviderId ?? providers[0]?.id;
   const contextWindowTokens = value === null ? undefined : positiveRequiredConfigInt(value, 'model_context_window');
   return providers.map((provider) => {
-    if (provider.id !== activeProviderId) return provider;
+    if (provider.id !== selectedProviderId) return provider;
     return {
       ...provider,
       models: provider.models?.map((model) => {
@@ -381,11 +420,14 @@ function sweProvidersWithModelContextWindow(
   });
 }
 
-function sweProviderIdForWrite(config: RuntimeConfigState, value: string): string {
-  const exact = config.providers.find((provider) => provider.id === value);
-  if (exact) return exact.id;
-  const byKind = config.providers.filter((provider) => provider.provider === value);
-  if (byKind.length === 1) return byKind[0].id;
+function sweProviderIdForWrite(
+  providers: NonNullable<RuntimeConfigInput['providers']>,
+  value: string,
+): string {
+  const exact = providers.find((provider) => provider.id === value);
+  if (exact?.id) return exact.id;
+  const byKind = providers.filter((provider) => provider.provider === value);
+  if (byKind.length === 1 && byKind[0]?.id) return byKind[0].id;
   throw appServerConfigWriteError('configValidationError', `Unknown model_provider: ${value}`);
 }
 
@@ -394,6 +436,60 @@ function appServerApprovalPolicyToRuntime(value: string): RuntimeConfigState['ap
   if (value === 'untrusted') return 'strict';
   if (value === 'on-request') return 'on-request';
   throw appServerConfigWriteError('configValidationError', `Unsupported approval_policy: ${value}`);
+}
+
+function appServerApprovalReviewerToRuntime(
+  value: string,
+): NonNullable<RuntimeConfigState['approvalReviewer']> {
+  if (value === 'user' || value === 'automatic') return value;
+  throw appServerConfigWriteError(
+    'configValidationError',
+    `Unsupported approvals_reviewer: ${value}`,
+  );
+}
+
+function appServerReviewModel(config: RuntimeConfigState): string | null {
+  const reference = config.taskModels?.review;
+  if (!reference) return null;
+  const provider = config.providers.find((item) => (
+    item.enabled && item.id === reference.providerId
+  ));
+  const model = provider?.models.find((item) => (
+    item.id === reference.modelId && Boolean(item.code.trim())
+  ));
+  return model?.code.trim() || null;
+}
+
+function appServerReviewModelInput(
+  value: unknown,
+  source: {
+    activeProviderId?: string;
+    current?: RuntimeConfiguredModelReference | null;
+    providers: NonNullable<RuntimeConfigInput['providers']>;
+  },
+): RuntimeConfiguredModelReference | null {
+  if (value === null) return null;
+  const modelCode = requiredRawString(value, 'review_model');
+  const candidates = source.providers.flatMap((provider) => {
+    if (provider.enabled === false || !provider.id) return [];
+    const providerId = provider.id;
+    return (provider.models ?? [])
+      .filter((model) => (
+        model.code === modelCode || model.id === modelCode || model.name === modelCode
+      ))
+      .map((model) => ({ providerId, modelId: model.id }));
+  });
+  const current = source.current;
+  const selected = candidates.find((candidate) => (
+    candidate.providerId === current?.providerId
+    && candidate.modelId === current?.modelId
+  )) ?? candidates.find((candidate) => candidate.providerId === source.activeProviderId)
+    ?? (candidates.length === 1 ? candidates[0] : undefined);
+  if (selected) return selected;
+  throw appServerConfigWriteError(
+    'configValidationError',
+    `Unknown or ambiguous review_model: ${modelCode}`,
+  );
 }
 
 function sweSandboxModeToRuntime(value: string): RuntimeConfigState['permissionProfile'] {

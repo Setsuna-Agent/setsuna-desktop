@@ -39,12 +39,13 @@ import {
 } from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 5;
+const CONFIG_SCHEMA_VERSION = 6;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
 const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
 const PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION = 5;
+const APPROVAL_REVIEWER_MIGRATION_SCHEMA_VERSION = 6;
 
 const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'PreToolUse',
@@ -199,6 +200,9 @@ export class FileConfigStore implements ConfigStore {
         taskModels,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
         approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previousAccessMode.approvalPolicy),
+        approvalReviewer: normalizeApprovalReviewer(
+          input.approvalReviewer ?? previousAccessMode.approvalReviewer,
+        ),
         permissionProfile: normalizePermissionProfile(input.permissionProfile ?? previousAccessMode.permissionProfile),
         sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(
           input.sandboxWorkspaceWrite ?? previous.sandboxWorkspaceWrite,
@@ -301,6 +305,10 @@ export class FileConfigStore implements ConfigStore {
       ),
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
+      approvalReviewer: normalizeApprovalReviewer(
+        stored.approvalReviewer,
+        legacyApprovalReviewer(stored),
+      ),
       permissionProfile: normalizePermissionProfile(stored.permissionProfile),
       sandboxWorkspaceWrite: normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite, {
         migrateNetworkDefault:
@@ -337,6 +345,7 @@ function defaultConfig(): StoredConfig {
     taskModels: {},
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
+    approvalReviewer: 'automatic',
     permissionProfile: 'workspace-write',
     sandboxWorkspaceWrite: { networkAccess: true },
     hooks: {},
@@ -538,9 +547,30 @@ function normalizeApprovalPolicy(value: unknown): RuntimeConfigState['approvalPo
   return 'on-request';
 }
 
+function normalizeApprovalReviewer(
+  value: unknown,
+  fallback: RuntimeConfigState['approvalReviewer'] = 'user',
+): NonNullable<RuntimeConfigState['approvalReviewer']> {
+  if (value === 'automatic' || value === 'user') return value;
+  return fallback ?? 'user';
+}
+
+function legacyApprovalReviewer(
+  stored: Pick<StoredConfig, 'approvalPolicy' | 'permissionProfile'>,
+): NonNullable<RuntimeConfigState['approvalReviewer']> {
+  return normalizeApprovalPolicy(stored.approvalPolicy) === 'on-request'
+    && normalizePermissionProfile(stored.permissionProfile) === 'workspace-write'
+    ? 'automatic'
+    : 'user';
+}
+
 function accessModeForStoredConfig(stored: StoredConfig) {
   const accessMode = {
     approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
+    approvalReviewer: normalizeApprovalReviewer(
+      stored.approvalReviewer,
+      legacyApprovalReviewer(stored),
+    ),
     permissionProfile: normalizePermissionProfile(stored.permissionProfile),
   };
   return (stored.schemaVersion ?? 0) < ACCESS_MODE_MIGRATION_SCHEMA_VERSION
@@ -567,6 +597,9 @@ function migrateStoredConfig(stored: StoredConfig): boolean {
       ...provider,
       proxyRoute: normalizeDesktopNetworkProxyRoute(provider.proxyRoute) ?? { mode: 'inherit' },
     }));
+  }
+  if (schemaVersion < APPROVAL_REVIEWER_MIGRATION_SCHEMA_VERSION) {
+    stored.approvalReviewer = legacyApprovalReviewer(stored);
   }
   stored.schemaVersion = CONFIG_SCHEMA_VERSION;
   return true;

@@ -39,9 +39,11 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
           </div>
         ) : null}
       </div>
-      <div className="chat-mcp-terminal__footer">
-        {diagnostic ? `${status} · ${diagnostic}` : status}
-      </div>
+      {run.status !== 'pending_approval' ? (
+        <div className="chat-mcp-terminal__footer">
+          {diagnostic ? `${status} · ${diagnostic}` : status}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -58,10 +60,11 @@ export function shellCommand(run: RuntimeToolRun): string {
 export function shellResultPreviewForDisplay(
   run: RuntimeToolRun,
 ): string | undefined {
+  const preview = run.resultPreview ?? '';
+  if (isApprovalMetadataPreview(run, preview)) return undefined;
   if (run.status !== 'pending_approval' && run.status !== 'running') {
     return run.resultPreview;
   }
-  const preview = run.resultPreview ?? '';
   const showsSandboxFailure =
     /\bspawn\b[^\r\n]*\b(?:EPERM|EACCES)\b|\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b/iu
       .test(preview);
@@ -74,6 +77,15 @@ export function shellResultPreviewForDisplay(
   const legacySandboxRetry = reason.startsWith('Sandbox denied ')
     && reason.includes('Approve retry without the OS sandbox.');
   return legacySandboxRetry ? undefined : run.resultPreview;
+}
+
+function isApprovalMetadataPreview(run: RuntimeToolRun, preview: string): boolean {
+  const normalized = preview.trim();
+  if (!normalized) return false;
+  return [
+    run.approvalMessage,
+    run.approvalReviewAssessment?.rationale,
+  ].some((value) => value?.trim() === normalized);
 }
 
 export function shellStatusLabel(
@@ -96,7 +108,7 @@ export function shellTerminalStatus(run: RuntimeToolRun): string {
     const exit = shellContentLine(run.resultPreview ?? '', /^exit:\s*(.+)$/im);
     return exit && exit !== '0' ? 'error' : 'completed';
   }
-  if (run.status === 'pending_approval') return 'running';
+  if (run.status === 'pending_approval') return 'pending';
   if (run.status === 'cancelled') return 'cancelled';
   return run.status === 'error' || run.status === 'rejected'
     ? 'error'

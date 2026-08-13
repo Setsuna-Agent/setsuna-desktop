@@ -21,6 +21,7 @@ export type RuntimePreferenceInput = Pick<
   | 'taskModels'
   | 'setsunaStyle'
   | 'approvalPolicy'
+  | 'approvalReviewer'
   | 'permissionProfile'
   | 'sandboxWorkspaceWrite'
   | 'bypassHookTrust'

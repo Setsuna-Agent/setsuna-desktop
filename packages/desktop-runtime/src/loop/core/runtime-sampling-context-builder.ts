@@ -32,6 +32,7 @@ import {
   CONTEXT_COMPACTION_MAX_TOKENS,
   estimateRuntimeMessageTokens,
   estimateRuntimeToolDefinitionTokens,
+  fitRuntimeMessagesToContextBudget,
 } from '../context/context-compaction.js';
 import { compileRuntimePrompt } from '../context/prompt-compiler.js';
 import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runtime-attachment-context.js';
@@ -49,6 +50,7 @@ import { RuntimeToolRouter } from '../tools/tool-router.js';
 import { goalContinuationContextMessages } from '../lifecycle/runtime-goal-prompts.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
+import { runtimeTaskModelRequest } from './runtime-task-model.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
@@ -56,6 +58,7 @@ export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
   developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
+  modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
   modelHistoryWarnings?: string[];
   runtimeConfig: RuntimeConfigState | null | undefined;
   snapshot: RuntimeModelRequestStepSnapshot;
@@ -137,6 +140,7 @@ export class RuntimeSamplingContextBuilder {
     const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
+    const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind);
     const developerFeaturesEnabled = runtimeDeveloperFeaturesEnabled(stepRuntimeConfig);
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     if (developerFeaturesEnabled) {
@@ -170,7 +174,7 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
-    const activeModelSupportsImages = activeModelForConfig(stepRuntimeConfig)?.supportsImages === true;
+    const activeModelSupportsImages = samplingModel.model?.supportsImages === true;
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
     const sandboxWorkspaceWrite = attachmentContext.readableRoots.length
       ? {
@@ -240,7 +244,10 @@ export class RuntimeSamplingContextBuilder {
       stepGoal,
       goalCompletionPending,
     );
-    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig);
+    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);
+    const persistentContextBudget = taskKind === 'review'
+      ? contextCompactionBudgetForConfig(stepRuntimeConfig)
+      : contextBudget;
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages: [
@@ -260,11 +267,12 @@ export class RuntimeSamplingContextBuilder {
     });
     const fragments = promptContext.fragments;
     const transientPrompt = compileRuntimePrompt({ fragments, conversationMessages: [], createdAt: this.options.clock.now().toISOString() });
-    const reservedOutputTokens = reservedOutputTokensForConfig(stepRuntimeConfig);
+    const reservedOutputTokens = reservedOutputTokensForConfig(stepRuntimeConfig, samplingModel.model);
     const reservedTokens = estimateRuntimeMessageTokens(transientPrompt.messages)
       + estimateRuntimeToolDefinitionTokens(tools)
       + reservedOutputTokens;
-    const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+    const persistentConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+      contextBudget: persistentContextBudget,
       force: false,
       messages: orderedConversationMessages,
       reservedTokens,
@@ -274,6 +282,13 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
+    const compactedConversationMessages = taskKind === 'review'
+      ? fitRuntimeMessagesToContextBudget({
+          budget: contextBudget,
+          messages: persistentConversationMessages,
+          reservedTokens,
+        })
+      : persistentConversationMessages;
     const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
       resolvedAttachments: attachmentContext.resolvedAttachments,
       supportsImages: activeModelSupportsImages,
@@ -328,6 +343,7 @@ export class RuntimeSamplingContextBuilder {
       conversationMessages: compactedConversationMessages,
       developerFeaturesEnabled,
       messages,
+      modelRequest: samplingModel.request,
       ...(normalizedConversation.warnings.length
         ? { modelHistoryWarnings: normalizedConversation.warnings }
         : {}),
@@ -404,8 +420,11 @@ function modelRequestMessages(messages: RuntimeMessage[]): RuntimeMessage[] {
   return messages.filter((message) => message.visibility !== 'transcript');
 }
 
-function reservedOutputTokensForConfig(config: RuntimeConfigState | null | undefined): number {
-  const activeModel = activeModelForConfig(config);
+function reservedOutputTokensForConfig(
+  config: RuntimeConfigState | null | undefined,
+  modelOverride?: RuntimeConfigState['providers'][number]['models'][number],
+): number {
+  const activeModel = modelOverride ?? activeModelForConfig(config);
   const maxContextTokens = positiveSetting(
     activeModel?.contextWindowTokens
       ?? config?.desktopSettings?.modelContextWindow
@@ -420,6 +439,32 @@ function activeModelForConfig(config: RuntimeConfigState | null | undefined): Ru
     ?? config?.providers.find((provider) => provider.enabled)
     ?? config?.providers[0];
   return activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
+}
+
+function samplingModelForTask(
+  config: RuntimeConfigState | null | undefined,
+  taskKind: RuntimeTaskKind,
+): {
+  model: RuntimeConfigState['providers'][number]['models'][number] | undefined;
+  request: Pick<ModelRequest, 'model' | 'providerId'>;
+} {
+  const activeModel = activeModelForConfig(config);
+  if (taskKind !== 'review') {
+    return {
+      model: activeModel,
+      request: { model: 'local-runtime-smoke' },
+    };
+  }
+
+  const request = runtimeTaskModelRequest(config, 'review', 'local-runtime-smoke');
+  const reference = config?.taskModels?.review;
+  const provider = request.providerId && reference
+    ? config?.providers.find((item) => item.id === request.providerId && item.enabled)
+    : undefined;
+  const model = provider && reference
+    ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === request.model)
+    : undefined;
+  return { model: model ?? activeModel, request };
 }
 
 function positiveSetting(value: unknown): number | undefined {

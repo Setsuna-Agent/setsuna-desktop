@@ -51,11 +51,11 @@ describe('runtimeDeveloperFeaturesEnabled', () => {
 
 describe('runtime access modes', () => {
   it.each([
-    ['request-approval', 'strict', 'workspace-write'],
-    ['agent-approval', 'on-request', 'workspace-write'],
-    ['full-access', 'full', 'danger-full-access'],
-  ] as const)('keeps the %s mode atomic', (mode, approvalPolicy, permissionProfile) => {
-    const selection = { approvalPolicy, permissionProfile };
+    ['request-approval', 'strict', 'user', 'workspace-write'],
+    ['agent-approval', 'on-request', 'automatic', 'workspace-write'],
+    ['full-access', 'full', 'user', 'danger-full-access'],
+  ] as const)('keeps the %s mode atomic', (mode, approvalPolicy, approvalReviewer, permissionProfile) => {
+    const selection = { approvalPolicy, approvalReviewer, permissionProfile };
     expect(runtimeAccessModeSelection(mode)).toEqual(selection);
     expect(runtimeAccessModeForConfig(selection)).toBe(mode);
     expect(normalizeRuntimeAccessModeConfig(selection)).toEqual(selection);
@@ -71,6 +71,7 @@ describe('runtime access modes', () => {
   ] as const)('normalizes legacy %s + %s to agent approval', (approvalPolicy, permissionProfile) => {
     expect(normalizeRuntimeAccessModeConfig({ approvalPolicy, permissionProfile })).toEqual({
       approvalPolicy: 'on-request',
+      approvalReviewer: 'automatic',
       permissionProfile: 'workspace-write',
     });
   });

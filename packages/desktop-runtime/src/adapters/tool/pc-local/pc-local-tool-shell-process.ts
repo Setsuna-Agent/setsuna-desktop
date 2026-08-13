@@ -52,6 +52,7 @@ import {
   boundedInteger,
   errorResult,
   okResult,
+  shortSingleLine,
   sleep,
 } from './pc-local-tool-utils.js';
 import {
@@ -178,6 +179,28 @@ function lookupShellSession(
     return null;
   }
   return session;
+}
+
+/**
+ * Non-empty stdin can turn a previously approved interactive process into a
+ * different action. Unsandboxed sessions therefore require a fresh approval;
+ * empty polling remains read-only and does not prompt.
+ */
+export function shellStdinApprovalReason(
+  args: ToolArguments,
+  state: ShellProcessState,
+): string | null {
+  const processId = String(args?.process_id || '').trim();
+  const input = String(args?.input ?? '');
+  if (!processId || !input) return null;
+  pruneShellProcessStore(state.shellProcessStore);
+  const session = lookupShellSession(state, processId);
+  if (!session || session.closed || session.sandboxed) return null;
+  const originalCommand = shortSingleLine(session.command);
+  return [
+    'Non-empty stdin will be written to an unsandboxed shell process and must be reviewed as a new exact action.',
+    ...(originalCommand ? [`Original command: ${originalCommand}`] : []),
+  ].join(' ');
 }
 
 export function removeShellSession(state: ShellProcessState, processId: string): void {

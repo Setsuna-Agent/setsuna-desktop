@@ -103,6 +103,16 @@
   margin: 0 10px;
 }
 
+/* Advanced settings mix generic rows with custom editors. Let each item after
+ * the first own the separator so adjacent component borders never stack. */
+.desktop-settings-panel .chat-user-settings__runtime-advanced > .chat-user-settings__row {
+  border-bottom: 0;
+}
+
+.desktop-settings-panel .chat-user-settings__runtime-advanced > * + * {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
 .chat-user-settings__runtime-list-editor,
 .chat-user-settings__runtime-json-field,
 .chat-user-settings__runtime-memory-tuning {

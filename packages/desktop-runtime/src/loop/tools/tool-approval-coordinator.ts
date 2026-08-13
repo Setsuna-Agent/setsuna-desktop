@@ -1,5 +1,6 @@
 import type {
   RuntimeApprovalDecision,
+  RuntimeApprovalReviewer,
   RuntimeConfigState,
   RuntimeExecPolicyAmendment,
   RuntimeToolCall,
@@ -8,7 +9,8 @@ import type {
   RuntimeToolHookEvents,
   RuntimeToolHookRunner,
 } from '../../hooks/runtime-hooks.js';
-import type { ApprovalGate } from '../../ports/approval-gate.js';
+import type { ApprovalGate, CreateApprovalInput } from '../../ports/approval-gate.js';
+import type { ApprovalReviewer } from '../../ports/approval-reviewer.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type {
@@ -20,6 +22,7 @@ import type {
 import type { RuntimeNetworkApprovalContext } from '../../security/network-approval-policy.js';
 import {
   requestToolApproval,
+  type ResolvedToolApprovalAnswer,
   type ToolApprovalLifecycleEvents,
 } from './tool-approval-lifecycle.js';
 import { ToolApprovalStore } from './tool-approval-store.js';
@@ -53,6 +56,8 @@ export type ToolApprovalCoordinatorEvents =
 export type ToolApprovalCoordinatorOptions = {
   toolHost: ToolHost;
   approvalGate?: ApprovalGate;
+  approvalReviewer?: ApprovalReviewer;
+  approvalReviewerMode?: RuntimeApprovalReviewer;
   approvalStore?: ToolApprovalStore;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
@@ -114,7 +119,9 @@ export class ToolApprovalCoordinator {
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) return 'approve_for_session';
     if (await this.persistentApprovalIsRemembered(persistentApprovalKeys)) return 'approve';
     const approvalGate = this.options.approvalGate;
-    if (!approvalGate) return 'approve';
+    if (!approvalGate) {
+      throw new ToolPolicyRejectedError('Interactive approval is required, but no approval gate is available.');
+    }
     const hookDecision = await this.options.hookRunner?.runPermissionRequest({
       approvalPolicy,
       context,
@@ -128,10 +135,9 @@ export class ToolApprovalCoordinator {
       throw new ToolPolicyRejectedError(hookDecision.message);
     }
 
-    const answer = await requestToolApproval({
+    const answer = await this.requestApproval(
       approvalGate,
-      events: this.options.events,
-      request: {
+      {
         threadId: context.threadId,
         turnId: context.turnId,
         toolCallId: toolCall.id,
@@ -144,8 +150,13 @@ export class ToolApprovalCoordinator {
         environmentId: requirement.environmentId,
         additionalPermissions: requirement.additionalPermissions,
       },
-      signal: context.signal,
-    });
+      parsedArguments,
+      context,
+    );
+
+    if (answer.decision === 'reject' && answer.resolution?.source === 'automatic') {
+      throw new ToolPolicyRejectedError(answer.message);
+    }
 
     await this.persistExecPolicyAmendmentDecision(
       answer,
@@ -184,10 +195,9 @@ export class ToolApprovalCoordinator {
     const approvalGate = this.options.approvalGate;
     if (!approvalGate) return { decision: 'reject' };
 
-    const answer = await requestToolApproval({
+    const answer = await this.requestApproval(
       approvalGate,
-      events: this.options.events,
-      request: {
+      {
         threadId: context.threadId,
         turnId: context.turnId,
         toolCallId: toolCall.id,
@@ -210,8 +220,9 @@ export class ToolApprovalCoordinator {
           commandWideNetworkApproval,
         ),
       },
-      signal: context.signal,
-    });
+      parsedArguments,
+      context,
+    );
 
     await this.persistNetworkPolicyAmendmentDecision(
       answer,
@@ -235,8 +246,8 @@ export class ToolApprovalCoordinator {
     reason: string,
     environment: ToolExecutionEnvironment,
     readableRoots: string[],
-  ): Promise<RuntimeApprovalDecision> {
-    if (approvalPolicy === 'full') return 'approve';
+  ): Promise<ResolvedToolApprovalAnswer> {
+    if (approvalPolicy === 'full') return { decision: 'approve' };
     const approvalKeys = sandboxReadableRootsRetryApprovalKeys(
       toolCall,
       parsedArguments,
@@ -244,15 +255,14 @@ export class ToolApprovalCoordinator {
       readableRoots,
     );
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) {
-      return 'approve_for_session';
+      return { decision: 'approve_for_session' };
     }
     const approvalGate = this.options.approvalGate;
-    if (!approvalGate) return 'reject';
+    if (!approvalGate) return { decision: 'reject' };
 
-    const answer = await requestToolApproval({
+    const answer = await this.requestApproval(
       approvalGate,
-      events: this.options.events,
-      request: {
+      {
         threadId: context.threadId,
         turnId: context.turnId,
         toolCallId: toolCall.id,
@@ -267,8 +277,9 @@ export class ToolApprovalCoordinator {
           { type: 'reject' },
         ],
       },
-      signal: context.signal,
-    });
+      parsedArguments,
+      context,
+    );
 
     if (decisionGrantsSessionReuse(answer.decision)) {
       this.options.approvalStore?.approveForSession(approvalKeys);
@@ -279,7 +290,7 @@ export class ToolApprovalCoordinator {
         { readableRoots },
       );
     }
-    return answer.decision;
+    return answer;
   }
 
   async approveSandboxBypassRetry(
@@ -288,18 +299,17 @@ export class ToolApprovalCoordinator {
     context: RuntimeToolExecutionContext,
     reason: string,
     environment: ToolExecutionEnvironment,
-  ): Promise<RuntimeApprovalDecision> {
+  ): Promise<ResolvedToolApprovalAnswer> {
     const approvalKeys = sandboxRetryApprovalKeys(toolCall, parsedArguments, context);
     if (this.options.approvalStore?.hasAll(approvalKeys, context.turnId)) {
-      return 'approve_for_session';
+      return { decision: 'approve_for_session' };
     }
     const approvalGate = this.options.approvalGate;
-    if (!approvalGate) return 'reject';
+    if (!approvalGate) return { decision: 'reject' };
 
-    const answer = await requestToolApproval({
+    const answer = await this.requestApproval(
       approvalGate,
-      events: this.options.events,
-      request: {
+      {
         threadId: context.threadId,
         turnId: context.turnId,
         toolCallId: toolCall.id,
@@ -314,13 +324,31 @@ export class ToolApprovalCoordinator {
           { type: 'reject' },
         ],
       },
-      signal: context.signal,
-    });
+      parsedArguments,
+      context,
+    );
 
     if (decisionGrantsSessionReuse(answer.decision)) {
       this.options.approvalStore?.approveForSession(approvalKeys);
     }
-    return answer.decision;
+    return answer;
+  }
+
+  private requestApproval(
+    approvalGate: ApprovalGate,
+    request: CreateApprovalInput,
+    parsedArguments: unknown,
+    context: RuntimeToolExecutionContext,
+  ): Promise<ResolvedToolApprovalAnswer> {
+    return requestToolApproval({
+      approvalGate,
+      automaticReview: { arguments: parsedArguments },
+      automaticReviewer: this.options.approvalReviewer,
+      events: this.options.events,
+      request,
+      reviewer: this.options.approvalReviewerMode ?? 'user',
+      signal: context.signal,
+    });
   }
 
   private async approvalRequirement(

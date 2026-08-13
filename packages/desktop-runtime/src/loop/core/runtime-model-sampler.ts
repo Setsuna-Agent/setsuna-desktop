@@ -29,6 +29,7 @@ type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 export type RuntimeSamplingModelContext = {
   developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
+  modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
   snapshot: RuntimeModelRequestStepSnapshot;
   toolChoice: ModelRequest['toolChoice'];
   toolRouter: RuntimeToolRouter | null;
@@ -117,7 +118,7 @@ export class RuntimeModelSampler {
       : requestSnapshot;
 
     for await (const item of this.options.modelClient.stream({
-      model: 'local-runtime-smoke',
+      ...step.modelRequest,
       messages: modelRequestMessages(step.messages),
       tools: requestTools,
       toolChoice: requestToolChoice,

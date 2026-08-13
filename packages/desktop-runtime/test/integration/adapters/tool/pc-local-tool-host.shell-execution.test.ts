@@ -532,6 +532,17 @@ describe('pc local shell execution', () => {
     const processId = String((interactive.data as Record<string, unknown>).process_id || '');
     expect(processId).toBeTruthy();
 
+    await expect(host.approvalForTool('write_stdin', {
+      session_id: processId,
+      chars: '',
+    }, context)).resolves.toBeNull();
+    await expect(host.approvalForTool('write_stdin', {
+      session_id: processId,
+      chars: 'hello\n',
+    }, context)).resolves.toMatchObject({
+      reason: expect.stringContaining('unsandboxed shell process'),
+    });
+
     await expect(host.runTool('write_stdin', {
       session_id: processId,
       chars: 'hello\n',

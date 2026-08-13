@@ -75,6 +75,15 @@ export class InMemoryApprovalGate implements ApprovalGate {
   async answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest> {
     const approval = this.approvals.get(approvalId);
     if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+    if (approval.reviewer === 'automatic') {
+      throw new Error('Automatic approval requests can only be resolved by the runtime reviewer.');
+    }
+    return this.resolveApproval(approvalId, input);
+  }
+
+  async resolveApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest> {
+    const approval = this.approvals.get(approvalId);
+    if (!approval) throw new Error(`Approval not found: ${approvalId}`);
     if (approval.status !== 'pending') return approval;
     validateElicitationAnswer(approval, input);
     validateUserInputAnswer(approval, input);

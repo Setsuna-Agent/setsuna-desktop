@@ -39,8 +39,8 @@ import {
   HookRunList,
 } from './RuntimeHookRunDetails.js';
 import {
-  ApprovalActions,
   McpElicitationActions,
+  RuntimeToolApprovalControl,
 } from './RuntimeToolApprovalActions.js';
 import {
   activeToolRunOrLast,
@@ -258,7 +258,7 @@ function toolRunGroupPanelNode(
       className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
       summary={(
         <>
-          <span className="chat-tool-run__icon">{toolRunGroupIcon(group)}</span>
+          <span className="chat-tool-run__icon">{toolRunGroupIcon(group.kind, status)}</span>
           <span className="chat-tool-run__summary-text">
             <span className="chat-tool-run__title">{summary.title}</span>
             <ToolRunSummaryTarget inspectionKind={summaryInspectionKind} kind={group.kind} target={summary.target} />
@@ -492,7 +492,11 @@ function FileMutationRunRow({
       >
         <div className="chat-tool-run__body chat-tool-run__body--file-diff">
           <RuntimeFileDiffPreview change={change} />
-          {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+          <RuntimeToolApprovalControl
+            approvalId={pendingApprovalId}
+            run={run}
+            onAnswerApproval={onAnswerApproval}
+          />
           {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
           <HookRunList runs={run.hookRuns} />
         </div>
@@ -505,7 +509,11 @@ function FileMutationRunRow({
       <div className="chat-tool-run__summary">
         {summary}
       </div>
-      {pendingApprovalId ? <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} /> : null}
+      <RuntimeToolApprovalControl
+        approvalId={pendingApprovalId}
+        run={run}
+        onAnswerApproval={onAnswerApproval}
+      />
       {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
       <HookRunList runs={run.hookRuns} />
     </div>
@@ -595,13 +603,17 @@ function ToolRunDetails({
   const permissionSummary = permissionApprovalSummary(run);
   const networkSummary = networkApprovalSummary(run);
   const hookRuns = <HookRunList runs={run.hookRuns} />;
-  const approvalActions = pendingApprovalId
-    ? run.userInput
-      ? <RuntimeUserInputActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
-      : run.elicitation
-        ? <McpElicitationActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
-        : <ApprovalActions approvalId={pendingApprovalId} availableDecisions={run.availableApprovalDecisions} onAnswerApproval={onAnswerApproval} />
-    : null;
+  const approvalActions = run.userInput && pendingApprovalId
+    ? <RuntimeUserInputActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
+    : run.elicitation && pendingApprovalId
+      ? <McpElicitationActions approvalId={pendingApprovalId} run={run} onAnswerApproval={onAnswerApproval} />
+      : (
+          <RuntimeToolApprovalControl
+            approvalId={pendingApprovalId}
+            run={run}
+            onAnswerApproval={onAnswerApproval}
+          />
+        );
   if (isShellRun(run)) {
     return (
       <>

@@ -1,6 +1,8 @@
 import type {
   RuntimeApprovalDecision,
   RuntimeApprovalRequest,
+  RuntimeApprovalResolutionSource,
+  RuntimeApprovalReviewAssessment,
   RuntimeCollabToolCall,
   RuntimeConfigState,
   RuntimeDynamicToolCallResult,
@@ -15,6 +17,7 @@ import type {
 import { createRuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
+import type { ApprovalReviewer } from '../../ports/approval-reviewer.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
@@ -77,6 +80,7 @@ type PendingAppServerDynamicToolCall = {
 
 type RuntimeToolCallExecutorOptions = {
   approvalGate?: ApprovalGate;
+  approvalReviewer?: ApprovalReviewer;
   appServerNotificationBus?: AppServerNotificationBus;
   clock: Clock;
   ids: IdGenerator;
@@ -608,6 +612,8 @@ export class RuntimeToolCallExecutor {
     return new ToolOrchestrator({
       toolHost: this.options.toolHost,
       approvalGate: this.options.approvalGate,
+      approvalReviewer: this.options.approvalReviewer,
+      approvalReviewerMode: runtimeConfig?.approvalReviewer ?? 'user',
       approvalStore: this.toolApprovalStore,
       policyAmendmentStore: this.options.policyAmendmentStore,
       persistentToolApprovalStore: this.options.persistentToolApprovalStore,
@@ -621,7 +627,14 @@ export class RuntimeToolCallExecutor {
         publishHookStarted: (run) => this.publishHookStarted(context.threadId, context.turnId, run),
         publishHookCompleted: (run) => this.publishHookCompleted(context.threadId, context.turnId, run),
         publishApprovalRequested: (approval) => this.publishApprovalRequested(context, approval),
-        publishApprovalResolved: (approvalId, decision, message, createdAt) => this.publishApprovalResolved(context, approvalId, decision, message, createdAt),
+        publishApprovalResolved: (approvalId, decision, message, createdAt, metadata) => this.publishApprovalResolved(
+          context,
+          approvalId,
+          decision,
+          message,
+          createdAt,
+          metadata,
+        ),
       },
     });
   }
@@ -637,7 +650,17 @@ export class RuntimeToolCallExecutor {
     });
   }
 
-  private async publishApprovalResolved(context: RuntimeToolExecutionContext, approvalId: string, decision: RuntimeApprovalDecision, message?: string, createdAt?: string): Promise<void> {
+  private async publishApprovalResolved(
+    context: RuntimeToolExecutionContext,
+    approvalId: string,
+    decision: RuntimeApprovalDecision,
+    message?: string,
+    createdAt?: string,
+    metadata?: {
+      source: RuntimeApprovalResolutionSource;
+      assessment?: RuntimeApprovalReviewAssessment;
+    },
+  ): Promise<void> {
     await this.options.appendEvent(context.threadId, {
       id: this.options.ids.id('event'),
       threadId: context.threadId,
@@ -648,6 +671,8 @@ export class RuntimeToolCallExecutor {
         approvalId,
         decision,
         message,
+        ...(metadata?.source ? { source: metadata.source } : {}),
+        ...(metadata?.assessment ? { assessment: metadata.assessment } : {}),
       },
     });
   }

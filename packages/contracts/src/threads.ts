@@ -1,5 +1,7 @@
 import type {
   RuntimeApprovalAvailableDecision,
+  RuntimeApprovalResolutionSource,
+  RuntimeApprovalReviewAssessment,
   RuntimeApprovalRetryKind,
   RuntimeExecPolicyAmendment,
   RuntimeMcpElicitation,
@@ -9,6 +11,7 @@ import type {
   RuntimeUserInputRequest,
 } from './approvals.js';
 import type { RuntimeInputMessageAttachment, RuntimeMessageAttachment } from './attachments.js';
+import type { RuntimeApprovalReviewer } from './config.js';
 import type { RuntimeHookSource } from './hooks.js';
 import type { RuntimeMemoryCitation } from './memory.js';
 import type {
@@ -666,9 +669,12 @@ export type RuntimeToolRun = {
   completedAt?: string;
   approvalId?: string;
   approvalReason?: string;
+  approvalReviewer?: RuntimeApprovalReviewer;
   approvalRetryKind?: RuntimeApprovalRetryKind;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | 'cancelled';
   approvalMessage?: string;
+  approvalResolutionSource?: RuntimeApprovalResolutionSource;
+  approvalReviewAssessment?: RuntimeApprovalReviewAssessment;
   availableApprovalDecisions?: RuntimeApprovalAvailableDecision[];
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
   networkApprovalContext?: RuntimeNetworkApprovalContext;

@@ -4,6 +4,7 @@ import type {
   RuntimeApprovalList,
   RuntimeApprovalRequest,
   RuntimeApprovalRetryKind,
+  RuntimeApprovalReviewer,
   RuntimeExecPolicyAmendment,
   RuntimeMcpElicitation,
   RuntimeNetworkApprovalContext,
@@ -19,6 +20,7 @@ export type CreateApprovalInput = {
   toolName: string;
   reason: string;
   argumentsPreview: string;
+  reviewer?: RuntimeApprovalReviewer;
   retryKind?: RuntimeApprovalRetryKind;
   availableDecisions?: RuntimeApprovalAvailableDecision[];
   proposedExecPolicyAmendment?: RuntimeExecPolicyAmendment;
@@ -35,6 +37,8 @@ export type ApprovalGate = {
   createApproval(input: CreateApprovalInput): Promise<RuntimeApprovalRequest>;
   waitForDecision(approvalId: string): Promise<AnswerRuntimeApprovalInput>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest>;
+  /** Runtime-only path used by an automatic reviewer; external clients must call answerApproval. */
+  resolveApproval?(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<RuntimeApprovalRequest>;
   listApprovals(): Promise<RuntimeApprovalList>;
   forgetApproval(approvalId: string): void;
   rejectPending?(error: Error): void;

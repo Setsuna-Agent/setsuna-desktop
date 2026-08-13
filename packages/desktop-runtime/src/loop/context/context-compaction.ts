@@ -145,6 +145,27 @@ export function createRuntimeContextCompactionCandidate({
   };
 }
 
+/** Fits one model request without changing the persisted thread context. */
+export function fitRuntimeMessagesToContextBudget({
+  budget,
+  messages,
+  reservedTokens = 0,
+}: {
+  budget?: RuntimeContextCompactionBudget;
+  messages: RuntimeMessage[];
+  reservedTokens?: number;
+}): RuntimeMessage[] {
+  const candidate = createRuntimeContextCompactionCandidate({
+    budget: reserveRuntimeContextCompactionBudget(budget, reservedTokens),
+    messages,
+  });
+  if (!candidate) return messages;
+  return [
+    ...candidate.pinnedMessages,
+    ...candidate.recentMessages,
+  ];
+}
+
 /**
  * 将模型窗口替换为 transcript 归档、一条 user-context 摘要和未改写的最近消息。
  *

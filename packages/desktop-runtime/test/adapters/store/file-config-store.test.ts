@@ -10,6 +10,7 @@ describe('file config store', () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 
     await expect(store.getConfig()).resolves.toMatchObject({
+      approvalReviewer: 'automatic',
       desktopSettings: { workspaceDependenciesEnabled: true },
       sandboxWorkspaceWrite: { networkAccess: true },
     });
@@ -59,7 +60,7 @@ describe('file config store', () => {
       sandboxWorkspaceWrite?: { networkAccess?: boolean };
     };
     expect(upgraded).toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       sandboxWorkspaceWrite: { networkAccess: false },
     });
   });
@@ -87,11 +88,13 @@ describe('file config store', () => {
 
     await expect(store.getConfig()).resolves.toMatchObject({
       approvalPolicy: 'on-request',
+      approvalReviewer: 'automatic',
       permissionProfile: 'workspace-write',
     });
     await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content))).resolves.toMatchObject({
-      schemaVersion: 5,
+      schemaVersion: 6,
       approvalPolicy: 'on-request',
+      approvalReviewer: 'automatic',
       permissionProfile: 'workspace-write',
     });
   });
@@ -139,7 +142,7 @@ describe('file config store', () => {
     });
     await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content)))
       .resolves.toMatchObject({
-        schemaVersion: 5,
+        schemaVersion: 6,
         providers: [{ proxyRoute: { mode: 'inherit' } }],
       });
   });
@@ -223,6 +226,8 @@ describe('file config store', () => {
     await expect(store.saveConfig({
       taskModels: {
         threadTitle: { providerId: provider.id, modelId: model.id },
+        review: { providerId: provider.id, modelId: model.id },
+        approvalReview: { providerId: provider.id, modelId: model.id },
         memoryExtraction: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
@@ -230,6 +235,8 @@ describe('file config store', () => {
     })).resolves.toMatchObject({
       taskModels: {
         threadTitle: { providerId: provider.id, modelId: model.id },
+        review: { providerId: provider.id, modelId: model.id },
+        approvalReview: { providerId: provider.id, modelId: model.id },
         memoryExtraction: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
@@ -247,6 +254,8 @@ describe('file config store', () => {
     })).resolves.toMatchObject({
       taskModels: {
         threadTitle: { providerId: provider.id, modelId: model.id },
+        review: { providerId: provider.id, modelId: model.id },
+        approvalReview: { providerId: provider.id, modelId: model.id },
         memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
@@ -316,9 +325,10 @@ describe('file config store', () => {
     await store.clearLegacyStoragePath();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated.storagePath).toBeUndefined();
-    expect(migrated.schemaVersion).toBe(5);
+    expect(migrated.schemaVersion).toBe(6);
     expect(migrated).toMatchObject({
       approvalPolicy: 'on-request',
+      approvalReviewer: 'automatic',
       permissionProfile: 'workspace-write',
     });
 

@@ -1,4 +1,9 @@
-import type { RuntimeApprovalDecision, RuntimeApprovalRequest } from './approvals.js';
+import type {
+  RuntimeApprovalDecision,
+  RuntimeApprovalRequest,
+  RuntimeApprovalResolutionSource,
+  RuntimeApprovalReviewAssessment,
+} from './approvals.js';
 import type { RuntimePluginReference } from './plugins.js';
 import type {
   RuntimeModelRequestStepSnapshot,
@@ -179,7 +184,16 @@ export type RuntimeEvent =
   | RuntimeEventBase<'hook.started', RuntimeHookRun>
   | RuntimeEventBase<'hook.completed', RuntimeHookRun>
   | RuntimeEventBase<'approval.requested', { approval: RuntimeApprovalRequest }>
-  | RuntimeEventBase<'approval.resolved', { approvalId: string; decision: RuntimeApprovalDecision; message?: string }>
+  | RuntimeEventBase<
+      'approval.resolved',
+      {
+        approvalId: string;
+        decision: RuntimeApprovalDecision;
+        message?: string;
+        source?: RuntimeApprovalResolutionSource;
+        assessment?: RuntimeApprovalReviewAssessment;
+      }
+    >
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>

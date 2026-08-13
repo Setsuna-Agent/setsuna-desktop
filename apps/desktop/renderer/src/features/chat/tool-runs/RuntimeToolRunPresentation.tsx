@@ -2,19 +2,7 @@ import {
   PUBLISH_ARTIFACT_TOOL_NAME,
   type RuntimeToolRun
 } from '@setsuna-desktop/contracts';
-import {
-  AlertCircle,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  Pencil,
-  Play,
-  Search,
-  ShieldAlert,
-  TerminalSquare,
-  Wrench,
-  XCircle
-} from 'lucide-react';
+import { FileText, Search, TerminalSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
 import type {
@@ -35,7 +23,10 @@ import {
   stringField,
   toolRunTarget,
 } from './runtimeToolRunPresentationUtils.js';
-import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
+import {
+  isAutomaticApprovalReviewPending,
+  isPendingRuntimeToolApproval,
+} from './runtimeToolRunState.js';
 import {
   shellCommand,
 } from './RuntimeShellToolRun.js';
@@ -80,6 +71,14 @@ export {
   ShellTerminalResult,
   shellTerminalStatus,
 } from './RuntimeShellToolRun.js';
+export {
+  mixedToolRunGroupIcon,
+  statusTextFromStatus,
+  ToolRunStatus,
+  toolRunGroupIcon,
+  toolRunIcon,
+  toolRunKindIcon,
+} from './RuntimeToolRunStatus.js';
 
 export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
   let hasTotals = false;
@@ -161,6 +160,17 @@ export function mixedToolRunGroupSummary(
   summaryMode: ToolRunSummaryMode,
   t: Translate = defaultTranslate,
 ): CompactToolRunSummary {
+  const reviewingRun = groups
+    .flatMap(toolRunGroupRuns)
+    .find(isAutomaticApprovalReviewPending);
+  if (reviewingRun) {
+    const kind = toolRunGroupKind(reviewingRun);
+    return {
+      ...toolRunSummary(reviewingRun, t),
+      targetKind: kind,
+      inspectionKind: kind === 'inspection' ? inspectionEntryKind(reviewingRun) : undefined,
+    };
+  }
   if (summaryMode === 'latest') return compactToolRunGroupSummary(groups.at(-1), t);
   return { title: mixedToolRunGroupAggregateTitle(groups, t) };
 }
@@ -258,14 +268,6 @@ export function searchCountSummary(runs: RuntimeToolRun[], status: RuntimeToolRu
   return t('toolRun.search.completedCount', { count: runs.length });
 }
 
-export function mixedToolRunGroupIcon(status: RuntimeToolRun['status']) {
-  if (status === 'pending_approval') return <ShieldAlert size={14} />;
-  if (status === 'running') return <Clock3 size={14} />;
-  if (status === 'cancelled') return <XCircle size={14} />;
-  if (status === 'rejected') return <AlertCircle size={14} />;
-  return <CheckCircle2 size={14} />;
-}
-
 export function isShellRun(run: RuntimeToolRun): boolean {
   return toolRunGroupKind(run) === 'shell';
 }
@@ -323,6 +325,8 @@ export function toolRunGroupSummary(
   group: Extract<ToolRunGroup, { type: 'group' }>,
   t: Translate = defaultTranslate,
 ): { title: string; target?: string } {
+  const reviewingRun = group.runs.find(isAutomaticApprovalReviewPending);
+  if (reviewingRun) return toolRunSummary(reviewingRun, t);
   if (group.kind === 'inspection') return inspectionGroupSummary(group.runs, t);
   if (group.kind === 'shell') return shellGroupSummary(group.runs, t);
   if (group.kind === 'search') return searchGroupSummary(group.runs, t);
@@ -499,7 +503,10 @@ export function fileOperationVerb(run: RuntimeToolRun, t: Translate = defaultTra
   const action = fileOperationAction(run);
   const created = action === 'created';
   const deleted = action === 'deleted';
-  if (run.status === 'pending_approval') return t('toolRun.file.awaitingWrite');
+  if (run.status === 'pending_approval') {
+    return automaticApprovalReviewTitle(run, t('toolRun.action.writeFiles'), t)
+      ?? t('toolRun.file.awaitingWrite');
+  }
   if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.file.generatingChanges' : 'toolRun.file.writing');
   if (run.status === 'error') return t(created ? 'toolRun.file.createFailed' : deleted ? 'toolRun.file.deleteFailed' : 'toolRun.file.editFailed');
   if (run.status === 'cancelled') return t('toolRun.file.cancelled');
@@ -788,7 +795,16 @@ export function searchRunSummary(
 
   const scope = pathBaseName(path, t);
   const target = query ? `“${query}”` : undefined;
-  if (run.status === 'pending_approval') return { title: t('toolRun.search.scope.awaiting', { scope }), target };
+  if (run.status === 'pending_approval') {
+    return {
+      title: automaticApprovalReviewTitle(
+        run,
+        t('toolRun.action.searchScope', { scope }),
+        t,
+      ) ?? t('toolRun.search.scope.awaiting', { scope }),
+      target,
+    };
+  }
   if (run.status === 'running') {
     return {
       title: t(isPreparingToolRun(run) ? 'toolRun.search.scope.preparing' : 'toolRun.search.scope.running', { scope }),
@@ -803,7 +819,17 @@ export function searchRunSummary(
 
 export function shellRunSummary(run: RuntimeToolRun, command: string, t: Translate = defaultTranslate): { title: string; target?: string } {
   const displayCommand = command || shellCommand(run);
-  if (run.status === 'pending_approval') return { title: displayCommand ? t('toolRun.shell.awaitingCommand', { command: displayCommand }) : t('toolRun.shell.awaiting') };
+  if (run.status === 'pending_approval') {
+    const action = displayCommand
+      ? t('toolRun.action.runCommand', { command: displayCommand })
+      : t('toolRun.action.runShell');
+    return {
+      title: automaticApprovalReviewTitle(run, action, t)
+        ?? (displayCommand
+          ? t('toolRun.shell.awaitingCommand', { command: displayCommand })
+          : t('toolRun.shell.awaiting')),
+    };
+  }
   if (run.status === 'running') {
     if (isPreparingToolRun(run)) return { title: displayCommand ? t('toolRun.shell.preparingCommand', { command: displayCommand }) : t('toolRun.shell.generatingCommand') };
     return { title: displayCommand ? t('toolRun.shell.runningCommand', { command: displayCommand }) : t('toolRun.shell.running') };
@@ -816,7 +842,10 @@ export function shellRunSummary(run: RuntimeToolRun, command: string, t: Transla
 
 export function runningAware(run: RuntimeToolRun, running: string, complete: string, t: Translate = defaultTranslate) {
   const action = running.replace(/^已?/u, '');
-  if (run.status === 'pending_approval') return t('toolRun.aware.awaiting', { action });
+  if (run.status === 'pending_approval') {
+    return automaticApprovalReviewTitle(run, action, t)
+      ?? t('toolRun.aware.awaiting', { action });
+  }
   if (run.status === 'running') return t(isPreparingToolRun(run) ? 'toolRun.aware.preparing' : 'toolRun.aware.running', { action });
   if (run.status === 'error') return t('toolRun.aware.failed', { action });
   if (run.status === 'cancelled') return t('toolRun.aware.cancelled', { action });
@@ -824,67 +853,20 @@ export function runningAware(run: RuntimeToolRun, running: string, complete: str
   return complete;
 }
 
-export function ToolRunStatus({
-  status,
-  summaryTitle,
-}: {
-  status: RuntimeToolRun['status'];
-  summaryTitle?: string;
-}) {
-  const { t } = useI18n();
-  const text = statusTextFromStatus(status, summaryTitle, t);
-  return text ? <span className="chat-tool-run__status">{text}</span> : null;
-}
-
-export function statusTextFromStatus(
-  status: RuntimeToolRun['status'],
-  summaryTitle = '',
-  t: Translate = defaultTranslate,
-) {
-  if (status === 'pending_approval') return summaryTitle.trim().startsWith(t('toolRun.status.awaitingPrefix')) ? '' : t('toolRun.status.confirm');
-  if (status === 'cancelled') return t('toolRun.status.cancelled');
-  if (status === 'rejected') return t('toolRun.status.rejected');
-  if (status === 'error') return t('toolRun.status.failed');
-  return '';
-}
-
-export function toolRunGroupIcon(group: Extract<ToolRunGroup, { type: 'group' }>) {
-  const status = toolRunGroupStatus(group.runs);
-  if (status === 'pending_approval') return <ShieldAlert size={14} />;
-  if (status === 'running') return <Clock3 size={14} />;
-  if (status === 'error') return <XCircle size={14} />;
-  if (status === 'cancelled') return <XCircle size={14} />;
-  if (status === 'rejected') return <AlertCircle size={14} />;
-  return toolRunKindIcon(group.kind);
-}
-
-export function toolRunKindIcon(kind: ToolRunGroupKind) {
-  if (kind === 'inspection') return <FileText size={14} />;
-  if (kind === 'search') return <Search size={14} />;
-  if (kind === 'shell') return <TerminalSquare size={14} />;
-  if (kind === 'fileMutation') return <Pencil size={14} />;
-  return <CheckCircle2 size={14} />;
+function automaticApprovalReviewTitle(
+  run: RuntimeToolRun,
+  action: string,
+  t: Translate,
+): string | null {
+  return isAutomaticApprovalReviewPending(run)
+    ? t('toolRun.approvalReview.pendingAction', { action })
+    : null;
 }
 
 export function inspectionEntryIcon(kind: InspectionEntryKind) {
   if (kind === 'fileSearch') return <Search size={14} />;
   if (kind === 'gitStatus') return <TerminalSquare size={14} />;
   return <FileText size={14} />;
-}
-
-export function toolRunIcon(run: RuntimeToolRun) {
-  if (run.status === 'pending_approval') return <ShieldAlert size={14} />;
-  if (run.status === 'running') return <Clock3 size={14} />;
-  if (run.status === 'error') return <XCircle size={14} />;
-  if (run.status === 'cancelled') return <XCircle size={14} />;
-  if (run.status === 'rejected') return <AlertCircle size={14} />;
-  if (run.name.includes('search')) return <Search size={14} />;
-  if (run.name.includes('shell')) return <TerminalSquare size={14} />;
-  if (isFileOperationRun(run)) return <Pencil size={14} />;
-  if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
-  if (run.name.includes('run')) return <Play size={14} />;
-  if (run.status === 'success') return <CheckCircle2 size={14} />;
-  return <Wrench size={14} />;
 }
 
 export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {

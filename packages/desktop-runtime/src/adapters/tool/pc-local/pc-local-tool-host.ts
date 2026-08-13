@@ -286,6 +286,15 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
         argumentsPreview: previewArguments(normalized.args),
       };
     }
+    if (normalized.name === 'write_shell_process') {
+      const reason = pcTools.shellStdinApprovalReason(normalized.args, toolState as never);
+      if (reason) {
+        return {
+          reason,
+          argumentsPreview: previewArguments(normalized.args),
+        };
+      }
+    }
     if (pcTools.toolNeedsConfirmation(normalized.name)) {
       const preview = await this.previewToolCall(normalized.name, normalized.args, context);
       return {

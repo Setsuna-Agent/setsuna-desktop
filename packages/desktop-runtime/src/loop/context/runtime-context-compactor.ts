@@ -93,9 +93,12 @@ type RuntimeCompactionDebugContext = {
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
-  async compactMessagesBeforeModelRequest({ force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
+  async compactMessagesBeforeModelRequest({ contextBudget, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { contextBudget?: RuntimeContextCompactionBudget; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
-    const budget = reserveRuntimeContextCompactionBudget(contextCompactionBudgetForConfig(runtimeConfig), reservedTokens);
+    const budget = reserveRuntimeContextCompactionBudget(
+      contextBudget ?? contextCompactionBudgetForConfig(runtimeConfig),
+      reservedTokens,
+    );
     const candidate = createRuntimeContextCompactionCandidate({ budget, force, messages });
     if (!candidate) return messages;
     const trigger = compactHookTrigger(force);
@@ -538,12 +541,17 @@ export function compactHookTrigger(force: boolean): RuntimeCompactHookTrigger {
   return force ? 'manual' : 'auto';
 }
 
-export function contextCompactionBudgetForConfig(config: RuntimeConfigState | null | undefined): RuntimeContextCompactionBudget | undefined {
+export function contextCompactionBudgetForConfig(
+  config: RuntimeConfigState | null | undefined,
+  modelOverride?: RuntimeConfigState['providers'][number]['models'][number],
+): RuntimeContextCompactionBudget | undefined {
   if (!config) return undefined;
   const activeProvider = config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
     ?? config.providers.find((provider) => provider.enabled)
     ?? config.providers[0];
-  const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
+  const activeModel = modelOverride
+    ?? activeProvider?.models.find((model) => model.enabled)
+    ?? activeProvider?.models[0];
   const maxContextTokens = positiveRuntimeInt(
     activeModel?.contextWindowTokens ??
     config.desktopSettings?.modelContextWindow ??

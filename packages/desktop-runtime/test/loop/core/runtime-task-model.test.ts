@@ -29,6 +29,32 @@ describe('runtime task model selection', () => {
     });
   });
 
+  it('resolves the dedicated review model', () => {
+    const config = taskModelConfig();
+
+    expect(runtimeTaskModelRequest(
+      config,
+      'review',
+      'chat-model-code',
+    )).toEqual({
+      model: 'background-model-code',
+      providerId: 'background-provider',
+    });
+  });
+
+  it('resolves the dedicated approval review model independently', () => {
+    const config = taskModelConfig();
+
+    expect(runtimeTaskModelRequest(
+      config,
+      'approvalReview',
+      'chat-model-code',
+    )).toEqual({
+      model: 'background-model-code',
+      providerId: 'background-provider',
+    });
+  });
+
   it('falls back safely when an assignment no longer points to an enabled configured model', () => {
     const config = taskModelConfig();
     config.providers[1]!.enabled = false;
@@ -106,6 +132,14 @@ function taskModelConfig(): RuntimeConfigState {
     memoryEnabled: true,
     taskModels: {
       threadTitle: {
+        providerId: 'background-provider',
+        modelId: 'background-model',
+      },
+      review: {
+        providerId: 'background-provider',
+        modelId: 'background-model',
+      },
+      approvalReview: {
         providerId: 'background-provider',
         modelId: 'background-model',
       },
