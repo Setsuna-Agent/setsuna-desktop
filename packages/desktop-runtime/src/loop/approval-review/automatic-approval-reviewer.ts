@@ -17,6 +17,7 @@ import { abortReason } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
   approvalReviewAuditRationale,
+  approvalReviewTechnicalFailureRationale,
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
 } from './approval-review-output.js';
@@ -128,14 +129,14 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         }
         const outcome = policyConstrainedApprovalReviewOutcome(parsed);
         const rationale = approvalReviewAuditRationale(parsed, outcome);
-        const providerId = usage?.providerId ?? modelRequest.providerId;
+        const auditModel = approvalReviewAuditModel(config, modelRequest, usage);
         const assessment: RuntimeApprovalReviewAssessment = {
           status: outcome === 'allow' ? 'allowed' : 'denied',
           riskLevel: parsed.riskLevel,
           userAuthorization: parsed.userAuthorization,
           rationale,
-          ...(providerId ? { providerId } : {}),
-          model: usage?.model ?? modelRequest.model,
+          ...(auditModel.providerId ? { providerId: auditModel.providerId } : {}),
+          model: auditModel.model,
         };
         const denied = outcome === 'deny';
         return {
@@ -160,7 +161,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
             modelRequest,
           );
         }
-        lastFailure = `Automatic approval review failed: ${errorMessage(error)}`;
+        lastFailure = approvalReviewTechnicalFailureRationale(error);
       }
     }
     return this.technicalResult(
@@ -259,6 +260,22 @@ export function createAutomaticApprovalReviewer(
   });
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function approvalReviewAuditModel(
+  config: Awaited<ReturnType<ConfigStore['getConfig']>>,
+  request: { model: string; providerId?: string },
+  usage: RuntimeUsage | undefined,
+): { model: string; providerId?: string } {
+  const provider = request.providerId
+    ? config.providers.find((item) => item.enabled && item.id === request.providerId)
+    : config.providers.find((item) => item.enabled && item.id === config.activeProviderId)
+      ?? config.providers.find((item) => item.enabled)
+      ?? config.providers[0];
+  const configuredModel = provider?.models.find((item) => item.code.trim() === request.model)
+    ?? provider?.models.find((item) => item.enabled)
+    ?? provider?.models[0];
+  const providerId = usage?.providerId ?? provider?.id ?? request.providerId;
+  return {
+    model: usage?.model ?? configuredModel?.code.trim() ?? request.model,
+    ...(providerId ? { providerId } : {}),
+  };
 }

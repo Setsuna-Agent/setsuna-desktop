@@ -13,6 +13,7 @@ import {
   isAbortError,
   TurnCancelledError,
 } from '../core/runtime-turn-errors.js';
+import { approvalReviewTechnicalFailureRationale } from '../approval-review/approval-review-output.js';
 
 export type ApprovalResolutionMetadata = {
   source: RuntimeApprovalResolutionSource;
@@ -161,7 +162,7 @@ async function requestAutomaticApproval({
     }
     assessment = {
       status: 'failed',
-      rationale: `Automatic approval review failed: ${errorMessage(error)}`,
+      rationale: approvalReviewTechnicalFailureRationale(error),
     };
   }
 
@@ -221,8 +222,4 @@ function resolveAutomaticApproval(
     throw new Error('The approval gate does not expose the runtime-only automatic resolver.');
   }
   return approvalGate.resolveApproval(approvalId, input);
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

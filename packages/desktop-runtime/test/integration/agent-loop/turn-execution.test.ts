@@ -10,6 +10,7 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
+  appendCompletedExchange,
   CapturingToolHost,
   CapturingUsageStore,
   MemoryCapturingModelClient,
@@ -528,10 +529,20 @@ describe('agent loop turn execution', () => {
       }));
     });
 
-  it('routes review sampling through its dedicated task model', async () => {
+  it('routes review sampling through its dedicated model without persisting its smaller context window', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Dedicated review model' });
+      const olderContextMarker = 'older chat context retained after review';
+      await appendCompletedExchange(
+        threadStore,
+        ids,
+        systemClock,
+        thread.id,
+        'prior_turn',
+        `${olderContextMarker}\n${'x'.repeat(160_000)}`,
+        'Earlier assistant response.',
+      );
       const modelClient = new MemoryCapturingModelClient();
       const loop = new AgentLoop({
         threadStore,
@@ -548,6 +559,8 @@ describe('agent loop turn execution', () => {
       });
       await waitForTurnCompleted(threadStore, thread.id, started.turnId);
 
+      const saved = await threadStore.getThread(thread.id);
+      const events = await threadStore.listEvents(thread.id, 0);
       expect(modelClient.requests[0]).toMatchObject({
         model: 'review-model-code',
         providerId: 'review-provider',
@@ -557,6 +570,13 @@ describe('agent loop turn execution', () => {
           },
         },
       });
+      expect(modelClient.requests[0].messages.some((message) => (
+        message.content.includes(olderContextMarker)
+      ))).toBe(false);
+      expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+      expect(saved?.messages.some((message) => (
+        message.content.includes(olderContextMarker)
+      ))).toBe(true);
     });
   
 });

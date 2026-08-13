@@ -207,6 +207,48 @@ describe('runtime server AppServer config', () => {
         },
       });
     });
+
+  it('resolves review models against earlier edits in the same config batch', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'primary-provider',
+          providers: [
+            {
+              id: 'primary-provider',
+              name: 'Primary provider',
+              provider: 'openai-compatible',
+              baseUrl: 'https://primary.example/v1',
+              enabled: true,
+              models: [modelConfig('primary-model', true)],
+            },
+            {
+              id: 'review-provider',
+              name: 'Review provider',
+              provider: 'openai-compatible',
+              baseUrl: 'https://review.example/v1',
+              enabled: true,
+              models: [modelConfig('review-base', true)],
+            },
+          ],
+        }),
+      });
+
+      await expect(harness.appServerRpc('config/batchWrite', {
+        edits: [
+          { keyPath: 'model_provider', value: 'review-provider', mergeStrategy: 'replace' },
+          { keyPath: 'model', value: 'new-review-model', mergeStrategy: 'replace' },
+          { keyPath: 'review_model', value: 'new-review-model', mergeStrategy: 'replace' },
+        ],
+      })).resolves.toMatchObject({ status: 'ok', version: '1' });
+
+      const read = await harness.appServerRpc('config/read', {});
+      expect(read.config).toMatchObject({
+        model_provider: 'review-provider',
+        model: 'new-review-model',
+        review_model: 'new-review-model',
+      });
+    });
   
   it('writes AppServer memory settings without collapsing read and generate', async () => {
       await expect(harness.appServerRpc('config/batchWrite', {
@@ -376,3 +418,15 @@ describe('runtime server AppServer config', () => {
         });
     });
 });
+
+function modelConfig(code: string, enabled: boolean) {
+  return {
+    id: code,
+    name: code,
+    code,
+    enabled,
+    maxOutputTokens: 4_000,
+    thinkingEnabled: false,
+    thinkingEfforts: [],
+  };
+}

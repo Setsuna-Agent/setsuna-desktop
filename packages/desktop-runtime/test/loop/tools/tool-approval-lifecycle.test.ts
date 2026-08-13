@@ -95,7 +95,7 @@ describe('tool approval lifecycle automatic review', () => {
     expect(fixture.requests.map((request) => request.reviewer)).toEqual(['automatic', 'user']);
     expect(fixture.resolutions[0]).toMatchObject({
       decision: 'reject',
-      message: 'Automatic approval review failed: review transport disconnected',
+      message: 'Automatic approval review failed: Unexpected reviewer error.',
       metadata: { source: 'automatic', assessment: { status: 'failed' } },
     });
   });

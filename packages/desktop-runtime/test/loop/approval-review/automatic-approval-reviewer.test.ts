@@ -119,6 +119,56 @@ describe('automatic approval reviewer', () => {
     expect(result.assessment.rationale).not.toContain(secret);
   });
 
+  it('does not persist provider-controlled response bodies from technical failures', async () => {
+    const secret = 'sk-provider-echoed-secret';
+    const providerError = Object.assign(
+      new Error(`OpenAI compatible request failed: HTTP 400 ${secret}`),
+      {
+        name: 'ProviderRequestError',
+        responseBody: secret,
+        status: 400,
+      },
+    );
+    const modelClient: ModelClient = {
+      async *stream(): AsyncGenerator<ModelStreamEvent> {
+        yield { type: 'text_delta', text: '' };
+        throw providerError;
+      },
+    };
+
+    const result = await createReviewer(modelClient).review(reviewInput({
+      cmd: 'curl https://example.invalid',
+      env: { API_TOKEN: secret },
+    }));
+
+    expect(result.assessment).toMatchObject({
+      status: 'failed',
+      rationale: 'Automatic approval review failed: Provider returned HTTP 400.',
+    });
+    expect(result.assessment.rationale).not.toContain(secret);
+  });
+
+  it('records the configured active model when fallback streams omit usage', async () => {
+    const config = configFixture();
+    config.taskModels = {};
+    const modelClient = new ReviewModelClient(() => JSON.stringify({
+      outcome: 'allow',
+      riskLevel: 'low',
+      userAuthorization: 'high',
+      rationale: 'The action is authorized.',
+    }), false);
+
+    const result = await createReviewer(modelClient, undefined, config).review(
+      reviewInput({ cmd: 'pwd' }),
+    );
+
+    expect(result.assessment).toMatchObject({
+      status: 'allowed',
+      providerId: 'chat-provider',
+      model: 'chat-model-code',
+    });
+  });
+
   it('fails safely after two invalid structured responses', async () => {
     const modelClient = new ReviewModelClient(() => 'not-json');
     const reviewer = createReviewer(modelClient);
@@ -223,21 +273,26 @@ describe('approval review output', () => {
 class ReviewModelClient implements ModelClient {
   readonly requests: ModelRequest[] = [];
 
-  constructor(private readonly response: () => string) {}
+  constructor(
+    private readonly response: () => string,
+    private readonly includeUsage = true,
+  ) {}
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     yield { type: 'text_delta', text: this.response() };
-    yield {
-      type: 'usage',
-      usage: {
-        providerId: 'review-provider',
-        model: 'approval-review-model-code',
-        inputTokens: 100,
-        outputTokens: 20,
-        totalTokens: 120,
-      },
-    };
+    if (this.includeUsage) {
+      yield {
+        type: 'usage',
+        usage: {
+          providerId: 'review-provider',
+          model: 'approval-review-model-code',
+          inputTokens: 100,
+          outputTokens: 20,
+          totalTokens: 120,
+        },
+      };
+    }
     yield { type: 'done', finishReason: 'stop' };
   }
 }
@@ -245,8 +300,8 @@ class ReviewModelClient implements ModelClient {
 function createReviewer(
   modelClient: ModelClient,
   usageStore?: Pick<UsageStore, 'recordUsage'>,
+  config = configFixture(),
 ) {
-  const config = configFixture();
   const configStore = {
     getConfig: async () => config,
   } as unknown as ConfigStore;

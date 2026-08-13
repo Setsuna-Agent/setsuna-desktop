@@ -32,6 +32,7 @@ import {
   CONTEXT_COMPACTION_MAX_TOKENS,
   estimateRuntimeMessageTokens,
   estimateRuntimeToolDefinitionTokens,
+  fitRuntimeMessagesToContextBudget,
 } from '../context/context-compaction.js';
 import { compileRuntimePrompt } from '../context/prompt-compiler.js';
 import { buildRuntimeAttachmentContext, messagesForModel } from '../context/runtime-attachment-context.js';
@@ -244,6 +245,9 @@ export class RuntimeSamplingContextBuilder {
       goalCompletionPending,
     );
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);
+    const persistentContextBudget = taskKind === 'review'
+      ? contextCompactionBudgetForConfig(stepRuntimeConfig)
+      : contextBudget;
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
       hookContextMessages: [
@@ -267,8 +271,8 @@ export class RuntimeSamplingContextBuilder {
     const reservedTokens = estimateRuntimeMessageTokens(transientPrompt.messages)
       + estimateRuntimeToolDefinitionTokens(tools)
       + reservedOutputTokens;
-    const compactedConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
-      contextBudget,
+    const persistentConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
+      contextBudget: persistentContextBudget,
       force: false,
       messages: orderedConversationMessages,
       reservedTokens,
@@ -278,6 +282,13 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
+    const compactedConversationMessages = taskKind === 'review'
+      ? fitRuntimeMessagesToContextBudget({
+          budget: contextBudget,
+          messages: persistentConversationMessages,
+          reservedTokens,
+        })
+      : persistentConversationMessages;
     const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
       resolvedAttachments: attachmentContext.resolvedAttachments,
       supportsImages: activeModelSupportsImages,
