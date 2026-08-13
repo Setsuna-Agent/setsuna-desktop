@@ -21,7 +21,6 @@ import {
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
 } from './approval-review-output.js';
-import { approvalReviewActionIdentity } from './approval-review-action.js';
 import { buildApprovalReviewPrompt } from './approval-review-prompt.js';
 
 const APPROVAL_REVIEW_TIMEOUT_MS = 60_000;
@@ -49,7 +48,6 @@ type AutomaticApprovalReviewerFactoryOptions = Omit<
 
 type TurnReviewState = {
   consecutiveDenials: number;
-  deniedActions: Map<string, RuntimeApprovalReviewAssessment>;
   history: boolean[];
 };
 
@@ -61,21 +59,6 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
 
   async review(input: ApprovalReviewInput): Promise<ApprovalReviewResult> {
     if (input.signal.aborted) throw abortReason(input.signal);
-    const actionIdentity = approvalReviewActionIdentity(input);
-    const priorDenial = actionIdentity
-      ? this.turnReviews.get(input.request.turnId)?.deniedActions.get(actionIdentity)
-      : undefined;
-    if (priorDenial) {
-      const assessment: RuntimeApprovalReviewAssessment = {
-        ...priorDenial,
-        rationale: `This exact action was already denied. ${priorDenial.rationale}`,
-      };
-      return {
-        assessment,
-        ...(this.recordOutcome(input.request.turnId, true) ? { interruptTurn: true } : {}),
-      };
-    }
-
     const [config, thread] = await Promise.all([
       this.options.configStore.getConfig().catch(() => null),
       this.options.threadStore.getThread(input.request.threadId).catch(() => null),
@@ -141,12 +124,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         const denied = outcome === 'deny';
         return {
           assessment,
-          ...(this.recordOutcome(
-            input.request.turnId,
-            denied,
-            true,
-            denied && actionIdentity ? { identity: actionIdentity, assessment } : undefined,
-          )
+          ...(this.recordOutcome(input.request.turnId, denied)
             ? { interruptTurn: true }
             : {}),
         };
@@ -201,17 +179,12 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     turnId: string,
     denied: boolean,
     includeInHistory = true,
-    deniedAction?: { identity: string; assessment: RuntimeApprovalReviewAssessment },
   ): boolean {
     const state: TurnReviewState = this.turnReviews.get(turnId) ?? {
       consecutiveDenials: 0,
-      deniedActions: new Map(),
       history: [],
     };
     state.consecutiveDenials = denied ? state.consecutiveDenials + 1 : 0;
-    if (deniedAction) {
-      state.deniedActions.set(deniedAction.identity, { ...deniedAction.assessment });
-    }
     if (includeInHistory) {
       state.history.push(denied);
       if (state.history.length > MAX_REVIEW_HISTORY) state.history.shift();

@@ -56,7 +56,14 @@ describe('automatic approval reviewer', () => {
     expect(reviewMessage?.content).toContain('"cmd":["pnpm","test","--filter","approval"]');
     expect(taggedJson(reviewMessage?.content ?? '', 'trusted_user_evidence_json')).toEqual([
       expect.objectContaining({ role: 'user', source: 'user_message', content: 'Run the approval tests.' }),
-      expect.objectContaining({ role: 'tool', source: 'request_user_input', content: expect.stringContaining('User submitted structured input') }),
+      expect.objectContaining({
+        role: 'tool',
+        source: 'request_user_input',
+        content: expect.stringContaining('User submitted structured input'),
+        userInputRequest: expect.objectContaining({
+          message: 'Approve running the exact test command?',
+        }),
+      }),
     ]);
     expect(taggedJson(reviewMessage?.content ?? '', 'untrusted_context_json')).toEqual([
       expect.objectContaining({ role: 'assistant', content: 'I will run the requested command.' }),
@@ -95,6 +102,91 @@ describe('automatic approval reviewer', () => {
         expect.objectContaining({ content: delimiterInjection }),
       ]),
     );
+  });
+
+  it('does not trust answers when the complete user-input request exceeds the evidence budget', () => {
+    const thread = threadFixture();
+    const userInputRun = thread.messages[1]?.toolRuns?.[0];
+    if (!userInputRun?.userInput) throw new Error('Expected a user-input fixture.');
+    userInputRun.userInput = {
+      message: `Approve this bounded request? ${'q'.repeat(8_000)}`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          choice: {
+            type: 'string',
+            title: 'Choose one option',
+            oneOf: Array.from({ length: 20 }, (_, index) => ({
+              const: `option_${index}`,
+              title: `Option ${index} ${'x'.repeat(4_000)}`,
+              description: 'y'.repeat(4_000),
+            })),
+          },
+        },
+        required: ['choice'],
+      },
+    };
+
+    const prompt = buildApprovalReviewPrompt(
+      reviewInput({ cmd: 'pnpm test' }),
+      thread,
+      '2026-08-13T00:00:00.000Z',
+    );
+
+    expect('messages' in prompt).toBe(true);
+    if (!('messages' in prompt)) return;
+    const trustedEvidence = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    ) as Array<Record<string, unknown>>;
+    const untrustedContext = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'untrusted_context_json',
+    ) as Array<Record<string, unknown>>;
+    expect(trustedEvidence).toEqual([
+      expect.objectContaining({ source: 'user_message' }),
+    ]);
+    expect(untrustedContext).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        messageId: 'tool_user_input',
+        content: expect.stringContaining('User submitted structured input'),
+      }),
+    ]));
+    expect(prompt.messages[1]?.content).not.toContain('Option 19');
+  });
+
+  it('does not trust a user-input exchange when its complete answer exceeds the evidence budget', () => {
+    const thread = threadFixture();
+    const result = thread.messages.find((message) => message.id === 'tool_user_input');
+    if (!result) throw new Error('Expected a user-input result fixture.');
+    result.content = `User submitted structured input:\n${JSON.stringify({
+      confirm: 'yes',
+      qualification: 'x'.repeat(12_000),
+    })}`;
+
+    const prompt = buildApprovalReviewPrompt(
+      reviewInput({ cmd: 'pnpm test' }),
+      thread,
+      '2026-08-13T00:00:00.000Z',
+    );
+
+    expect('messages' in prompt).toBe(true);
+    if (!('messages' in prompt)) return;
+    const trustedEvidence = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    ) as Array<Record<string, unknown>>;
+    const untrustedContext = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'untrusted_context_json',
+    ) as Array<Record<string, unknown>>;
+    expect(trustedEvidence).toEqual([
+      expect.objectContaining({ source: 'user_message' }),
+    ]);
+    expect(untrustedContext).toEqual(expect.arrayContaining([
+      expect.objectContaining({ messageId: 'tool_user_input' }),
+    ]));
+    expect(prompt.messages[1]?.content).not.toContain('x'.repeat(4_000));
   });
 
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
@@ -200,7 +292,8 @@ describe('automatic approval reviewer', () => {
     expect(third.interruptTurn).toBe(true);
   });
 
-  it('keeps a denied exact action denied across new tool-call ids without resampling', async () => {
+  it('re-reviews the same action after a verified user confirmation', async () => {
+    const thread = threadFixture();
     let responseIndex = 0;
     const modelClient = new ReviewModelClient(() => {
       responseIndex += 1;
@@ -213,31 +306,77 @@ describe('automatic approval reviewer', () => {
           }
         : {
             outcome: 'allow',
-            riskLevel: 'low',
+            riskLevel: 'high',
             userAuthorization: 'high',
-            rationale: 'A later sample attempted to reverse the denial.',
+            rationale: 'The user explicitly approved this exact command.',
           });
     });
-    const reviewer = createReviewer(modelClient);
+    const reviewer = createReviewer(modelClient, undefined, configFixture(), thread);
 
     const first = await reviewer.review(reviewInput(
       { cmd: 'sudo su', workdir: '/work' },
       'call_1',
     ));
+    thread.messages.push(
+      {
+        id: 'assistant_confirmation',
+        turnId: 'turn_1',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-13T00:00:02.000Z',
+        status: 'complete',
+        toolRuns: [{
+          id: 'call_confirmation',
+          name: 'request_user_input',
+          status: 'success',
+          userInput: {
+            message: 'Approve running sudo su once in /work?',
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                confirm: { type: 'string', enum: ['yes', 'no'] },
+              },
+              required: ['confirm'],
+            },
+          },
+        }],
+      },
+      {
+        id: 'tool_confirmation',
+        turnId: 'turn_1',
+        role: 'tool',
+        content: 'User submitted structured input:\n{"confirm":"yes"}',
+        toolCallId: 'call_confirmation',
+        toolName: 'request_user_input',
+        createdAt: '2026-08-13T00:00:02.100Z',
+        status: 'complete',
+      },
+    );
     const retryInput = reviewInput(
       { workdir: '/work', cmd: 'sudo su' },
       'call_2',
     );
-    retryInput.request.reason = 'A different description of the same command.';
-    retryInput.request.retryKind = 'sandbox_bypass';
     const retried = await reviewer.review(retryInput);
 
     expect(first.assessment.status).toBe('denied');
     expect(retried.assessment).toMatchObject({
-      status: 'denied',
-      rationale: expect.stringContaining('This exact action was already denied.'),
+      status: 'allowed',
+      riskLevel: 'high',
+      userAuthorization: 'high',
     });
-    expect(modelClient.requests).toHaveLength(1);
+    expect(modelClient.requests).toHaveLength(2);
+    const retryEvidence = taggedJson(
+      modelClient.requests[1]?.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    );
+    expect(retryEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        messageId: 'tool_confirmation',
+        userInputRequest: expect.objectContaining({
+          message: 'Approve running sudo su once in /work?',
+        }),
+      }),
+    ]));
   });
 });
 
@@ -301,12 +440,13 @@ function createReviewer(
   modelClient: ModelClient,
   usageStore?: Pick<UsageStore, 'recordUsage'>,
   config = configFixture(),
+  thread = threadFixture(),
 ) {
   const configStore = {
     getConfig: async () => config,
   } as unknown as ConfigStore;
   const threadStore = {
-    getThread: async () => threadFixture(),
+    getThread: async () => thread,
   } as unknown as ThreadStore;
   return new AutomaticApprovalReviewer({
     clock: { now: () => new Date('2026-08-13T00:00:00.000Z') },
@@ -357,6 +497,21 @@ function threadFixture(): RuntimeThread {
         content: 'I will run the requested command.',
         createdAt: '2026-08-13T00:00:00.500Z',
         status: 'complete',
+        toolRuns: [{
+          id: 'call_user_input',
+          name: 'request_user_input',
+          status: 'success',
+          userInput: {
+            message: 'Approve running the exact test command?',
+            requestedSchema: {
+              type: 'object',
+              properties: {
+                confirm: { type: 'string', enum: ['yes', 'no'] },
+              },
+              required: ['confirm'],
+            },
+          },
+        }],
       },
       {
         id: 'tool_1',
@@ -370,6 +525,7 @@ function threadFixture(): RuntimeThread {
         id: 'tool_user_input',
         role: 'tool',
         content: 'User submitted structured input:\n{"confirm":"yes"}',
+        toolCallId: 'call_user_input',
         toolName: 'request_user_input',
         createdAt: '2026-08-13T00:00:00.900Z',
         status: 'complete',
