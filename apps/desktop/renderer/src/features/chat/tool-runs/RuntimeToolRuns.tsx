@@ -694,17 +694,20 @@ function GroupedApprovalControls({
   runs: RuntimeToolRun[];
   onAnswerApproval: AnswerApprovalHandler;
 }) {
-  return runs.map((run) => {
+  const approvalRuns = runs.flatMap((run) => {
     const approvalId = approvalControlId(run);
-    return approvalId ? (
+    return approvalId ? [{ approvalId, run }] : [];
+  });
+  return approvalRuns.map(({ approvalId, run }) => (
+    <div className="chat-tool-run__grouped-approval" key={run.id}>
+      {approvalRuns.length > 1 ? <FileOperationTargetList runs={[run]} /> : null}
       <RuntimeToolApprovalControl
         approvalId={approvalId}
-        key={run.id}
         run={run}
         onAnswerApproval={onAnswerApproval}
       />
-    ) : null;
-  });
+    </div>
+  ));
 }
 
 function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {

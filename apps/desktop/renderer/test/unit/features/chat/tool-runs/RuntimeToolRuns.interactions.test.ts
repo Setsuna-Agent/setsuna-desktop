@@ -157,6 +157,34 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(renderedTextFromHtml(html)).toContain('仍然批准并精确重试一次');
   });
 
+  it('associates each grouped retry with its own file target', () => {
+    const deniedRun = (id: string, filePath: string): RuntimeToolRun => ({
+      id,
+      name: 'write_file',
+      status: 'rejected',
+      argumentsPreview: JSON.stringify({ file_path: filePath, content: 'updated' }),
+      approvalId: `approval_${id}`,
+      approvalReviewer: 'automatic',
+      approvalStatus: 'rejected',
+      approvalReviewAssessment: {
+        status: 'denied',
+        rationale: `Writing ${filePath} was not authorized.`,
+        riskLevel: 'high',
+      },
+    });
+    const html = renderedHtml([
+      deniedRun('write_first', 'src/first.ts'),
+      deniedRun('write_second', 'src/second.ts'),
+    ]);
+    const controls = html.split('<div class="chat-tool-run__grouped-approval">').slice(1);
+
+    expect(controls).toHaveLength(2);
+    expect(controls[0]).toContain('first.ts');
+    expect(controls[0]).not.toContain('second.ts');
+    expect(controls[1]).toContain('second.ts');
+    expect(controls[1]).not.toContain('first.ts');
+  });
+
   it('shows generic MCP arguments before offering an exact retry', () => {
     const html = renderedHtml([{
       id: 'mcp_denied',
