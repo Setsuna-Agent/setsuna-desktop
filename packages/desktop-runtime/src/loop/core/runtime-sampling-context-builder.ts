@@ -121,6 +121,7 @@ export class RuntimeSamplingContextBuilder {
     thread,
     threadId,
     taskKind,
+    transientConversationMessages = [],
     turnId,
     toolAccess = 'all',
   }: {
@@ -133,11 +134,15 @@ export class RuntimeSamplingContextBuilder {
     thread: RuntimeThread;
     threadId: string;
     taskKind: RuntimeTaskKind;
+    transientConversationMessages?: RuntimeMessage[];
     turnId: string;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
     const normalizedConversation = normalizeModelConversationHistory(conversationMessages);
     const orderedConversationMessages = normalizedConversation.messages;
+    const orderedTransientConversationMessages = normalizeModelConversationHistory(
+      transientConversationMessages,
+    ).messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
     const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind);
@@ -258,7 +263,10 @@ export class RuntimeSamplingContextBuilder {
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
       ],
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
-      skillActivationText: currentTurnSkillActivationText(orderedConversationMessages, turnId),
+      skillActivationText: currentTurnSkillActivationText([
+        ...orderedConversationMessages,
+        ...orderedTransientConversationMessages,
+      ], turnId),
       skillIds,
       thread,
       toolContext,
@@ -269,6 +277,7 @@ export class RuntimeSamplingContextBuilder {
     const transientPrompt = compileRuntimePrompt({ fragments, conversationMessages: [], createdAt: this.options.clock.now().toISOString() });
     const reservedOutputTokens = reservedOutputTokensForConfig(stepRuntimeConfig, samplingModel.model);
     const reservedTokens = estimateRuntimeMessageTokens(transientPrompt.messages)
+      + estimateRuntimeMessageTokens(orderedTransientConversationMessages)
       + estimateRuntimeToolDefinitionTokens(tools)
       + reservedOutputTokens;
     const persistentConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
@@ -289,7 +298,13 @@ export class RuntimeSamplingContextBuilder {
           reservedTokens,
         })
       : persistentConversationMessages;
-    const providerConversationMessages = await messagesForModel(compactedConversationMessages, {
+    // Transient mailbox input is intentionally appended only after compaction:
+    // the active model sees it once, while compaction providers and events never do.
+    const modelConversationMessages = [
+      ...compactedConversationMessages,
+      ...orderedTransientConversationMessages,
+    ];
+    const providerConversationMessages = await messagesForModel(modelConversationMessages, {
       resolvedAttachments: attachmentContext.resolvedAttachments,
       supportsImages: activeModelSupportsImages,
     });
@@ -306,7 +321,7 @@ export class RuntimeSamplingContextBuilder {
       turnId,
       threadLastSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
       ...(thread.projectId ? { projectId: thread.projectId } : {}),
-      conversationMessageIds: compactedConversationMessages.map((message) => message.id),
+      conversationMessageIds: modelConversationMessages.map((message) => message.id),
       messageIds: messages.map((message) => message.id),
       inputMessageIds: samplingInputMessageIds(messages, turnId),
       toolNames: advertisedToolNames,

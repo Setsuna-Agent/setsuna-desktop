@@ -17,7 +17,10 @@ import type { RuntimeCollaborationCoordinator } from '../lifecycle/collaboration
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import type { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
-import type { RuntimeTurnInputCoordinator } from '../lifecycle/runtime-turn-input-coordinator.js';
+import type {
+  RuntimeMailboxModelInput,
+  RuntimeTurnInputCoordinator,
+} from '../lifecycle/runtime-turn-input-coordinator.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import type { RuntimeQueuedSteer } from '../lifecycle/turn-input-queue.js';
 import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
@@ -184,6 +187,7 @@ export class RuntimeAgentTurnRunner {
       // SamplingContextBuilder 统一管理单次请求边界，使压缩逻辑能够计入临时提示片段、
       // 工具模式和输出预留空间。
       let conversationMessages = [...thread.messages, ...(includeUserMessageInConversation ? [modelUserMessage] : [])];
+      let transientConversationMessages: RuntimeMessage[] = [];
       // review turn 展示给用户的是简短文案，发给模型的是完整 review prompt，两者在这里分流。
       runtimeConfig = runtimeConfig ?? await this.options.configStore?.getConfig().catch(() => null);
       let explicitMemoryUserContent = userMessage.content;
@@ -210,9 +214,10 @@ export class RuntimeAgentTurnRunner {
         if (steerText) explicitMemoryUserContent = [explicitMemoryUserContent, steerText].filter(Boolean).join('\n\n');
         return true;
       };
-      const appendMailboxMessagesToConversation = (messages: RuntimeMessage[]) => {
-        if (!messages.length) return false;
-        conversationMessages.push(...messages);
+      const appendMailboxMessagesToConversation = (inputs: RuntimeMailboxModelInput[]) => {
+        if (!inputs.length) return false;
+        conversationMessages.push(...inputs.filter((input) => !input.transient).map((input) => input.message));
+        transientConversationMessages.push(...inputs.filter((input) => input.transient).map((input) => input.message));
         return true;
       };
       let memorySavedByTool = false;
@@ -234,11 +239,15 @@ export class RuntimeAgentTurnRunner {
           thread,
           threadId,
           taskKind,
+          transientConversationMessages,
           turnId,
           toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;
+        // Sensitive mailbox instructions are one-shot sampling input. Once the
+        // immutable step owns them, they must not enter later turn context.
+        transientConversationMessages = [];
         runtimeConfig = stepContext.runtimeConfig;
         const newModelHistoryWarnings = (stepContext.modelHistoryWarnings ?? [])
           .filter((warning) => !publishedModelHistoryWarnings.has(warning));

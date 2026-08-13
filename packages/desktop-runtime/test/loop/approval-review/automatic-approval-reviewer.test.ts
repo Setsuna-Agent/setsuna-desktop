@@ -327,7 +327,9 @@ describe('automatic approval reviewer', () => {
       status: 'complete',
       visibility: 'model',
     });
-    const retried = await reviewer.review(reviewInput({ cmd: 'sudo su' }, 'call_retry'));
+    const retryInput = reviewInput({ cmd: 'sudo su' }, 'call_retry');
+    retryInput.request.turnId = 'turn_2';
+    const retried = await reviewer.review(retryInput);
 
     expect(retried.assessment).toMatchObject({
       status: 'denied',

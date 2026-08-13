@@ -32,6 +32,7 @@ const APPROVAL_REVIEW_MAX_ATTEMPTS = 2;
 const APPROVAL_REVIEW_MAX_OUTPUT_TOKENS = 1_200;
 const MAX_TRACKED_TURNS = 100;
 const MAX_REVIEW_HISTORY = 50;
+const MAX_DENIED_ACTION_REVIEWS = 500;
 const MAX_DENIED_APPROVALS = 500;
 const CONSECUTIVE_DENIAL_LIMIT = 3;
 const ROLLING_DENIAL_LIMIT = 10;
@@ -53,13 +54,11 @@ type AutomaticApprovalReviewerFactoryOptions = Omit<
 
 type TurnReviewState = {
   consecutiveDenials: number;
-  deniedActions: Map<string, DeniedActionReview>;
   history: boolean[];
 };
 
 type DeniedActionReview = {
   assessment: RuntimeApprovalReviewAssessment;
-  trustedEvidenceFingerprint: string;
 };
 
 type DeniedApprovalAction = {
@@ -79,6 +78,7 @@ type RegisteredOverride = {
 /** Runs a narrow, tool-free model request for permission-boundary decisions. */
 export class AutomaticApprovalReviewer implements ApprovalReviewer {
   private readonly turnReviews = new Map<string, TurnReviewState>();
+  private readonly deniedActionReviews = new Map<string, DeniedActionReview>();
   private readonly deniedApprovals = new Map<string, DeniedApprovalAction>();
   private readonly registeredOverrides = new Map<string, RegisteredOverride>();
 
@@ -132,12 +132,15 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     }
 
     const priorDenial = actionIdentity
-      ? this.turnReviews.get(input.request.turnId)?.deniedActions.get(actionIdentity)
+      ? this.deniedActionReviews.get(deniedActionReviewKey(
+          input.request.threadId,
+          actionIdentity,
+          prompt.trustedEvidenceFingerprint,
+        ))
       : undefined;
     if (
       priorDenial
       && !overrideApprovalId
-      && priorDenial.trustedEvidenceFingerprint === prompt.trustedEvidenceFingerprint
     ) {
       const retryAction = exactRetryAction(input, serializedAction);
       const assessment: RuntimeApprovalReviewAssessment = {
@@ -283,15 +286,24 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
   ): boolean {
     const state: TurnReviewState = this.turnReviews.get(turnId) ?? {
       consecutiveDenials: 0,
-      deniedActions: new Map(),
       history: [],
     };
     state.consecutiveDenials = denied ? state.consecutiveDenials + 1 : 0;
     if (reviewedAction?.assessment) {
-      state.deniedActions.set(reviewedAction.identity, {
+      const reviewKey = deniedActionReviewKey(
+        reviewedAction.threadId,
+        reviewedAction.identity,
+        reviewedAction.trustedEvidenceFingerprint,
+      );
+      this.deniedActionReviews.delete(reviewKey);
+      this.deniedActionReviews.set(reviewKey, {
         assessment: { ...reviewedAction.assessment },
-        trustedEvidenceFingerprint: reviewedAction.trustedEvidenceFingerprint,
       });
+      while (this.deniedActionReviews.size > MAX_DENIED_ACTION_REVIEWS) {
+        const oldestReviewKey = this.deniedActionReviews.keys().next().value as string | undefined;
+        if (!oldestReviewKey) break;
+        this.deniedActionReviews.delete(oldestReviewKey);
+      }
       if (reviewedAction.action) this.recordDeniedApproval({
         action: reviewedAction.action,
         approvalId: reviewedAction.approvalId,
@@ -299,7 +311,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
         threadId: reviewedAction.threadId,
       }, turnId);
     } else if (reviewedAction) {
-      state.deniedActions.delete(reviewedAction.identity);
+      this.retireDeniedActionReviews(reviewedAction.threadId, reviewedAction.identity);
       this.retireDeniedApprovals(reviewedAction.threadId, reviewedAction.identity);
     }
     if (includeInHistory) {
@@ -435,6 +447,13 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     }
   }
 
+  private retireDeniedActionReviews(threadId: string, identity: string): void {
+    const prefix = `${deniedActionOverrideKey(threadId, identity)}\u0000`;
+    for (const reviewKey of this.deniedActionReviews.keys()) {
+      if (reviewKey.startsWith(prefix)) this.deniedActionReviews.delete(reviewKey);
+    }
+  }
+
   private async recordUsage(
     input: ApprovalReviewInput,
     usage: RuntimeUsage | undefined,
@@ -484,6 +503,14 @@ function approvalReviewAuditModel(
 
 function deniedActionOverrideKey(threadId: string, identity: string): string {
   return `${threadId}\u0000${identity}`;
+}
+
+function deniedActionReviewKey(
+  threadId: string,
+  identity: string,
+  trustedEvidenceFingerprint: string,
+): string {
+  return `${deniedActionOverrideKey(threadId, identity)}\u0000${trustedEvidenceFingerprint}`;
 }
 
 function exactRetryAction(input: ApprovalReviewInput, action: string | null): string | null {

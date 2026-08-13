@@ -5,6 +5,9 @@ import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
+  AutoCompactionModelClient,
+} from '../../support/agent-loop/compaction.js';
+import {
   ContextWindowConfigStore,
   mkDataDir,
   stepSnapshotSkillRegistry,
@@ -551,12 +554,30 @@ describe('agent loop turn steering and mailbox input', () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Sensitive mailbox loop' });
-      const modelClient = new MailboxAwareModelClient();
+      for (let index = 0; index < 12; index += 1) {
+        await threadStore.appendEvent(thread.id, {
+          id: ids.id('event'),
+          threadId: thread.id,
+          type: 'message.created',
+          createdAt: `2026-08-13T00:00:${String(index).padStart(2, '0')}.000Z`,
+          payload: {
+            message: {
+              id: `history_${index}`,
+              role: index % 2 ? 'assistant' : 'user',
+              content: `Persistent history ${index}: ${'context '.repeat(80)}`,
+              createdAt: `2026-08-13T00:00:${String(index).padStart(2, '0')}.000Z`,
+              status: 'complete',
+            },
+          },
+        });
+      }
+      const modelClient = new AutoCompactionModelClient();
       const loop = new AgentLoop({
         threadStore,
         modelClient,
         eventBus: new InMemoryEventBus(),
         clock: systemClock,
+        configStore: new ContextWindowConfigStore(1_000),
         ids,
       });
       const sensitiveContent = 'retry exact action with secret suffix=not-for-event-log';
@@ -576,10 +597,19 @@ describe('agent loop turn steering and mailbox input', () => {
 
       expect(delivered.turnId).toBe(preparedTurnId);
       const events = await waitForTurnCompleted(threadStore, thread.id, delivered.turnId!);
-      const requestText = modelClient.requests[0].messages.map((message) => message.content).join('\n');
+      const compactionRequests = modelClient.requests
+        .filter((request) => request.model === 'context-compaction');
+      const compactionRequestText = compactionRequests
+        .map((request) => request.messages.map((message) => message.content).join('\n'))
+        .join('\n');
+      const requestText = modelClient.requests
+        .find((request) => request.model === 'local-runtime-smoke')
+        ?.messages.map((message) => message.content).join('\n') ?? '';
 
       expect(events.some((event) => event.type === 'mailbox.delivered')).toBe(false);
       expect(JSON.stringify(events)).not.toContain(sensitiveContent);
+      expect(compactionRequests.length).toBeGreaterThan(0);
+      expect(compactionRequestText).not.toContain(sensitiveContent);
       expect(requestText).toContain(sensitiveContent);
     });
 });
