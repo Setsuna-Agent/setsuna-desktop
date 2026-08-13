@@ -11,8 +11,7 @@ const MAX_ACTION_CHARS = 32_000;
 const MAX_TRANSCRIPT_CHARS = 20_000;
 const MAX_MESSAGE_CHARS = 3_000;
 const MAX_TRANSCRIPT_MESSAGES = 24;
-const MAX_USER_INPUT_QUESTION_CHARS = 2_000;
-const MAX_USER_INPUT_SCHEMA_CHARS = 2_000;
+const MAX_USER_INPUT_REQUEST_CHARS = 6_000;
 
 export type ApprovalReviewPrompt = {
   messages: RuntimeMessage[];
@@ -87,7 +86,8 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
 
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const message = candidates[index]!;
-    const trustedSource = trustedUserEvidenceSource(message);
+    const userInputRequest = userInputRequests.get(message.id);
+    const trustedSource = trustedUserEvidenceSource(message, Boolean(userInputRequest));
     const entry = {
       order: index,
       messageId: message.id,
@@ -98,7 +98,7 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
       ...(trustedSource === 'request_user_input' && message.toolCallId
         ? {
             toolCallId: message.toolCallId,
-            userInputRequest: userInputRequests.get(message.id),
+            userInputRequest,
           }
         : {}),
       ...(message.toolRuns?.length
@@ -134,15 +134,15 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
  */
 function userInputRequestsByResultMessageId(
   thread: RuntimeThread,
-): Map<string, ApprovalReviewUserInputRequest> {
-  const pending = new Map<string, ApprovalReviewUserInputRequest[]>();
-  const requests = new Map<string, ApprovalReviewUserInputRequest>();
+): Map<string, RuntimeUserInputRequest> {
+  const pending = new Map<string, Array<RuntimeUserInputRequest | null>>();
+  const requests = new Map<string, RuntimeUserInputRequest>();
   for (const message of thread.messages) {
     for (const run of message.toolRuns ?? []) {
       if (run.name !== 'request_user_input' || !run.userInput) continue;
       const key = userInputTransactionKey(message.turnId, run.id);
       const queue = pending.get(key) ?? [];
-      queue.push(approvalReviewUserInputRequest(run.userInput));
+      queue.push(exactApprovalReviewUserInputRequest(run.userInput));
       pending.set(key, queue);
     }
     if (
@@ -159,23 +159,20 @@ function userInputRequestsByResultMessageId(
   return requests;
 }
 
-type ApprovalReviewUserInputRequest = {
-  title?: string;
-  message: string;
-  requestedSchemaPreview: string;
-};
-
-function approvalReviewUserInputRequest(
+function exactApprovalReviewUserInputRequest(
   request: RuntimeUserInputRequest,
-): ApprovalReviewUserInputRequest {
-  return {
-    ...(request.title ? { title: clip(request.title, 256) } : {}),
-    message: clip(request.message, MAX_USER_INPUT_QUESTION_CHARS),
-    requestedSchemaPreview: clip(
-      JSON.stringify(request.requestedSchema),
-      MAX_USER_INPUT_SCHEMA_CHARS,
-    ),
+): RuntimeUserInputRequest | null {
+  const materialRequest: RuntimeUserInputRequest = {
+    ...(request.title ? { title: request.title } : {}),
+    message: request.message,
+    requestedSchema: request.requestedSchema,
   };
+  // A partial question can misattribute an opaque answer to the action under
+  // review. Oversized requests therefore remain context, never authorization.
+  return escapePromptEnvelopeJson(JSON.stringify(materialRequest)).length
+    <= MAX_USER_INPUT_REQUEST_CHARS
+    ? materialRequest
+    : null;
 }
 
 function userInputTransactionKey(turnId: string | undefined, toolCallId: string): string {
@@ -189,6 +186,7 @@ function escapePromptEnvelopeJson(value: string): string {
 
 function trustedUserEvidenceSource(
   message: RuntimeMessage,
+  hasExactUserInputRequest = false,
 ): 'user_message' | 'request_user_input' | null {
   // Compaction summaries use the user role for provider compatibility, but
   // their content is model-generated from mixed-trust history.
@@ -196,6 +194,7 @@ function trustedUserEvidenceSource(
   if (
     message.role === 'tool'
     && message.toolName === 'request_user_input'
+    && hasExactUserInputRequest
     && /^(?:User submitted structured input:|User declined to provide this input\.|User input was cancelled\.)/u.test(message.content)
   ) return 'request_user_input';
   return null;

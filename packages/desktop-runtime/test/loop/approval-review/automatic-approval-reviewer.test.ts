@@ -104,7 +104,7 @@ describe('automatic approval reviewer', () => {
     );
   });
 
-  it('keeps large user-input forms within the review evidence budget', () => {
+  it('does not trust answers when the complete user-input request exceeds the evidence budget', () => {
     const thread = threadFixture();
     const userInputRun = thread.messages[1]?.toolRuns?.[0];
     if (!userInputRun?.userInput) throw new Error('Expected a user-input fixture.');
@@ -135,14 +135,24 @@ describe('automatic approval reviewer', () => {
 
     expect('messages' in prompt).toBe(true);
     if (!('messages' in prompt)) return;
-    const evidence = taggedJson(
+    const trustedEvidence = taggedJson(
       prompt.messages[1]?.content ?? '',
       'trusted_user_evidence_json',
     ) as Array<Record<string, unknown>>;
-    const userInputRequest = evidence[1]?.userInputRequest as Record<string, unknown>;
-    expect(userInputRequest.message).toMatch(/\[truncated\]$/u);
-    expect(userInputRequest.requestedSchemaPreview).toMatch(/\[truncated\]$/u);
-    expect(JSON.stringify(evidence).length).toBeLessThan(20_000);
+    const untrustedContext = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'untrusted_context_json',
+    ) as Array<Record<string, unknown>>;
+    expect(trustedEvidence).toEqual([
+      expect.objectContaining({ source: 'user_message' }),
+    ]);
+    expect(untrustedContext).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        messageId: 'tool_user_input',
+        content: expect.stringContaining('User submitted structured input'),
+      }),
+    ]));
+    expect(prompt.messages[1]?.content).not.toContain('Option 19');
   });
 
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
