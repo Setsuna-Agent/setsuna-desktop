@@ -11,7 +11,7 @@ const MAX_ACTION_CHARS = 32_000;
 const MAX_TRANSCRIPT_CHARS = 20_000;
 const MAX_MESSAGE_CHARS = 3_000;
 const MAX_TRANSCRIPT_MESSAGES = 24;
-const MAX_USER_INPUT_REQUEST_CHARS = 6_000;
+const MAX_USER_INPUT_EXCHANGE_CHARS = 12_000;
 
 export type ApprovalReviewPrompt = {
   messages: RuntimeMessage[];
@@ -86,19 +86,22 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
 
   for (let index = candidates.length - 1; index >= 0; index -= 1) {
     const message = candidates[index]!;
-    const userInputRequest = userInputRequests.get(message.id);
-    const trustedSource = trustedUserEvidenceSource(message, Boolean(userInputRequest));
+    const userInputExchange = exactApprovalReviewUserInputExchange(
+      message,
+      userInputRequests.get(message.id),
+    );
+    const trustedSource = trustedUserEvidenceSource(message, Boolean(userInputExchange));
     const entry = {
       order: index,
       messageId: message.id,
       role: message.role,
       ...(trustedSource ? { source: trustedSource } : {}),
-      content: clip(message.content, MAX_MESSAGE_CHARS),
+      content: userInputExchange?.answer ?? clip(message.content, MAX_MESSAGE_CHARS),
       ...(message.toolName ? { toolName: message.toolName } : {}),
       ...(trustedSource === 'request_user_input' && message.toolCallId
         ? {
             toolCallId: message.toolCallId,
-            userInputRequest,
+            userInputRequest: userInputExchange?.request,
           }
         : {}),
       ...(message.toolRuns?.length
@@ -135,14 +138,14 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
 function userInputRequestsByResultMessageId(
   thread: RuntimeThread,
 ): Map<string, RuntimeUserInputRequest> {
-  const pending = new Map<string, Array<RuntimeUserInputRequest | null>>();
+  const pending = new Map<string, RuntimeUserInputRequest[]>();
   const requests = new Map<string, RuntimeUserInputRequest>();
   for (const message of thread.messages) {
     for (const run of message.toolRuns ?? []) {
       if (run.name !== 'request_user_input' || !run.userInput) continue;
       const key = userInputTransactionKey(message.turnId, run.id);
       const queue = pending.get(key) ?? [];
-      queue.push(exactApprovalReviewUserInputRequest(run.userInput));
+      queue.push(materialApprovalReviewUserInputRequest(run.userInput));
       pending.set(key, queue);
     }
     if (
@@ -159,19 +162,27 @@ function userInputRequestsByResultMessageId(
   return requests;
 }
 
-function exactApprovalReviewUserInputRequest(
+function materialApprovalReviewUserInputRequest(
   request: RuntimeUserInputRequest,
-): RuntimeUserInputRequest | null {
-  const materialRequest: RuntimeUserInputRequest = {
+): RuntimeUserInputRequest {
+  return {
     ...(request.title ? { title: request.title } : {}),
     message: request.message,
     requestedSchema: request.requestedSchema,
   };
-  // A partial question can misattribute an opaque answer to the action under
-  // review. Oversized requests therefore remain context, never authorization.
-  return escapePromptEnvelopeJson(JSON.stringify(materialRequest)).length
-    <= MAX_USER_INPUT_REQUEST_CHARS
-    ? materialRequest
+}
+
+function exactApprovalReviewUserInputExchange(
+  message: RuntimeMessage,
+  request: RuntimeUserInputRequest | undefined,
+): { answer: string; request: RuntimeUserInputRequest } | null {
+  if (!request) return null;
+  const exchange = { answer: message.content, request };
+  // Authorization is an atomic question/answer pair. If either half would be
+  // truncated, retain the result only as context so review fails closed.
+  return escapePromptEnvelopeJson(JSON.stringify(exchange)).length
+    <= MAX_USER_INPUT_EXCHANGE_CHARS
+    ? exchange
     : null;
 }
 

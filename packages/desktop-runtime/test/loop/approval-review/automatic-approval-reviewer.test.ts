@@ -155,6 +155,40 @@ describe('automatic approval reviewer', () => {
     expect(prompt.messages[1]?.content).not.toContain('Option 19');
   });
 
+  it('does not trust a user-input exchange when its complete answer exceeds the evidence budget', () => {
+    const thread = threadFixture();
+    const result = thread.messages.find((message) => message.id === 'tool_user_input');
+    if (!result) throw new Error('Expected a user-input result fixture.');
+    result.content = `User submitted structured input:\n${JSON.stringify({
+      confirm: 'yes',
+      qualification: 'x'.repeat(12_000),
+    })}`;
+
+    const prompt = buildApprovalReviewPrompt(
+      reviewInput({ cmd: 'pnpm test' }),
+      thread,
+      '2026-08-13T00:00:00.000Z',
+    );
+
+    expect('messages' in prompt).toBe(true);
+    if (!('messages' in prompt)) return;
+    const trustedEvidence = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    ) as Array<Record<string, unknown>>;
+    const untrustedContext = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'untrusted_context_json',
+    ) as Array<Record<string, unknown>>;
+    expect(trustedEvidence).toEqual([
+      expect.objectContaining({ source: 'user_message' }),
+    ]);
+    expect(untrustedContext).toEqual(expect.arrayContaining([
+      expect.objectContaining({ messageId: 'tool_user_input' }),
+    ]));
+    expect(prompt.messages[1]?.content).not.toContain('x'.repeat(4_000));
+  });
+
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
     const secret = 'sk-review-secret-value';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
