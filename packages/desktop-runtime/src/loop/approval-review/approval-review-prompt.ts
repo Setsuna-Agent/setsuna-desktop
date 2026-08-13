@@ -11,6 +11,8 @@ const MAX_ACTION_CHARS = 32_000;
 const MAX_TRANSCRIPT_CHARS = 20_000;
 const MAX_MESSAGE_CHARS = 3_000;
 const MAX_TRANSCRIPT_MESSAGES = 24;
+const MAX_USER_INPUT_QUESTION_CHARS = 2_000;
+const MAX_USER_INPUT_SCHEMA_CHARS = 2_000;
 
 export type ApprovalReviewPrompt = {
   messages: RuntimeMessage[];
@@ -132,15 +134,15 @@ function compactReviewEvidence(thread: RuntimeThread): CompactReviewEvidence {
  */
 function userInputRequestsByResultMessageId(
   thread: RuntimeThread,
-): Map<string, RuntimeUserInputRequest> {
-  const pending = new Map<string, RuntimeUserInputRequest[]>();
-  const requests = new Map<string, RuntimeUserInputRequest>();
+): Map<string, ApprovalReviewUserInputRequest> {
+  const pending = new Map<string, ApprovalReviewUserInputRequest[]>();
+  const requests = new Map<string, ApprovalReviewUserInputRequest>();
   for (const message of thread.messages) {
     for (const run of message.toolRuns ?? []) {
       if (run.name !== 'request_user_input' || !run.userInput) continue;
       const key = userInputTransactionKey(message.turnId, run.id);
       const queue = pending.get(key) ?? [];
-      queue.push(run.userInput);
+      queue.push(approvalReviewUserInputRequest(run.userInput));
       pending.set(key, queue);
     }
     if (
@@ -155,6 +157,25 @@ function userInputRequestsByResultMessageId(
     if (queue?.length === 0) pending.delete(key);
   }
   return requests;
+}
+
+type ApprovalReviewUserInputRequest = {
+  title?: string;
+  message: string;
+  requestedSchemaPreview: string;
+};
+
+function approvalReviewUserInputRequest(
+  request: RuntimeUserInputRequest,
+): ApprovalReviewUserInputRequest {
+  return {
+    ...(request.title ? { title: clip(request.title, 256) } : {}),
+    message: clip(request.message, MAX_USER_INPUT_QUESTION_CHARS),
+    requestedSchemaPreview: clip(
+      JSON.stringify(request.requestedSchema),
+      MAX_USER_INPUT_SCHEMA_CHARS,
+    ),
+  };
 }
 
 function userInputTransactionKey(turnId: string | undefined, toolCallId: string): string {

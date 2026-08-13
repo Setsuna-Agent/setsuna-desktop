@@ -104,6 +104,47 @@ describe('automatic approval reviewer', () => {
     );
   });
 
+  it('keeps large user-input forms within the review evidence budget', () => {
+    const thread = threadFixture();
+    const userInputRun = thread.messages[1]?.toolRuns?.[0];
+    if (!userInputRun?.userInput) throw new Error('Expected a user-input fixture.');
+    userInputRun.userInput = {
+      message: `Approve this bounded request? ${'q'.repeat(8_000)}`,
+      requestedSchema: {
+        type: 'object',
+        properties: {
+          choice: {
+            type: 'string',
+            title: 'Choose one option',
+            oneOf: Array.from({ length: 20 }, (_, index) => ({
+              const: `option_${index}`,
+              title: `Option ${index} ${'x'.repeat(4_000)}`,
+              description: 'y'.repeat(4_000),
+            })),
+          },
+        },
+        required: ['choice'],
+      },
+    };
+
+    const prompt = buildApprovalReviewPrompt(
+      reviewInput({ cmd: 'pnpm test' }),
+      thread,
+      '2026-08-13T00:00:00.000Z',
+    );
+
+    expect('messages' in prompt).toBe(true);
+    if (!('messages' in prompt)) return;
+    const evidence = taggedJson(
+      prompt.messages[1]?.content ?? '',
+      'trusted_user_evidence_json',
+    ) as Array<Record<string, unknown>>;
+    const userInputRequest = evidence[1]?.userInputRequest as Record<string, unknown>;
+    expect(userInputRequest.message).toMatch(/\[truncated\]$/u);
+    expect(userInputRequest.requestedSchemaPreview).toMatch(/\[truncated\]$/u);
+    expect(JSON.stringify(evidence).length).toBeLessThan(20_000);
+  });
+
   it('persists a runtime-generated rationale instead of model-authored action details', async () => {
     const secret = 'sk-review-secret-value';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
