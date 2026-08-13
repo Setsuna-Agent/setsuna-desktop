@@ -5,7 +5,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
-import { ChevronRight, Cpu, Eye, FileText, Pencil, RefreshCw, Sun, Trash2 } from 'lucide-react';
+import { ChevronRight, Code2, Eye, FileText, Palette, RefreshCw, Sun, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
   Button,
@@ -41,7 +41,7 @@ export function PersonalizationSettings({
 }) {
   const { locale, t } = useI18n();
   const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
-    { value: 'developer', label: t('settings.personalization.styleDeveloper'), icon: <Cpu size={14} /> },
+    { value: 'developer', label: t('settings.personalization.styleDeveloper'), icon: <Code2 size={14} /> },
     { value: 'daily', label: t('settings.personalization.styleDaily'), icon: <Sun size={14} /> },
   ];
   const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
@@ -173,7 +173,7 @@ export function PersonalizationSettings({
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
-              <Pencil size={14} />
+              <Palette size={14} />
               <span>{t('settings.personalization.setsunaStyle')}</span>
             </span>
             <SettingsChoiceGroup ariaLabel={t('settings.personalization.setsunaStyle')} options={setsunaStyleOptions} value={config.setsunaStyle} onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })} />

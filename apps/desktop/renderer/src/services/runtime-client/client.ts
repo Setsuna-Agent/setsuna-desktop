@@ -64,7 +64,6 @@ import type {
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependenciesToggleInput,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -295,14 +294,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     getWorkspaceDependencies() {
       return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies' });
     },
-    setWorkspaceDependencies(input: RuntimeWorkspaceDependenciesToggleInput) {
-      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies', method: 'PUT', body: input });
-    },
     diagnoseWorkspaceDependencies() {
       return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/diagnose', method: 'POST' });
     },
-    reinstallWorkspaceDependencies() {
-      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/reinstall', method: 'POST' });
+    repairWorkspaceDependencies() {
+      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/repair', method: 'POST' });
     },
     fetchProviderModels(input: RuntimeFetchModelsInput) {
       return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });
@@ -470,6 +466,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const params = new URLSearchParams();
       if (query.threadId) params.set('threadId', query.threadId);
       if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+      if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+      if (query.from) params.set('from', query.from);
+      if (query.to) params.set('to', query.to);
       const suffix = params.size ? `?${params}` : '';
       return request<RuntimeUsageResponse>({ path: `/v1/usage${suffix}` });
     },

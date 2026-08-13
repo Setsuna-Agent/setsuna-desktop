@@ -359,16 +359,18 @@ function CodeAppearancePreview({ fontLabel, themeLabel }: { fontLabel: string; t
   ].join('\n');
   return (
     <div className="chat-user-settings__code-preview" aria-label={t('settings.general.codePreview')}>
-      <div className="chat-user-settings__code-preview-header">
-        <span><Code2 size={12} /> TypeScript</span>
-        <span>{`${fontLabel} · ${themeLabel}`}</span>
+      <div className="chat-user-settings__code-preview-frame">
+        <div className="chat-user-settings__code-preview-header">
+          <span><Code2 size={12} /> TypeScript</span>
+          <span>{`${fontLabel} · ${themeLabel}`}</span>
+        </div>
+        <CodeFileView
+          className="chat-user-settings__code-preview-body"
+          contents={contents}
+          language="typescript"
+          name="settings-preview.ts"
+        />
       </div>
-      <CodeFileView
-        className="chat-user-settings__code-preview-body"
-        contents={contents}
-        language="typescript"
-        name="settings-preview.ts"
-      />
     </div>
   );
 }

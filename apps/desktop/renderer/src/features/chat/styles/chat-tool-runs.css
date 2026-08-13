@@ -628,7 +628,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__target {
   color: color-mix(in srgb, var(--app-text-muted) 82%, transparent);
-  font-family: var(--app-code-font-family);
   font-size: var(--chat-tool-run-font-size);
   line-height: var(--chat-tool-run-line-height);
 }
@@ -733,7 +732,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   max-width: 100%;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -766,7 +764,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   min-width: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -850,7 +847,6 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }

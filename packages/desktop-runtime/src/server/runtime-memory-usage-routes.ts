@@ -23,6 +23,9 @@ export async function handleRuntimeMemoryUsageRequest(
     const query: RuntimeUsageQuery = {
       threadId: url.searchParams.get('threadId') ?? undefined,
       limit: optionalNumber(url.searchParams.get('limit')),
+      offset: optionalNumber(url.searchParams.get('offset')),
+      from: url.searchParams.get('from') ?? undefined,
+      to: url.searchParams.get('to') ?? undefined,
     };
     sendJson(response, 200, await runtime.usageStore.getUsage(query));
     return true;

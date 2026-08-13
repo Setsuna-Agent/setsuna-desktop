@@ -1,7 +1,6 @@
 import type {
   RuntimeEnvironment,
   RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependenciesToggleInput,
 } from '@setsuna-desktop/contracts';
 
 export type ShellToolchainCommand = {
@@ -36,8 +35,7 @@ export type WorkspaceDependencyPromptContext = {
 export type WorkspaceDependencyManager = {
   getStatus(): Promise<RuntimeWorkspaceDependenciesStatus>;
   getPromptContext(): Promise<WorkspaceDependencyPromptContext>;
-  setEnabled(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus>;
   diagnose(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  reinstall(): Promise<RuntimeWorkspaceDependenciesStatus>;
+  repair(): Promise<RuntimeWorkspaceDependenciesStatus>;
   prepareShellToolchain(input: PrepareShellToolchainInput): Promise<ShellToolchain>;
 };

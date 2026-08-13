@@ -220,6 +220,7 @@ export function AppRouteContent({
           onFetchProviderModels={runtime.fetchProviderModels}
           onSaveProviders={runtime.saveProviders}
           onSaveRuntimePreferences={runtime.saveRuntimePreferences}
+          onQueryUsage={runtime.queryUsage}
           onPreviewMemories={runtime.previewMemories}
           onDeleteMemory={runtime.deleteMemory}
           onResetMemories={runtime.clearMemories}

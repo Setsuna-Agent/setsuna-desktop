@@ -632,7 +632,6 @@
 .conversation-debug-flow__controls .conversation-debug-flow__zoom-value {
   min-width: 52px;
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
@@ -733,7 +732,6 @@
 
 .conversation-debug-event__sequence {
   color: var(--app-text-subtle);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
 }
 
@@ -746,7 +744,6 @@
 
 .conversation-debug-event__body strong {
   overflow: hidden;
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   font-weight: 500;
   text-overflow: ellipsis;
@@ -947,7 +944,6 @@
   margin: 0;
   overflow: hidden;
   color: var(--app-text);
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -1035,7 +1031,6 @@
 .conversation-debug-inspector__events button code {
   overflow: hidden;
   color: inherit;
-  font-family: var(--app-code-font-family);
   font-size: 9px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -1070,7 +1065,6 @@
   overflow: hidden;
   border-radius: var(--app-radius-xs);
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 8.5px;
   text-overflow: ellipsis;
   white-space: nowrap;

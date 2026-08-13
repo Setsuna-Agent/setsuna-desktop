@@ -6,6 +6,7 @@ import type {
   RuntimeMemoryPreview,
   RuntimeThread,
   RuntimeThreadSummary,
+  RuntimeUsageQuery,
   RuntimeUsageResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -45,6 +46,7 @@ import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings
 import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 import { WebDavSyncSettings } from './webdav-sync/WebDavSyncSettings.js';
+import { SettingsPageHeading } from './SettingsPageHeading.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
@@ -132,6 +134,7 @@ export function SettingsPage({
   onFetchProviderModels,
   onSaveProviders,
   onSaveRuntimePreferences,
+  onQueryUsage,
   onPreviewMemories,
   onDeleteMemory,
   onResetMemories,
@@ -157,6 +160,7 @@ export function SettingsPage({
     apiKeysByProviderId: Record<string, string>,
   ) => Promise<void>;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
+  onQueryUsage: (query: RuntimeUsageQuery) => Promise<RuntimeUsageResponse>;
   onPreviewMemories: () => Promise<RuntimeMemoryPreview>;
   onDeleteMemory: (memoryId: string) => Promise<void>;
   onResetMemories: () => Promise<void>;
@@ -193,7 +197,11 @@ export function SettingsPage({
         <EmptyState title={t('settings.configUnavailable')} />
       )
     ) : activeSection === 'usage' ? (
-      <UsageSettings providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS} usage={usage} />
+      <UsageSettings
+        providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS}
+        usage={usage}
+        onQueryUsage={onQueryUsage}
+      />
     ) : activeSection === 'networkProxy' ? (
       <NetworkProxySettings proxy={networkProxy} />
     ) : activeSection === 'sync' ? (
@@ -248,17 +256,17 @@ export function SettingsPage({
             activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''
           } ${activeSection === 'usage' ? 'chat-user-settings__content--usage' : ''}`}
         >
-          <header className="chat-user-settings__page-heading">
-            <div className="chat-user-settings__page-heading-copy">
-              <h1>{t(settingsSectionLabelKeys[activeSection])}</h1>
-              {settingsSectionDescriptionKeys[activeSection] ? (
-                <p>{t(settingsSectionDescriptionKeys[activeSection])}</p>
+          {activeSection === 'usage' ? null : (
+            <SettingsPageHeading
+              action={activeSection === 'localLlm' && localModelSaveState.message ? (
+                <AutoSaveStatus state={localModelSaveState} />
               ) : null}
-            </div>
-            {activeSection === 'localLlm' && localModelSaveState.message ? (
-              <AutoSaveStatus state={localModelSaveState} />
-            ) : null}
-          </header>
+              description={settingsSectionDescriptionKeys[activeSection]
+                ? t(settingsSectionDescriptionKeys[activeSection])
+                : undefined}
+              title={t(settingsSectionLabelKeys[activeSection])}
+            />
+          )}
           {content}
         </section>
       </main>

@@ -66,7 +66,6 @@ export function stubWorkspaceDependencyManager(
   const status: RuntimeWorkspaceDependenciesStatus = {
     bundleVersion: 'test',
     checks: [],
-    enabled: true,
     installPath: '/managed',
     node: { available: true },
     python: { available: true },
@@ -83,8 +82,7 @@ export function stubWorkspaceDependencyManager(
       readableRoots: [environment.workspaceRoot],
       writableCacheRoots: [],
     }),
-    reinstall: async () => status,
-    setEnabled: async () => status,
+    repair: async () => status,
     ...overrides,
   };
 }

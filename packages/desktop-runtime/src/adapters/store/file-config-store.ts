@@ -351,7 +351,7 @@ function defaultConfig(): StoredConfig {
     hooks: {},
     bypassHookTrust: false,
     features: { request_permissions_tool: true },
-    desktopSettings: { workspaceDependenciesEnabled: true },
+    desktopSettings: {},
     imageGeneration: defaultImageGenerationSettings(),
     providers: [
       {
@@ -808,7 +808,7 @@ function normalizeHookState(value: unknown): NonNullable<RuntimeHooksConfig['sta
 }
 
 function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { workspaceDependenciesEnabled: true };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const settings = Object.fromEntries(
     Object.entries(value).filter(([key, setting]) => (
       typeof key === 'string' &&
@@ -829,9 +829,7 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   const pythonPackageIndexUrl = normalizePythonPackageIndexUrl(settings.pythonPackageIndexUrl);
   if (pythonPackageIndexUrl) settings.pythonPackageIndexUrl = pythonPackageIndexUrl;
   else delete settings.pythonPackageIndexUrl;
-  if (typeof settings.workspaceDependenciesEnabled !== 'boolean') {
-    settings.workspaceDependenciesEnabled = true;
-  }
+  delete settings.workspaceDependenciesEnabled;
   return settings;
 }
 

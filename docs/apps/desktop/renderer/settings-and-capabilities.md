@@ -83,12 +83,16 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 - Activity calendar。
 - Recent calls。
 - Branding 映射。
+- 全部时间、当天、滚动 24h/7d/30d 与分钟级自定义时间范围。
+- 最近调用明细按 10 条分页，翻页通过 usage query 的 `limit`/`offset` 按需读取。
 
-聚合数据来自 runtime `UsageStore`；renderer 只做展示聚合，不重新计算计费真源。
+时间范围通过 `RuntimeUsageQuery.from/to` 传给 runtime，按 `[from, to)` 过滤后再统一聚合；
+renderer 只负责范围选择与展示，不重新计算计费真源。年度 Activity calendar 始终使用未筛选的
+全局过去一年数据，避免短区间筛选把长期趋势图压缩成少量格子。
 
 ### Workspace dependencies
 
-`WorkspaceDependenciesSettings.tsx` 展示 runtime 管理的 Python/uv 等依赖状态，支持启用、诊断和重装。实际下载、校验和安装在 runtime adapter，不在 renderer 执行进程。
+`WorkspaceDependenciesSettings.tsx` 展示 runtime 管理的 Node.js/Python/uv 状态，支持诊断与修复缺失项。修复会复用健康的本机或托管工具，只补齐缺失、损坏或版本过低的环境；实际下载、校验和安装在 runtime adapter，不在 renderer 执行进程。
 
 ## Capabilities
 

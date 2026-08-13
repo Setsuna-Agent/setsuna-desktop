@@ -25,7 +25,7 @@
 | 底层与附件 | `uploadAttachment`、`deleteAttachment`、`subscribeEvents` | preload bridge、REST、SSE |
 | Thread lifecycle | `listThreads`、`listRuntimeActivities`、`getThread`、`createThread`、`updateThread`、`deleteThread`、`listBackgroundShellProcesses`、`terminateBackgroundShellProcess`、`setThreadGoal`、`clearThreadGoal`、`updateThreadMemoryMode`、`clearThreadContext`、`compactThreadContext`、`listDebugTraces` | 14 REST |
 | Turn、message、queue | `sendTurn`、`steerTurn`、`queueTurnInput`、`retrieveQueuedTurnInput`、`releaseQueuedTurnInputEdit`、`updateQueuedTurnInput`、`deleteQueuedTurnInput`、`sendQueuedTurnInputNow`、`updateMessage`、`deleteMessages`、`regenerateFromMessage`、`cancelTurn`、`startReview` | 13 REST |
-| Config 与依赖 | `getConfig`、`saveConfig`、`getWorkspaceDependencies`、`setWorkspaceDependencies`、`diagnoseWorkspaceDependencies`、`reinstallWorkspaceDependencies`、`fetchProviderModels` | REST |
+| Config 与依赖 | `getConfig`、`saveConfig`、`getWorkspaceDependencies`、`diagnoseWorkspaceDependencies`、`repairWorkspaceDependencies`、`fetchProviderModels` | REST |
 | Hook 与 Skill | `listHooks`、`listSkills`、`createSkill`、`getSkill`、`updateSkill`、`deleteSkill`、`installSkillMcpDependencies`、`authenticateSkillMcpDependency`、`setSkillExtraRoots` | 9 REST |
 | Plugin | `listPlugins`、`listPluginMarketplace`、`getPluginItemContent`、`getMarketplacePluginItemContent`、`installMarketplacePlugin`、`updateMarketplacePlugin`、`removePlugin`、`testImageGeneration` | REST |
 | Project 与 workspace | `listProjects`、`addProject`、`archiveProject`、`removeProject`、`getWorkspaceStatus`、`listProjectEntries`、`searchProjectEntries`、`readProjectFile`、`searchProject` | REST |

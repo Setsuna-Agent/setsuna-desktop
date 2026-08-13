@@ -17,16 +17,11 @@ export type RuntimeWorkspaceDependencyCheck = {
 export type RuntimeWorkspaceDependenciesStatus = {
   bundleVersion: string;
   checks: RuntimeWorkspaceDependencyCheck[];
-  enabled: boolean;
   error?: string;
   installPath: string;
   node: RuntimeWorkspaceDependencyToolStatus;
   python: RuntimeWorkspaceDependencyToolStatus;
-  state: 'disabled' | 'not-installed' | 'installing' | 'ready' | 'error';
+  state: 'not-installed' | 'installing' | 'ready' | 'error';
   updatedAt?: string;
   uv: RuntimeWorkspaceDependencyToolStatus;
-};
-
-export type RuntimeWorkspaceDependenciesToggleInput = {
-  enabled: boolean;
 };

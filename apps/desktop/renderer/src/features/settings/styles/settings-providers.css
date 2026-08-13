@@ -450,7 +450,6 @@
 .desktop-settings-panel .settings-provider-section__head code {
   overflow: hidden;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 11px;
   line-height: 16px;
   text-overflow: ellipsis;
@@ -486,7 +485,6 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-subtle);
-  font-family: var(--app-code-font-family);
   font-size: 11px;
   font-style: normal;
   text-overflow: ellipsis;
@@ -686,7 +684,6 @@
   min-width: 0;
   overflow: hidden;
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 11px;
   line-height: 15px;
   text-overflow: ellipsis;
@@ -729,7 +726,6 @@
 
 .settings-model-code-control {
   color: var(--app-text-muted);
-  font-family: var(--app-code-font-family);
   font-size: 11px;
 }
 

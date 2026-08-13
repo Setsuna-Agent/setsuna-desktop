@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useDesktopDataRoot } from '../../../app/providers/DesktopDataRootProvider.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button } from '../../../shared/ui/primitives.js';
+import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataMigrationIssueNotice } from './DataMigrationIssueNotice.js';
 import { DataRootBackupSettings } from './DataRootBackupSettings.js';
 import { formatDataBytes } from './dataRootFormat.js';
@@ -98,9 +99,7 @@ export function DataLocationSettings({ fallbackRoot }: { fallbackRoot: string })
             {t('dataRoot.change')}
           </Button>
         </div>
-        <code className="chat-user-settings__path-value" title={activeRoot}>
-          {activeRoot}
-        </code>
+        <SettingsPathValue path={activeRoot} />
       </div>
       <DataRootBackupSettings />
       {error && !plan ? <div className="chat-user-settings__runtime-error">{error}</div> : null}

@@ -85,7 +85,6 @@ import type { RuntimeInterfaceLanguage } from './config.js';
 import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
   RuntimeWorkspaceDependenciesStatus,
-  RuntimeWorkspaceDependenciesToggleInput,
 } from './workspace-dependencies.js';
 import type {
   AddWorkspaceProjectInput,
@@ -164,9 +163,8 @@ export type DesktopRuntimeClient = {
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   getWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  setWorkspaceDependencies(input: RuntimeWorkspaceDependenciesToggleInput): Promise<RuntimeWorkspaceDependenciesStatus>;
   diagnoseWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  reinstallWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
+  repairWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
   fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;
   listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listSkills(): Promise<RuntimeSkillList>;

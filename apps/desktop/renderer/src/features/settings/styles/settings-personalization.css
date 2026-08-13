@@ -278,7 +278,6 @@
 
 .desktop-settings-panel .chat-user-settings__download-source-current code {
   color: var(--app-text-muted);
-  font-family: var(--app-font-mono);
 }
 
 .desktop-settings-panel .chat-user-settings__download-source-form {
@@ -402,7 +401,6 @@
   border-radius: 7px;
   color: var(--app-text);
   background: var(--app-bg);
-  font-family: var(--app-code-font-family);
   font-size: 12px;
   line-height: 18px;
   white-space: pre-wrap;

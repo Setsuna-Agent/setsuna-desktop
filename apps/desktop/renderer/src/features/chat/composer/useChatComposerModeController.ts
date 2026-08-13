@@ -21,11 +21,21 @@ import {
   normalizeChatThinkingSelection,
   resetChatComposerModesAfterSend,
   resetThreadScopedChatComposerModes,
+  type ChatThinkingSelection,
 } from './chatComposerModeState.js';
 import {
   createChatComposerSendOptions,
   type ChatComposerSendOptions,
 } from './chatComposerSendOptions.js';
+import {
+  readChatThinkingPreference,
+  writeChatThinkingPreference,
+} from './chatThinkingPreferences.js';
+
+type ModelThinkingSelectionState = {
+  modelKey: string | null;
+  selection: ChatThinkingSelection;
+};
 
 export function useChatComposerModeController({
   activeGoal,
@@ -45,14 +55,38 @@ export function useChatComposerModeController({
   const [localModes, setLocalModes] = useState(emptyChatComposerLocalModes);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);
   const [thinkingMenuOpen, setThinkingMenuOpen] = useState(false);
-  const [thinkingSelection, setThinkingSelection] = useState(emptyChatThinkingSelection);
+  const [modelThinkingSelection, setModelThinkingSelection] = useState<ModelThinkingSelectionState>(() => (
+    createModelThinkingSelectionState(modelCapabilities)
+  ));
   const [usagePanelOpen, setUsagePanelOpen] = useState(false);
+  const thinkingSelection = modelThinkingSelection.selection;
 
   useEffect(() => {
-    setThinkingSelection((current) => (
-      normalizeChatThinkingSelection(current, modelCapabilities.thinking)
-    ));
-  }, [modelCapabilities.thinking]);
+    setModelThinkingSelection((current) => {
+      if (current.modelKey !== modelCapabilities.preferenceKey) {
+        return createModelThinkingSelectionState(modelCapabilities);
+      }
+      const selection = normalizeChatThinkingSelection(
+        current.selection,
+        modelCapabilities.thinking,
+      );
+      return selection === current.selection ? current : { ...current, selection };
+    });
+  }, [modelCapabilities.preferenceKey, modelCapabilities.thinking]);
+
+  useEffect(() => {
+    if (
+      !modelThinkingSelection.modelKey
+      || modelThinkingSelection.modelKey !== modelCapabilities.preferenceKey
+    ) return;
+    writeChatThinkingPreference(
+      modelThinkingSelection.modelKey,
+      modelThinkingSelection.selection,
+    );
+  }, [
+    modelCapabilities.preferenceKey,
+    modelThinkingSelection,
+  ]);
 
   useEffect(() => {
     setLocalModes(resetThreadScopedChatComposerModes);
@@ -60,15 +94,23 @@ export function useChatComposerModeController({
   }, [currentThreadId]);
 
   const setThinkingEnabled = useCallback((enabled: boolean) => {
-    setThinkingSelection((current) => (
-      current.enabled === enabled ? current : { ...current, enabled }
-    ));
+    setModelThinkingSelection((current) => {
+      if (current.selection.enabled === enabled) return current;
+      return {
+        ...current,
+        selection: { ...current.selection, enabled },
+      };
+    });
   }, []);
 
   const setThinkingEffort = useCallback((effort: string) => {
-    setThinkingSelection((current) => (
-      current.effort === effort ? current : { ...current, effort }
-    ));
+    setModelThinkingSelection((current) => {
+      if (current.selection.effort === effort) return current;
+      return {
+        ...current,
+        selection: { ...current.selection, effort },
+      };
+    });
   }, []);
 
   const clearGoalMode = useCallback(() => {
@@ -156,5 +198,20 @@ export function useChatComposerModeController({
     thinkingMenuOpen,
     toggleUsagePanel,
     usagePanelOpen,
+  };
+}
+
+function createModelThinkingSelectionState(
+  modelCapabilities: ReturnType<typeof createChatComposerModelCapabilities>,
+): ModelThinkingSelectionState {
+  const storedSelection = modelCapabilities.preferenceKey
+    ? readChatThinkingPreference(modelCapabilities.preferenceKey)
+    : null;
+  return {
+    modelKey: modelCapabilities.preferenceKey,
+    selection: normalizeChatThinkingSelection(
+      storedSelection ?? emptyChatThinkingSelection,
+      modelCapabilities.thinking,
+    ),
   };
 }

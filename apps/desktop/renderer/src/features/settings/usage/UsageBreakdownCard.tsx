@@ -1,5 +1,4 @@
 import type { ProviderConfigState, RuntimeUsageBucket } from '@setsuna-desktop/contracts';
-import { Boxes, Building2 } from 'lucide-react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { formatTokens } from '../../workspace/model.js';
@@ -27,16 +26,12 @@ export function UsageBreakdownCard({ buckets, providers, totalTokens, variant }:
         subtitle: t('settings.usage.modelSubtitle'),
         title: t('settings.usage.modelTitle'),
       };
-  const Icon = variant === 'provider' ? Building2 : Boxes;
   const visibleBuckets = buckets.slice(0, 6);
   const maximumTokens = Math.max(1, ...visibleBuckets.map((bucket) => bucket.totalTokens));
 
   return (
     <section className="settings-usage-card settings-usage-breakdown" aria-labelledby={`settings-usage-${variant}-title`}>
-      <header className="settings-usage-card__header">
-        <span className="settings-usage-card__icon" aria-hidden="true">
-          <Icon size={16} strokeWidth={1.8} />
-        </span>
+      <header className="settings-usage-card__header settings-usage-card__header--plain">
         <div>
           <strong id={`settings-usage-${variant}-title`}>{copy.title}</strong>
           <span>{copy.subtitle}</span>

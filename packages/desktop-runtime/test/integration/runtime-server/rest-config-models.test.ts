@@ -79,13 +79,9 @@ describe('runtime server REST config and model discovery', () => {
   
   it('returns real host dependency status without provisioning during startup', async () => {
       const status = await harness.runtimeFetch('/v1/workspace-dependencies');
-      const disabled = await harness.runtimeFetch('/v1/workspace-dependencies', {
-        method: 'PUT',
-        body: JSON.stringify({ enabled: false }),
-      });
+      const diagnosed = await harness.runtimeFetch('/v1/workspace-dependencies/diagnose', { method: 'POST' });
   
       expect(status).toMatchObject({
-        enabled: true,
         checks: expect.arrayContaining([
           expect.objectContaining({ id: 'sandbox', status: 'ok' }),
         ]),
@@ -99,17 +95,7 @@ describe('runtime server REST config and model discovery', () => {
         'toolchain',
         'manifest.json',
       ))).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(disabled).toMatchObject({ enabled: false, state: 'disabled' });
-  
-      const invalidResponse = await fetch(`${harness.baseUrl}/v1/workspace-dependencies`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${harness.token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ enabled: 'yes' }),
-      });
-      expect(invalidResponse.status).toBe(400);
+      expect(diagnosed).toMatchObject({ state: status.state });
     });
   
   it('fetches models with the selected provider saved API key', async () => {

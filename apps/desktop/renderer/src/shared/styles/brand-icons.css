@@ -47,7 +47,6 @@
   border: 1px solid color-mix(in srgb, var(--app-border) 52%, transparent);
   border-radius: 9px;
   background: color-mix(in srgb, var(--app-bg) 76%, var(--app-surface));
-  font-family: var(--app-code-font-family);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: -0.03em;

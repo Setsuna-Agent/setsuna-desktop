@@ -1,0 +1,152 @@
+.settings-usage-time-filter-popover .ant-popover-container {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border-radius: 14px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-popover);
+  overflow: hidden;
+}
+
+.settings-usage-time-filter-popover .ant-popover-arrow::before {
+  background: var(--app-surface);
+}
+
+.settings-usage-custom-range {
+  display: grid;
+  min-width: 0;
+}
+
+.settings-usage-custom-range__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 14px 6px;
+  background: transparent;
+}
+
+.settings-usage-custom-range__header-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, var(--app-surface));
+}
+
+.settings-usage-custom-range__header > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.settings-usage-custom-range__header strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+}
+
+.settings-usage-custom-range__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 14px;
+}
+
+.settings-usage-custom-range__field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface-subtle);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+
+.settings-usage-custom-range__field:focus-within {
+  border-color: color-mix(in srgb, var(--app-primary) 55%, var(--app-border));
+  background: var(--app-surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 8%, transparent);
+}
+
+.settings-usage-custom-range__field > span {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+}
+
+.settings-usage-custom-range__field input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  color: var(--app-text);
+  background: transparent;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 20px;
+}
+
+.settings-usage-custom-range__field input::placeholder {
+  color: var(--app-text-subtle);
+}
+
+.settings-usage-custom-range__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+  padding: 6px 14px 10px;
+  background: transparent;
+}
+
+.settings-usage-custom-range__actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.settings-usage-custom-range__actions button {
+  min-width: 58px;
+  height: 29px;
+  padding: 4px 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  color: var(--app-text-muted);
+  background: var(--app-surface);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.settings-usage-custom-range__actions button:hover:not(:disabled) {
+  color: var(--app-text);
+  background: var(--app-surface-muted);
+}
+
+.settings-usage-custom-range__actions button.is-primary {
+  border-color: var(--app-primary);
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+}
+
+.settings-usage-custom-range__actions button.is-primary:hover:not(:disabled) {
+  color: var(--app-primary-text);
+  background: var(--app-primary-hover);
+}
+
+.settings-usage-custom-range__actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

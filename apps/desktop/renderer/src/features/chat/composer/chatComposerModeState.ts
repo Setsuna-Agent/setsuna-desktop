@@ -1,4 +1,5 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { chatModelOptionKey } from './chatModelOptions.js';
 
 export type ChatComposerSendIntent = 'message' | 'goal' | 'review';
 
@@ -18,6 +19,7 @@ export type ChatThinkingSelection = {
 };
 
 export type ChatComposerModelCapabilities = {
+  preferenceKey: string | null;
   name: string | null;
   supportsImageInput: boolean;
   thinking: ChatThinkingConfig;
@@ -43,6 +45,9 @@ export function createChatComposerModelCapabilities(
     : '';
 
   return {
+    preferenceKey: provider && model
+      ? chatModelOptionKey(provider.id, model.id)
+      : null,
     name: model?.name ?? null,
     supportsImageInput: Boolean(model?.supportsImages),
     thinking: {
