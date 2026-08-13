@@ -22,6 +22,8 @@ export type DeliverMailboxInput = {
   fromAgentId?: string;
   fromThreadId?: string;
   id?: string;
+  /** Internal callers can reject delivery instead of leaving a retry in the idle queue. */
+  queueIfBusy?: boolean;
   toAgentId?: string;
   triggerTurn?: boolean;
 };
@@ -155,7 +157,12 @@ export class RuntimeTurnInputCoordinator {
       triggerTurn: triggerTurn || undefined,
     };
 
-    if (active && !active.controller.signal.aborted && !turnTaskCanReceiveMailbox(active) && input.expectedTurnId) {
+    if (
+      active
+      && !active.controller.signal.aborted
+      && !turnTaskCanReceiveMailbox(active)
+      && (input.expectedTurnId || input.queueIfBusy === false)
+    ) {
       throw new Error(`active ${active.taskKind} turn cannot receive mailbox input`);
     }
     if (active && !active.controller.signal.aborted && turnTaskCanReceiveMailbox(active)) {
@@ -191,6 +198,10 @@ export class RuntimeTurnInputCoordinator {
       const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId };
+    }
+
+    if (input.queueIfBusy === false) {
+      throw new Error('mailbox input cannot be queued while the thread is busy');
     }
 
     this.queueIdleMailbox(threadId, delivery);

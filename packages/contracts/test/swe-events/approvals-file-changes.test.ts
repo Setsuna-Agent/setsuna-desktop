@@ -535,7 +535,7 @@ describe('runtime AppServer SWE approvals and file changes', () => {
       }]);
     });
 
-  it('keeps runtime-owned approvals out of interactive AppServer requests', () => {
+  it('exposes runtime-owned review ids without creating interactive AppServer requests', () => {
       const requested: RuntimeEvent = {
         id: 'event_automatic_requested',
         seq: 1,
@@ -567,16 +567,69 @@ describe('runtime AppServer SWE approvals and file changes', () => {
         createdAt: '2026-06-27T00:00:01.000Z',
         payload: {
           approvalId: 'approval_automatic',
-          decision: 'cancel',
-          source: 'system',
+          decision: 'reject',
+          source: 'automatic',
+          assessment: {
+            status: 'denied',
+            riskLevel: 'high',
+            userAuthorization: 'unknown',
+            rationale: 'The command was not authorized.',
+          },
         },
       };
 
-      expect(runtimeEventsToSweNotifications([requested, resolved])).toEqual([]);
-      expect(runtimeEventToSweNotifications(requested)).toEqual([]);
+      expect(runtimeEventsToSweNotifications([requested, resolved])).toEqual([
+        {
+          method: 'item/autoApprovalReview/started',
+          params: {
+            action: {
+              type: 'command',
+              command: 'pwd',
+              cwd: '.',
+              source: 'shell',
+            },
+            review: { status: 'inProgress' },
+            reviewId: 'approval_automatic',
+            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+            targetItemId: 'call_automatic',
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+          },
+        },
+        {
+          method: 'item/autoApprovalReview/completed',
+          params: {
+            action: {
+              type: 'command',
+              command: 'pwd',
+              cwd: '.',
+              source: 'shell',
+            },
+            completedAtMs: Date.parse('2026-06-27T00:00:01.000Z'),
+            decisionSource: 'agent',
+            review: {
+              status: 'denied',
+              riskLevel: 'high',
+              userAuthorization: 'unknown',
+              rationale: 'The command was not authorized.',
+            },
+            reviewId: 'approval_automatic',
+            startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+            targetItemId: 'call_automatic',
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+          },
+        },
+      ]);
+      expect(runtimeEventToSweNotifications(requested)).toEqual([
+        expect.objectContaining({
+          method: 'item/autoApprovalReview/started',
+          params: expect.objectContaining({ reviewId: 'approval_automatic' }),
+        }),
+      ]);
       expect(runtimeEventToSweNotifications({
         ...resolved,
-        payload: { ...resolved.payload, decision: 'reject', source: 'automatic' },
+        payload: { ...resolved.payload, source: 'automatic' },
       })).toEqual([]);
     });
   

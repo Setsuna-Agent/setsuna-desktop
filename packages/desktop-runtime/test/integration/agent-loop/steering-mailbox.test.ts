@@ -104,7 +104,14 @@ describe('agent loop turn steering and mailbox input', () => {
         fromAgentId: 'agent_child',
         content: 'this should not attach to a shell task',
       })).rejects.toThrow('active user_shell turn cannot receive mailbox input');
-  
+
+      await expect(loop.deliverMailboxInput(thread.id, {
+        id: 'mail_shell_no_queue',
+        fromAgentId: 'runtime-auto-review',
+        content: 'do not let this retry outlive its authorization',
+        queueIfBusy: false,
+      })).rejects.toThrow('active user_shell turn cannot receive mailbox input');
+
       await expect(loop.deliverMailboxInput(thread.id, {
         id: 'mail_shell_queue',
         fromAgentId: 'agent_child',

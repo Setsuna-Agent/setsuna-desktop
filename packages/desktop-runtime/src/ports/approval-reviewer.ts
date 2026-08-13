@@ -19,8 +19,10 @@ export type ApprovalReviewResult = {
 
 export type ApprovalReviewer = {
   review(input: ApprovalReviewInput): Promise<ApprovalReviewResult>;
-  /** Registers one user-authorized retry without retaining the exact action payload. */
+  /** Reserves one user-authorized retry without retaining the exact action payload. */
   approveDeniedAction?(approvalId: string): ApprovalDeniedActionOverride | null;
+  /** Binds the reserved retry to the only turn allowed to consume it. */
+  activateDeniedActionApproval?(approvalId: string, eligibleTurnId: string): boolean;
   cancelDeniedActionApproval?(approvalId: string): void;
 };
 

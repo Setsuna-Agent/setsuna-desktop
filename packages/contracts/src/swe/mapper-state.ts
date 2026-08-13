@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../events.js';
+import type { RuntimeApprovalRequest } from '../approvals.js';
 import type { RuntimeMailboxDeliveryRecord, RuntimeMessage, RuntimeThreadTurn } from '../threads.js';
 import type { SweThreadItem, SweThreadStatus, SweTokenUsageBreakdown } from './types.js';
 
@@ -15,7 +16,7 @@ export type SweMapperState = {
   threadRuntime: Map<string, ThreadRuntimeState>;
   planMessageIds: Set<string>;
   planItemsByMessageId: Map<string, SweThreadItem>;
-  runtimeOwnedApprovalIds: Map<string, string>;
+  runtimeOwnedApprovals: Map<string, RuntimeApprovalRequest>;
   turnPlanItemIds: Map<string, string>;
 };
 

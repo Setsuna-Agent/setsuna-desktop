@@ -66,11 +66,16 @@ type DeniedApprovalAction = {
   turnId: string;
 };
 
+type RegisteredOverride = {
+  approvalId: string;
+  eligibleTurnId: string;
+};
+
 /** Runs a narrow, tool-free model request for permission-boundary decisions. */
 export class AutomaticApprovalReviewer implements ApprovalReviewer {
   private readonly turnReviews = new Map<string, TurnReviewState>();
   private readonly deniedApprovals = new Map<string, DeniedApprovalAction>();
-  private readonly registeredOverrides = new Map<string, string>();
+  private readonly registeredOverrides = new Map<string, RegisteredOverride>();
 
   constructor(private readonly options: AutomaticApprovalReviewerOptions) {}
 
@@ -97,8 +102,11 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     const overrideKey = actionIdentity
       ? deniedActionOverrideKey(input.request.threadId, actionIdentity)
       : null;
-    const overrideApprovalId = overrideKey
+    const registeredOverride = overrideKey
       ? this.registeredOverrides.get(overrideKey)
+      : undefined;
+    const overrideApprovalId = registeredOverride?.eligibleTurnId === input.request.turnId
+      ? registeredOverride.approvalId
       : undefined;
     const prompt = buildApprovalReviewPrompt(
       input,
@@ -109,7 +117,12 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     if ('unavailableReason' in prompt) {
       return this.failedResult(input.request.turnId, prompt.unavailableReason, modelRequest);
     }
-    if (overrideKey && overrideApprovalId) this.registeredOverrides.delete(overrideKey);
+    if (overrideApprovalId) {
+      const overridden = this.deniedApprovals.get(overrideApprovalId);
+      if (overridden) {
+        this.retireDeniedApprovals(overridden.threadId, overridden.identity);
+      }
+    }
 
     const priorDenial = actionIdentity
       ? this.turnReviews.get(input.request.turnId)?.deniedActions.get(actionIdentity)
@@ -268,6 +281,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       this.recordDeniedApproval(reviewedAction, turnId);
     } else if (reviewedAction) {
       state.deniedActions.delete(reviewedAction.identity);
+      this.retireDeniedApprovals(reviewedAction.threadId, reviewedAction.identity);
     }
     if (includeInHistory) {
       state.history.push(denied);
@@ -301,10 +315,6 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       };
     }
     denied.overrideRegistered = true;
-    this.registeredOverrides.set(
-      deniedActionOverrideKey(denied.threadId, denied.identity),
-      approvalId,
-    );
     return {
       alreadyRegistered: false,
       threadId: denied.threadId,
@@ -312,12 +322,23 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
     };
   }
 
+  activateDeniedActionApproval(approvalId: string, eligibleTurnId: string): boolean {
+    const denied = this.deniedApprovals.get(approvalId);
+    if (!denied?.overrideRegistered || !eligibleTurnId) return false;
+    const key = deniedActionOverrideKey(denied.threadId, denied.identity);
+    const existing = this.registeredOverrides.get(key);
+    if (existing && existing.approvalId !== approvalId) return false;
+    this.registeredOverrides.set(key, { approvalId, eligibleTurnId });
+    return true;
+  }
+
   cancelDeniedActionApproval(approvalId: string): void {
     const denied = this.deniedApprovals.get(approvalId);
     if (!denied?.overrideRegistered) return;
     const key = deniedActionOverrideKey(denied.threadId, denied.identity);
-    if (this.registeredOverrides.get(key) !== approvalId) return;
-    this.registeredOverrides.delete(key);
+    if (this.registeredOverrides.get(key)?.approvalId === approvalId) {
+      this.registeredOverrides.delete(key);
+    }
     denied.overrideRegistered = false;
   }
 
@@ -339,11 +360,29 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       const oldest = this.deniedApprovals.get(oldestApprovalId);
       if (oldest) {
         const key = deniedActionOverrideKey(oldest.threadId, oldest.identity);
-        if (this.registeredOverrides.get(key) === oldestApprovalId) {
+        if (this.registeredOverrides.get(key)?.approvalId === oldestApprovalId) {
           this.registeredOverrides.delete(key);
         }
       }
       this.deniedApprovals.delete(oldestApprovalId);
+    }
+  }
+
+  private retireDeniedApproval(approvalId: string): void {
+    const denied = this.deniedApprovals.get(approvalId);
+    if (!denied) return;
+    const key = deniedActionOverrideKey(denied.threadId, denied.identity);
+    if (this.registeredOverrides.get(key)?.approvalId === approvalId) {
+      this.registeredOverrides.delete(key);
+    }
+    this.deniedApprovals.delete(approvalId);
+  }
+
+  private retireDeniedApprovals(threadId: string, identity: string): void {
+    for (const [approvalId, denied] of this.deniedApprovals) {
+      if (denied.threadId === threadId && denied.identity === identity) {
+        this.retireDeniedApproval(approvalId);
+      }
     }
   }
 

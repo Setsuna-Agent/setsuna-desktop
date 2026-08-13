@@ -3,7 +3,7 @@ import { AutomaticApprovalOverrideCoordinator } from '../../../src/loop/approval
 import type { ApprovalReviewer } from '../../../src/ports/approval-reviewer.js';
 
 describe('automatic approval override coordinator', () => {
-  it('records one override event and queues one retry turn idempotently', async () => {
+  it('records one override event and binds one model-only retry turn idempotently', async () => {
     const approveDeniedAction = vi.fn()
       .mockReturnValueOnce({
         alreadyRegistered: false,
@@ -16,16 +16,18 @@ describe('automatic approval override coordinator', () => {
         turnId: 'turn_denied',
       });
     const append = vi.fn(async () => null);
-    const startTurn = vi.fn(async () => ({ accepted: true as const, turnId: 'turn_retry' }));
+    const activateDeniedActionApproval = vi.fn(() => true);
+    const deliverRetryInstruction = vi.fn(async () => ({ turnId: 'turn_retry' }));
     const coordinator = new AutomaticApprovalOverrideCoordinator({
       clock: { now: () => new Date('2026-08-13T00:00:00.000Z') },
       eventWriter: { append },
       ids: { id: () => 'event_override' },
       reviewer: {
         approveDeniedAction,
+        activateDeniedActionApproval,
         review: vi.fn(),
       } as unknown as ApprovalReviewer,
-      startTurn,
+      deliverRetryInstruction,
     });
 
     await expect(coordinator.approveDeniedAction('approval_1')).resolves.toBe(true);
@@ -38,10 +40,12 @@ describe('automatic approval override coordinator', () => {
       type: 'approval.override_registered',
       payload: { approvalId: 'approval_1' },
     }));
-    expect(startTurn).toHaveBeenCalledOnce();
-    expect(startTurn).toHaveBeenCalledWith('thread_1', {
-      input: expect.stringContaining('Retry only that exact action.'),
-    });
+    expect(deliverRetryInstruction).toHaveBeenCalledOnce();
+    expect(deliverRetryInstruction).toHaveBeenCalledWith(
+      'thread_1',
+      expect.stringContaining('Retry only that exact action.'),
+    );
+    expect(activateDeniedActionApproval).toHaveBeenCalledWith('approval_1', 'turn_retry');
   });
 
   it('returns the one-time token when the retry turn cannot be queued', async () => {
@@ -57,10 +61,11 @@ describe('automatic approval override coordinator', () => {
           threadId: 'thread_1',
           turnId: 'turn_denied',
         }),
+        activateDeniedActionApproval: vi.fn(() => true),
         cancelDeniedActionApproval,
         review: vi.fn(),
       } as unknown as ApprovalReviewer,
-      startTurn: async () => {
+      deliverRetryInstruction: async () => {
         throw new Error('Thread was deleted.');
       },
     });
@@ -73,7 +78,7 @@ describe('automatic approval override coordinator', () => {
 
   it('rejects an app-server thread mismatch without consuming the token', async () => {
     const cancelDeniedActionApproval = vi.fn();
-    const startTurn = vi.fn();
+    const deliverRetryInstruction = vi.fn();
     const coordinator = new AutomaticApprovalOverrideCoordinator({
       clock: { now: () => new Date('2026-08-13T00:00:00.000Z') },
       eventWriter: { append: vi.fn(async () => null) },
@@ -87,12 +92,12 @@ describe('automatic approval override coordinator', () => {
         cancelDeniedActionApproval,
         review: vi.fn(),
       } as unknown as ApprovalReviewer,
-      startTurn,
+      deliverRetryInstruction,
     });
 
     await expect(coordinator.approveDeniedAction('approval_1', 'thread_other'))
       .resolves.toBe(false);
     expect(cancelDeniedActionApproval).toHaveBeenCalledWith('approval_1');
-    expect(startTurn).not.toHaveBeenCalled();
+    expect(deliverRetryInstruction).not.toHaveBeenCalled();
   });
 });

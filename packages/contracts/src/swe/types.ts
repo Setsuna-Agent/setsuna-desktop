@@ -77,6 +77,27 @@ export type SweCommandAction =
   | { type: 'search'; command: string; query: string | null; path: string | null }
   | { type: 'unknown'; command: string };
 
+export type SweGuardianApprovalReviewStatus =
+  | 'inProgress'
+  | 'approved'
+  | 'denied'
+  | 'timedOut'
+  | 'aborted';
+
+export type SweGuardianApprovalReview = {
+  status: SweGuardianApprovalReviewStatus;
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical' | null;
+  userAuthorization?: 'unknown' | 'low' | 'medium' | 'high' | null;
+  rationale?: string | null;
+};
+
+export type SweGuardianApprovalReviewAction =
+  | { type: 'command'; command: string; cwd: string; source: 'shell' | 'unifiedExec' }
+  | { type: 'applyPatch'; cwd: string; files: string[] }
+  | { type: 'networkAccess'; host: string; port: number; protocol: SweNetworkApprovalProtocol; target: string }
+  | { type: 'mcpToolCall'; server: string; toolName: string; connectorId?: string | null; connectorName?: string | null; toolTitle?: string | null }
+  | { type: 'requestPermissions'; permissions: Record<string, unknown>; reason?: string | null };
+
 export type SweFileUpdateChange = {
   path: string;
   kind: SwePatchChangeKind;
@@ -317,6 +338,32 @@ export type SweNotification =
   | {
       method: 'item/started';
       params: { threadId: string; turnId: string; item: SweThreadItem; startedAtMs: number };
+    }
+  | {
+      method: 'item/autoApprovalReview/started';
+      params: {
+        action: SweGuardianApprovalReviewAction;
+        review: SweGuardianApprovalReview;
+        reviewId: string;
+        startedAtMs: number;
+        targetItemId?: string | null;
+        threadId: string;
+        turnId: string;
+      };
+    }
+  | {
+      method: 'item/autoApprovalReview/completed';
+      params: {
+        action: SweGuardianApprovalReviewAction;
+        completedAtMs: number;
+        decisionSource: 'agent';
+        review: SweGuardianApprovalReview;
+        reviewId: string;
+        startedAtMs: number;
+        targetItemId?: string | null;
+        threadId: string;
+        turnId: string;
+      };
     }
   | {
       method: 'item/completed';

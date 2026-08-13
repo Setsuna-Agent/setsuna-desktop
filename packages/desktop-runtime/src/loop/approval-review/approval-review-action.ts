@@ -28,6 +28,7 @@ export function approvalReviewActionIdentity(input: ApprovalReviewInput): string
   const canonical = canonicalJson({
     toolName: input.request.toolName,
     environmentId: input.request.environmentId,
+    retryKind: input.request.retryKind,
     arguments: input.arguments,
     additionalPermissions: input.request.additionalPermissions,
     permissionApprovalContext: materialPermissionApprovalContext(input),
