@@ -216,6 +216,7 @@ export function useRuntimeCapabilityState({
     ): Promise<RuntimeSkillDetail> => {
       const updated = await client.updateSkill(skill.id, patch);
       setSkills((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      if (skill.kind === 'plugin') setPlugins((await client.listPlugins()).plugins);
       return updated;
     },
     [client],
@@ -242,6 +243,7 @@ export function useRuntimeCapabilityState({
     async (skill: RuntimeSkillSummary): Promise<void> => {
       await client.deleteSkill(skill.id);
       setSkills((items) => items.filter((item) => item.id !== skill.id));
+      if (skill.kind === 'plugin') setPlugins((await client.listPlugins()).plugins);
     },
     [client],
   );
@@ -300,7 +302,7 @@ export function useRuntimeCapabilityState({
   const updateMcpServer = useCallback(
     async (
       server: RuntimeMcpServer,
-      patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>,
+      patch: Pick<RuntimeMcpServer, 'enabled'>,
     ) => {
       const next = await client.updateMcpServer(server.key, patch);
       setMcpState(next);

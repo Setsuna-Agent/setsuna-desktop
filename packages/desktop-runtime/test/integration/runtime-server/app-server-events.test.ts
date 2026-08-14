@@ -64,7 +64,6 @@ describe('runtime server AppServer events and shell turns', () => {
           body: JSON.stringify({
             name: 'Runtime API Skill',
             content: '# Runtime API Skill\n\nInjected via per-turn skill ids.',
-            selected: false,
           }),
         });
         const thread = await harness.runtimeFetch('/v1/threads', {

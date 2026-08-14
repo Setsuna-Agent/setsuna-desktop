@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { RuntimePromptContextAssembler } from '../../../src/loop/context/runtime-prompt-context-assembler.js';
 
 describe('RuntimePromptContextAssembler', () => {
-  it('prioritizes explicitly selected skills when the full-content budget is exhausted', async () => {
+  it('prioritizes explicitly selected skills over automatic activations when the full-content budget is exhausted', async () => {
     let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
       memory: { contextMessages: async () => [] },
@@ -16,13 +16,13 @@ describe('RuntimePromptContextAssembler', () => {
       skillRegistry: {
         resolvePromptContext: async () => ({
           availableSkills: [
-            { id: 'default', name: 'Default Skill', description: 'Always-on guidance', kind: 'user', enabled: true, selected: true, path: '/skills/default/SKILL.md' },
-            { id: 'explicit', name: 'Explicit Skill', description: 'Explicit workflow', kind: 'plugin', enabled: true, selected: false, path: '/skills/explicit/SKILL.md' },
-            { id: 'available', name: 'Available Skill', description: 'Use for deployment checks', kind: 'user', enabled: true, selected: false, path: '/skills/available/SKILL.md' },
-            { id: 'disabled', name: 'Disabled Skill', kind: 'user', enabled: false, selected: false },
+            { id: 'automatic', name: 'Automatic Skill', description: 'Automatically activated guidance', kind: 'plugin', enabled: true, path: '/skills/automatic/SKILL.md' },
+            { id: 'explicit', name: 'Explicit Skill', description: 'Explicit workflow', kind: 'plugin', enabled: true, path: '/skills/explicit/SKILL.md' },
+            { id: 'available', name: 'Available Skill', description: 'Use for deployment checks', kind: 'user', enabled: true, path: '/skills/available/SKILL.md' },
+            { id: 'disabled', name: 'Disabled Skill', kind: 'user', enabled: false },
           ],
           selectedInjections: [
-            { id: 'default', name: 'Default Skill', content: '12345', path: '/skills/default/SKILL.md' },
+            { id: 'automatic', name: 'Automatic Skill', content: '12345', path: '/skills/automatic/SKILL.md' },
             {
               id: 'explicit',
               name: 'Explicit Skill',
@@ -68,17 +68,17 @@ describe('RuntimePromptContextAssembler', () => {
 
     const catalog = result.fragments.find((fragment) => fragment.id === 'desktop_available_skills');
     const explicit = result.fragments.find((fragment) => fragment.id === 'skill_explicit');
-    const defaultSkill = result.fragments.find((fragment) => fragment.id === 'skill_default');
+    const automaticSkill = result.fragments.find((fragment) => fragment.id === 'skill_automatic');
     expect(explicit?.content).toContain('abcde');
     expect(explicit?.content).toContain('install_skill_mcp_dependencies');
     expect(explicit?.content).toContain('- docs: missing');
-    expect(defaultSkill?.content).toContain('budget was exhausted');
-    expect(defaultSkill?.content).toContain('read_skill');
+    expect(automaticSkill?.content).toContain('budget was exhausted');
+    expect(automaticSkill?.content).toContain('read_skill');
     expect(catalog).toMatchObject({ role: 'developer', source: 'skill', trust: 'user' });
     expect(catalog?.content).toContain('"id":"available"');
     expect(catalog?.content).toContain('Use for deployment checks');
     expect(catalog?.content).not.toContain('"id":"disabled"');
-    expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'default']);
+    expect(result.selectedSkills.map((skill) => skill.id)).toEqual(['explicit', 'automatic']);
     expect(result.selectedSkills[0]?.plugin).toEqual({ id: 'documents', name: 'Documents', icon: 'documents' });
     expect(instructionEnvironment).toBe(environment);
     expect(result.fragments.find((fragment) => fragment.id === 'desktop_runtime_environment')).toMatchObject({

@@ -1,10 +1,8 @@
 import type {
-  RuntimeMcpRequireApproval,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpToolInfo,
   RuntimeMcpTransport,
-  RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
 import { Loader2, RefreshCw, Save } from 'lucide-react';
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
@@ -101,7 +99,7 @@ export function CapabilitiesMcpEditor({
             disabled={saving || !draft.key.trim() || editingMcpServer?.readOnly}
             onClick={() => void onSave()}
           >
-            {saving ? t('capabilities.common.saving') : editingMcpServer ? t('capabilities.mcp.editor.saveChanges') : t('common.save')}
+            {saving ? t('capabilities.common.saving') : t('common.save')}
           </Button>
         }
       />
@@ -121,39 +119,9 @@ export function CapabilitiesMcpEditor({
             <option value="streamableHttp">streamable HTTP</option>
           </SelectField>
         </McpFormField>
-        <McpFormField label={t('capabilities.mcp.approval')} help={t('capabilities.mcp.approvalHelp')}>
-          <SelectField
-            value={draft.requireApproval}
-            onValueChange={(nextValue) => setDraftField(setDraft, 'requireApproval', nextValue as RuntimeMcpRequireApproval)}
-          >
-            <option value="auto">{t('capabilities.mcp.approval.auto')}</option>
-            <option value="prompt">{t('capabilities.mcp.approval.prompt')}</option>
-            <option value="approve">{t('capabilities.mcp.approval.approve')}</option>
-          </SelectField>
-        </McpFormField>
-        <McpFormField label={t('capabilities.mcp.trust')} help={t('capabilities.mcp.trustHelp')}>
-          <SelectField
-            value={draft.trustLevel}
-            onValueChange={(nextValue) => setDraftField(setDraft, 'trustLevel', nextValue as RuntimeMcpTrustLevel)}
-          >
-            <option value="untrusted">{t('capabilities.mcp.trust.untrusted')}</option>
-            <option value="trusted">{t('capabilities.mcp.trust.trusted')}</option>
-          </SelectField>
-        </McpFormField>
         <McpFormField className="desktop-capabilities-mcp-form__full" label={t('capabilities.mcp.description')}>
           <TextField value={draft.description} onChange={(event) => setDraftField(setDraft, 'description', event.target.value)} placeholder={t('capabilities.mcp.descriptionPlaceholder')} />
         </McpFormField>
-        <div className="desktop-capabilities-mcp-form__switches">
-          <label className="sd-check" title={t('capabilities.mcp.enableHint')}>
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraftField(setDraft, 'enabled', event.currentTarget.checked)} />
-            <span>{t('capabilities.mcp.enabled')}</span>
-          </label>
-          <label className="sd-check" title={t('capabilities.mcp.requiredHint')}>
-            <input type="checkbox" checked={draft.required} onChange={(event) => setDraftField(setDraft, 'required', event.currentTarget.checked)} />
-            <span>{t('capabilities.mcp.required')}</span>
-          </label>
-          <p>{t('capabilities.mcp.flagsHelp')}</p>
-        </div>
         {draft.transport === 'stdio' ? (
           <>
             <McpFormField label={t('capabilities.mcp.command')}>

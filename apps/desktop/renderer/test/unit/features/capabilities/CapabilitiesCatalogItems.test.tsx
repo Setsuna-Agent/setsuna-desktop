@@ -12,22 +12,19 @@ import {
   CapabilitiesMcpListItem,
   CapabilitiesSkillListItem,
 } from '../../../../src/features/capabilities/CapabilitiesCatalogItems.js';
+import { CapabilitiesSkillCatalog } from '../../../../src/features/capabilities/CapabilitiesSkillCatalog.js';
 import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 afterEach(cleanup);
 
 describe('capability catalog list items', () => {
   it('keeps MCP controls in the shared borderless list item', async () => {
-    const onEdit = vi.fn();
+    const onOpen = vi.fn();
     const onUpdate = vi.fn();
     renderWithI18n(
       <CapabilitiesMcpListItem
-        authPending={false}
         server={mcpServer}
-        onDelete={() => undefined}
-        onEdit={onEdit}
-        onLogin={() => undefined}
-        onLogout={() => undefined}
+        onOpen={onOpen}
         onUpdate={onUpdate}
       />,
     );
@@ -36,36 +33,32 @@ describe('capability catalog list items', () => {
     expect(document.querySelector('.desktop-capability-card')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Docs MCP' }));
     await userEvent.click(screen.getByRole('checkbox', { name: '启用' }));
-    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onOpen).toHaveBeenCalledOnce();
     expect(onUpdate).toHaveBeenCalledWith({ enabled: false });
   });
 
-  it('keeps Skill navigation and selection controls in the shared list item', async () => {
+  it('keeps Skill navigation and enable controls in the shared list item', async () => {
     const onOpen = vi.fn();
     const onUpdate = vi.fn();
     renderWithI18n(
       <CapabilitiesSkillListItem
-        dependencyPending={false}
         skill={skill}
-        onAuthenticateDependency={() => undefined}
-        onEdit={() => undefined}
-        onInstallDependencies={() => undefined}
         onOpen={onOpen}
         onUpdate={onUpdate}
       />,
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Docs Skill' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: '默认使用' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: '启用' }));
     expect(document.querySelector('[data-skill-icon="skill"]')).toBeTruthy();
+    expect(document.querySelector('.desktop-capability-list-item__actions')).toBeNull();
     expect(onOpen).toHaveBeenCalledOnce();
-    expect(onUpdate).toHaveBeenCalledWith({ selected: false });
+    expect(onUpdate).toHaveBeenCalledWith({ enabled: false });
   });
 
   it('uses the owning Plugin icon for Plugin Skills', () => {
     renderWithI18n(
       <CapabilitiesSkillListItem
-        dependencyPending={false}
         skill={{
           ...skill,
           id: 'documents.documents',
@@ -73,9 +66,6 @@ describe('capability catalog list items', () => {
           kind: 'plugin',
           pluginId: 'documents',
         }}
-        onAuthenticateDependency={() => undefined}
-        onEdit={() => undefined}
-        onInstallDependencies={() => undefined}
         onOpen={() => undefined}
         onUpdate={() => undefined}
       />,
@@ -83,6 +73,26 @@ describe('capability catalog list items', () => {
 
     expect(document.querySelector('[data-plugin-icon="documents"]')).toBeTruthy();
     expect(document.querySelector('[data-skill-icon="skill"]')).toBeNull();
+  });
+
+  it('groups Skills by built-in, Plugin, and personal ownership', () => {
+    renderWithI18n(
+      <CapabilitiesSkillCatalog
+        skills={[
+          { ...skill, id: 'personal', name: 'Personal', kind: 'user' },
+          { ...skill, id: 'plugin', name: 'Plugin', kind: 'plugin', pluginId: 'docs' },
+          { ...skill, id: 'builtin', name: 'Built-in', kind: 'builtin' },
+        ]}
+        onOpen={() => undefined}
+        onUpdate={() => undefined}
+      />,
+    );
+
+    expect(screen.getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      '个人 Skill',
+      '插件提供的 Skill',
+      '内置 Skill',
+    ]);
   });
 
 });
@@ -101,9 +111,6 @@ const mcpServer: RuntimeMcpServer = {
   timeoutMs: 30_000,
   startupTimeoutMs: 30_000,
   toolTimeoutMs: 30_000,
-  required: false,
-  requireApproval: 'auto',
-  trustLevel: 'untrusted',
   enabled: true,
   allowedTools: [],
   disabledTools: [],
@@ -121,6 +128,5 @@ const skill: RuntimeSkillSummary = {
   description: 'Search project documentation.',
   kind: 'user',
   enabled: true,
-  selected: true,
   mcpDependencies: [],
 };

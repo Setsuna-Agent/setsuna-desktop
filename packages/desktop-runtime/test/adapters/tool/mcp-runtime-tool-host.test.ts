@@ -76,7 +76,6 @@ describe('mcp runtime tool host', () => {
       transport: 'streamableHttp',
       url: mcpServer.baseUrl,
       headers: { Authorization: 'Bearer secret' },
-      requireApproval: 'approve',
       tools: [
         {
           name: 'search_web',
@@ -102,8 +101,6 @@ describe('mcp runtime tool host', () => {
           inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
         }),
       ]);
-      await expect(host.approvalForTool('mcp__search__search_web', { query: 'setsuna' }, context)).resolves.toBeNull();
-
       const result = await host.runTool('mcp__search__search_web', { query: 'setsuna' }, context);
       expect(result.content).toBe('result for setsuna');
       expect(result.data).toMatchObject({ serverKey: 'search', toolName: 'search_web' });
@@ -134,7 +131,6 @@ describe('mcp runtime tool host', () => {
       headers: { 'X-Static': 'static-value' },
       envHttpHeaders: { 'X-Account': 'SETSUNA_MCP_RUNTIME_ACCOUNT' },
       bearerTokenEnvVar: 'SETSUNA_MCP_RUNTIME_TOKEN',
-      requireApproval: 'approve',
       tools: [{ name: 'search_web', description: 'Search the web' }],
     });
 
@@ -160,76 +156,6 @@ describe('mcp runtime tool host', () => {
     }
   });
 
-  it('uses codex-style MCP approval modes', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
-    await store.upsertServer({
-      key: 'search',
-      label: 'Search MCP',
-      transport: 'streamableHttp',
-      url: 'https://example.com/mcp',
-      requireApproval: 'auto',
-      tools: [
-        { name: 'fetchWebContent', description: 'Fetch URL content', annotations: { openWorldHint: true } },
-        { name: 'read_status', description: 'Read status', annotations: { readOnlyHint: true } },
-        { name: 'local_index', description: 'Read local index', annotations: { destructive_hint: false, open_world_hint: false } },
-        { name: 'force_prompt', description: 'Always prompt', annotations: { readOnlyHint: true }, approvalMode: 'prompt' },
-        { name: 'trusted_write', description: 'Trusted write', approvalMode: 'approve' },
-        { name: 'write_note', description: 'Write a note' },
-      ],
-    });
-
-    const host = new McpRuntimeToolHost(store, storedInventoryMcpClient());
-    const context = { threadId: 'thread_1', turnId: 'turn_1' };
-
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, context)).resolves.toMatchObject({
-      reason: '调用 MCP 工具：Search MCP / fetchWebContent',
-      approvalKeys: ['mcp:search:fetchWebContent'],
-      persistentApprovalKeys: ['mcp:search:fetchWebContent'],
-    });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, context)).resolves.toMatchObject({
-      approvalKeys: ['mcp:search:read_status'],
-    });
-    await expect(host.approvalForTool('mcp__search__local_index', {}, context)).resolves.toMatchObject({
-      approvalKeys: ['mcp:search:local_index'],
-    });
-    await expect(host.approvalForTool('mcp__search__force_prompt', {}, context)).resolves.toEqual({
-      reason: '调用 MCP 工具：Search MCP / force_prompt',
-    });
-    await expect(host.approvalForTool('mcp__search__trusted_write', {}, context)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, context)).resolves.toMatchObject({
-      reason: '调用 MCP 工具：Search MCP / write_note',
-      approvalKeys: ['mcp:search:write_note'],
-      persistentApprovalKeys: ['mcp:search:write_note'],
-    });
-
-    await store.updateServer('search', { trustLevel: 'trusted' });
-    const trustedContext = { ...context, turnId: 'turn_trusted' };
-    await expect(host.approvalForTool('mcp__search__read_status', {}, trustedContext)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', {}, trustedContext)).resolves.toMatchObject({
-      approvalKeys: ['mcp:search:fetchWebContent'],
-    });
-    await expect(host.approvalForTool('mcp__search__force_prompt', {}, trustedContext)).resolves.toEqual({
-      reason: '调用 MCP 工具：Search MCP / force_prompt',
-    });
-
-    await store.updateServer('search', { requireApproval: 'prompt' });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, { ...context, turnId: 'turn_2' })).resolves.toEqual({
-      reason: '调用 MCP 工具：Search MCP / read_status',
-    });
-
-    await store.updateServer('search', { requireApproval: 'approve' });
-    const approvedContext = { ...context, turnId: 'turn_3' };
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, approvedContext)).resolves.toBeNull();
-    await expect(host.approvalForTool('mcp__search__write_note', { text: 'note' }, approvedContext)).resolves.toBeNull();
-
-    await store.updateServer('search', { requireApproval: 'always' });
-    await expect(host.approvalForTool('mcp__search__read_status', {}, { ...context, turnId: 'turn_4' })).resolves.toEqual({
-      reason: '调用 MCP 工具：Search MCP / read_status',
-    });
-
-    await store.updateServer('search', { requireApproval: 'never' });
-    await expect(host.approvalForTool('mcp__search__fetchWebContent', { url: 'https://example.com' }, { ...context, turnId: 'turn_5' })).resolves.toBeNull();
-  });
 });
 
 async function createCallableMcpServer(): Promise<{

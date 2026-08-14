@@ -60,7 +60,6 @@ function skill(id: string, description: string, path?: string): RuntimeSkillSumm
     contentVersion: `${id}-v1`,
     kind: 'user',
     enabled: true,
-    selected: false,
     description,
     ...(path ? { path } : {}),
   };

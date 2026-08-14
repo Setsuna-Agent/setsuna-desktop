@@ -28,6 +28,27 @@ export function installedPluginsOutsideCatalog(
     plugin.installationSource !== 'marketplace' || !catalogIds.has(plugin.id));
 }
 
+export function pluginMatchesQuery(
+  plugin: RuntimePluginMarketplaceItem | RuntimePluginSummary,
+  query: string,
+): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+  const searchableValues = [
+    plugin.id,
+    plugin.name,
+    plugin.description,
+    plugin.publisher,
+    ...(plugin.tags ?? []),
+    ...(plugin.tools ?? []).flatMap((tool) => [tool.name, tool.description]),
+    ...plugin.skills.flatMap((skill) => [skill.id, skill.name, skill.description]),
+    ...plugin.mcpServers.flatMap((server) => [server.key, server.label, server.description]),
+    ...plugin.hooks.flatMap((hook) => [hook.id, hook.name, hook.description]),
+    ...plugin.resources.flatMap((resource) => [resource.id, resource.label, resource.path]),
+  ];
+  return searchableValues.some((value) => value?.toLowerCase().includes(normalizedQuery));
+}
+
 export function pluginMarketplacePresentation(
   plugins: RuntimePluginMarketplaceItem[],
   t: Translate = defaultTranslate,

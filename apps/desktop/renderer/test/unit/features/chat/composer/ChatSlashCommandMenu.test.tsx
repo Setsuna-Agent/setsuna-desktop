@@ -20,14 +20,12 @@ describe('ChatSlashCommandMenu', () => {
               name: 'Goal Writer',
               kind: 'builtin',
               enabled: true,
-              selected: false,
             }),
             skillItem({
               id: 'openai-vision-recognition.vision-recognition',
               name: '视觉识别',
               kind: 'plugin',
               enabled: true,
-              selected: false,
               pluginId: 'openai-vision-recognition',
             }),
           ]}

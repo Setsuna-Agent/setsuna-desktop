@@ -13,7 +13,6 @@ const skill: RuntimeSkillSummary = {
   name: '对话创建插件',
   kind: 'builtin',
   enabled: true,
-  selected: false,
 };
 
 describe('ensureChatComposerSkillSlot', () => {

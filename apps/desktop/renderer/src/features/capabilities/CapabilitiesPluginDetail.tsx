@@ -11,6 +11,7 @@ import type {
   RuntimePluginItemKind,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
+  RuntimeSkillSummary,
   RuntimeVisionRecognitionConfigInput,
   RuntimeVisionRecognitionTestInput,
   RuntimeVisionRecognitionTestResult,
@@ -19,14 +20,16 @@ import {
   OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
 } from '@setsuna-desktop/contracts';
-import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
+import { Dropdown, type MenuProps } from 'antd';
+import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, MessageSquare, MoreHorizontal, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { Button, PageHeader } from '../../shared/ui/primitives.js';
+import { Button, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
+import { CapabilitiesPluginSkillItem } from './CapabilitiesPluginSkillItem.js';
 import { ImageGenerationPluginSettings } from './ImageGenerationPluginSettings.js';
 import { VisionRecognitionPluginSettings } from './VisionRecognitionPluginSettings.js';
 import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills, mergePluginTools } from './pluginDisplay.js';
@@ -42,13 +45,16 @@ export function CapabilitiesPluginDetail({
   installing,
   marketplacePlugin,
   runtimeMcpServers,
+  runtimeSkills,
   onBack,
   onGetItemContent,
   onInstall,
   onRemove,
+  onUseInConversation,
   onSetExtensionTrust,
   onSetHookEnabled,
   onSetHookTrust,
+  onSetSkillEnabled,
   onSaveImageGenerationConfig,
   onTestImageGeneration,
   onSaveVisionRecognitionConfig,
@@ -65,13 +71,16 @@ export function CapabilitiesPluginDetail({
   installing: boolean;
   marketplacePlugin?: RuntimePluginMarketplaceItem;
   runtimeMcpServers?: RuntimeMcpServer[];
+  runtimeSkills?: RuntimeSkillSummary[];
   onBack: () => void;
   onGetItemContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
+  onUseInConversation?: (skillId: string) => void;
   onSetExtensionTrust?: (plugin: RuntimePluginSummary, trusted: boolean) => Promise<void>;
   onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
   onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
+  onSetSkillEnabled?: (skill: RuntimeSkillSummary, enabled: boolean) => Promise<void>;
   onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
   onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
   onSaveVisionRecognitionConfig?: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
@@ -93,6 +102,10 @@ export function CapabilitiesPluginDetail({
   const includeCatalogOnly = !installedPlugin;
   const tools = mergePluginTools(marketplaceMetadata?.tools ?? [], installedPlugin?.tools ?? [], includeCatalogOnly);
   const skills = mergePluginSkills(marketplaceMetadata?.skills ?? [], installedPlugin?.skills ?? [], includeCatalogOnly);
+  const runtimeSkillById = new Map((runtimeSkills ?? []).map((skill) => [skill.id, skill]));
+  const conversationSkill = skills
+    .map((skill) => runtimeSkillById.get(skill.id))
+    .find((skill) => skill?.enabled);
   const mcpServers = mergePluginMcpServers(
     marketplaceMetadata?.mcpServers ?? [],
     installedPlugin?.mcpServers ?? [],
@@ -115,7 +128,6 @@ export function CapabilitiesPluginDetail({
   const installedFromMarketplace = installedPlugin?.installationSource === 'marketplace';
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
-  const tags = displayPlugin.tags ?? [];
   const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
   const isBundledExtension = Boolean(marketplaceMetadata);
   const installedExtensionTrust = installedPlugin?.extension?.trust;
@@ -134,41 +146,63 @@ export function CapabilitiesPluginDetail({
         || (!isBundledExtension && installedPlugin?.extension)
         || extensionStatus?.state === 'failed'),
   );
+  const actionItems: MenuProps['items'] = [
+    ...(marketplaceMetadata?.updateAvailable ? [{
+      key: 'update',
+      disabled: installing || removing,
+      icon: installing ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />,
+      label: installing
+        ? t('capabilities.market.updating')
+        : marketplaceMetadata.version
+          ? t('capabilities.detail.updateTo', { version: marketplaceMetadata.version })
+          : t('capabilities.detail.updatePlugin'),
+    }] : []),
+    {
+      key: 'uninstall',
+      danger: true,
+      disabled: installing || removing,
+      icon: removing ? <Loader2 className="is-spinning" size={14} /> : <Trash2 size={14} />,
+      label: t(removing ? 'capabilities.detail.uninstalling' : 'capabilities.detail.uninstall'),
+    },
+    {
+      key: 'use-in-conversation',
+      disabled: !conversationSkill || !onUseInConversation,
+      icon: <MessageSquare size={14} />,
+      label: t('capabilities.skill.useInConversation'),
+    },
+  ];
+  const handleActionClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
+    if (key === 'update' && marketplaceMetadata) void onInstall(marketplaceMetadata);
+    if (key === 'uninstall' && installedPlugin) void onRemove(installedPlugin);
+    if (key === 'use-in-conversation' && conversationSkill) onUseInConversation?.(conversationSkill.id);
+  };
 
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
       <PageHeader
+        className="desktop-capabilities-plugin-detail__header"
+        leading={(
+          <CapabilitiesPluginIcon
+            name={marketplaceMetadata?.icon ?? installedPlugin?.icon}
+            pluginId={marketplaceMetadata?.id ?? installedPlugin?.id}
+            variant="list"
+          />
+        )}
         title={copy.name}
         subtitle={subtitle}
         backLabel={t('capabilities.detail.back')}
         onBack={onBack}
         actions={installedPlugin ? (
-          <>
-            {marketplaceMetadata?.updateAvailable ? (
-              <Button
-                type="button"
-                variant="primary"
-                icon={installing ? <Loader2 className="is-spinning" size={14} /> : <Download size={14} />}
-                disabled={installing || removing}
-                onClick={() => void onInstall(marketplaceMetadata)}
-              >
-                {installing
-                  ? t('capabilities.market.updating')
-                  : marketplaceMetadata.version
-                    ? t('capabilities.detail.updateTo', { version: marketplaceMetadata.version })
-                    : t('capabilities.detail.updatePlugin')}
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="danger"
-              icon={removing ? <Loader2 className="is-spinning" size={14} /> : <Trash2 size={14} />}
-              disabled={installing || removing}
-              onClick={() => void onRemove(installedPlugin)}
-            >
-              {t(removing ? 'capabilities.detail.uninstalling' : 'capabilities.detail.uninstall')}
-            </Button>
-          </>
+          <Dropdown
+            destroyOnHidden
+            menu={{ items: actionItems, onClick: handleActionClick }}
+            placement="bottomRight"
+            trigger={['click']}
+          >
+            <IconButton label={t('capabilities.skill.actions')}>
+              <MoreHorizontal size={16} />
+            </IconButton>
+          </Dropdown>
         ) : marketplaceMetadata && !installed ? (
           <Button
             type="button"
@@ -186,24 +220,11 @@ export function CapabilitiesPluginDetail({
         )}
       />
 
-      {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
+      <p className="desktop-capabilities-plugin-detail__description">
+        {copy.description || t('capabilities.market.listFallback')}
+      </p>
 
-      <div className="desktop-capabilities-plugin-detail__hero">
-        <CapabilitiesPluginIcon
-          name={marketplaceMetadata?.icon ?? installedPlugin?.icon}
-          pluginId={marketplaceMetadata?.id ?? installedPlugin?.id}
-          variant="detail"
-        />
-        <div className="desktop-capabilities-plugin-detail__intro">
-          <div className="desktop-capabilities-plugin-detail__badges">
-            <span className={installed ? 'is-installed' : ''}>{t(installed ? 'capabilities.market.installed' : 'capabilities.detail.available')}</span>
-            {marketplaceMetadata?.featured ? <span>{t('capabilities.detail.featured')}</span> : null}
-            {tags.map((tag) => <span key={tag}>{tag}</span>)}
-          </div>
-          <p>{copy.description || t('capabilities.market.listFallback')}</p>
-          <small>{t('capabilities.detail.manageHint')}</small>
-        </div>
-      </div>
+      {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
 
       {extension && showExtensionStatus ? (
         <section className="desktop-capabilities-plugin-detail__extension" aria-label={t('capabilities.extension.title')}>
@@ -302,13 +323,23 @@ export function CapabilitiesPluginDetail({
         empty={t('capabilities.detail.skillsEmpty')}
       >
         {skills.map((skill) => (
-          <CapabilitiesPluginItemButton
-            key={skill.id}
-            title={skill.name}
-            description={skill.description || t('capabilities.detail.skillFallback')}
-            icon={<BookOpen size={16} />}
-            onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
-          />
+          installedPlugin ? (
+            <CapabilitiesPluginSkillItem
+              key={skill.id}
+              runtimeSkill={runtimeSkillById.get(skill.id)}
+              skill={skill}
+              onOpen={() => setSelectedItem({ kind: 'skill', value: skill })}
+              onSetEnabled={onSetSkillEnabled}
+            />
+          ) : (
+            <CapabilitiesPluginItemButton
+              key={skill.id}
+              title={skill.name}
+              description={skill.description || t('capabilities.detail.skillFallback')}
+              icon={<BookOpen size={16} />}
+              onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
+            />
+          )
         ))}
       </CapabilitiesPluginDetailSection>
 

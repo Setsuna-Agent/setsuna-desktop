@@ -86,7 +86,6 @@ describe('workspace mention slots', () => {
       name: 'First skill',
       kind: 'user' as const,
       enabled: true,
-      selected: false,
       description: 'First description',
     };
     const secondSkill = {
@@ -119,7 +118,6 @@ describe('workspace mention slots', () => {
       icon: 'vision-recognition',
       kind: 'plugin',
       enabled: true,
-      selected: false,
       pluginId: 'openai-vision-recognition',
     });
 
@@ -136,7 +134,6 @@ describe('workspace mention slots', () => {
       name: 'Review',
       kind: 'builtin' as const,
       enabled: true,
-      selected: false,
     };
     const secondSkill = { ...firstSkill, id: 'review-user', kind: 'user' as const };
     const trimmedContent = 'Use Review then Review';

@@ -64,7 +64,7 @@ describe('WebDAV portable snapshot data', () => {
     expect(portableConfig.providers[0]?.proxyRoute).toBeUndefined();
     expect(JSON.parse(await readFile(skillState!.sourcePath!, 'utf8'))).toEqual({
       version: 1,
-      states: { demo: { enabled: true, selected: true } },
+      states: { demo: { enabled: true } },
     });
     expect(skillFile?.sourcePath).not.toBe(path.join(root, 'runtime', 'user-skills', 'demo', 'SKILL.md'));
     await writeFile(path.join(root, 'runtime', 'user-skills', 'demo', 'SKILL.md'), '# Changed', 'utf8');
@@ -240,9 +240,9 @@ async function createDataRoot(): Promise<string> {
   await writeFile(path.join(runtimeRoot, 'skills.json'), JSON.stringify({
     version: 1,
     states: {
-      demo: { enabled: true, selected: true },
+      demo: { enabled: true },
       'bundled-skill': { enabled: false },
-      'plugin-skill': { selected: true },
+      'plugin-skill': { enabled: true },
     },
   }), 'utf8');
   await writeFile(path.join(runtimeRoot, 'config.json'), JSON.stringify({

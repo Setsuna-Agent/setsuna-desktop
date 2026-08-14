@@ -7,6 +7,46 @@
   min-width: 0;
 }
 
+.desktop-skill-catalog {
+  display: grid;
+  gap: 28px;
+  min-width: 0;
+}
+
+.desktop-skill-catalog__section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.desktop-skill-catalog__section > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
+}
+
+.desktop-skill-catalog__section h3,
+.desktop-skill-catalog__section header span {
+  margin: 0;
+}
+
+.desktop-skill-catalog__section h3 {
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.desktop-skill-catalog__section header span {
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 18px;
+}
+
 .desktop-capability-list-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -157,10 +197,6 @@ button.desktop-capability-list-item__identity:hover .desktop-capability-list-ite
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.desktop-capability-list-item__dependency-action {
-  max-width: 170px;
 }
 
 @media (max-width: 1000px) {

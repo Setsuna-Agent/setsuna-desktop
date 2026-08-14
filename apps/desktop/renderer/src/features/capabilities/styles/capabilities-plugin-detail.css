@@ -350,6 +350,118 @@
   line-height: 20px;
 }
 
+.desktop-capabilities-mcp-detail__connection {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 20px;
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+}
+
+.desktop-capabilities-mcp-detail__grid > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.desktop-capabilities-mcp-detail__grid > [data-wide] {
+  grid-column: 1 / -1;
+}
+
+.desktop-capabilities-mcp-detail__grid dt,
+.desktop-capabilities-mcp-detail__grid dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.desktop-capabilities-mcp-detail__grid dt {
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.desktop-capabilities-mcp-detail__grid dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--app-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.desktop-capabilities-mcp-detail__grid code {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: inherit;
+  font-family: var(--app-code-font-family);
+  font-size: inherit;
+  white-space: pre-wrap;
+}
+
+.desktop-capabilities-mcp-detail__connection > small {
+  margin: 0 12px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.desktop-capabilities-mcp-detail__connection > small.is-error {
+  color: var(--app-danger);
+}
+
+.desktop-capabilities-mcp-detail__connection > .sd-button {
+  justify-self: start;
+  margin: 0 12px 12px;
+}
+
+.desktop-capabilities-mcp-detail__tools {
+  display: grid;
+  gap: 1px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.desktop-capabilities-mcp-detail__tools > div {
+  display: grid;
+  gap: 2px;
+  padding: 9px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--app-border) 58%, transparent);
+}
+
+.desktop-capabilities-mcp-detail__tools > div:first-child {
+  border-top: 0;
+}
+
+.desktop-capabilities-mcp-detail__tools > div.is-disabled {
+  opacity: 0.5;
+}
+
+.desktop-capabilities-mcp-detail__tools strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.desktop-capabilities-mcp-detail__tools span,
+.desktop-capabilities-mcp-detail .desktop-capabilities-skill-section > header small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+.desktop-capabilities-mcp-detail .desktop-capabilities-skill-section > header small {
+  margin-left: auto;
+}
+
 .desktop-capabilities-skill-usage-help {
   margin: 0;
   color: var(--app-text-muted);
@@ -385,20 +497,6 @@
   color: var(--app-text);
   font-size: 13px;
   font-weight: 500;
-}
-
-.desktop-capabilities-skill-content {
-  max-height: min(52vh, 560px);
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-bg) 96%, var(--app-text) 4%);
-  font-family: var(--app-code-font-family);
-  font-size: 12px;
-  line-height: 20px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .desktop-capabilities-skill-reference-list {
@@ -529,30 +627,12 @@
   font-family: var(--app-code-font-family);
 }
 
-.desktop-capabilities-mcp-form__full,
-.desktop-capabilities-mcp-form__switches {
+.desktop-capabilities-mcp-form__full {
   grid-column: 1 / -1;
 }
 
 .desktop-capabilities-mcp-form__wide {
   grid-column: span 2;
-}
-
-.desktop-capabilities-mcp-form__switches {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-  padding: 2px 0 4px;
-}
-
-.desktop-capabilities-mcp-form__switches p {
-  min-width: 0;
-  margin: 0;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
 }
 
 .desktop-capabilities-mcp-tools {
@@ -692,6 +772,14 @@
 }
 
 @media (max-width: 760px) {
+  .desktop-capabilities-mcp-detail__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .desktop-capabilities-mcp-detail__grid > [data-wide] {
+    grid-column: auto;
+  }
+
   .desktop-plugin-market__list {
     grid-template-columns: minmax(0, 1fr);
   }

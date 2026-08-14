@@ -23,7 +23,7 @@
 | Plugin | `runtime/plugins/<plugin>/skills/` | 否 |
 | User | `runtime/user-skills/<id>/SKILL.md` | 是 |
 
-Enable/selected 状态统一保存在 `runtime/skills.json`。
+Enable 状态统一保存在 `runtime/skills.json`。
 
 ## Runtime 加载链路
 
@@ -55,7 +55,6 @@ main RuntimeHost
 注入来源：
 
 - 用户在当前输入显式选择的 Skill。
-- `selected: true` 的默认 Skill。
 - Plugin Skill 的 auto-activation。
 
 显式选择存在时，不再追加自动匹配的 Plugin Skill。自动匹配可使用：

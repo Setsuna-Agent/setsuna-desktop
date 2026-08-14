@@ -1,10 +1,8 @@
 import type {
-  RuntimeMcpRequireApproval,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpToolInfo,
   RuntimeMcpTransport,
-  RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
@@ -26,9 +24,6 @@ export type McpDraft = {
   oauthClientId: string;
   oauthResource: string;
   enabled: boolean;
-  required: boolean;
-  requireApproval: RuntimeMcpRequireApproval;
-  trustLevel: RuntimeMcpTrustLevel;
   timeoutMs: string;
   startupTimeoutMs: string;
   toolTimeoutMs: string;
@@ -53,9 +48,6 @@ export const emptyMcpDraft: McpDraft = {
   oauthClientId: '',
   oauthResource: '',
   enabled: true,
-  required: false,
-  requireApproval: 'auto',
-  trustLevel: 'untrusted',
   timeoutMs: '',
   startupTimeoutMs: '',
   toolTimeoutMs: '',
@@ -75,10 +67,7 @@ export function mcpDraftToInput(
     label: draft.label.trim() || key,
     description: optionalText(draft.description),
     transport: draft.transport,
-    requireApproval: draft.requireApproval,
-    trustLevel: draft.trustLevel,
     enabled: draft.enabled,
-    required: draft.required,
     timeoutMs: optionalNumber(draft.timeoutMs),
     startupTimeoutMs: optionalNumber(draft.startupTimeoutMs),
     toolTimeoutMs: optionalNumber(draft.toolTimeoutMs),

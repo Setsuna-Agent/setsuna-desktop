@@ -19,6 +19,7 @@ describe('capabilities plugin components', () => {
     cleanup();
     vi.restoreAllMocks();
   });
+
   it('renders a one-click marketplace row without card chrome or local paths', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginListItem
@@ -83,9 +84,60 @@ describe('capabilities plugin components', () => {
     );
     expect(html).toContain('Read project documentation.');
     expect(html).toContain('Search project documentation.');
+    expect(html).toContain('desktop-capabilities-plugin-detail__description');
+    expect(html).not.toContain('desktop-capabilities-plugin-detail__hero');
+    expect(html).not.toContain('desktop-capabilities-plugin-detail__badges');
     expect(html).toMatch(/aria-label="[^"]*Docs Skill[^"]*"/u);
     expect(html).toMatch(/aria-label="[^"]*Docs Server[^"]*"/u);
     expect(html).toMatch(/aria-label="[^"]*Docs Guide[^"]*"/u);
+  });
+
+  it('shows Plugin Skill switches and keeps a removed Skill switched off', async () => {
+    const onSetSkillEnabled = vi.fn(async () => undefined);
+    const user = userEvent.setup();
+    render(
+      <CapabilitiesPluginDetail
+        error={null}
+        installedPlugin={{
+          id: 'docs-plugin',
+          name: 'Docs Plugin',
+          installedAt: '2026-08-14T00:00:00.000Z',
+          skills: [
+            { id: 'docs-plugin.active', name: 'Active Skill' },
+            { id: 'docs-plugin.removed', name: 'Removed Skill' },
+          ],
+          mcpServers: [],
+          hooks: [],
+          hookCount: 0,
+          resources: [],
+        }}
+        runtimeSkills={[{
+          id: 'docs-plugin.active',
+          name: 'Active Skill',
+          kind: 'plugin',
+          pluginId: 'docs-plugin',
+          enabled: false,
+        }]}
+        installing={false}
+        removing={false}
+        onBack={() => undefined}
+        onInstall={async () => undefined}
+        onRemove={async () => undefined}
+        onSetSkillEnabled={onSetSkillEnabled}
+      />,
+    );
+
+    const activeSwitch = screen.getByRole('checkbox', { name: '启用或停用 Active Skill' });
+    const removedSwitch = screen.getByRole('checkbox', { name: '启用或停用 Removed Skill' });
+    expect(activeSwitch.hasAttribute('disabled')).toBe(false);
+    expect(removedSwitch.hasAttribute('disabled')).toBe(true);
+    expect((removedSwitch as HTMLInputElement).checked).toBe(false);
+
+    await user.click(activeSwitch);
+    expect(onSetSkillEnabled).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'docs-plugin.active' }),
+      true,
+    );
   });
 
   it('shows local executable extension trust, process state, and the unsandboxed warning', () => {
@@ -317,10 +369,9 @@ describe('capabilities plugin components', () => {
     expect(rowHtml).not.toContain('disabled=""');
     expect(loadingRowHtml).toContain('aria-label="更新中：图片生成"');
     expect(loadingRowHtml).toContain('disabled=""');
-    expect(detailHtml).toContain('更新到 v1.0.1');
-    expect(detailHtml).toContain('卸载');
+    expect(detailHtml).toContain('aria-label="更多操作"');
     expect(detailHtml).toContain('role="alert">更新插件失败：EPERM');
-    expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__hero'));
+    expect(detailHtml.indexOf('更新插件失败：EPERM')).toBeLessThan(detailHtml.indexOf('desktop-capabilities-plugin-detail__section'));
   });
 
   it('keeps installed capabilities readable until a marketplace update is applied', () => {

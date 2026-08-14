@@ -28,8 +28,6 @@ describe('file mcp store', () => {
       command: 'node',
       args: ['server.js'],
       env: { DOCS_TOKEN: 'secret-token' },
-      requireApproval: 'prompt',
-      trustLevel: 'trusted',
     });
 
     expect(saved.servers).toMatchObject([
@@ -40,8 +38,6 @@ describe('file mcp store', () => {
         command: 'node',
         args: ['server.js'],
         envKeys: ['DOCS_TOKEN'],
-        requireApproval: 'prompt',
-        trustLevel: 'trusted',
         readOnly: false,
       },
     ]);
@@ -77,7 +73,6 @@ describe('file mcp store', () => {
           annotations: { readOnlyHint: true },
           execution: { taskSupport: 'forbidden' },
           _meta: { ui: 'compact' },
-          approvalMode: 'prompt',
         },
       ],
     });
@@ -102,7 +97,6 @@ describe('file mcp store', () => {
           annotations: { readOnlyHint: true },
           execution: { taskSupport: 'forbidden' },
           _meta: { ui: 'compact' },
-          approvalMode: 'prompt',
         },
       ],
     });
@@ -223,46 +217,6 @@ describe('file mcp store', () => {
     ]));
   });
 
-  it('normalizes legacy approval modes to codex modes', async () => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
-    const store = new FileMcpStore(dataDir, new InMemorySecretStore());
-    await writeFile(path.join(dataDir, 'mcp.json'), JSON.stringify({
-      mcpServers: {
-        remote: {
-          transport: 'streamableHttp',
-          url: 'https://example.com/mcp',
-          requireApproval: 'on-write',
-        },
-        legacy_prompt: {
-          transport: 'streamableHttp',
-          url: 'https://example.com/mcp',
-          require_approval: 'always',
-        },
-        legacy_approve: {
-          transport: 'streamableHttp',
-          url: 'https://example.com/mcp',
-          require_approval: 'never',
-        },
-      },
-    }));
-
-    await expect(store.listServers()).resolves.toMatchObject({
-      servers: expect.arrayContaining([
-        expect.objectContaining({ key: 'remote', requireApproval: 'auto' }),
-        expect.objectContaining({ key: 'legacy_prompt', requireApproval: 'prompt' }),
-        expect.objectContaining({ key: 'legacy_approve', requireApproval: 'approve' }),
-      ]),
-    });
-    await store.updateServer('remote', { enabled: false });
-
-    await expect(readFile(path.join(dataDir, 'mcp.json'), 'utf8')).resolves.not.toContain('on-write');
-    await expect(store.listServers()).resolves.toMatchObject({
-      servers: expect.arrayContaining([
-        expect.objectContaining({ key: 'remote', enabled: false, requireApproval: 'auto' }),
-      ]),
-    });
-  });
-
   it('reads and writes codex-compatible MCP server fields', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-'));
     const store = new FileMcpStore(dataDir, new InMemorySecretStore());
@@ -273,12 +227,11 @@ describe('file mcp store', () => {
           args: ['server.js'],
           startup_timeout_sec: 2.5,
           tool_timeout_sec: 5,
-          default_tools_approval_mode: 'prompt',
           enabled_tools: ['search'],
           disabled_tools: ['delete'],
           tools: {
-            search: { approval_mode: 'approve' },
-            write_note: { approval_mode: 'prompt' },
+            search: { description: 'Search documents' },
+            write_note: { description: 'Write a note' },
           },
         },
       },
@@ -289,59 +242,12 @@ describe('file mcp store', () => {
         key: 'docs',
         startupTimeoutMs: 2500,
         toolTimeoutMs: 5000,
-        requireApproval: 'prompt',
         allowedTools: ['search'],
         disabledTools: ['delete'],
         tools: [
-          { name: 'search', approvalMode: 'approve' },
-          { name: 'write_note', approvalMode: 'prompt' },
+          { name: 'search', description: 'Search documents' },
+          { name: 'write_note', description: 'Write a note' },
         ],
-      }],
-    });
-
-    await store.setToolApprovalMode('docs', 'write_note', 'approve');
-    const raw = JSON.parse(await readFile(path.join(dataDir, 'mcp.json'), 'utf8')) as {
-      mcp_servers?: Record<string, { tools?: Record<string, { approval_mode?: string }> }>;
-    };
-    expect(raw.mcp_servers?.docs.tools?.write_note?.approval_mode).toBe('approve');
-    expect(raw.mcp_servers?.docs.tools?.search?.approval_mode).toBe('approve');
-  });
-
-  it('sets per-tool approval modes without dropping tool metadata', async () => {
-    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-store-test-')), new InMemorySecretStore());
-    await store.upsertServer({
-      key: 'docs',
-      transport: 'streamableHttp',
-      url: 'https://example.com/mcp',
-      tools: [
-        {
-          name: 'write_note',
-          description: 'Write a note',
-          inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
-          annotations: { destructiveHint: true },
-          approvalMode: 'prompt',
-        },
-      ],
-    });
-
-    const updated = await store.setToolApprovalMode('docs', 'write_note', 'approve');
-    expect(updated.servers[0].tools).toMatchObject([
-      {
-        name: 'write_note',
-        description: 'Write a note',
-        inputSchema: { type: 'object', properties: { text: { type: 'string' } } },
-        annotations: { destructiveHint: true },
-        approvalMode: 'approve',
-      },
-    ]);
-
-    await store.setToolApprovalMode('docs', 'search', 'prompt');
-    await expect(store.listServers()).resolves.toMatchObject({
-      servers: [{
-        key: 'docs',
-        tools: expect.arrayContaining([
-          expect.objectContaining({ name: 'search', approvalMode: 'prompt' }),
-        ]),
       }],
     });
   });

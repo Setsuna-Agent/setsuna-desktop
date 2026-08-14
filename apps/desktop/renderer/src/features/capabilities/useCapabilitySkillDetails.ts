@@ -86,7 +86,7 @@ export function useCapabilitySkillDetails({
 
   const updateFromDetail = useCallback(async (
     skill: RuntimeSkillSummary,
-    patch: Partial<Pick<RuntimeSkillSummary, 'enabled' | 'selected'>>,
+    patch: Pick<RuntimeSkillSummary, 'enabled'>,
   ) => {
     const isCurrentRequest = mutationRequests.begin();
     const updated = await onUpdateSkill(skill, patch);

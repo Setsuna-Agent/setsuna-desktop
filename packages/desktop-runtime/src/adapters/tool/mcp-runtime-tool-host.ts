@@ -1,5 +1,4 @@
 import type {
-  RuntimeMcpRequireApproval,
   RuntimeMcpResource,
   RuntimeMcpResourceTemplate,
   RuntimeMcpServerInput,
@@ -25,8 +24,6 @@ type McpToolMapping = {
   server: RuntimeMcpServerInput;
   tool: RuntimeMcpToolInfo;
 };
-
-type McpApprovalMode = 'auto' | 'prompt' | 'approve';
 
 const LIST_MCP_RESOURCES_TOOL_NAME = 'list_mcp_resources';
 const LIST_MCP_RESOURCE_TEMPLATES_TOOL_NAME = 'list_mcp_resource_templates';
@@ -123,26 +120,6 @@ export class McpRuntimeToolHost implements ToolHost {
     const contexts = snapshots.filter((item): item is ToolExternalContext => Boolean(item));
     this.externalContextByContext.set(context, contexts);
     return contexts;
-  }
-
-  async approvalForTool(name: string, _input: unknown, context: ToolExecutionContext) {
-    if (RESOURCE_TOOL_NAMES.has(name)) return null;
-    const mapping = await this.findToolMapping(name, context);
-    if (!mapping) return null;
-    const policy = normalizeApprovalMode(mapping.tool.approvalMode ?? mapping.server.requireApproval);
-    if (policy === 'approve') return null;
-    if (policy === 'auto' && mapping.server.trustLevel === 'trusted' && isReadOnlyTool(mapping.tool.annotations)) {
-      return null;
-    }
-    return {
-      reason: `调用 MCP 工具：${mapping.server.label ?? mapping.server.key} / ${mapping.tool.name}`,
-      ...(policy === 'auto'
-        ? {
-            approvalKeys: [mcpApprovalSessionKey(mapping)],
-            persistentApprovalKeys: [mcpApprovalSessionKey(mapping)],
-          }
-        : {}),
-    };
   }
 
   async previewToolCall(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
@@ -247,8 +224,7 @@ export class McpRuntimeToolHost implements ToolHost {
     const liveInventories = await Promise.all(servers.map(async (server) => {
       try {
         return { server, tools: await this.mcpClient.listTools(server, mcpContext(context)) };
-      } catch (error) {
-        if (server.required) throw new Error(`Required MCP server '${server.key}' failed: ${errorMessage(error)}`, { cause: error });
+      } catch {
         return { server, tools: [] };
       }
     }));
@@ -259,7 +235,7 @@ export class McpRuntimeToolHost implements ToolHost {
         const baseName = modelToolName(server.key, tool.name);
         const count = usedNames.get(baseName) ?? 0;
         usedNames.set(baseName, count + 1);
-        mappings.push({ name: uniqueModelToolName(baseName, count), server, tool: withStoredApprovalMode(server, tool) });
+        mappings.push({ name: uniqueModelToolName(baseName, count), server, tool });
       }
     }
     return mappings;
@@ -285,11 +261,6 @@ function mcpContext(context: ToolExecutionContext, toolName?: string): McpReques
         }
       : {}),
   };
-}
-
-function withStoredApprovalMode(server: RuntimeMcpServerInput, liveTool: RuntimeMcpToolInfo): RuntimeMcpToolInfo {
-  const stored = server.tools?.find((tool) => tool.name === liveTool.name);
-  return stored?.approvalMode ? { ...liveTool, approvalMode: stored.approvalMode } : liveTool;
 }
 
 function enabledServerTools(server: RuntimeMcpServerInput, tools: RuntimeMcpToolInfo[]): RuntimeMcpToolInfo[] {
@@ -319,22 +290,6 @@ function uniqueModelToolName(baseName: string, collisionIndex: number): string {
 function validInputSchema(value: Record<string, unknown> | undefined): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || !Object.keys(value).length) return emptyInputSchema;
   return value;
-}
-
-function normalizeApprovalMode(value: RuntimeMcpRequireApproval | undefined): McpApprovalMode {
-  if (value === 'approve' || value === 'never') return 'approve';
-  if (value === 'prompt' || value === 'always') return 'prompt';
-  // MCP 注解由服务器提供，因此不能降低不受信任连接的审批要求。已记住的单工具审批
-  // 由上面的 approvalMode='approve' 表示，仍然属于用户的显式决定。
-  return 'auto';
-}
-
-function isReadOnlyTool(annotations: Record<string, unknown> | undefined): boolean {
-  return annotations?.readOnlyHint === true && annotations.destructiveHint !== true;
-}
-
-function mcpApprovalSessionKey(mapping: McpToolMapping): string {
-  return `mcp:${mapping.server.key}:${mapping.tool.name}`;
 }
 
 function externalJsonResult(value: unknown): ToolExecutionResult {

@@ -53,7 +53,6 @@ function pluginSkillItem(): SlashCommandMenuItem {
       description: 'Read and verify PDF files',
       kind: 'plugin',
       enabled: true,
-      selected: false,
     },
   };
 }

@@ -20,7 +20,6 @@ type McpToolState = {
 };
 
 type McpTransport = 'stdio' | 'streamableHttp';
-type McpRequireApproval = 'auto' | 'approve' | 'prompt';
 type JsonRecord = Record<string, unknown>;
 
 type McpServerPreview = {
@@ -33,7 +32,6 @@ type McpServerPreview = {
   cwd: string;
   url: string;
   timeoutMs: number;
-  requireApproval: McpRequireApproval;
   enabled: boolean;
   allowedTools: string[];
   disabledTools: string[];
@@ -124,10 +122,6 @@ export async function calculateMcpServerConfig(
   if (Object.hasOwn(args || {}, 'timeout_ms') || Object.hasOwn(args || {}, 'timeoutMs')) {
     server.timeoutMs = boundedInteger(args?.timeout_ms ?? args?.timeoutMs, DEFAULT_MCP_TIMEOUT_MS, 1000, MAX_MCP_TIMEOUT_MS);
   }
-  if (Object.hasOwn(args || {}, 'require_approval') || Object.hasOwn(args || {}, 'requireApproval')) {
-    server.requireApproval = normalizeMcpRequireApproval(args?.require_approval ?? args?.requireApproval);
-  }
-
   const transport = normalizeMcpTransport(args?.transport, server);
   if (!transport) return { ok: false, error: `MCP server ${key} 缺少 command 或 url。` };
   server.transport = transport;
@@ -230,13 +224,6 @@ function normalizeMcpTransport(value: unknown, server: Readonly<JsonRecord>): Mc
   return '';
 }
 
-function normalizeMcpRequireApproval(value: unknown): McpRequireApproval {
-  const raw = String(value || '').trim().toLowerCase();
-  if (raw === 'never' || raw === 'approve' || raw === 'approved' || raw === 'false') return 'approve';
-  if (raw === 'always' || raw === 'prompt' || raw === 'true') return 'prompt';
-  return 'auto';
-}
-
 function validateMcpServerObject(key: string, server: Readonly<JsonRecord>): string {
   const transport = String(server.transport || '');
   if (transport === 'stdio' && !String(server.command || '').trim()) {
@@ -287,7 +274,6 @@ function mcpServerPreview(
     cwd: String(server.cwd || ''),
     url: String(server.url || ''),
     timeoutMs: boundedInteger(server.timeoutMs, DEFAULT_MCP_TIMEOUT_MS, 1000, MAX_MCP_TIMEOUT_MS),
-    requireApproval: normalizeMcpRequireApproval(server.requireApproval),
     enabled: server.enabled !== false,
     allowedTools: normalizeMcpStringList(server.allowedTools),
     disabledTools: normalizeMcpStringList(server.disabledTools),

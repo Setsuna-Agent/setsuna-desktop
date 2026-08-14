@@ -1,12 +1,10 @@
 import type {
-  RuntimeMcpRequireApproval,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
   RuntimeMcpToolInfo,
   RuntimeMcpTransport,
-  RuntimeMcpTrustLevel,
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -53,13 +51,6 @@ type StoredMcpServer = {
   toolTimeoutMs?: unknown;
   tool_timeout_ms?: unknown;
   tool_timeout_sec?: unknown;
-  required?: boolean;
-  requireApproval?: string;
-  require_approval?: string;
-  trustLevel?: string;
-  trust_level?: string;
-  defaultToolsApprovalMode?: string;
-  default_tools_approval_mode?: string;
   enabled?: boolean;
   disabled?: boolean;
   allowedTools?: unknown;
@@ -159,29 +150,6 @@ export class FileMcpStore implements McpStore {
       };
       await this.writeConfig(config);
       await this.deleteOrphanedCredentials(previous, stored);
-      return this.listServers();
-    });
-  }
-
-  async setToolApprovalMode(keyInput: string, toolNameInput: string, approvalMode: RuntimeMcpRequireApproval): Promise<RuntimeMcpServerList> {
-    return withFileStateUpdate(this.configPath, async () => {
-      const key = normalizeKey(keyInput);
-      const toolName = nonEmpty(toolNameInput);
-      if (!toolName) throw new Error('MCP tool name is required.');
-      const { config } = await this.readConfig();
-      const server = config.mcpServers?.[key];
-      if (!server) throw new Error(`MCP server not found: ${key}`);
-      const normalizedApprovalMode = normalizeRequireApproval(approvalMode);
-      const next: StoredMcpServer = {
-        ...server,
-        tools: withToolApprovalMode(server.tools, toolName, normalizedApprovalMode),
-      };
-      validateStoredServer(key, next);
-      config.mcpServers = {
-        ...config.mcpServers,
-        [key]: pruneTransportFields(next),
-      };
-      await this.writeConfig(config);
       return this.listServers();
     });
   }
@@ -362,9 +330,6 @@ function normalizeServer(
       timeoutMs,
       startupTimeoutMs,
       toolTimeoutMs,
-      required: rawServer.required === true,
-      requireApproval: normalizeRequireApproval(serverApprovalMode(rawServer)),
-      trustLevel: normalizeTrustLevel(rawServer.trustLevel ?? rawServer.trust_level),
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools ?? rawServer.enabledTools ?? rawServer.enabled_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
@@ -406,9 +371,6 @@ function normalizeServerInput(rawKey: string, rawServer: StoredMcpServer): Runti
       timeoutMs,
       startupTimeoutMs,
       toolTimeoutMs,
-      required: rawServer.required === true,
-      requireApproval: normalizeRequireApproval(serverApprovalMode(rawServer)),
-      trustLevel: normalizeTrustLevel(rawServer.trustLevel ?? rawServer.trust_level),
       enabled: rawServer.enabled !== false && rawServer.disabled !== true,
       allowedTools: stringList(rawServer.allowedTools ?? rawServer.allowed_tools ?? rawServer.enabledTools ?? rawServer.enabled_tools),
       disabledTools: stringList(rawServer.disabledTools ?? rawServer.disabled_tools),
@@ -437,17 +399,6 @@ function applyServerInput(previous: StoredMcpServer, input: RuntimeMcpServerInpu
   if (input.timeoutMs !== undefined) next.timeoutMs = timeout(input.timeoutMs, DEFAULT_TIMEOUT_MS);
   if (input.startupTimeoutMs !== undefined) next.startupTimeoutMs = timeout(input.startupTimeoutMs, DEFAULT_TIMEOUT_MS);
   if (input.toolTimeoutMs !== undefined) next.toolTimeoutMs = timeout(input.toolTimeoutMs, DEFAULT_TIMEOUT_MS);
-  if (input.required !== undefined) next.required = input.required;
-  if (input.requireApproval !== undefined) {
-    next.default_tools_approval_mode = normalizeRequireApproval(input.requireApproval);
-    delete next.defaultToolsApprovalMode;
-    delete next.requireApproval;
-    delete next.require_approval;
-  }
-  if (input.trustLevel !== undefined) {
-    next.trust_level = normalizeTrustLevel(input.trustLevel);
-    delete next.trustLevel;
-  }
   if (input.enabled !== undefined) next.enabled = input.enabled;
   if (input.allowedTools !== undefined) {
     next.enabled_tools = input.allowedTools.filter((item) => item.trim()).map((item) => item.trim());
@@ -472,10 +423,7 @@ function applyServerInput(previous: StoredMcpServer, input: RuntimeMcpServerInpu
   }
   if (input.oauthClientId !== undefined) setOAuthClientId(next, input.oauthClientId);
   if (input.oauthResource !== undefined) setOAuthResource(next, input.oauthResource);
-  next.default_tools_approval_mode = normalizeRequireApproval(serverApprovalMode(next));
-  delete next.defaultToolsApprovalMode;
-  delete next.requireApproval;
-  delete next.require_approval;
+  removeMcpPolicyFields(next);
   if (!next.transport) next.transport = next.command ? 'stdio' : 'streamableHttp';
   if (!next.timeoutMs) next.timeoutMs = DEFAULT_TIMEOUT_MS;
   if (!next.startupTimeoutMs) next.startupTimeoutMs = next.timeoutMs;
@@ -539,10 +487,6 @@ function normalizeTransport(value: unknown, command?: string, url?: string): Run
   if (value === 'stdio') return 'stdio';
   if (value === 'streamableHttp' || value === 'streamable-http' || value === 'streamable_http' || value === 'http') return 'streamableHttp';
   return command || !url ? 'stdio' : 'streamableHttp';
-}
-
-function serverApprovalMode(server: StoredMcpServer): unknown {
-  return server.default_tools_approval_mode ?? server.defaultToolsApprovalMode ?? server.requireApproval ?? server.require_approval;
 }
 
 function serverStaticHeaders(server: StoredMcpServer): unknown {
@@ -629,22 +573,6 @@ function ensureNoInlineBearerToken(key: string, server: StoredMcpServer): void {
   }
 }
 
-function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval {
-  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
-  if (raw === 'approve' || raw === 'approved' || raw === 'never' || raw === 'false') return 'approve';
-  if (raw === 'prompt' || raw === 'always' || raw === 'true') return 'prompt';
-  return 'auto';
-}
-
-function normalizeOptionalRequireApproval(value: unknown): RuntimeMcpRequireApproval | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  return normalizeRequireApproval(value);
-}
-
-function normalizeTrustLevel(value: unknown): RuntimeMcpTrustLevel {
-  return value === 'trusted' ? 'trusted' : 'untrusted';
-}
-
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map((item) => item.trim()) : [];
 }
@@ -679,7 +607,6 @@ function toolInfoFromRecord(name: string, record: Record<string, unknown>): Runt
   const annotations = plainRecord(record.annotations);
   const execution = plainRecord(record.execution);
   const meta = plainRecord(record._meta);
-  const approvalMode = normalizeOptionalRequireApproval(record.approvalMode ?? record.approval_mode ?? record.requireApproval ?? record.require_approval);
   return {
     name,
     ...(title ? { title } : {}),
@@ -689,31 +616,18 @@ function toolInfoFromRecord(name: string, record: Record<string, unknown>): Runt
     ...(annotations ? { annotations } : {}),
     ...(execution ? { execution } : {}),
     ...(meta ? { _meta: meta } : {}),
-    ...(approvalMode ? { approvalMode } : {}),
   };
 }
 
-function withToolApprovalMode(value: unknown, toolName: string, approvalMode: RuntimeMcpRequireApproval): unknown {
-  if (Array.isArray(value)) {
-    const tools = mcpToolList(value);
-    const index = tools.findIndex((tool) => tool.name === toolName);
-    if (index >= 0) {
-      tools[index] = { ...tools[index], approvalMode };
-    } else {
-      tools.push({ name: toolName, approvalMode });
-    }
-    return tools;
-  }
-  const tools = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  const existing = plainRecord(tools[toolName]) ?? {};
-  const nextTool = { ...existing, approval_mode: approvalMode };
-  delete (nextTool as Record<string, unknown>).approvalMode;
-  delete (nextTool as Record<string, unknown>).requireApproval;
-  delete (nextTool as Record<string, unknown>).require_approval;
-  return {
-    ...tools,
-    [toolName]: nextTool,
-  };
+function removeMcpPolicyFields(server: StoredMcpServer): void {
+  const record = server as Record<string, unknown>;
+  delete record.required;
+  delete record.requireApproval;
+  delete record.require_approval;
+  delete record.defaultToolsApprovalMode;
+  delete record.default_tools_approval_mode;
+  delete record.trustLevel;
+  delete record.trust_level;
 }
 
 function setOAuthClientId(server: StoredMcpServer, value: string | undefined): void {

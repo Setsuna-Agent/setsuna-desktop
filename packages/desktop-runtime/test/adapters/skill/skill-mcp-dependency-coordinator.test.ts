@@ -35,8 +35,6 @@ describe('SkillMcpDependencyCoordinator', () => {
     expect(mcp.inputs[0]).toMatchObject({
       key: 'sentry',
       enabled: true,
-      requireApproval: 'always',
-      trustLevel: 'untrusted',
       url: 'https://mcp.sentry.dev/',
     });
     expect(installed.skill.mcpDependencies).toEqual([
@@ -123,7 +121,6 @@ function dependencySkill(): RuntimeSkillDetail {
     name: 'Sentry Helper',
     kind: 'builtin',
     enabled: true,
-    selected: false,
     content: '# Sentry Helper',
     references: [],
     mcpDependencies: [{
@@ -184,7 +181,6 @@ function memoryMcpStore(initial: RuntimeMcpServerInput[] = []): { inputs: Runtim
       inputs[index] = { ...inputs[index], ...patch, key };
       return { configPath: '', workspaceConfigPaths: [], servers: [], errors: [] };
     },
-    setToolApprovalMode: async () => ({ configPath: '', workspaceConfigPaths: [], servers: [], errors: [] }),
     deleteServer: async () => undefined,
   } satisfies McpStore;
   return { inputs, store };

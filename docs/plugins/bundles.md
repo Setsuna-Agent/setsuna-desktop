@@ -120,7 +120,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 - Bundle 被复制到 runtime 数据目录，运行不依赖原始目录继续存在。
 - Skills 会出现在技能页并标记为 Plugin 来源。
-- MCP 以 `untrusted` 和每次调用审批策略启用。若同名 MCP 已存在且连接配置兼容，则复用但不取得所有权。
+- MCP 默认启用。若同名 MCP 已存在且连接配置兼容，则复用但不取得所有权。
 - Hooks 作为插件能力显示在插件详情中，不再进入独立目录。内置市场 Hook 由应用控制的可信来源规则启用；Agent 创建的 Hook 随 `configure_plugin` 审批写入当前命令 hash 信任。
 - 本地可执行扩展默认不加载，必须由用户信任当前完整 Bundle 哈希；内置市场安装和升级会自动校验并启用随包内容，不向普通用户提供信任或撤销入口。
 - 静态资源可通过 `list_plugin_resources` 和 `read_plugin_resource` 读取，始终标记为外部不可信上下文。
@@ -146,7 +146,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 - 拒绝符号链接、特殊文件、路径越界和源目录/runtime 安装目录重叠。
 - 最多 1,000 个文件、总计 32 MiB，manifest 最多 256 KiB。
 - Manifest 不允许 `env`、HTTP headers、bearer token 环境变量或 URL 用户名/密码，凭据必须在安装后通过 Setsuna 的安全凭据/OAuth 链路配置。
-- Bundle MCP 的网络地址和本地命令不会因为来自 Plugin 而自动获得信任。
+- Bundle MCP 的网络地址和本地命令仍需通过 Bundle 校验，凭据继续走安全存储或 OAuth 链路。
 - 可执行扩展的源目录、staged 副本、启动和调用都会校验确定性的完整 Bundle 哈希；内容变化、信任切换、更新和卸载先停止 worker。
 - worker 使用环境变量 allowlist，不继承 runtime/native bridge token；但被信任代码仍拥有当前用户的文件系统和网络权限，不宣称 OS 沙箱隔离。
 - 安装失败会回滚已复制文件、Hooks 和由该次安装新建的 MCP；卸载在提交索引前也会恢复已移除的 MCP 与 Hook 配置。

@@ -43,7 +43,6 @@ describe('runtime factory tool wiring', () => {
       name: 'Factory Skill',
       description: 'Created through the chat Skill tool.',
       content: '# Factory Skill\n\nUse this from the shared runtime registry.',
-      selected: true,
     }, context);
 
     expect(created.content).toContain('Skill configured: Factory Skill');
@@ -54,7 +53,6 @@ describe('runtime factory tool wiring', () => {
           name: 'Factory Skill',
           kind: 'user',
           enabled: true,
-          selected: true,
         }),
       ]),
     });
@@ -62,13 +60,11 @@ describe('runtime factory tool wiring', () => {
     const updated = await runtime.skillRegistry.updateSkill('factory-skill', {
       name: 'Factory Skill Updated',
       content: '# Factory Skill Updated\n\nUpdated through the capability form registry.',
-      selected: false,
     });
 
     expect(updated).toMatchObject({
       id: 'factory-skill',
       name: 'Factory Skill Updated',
-      selected: false,
       content: expect.stringContaining('capability form registry'),
     });
     await expect(runtime.toolHost.previewToolCall?.('configure_skill', {

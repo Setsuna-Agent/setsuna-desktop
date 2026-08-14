@@ -31,7 +31,6 @@ metadata:
 
 - `id`：稳定标识。用户未指定时由工具根据名称生成。
 - `enabled`：默认 `true`。
-- `selected`：默认 `false`；只有用户明确要求“默认使用”“全局启用”“每次都带上”时才设为 `true`。
 
 ## 正文生成规则
 
@@ -75,8 +74,8 @@ Use this skill when the user asks for a clearly scoped task that matches this ca
 2. 提取名称、触发场景、工作流、约束和输出要求。
 3. 如缺少核心目的或触发场景，先问一个短问题；不要连续盘问表单字段。
 4. 生成完整 `content` 正文。
-5. 调用 `configure_skill`，传入 `name`、`description`、`content`、`enabled`，以及必要时的 `id` 和 `selected`。
-6. 保存成功后告诉用户 Skill 名称、id、路径、是否启用、是否默认使用。
+5. 调用 `configure_skill`，传入 `name`、`description`、`content`、`enabled`，以及必要时的 `id`。
+6. 保存成功后告诉用户 Skill 名称、id、路径和是否启用。
 7. 如果工具报错，解释原因并继续修正输入。
 
 ## 输出要求

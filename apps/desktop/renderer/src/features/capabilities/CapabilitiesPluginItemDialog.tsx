@@ -358,8 +358,6 @@ function pluginItemConfig(
       args: activeMcpServer?.args,
       cwd: activeMcpServer?.cwd,
       enabled: activeMcpServer?.enabled,
-      requireApproval: activeMcpServer?.requireApproval,
-      trustLevel: activeMcpServer?.trustLevel,
       allowedTools: activeMcpServer?.allowedTools,
       disabledTools: activeMcpServer?.disabledTools,
     }), null, 2);

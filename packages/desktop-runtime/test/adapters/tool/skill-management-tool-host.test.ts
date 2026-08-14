@@ -104,7 +104,6 @@ describe('skill management tool host', () => {
       name: 'Conversation Helper',
       description: 'Helps create local skills from chat',
       content: '# Conversation Helper\n\nUse chat context.',
-      selected: true,
     })).resolves.toMatchObject({
       reason: expect.stringContaining('创建本地 Skill'),
     });
@@ -113,7 +112,6 @@ describe('skill management tool host', () => {
       name: 'Conversation Helper',
       description: 'Helps create local skills from chat',
       content: '# Conversation Helper\n\nUse chat context.',
-      selected: true,
       mcp_dependencies: [{
         type: 'mcp',
         value: 'docs',
@@ -128,7 +126,6 @@ describe('skill management tool host', () => {
       id: 'conversation-helper',
       kind: 'user',
       enabled: true,
-      selected: true,
       name: 'Conversation Helper',
     });
     expect(saved?.path ? await readFile(saved.path, 'utf8') : '').toContain('name: "Conversation Helper"');
@@ -155,7 +152,6 @@ describe('skill management tool host', () => {
       id: 'conversation-helper',
       name: 'Conversation Guide',
       enabled: false,
-      selected: false,
       content: expect.stringContaining('Keep it narrow.'),
     });
   });

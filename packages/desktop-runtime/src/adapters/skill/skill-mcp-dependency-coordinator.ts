@@ -193,9 +193,6 @@ function serverInputFromDependency(dependency: RuntimeSkillMcpDependencyInput): 
     ...(dependency.oauthClientId ? { oauthClientId: dependency.oauthClientId } : {}),
     ...(dependency.oauthResource ? { oauthResource: dependency.oauthResource } : {}),
     enabled: true,
-    required: false,
-    requireApproval: 'always',
-    trustLevel: 'untrusted',
   };
 }
 

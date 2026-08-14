@@ -98,7 +98,7 @@ Workspace、shell、artifact 和图片生成扩展的 host bridge 共享该环�
 6. Project workflow（外部数据）。
 7. Project instructions。
 8. Memory context。
-9. Skill metadata catalog 与 selected Skill instructions。
+9. Skill metadata catalog 与当前轮激活的 Skill instructions。
 10. Conversation history。
 
 优先级必须显式，不靠字符串偶然拼接。
