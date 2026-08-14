@@ -62,7 +62,11 @@ describe('tool approval lifecycle automatic review', () => {
       signal: new AbortController().signal,
     });
 
-    expect(answer).toMatchObject({ decision: 'approve', resolution: { source: 'user' } });
+    expect(answer).toMatchObject({
+      decision: 'approve',
+      automaticReviewFallback: true,
+      resolution: { source: 'user' },
+    });
     expect(fixture.requests.map((request) => request.reviewer)).toEqual(['automatic', 'user']);
     expect(fixture.resolutions[0]).toMatchObject({
       decision: 'reject',
@@ -91,7 +95,11 @@ describe('tool approval lifecycle automatic review', () => {
       signal: new AbortController().signal,
     });
 
-    expect(answer).toMatchObject({ decision: 'approve', resolution: { source: 'user' } });
+    expect(answer).toMatchObject({
+      decision: 'approve',
+      automaticReviewFallback: true,
+      resolution: { source: 'user' },
+    });
     expect(fixture.requests.map((request) => request.reviewer)).toEqual(['automatic', 'user']);
     expect(fixture.resolutions[0]).toMatchObject({
       decision: 'reject',

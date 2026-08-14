@@ -21,6 +21,7 @@ export type ApprovalResolutionMetadata = {
 };
 
 export type ResolvedToolApprovalAnswer = AnswerRuntimeApprovalInput & {
+  automaticReviewFallback?: boolean;
   resolution?: ApprovalResolutionMetadata;
 };
 
@@ -81,6 +82,7 @@ export async function requestToolApproval({
   return requestUserApproval({
     approvalGate,
     events,
+    automaticReviewFallback: fellBackFromAutomaticReview,
     request: fellBackFromAutomaticReview
       ? {
           ...request,
@@ -96,9 +98,12 @@ export async function requestToolApproval({
 async function requestUserApproval({
   approvalGate,
   events,
+  automaticReviewFallback = false,
   request,
   signal,
-}: Pick<RequestToolApprovalInput, 'approvalGate' | 'events' | 'request' | 'signal'>): Promise<ResolvedToolApprovalAnswer> {
+}: Pick<RequestToolApprovalInput, 'approvalGate' | 'events' | 'request' | 'signal'> & {
+  automaticReviewFallback?: boolean;
+}): Promise<ResolvedToolApprovalAnswer> {
   const approval = await approvalGate.createApproval({ ...request, reviewer: 'user' });
   await events.publishApprovalRequested(approval);
 
@@ -131,7 +136,11 @@ async function requestUserApproval({
     resolution,
   );
   throwIfApprovalCancelled(answer.decision);
-  return { ...answer, resolution };
+  return {
+    ...answer,
+    ...(automaticReviewFallback ? { automaticReviewFallback: true } : {}),
+    resolution,
+  };
 }
 
 async function requestAutomaticApproval({

@@ -412,6 +412,7 @@ export class ToolOrchestrator {
     }
 
     let decision: RuntimeApprovalDecision = 'approve';
+    let automaticReviewFallback = false;
     let permissionGrant: RuntimePermissionGrantResponse | undefined;
     let automaticReviewMessage: string | undefined;
     if (isEmptySandboxWorkspaceWrite(request.sandboxWorkspaceWrite)) {
@@ -456,13 +457,28 @@ export class ToolOrchestrator {
         signal: context.signal,
       });
       decision = answer.decision;
+      automaticReviewFallback = answer.automaticReviewFallback === true;
       permissionGrant = answer.permissionGrant;
       if (answer.resolution?.source === 'automatic' && answer.decision === 'reject') {
         automaticReviewMessage = answer.message;
       }
     }
 
-    const permissionResponse = requestPermissionResponseForDecision(decision, permissionGrant, request, context, environment);
+    const permissionResponse = requestPermissionResponseForDecision(
+      decision,
+      automaticReviewFallback && decision !== 'reject'
+        ? {
+            ...(permissionGrant ?? {}),
+            // A denied permission escalation may be manually continued, but
+            // every resulting tool use must still cross automatic review.
+            scope: 'turn',
+            strictAutoReview: true,
+          }
+        : permissionGrant,
+      request,
+      context,
+      environment,
+    );
     const response = {
       permissions: permissionResponse.permissions,
       scope: permissionResponse.scope,
@@ -472,7 +488,9 @@ export class ToolOrchestrator {
 
     if (!isEmptySandboxWorkspaceWrite(permissionResponse.sandboxWorkspaceWrite)) {
       const approvalKeys = requestPermissionsApprovalKeys(request.environmentId, permissionResponse.permissions);
-      if (permissionResponse.scope === 'session') {
+      if (automaticReviewFallback) {
+        this.options.approvalStore?.enableStrictAutoReviewForTurn(context.turnId);
+      } else if (permissionResponse.scope === 'session') {
         this.options.approvalStore?.approveForSession(approvalKeys);
       } else {
         this.options.approvalStore?.approveForTurn(context.turnId, approvalKeys);

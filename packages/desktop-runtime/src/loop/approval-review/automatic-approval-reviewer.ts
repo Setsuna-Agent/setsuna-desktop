@@ -25,6 +25,7 @@ import {
 } from './approval-review-output.js';
 import { buildApprovalReviewPrompt } from './approval-review-prompt.js';
 
+const APPROVAL_REVIEW_TIMEOUT_MS = 60_000;
 const APPROVAL_REVIEW_MAX_ATTEMPTS = 2;
 const MAX_TRACKED_TURNS = 100;
 const MAX_REVIEW_HISTORY = 50;
@@ -85,6 +86,8 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       return this.failedResult(input.request.turnId, prompt.unavailableReason, modelRequest);
     }
 
+    const timeoutSignal = AbortSignal.timeout(APPROVAL_REVIEW_TIMEOUT_MS);
+    const reviewSignal = AbortSignal.any([input.signal, timeoutSignal]);
     let lastFailure = 'Automatic approval review returned no valid decision.';
     for (let attempt = 0; attempt < APPROVAL_REVIEW_MAX_ATTEMPTS; attempt += 1) {
       let usage: RuntimeUsage | undefined;
@@ -102,7 +105,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
             description: 'One approval decision for the exact action under review.',
             schema: APPROVAL_REVIEW_RESPONSE_SCHEMA,
           },
-          signal: input.signal,
+          signal: reviewSignal,
         })) {
           output.consume(event);
           if (event.type === 'usage' || event.type === 'token_count') usage = event.usage;
@@ -138,7 +141,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       } catch (error) {
         await this.recordUsage(input, usage);
         if (input.signal.aborted) throw abortReason(input.signal);
-        if (isTimeoutError(error)) {
+        if (timeoutSignal.aborted || isTimeoutError(error)) {
           return this.technicalResult(
             input.request.turnId,
             'timed_out',

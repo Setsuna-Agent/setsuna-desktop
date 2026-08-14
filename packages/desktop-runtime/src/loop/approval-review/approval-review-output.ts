@@ -116,8 +116,12 @@ export function approvalReviewAuditRationale(
 export function approvalReviewDisplayText(value: string, actionArguments: unknown): string {
   let sanitized = value
     .replace(/\bBearer\s+\S+/giu, 'Bearer [redacted]')
+    .replace(/\bBasic\s+\S+/giu, 'Basic [redacted]')
     .replace(/\bsk-[a-z0-9_-]+\b/giu, '[redacted api key]')
-    .replace(/([?&](?:api[_-]?key|token|secret|password)=)[^&\s]+/giu, '$1[redacted]');
+    .replace(/([?&](?:api[_-]?key|token|secret|password)=)[^&\s]+/giu, '$1[redacted]')
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/giu, '$1[redacted]@')
+    .replace(/((?:^|\s)(?:-u|--user)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/giu, '$1[redacted]')
+    .replace(/(\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\s*[=:]\s*)(?:(?:"[^"]*")|(?:'[^']*')|[^\s,;]+)/giu, '$1[redacted]');
   for (const sensitiveValue of sensitiveArgumentValues(actionArguments)) {
     sanitized = sanitized.replaceAll(sensitiveValue, '[redacted]');
   }
@@ -143,9 +147,11 @@ function stripThinking(value: string): string {
 
 function sensitiveArgumentValues(value: unknown, key = ''): string[] {
   if (typeof value === 'string') {
-    return value.length >= 4 && (sensitiveArgumentKey(key) || value.length >= 80)
-      ? [value]
-      : [];
+    if (value.length < 4) return [];
+    return [...new Set([
+      ...(sensitiveArgumentKey(key) || value.length >= 80 ? [value] : []),
+      ...inlineSensitiveValues(value),
+    ])];
   }
   if (Array.isArray(value)) {
     return value.flatMap((item) => sensitiveArgumentValues(item, key));
@@ -158,6 +164,23 @@ function sensitiveArgumentValues(value: unknown, key = ''): string[] {
 
 function sensitiveArgumentKey(key: string): boolean {
   return /(?:authorization|cookie|credential|password|passwd|private[_-]?key|secret|token|api[_-]?key)/iu.test(key);
+}
+
+function inlineSensitiveValues(value: string): string[] {
+  const values: string[] = [];
+  for (const match of value.matchAll(/\b(?:Basic|Bearer)\s+([^\s"']+)/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/(?:^|\s)(?:-u|--user)(?:=|\s+)["']?([^\s"']+)["']?/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/https?:\/\/([^/@\s]+)@/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\s*[=:]\s*["']?([^\s"',;]+)/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  return values.filter((item) => item.length >= 3);
 }
 
 function fencedJson(value: string): string | null {

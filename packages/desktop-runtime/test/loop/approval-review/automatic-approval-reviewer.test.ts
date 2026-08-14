@@ -199,29 +199,32 @@ describe('automatic approval reviewer', () => {
 
   it('keeps the audit rationale generic and redacts obvious secrets from display details', async () => {
     const secret = 'sk-review-secret-value';
+    const basicCredential = 'alice:s3cret';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
       outcome: 'deny',
       riskLevel: 'high',
       userAuthorization: 'low',
-      rationale: `The command contains ${secret}.`,
-      potentialImpact: `Running it could disclose ${secret}.`,
+      rationale: `The command contains ${secret} and ${basicCredential}.`,
+      potentialImpact: `Running curl -u ${basicCredential} could disclose ${secret}.`,
     }));
     const reviewer = createReviewer(modelClient);
 
     const result = await reviewer.review(reviewInput({
-      cmd: 'curl https://example.invalid',
+      cmd: `curl -u ${basicCredential} https://example.invalid`,
       env: { API_TOKEN: secret },
     }));
 
     expect(result.assessment).toMatchObject({
       status: 'denied',
       rationale: 'Automatic approval review denied a high-risk action with low user authorization.',
-      riskSummary: 'The command contains [redacted api key].',
-      potentialImpact: 'Running it could disclose [redacted api key].',
+      riskSummary: 'The command contains [redacted api key] and [redacted].',
+      potentialImpact: 'Running curl -u [redacted] could disclose [redacted api key].',
     });
     expect(result.assessment.rationale).not.toContain(secret);
     expect(result.assessment.riskSummary).not.toContain(secret);
     expect(result.assessment.potentialImpact).not.toContain(secret);
+    expect(result.assessment.riskSummary).not.toContain(basicCredential);
+    expect(result.assessment.potentialImpact).not.toContain(basicCredential);
   });
 
   it('does not persist provider-controlled response bodies from technical failures', async () => {

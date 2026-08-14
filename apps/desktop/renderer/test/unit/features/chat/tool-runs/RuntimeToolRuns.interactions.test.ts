@@ -163,6 +163,24 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       },
     }]);
     const manualRiskFallback = renderedTextFromHtml(manualRiskFallbackHtml);
+    const approvedRiskOverrideHtml = renderedHtml([{
+      id: 'exec_manual_risk_approved',
+      name: 'exec_command',
+      status: 'success',
+      argumentsPreview: '{"cmd":"printf completed"}',
+      resultPreview: 'completed',
+      approvalReviewer: 'user',
+      approvalStatus: 'approved',
+      approvalResolutionSource: 'user',
+      approvalReviewAssessment: {
+        status: 'denied',
+        rationale: 'Automatic approval review denied a high-risk action with medium user authorization.',
+        riskLevel: 'high',
+        userAuthorization: 'medium',
+        riskSummary: '该命令需要明确确认。',
+        potentialImpact: '命令可能修改本地状态。',
+      },
+    }]);
     const manuallyRejectedRiskHtml = renderedHtml([{
       id: 'exec_manual_risk_rejected',
       name: 'exec_command',
@@ -264,6 +282,9 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(manualRiskFallback).toContain('仍然授权并执行');
     expect(manualRiskFallback).toContain('拒绝');
     expect(manualRiskFallback).not.toContain('本会话允许');
+    expect(approvedRiskOverrideHtml).toContain('chat-mcp-terminal__output');
+    expect(approvedRiskOverrideHtml).toContain('chat-mcp-terminal__footer');
+    expect(renderedTextFromHtml(approvedRiskOverrideHtml)).toContain('completed');
     expect(manuallyRejectedRiskHtml).toContain('<details');
     expect(manuallyRejectedRisk).toContain('高风险操作详情');
     expect(manuallyRejectedRisk).toContain('原因：该操作会重启本地服务。');

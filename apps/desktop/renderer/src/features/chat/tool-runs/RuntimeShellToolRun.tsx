@@ -41,7 +41,7 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
       </div>
       {run.status !== 'pending_approval'
         && run.status !== 'cancelled'
-        && run.approvalReviewAssessment?.status !== 'denied' ? (
+        && run.status !== 'rejected' ? (
         <div className="chat-mcp-terminal__footer">
           {diagnostic ? `${status} · ${diagnostic}` : status}
         </div>
@@ -62,9 +62,9 @@ export function shellCommand(run: RuntimeToolRun): string {
 export function shellResultPreviewForDisplay(
   run: RuntimeToolRun,
 ): string | undefined {
-  // A denied approval means the command never ran. The risk card explains the
-  // decision, so a policy/reviewer message must not masquerade as shell output.
-  if (run.approvalReviewAssessment?.status === 'denied') return undefined;
+  // Rejected and cancelled commands never ran. A retained automatic-review
+  // denial may instead describe a command the user subsequently approved.
+  if (run.status === 'rejected' || run.status === 'cancelled') return undefined;
   const preview = run.resultPreview ?? '';
   if (isApprovalMetadataPreview(run, preview)) return undefined;
   if (run.status !== 'pending_approval' && run.status !== 'running') {
