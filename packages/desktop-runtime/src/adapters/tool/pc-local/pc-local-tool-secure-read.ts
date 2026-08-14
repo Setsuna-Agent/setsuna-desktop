@@ -1,6 +1,5 @@
 import type { Stats } from 'node:fs';
 import { open, realpath, stat, type FileHandle } from 'node:fs/promises';
-import path from 'node:path';
 import {
   isPathInsideRoot,
   readableRootsForState,
@@ -44,10 +43,15 @@ export async function openValidatedReadableFile(
   const handle = await open(canonicalPath, 'r');
   try {
     const info = await handle.stat();
-    const revalidatedPath = await realpath(canonicalPath);
+    const [revalidatedPath, revalidatedAllowedRoot] = await Promise.all([
+      realpath(canonicalPath),
+      realpath(allowedRoot),
+    ]);
     const revalidatedInfo = await stat(revalidatedPath);
-    if (!isPathInsideRoot(revalidatedPath, allowedRoot)
-        || path.resolve(revalidatedPath) !== path.resolve(canonicalPath)
+    // Windows may spell the same file differently across sync and async
+    // realpath calls (for example RUNNER~1 versus runneradmin). Revalidate both
+    // sides with the same API, then rely on descriptor identity for the race check.
+    if (!isPathInsideRoot(revalidatedPath, revalidatedAllowedRoot)
         || !sameIdentity(info, revalidatedInfo)) {
       throw new Error('Readable file changed while its workspace boundary was being verified.');
     }
