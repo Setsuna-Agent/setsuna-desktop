@@ -35,9 +35,9 @@ import {
   deniedSandboxRuleForPath,
   isPathInsideRoot,
   normalizePermissionProfile,
-  readableRootsForState,
   realPathIfExists,
   resolvePolicyPath,
+  sandboxReadableRootsForState,
 } from './pc-local-tool-paths.js';
 import {
   escapeRegExp,
@@ -73,6 +73,8 @@ export type ShellPolicyState = {
   root?: string;
   permissionProfile?: unknown;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  /** Host-only grants are intentionally excluded from OS shell sandbox plans. */
+  directToolReadableRoots?: readonly string[];
   osSandbox?: boolean;
   shellPolicyRules?: readonly unknown[];
   networkPolicyAmendments?: readonly RuntimeNetworkPolicyAmendment[] | readonly unknown[];
@@ -631,7 +633,7 @@ function shellExplicitReadableRoots(
   additionalRoots: readonly string[] = [],
 ): string[] {
   const roots = [
-    ...readableRootsForState(state),
+    ...sandboxReadableRootsForState(state),
     ...shellWorkspaceWriteRoots(state),
     ...additionalRoots,
   ];

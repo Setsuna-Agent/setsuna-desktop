@@ -207,7 +207,8 @@ UI 只根据这些结构化状态展示，不能解析 main 的自由格式日�
 
 ## Attachment 与 asset
 
-- Upload input 使用受限 filename/MIME/data。
+- 本地文件由 preload 从 Electron `File` 提取可信路径，再通过 main-only link contract 登记；renderer 不能提交任意路径。
+- 没有本地路径的图片使用受限 filename/MIME/data input 写入受管存储。
 - Runtime 返回 managed asset ID 和 metadata。
 - Message 只引用已认领 attachment。
 - Generated image 与 artifact 使用独立 managed store/contract。

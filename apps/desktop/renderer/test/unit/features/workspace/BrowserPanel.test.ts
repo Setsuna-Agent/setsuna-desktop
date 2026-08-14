@@ -68,7 +68,6 @@ describe('browserScreenshotOutcomeFeedback', () => {
     });
     expect(browserScreenshotOutcomeFeedback('unsupported').tone).toBe('warning');
     expect(browserScreenshotOutcomeFeedback('limit-reached').tone).toBe('warning');
-    expect(browserScreenshotOutcomeFeedback('too-large').tone).toBe('warning');
     expect(browserScreenshotOutcomeFeedback('unavailable').tone).toBe('warning');
   });
 });

@@ -11,6 +11,7 @@ import {
 type ReadPolicyState = {
   root?: string;
   permissionProfile?: string;
+  directToolReadableRoots?: readonly string[];
   sandboxWorkspaceWrite?: {
     deniedGlobPatterns?: string[];
     deniedRoots?: string[];

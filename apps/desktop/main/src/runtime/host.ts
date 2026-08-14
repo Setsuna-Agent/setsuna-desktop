@@ -1,10 +1,11 @@
 import {
-  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
+  RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
   RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type DesktopImageDataResult,
   type DesktopRuntimeEventPayload,
   type RuntimeDataMigrationReadiness,
+  type RuntimeAttachmentLinkInput,
   type RuntimeAttachmentUploadInput,
   type RuntimeEvent,
   type RuntimeEventResync,
@@ -213,7 +214,17 @@ export class RuntimeHost {
     await this.sendRequest({ path: requestPath, method: 'DELETE' }, requestPath);
   }
 
-  /** 上传一个由渲染进程选择的文件，同时不暴露 runtime 端口或令牌。 */
+  /** Registers a renderer-selected local file without copying its bytes into runtime storage. */
+  linkAttachment(input: RuntimeAttachmentLinkInput): Promise<RuntimeStoredMessageAttachment> {
+    if (!path.isAbsolute(input.path)) throw new Error('Attachment path must be absolute.');
+    return this.sendRequest<RuntimeStoredMessageAttachment>({
+      path: RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
+      method: 'POST',
+      body: input,
+    }, RUNTIME_LOCAL_ATTACHMENT_LINK_PATH);
+  }
+
+  /** Stores an image without a local path (for example, a pasted image). */
   async uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
     if (!(input.data instanceof Uint8Array)) throw new Error('Attachment bytes are invalid.');
     const params = new URLSearchParams({ name: input.name, type: input.type });
@@ -252,7 +263,7 @@ export class RuntimeHost {
       return { ok: false, error: 'Runtime returned an unsupported image type.' };
     }
     const data = new Uint8Array(await response.arrayBuffer());
-    if (!data.byteLength || data.byteLength > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) {
+    if (!data.byteLength) {
       return { ok: false, error: 'Runtime returned invalid image bytes.' };
     }
     return { ok: true, data, type };

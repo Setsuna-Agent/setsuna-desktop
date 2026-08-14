@@ -130,6 +130,34 @@ describe('WebDAV portable snapshot data', () => {
     })).rejects.toThrow('符号链接');
   });
 
+  it('keeps device-local attachment links out of portable conversation snapshots', async () => {
+    const root = await createDataRoot();
+    const localPath = path.join(root, 'private', 'notes.txt');
+    const indexPath = path.join(root, 'runtime', 'attachments', 'index.json');
+    await writeFile(indexPath, JSON.stringify({
+      version: 1,
+      attachments: [
+        { id: 'attachment_link', storage: 'linked', absolutePath: localPath },
+        { id: 'attachment_managed', storage: 'managed', fileName: 'image.png' },
+      ],
+    }));
+
+    const sources = await prepareLocalSnapshotSources({
+      dataRoot: root,
+      stagingRoot: path.join(root, '.webdav-sync-work', 'portable-attachments'),
+      categories: ['conversations'],
+    });
+    const portableIndex = sources.find((source) => (
+      source.logicalPath === 'runtime/attachments/index.json'
+    ));
+    const restored = JSON.parse(await readFile(portableIndex!.sourcePath!, 'utf8')) as {
+      attachments: Array<{ id: string }>;
+    };
+
+    expect(restored.attachments).toEqual([{ id: 'attachment_managed', storage: 'managed', fileName: 'image.png' }]);
+    expect(await readFile(portableIndex!.sourcePath!, 'utf8')).not.toContain(localPath);
+  });
+
   it('interrupts an in-progress SQLite backup when snapshot creation is cancelled', async () => {
     const root = await createDataRoot();
     const sourcePath = path.join(root, 'runtime', 'threads.sqlite');

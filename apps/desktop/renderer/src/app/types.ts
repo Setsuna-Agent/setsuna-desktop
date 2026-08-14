@@ -22,6 +22,5 @@ export type ChatImageAttachmentRequest = {
 export type ChatImageAttachmentOutcome =
   | 'added'
   | 'limit-reached'
-  | 'too-large'
   | 'unavailable'
   | 'unsupported';

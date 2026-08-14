@@ -1,4 +1,5 @@
 import type {
+  RuntimeAttachmentLinkInput,
   RuntimeAttachmentUploadInput,
   RuntimeMessageAttachment,
   RuntimeStoredMessageAttachment,
@@ -13,7 +14,6 @@ export type RuntimeResolvedAttachment = {
 export type RuntimeAttachmentValidationCode =
   | 'attachment_empty'
   | 'attachment_invalid'
-  | 'attachment_too_large'
   | 'attachment_unsupported';
 
 export class RuntimeAttachmentValidationError extends Error {
@@ -28,6 +28,7 @@ export class RuntimeAttachmentValidationError extends Error {
 
 export type AttachmentStore = {
   recover(validThreadIds: string[]): Promise<void>;
+  link(input: RuntimeAttachmentLinkInput): Promise<RuntimeStoredMessageAttachment>;
   create(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deletePending(assetId: string): Promise<boolean>;
   claimForThread(threadId: string, attachments: RuntimeMessageAttachment[]): Promise<RuntimeMessageAttachment[]>;
@@ -35,4 +36,3 @@ export type AttachmentStore = {
   releaseThread(threadId: string): Promise<void>;
   resolveForThread(threadId: string, attachments: RuntimeMessageAttachment[]): Promise<RuntimeResolvedAttachment[]>;
 };
-

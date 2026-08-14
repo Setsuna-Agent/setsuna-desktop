@@ -1,7 +1,9 @@
-import { mkdtemp } from 'node:fs/promises';
+import { RUNTIME_LOCAL_ATTACHMENT_LINK_PATH } from '@setsuna-desktop/contracts';
+import { mkdir, mkdtemp, realpath, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MAX_IN_MEMORY_RASTER_IMAGE_BYTES } from '../../../src/utils/safe-image.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import {
   createOpenAiCaptureServer,
@@ -89,17 +91,22 @@ describe('runtime server REST threads and attachments', () => {
       await expect(invalid.json()).resolves.toMatchObject({ code: 'attachment_unsupported' });
     });
   
-  it('claims stored documents for a turn and exposes only a read-only path to the model', async () => {
+  it('claims a linked local file for a turn without granting additional write access', async () => {
       const capture = await createOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('attachment-provider', capture.baseUrl);
-        const query = new URLSearchParams({ name: 'guide.pdf', type: 'application/pdf' });
-        const upload = await fetch(`${harness.baseUrl}/v1/attachments?${query}`, {
+        const sourceDirectory = path.join(harness.runtimeDataDir, 'local-files');
+        const sourcePath = path.join(sourceDirectory, 'notes.txt');
+        await mkdir(sourceDirectory, { recursive: true });
+        await writeFile(sourcePath, 'plugin-readable local file');
+        const canonicalSourcePath = await realpath(sourcePath);
+        const link = await fetch(`${harness.baseUrl}${RUNTIME_LOCAL_ATTACHMENT_LINK_PATH}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/octet-stream' },
-          body: Buffer.from('%PDF-1.7\nplugin-readable attachment'),
+          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: sourcePath, type: 'text/plain' }),
         });
-        const attachment = await upload.json();
+        expect(link.status).toBe(201);
+        const attachment = await link.json();
         const thread = await harness.runtimeFetch('/v1/threads', {
           method: 'POST',
           body: JSON.stringify({ title: 'Attachment context' }),
@@ -116,12 +123,14 @@ describe('runtime server REST threads and attachments', () => {
           (item) => item.messages.some((message) => message.turnId === started.turnId && message.role === 'user'),
         );
   
-        expect(serializedMessages).toContain('Runtime-managed user attachments for this thread');
-        expect(serializedMessages).toContain('guide.pdf');
-        expect(serializedMessages).toContain('read-only');
-        expect(serializedMessages).not.toContain('plugin-readable attachment');
+        expect(serializedMessages).toContain('User attachments available to this thread');
+        expect(serializedMessages).toContain('notes.txt');
+        expect(serializedMessages).toContain(canonicalSourcePath);
+        expect(serializedMessages).toContain('do not grant additional write access');
+        expect(serializedMessages).toContain('Existing workspace permissions still apply');
+        expect(serializedMessages).not.toContain('plugin-readable local file');
         expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
-          .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'guide.pdf' })] });
+          .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'notes.txt' })] });
       } finally {
         await capture.close();
       }
@@ -152,7 +161,7 @@ describe('runtime server REST threads and attachments', () => {
         const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for image attachment model request');
         const serializedRequest = JSON.stringify(request);
 
-        expect(serializedRequest).toContain('Runtime-managed user attachments for this thread');
+        expect(serializedRequest).toContain('User attachments available to this thread');
         expect(serializedRequest).toContain('diagram.png');
         expect(serializedRequest).not.toContain('input_image');
         expect(serializedRequest).not.toContain('image_url');
@@ -178,6 +187,53 @@ describe('runtime server REST threads and attachments', () => {
           { headers: { Authorization: `Bearer ${harness.token}` } },
         );
         expect(deniedPreview.status).toBe(404);
+      } finally {
+        await capture.close();
+      }
+    });
+
+  it('keeps oversized linked images path-readable without loading them for provider or preview', async () => {
+      const capture = await createOpenAiCaptureServer();
+      try {
+        await harness.configureOpenAiProvider('oversized-image-provider', capture.baseUrl);
+        const sourceDirectory = path.join(harness.runtimeDataDir, 'large-local-images');
+        const sourcePath = path.join(sourceDirectory, 'large.png');
+        await mkdir(sourceDirectory, { recursive: true });
+        await writeFile(sourcePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+        await truncate(sourcePath, MAX_IN_MEMORY_RASTER_IMAGE_BYTES + 1);
+        const canonicalSourcePath = await realpath(sourcePath);
+        const link = await fetch(`${harness.baseUrl}${RUNTIME_LOCAL_ATTACHMENT_LINK_PATH}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: sourcePath, type: 'image/png' }),
+        });
+        expect(link.status).toBe(201);
+        const attachment = await link.json();
+        const thread = await harness.runtimeFetch('/v1/threads', {
+          method: 'POST',
+          body: JSON.stringify({ title: 'Oversized linked image' }),
+        });
+
+        await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+          method: 'POST',
+          body: JSON.stringify({ input: 'Inspect the attached image.', attachments: [attachment] }),
+        });
+        const request = await withTimeout(
+          capture.nextBody,
+          harness.providerCaptureTimeoutMs,
+          'Timed out waiting for oversized image model request',
+        );
+        const serializedRequest = JSON.stringify(request);
+        expect(serializedRequest).toContain(canonicalSourcePath);
+        expect(serializedRequest).not.toContain('input_image');
+        expect(serializedRequest).not.toContain('image_url');
+
+        const preview = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(thread.id)}/attachments/${encodeURIComponent(attachment.assetId)}/image`,
+          { headers: { Authorization: `Bearer ${harness.token}` } },
+        );
+        expect(preview.status).toBe(413);
+        await expect(preview.json()).resolves.toMatchObject({ code: 'attachment_too_large' });
       } finally {
         await capture.close();
       }

@@ -6,10 +6,16 @@ import type {
   RuntimeRequestInput,
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
+  linkAttachment: (file) => {
+    const filePath = webUtils.getPathForFile(file);
+    return filePath
+      ? ipcRenderer.invoke('runtime:link-attachment', { path: filePath, type: file.type })
+      : Promise.resolve(null);
+  },
   uploadAttachment: (input) => ipcRenderer.invoke('runtime:upload-attachment', input),
   readAttachmentImage: (threadId, assetId) =>
     ipcRenderer.invoke('runtime:read-attachment-image', { threadId, assetId }),

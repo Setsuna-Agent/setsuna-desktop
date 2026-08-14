@@ -12,6 +12,7 @@ import {
   readFile,
   readdir,
   rm,
+  writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
@@ -52,11 +53,33 @@ export async function prepareLocalSnapshotSources(
 ): Promise<LocalSnapshotSource[]> {
   const sources = await collectLocalSnapshotSources(input, true);
   try {
-    return await materializeFileSources(sources, input.stagingRoot, input.signal);
+    const materialized = await materializeFileSources(sources, input.stagingRoot, input.signal);
+    if (input.categories.includes('conversations')) {
+      await removeDeviceLocalAttachmentLinks(materialized);
+    }
+    return materialized;
   } catch (error) {
     for (const source of sources) source.data?.fill(0);
     throw error;
   }
+}
+
+async function removeDeviceLocalAttachmentLinks(sources: readonly LocalSnapshotSource[]): Promise<void> {
+  const indexSource = sources.find((source) => source.logicalPath === 'runtime/attachments/index.json');
+  if (!indexSource?.sourcePath) return;
+  const index = JSON.parse(await readFile(indexSource.sourcePath, 'utf8')) as unknown;
+  if (!isRecord(index) || !Array.isArray(index.attachments)) {
+    throw new Error('本地附件索引格式无效，无法生成可移植快照。');
+  }
+  const attachments = index.attachments.filter((record) => (
+    !isRecord(record) || record.storage !== 'linked'
+  ));
+  if (attachments.length === index.attachments.length) return;
+  await writeFile(
+    indexSource.sourcePath,
+    `${JSON.stringify({ ...index, attachments }, null, 2)}\n`,
+    { encoding: 'utf8', mode: 0o600 },
+  );
 }
 
 export async function summarizeLocalSnapshotCategories(

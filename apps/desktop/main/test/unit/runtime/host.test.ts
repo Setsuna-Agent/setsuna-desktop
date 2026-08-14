@@ -1,4 +1,5 @@
 import {
+  RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
   RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type RuntimeEvent,
@@ -335,6 +336,31 @@ describe('runtime host packaging paths', () => {
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({ path: bundlePath }),
+    });
+  });
+
+  it('registers selected local files through a main-only runtime route', async () => {
+    const filePath = path.resolve('/tmp/notes.txt');
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      id: 'attachment_1',
+      assetId: 'attachment_1',
+      source: 'runtime',
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 5,
+    }), { status: 201 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const host = new RuntimeHost({ appRoot: '/tmp/setsuna', dataDir: '/tmp/setsuna-data' });
+
+    await expect(host.request({ path: RUNTIME_LOCAL_ATTACHMENT_LINK_PATH }))
+      .rejects.toThrow('Runtime path is not allowed');
+    await expect(host.linkAttachment({ path: filePath, type: 'text/plain' }))
+      .resolves.toMatchObject({ assetId: 'attachment_1' });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://127.0.0.1:0${RUNTIME_LOCAL_ATTACHMENT_LINK_PATH}`);
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ path: filePath, type: 'text/plain' }),
     });
   });
 

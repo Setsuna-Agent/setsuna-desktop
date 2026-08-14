@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   chatImageDataUrlBytes,
   maxChatImageAttachments,
-  maxChatImageSize,
   rejectedChatImageAttachment,
 } from '../../../../../src/features/chat/composer/chatImageAttachments.js';
 
@@ -18,10 +17,10 @@ const imageAttachment: RuntimeMessageAttachment = {
 describe('rejectedChatImageAttachment', () => {
   it('accepts a valid image while capacity remains', () => {
     expect(rejectedChatImageAttachment(imageAttachment, 0)).toBeNull();
+    expect(rejectedChatImageAttachment({ ...imageAttachment, size: 128 * 1024 * 1024 }, 0)).toBeNull();
   });
 
   it('reports the reason an external image cannot enter the composer', () => {
-    expect(rejectedChatImageAttachment({ ...imageAttachment, size: maxChatImageSize + 1 }, 0)).toBe('too-large');
     expect(rejectedChatImageAttachment(imageAttachment, maxChatImageAttachments)).toBe('limit-reached');
     expect(rejectedChatImageAttachment({ ...imageAttachment, url: 'https://example.com/image.png' }, 0)).toBe('unavailable');
   });

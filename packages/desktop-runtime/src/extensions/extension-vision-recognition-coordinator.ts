@@ -1,5 +1,6 @@
 import {
   isRuntimeInlineMessageAttachment,
+  isRuntimeRasterImageMimeType,
   isRuntimeStoredMessageAttachment,
   RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
   type ProviderConfigState,
@@ -12,7 +13,6 @@ import {
   type RuntimeVisionRecognitionTestInput,
   type RuntimeVisionRecognitionTestResult,
 } from '@setsuna-desktop/contracts';
-import { readFile } from 'node:fs/promises';
 import type { AttachmentStore } from '../ports/attachment-store.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -20,11 +20,15 @@ import type { ModelClient } from '../ports/model-client.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import type { ToolExecutionContext } from '../ports/tool-host.js';
-import { detectSafeImageMimeType, type SafeImageMimeType } from '../utils/safe-image.js';
+import {
+  detectSafeImageMimeType,
+  MAX_IN_MEMORY_RASTER_IMAGE_BYTES,
+  readSafeRasterImageFile,
+  type SafeImageMimeType,
+} from '../utils/safe-image.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { objectInput, requiredStringArg } from '../adapters/tool/tool-input.js';
 
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_RESULT_CHARS = 64_000;
 const MAX_OUTPUT_TOKENS = 4_096;
 const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -174,13 +178,15 @@ export class ExtensionVisionRecognitionCoordinator {
       .flatMap((message) => [...(message.attachments ?? [])].reverse())
       .find((item): item is RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment => (
         (isRuntimeInlineMessageAttachment(item) || isRuntimeStoredMessageAttachment(item))
-        && item.type.startsWith('image/')
+        && (isRuntimeInlineMessageAttachment(item)
+          ? item.type.startsWith('image/')
+          : isRuntimeRasterImageMimeType(item.type))
         && (
           item.id === requestedId
           || (isRuntimeStoredMessageAttachment(item) && item.assetId === requestedId)
         )
       ));
-    if (!attachment || !attachment.type.startsWith('image/')) {
+    if (!attachment) {
       throw new Error(`当前会话中没有可用的图片附件：${requestedId}`);
     }
     if (isRuntimeInlineMessageAttachment(attachment)) {
@@ -192,21 +198,27 @@ export class ExtensionVisionRecognitionCoordinator {
         ...inline,
       };
     }
+    if (!isRuntimeRasterImageMimeType(attachment.type)) {
+      throw new Error('图片附件不是受支持的 PNG、JPEG、GIF 或 WebP 文件。');
+    }
 
     const resolved = (await this.attachmentStore.resolveForThread(threadId, [attachment]))[0];
     if (!resolved) throw new Error(`图片附件不可用或不属于当前会话：${requestedId}`);
-    const data = await readFile(resolved.absolutePath);
-    if (!data.byteLength || data.byteLength !== attachment.size || data.byteLength > MAX_IMAGE_BYTES) {
-      throw new Error('图片附件为空或超过 20 MB 限制。');
+    if (resolved.attachment.size > MAX_IN_MEMORY_RASTER_IMAGE_BYTES) {
+      throw new Error('图片附件过大，无法载入视觉模型；Agent 仍可通过本地文件路径读取。');
     }
-    const mimeType = detectSafeImageMimeType(data);
-    if (!mimeType || mimeType !== attachment.type) {
+    const data = await readSafeRasterImageFile({
+      filePath: resolved.absolutePath,
+      expectedMimeType: attachment.type,
+      expectedSize: resolved.attachment.size,
+    });
+    if (!data) {
       throw new Error('图片附件不是受支持的 PNG、JPEG、GIF 或 WebP 文件。');
     }
     return {
       id: attachment.assetId,
       name: attachment.name,
-      mimeType,
+      mimeType: attachment.type,
       data,
     };
   }
@@ -248,11 +260,16 @@ function decodeInlineImage(
   if (!match?.[1] || !match[2]) return null;
   const mimeType = match[1].toLowerCase() as SafeImageMimeType;
   const payload = match[2].replace(/\s/gu, '');
-  if (mimeType !== attachment.type || !payload.length || payload.length % 4 !== 0) return null;
+  if (
+    mimeType !== attachment.type
+    || attachment.size > MAX_IN_MEMORY_RASTER_IMAGE_BYTES
+    || !payload.length
+    || payload.length % 4 !== 0
+    || payload.length > Math.ceil(MAX_IN_MEMORY_RASTER_IMAGE_BYTES / 3) * 4
+  ) return null;
   const data = Buffer.from(payload, 'base64');
   if (!data.byteLength
     || data.byteLength !== attachment.size
-    || data.byteLength > MAX_IMAGE_BYTES
     || data.toString('base64') !== payload) return null;
   return detectSafeImageMimeType(data) === mimeType ? { mimeType, data } : null;
 }

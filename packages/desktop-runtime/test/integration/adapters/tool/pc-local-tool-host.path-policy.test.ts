@@ -425,6 +425,22 @@ describe('pc local path and mutation policy', () => {
     expect(result.content).toContain('outside but approved');
   });
 
+  it('allows attachment reads through direct tools without a sandbox readable root', async () => {
+    const { host } = await createHost();
+    const attachmentRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-direct-tool-attachment-'));
+    const target = path.join(attachmentRoot, 'notes.txt');
+    await writeFile(target, 'linked attachment\n', 'utf8');
+
+    const result = await host.runTool('read_file', { file_path: target }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      directToolReadableRoots: [target],
+      sandboxWorkspaceWrite: {},
+    });
+
+    expect(result.content).toContain('linked attachment');
+  });
+
   it('denies file tool access under configured denied roots', async () => {
     const { host, projectDir } = await createHost();
     const deniedRoot = path.join(projectDir, 'blocked');

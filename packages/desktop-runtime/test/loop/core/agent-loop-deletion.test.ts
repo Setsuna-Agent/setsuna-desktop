@@ -1,6 +1,7 @@
 import type {
   ModelRequest,
   ModelStreamEvent,
+  RuntimeAttachmentLinkInput,
   RuntimeAttachmentUploadInput,
   RuntimeMessageAttachment,
   RuntimeStoredMessageAttachment,
@@ -263,6 +264,10 @@ class DeferredClaimAttachmentStore implements AttachmentStore {
   }
 
   async create(_input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment> {
+    throw new Error('not implemented in this test');
+  }
+
+  async link(_input: RuntimeAttachmentLinkInput): Promise<RuntimeStoredMessageAttachment> {
     throw new Error('not implemented in this test');
   }
 

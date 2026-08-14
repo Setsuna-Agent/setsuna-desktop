@@ -93,6 +93,9 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
   const request = <T = unknown>(input: RuntimeRequestInput): Promise<T> => bridge.request<T>(input);
 
   return {
+    linkAttachment(file) {
+      return bridge.linkAttachment(file);
+    },
     uploadAttachment(input) {
       return bridge.uploadAttachment(input);
     },

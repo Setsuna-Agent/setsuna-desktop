@@ -8,11 +8,12 @@ import {
   type RuntimeUsage,
   type RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ExtensionVisionRecognitionCoordinator } from '../../src/extensions/extension-vision-recognition-coordinator.js';
+import { MAX_IN_MEMORY_RASTER_IMAGE_BYTES } from '../../src/utils/safe-image.js';
 
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
@@ -155,6 +156,26 @@ describe('ExtensionVisionRecognitionCoordinator', () => {
       attachment_id: fixture.attachment.assetId,
       prompt: 'Describe it.',
     }, { threadId: 'thread_1' })).rejects.toThrow('当前会话中没有可用的图片附件');
+    expect(requestCount).toBe(0);
+  });
+
+  it('does not load oversized linked images into the vision model', async () => {
+    const fixture = await imageFixture();
+    const size = MAX_IN_MEMORY_RASTER_IMAGE_BYTES + 1;
+    await truncate(fixture.absolutePath, size);
+    fixture.attachment = { ...fixture.attachment, size };
+    fixture.thread = runtimeThread([fixture.attachment]);
+    let requestCount = 0;
+    const host = visionCoordinator(
+      configStore(runtimeConfig()),
+      fixture,
+      modelClient(() => { requestCount += 1; }),
+    );
+
+    await expect(host.analyze({
+      attachment_id: fixture.attachment.assetId,
+      prompt: 'Describe it.',
+    }, { threadId: 'thread_1' })).rejects.toThrow('图片附件过大');
     expect(requestCount).toBe(0);
   });
 

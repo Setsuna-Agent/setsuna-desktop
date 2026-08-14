@@ -16,7 +16,7 @@ describe('renderer i18n', () => {
     expect(translate('zh-CN', 'settings.title')).toBe('设置');
     expect(translate('en-US', 'settings.title')).toBe('Settings');
     expect(translate('en-US', 'chat.starter.projectTitle', { project: 'Setsuna' })).toBe(
-      'What should we build in Setsuna?',
+      'What would you like to do in Setsuna?',
     );
   });
 

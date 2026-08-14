@@ -8,14 +8,12 @@ import {
 import type { ChatImageAttachmentOutcome } from '../../../app/types.js';
 
 export const maxChatImageAttachments = 8;
-export const maxChatImageSize = 8 * 1024 * 1024;
 
 export function rejectedChatImageAttachment(
   attachment: RuntimeMessageAttachment,
   currentCount: number,
 ): Exclude<ChatImageAttachmentOutcome, 'added' | 'unsupported'> | null {
   if (!isRuntimeInlineMessageAttachment(attachment) || !attachment.type.startsWith('image/') || !attachment.url.startsWith('data:image/')) return 'unavailable';
-  if (attachment.size > maxChatImageSize) return 'too-large';
   if (currentCount >= maxChatImageAttachments) return 'limit-reached';
   return null;
 }

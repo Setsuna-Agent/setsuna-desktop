@@ -1,19 +1,25 @@
 import {
   isRuntimeStoredMessageAttachment,
+  type RuntimeAttachmentLinkInput,
   type RuntimeAttachmentUploadInput,
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { mkdir, open, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
+  RuntimeAttachmentValidationError,
   type AttachmentStore,
   type RuntimeResolvedAttachment,
 } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
+import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import {
+  DEFAULT_STORED_ATTACHMENT_MIME_TYPE,
+  normalizeAttachmentLinkMimeType,
   normalizeStoredAttachmentMimeType,
   safeAttachmentDisplayName,
   safeStoredAttachmentFileName,
@@ -22,15 +28,26 @@ import {
 } from './file-attachment-validation.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 
-type StoredAttachmentRecord = {
+type StoredAttachmentRecordBase = {
   id: string;
   name: string;
   type: StoredAttachmentMimeType;
   size: number;
-  fileName: string;
   createdAt: string;
   threadIds: string[];
 };
+
+type ManagedStoredAttachmentRecord = StoredAttachmentRecordBase & {
+  storage: 'managed';
+  fileName: string;
+};
+
+type LinkedStoredAttachmentRecord = StoredAttachmentRecordBase & {
+  storage: 'linked';
+  absolutePath: string;
+};
+
+type StoredAttachmentRecord = ManagedStoredAttachmentRecord | LinkedStoredAttachmentRecord;
 
 type AttachmentIndex = {
   version: 1;
@@ -40,7 +57,7 @@ type AttachmentIndex = {
 const EMPTY_INDEX: AttachmentIndex = { version: 1, attachments: [] };
 const DEFAULT_PENDING_TTL_MS = 24 * 60 * 60 * 1_000;
 
-/** 在工作区外持久化用户上传的附件，并通过不透明资源 ID 授予访问权限。 */
+/** 通过不透明 ID 管理本地文件引用，以及必须持久化的图片字节。 */
 export class FileAttachmentStore implements AttachmentStore {
   private readonly root: string;
   private readonly filesRoot: string;
@@ -65,15 +82,16 @@ export class FileAttachmentStore implements AttachmentStore {
       const index = await this.readIndex();
       const now = this.clock.now().getTime();
       const retained: StoredAttachmentRecord[] = [];
-      const removedIds = new Set<string>();
+      const removedManagedIds = new Set<string>();
 
       for (const record of index.attachments) {
         const threadIds = record.threadIds.filter((threadId) => validThreads.has(threadId));
         const createdAt = Date.parse(record.createdAt);
         const pendingExpired = !threadIds.length && (!Number.isFinite(createdAt) || now - createdAt >= this.pendingTtlMs);
-        const fileExists = await stat(this.filePath(record)).then((entry) => entry.isFile()).catch(() => false);
-        if (pendingExpired || !fileExists) {
-          removedIds.add(record.id);
+        const managedFileUnavailable = record.storage === 'managed'
+          && !await stat(this.filePath(record)).then((entry) => entry.isFile()).catch(() => false);
+        if (pendingExpired || managedFileUnavailable) {
+          if (record.storage === 'managed') removedManagedIds.add(record.id);
           continue;
         }
         retained.push({ ...record, threadIds });
@@ -88,7 +106,7 @@ export class FileAttachmentStore implements AttachmentStore {
         orphanDirectories.push(entry.name);
       }
       await Promise.all([
-        ...[...removedIds].map((id) => this.removeAssetDirectory(id)),
+        ...[...removedManagedIds].map((id) => this.removeAssetDirectory(id)),
         ...orphanDirectories.map((name) => this.removeDiscoveredAssetDirectory(name)),
       ]);
     });
@@ -98,11 +116,12 @@ export class FileAttachmentStore implements AttachmentStore {
     return this.enqueueMutation(async () => {
       const validated = validateStoredAttachmentUpload(input);
       const id = assertSafeRuntimeId(this.ids.id('attachment'), 'Attachment id');
-      const record: StoredAttachmentRecord = {
+      const record: ManagedStoredAttachmentRecord = {
         id,
         name: validated.name,
         type: validated.type,
         size: validated.data.byteLength,
+        storage: 'managed',
         fileName: safeStoredAttachmentFileName(validated.name, validated.type),
         createdAt: this.clock.now().toISOString(),
         threadIds: [],
@@ -123,6 +142,38 @@ export class FileAttachmentStore implements AttachmentStore {
     });
   }
 
+  link(input: RuntimeAttachmentLinkInput): Promise<RuntimeStoredMessageAttachment> {
+    return this.enqueueMutation(async () => {
+      if (!path.isAbsolute(input.path)) {
+        throw new RuntimeAttachmentValidationError('附件路径无效。', 'attachment_invalid');
+      }
+      const absolutePath = await realpath(input.path).catch(() => '');
+      const file = absolutePath ? await readableRegularFileInfo(absolutePath, true) : null;
+      if (!absolutePath || !file) {
+        throw new RuntimeAttachmentValidationError('本地文件不存在或不可读取。', 'attachment_invalid');
+      }
+      const name = safeAttachmentDisplayName(path.basename(input.path));
+      const declaredType = normalizeAttachmentLinkMimeType(input.type);
+      const type = declaredType === DEFAULT_STORED_ATTACHMENT_MIME_TYPE && file.detectedImageType
+        ? file.detectedImageType
+        : declaredType;
+      const id = assertSafeRuntimeId(this.ids.id('attachment'), 'Attachment id');
+      const record: LinkedStoredAttachmentRecord = {
+        id,
+        name,
+        type,
+        size: file.size,
+        storage: 'linked',
+        absolutePath,
+        createdAt: this.clock.now().toISOString(),
+        threadIds: [],
+      };
+      const index = await this.readIndex();
+      await this.writeIndex({ version: 1, attachments: [...index.attachments, record] });
+      return storedAttachment(record);
+    });
+  }
+
   deletePending(assetId: string): Promise<boolean> {
     return this.enqueueMutation(async () => {
       const safeId = assertSafeRuntimeId(assetId, 'Attachment id');
@@ -133,7 +184,7 @@ export class FileAttachmentStore implements AttachmentStore {
         version: 1,
         attachments: index.attachments.filter((item) => item.id !== safeId),
       });
-      await this.removeAssetDirectory(safeId);
+      if (record.storage === 'managed') await this.removeAssetDirectory(safeId);
       return true;
     });
   }
@@ -178,16 +229,16 @@ export class FileAttachmentStore implements AttachmentStore {
     return this.enqueueMutation(async () => {
       const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
       const index = await this.readIndex();
-      const removedIds: string[] = [];
+      const removedManagedIds: string[] = [];
       const attachments = index.attachments.flatMap((record) => {
         if (!record.threadIds.includes(safeThreadId)) return [record];
         const threadIds = record.threadIds.filter((id) => id !== safeThreadId);
         if (threadIds.length) return [{ ...record, threadIds }];
-        removedIds.push(record.id);
+        if (record.storage === 'managed') removedManagedIds.push(record.id);
         return [];
       });
       await this.writeIndex({ version: 1, attachments });
-      await Promise.all(removedIds.map((id) => this.removeAssetDirectory(id)));
+      await Promise.all(removedManagedIds.map((id) => this.removeAssetDirectory(id)));
     });
   }
 
@@ -200,13 +251,13 @@ export class FileAttachmentStore implements AttachmentStore {
     for (const attachment of uniqueStoredAttachments(attachments)) {
       const record = recordsById.get(attachment.assetId);
       if (!record || !record.threadIds.includes(safeThreadId) || !attachmentMatchesRecord(attachment, record)) continue;
-      const absolutePath = this.filePath(record);
-      const exists = await stat(absolutePath).then((entry) => entry.isFile()).catch(() => false);
-      if (!exists) continue;
+      const absolutePath = this.recordPath(record);
+      const file = await readableRegularFileInfo(absolutePath);
+      if (!file) continue;
       resolved.push({
-        attachment: storedAttachment(record),
+        attachment: storedAttachment(record, file.size),
         absolutePath,
-        readableRoot: this.assetDirectory(record.id),
+        readableRoot: record.storage === 'linked' ? absolutePath : this.assetDirectory(record.id),
       });
     }
     return resolved;
@@ -230,8 +281,12 @@ export class FileAttachmentStore implements AttachmentStore {
     return path.join(this.filesRoot, assertSafeRuntimeId(assetId, 'Attachment id'));
   }
 
-  private filePath(record: StoredAttachmentRecord): string {
+  private filePath(record: ManagedStoredAttachmentRecord): string {
     return path.join(this.assetDirectory(record.id), record.fileName);
+  }
+
+  private recordPath(record: StoredAttachmentRecord): string {
+    return record.storage === 'linked' ? record.absolutePath : this.filePath(record);
   }
 
   private removeAssetDirectory(assetId: string): Promise<void> {
@@ -246,6 +301,29 @@ export class FileAttachmentStore implements AttachmentStore {
   }
 }
 
+async function readableRegularFileInfo(
+  filePath: string,
+  sniffImage = false,
+): Promise<{ size: number; detectedImageType: SafeImageMimeType | null } | null> {
+  const pathInfo = await stat(filePath).catch(() => null);
+  if (!pathInfo?.isFile()) return null;
+  const handle = await open(filePath, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => null);
+  if (!handle) return null;
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) return null;
+    let detectedImageType: SafeImageMimeType | null = null;
+    if (sniffImage && info.size > 0) {
+      const header = Buffer.alloc(12);
+      const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
+      detectedImageType = detectSafeImageMimeType(header.subarray(0, bytesRead));
+    }
+    return { size: info.size, detectedImageType };
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
 function removeDirectory(directory: string): Promise<void> {
   return rm(directory, {
     recursive: true,
@@ -256,14 +334,14 @@ function removeDirectory(directory: string): Promise<void> {
   });
 }
 
-function storedAttachment(record: StoredAttachmentRecord): RuntimeStoredMessageAttachment {
+function storedAttachment(record: StoredAttachmentRecord, currentSize = record.size): RuntimeStoredMessageAttachment {
   return {
     id: record.id,
     assetId: record.id,
     source: 'runtime',
     name: record.name,
     type: record.type,
-    size: record.size,
+    size: currentSize,
   };
 }
 
@@ -299,14 +377,13 @@ function attachmentMatchesRecord(attachment: RuntimeStoredMessageAttachment, rec
 
 function normalizeIndex(value: AttachmentIndex): AttachmentIndex {
   if (!value || value.version !== 1 || !Array.isArray(value.attachments)) return EMPTY_INDEX;
-  const attachments = value.attachments.flatMap((record) => {
+  const attachments = value.attachments.flatMap<StoredAttachmentRecord>((record) => {
     if (!record || typeof record !== 'object') return [];
     try {
       const id = assertSafeRuntimeId(String(record.id ?? ''), 'Attachment id');
       const type = normalizeStoredAttachmentMimeType(record.type);
-      if (!type || typeof record.name !== 'string' || typeof record.fileName !== 'string' || typeof record.createdAt !== 'string') return [];
+      if (!type || typeof record.name !== 'string' || typeof record.createdAt !== 'string') return [];
       if (!Number.isFinite(record.size) || record.size < 0) return [];
-      const fileName = safeStoredAttachmentFileName(record.fileName, type);
       const threadIds = Array.isArray(record.threadIds)
         ? [...new Set(record.threadIds.flatMap((threadId) => {
             try {
@@ -316,15 +393,28 @@ function normalizeIndex(value: AttachmentIndex): AttachmentIndex {
             }
           }))]
         : [];
-      return [{
+      const common = {
         id,
         name: safeAttachmentDisplayName(record.name),
         type,
         size: Math.floor(record.size),
-        fileName,
         createdAt: record.createdAt,
         threadIds,
-      } satisfies StoredAttachmentRecord];
+      } satisfies StoredAttachmentRecordBase;
+      if (record.storage === 'linked') {
+        if (typeof record.absolutePath !== 'string' || !path.isAbsolute(record.absolutePath)) return [];
+        return [{
+          ...common,
+          storage: 'linked',
+          absolutePath: path.resolve(record.absolutePath),
+        } satisfies LinkedStoredAttachmentRecord];
+      }
+      if (typeof record.fileName !== 'string') return [];
+      return [{
+        ...common,
+        storage: 'managed',
+        fileName: safeStoredAttachmentFileName(record.fileName, type),
+      } satisfies ManagedStoredAttachmentRecord];
     } catch {
       return [];
     }

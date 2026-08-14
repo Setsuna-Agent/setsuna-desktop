@@ -3,7 +3,11 @@ import { Image } from 'antd';
 import { LoaderCircle, TriangleAlert, X } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileIcon } from '../../workspace/WorkspaceFileIcon.js';
-import { formatAttachmentTypeLabel, type ChatComposerAttachmentItem } from './chatAttachments.js';
+import {
+  formatAttachmentTypeLabel,
+  isChatPreviewableImageType,
+  type ChatComposerAttachmentItem,
+} from './chatAttachments.js';
 
 export function ChatAttachmentTray({
   disabled = false,
@@ -43,10 +47,10 @@ function ComposerAttachmentCard({
   const { t } = useI18n();
   const inlineImage = item.attachment
     && isRuntimeInlineMessageAttachment(item.attachment)
-    && item.attachment.type.startsWith('image/')
+    && isChatPreviewableImageType(item.attachment.type)
     ? item.attachment
     : null;
-  const imagePreviewUrl = item.type.startsWith('image/')
+  const imagePreviewUrl = isChatPreviewableImageType(item.type)
     ? item.previewUrl ?? inlineImage?.url
     : undefined;
   const removing = item.status === 'removing';
@@ -60,7 +64,7 @@ function ComposerAttachmentCard({
       ) : (
         <>
           <span className="chat-attachment__file-icon" aria-hidden="true">
-            {item.status === 'uploading' ? (
+            {item.status === 'preparing' ? (
               <LoaderCircle className="is-spinning" size={17} />
             ) : item.status === 'error' ? (
               <TriangleAlert size={17} />
@@ -71,7 +75,7 @@ function ComposerAttachmentCard({
           <span className="chat-attachment__file-copy">
             <span className="chat-attachment__file-name">{item.name}</span>
             <span className="chat-attachment__file-meta">
-              {item.status === 'uploading' ? t('chat.attachments.uploading') : item.status === 'error' ? item.error : formatAttachmentTypeLabel(item.name, item.type)}
+              {item.status === 'preparing' ? t('chat.attachments.preparing') : item.status === 'error' ? item.error : formatAttachmentTypeLabel(item.name, item.type)}
             </span>
           </span>
         </>

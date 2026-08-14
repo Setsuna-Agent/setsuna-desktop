@@ -104,4 +104,35 @@ describe('Windows sandbox curl environment', () => {
     expect(bypass.readableRoots).not.toContain(path.resolve(curlExecutable));
     expect(bypass.readableRoots).not.toContain(path.resolve(trustBundle));
   });
+
+  it('keeps direct-tool attachment roots out of Windows shell plans', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-direct-tool-shell-plan-'));
+    temporaryRoots.push(root);
+    const workspace = path.join(root, 'workspace');
+    const configuredRoot = path.join(root, 'configured-readable');
+    const attachment = path.join(root, 'private-attachment.txt');
+    await Promise.all([
+      mkdir(workspace, { recursive: true }),
+      mkdir(configuredRoot, { recursive: true }),
+      writeFile(attachment, 'private', 'utf8'),
+    ]);
+
+    const plan = createShellSandboxExecutionPlan({
+      root: workspace,
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      directToolReadableRoots: [attachment],
+      sandboxWorkspaceWrite: { readableRoots: [configuredRoot] },
+    }, {
+      capability: {
+        executablePath: path.join(root, 'setsuna-sandbox-win.exe'),
+        provider: 'windows-native',
+        reason: '',
+        supported: true,
+      },
+    });
+
+    expect(plan.readableRoots).toContain(path.resolve(configuredRoot));
+    expect(plan.readableRoots).not.toContain(path.resolve(attachment));
+  });
 });
