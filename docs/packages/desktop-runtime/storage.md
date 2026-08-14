@@ -17,6 +17,7 @@ runtime/
 ├── skills.json
 ├── plugins.json
 ├── user-skills/
+├── plugin-skill-overrides/
 ├── plugins/
 ├── attachments/
 ├── generated-images/
@@ -239,8 +240,9 @@ Search 实现独立为 `WorkspaceSearchEngine`，不把 ripgrep process 状态�
 
 它们不位于 `adapters/store/`，但属于 runtime 数据：
 
-- `skills.json` 保存 enable/select/extra roots。
+- `skills.json` 保存 enable 状态。
 - `user-skills/<id>/SKILL.md` 保存用户 Skill。
+- `plugin-skill-overrides/<plugin>/<skill>/` 保存 Plugin Skill 的可编辑副本或删除标记，并按 Plugin 安装实例隔离。
 - `plugins.json` 保存安装所有权和 manifest 摘要。
 - `plugins/<id>/` 是 runtime 私有副本。
 

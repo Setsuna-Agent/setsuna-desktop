@@ -73,7 +73,12 @@ const readMcpResourceTool: RuntimeToolDefinition = {
   },
 };
 
-/** 将实时 MCP 清单映射为模型工具，同时保留服务器策略元数据。 */
+/**
+ * 将实时 MCP 清单映射为模型工具。
+ *
+ * 启用 server 并限定 allowed/disabled tools 是 MCP 的执行授权边界；产品不再提供
+ * 逐次调用确认或信任级别，因此这里有意不返回 ToolHost approval requirement。
+ */
 export class McpRuntimeToolHost implements ToolHost {
   private readonly mappingsByContext = new WeakMap<ToolExecutionContext, McpToolMapping[]>();
   private readonly externalContextByContext = new WeakMap<ToolExecutionContext, ToolExternalContext[]>();

@@ -25,6 +25,7 @@ import { errorMessage } from '../../shared/node-errors.js';
 import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
+import { PluginSkillOverrideStore } from './plugin-skill-override-store.js';
 
 type SkillStateFile = {
   version: 1;
@@ -63,6 +64,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private extraSkillRoots: string[] = [];
   private readonly statePath: string;
   private readonly pluginIndexPath: string;
+  private readonly pluginSkillOverrides: PluginSkillOverrideStore;
   private readonly userSkillsDir: string;
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly suspendedPluginRoots = new Map<string, number>();
@@ -73,6 +75,9 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   ) {
     this.statePath = path.join(dataDir, 'skills.json');
     this.pluginIndexPath = path.join(dataDir, 'plugins.json');
+    this.pluginSkillOverrides = new PluginSkillOverrideStore(
+      path.join(dataDir, 'plugin-skill-overrides'),
+    );
     this.userSkillsDir = path.join(dataDir, 'user-skills');
   }
 
@@ -156,7 +161,17 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       if (!skill) return;
       if (skill.kind === 'builtin') throw readOnlySkillError(skillId);
       if (skill.kind === 'plugin') await this.deletePluginSkill(skillId);
-      else await rm(path.dirname(skill.path), { recursive: true, force: true });
+      else {
+        const managedRoot = path.resolve(this.userSkillsDir);
+        const skillDirectory = path.resolve(path.dirname(skill.path));
+        if (skillDirectory !== managedRoot && pathIsInside(managedRoot, skillDirectory)) {
+          await rm(skillDirectory, { recursive: true, force: true });
+        } else {
+          // Extra roots are not runtime-owned. Remove only their Skill entrypoint
+          // instead of recursively deleting an externally managed directory.
+          await rm(skill.path, { force: true });
+        }
+      }
       const state = await this.readState();
       delete state.states[skillId];
       await this.writeState(state);
@@ -243,8 +258,11 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
     const skills = await Promise.all(index.plugins.flatMap((plugin) => plugin.skillEntries.map(async (entry) => {
       const pluginRoot = path.resolve(plugin.installPath);
-      const skillPath = path.resolve(pluginRoot, entry.relativePath, 'SKILL.md');
-      if (!pathIsInside(pluginRoot, skillPath)) return null;
+      const sourceSkillPath = path.resolve(pluginRoot, entry.relativePath, 'SKILL.md');
+      if (!pathIsInside(pluginRoot, sourceSkillPath)) return null;
+      const override = await this.pluginSkillOverrides.read(plugin, entry.id);
+      if (override?.deleted) return null;
+      const skillPath = override?.skillPath ?? sourceSkillPath;
       const content = await readFile(skillPath, 'utf8').catch(() => '');
       if (!content) return null;
       const dependencyManifest = await readSkillDependencyManifest(skillPath);
@@ -311,7 +329,12 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
       const location = pluginSkillLocation(index, skill.id);
       if (!location) throw new Error(`Plugin skill not found: ${skill.id}`);
-      await writeSkillFiles(location.skillPath, files);
+      await this.pluginSkillOverrides.write(
+        location.plugin,
+        location.skillId,
+        location.skillPath,
+        (skillPath) => writeSkillFiles(skillPath, files),
+      );
       const metadata = {
         id: skill.id,
         name: input.name.trim(),
@@ -334,9 +357,9 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
       const location = pluginSkillLocation(index, skillId);
       if (!location) return;
-      // Keep the Plugin declaration in the index so its detail page can show
-      // the removed Skill as unavailable until the Plugin is reinstalled.
-      await rm(path.dirname(location.skillPath), { recursive: true, force: true });
+      // Keep the signed Plugin snapshot untouched. The installation timestamp
+      // scopes this tombstone so uninstalling and reinstalling restores the Skill.
+      await this.pluginSkillOverrides.markDeleted(location.plugin, skillId);
     });
   }
 
@@ -356,6 +379,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private async refreshChangeWatchers(): Promise<void> {
     if (!this.changeSubscribers.size) return;
     await mkdir(this.userSkillsDir, { recursive: true }).catch(() => undefined);
+    await this.pluginSkillOverrides.ensureRoot().catch(() => undefined);
     const directories = new Set(await this.watchDirectories());
     for (const [directory, watcher] of this.watchers.entries()) {
       if (directories.has(directory)) continue;
@@ -384,7 +408,13 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       plugin.installPath,
       ...plugin.skillEntries.map((entry) => path.join(plugin.installPath, entry.relativePath)),
     ]);
-    const roots = [this.builtinSkillsDir, this.userSkillsDir, ...this.extraSkillRoots, ...pluginRoots].map((root) => path.resolve(root));
+    const roots = [
+      this.builtinSkillsDir,
+      this.userSkillsDir,
+      ...this.extraSkillRoots,
+      ...pluginRoots,
+      ...this.pluginSkillOverrides.watchRoots(pluginIndex.plugins),
+    ].map((root) => path.resolve(root));
     const directories = new Set<string>();
     await Promise.all(roots.map(async (root) => {
       if (!await isDirectory(root)) return;
@@ -817,6 +847,7 @@ function pathIsInside(root: string, target: string): boolean {
 
 function pluginSkillLocation(index: PluginIndexFile, skillId: string): {
   plugin: InstalledPluginRecord;
+  skillId: string;
   skillPath: string;
 } | null {
   for (const plugin of index.plugins) {
@@ -827,7 +858,7 @@ function pluginSkillLocation(index: PluginIndexFile, skillId: string): {
     if (!pathIsInside(pluginRoot, skillDirectory) || skillDirectory === pluginRoot) {
       throw new Error(`Installed Plugin Skill path is invalid: ${skillId}`);
     }
-    return { plugin, skillPath: path.join(skillDirectory, 'SKILL.md') };
+    return { plugin, skillId, skillPath: path.join(skillDirectory, 'SKILL.md') };
   }
   return null;
 }

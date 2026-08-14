@@ -126,6 +126,8 @@ describe('file skill registry', () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const sourceSkillPath = path.join(dataDir, 'plugins', 'documents', 'skills', 'documents', 'SKILL.md');
+    const sourceContent = await readFile(sourceSkillPath, 'utf8');
 
     await expect(registry.updateSkill('documents.documents', {
       name: 'Custom Documents',
@@ -136,6 +138,10 @@ describe('file skill registry', () => {
       kind: 'plugin',
       name: 'Custom Documents',
       content: expect.stringContaining('customized workflow'),
+    });
+    expect(await readFile(sourceSkillPath, 'utf8')).toBe(sourceContent);
+    await expect(registry.getSkill('documents.documents')).resolves.toMatchObject({
+      path: expect.stringContaining('plugin-skill-overrides'),
     });
 
     const indexPath = path.join(dataDir, 'plugins.json');
@@ -152,11 +158,21 @@ describe('file skill registry', () => {
     await registry.deleteSkill('documents.documents');
 
     await expect(registry.getSkill('documents.documents')).resolves.toBeNull();
+    expect(await readFile(sourceSkillPath, 'utf8')).toBe(sourceContent);
     await expect(readFile(indexPath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
       plugins: [expect.objectContaining({
         skills: [expect.objectContaining({ id: 'documents.documents' })],
         skillEntries: [expect.objectContaining({ id: 'documents.documents' })],
       })],
+    });
+
+    const reinstalledIndex = JSON.parse(await readFile(indexPath, 'utf8'));
+    reinstalledIndex.plugins[0].installedAt = '2026-07-18T00:00:00.000Z';
+    await writeFile(indexPath, JSON.stringify(reinstalledIndex));
+    await expect(registry.getSkill('documents.documents')).resolves.toMatchObject({
+      id: 'documents.documents',
+      name: 'Word 文档处理',
+      path: sourceSkillPath,
     });
   });
 
@@ -357,6 +373,8 @@ describe('file skill registry', () => {
         'Use the extra root.',
       ].join('\n'),
     );
+    const referencePath = path.join(extraRoot, 'extra-helper', 'reference.md');
+    await writeFile(referencePath, 'Keep this externally managed reference.');
     await registry.setExtraRoots([extraRoot]);
 
     expect(await registry.listSkills()).toMatchObject({
@@ -377,6 +395,11 @@ describe('file skill registry', () => {
         }),
       ]),
     );
+    await expect(registry.deleteSkill('extra-helper')).resolves.toBeUndefined();
+    await expect(readFile(path.join(extraRoot, 'extra-helper', 'SKILL.md'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(referencePath, 'utf8'))
+      .resolves.toBe('Keep this externally managed reference.');
   });
 
   it('notifies subscribers when watched skill files change', async () => {

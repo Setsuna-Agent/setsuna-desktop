@@ -246,7 +246,7 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 - 读取 Plugin Skills。
 - 管理 `runtime/user-skills/<id>/SKILL.md`。
 - `skills.json` 保存 enabled。
-- Builtin 只读；Plugin 和 user Skill 可编辑、删除。删除 Plugin Skill 后保留插件声明，重新安装插件时恢复其文件。
+- Builtin 只读；Plugin 和 user Skill 可编辑、删除。Plugin Skill 的编辑副本和删除标记位于 `plugin-skill-overrides/`，不修改完整性校验覆盖的 Plugin 目录；卸载并重新安装后恢复 Plugin 原始内容。删除 Extra root Skill 时只移除其 `SKILL.md` 入口，不递归删除外部源目录中的其他文件。
 - 每轮从同一 registry 快照暴露所有 enabled Skill 的 `id/name/description/path/contentVersion` 路由元数据；`contentVersion` 由当前 SKILL.md 正文摘要生成。
 - 显式 Skill 优先；显式选择和 auto-activation 只决定哪些 Skill 额外注入完整正文。
 
