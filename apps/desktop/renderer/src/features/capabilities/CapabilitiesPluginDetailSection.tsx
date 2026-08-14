@@ -14,7 +14,7 @@ export function CapabilitiesPluginDetailSection({
   icon: ReactNode;
   title: string;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(count > 0);
   const contentId = useId();
 
   return (

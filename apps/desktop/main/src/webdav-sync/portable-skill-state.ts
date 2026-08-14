@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const MAX_SKILL_STATE_BYTES = 2 * 1024 * 1024;
 
-type SkillState = { enabled?: boolean; selected?: boolean };
+type SkillState = { enabled?: boolean };
 type SkillStateFile = { version: 1; states: Record<string, SkillState> };
 
 /** Keeps only state belonging to user-owned Skill directories. */
@@ -90,7 +90,6 @@ async function readState(filePath: string): Promise<SkillStateFile> {
     if (!id || !isRecord(rawState)) return [];
     const state: SkillState = {
       ...(typeof rawState.enabled === 'boolean' ? { enabled: rawState.enabled } : {}),
-      ...(typeof rawState.selected === 'boolean' ? { selected: rawState.selected } : {}),
     };
     return [[id, state] as const];
   }));

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 import { InMemoryEventBus } from '../../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../../src/adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../../../../src/adapters/skill/file-skill-registry.js';
@@ -17,19 +18,19 @@ describe('file skill registry', () => {
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
     await Promise.all([
-      registry.createSkill({ name: 'Alpha Skill', content: 'alpha', selected: true }),
+      registry.createSkill({ name: 'Alpha Skill', content: 'alpha' }),
       registry.createSkill({ name: 'Beta Skill', content: 'beta', enabled: false }),
     ]);
 
     await expect(registry.listSkills()).resolves.toMatchObject({
       skills: expect.arrayContaining([
-        expect.objectContaining({ id: 'alpha-skill', selected: true }),
+        expect.objectContaining({ id: 'alpha-skill', enabled: true }),
         expect.objectContaining({ id: 'beta-skill', enabled: false }),
       ]),
     });
   });
 
-  it('lists built-in skills and persists selected state', async () => {
+  it('lists built-in skills and persists enabled state', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
 
@@ -39,20 +40,14 @@ describe('file skill registry', () => {
       id: 'builtin-demo',
       name: 'builtin-demo',
       enabled: true,
-      selected: false,
     });
 
-    const updated = await registry.updateSkill('builtin-demo', { selected: true });
-    expect(updated.selected).toBe(true);
-    expect(await registry.selectedSkillInjections()).toMatchObject([
-      {
-        id: 'builtin-demo',
-        name: 'builtin-demo',
-      },
-    ]);
+    const updated = await registry.updateSkill('builtin-demo', { enabled: false });
+    expect(updated.enabled).toBe(false);
+    expect((await registry.listSkills()).skills[0]?.enabled).toBe(false);
   });
 
-  it('resolves enabled metadata and selected full content from one prompt snapshot', async () => {
+  it('resolves enabled metadata and explicitly selected full content from one prompt snapshot', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
     await registry.createSkill({
@@ -128,6 +123,84 @@ describe('file skill registry', () => {
     ]);
   });
 
+  it('updates and removes Plugin Skills without dropping their Plugin declaration', async () => {
+    const { builtinDir, dataDir } = await createSkillFixture();
+    await installDocumentsPluginFixture(dataDir);
+    const sourceSkillDirectory = path.join(dataDir, 'plugins', 'documents', 'skills', 'documents');
+    const sourceManifest = [
+      'interface:',
+      '  display_name: Documents',
+      '  default_prompt: Create a document',
+      'dependencies:',
+      '  tools: []',
+    ].join('\n');
+    await mkdir(path.join(sourceSkillDirectory, 'agents'), { recursive: true });
+    await writeFile(path.join(sourceSkillDirectory, 'agents', 'openai.yaml'), sourceManifest);
+    const registry = new FileSkillRegistry(builtinDir, dataDir);
+    const sourceSkillPath = path.join(sourceSkillDirectory, 'SKILL.md');
+    const sourceContent = await readFile(sourceSkillPath, 'utf8');
+
+    await expect(registry.updateSkill('documents.documents', {
+      name: 'Custom Documents',
+      description: 'Customized document workflow.',
+      content: '# Custom Documents\n\nUse the customized workflow.',
+    })).resolves.toMatchObject({
+      id: 'documents.documents',
+      kind: 'plugin',
+      name: 'Custom Documents',
+      content: expect.stringContaining('customized workflow'),
+    });
+    expect(await readFile(sourceSkillPath, 'utf8')).toBe(sourceContent);
+    const updatedSkill = await registry.getSkill('documents.documents');
+    expect(updatedSkill).toMatchObject({
+      path: expect.stringContaining('plugin-skill-overrides'),
+    });
+    const overrideManifest = await readFile(
+      path.join(path.dirname(updatedSkill?.path ?? ''), 'agents', 'openai.yaml'),
+      'utf8',
+    );
+    expect(parseYaml(overrideManifest)).toMatchObject({
+      interface: {
+        display_name: 'Custom Documents',
+        default_prompt: 'Create a document',
+      },
+      dependencies: { tools: [] },
+    });
+    await expect(readFile(path.join(sourceSkillDirectory, 'agents', 'openai.yaml'), 'utf8'))
+      .resolves.toBe(sourceManifest);
+
+    const indexPath = path.join(dataDir, 'plugins.json');
+    await expect(readFile(indexPath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      plugins: [expect.objectContaining({
+        skills: [expect.objectContaining({
+          id: 'documents.documents',
+          name: 'Custom Documents',
+        })],
+        skillEntries: [expect.objectContaining({ id: 'documents.documents' })],
+      })],
+    });
+
+    await registry.deleteSkill('documents.documents');
+
+    await expect(registry.getSkill('documents.documents')).resolves.toBeNull();
+    expect(await readFile(sourceSkillPath, 'utf8')).toBe(sourceContent);
+    await expect(readFile(indexPath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
+      plugins: [expect.objectContaining({
+        skills: [expect.objectContaining({ id: 'documents.documents' })],
+        skillEntries: [expect.objectContaining({ id: 'documents.documents' })],
+      })],
+    });
+
+    const reinstalledIndex = JSON.parse(await readFile(indexPath, 'utf8'));
+    reinstalledIndex.plugins[0].installedAt = '2026-07-18T00:00:00.000Z';
+    await writeFile(indexPath, JSON.stringify(reinstalledIndex));
+    await expect(registry.getSkill('documents.documents')).resolves.toMatchObject({
+      id: 'documents.documents',
+      name: 'Documents',
+      path: sourceSkillPath,
+    });
+  });
+
   it('uses declared activation phrases without mixing in incidental Plugin metadata', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installPluginSkillFixture(dataDir, {
@@ -176,18 +249,16 @@ describe('file skill registry', () => {
       name: 'Workspace Helper',
       description: 'Helps with local workspace tasks',
       content: '# Workspace Helper\n\nUse only local files.',
-      selected: true,
     });
 
     expect(created).toMatchObject({
       id: 'workspace-helper',
       kind: 'user',
       enabled: true,
-      selected: true,
       name: 'Workspace Helper',
     });
     expect((await registry.listSkills()).skills.map((skill) => skill.id)).toContain('workspace-helper');
-    expect(await registry.selectedSkillInjections()).toEqual(
+    expect(await registry.selectedSkillInjections(['workspace-helper'])).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           id: 'workspace-helper',
@@ -199,14 +270,12 @@ describe('file skill registry', () => {
     const updated = await registry.updateSkill('workspace-helper', {
       name: 'Workspace Guide',
       content: '# Workspace Guide\n\nStay local.',
-      selected: false,
     });
 
     expect(updated).toMatchObject({
       id: 'workspace-helper',
       kind: 'user',
       name: 'Workspace Guide',
-      selected: false,
     });
     expect(updated.content).toContain('Stay local.');
 
@@ -329,6 +398,8 @@ describe('file skill registry', () => {
         'Use the extra root.',
       ].join('\n'),
     );
+    const referencePath = path.join(extraRoot, 'extra-helper', 'reference.md');
+    await writeFile(referencePath, 'Keep this externally managed reference.');
     await registry.setExtraRoots([extraRoot]);
 
     expect(await registry.listSkills()).toMatchObject({
@@ -349,6 +420,11 @@ describe('file skill registry', () => {
         }),
       ]),
     );
+    await expect(registry.deleteSkill('extra-helper')).resolves.toBeUndefined();
+    await expect(readFile(path.join(extraRoot, 'extra-helper', 'SKILL.md'), 'utf8'))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(referencePath, 'utf8'))
+      .resolves.toBe('Keep this externally managed reference.');
   });
 
   it('notifies subscribers when watched skill files change', async () => {
@@ -388,7 +464,7 @@ describe('file skill registry', () => {
     await expect(registry.deleteSkill('builtin-demo')).rejects.toThrow('Built-in skill is read-only');
   });
 
-  it('advertises enabled unselected Skill metadata without injecting its full body', async () => {
+  it('advertises enabled Skill metadata without injecting its full body', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
     const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -413,30 +489,7 @@ describe('file skill registry', () => {
     expect(modelClient.messages.find((message) => message.id === 'skill_builtin-demo')).toBeUndefined();
   });
 
-  it('injects selected skills into agent loop model messages', async () => {
-    const { builtinDir, dataDir } = await createSkillFixture();
-    const registry = new FileSkillRegistry(builtinDir, dataDir);
-    await registry.updateSkill('builtin-demo', { selected: true });
-    const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
-    const thread = await threadStore.createThread({ title: 'Skill injection' });
-    const modelClient = new CapturingModelClient();
-    const loop = new AgentLoop({
-      threadStore,
-      modelClient,
-      eventBus: new InMemoryEventBus(),
-      clock: systemClock,
-      ids: new RandomIdGenerator(),
-      skillRegistry: registry,
-    });
-
-    await loop.sendTurn(thread.id, { input: 'run the built-in workflow' });
-
-    const skillMessage = modelClient.messages.find((message) => message.id === 'skill_builtin-demo');
-    expect(skillMessage?.content).toContain('<skill name="builtin-demo" id="builtin-demo" path="');
-    expect(skillMessage?.content).toContain('Use the built-in demo workflow.');
-  });
-
-  it('injects per-turn skills without persisting selected state', async () => {
+  it('injects explicitly selected skills for the current turn', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     const registry = new FileSkillRegistry(builtinDir, dataDir);
     const threadStore = createTestThreadStore(dataDir, systemClock, new RandomIdGenerator());
@@ -455,7 +508,7 @@ describe('file skill registry', () => {
 
     expect(modelClient.messages.find((message) => message.id === 'skill_builtin-demo')?.content)
       .toContain('<skill name="builtin-demo" id="builtin-demo" path="');
-    expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', selected: false });
+    expect((await registry.listSkills()).skills[0]).toMatchObject({ id: 'builtin-demo', enabled: true });
   });
 
   it('automatically injects a matching Plugin Skill from the current turn input', async () => {

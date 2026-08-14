@@ -7,6 +7,7 @@ import {
   mergePluginMcpServers,
   mergePluginSkills,
   pluginCapabilitySummary,
+  pluginMatchesQuery,
   pluginMarketplacePresentation,
 } from '../../../../src/features/capabilities/pluginDisplay.js';
 import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
@@ -58,6 +59,27 @@ describe('plugin display helpers', () => {
     expect(formatPluginFileSize(512)).toBe('512 B');
     expect(formatPluginFileSize(2048)).toBe('2.0 KB');
     expect(formatPluginFileSize(2 * 1024 * 1024)).toBe('2.0 MB');
+  });
+
+  it('matches plugin searches across plugin and provided capability metadata', () => {
+    const plugin = marketplacePlugin({
+      id: 'documents',
+      name: 'Word Documents',
+      publisher: 'Setsuna',
+      tags: ['DOCX'],
+      skills: [{ id: 'documents.edit', name: 'Edit reports', description: 'Render Word files' }],
+    });
+
+    expect(pluginMatchesQuery(plugin, 'word')).toBe(true);
+    expect(pluginMatchesQuery(plugin, 'docx')).toBe(true);
+    expect(pluginMatchesQuery(plugin, 'render')).toBe(true);
+    expect(pluginMatchesQuery(plugin, 'spreadsheet')).toBe(false);
+
+    const installed = installedPlugin({
+      id: 'documents',
+      skills: [{ id: 'documents.edit', name: 'Custom legal brief', description: 'Firm workflow' }],
+    });
+    expect(pluginMatchesQuery(plugin, 'legal brief', installed)).toBe(true);
   });
 
   it('builds a featured section and keeps the remaining catalog grouped by capability', () => {

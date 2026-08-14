@@ -116,7 +116,6 @@ export function AppRouteContent({
   workspaceWidth: number;
 }) {
   const { t } = useI18n();
-  const selectedSkillCount = runtime.skills.filter((skill) => skill.enabled && skill.selected).length;
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
   const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
@@ -239,7 +238,6 @@ export function AppRouteContent({
         <CapabilitiesPage
           config={runtime.config}
           skills={runtime.skills}
-          selectedSkillCount={selectedSkillCount}
           mcpState={runtime.mcpState}
           hookState={runtime.hookState}
           plugins={runtime.plugins}
@@ -259,7 +257,7 @@ export function AppRouteContent({
           onFetchMcpTools={runtime.fetchMcpServerTools}
           onSaveMcpServer={runtime.saveMcpServer}
           onUpdateMcpServer={runtime.updateMcpServer}
-          onDeleteMcpServer={(server) => void runtime.deleteMcpServer(server)}
+          onDeleteMcpServer={runtime.deleteMcpServer}
           onLoginMcpServer={runtime.loginMcpServer}
           onLogoutMcpServer={runtime.logoutMcpServer}
           onInstallLocalPlugin={runtime.installLocalPlugin}

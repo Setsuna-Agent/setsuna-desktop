@@ -211,15 +211,12 @@
   flex: 0 0 auto;
 }
 
-.desktop-capabilities-plugin-detail__hero {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  align-items: start;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
-  border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-surface) 92%, var(--app-primary) 3%);
+.desktop-capabilities-plugin-detail__description {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 13px;
+  line-height: 21px;
+  overflow-wrap: anywhere;
 }
 
 .desktop-capabilities-plugin-detail__item-icon {
@@ -231,20 +228,6 @@
   background: color-mix(in srgb, var(--app-bg) 82%, var(--app-primary) 5%);
 }
 
-.desktop-capabilities-plugin-detail__intro {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-}
-
-.desktop-capabilities-plugin-detail__badges {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.desktop-capabilities-plugin-detail__badges span,
 .desktop-capabilities-plugin-detail__item-badges span {
   display: inline-flex;
   align-items: center;
@@ -256,27 +239,6 @@
   background: color-mix(in srgb, var(--app-bg) 86%, var(--app-text) 4%);
   font-size: 11px;
   line-height: 16px;
-}
-
-.desktop-capabilities-plugin-detail__badges span.is-installed {
-  color: var(--app-success);
-}
-
-.desktop-capabilities-plugin-detail__intro p,
-.desktop-capabilities-plugin-detail__intro small {
-  margin: 0;
-  color: var(--app-text-muted);
-  overflow-wrap: anywhere;
-}
-
-.desktop-capabilities-plugin-detail__intro p {
-  font-size: 13px;
-  line-height: 21px;
-}
-
-.desktop-capabilities-plugin-detail__intro small {
-  font-size: 12px;
-  line-height: 18px;
 }
 
 .desktop-capabilities-plugin-detail__extension {
@@ -357,7 +319,6 @@
   padding: 16px;
   border: 1px solid color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
   border-radius: var(--app-radius-md);
-  background: color-mix(in srgb, var(--app-surface) 95%, var(--app-primary) 3%);
 }
 
 .desktop-image-generation-settings > header {
@@ -772,6 +733,43 @@
   box-shadow: inset var(--app-focus-ring);
 }
 
+.desktop-capabilities-plugin-detail__skill-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  padding: 0 12px 0 0;
+  cursor: default;
+}
+
+.desktop-capabilities-plugin-detail__skill-open {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 70px;
+  min-width: 0;
+  padding: 12px;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.desktop-capabilities-plugin-detail__skill-open:disabled {
+  cursor: default;
+}
+
+.desktop-capabilities-plugin-detail__skill-open:focus-visible {
+  outline: 0;
+  box-shadow: inset var(--app-focus-ring);
+}
+
+.desktop-capabilities-plugin-detail__skill-item.is-removed {
+  opacity: 0.62;
+}
+
 .desktop-capabilities-plugin-detail__item-icon {
   width: 34px;
   height: 34px;
@@ -859,7 +857,8 @@
   transition: color 140ms ease, transform 140ms ease;
 }
 
-.desktop-capabilities-plugin-detail__item:hover .desktop-capabilities-plugin-detail__item-chevron {
+.desktop-capabilities-plugin-detail__item:hover .desktop-capabilities-plugin-detail__item-chevron,
+.desktop-capabilities-plugin-detail__skill-open:hover .desktop-capabilities-plugin-detail__item-chevron {
   color: var(--app-primary);
   transform: translateX(1px);
 }

@@ -137,6 +137,7 @@ export function PageHeader({
   backIcon,
   backLabel,
   className = '',
+  leading,
   onBack,
   subtitle,
   title,
@@ -145,6 +146,7 @@ export function PageHeader({
   backIcon?: ReactNode;
   backLabel?: string;
   className?: string;
+  leading?: ReactNode;
   onBack?: () => void;
   subtitle?: ReactNode;
   title: ReactNode;
@@ -161,9 +163,12 @@ export function PageHeader({
         />
       ) : null}
       <div className="sd-page-header__body">
-        <div className="sd-page-header__title-group">
-          <h2>{title}</h2>
-          {subtitle ? <span>{subtitle}</span> : null}
+        <div className="sd-page-header__main">
+          {leading ? <div className="sd-page-header__leading">{leading}</div> : null}
+          <div className="sd-page-header__title-group">
+            <h2>{title}</h2>
+            {subtitle ? <span>{subtitle}</span> : null}
+          </div>
         </div>
         {actions ? <div className="sd-page-header__actions">{actions}</div> : null}
       </div>

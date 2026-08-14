@@ -25,7 +25,6 @@ import type {
 import {
   AlertTriangle,
   FilePlus2,
-  Info,
   MessageSquare,
   Plug,
   RefreshCw,
@@ -38,7 +37,6 @@ import { AppRouteTopbarPortal } from '../../shared/ui/AppRouteTopbarPortal.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import {
   CapabilitiesMcpListItem,
-  CapabilitiesSkillListItem,
 } from './CapabilitiesCatalogItems.js';
 import {
   CapabilitiesCreateMenu,
@@ -49,8 +47,10 @@ import { CapabilitiesLegacyHooksDetail } from './CapabilitiesLegacyHooksDetail.j
 import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
-import { installedPluginsOutsideCatalog } from './pluginDisplay.js';
+import { CapabilitiesSkillCatalog } from './CapabilitiesSkillCatalog.js';
+import { installedPluginsOutsideCatalog, pluginMatchesQuery } from './pluginDisplay.js';
 import { CapabilitiesMcpEditor } from './mcp/CapabilitiesMcpEditor.js';
+import { CapabilitiesMcpDetail } from './mcp/CapabilitiesMcpDetail.js';
 import {
   emptyMcpDraft,
   mcpDraftToInput,
@@ -81,7 +81,6 @@ export function capabilityCatalogTitle(
 export function CapabilitiesPage({
   config,
   skills,
-  selectedSkillCount,
   mcpState,
   hookState,
   plugins,
@@ -120,7 +119,6 @@ export function CapabilitiesPage({
 }: {
   config: RuntimeConfigState | null;
   skills: RuntimeSkillSummary[];
-  selectedSkillCount: number;
   mcpState: RuntimeMcpServerList | null;
   hookState: RuntimeHookListResponse | null;
   plugins: RuntimePluginSummary[];
@@ -139,8 +137,8 @@ export function CapabilitiesPage({
   onUpdateSkill: (skill: RuntimeSkillSummary, patch: Partial<RuntimeSkillInput>) => Promise<RuntimeSkillDetail>;
   onFetchMcpTools: (input: RuntimeMcpServerInput) => Promise<{ tools: RuntimeMcpToolInfo[]; errors: string[] }>;
   onSaveMcpServer: (input: RuntimeMcpServerInput) => Promise<void>;
-  onUpdateMcpServer: (server: RuntimeMcpServer, patch: Partial<Pick<RuntimeMcpServer, 'enabled' | 'required' | 'requireApproval'>>) => Promise<void>;
-  onDeleteMcpServer: (server: RuntimeMcpServer) => void;
+  onUpdateMcpServer: (server: RuntimeMcpServer, patch: Pick<RuntimeMcpServer, 'enabled'>) => Promise<void>;
+  onDeleteMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onLoginMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onLogoutMcpServer: (server: RuntimeMcpServer) => Promise<void>;
   onInstallLocalPlugin: () => Promise<RuntimePluginInstallResult | null>;
@@ -164,6 +162,7 @@ export function CapabilitiesPage({
   const [capabilityQuery, setCapabilityQuery] = useState('');
   const [mcpAuthPendingKeys, setMcpAuthPendingKeys] = useState<Set<string>>(new Set());
   const [mcpEditorOpen, setMcpEditorOpen] = useState(false);
+  const [selectedMcpServerKey, setSelectedMcpServerKey] = useState<string | null>(null);
   const [installingLocalPlugin, setInstallingLocalPlugin] = useState(false);
   const [installingPluginIds, setInstallingPluginIds] = useState<Set<string>>(new Set());
   const [removingPluginIds, setRemovingPluginIds] = useState<Set<string>>(new Set());
@@ -188,6 +187,9 @@ export function CapabilitiesPage({
     summary: skillDetailSummary,
   } = skillDetails;
   const servers = mcpState?.servers ?? [];
+  const selectedMcpServer = selectedMcpServerKey
+    ? servers.find((server) => server.key === selectedMcpServerKey)
+    : undefined;
   const hookEntries = hookState?.data ?? [];
   const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
   const standaloneHooks = hooks.filter((hook) => hook.source === 'user' && !hook.pluginId);
@@ -201,8 +203,9 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${skill.name} ${skill.description} ${skill.id}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
+  const installedPluginById = new Map(plugins.map((plugin) => [plugin.id, plugin]));
   const selectedInstalledPlugin = selectedPluginId
-    ? plugins.find((plugin) => plugin.id === selectedPluginId)
+    ? installedPluginById.get(selectedPluginId)
     : undefined;
   const localPlugins = installedPluginsOutsideCatalog(plugins, pluginMarketplace);
   const selectedMarketplacePlugin = selectedInstalledPlugin && selectedInstalledPlugin.installationSource !== 'marketplace'
@@ -222,6 +225,17 @@ export function CapabilitiesPage({
     hookCount: standaloneHooks.length,
     resources: [],
   } : undefined;
+  const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) =>
+    pluginMatchesQuery(plugin, normalizedCapabilityQuery, installedPluginById.get(plugin.id)));
+  const visibleLocalPlugins = localPlugins.filter((plugin) =>
+    pluginMatchesQuery(plugin, normalizedCapabilityQuery));
+  const visibleLegacyHooksPlugin = legacyHooksPlugin
+    && pluginMatchesQuery(legacyHooksPlugin, normalizedCapabilityQuery)
+    ? legacyHooksPlugin
+    : undefined;
+  const hasVisiblePlugins = Boolean(
+    visibleMarketplacePlugins.length || visibleLocalPlugins.length || visibleLegacyHooksPlugin,
+  );
   const selectedPluginItemSource = selectedInstalledPlugin ? 'installed' : 'marketplace';
   const createCapabilityKind: keyof typeof chatCreateSkillIds = capabilityFilter === 'plugins'
     ? 'plugins'
@@ -246,6 +260,7 @@ export function CapabilitiesPage({
   function openMcpFormCreate() {
     setCreateMenuOpen(false);
     setCapabilityFilter('mcp');
+    setSelectedMcpServerKey(null);
     setEditingMcpServer(null);
     resetMcpDraft();
     setMcpEditorOpen(true);
@@ -258,6 +273,7 @@ export function CapabilitiesPage({
   }
 
   function editMcpServer(server: RuntimeMcpServer) {
+    setSelectedMcpServerKey(server.key);
     setEditingMcpServer(server);
     setCapabilityFilter('mcp');
     setMcpEditorOpen(true);
@@ -277,9 +293,6 @@ export function CapabilitiesPage({
       oauthClientId: server.oauthClientId ?? '',
       oauthResource: server.oauthResource ?? '',
       enabled: server.enabled,
-      required: server.required,
-      requireApproval: server.requireApproval,
-      trustLevel: server.trustLevel,
       timeoutMs: server.timeoutMs ? String(server.timeoutMs) : '',
       startupTimeoutMs: server.startupTimeoutMs ? String(server.startupTimeoutMs) : '',
       toolTimeoutMs: server.toolTimeoutMs ? String(server.toolTimeoutMs) : '',
@@ -382,6 +395,7 @@ export function CapabilitiesPage({
 
   function selectCapabilityFilter(nextFilter: CapabilityFilter) {
     setCapabilityFilter(nextFilter);
+    setSelectedMcpServerKey(null);
     setCapabilityQuery('');
     setCreateMenuOpen(false);
     setLegacyHooksOpen(false);
@@ -399,6 +413,29 @@ export function CapabilitiesPage({
             onBack={resetMcpDraft}
             onFetchTools={onFetchMcpTools}
             onSave={submitMcpServer}
+          />
+        </section>
+      </main>
+    );
+  }
+
+  if (selectedMcpServer) {
+    return (
+      <main className="capabilities-page desktop-capabilities-panel">
+        <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
+          <CapabilitiesMcpDetail
+            authPending={mcpAuthPendingKeys.has(selectedMcpServer.key)}
+            server={selectedMcpServer}
+            onBack={() => setSelectedMcpServerKey(null)}
+            onDelete={() => {
+              const confirmed = window.confirm(t('capabilities.page.confirmDeleteMcp', { name: selectedMcpServer.label }));
+              if (!confirmed) return;
+              void onDeleteMcpServer(selectedMcpServer).then(() => setSelectedMcpServerKey(null));
+            }}
+            onEdit={() => editMcpServer(selectedMcpServer)}
+            onLogin={() => void updateMcpAuth(selectedMcpServer, () => onLoginMcpServer(selectedMcpServer))}
+            onLogout={() => void updateMcpAuth(selectedMcpServer, () => onLogoutMcpServer(selectedMcpServer))}
+            onUpdate={(patch) => void onUpdateMcpServer(selectedMcpServer, patch)}
           />
         </section>
       </main>
@@ -433,6 +470,7 @@ export function CapabilitiesPage({
             onBack={skillDetails.close}
             onDelete={skillDetails.remove}
             onEdit={skillDetails.openEditor}
+            onUseInConversation={onCreateInConversation}
             onUpdateSkill={skillDetails.updateFromDetail}
             onInstallMcpDependencies={(skill) => skillDetails.updateDependency(
               skill,
@@ -479,6 +517,7 @@ export function CapabilitiesPage({
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
             runtimeMcpServers={servers}
+            runtimeSkills={skills}
             extensionStatus={extensionStatuses.find((status) => status.pluginId === selectedPluginId)}
             extensionTrusting={trustingExtensionIds.has(selectedPluginId)}
             removing={removingPluginIds.has(selectedPluginId)}
@@ -489,12 +528,17 @@ export function CapabilitiesPage({
             }}
             onInstall={installOrUpdateMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
+            onGetSkillDetail={onGetSkillDetail}
             onRemove={removePlugin}
+            onUseInConversation={onCreateInConversation}
             onSetExtensionTrust={selectedInstalledPlugin?.installationSource === 'marketplace'
               ? undefined
               : setPluginExtensionTrust}
             onSetHookEnabled={onSetHookEnabled}
             onSetHookTrust={onSetHookTrust}
+            onSetSkillEnabled={async (skill, enabled) => {
+              await onUpdateSkill(skill, { enabled });
+            }}
             onSaveImageGenerationConfig={onSaveImageGenerationConfig}
             onTestImageGeneration={onTestImageGeneration}
             onSaveVisionRecognitionConfig={onSaveVisionRecognitionConfig}
@@ -525,8 +569,12 @@ export function CapabilitiesPage({
       mcp: servers.length,
       enabledSkills: enabledSkillCount,
       skills: skills.length,
-      defaultSkills: selectedSkillCount,
     });
+  const capabilitySearchLabel = t(capabilityFilter === 'plugins'
+    ? 'capabilities.search.plugins'
+    : capabilityFilter === 'skills'
+      ? 'capabilities.search.skills'
+      : 'capabilities.search.mcp');
 
   async function updateMcpAuth(server: RuntimeMcpServer, action: () => Promise<void>) {
     setMcpAuthPendingKeys((items) => new Set([...items, server.key]));
@@ -555,25 +603,13 @@ export function CapabilitiesPage({
     <>
       {tabsInPage ? null : <AppRouteTopbarPortal>{capabilityTabs}</AppRouteTopbarPortal>}
       <main className="capabilities-page desktop-capabilities-panel">
-        <section className={`desktop-capabilities-panel__inner${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}${tabsInPage ? ' desktop-capabilities-panel__inner--page-tabs' : ''}`}>
+        <section className={`desktop-capabilities-panel__inner desktop-capabilities-panel__inner--catalog${capabilityFilter === 'plugins' ? ' desktop-capabilities-panel__inner--market' : ''}${capabilityFilter === 'skills' ? ' desktop-capabilities-panel__inner--skills' : ''}${marketplaceNoticeVisible ? ' desktop-capabilities-panel__inner--market-notice' : ''}${tabsInPage ? ' desktop-capabilities-panel__inner--page-tabs' : ''}`}>
           {tabsInPage ? capabilityTabs : null}
           <header className={`desktop-capabilities-header${capabilityFilter === 'plugins' ? ' desktop-capabilities-header--market' : ''}`}>
             <div className="desktop-capabilities-title">
               <h2>{capabilityCatalogTitle(capabilityFilter, t)}</h2>
-              {capabilityFilter === 'plugins' ? <span>{t('capabilities.market.subtitle')}</span> : null}
             </div>
             <div className="desktop-capabilities-actions">
-              {capabilityFilter !== 'plugins' ? (
-                <div className="desktop-capabilities-search">
-                  <Search size={14} />
-                  <input
-                    value={capabilityQuery}
-                    aria-label={t('capabilities.search.capabilities')}
-                    onChange={(event) => setCapabilityQuery(event.target.value)}
-                    placeholder={t('capabilities.search.capabilities')}
-                  />
-                </div>
-              ) : null}
               <IconButton label={t('capabilities.refresh')} onClick={() => void onRefresh()}>
                 <RefreshCw size={15} />
               </IconButton>
@@ -611,6 +647,18 @@ export function CapabilitiesPage({
             </div>
           </header>
 
+          <div className="desktop-capabilities-search-row">
+            <div className="desktop-capabilities-search">
+              <Search size={14} />
+              <input
+                value={capabilityQuery}
+                aria-label={capabilitySearchLabel}
+                onChange={(event) => setCapabilityQuery(event.target.value)}
+                placeholder={capabilitySearchLabel}
+              />
+            </div>
+          </div>
+
           {marketplaceNoticeVisible ? (
             <div className="desktop-capabilities-market-notices">
               {pluginError ? <div className="desktop-capabilities-errors" role="alert">{pluginError}</div> : null}
@@ -627,99 +675,52 @@ export function CapabilitiesPage({
             </div>
           ) : null}
 
-          {capabilityFilter !== 'plugins' ? (
-            <div className="desktop-capabilities-usage-note">
-              <Info size={14} />
-              <span>
-                {t(capabilityFilter === 'mcp'
-                  ? 'capabilities.usage.mcp'
-                  : 'capabilities.usage.skills')}
-              </span>
-            </div>
-          ) : null}
-
-          <div className={`desktop-capabilities-grid${capabilityFilter === 'plugins' ? ' desktop-capabilities-grid--market' : ' desktop-capability-list'}`}>
-            {capabilityFilter === 'mcp'
-              ? visibleServers.map((server) => (
-                <CapabilitiesMcpListItem
-                  key={`mcp:${server.key}`}
-                  authPending={mcpAuthPendingKeys.has(server.key)}
-                  server={server}
-                  onDelete={() => onDeleteMcpServer(server)}
-                  onEdit={() => editMcpServer(server)}
-                  onLogin={() => void updateMcpAuth(
-                    server,
-                    () => onLoginMcpServer(server),
-                  )}
-                  onLogout={() => void updateMcpAuth(
-                    server,
-                    () => onLogoutMcpServer(server),
-                  )}
-                  onUpdate={(patch) => void onUpdateMcpServer(server, patch)}
-                />
-              ))
-              : null}
-            {capabilityFilter === 'skills'
-              ? visibleSkills.map((skill) => {
-                const dependencies = skill.mcpDependencies ?? [];
-                const authDependency = dependencies.find(
-                  (dependency) => dependency.status === 'authRequired'
-                    || dependency.status === 'error',
-                );
-                const dependencyPending = skillDependencyPendingKeys.has(
-                  `install:${skill.id}`,
-                ) || Boolean(
-                  authDependency
-                  && skillDependencyPendingKeys.has(
-                    `auth:${skill.id}:${authDependency.value}`,
-                  ),
-                );
-                return (
-                  <CapabilitiesSkillListItem
-                    key={`skill:${skill.id}`}
-                    dependencyPending={dependencyPending}
-                    skill={skill}
-                    onAuthenticateDependency={(serverKey) => void skillDetails.updateDependency(
-                      skill,
-                      `auth:${skill.id}:${serverKey}`,
-                      () => onAuthenticateSkillMcpDependency(skill, serverKey),
-                    )}
-                    onEdit={() => void skillDetails.open(skill, 'edit')}
-                    onInstallDependencies={() => void skillDetails.updateDependency(
-                      skill,
-                      `install:${skill.id}`,
-                      () => onInstallSkillMcpDependencies(skill),
-                    )}
-                    onOpen={() => void skillDetails.open(skill, 'view')}
-                    onUpdate={(patch) => void onUpdateSkill(skill, patch)}
+          <div className="desktop-capabilities-grid">
+            <div className={`desktop-capabilities-grid__content${capabilityFilter === 'mcp' ? ' desktop-capability-list' : ''}`}>
+              {capabilityFilter === 'mcp'
+                ? visibleServers.map((server) => (
+                  <CapabilitiesMcpListItem
+                    key={`mcp:${server.key}`}
+                    server={server}
+                    onOpen={() => setSelectedMcpServerKey(server.key)}
+                    onUpdate={(patch) => void onUpdateMcpServer(server, patch)}
                   />
-                );
-              })
-              : null}
-            {capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin) ? (
-              <CapabilitiesPluginMarket
-                marketplacePlugins={pluginMarketplace}
-                localPlugins={localPlugins}
-                legacyHooksPlugin={legacyHooksPlugin}
-                installingPluginIds={installingPluginIds}
-                onInstall={installOrUpdateMarketplacePlugin}
-                onOpenLegacyHooks={() => {
-                  onSelectedPluginIdChange(null);
-                  setLegacyHooksOpen(true);
-                }}
-                onOpenMarketplace={openPluginDetail}
-                onOpenLocal={openPluginDetail}
-              />
-            ) : null}
-            {((capabilityFilter === 'mcp' && visibleServers.length)
-              || (capabilityFilter === 'skills' && visibleSkills.length)
-              || (capabilityFilter === 'plugins' && (pluginMarketplace.length || localPlugins.length || legacyHooksPlugin))) ? null : (
-              <div className="desktop-capabilities-empty">
-                {capabilityFilter === 'plugins'
-                  ? t('capabilities.market.empty')
-                  : t('capabilities.empty')}
-              </div>
-            )}
+                ))
+                : null}
+              {capabilityFilter === 'skills'
+                ? (
+                  <CapabilitiesSkillCatalog
+                    skills={visibleSkills}
+                    onOpen={(skill) => void skillDetails.open(skill, 'view')}
+                    onUpdate={(skill, patch) => void onUpdateSkill(skill, patch)}
+                  />
+                )
+                : null}
+              {capabilityFilter === 'plugins' && hasVisiblePlugins ? (
+                <CapabilitiesPluginMarket
+                  marketplacePlugins={visibleMarketplacePlugins}
+                  localPlugins={visibleLocalPlugins}
+                  legacyHooksPlugin={visibleLegacyHooksPlugin}
+                  installingPluginIds={installingPluginIds}
+                  onInstall={installOrUpdateMarketplacePlugin}
+                  onOpenLegacyHooks={() => {
+                    onSelectedPluginIdChange(null);
+                    setLegacyHooksOpen(true);
+                  }}
+                  onOpenMarketplace={openPluginDetail}
+                  onOpenLocal={openPluginDetail}
+                />
+              ) : null}
+              {((capabilityFilter === 'mcp' && visibleServers.length)
+                || (capabilityFilter === 'skills' && visibleSkills.length)
+                || (capabilityFilter === 'plugins' && hasVisiblePlugins)) ? null : (
+                <div className="desktop-capabilities-empty">
+                  {capabilityFilter === 'plugins' && !normalizedCapabilityQuery
+                    ? t('capabilities.market.empty')
+                    : t('capabilities.empty')}
+                </div>
+              )}
+            </div>
           </div>
 
           {capabilityFilter === 'mcp' && mcpState?.errors.length ? (

@@ -1,10 +1,8 @@
 import {
   mergeRuntimeMcpServerInput,
-  type RuntimeMcpRequireApproval,
   type RuntimeMcpServer,
   type RuntimeMcpServerInput,
   type RuntimeMcpTransport,
-  type RuntimeMcpTrustLevel,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
@@ -141,33 +139,9 @@ const configureMcpTool: RuntimeToolDefinition = {
         minimum: 1000,
         maximum: MAX_TIMEOUT_MS,
       },
-      require_approval: {
-        type: 'string',
-        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
-        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
-      },
-      requireApproval: {
-        type: 'string',
-        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
-        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
-      },
-      trust_level: {
-        type: 'string',
-        enum: ['untrusted', 'trusted'],
-        description: 'Server trust level. Defaults to untrusted. Trusted servers may use read-only annotations to skip per-call approval.',
-      },
-      trustLevel: {
-        type: 'string',
-        enum: ['untrusted', 'trusted'],
-        description: 'Server trust level. Defaults to untrusted. Only set trusted after the user has explicitly authorized it.',
-      },
       enabled: {
         type: 'boolean',
         description: 'Whether the server is enabled. Defaults to true.',
-      },
-      required: {
-        type: 'boolean',
-        description: 'Whether this server is required.',
       },
       allowed_tools: {
         type: 'array',
@@ -249,7 +223,6 @@ export class McpManagementToolHost implements ToolHost {
         `Key: ${saved.key}`,
         `Config: ${savedList.configPath}`,
         `Transport: ${saved.transport}`,
-        `Trust: ${saved.trustLevel}`,
         saved.transport === 'stdio'
           ? `Command: ${[saved.command, ...saved.args].filter(Boolean).join(' ')}`
           : `URL: ${saved.url}`,
@@ -300,9 +273,6 @@ function normalizeMcpInput(input: unknown): RuntimeMcpServerInput {
     timeoutMs: timeout(record.timeoutMs ?? record.timeout_ms),
     startupTimeoutMs: timeout(record.startupTimeoutMs ?? record.startup_timeout_ms),
     toolTimeoutMs: timeout(record.toolTimeoutMs ?? record.tool_timeout_ms),
-    required: booleanValue(record.required),
-    requireApproval: normalizeRequireApproval(record.requireApproval ?? record.require_approval),
-    trustLevel: normalizeTrustLevel(record.trustLevel ?? record.trust_level),
     enabled: booleanValue(record.enabled),
     allowedTools: stringList(record.allowedTools ?? record.allowed_tools),
     disabledTools: stringList(record.disabledTools ?? record.disabled_tools),
@@ -333,10 +303,7 @@ function mcpPreviewPayload(
     args: input.args ?? existing?.args ?? [],
     url: input.url ?? existing?.url,
     timeoutMs: input.timeoutMs ?? existing?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    requireApproval: input.requireApproval ?? existing?.requireApproval ?? 'auto',
-    trustLevel: input.trustLevel ?? existing?.trustLevel ?? 'untrusted',
     enabled: input.enabled ?? existing?.enabled ?? true,
-    required: input.required ?? existing?.required ?? false,
     allowedTools: input.allowedTools ?? existing?.allowedTools ?? [],
     disabledTools: input.disabledTools ?? existing?.disabledTools ?? [],
     oauthClientId: input.oauthClientId ?? existing?.oauthClientId,
@@ -361,10 +328,7 @@ function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer,
     args: server.args,
     url: server.url,
     timeoutMs: server.timeoutMs,
-    requireApproval: server.requireApproval,
-    trustLevel: server.trustLevel,
     enabled: server.enabled,
-    required: server.required,
     allowedTools: server.allowedTools,
     disabledTools: server.disabledTools,
     oauthClientId: server.oauthClientId,
@@ -404,18 +368,6 @@ function normalizeMcpKey(value: string): string {
 function normalizeTransport(value: unknown): RuntimeMcpTransport | undefined {
   if (value === 'stdio' || value === 'streamableHttp') return value;
   if (value === 'streamable-http' || value === 'http') return 'streamableHttp';
-  return undefined;
-}
-
-function normalizeRequireApproval(value: unknown): RuntimeMcpRequireApproval | undefined {
-  if (value === 'approve' || value === 'never') return 'approve';
-  if (value === 'prompt' || value === 'always') return 'prompt';
-  if (value === 'smart' || value === 'auto' || value === 'on-write' || value === 'onWrite' || value === 'on_write') return 'auto';
-  return undefined;
-}
-
-function normalizeTrustLevel(value: unknown): RuntimeMcpTrustLevel | undefined {
-  if (value === 'trusted' || value === 'untrusted') return value;
   return undefined;
 }
 

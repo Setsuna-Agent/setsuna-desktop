@@ -377,11 +377,6 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
         minimum: 1000,
         maximum: MAX_MCP_TIMEOUT_MS,
       },
-      require_approval: {
-        type: 'string',
-        enum: ['auto', 'prompt', 'approve', 'always', 'never'],
-        description: 'MCP approval mode. Use auto by default, prompt to ask every time, or approve to run without asking.',
-      },
       enabled: {
         type: 'boolean',
         description: 'Whether the server is enabled. Defaults to true.',

@@ -56,7 +56,6 @@ describe('runtimePluginUsesByTurn', () => {
       name: 'Word 文档处理',
       kind: 'plugin',
       enabled: true,
-      selected: true,
       pluginId: 'documents',
     }];
     const plugins = [

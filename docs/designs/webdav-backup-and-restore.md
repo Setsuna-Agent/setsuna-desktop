@@ -49,7 +49,7 @@
 | 长期记忆 | 开 | 整域替换 | Runtime memory store 及其 baseline/rollout 等恢复所需文件。 |
 | 偏好与模型配置 | 开 | 白名单覆盖 + 安全合并 | Global prompt、memory 设置、task model、Setsuna style、provider/model 非敏感元数据、image generation 元数据、vision reference、界面语言和 Markdown 链接打开方式。 |
 | 模型 API Key | 开 | 同 ID 覆盖，仅本机 Key 保留 | Provider API key 和 image generation API key。每个 Key 是独立清单条目，不上传整个 `secrets.json`。 |
-| 用户 Skill | 开 | 用户 Skill 整域替换 | `user-skills/` 内容和这些用户 Skill 的 enabled/selected 状态。Bundled、Plugin 和 external Skill 状态保留本机值。 |
+| 用户 Skill | 开 | 用户 Skill 整域替换 | `user-skills/` 内容和这些用户 Skill 的 enabled 状态。Bundled、Plugin 和 external Skill 状态保留本机值。 |
 | Usage 历史 | 关 | 整域替换 | `usage.jsonl`。它主要用于本地统计且持续增长，因此默认不选。 |
 
 “偏好与模型配置”不是原样上传 `config.json`。导出和还原会强制以下边界：

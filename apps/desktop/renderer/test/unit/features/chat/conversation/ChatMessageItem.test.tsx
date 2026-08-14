@@ -24,7 +24,6 @@ const skillCreator: RuntimeSkillSummary = {
   name: '对话创建Skill',
   kind: 'builtin',
   enabled: true,
-  selected: false,
   description: '通过对话创建 Skill',
 };
 
@@ -220,7 +219,6 @@ describe('MessageItem user messages', () => {
       icon: 'vision-recognition',
       kind: 'plugin',
       enabled: true,
-      selected: false,
       pluginId: 'openai-vision-recognition',
     };
     const html = renderUserMessage('message', false, '视觉识别 看下图片', {

@@ -40,7 +40,6 @@ export type RuntimeSkillSummary = {
   contentVersion?: string;
   kind: RuntimeSkillKind;
   enabled: boolean;
-  selected: boolean;
   description?: string;
   path?: string;
   pluginId?: string;
@@ -63,13 +62,11 @@ export type RuntimeSkillInput = {
   description?: string;
   content: string;
   enabled?: boolean;
-  selected?: boolean;
   mcpDependencies?: RuntimeSkillMcpDependencyInput[];
 };
 
 export type RuntimeSkillPatch = {
   enabled?: boolean;
-  selected?: boolean;
   name?: string;
   description?: string;
   content?: string;

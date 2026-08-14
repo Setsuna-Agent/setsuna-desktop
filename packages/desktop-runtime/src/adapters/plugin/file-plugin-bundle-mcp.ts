@@ -40,10 +40,7 @@ export function normalizePluginMcpServers(value: unknown): RuntimeMcpServerInput
       disabledTools: stringArray(record.disabledTools ?? record.disabled_tools, `Plugin mcpServers[${index}].disabledTools`),
       oauthClientId: optionalString(record.oauthClientId ?? record.oauth_client_id),
       oauthResource: optionalString(record.oauthResource ?? record.oauth_resource),
-      required: false,
       enabled: true,
-      requireApproval: 'always',
-      trustLevel: 'untrusted',
     };
     if (transport === 'streamableHttp') {
       server.url = safeHttpUrl(requiredString(record.url, `Plugin mcpServers[${index}].url`));
@@ -102,9 +99,6 @@ export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record
     timeoutMs,
     startupTimeoutMs: normalizedMcpTimeout(server.startupTimeoutMs, timeoutMs),
     toolTimeoutMs: normalizedMcpTimeout(server.toolTimeoutMs, timeoutMs),
-    required: server.required === true,
-    requireApproval: comparableMcpApproval(server.requireApproval),
-    trustLevel: server.trustLevel === 'trusted' ? 'trusted' : 'untrusted',
     enabled: server.enabled !== false,
     allowedTools: normalizedStringSet(server.allowedTools),
     disabledTools: normalizedStringSet(server.disabledTools),
@@ -116,12 +110,6 @@ export function comparablePluginMcpServer(server: RuntimeMcpServerInput): Record
     oauthClientId: server.oauthClientId?.trim() || null,
     oauthResource: server.oauthResource?.trim() || null,
   };
-}
-
-export function comparableMcpApproval(value: RuntimeMcpServerInput['requireApproval']): 'auto' | 'prompt' | 'approve' {
-  if (value === 'approve' || value === 'never') return 'approve';
-  if (value === 'prompt' || value === 'always') return 'prompt';
-  return 'auto';
 }
 
 export function normalizedMcpTimeout(value: number | undefined, fallback: number): number {

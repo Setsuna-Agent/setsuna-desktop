@@ -1,10 +1,6 @@
 export type RuntimeMcpTransport = 'stdio' | 'streamableHttp';
 
-export type RuntimeMcpRequireApproval = 'auto' | 'prompt' | 'approve' | 'always' | 'never';
-
 export type RuntimeMcpServerSource = 'local' | 'workspace' | 'legacy' | 'builtin';
-
-export type RuntimeMcpTrustLevel = 'untrusted' | 'trusted';
 
 export type RuntimeMcpAuthStatus =
   | 'unsupported'
@@ -27,9 +23,6 @@ export type RuntimeMcpServer = {
   timeoutMs: number;
   startupTimeoutMs: number;
   toolTimeoutMs: number;
-  required: boolean;
-  requireApproval: RuntimeMcpRequireApproval;
-  trustLevel: RuntimeMcpTrustLevel;
   enabled: boolean;
   allowedTools: string[];
   disabledTools: string[];
@@ -61,7 +54,6 @@ export type RuntimeMcpToolInfo = {
   annotations?: Record<string, unknown>;
   execution?: Record<string, unknown>;
   _meta?: Record<string, unknown>;
-  approvalMode?: RuntimeMcpRequireApproval;
 };
 
 export type RuntimeMcpToolList = {
@@ -120,9 +112,6 @@ export type RuntimeMcpServerInput = {
   timeoutMs?: number;
   startupTimeoutMs?: number;
   toolTimeoutMs?: number;
-  required?: boolean;
-  requireApproval?: RuntimeMcpRequireApproval;
-  trustLevel?: RuntimeMcpTrustLevel;
   enabled?: boolean;
   allowedTools?: string[];
   disabledTools?: string[];

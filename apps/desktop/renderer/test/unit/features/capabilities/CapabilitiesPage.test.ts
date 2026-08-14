@@ -19,7 +19,7 @@ describe('capabilities tabs placement', () => {
   });
 
   it('uses the active catalog name as the page title', () => {
-    expect(capabilityCatalogTitle('plugins')).toBe('插件市场');
+    expect(capabilityCatalogTitle('plugins')).toBe('插件');
     expect(capabilityCatalogTitle('mcp')).toBe('MCP');
     expect(capabilityCatalogTitle('skills')).toBe('技能');
   });

@@ -26,7 +26,6 @@ metadata:
 - `label`：展示名称，可从用户描述推断。
 - `description`：一句话说明该 MCP 提供什么能力。
 - `enabled`：默认 `true`，除非用户明确要求先禁用。
-- `require_approval`：默认 `always`；用户要求每次确认时用 `always`，用户明确要求不确认时用 `never`。
 
 `stdio` 服务字段：
 
@@ -64,6 +63,6 @@ metadata:
 
 ## 输出要求
 
-- 保存前的说明要短，只列会写入的 key、transport、command 或 url、授权策略。
+- 保存前的说明要短，只列会写入的 key、transport、command 或 url。
 - 保存后不要再要求用户手动复制 JSON。
 - 如果用户想立刻试用，下一步应引导用户发起一次使用该 MCP 能力的请求。

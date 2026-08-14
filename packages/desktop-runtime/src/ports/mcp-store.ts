@@ -1,5 +1,4 @@
 import type {
-  RuntimeMcpRequireApproval,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
@@ -10,6 +9,5 @@ export type McpStore = {
   listServerInputs(): Promise<RuntimeMcpServerInput[]>;
   upsertServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
   updateServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
-  setToolApprovalMode(key: string, toolName: string, approvalMode: RuntimeMcpRequireApproval): Promise<RuntimeMcpServerList>;
   deleteServer(key: string): Promise<void>;
 };

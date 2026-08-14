@@ -21,6 +21,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
     ├── skills.json
     ├── plugins.json
     ├── user-skills/
+    ├── plugin-skill-overrides/
     ├── plugins/
     ├── attachments/
     ├── generated-images/
@@ -111,7 +112,7 @@ Runtime 在多个层面约束工具：
 - `permissionProfile` 决定文件、shell、网络等能力范围。
 - `approvalPolicy` 决定何时要求用户批准。
 - ToolHost 可以返回 approval requirement 和变更 preview。
-- MCP 默认要求审批，只有明确配置为 `never` 才跳过。
+- MCP server 的启用状态和允许工具范围是执行授权边界；不再提供逐次调用确认或信任级别配置。
 - 文件 mutation、危险 shell、浏览器 click/type 等在执行前进入统一 orchestrator。
 - 持久化允许规则有单独 store，不能由工具结果自行修改。
 - 外部页面、MCP、Plugin resource 和项目脚本进入模型时标记为不可信上下文。

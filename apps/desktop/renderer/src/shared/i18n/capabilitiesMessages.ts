@@ -1,10 +1,12 @@
 export const capabilitiesZhCN = {
-  'capabilities.title.marketplace': '插件市场',
+  'capabilities.title.marketplace': '插件',
   'capabilities.title.capabilities': '能力',
-  'capabilities.market.subtitle': '安装技能、工具与自动化，让 Setsuna 更适合你的工作方式',
   'capabilities.market.installLocal': '导入本地插件',
   'capabilities.market.installingLocal': '正在导入',
   'capabilities.search.capabilities': '搜索能力...',
+  'capabilities.search.plugins': '搜索插件...',
+  'capabilities.search.skills': '搜索 Skill...',
+  'capabilities.search.mcp': '搜索 MCP...',
   'capabilities.refresh': '刷新能力',
   'capabilities.tab.plugins': '插件',
   'capabilities.tab.skills': '技能',
@@ -80,12 +82,14 @@ export const capabilitiesZhCN = {
 } as const;
 
 export const capabilitiesEnUS = {
-  'capabilities.title.marketplace': 'Plugin Marketplace',
+  'capabilities.title.marketplace': 'Plugins',
   'capabilities.title.capabilities': 'Capabilities',
-  'capabilities.market.subtitle': 'Add skills, tools, and automations that fit the way you work',
   'capabilities.market.installLocal': 'Import local plugin',
   'capabilities.market.installingLocal': 'Importing',
   'capabilities.search.capabilities': 'Search capabilities...',
+  'capabilities.search.plugins': 'Search plugins...',
+  'capabilities.search.skills': 'Search skills...',
+  'capabilities.search.mcp': 'Search MCP...',
   'capabilities.refresh': 'Refresh capabilities',
   'capabilities.tab.plugins': 'Plugins',
   'capabilities.tab.skills': 'Skills',

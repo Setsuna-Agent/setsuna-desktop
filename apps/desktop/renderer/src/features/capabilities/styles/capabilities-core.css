@@ -36,6 +36,12 @@
   overflow: auto;
 }
 
+.desktop-capabilities-panel__inner--catalog {
+  padding-right: 0;
+  padding-bottom: 0;
+  padding-left: 0;
+}
+
 :root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail {
   padding-top: var(--desktop-capabilities-page-padding-inline);
 }
@@ -46,28 +52,24 @@
 }
 
 .desktop-capabilities-panel__inner--market {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 16px;
-  padding: var(--desktop-capabilities-page-padding-top) 0 0 var(--desktop-capabilities-page-padding-inline);
+  padding: var(--desktop-capabilities-page-padding-top) 0 0;
 }
 
 .desktop-capabilities-panel__inner--market-notice {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
-.desktop-capabilities-panel__inner--market .desktop-capabilities-header {
-  grid-row: 1;
-  /* 把滚动留白算进外框后，标题内容仍与市场列表共享同一条基线。 */
-  width: min(calc(var(--desktop-capabilities-content-width) + var(--desktop-capabilities-page-padding-inline)), 100%);
-  margin: 0 auto;
-  padding-right: var(--desktop-capabilities-page-padding-inline);
-}
-
-.desktop-capabilities-panel__inner:not(.desktop-capabilities-panel__inner--market) > .desktop-capabilities-header,
-.desktop-capabilities-panel__inner:not(.desktop-capabilities-panel__inner--market) > .desktop-capabilities-usage-note,
-.desktop-capabilities-panel__inner:not(.desktop-capabilities-panel__inner--market) > .desktop-capabilities-grid,
-.desktop-capabilities-panel__inner:not(.desktop-capabilities-panel__inner--market) > .desktop-capabilities-errors {
-  width: min(var(--desktop-capabilities-content-width), 100%);
+.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-header,
+.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-search-row,
+.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-market-notices,
+.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-errors,
+.desktop-capabilities-panel__inner--catalog > .desktop-capabilities-tabs {
+  width: min(
+    var(--desktop-capabilities-content-width),
+    calc(100% - var(--desktop-capabilities-page-padding-inline) - var(--desktop-capabilities-page-padding-inline))
+  );
   margin-right: auto;
   margin-left: auto;
 }
@@ -77,18 +79,16 @@
   padding-top: var(--desktop-capabilities-page-padding-inline);
 }
 
-.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs {
-  grid-template-rows: auto auto minmax(0, 1fr);
+.desktop-capabilities-panel__inner--skills.desktop-capabilities-panel__inner--page-tabs {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
 }
 
-.desktop-capabilities-panel__inner--market-notice.desktop-capabilities-panel__inner--page-tabs {
+.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs {
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
-.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {
-  /* Windows 的页内导航横跨内容区，两端分别承载分类与数量。 */
-  width: 100%;
-  padding-right: var(--desktop-capabilities-page-padding-inline);
+.desktop-capabilities-panel__inner--market-notice.desktop-capabilities-panel__inner--page-tabs {
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
 }
 
 .desktop-capabilities-header {
@@ -101,16 +101,16 @@
 
 .desktop-capabilities-title {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .desktop-capabilities-title h2 {
   margin: 0;
   color: var(--app-text);
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 26px;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
 }
 
 .desktop-capabilities-title span {
@@ -129,24 +129,6 @@
   gap: 12px;
   align-items: start;
   padding-top: 2px;
-}
-
-.desktop-capabilities-header--market .desktop-capabilities-title {
-  gap: 2px;
-}
-
-.desktop-capabilities-header--market .desktop-capabilities-title h2 {
-  font-size: 24px;
-  font-weight: 400;
-  line-height: 32px;
-}
-
-.desktop-capabilities-header--market .desktop-capabilities-title span {
-  max-width: none;
-  color: var(--app-text-muted);
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 20px;
 }
 
 .desktop-capabilities-actions {
@@ -168,7 +150,7 @@
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 7px;
-  width: min(320px, 100%);
+  width: 100%;
   height: var(--app-control-height);
   padding: 0 10px;
   border: 1px solid color-mix(in srgb, var(--app-border) 84%, transparent);
@@ -176,6 +158,10 @@
   color: var(--app-text-muted);
   background: var(--app-bg);
   transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.desktop-capabilities-search-row {
+  min-width: 0;
 }
 
 .desktop-capabilities-search:hover {
@@ -309,6 +295,14 @@
   grid-row: 2;
 }
 
+.desktop-capabilities-search-row {
+  grid-row: 2;
+}
+
+.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-search-row {
+  grid-row: 3;
+}
+
 .desktop-capabilities-tabs button {
   height: 28px;
   padding: 0 var(--desktop-capabilities-tab-padding-inline);
@@ -341,47 +335,25 @@
   white-space: nowrap;
 }
 
-.desktop-capabilities-usage-note {
-  display: grid;
-  grid-row: 2;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 36px;
-  padding: 8px 10px;
-  border: 1px solid var(--app-accent-border);
-  border-radius: var(--app-radius-md);
-  color: var(--app-text-muted);
-  background: var(--app-accent-subtle);
-  font-size: 12px;
-  line-height: 18px;
-}
-
-.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-usage-note {
-  grid-row: 3;
-}
-
-.desktop-capabilities-usage-note svg {
-  color: var(--app-primary);
-}
-
-.desktop-capabilities-usage-note span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .desktop-capabilities-grid {
-  display: grid;
+  display: block;
   grid-row: 3;
-  grid-auto-rows: auto;
-  align-items: stretch;
-  align-content: start;
+  width: 100%;
   min-width: 0;
   min-height: 0;
   overflow: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--chat-scrollbar-thumb) transparent;
+}
+
+.desktop-capabilities-grid__content {
+  width: min(
+    var(--desktop-capabilities-content-width),
+    calc(100% - var(--desktop-capabilities-page-padding-inline) - var(--desktop-capabilities-page-padding-inline))
+  );
+  min-width: 0;
+  margin: 0 auto;
+  padding: 4px 0 24px;
 }
 
 .desktop-capabilities-grid::-webkit-scrollbar {
@@ -396,33 +368,27 @@
 }
 
 .desktop-capabilities-panel__inner--market .desktop-capabilities-grid {
-  grid-row: 2;
+  grid-row: 3;
 }
 
 .desktop-capabilities-panel__inner--market-notice .desktop-capabilities-grid {
-  grid-row: 3;
+  grid-row: 4;
 }
 
 .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
   grid-row: 4;
 }
 
-.desktop-capabilities-panel__inner--market.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
-  grid-row: 3;
-}
-
 .desktop-capabilities-panel__inner--market-notice.desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-grid {
-  grid-row: 4;
+  grid-row: 5;
 }
 
 .desktop-capabilities-market-notices {
   display: grid;
-  grid-row: 2;
+  grid-row: 3;
   gap: 6px;
   width: min(calc(var(--desktop-capabilities-content-width) + var(--desktop-capabilities-page-padding-inline)), 100%);
   min-width: 0;
-  margin: 0 auto;
-  padding-right: var(--desktop-capabilities-page-padding-inline);
 }
 
 .desktop-capabilities-market-warning {
@@ -446,12 +412,7 @@
 }
 
 .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-market-notices {
-  grid-row: 3;
-}
-
-.desktop-capabilities-grid--market {
-  display: block;
-  padding: 4px var(--desktop-capabilities-page-padding-inline) 24px 0;
+  grid-row: 4;
 }
 
 @media (max-width: 760px) {
@@ -468,14 +429,9 @@
     padding-top: 2px;
   }
 
-  .desktop-capabilities-header--market .desktop-capabilities-title h2 {
+  .desktop-capabilities-title h2 {
     font-size: 21px;
     line-height: 28px;
-  }
-
-  .desktop-capabilities-header--market .desktop-capabilities-title span {
-    overflow: visible;
-    white-space: normal;
   }
 
   .app-topbar__route-slot .desktop-capabilities-tabs,

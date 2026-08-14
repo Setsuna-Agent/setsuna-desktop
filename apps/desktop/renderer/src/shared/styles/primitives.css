@@ -274,6 +274,18 @@
   min-width: 0;
 }
 
+.sd-page-header__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sd-page-header__leading {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
 .sd-page-header__title-group {
   display: grid;
   gap: 2px;

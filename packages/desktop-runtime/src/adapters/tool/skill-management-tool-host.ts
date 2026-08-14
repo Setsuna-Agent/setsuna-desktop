@@ -47,10 +47,6 @@ const configureSkillTool: RuntimeToolDefinition = {
         type: 'boolean',
         description: 'Whether the Skill is enabled. Defaults to true.',
       },
-      selected: {
-        type: 'boolean',
-        description: 'Whether the Skill should be globally selected for future turns. Defaults to false.',
-      },
       mcp_dependencies: {
         type: 'array',
         description: 'Optional MCP dependencies stored in agents/openai.yaml. Do not include tokens or plaintext secrets.',
@@ -79,7 +75,7 @@ const configureSkillTool: RuntimeToolDefinition = {
 
 const readSkillTool: RuntimeToolDefinition = {
   name: readSkillToolName,
-  description: 'Read one bounded chunk of the current instructions for an enabled Skill. Continue from next_offset until complete before applying an unselected Skill, and restart at offset 0 when content_version changes.',
+  description: 'Read one bounded chunk of the current instructions for an enabled Skill. Continue from next_offset until complete before applying a Skill that was not injected for this turn, and restart at offset 0 when content_version changes.',
   inputSchema: {
     type: 'object',
     properties: {
@@ -144,7 +140,7 @@ export class SkillManagementToolHost implements ToolHost {
     if (toolIsAdvertised(advertised, readSkillToolName)) {
       lines.push(
         'Every enabled Skill is advertised separately as routing metadata. Metadata visibility does not mean the full Skill instructions have been loaded.',
-        'When a request matches an unselected Skill, call read_skill with its skill_id and current content_version. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.',
+        'When a request matches a Skill that was not injected for the current turn, call read_skill with its skill_id and current content_version. Read every chunk through complete=true before acting, and restart from offset 0 if the catalog version changes.',
       );
     }
     if (toolIsAdvertised(advertised, configureSkillToolName)) {
@@ -160,7 +156,7 @@ export class SkillManagementToolHost implements ToolHost {
     if (canInstall || canAuthenticate) {
       lines.push(
         [
-          'A selected Skill can declare MCP dependencies in agents/openai.yaml.',
+          'An injected Skill can declare MCP dependencies in agents/openai.yaml.',
           ...(canInstall ? ['Use install_skill_mcp_dependencies when an injected dependency is missing or disabled.'] : []),
           ...(canAuthenticate ? ['Use authenticate_skill_mcp_dependency when an injected dependency is authRequired.'] : []),
         ].join(' '),
@@ -328,7 +324,6 @@ export class SkillManagementToolHost implements ToolHost {
     const normalized = normalizeSkillInput(input);
     const existing = normalized.id ? await this.skillRegistry.getSkill(normalized.id) : null;
     if (existing?.kind === 'builtin') throw new Error(`Built-in skill is read-only: ${existing.id}`);
-    if (existing?.kind === 'plugin') throw new Error(`Plugin skill is read-only: ${existing.id}`);
 
     const saved = existing
       ? await this.skillRegistry.updateSkill(existing.id, normalized)
@@ -340,7 +335,6 @@ export class SkillManagementToolHost implements ToolHost {
         `ID: ${saved.id}`,
         saved.path ? `Path: ${saved.path}` : '',
         saved.enabled ? 'Enabled: true' : 'Enabled: false',
-        saved.selected ? 'Selected: true' : 'Selected: false',
       ].filter(Boolean).join('\n'),
       preview: JSON.stringify(skillResultPreview(existing ? 'update' : 'create', saved)),
       data: saved,
@@ -434,7 +428,6 @@ function normalizeSkillInput(input: unknown): RuntimeSkillInput {
     description: optionalString(record.description),
     content,
     enabled: booleanValue(record.enabled, true),
-    selected: booleanValue(record.selected, false),
     ...(record.mcp_dependencies !== undefined || record.mcpDependencies !== undefined
       ? { mcpDependencies: normalizeSkillMcpDependencies(record.mcp_dependencies ?? record.mcpDependencies) }
       : {}),
@@ -452,7 +445,6 @@ function skillPreviewPayload(
     name: input.name,
     description: input.description,
     enabled: input.enabled,
-    selected: input.selected,
     existingPath: existing?.path,
     contentChars: input.content.length,
     mcpDependencyCount: input.mcpDependencies?.length ?? 0,
@@ -501,7 +493,6 @@ function skillResultPreview(action: 'create' | 'update', skill: RuntimeSkillDeta
     name: skill.name,
     path: skill.path,
     enabled: skill.enabled,
-    selected: skill.selected,
   };
 }
 

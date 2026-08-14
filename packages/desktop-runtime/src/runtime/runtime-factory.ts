@@ -108,7 +108,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
   });
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
-  const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir, mcpStore);
+  const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir);
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);
   const builtinSkillsDir =
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');

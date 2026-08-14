@@ -25,10 +25,12 @@ import { errorMessage } from '../../shared/node-errors.js';
 import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
+import { PluginSkillOverrideStore } from './plugin-skill-override-store.js';
+import { mergeSkillManifest, readOptionalSkillManifest } from './skill-manifest-editor.js';
 
 type SkillStateFile = {
   version: 1;
-  states: Record<string, { enabled?: boolean; selected?: boolean }>;
+  states: Record<string, { enabled?: boolean }>;
 };
 
 type ParsedSkill = {
@@ -63,6 +65,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private extraSkillRoots: string[] = [];
   private readonly statePath: string;
   private readonly pluginIndexPath: string;
+  private readonly pluginSkillOverrides: PluginSkillOverrideStore;
   private readonly userSkillsDir: string;
   private readonly watchers = new Map<string, FSWatcher>();
   private readonly suspendedPluginRoots = new Map<string, number>();
@@ -73,6 +76,9 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   ) {
     this.statePath = path.join(dataDir, 'skills.json');
     this.pluginIndexPath = path.join(dataDir, 'plugins.json');
+    this.pluginSkillOverrides = new PluginSkillOverrideStore(
+      path.join(dataDir, 'plugin-skill-overrides'),
+    );
     this.userSkillsDir = path.join(dataDir, 'user-skills');
   }
 
@@ -89,11 +95,10 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       if (!id) throw new Error('Skill id is required');
       const existing = await this.readSkills();
       if (existing.some((skill) => skill.id === id)) throw new Error(`Skill already exists: ${id}`);
-      const preparedFiles = prepareUserSkillFiles(input);
+      const preparedFiles = prepareSkillFiles(input);
       const state = await this.readState();
       state.states[id] = {
         enabled: input.enabled ?? true,
-        selected: input.selected ?? false,
       };
       await this.writeState(state);
       const skillPath = await this.writeUserSkill(id, preparedFiles);
@@ -119,13 +124,11 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         || patch.description !== undefined
         || patch.content !== undefined
         || patch.mcpDependencies !== undefined;
-      if (contentPatch && skill.kind !== 'user') throw readOnlySkillError(skill.kind, skillId);
+      if (contentPatch && skill.kind === 'builtin') throw readOnlySkillError(skillId);
 
       const state = await this.readState();
       state.states[skillId] = {
-        ...state.states[skillId],
         enabled: patch.enabled ?? state.states[skillId]?.enabled,
-        selected: patch.selected ?? state.states[skillId]?.selected,
       };
       if (!contentPatch) {
         await this.writeState(state);
@@ -137,18 +140,27 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         name: patch.name ?? skill.name,
         description: patch.description ?? skill.description,
         content: patch.content ?? skill.content,
-        mcpDependencies: patch.mcpDependencies ?? skill.mcpDependencies.map(dependencyInput),
+        ...(patch.mcpDependencies !== undefined
+          ? { mcpDependencies: patch.mcpDependencies }
+          : {}),
         enabled: state.states[skillId]?.enabled,
-        selected: state.states[skillId]?.selected,
       };
       // 修改任一持久化文件前，先对两个文件完成规范化与校验。
-      const preparedFiles = prepareUserSkillFiles(nextInput);
+      const [rawContent, existingDependencyManifest] = await Promise.all([
+        readFile(skill.path, 'utf8'),
+        readOptionalSkillManifest(skill.path),
+      ]);
+      const preparedFiles = prepareSkillFiles(nextInput, {
+        existingRawContent: rawContent,
+        existingDependencyManifest,
+        updateDisplayName: patch.name !== undefined,
+      });
       await this.writeState(state);
-      const skillPath = await this.writeUserSkill(skillId, preparedFiles);
-      const content = await readFile(skillPath, 'utf8');
-      const dependencyManifest = await readSkillDependencyManifest(skillPath);
+      await this.writeExistingSkill(skill, nextInput, preparedFiles);
+      const updatedSkill = (await this.readSkills()).find((item) => item.id === skillId);
+      if (!updatedSkill) throw new Error(`Skill not found after update: ${skillId}`);
       this.queueChangeNotification();
-      return toDetail(parseSkill(skillId, 'user', skillPath, content, dependencyManifest), state);
+      return toDetail(updatedSkill, state);
     });
   }
 
@@ -157,8 +169,19 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       const skills = await this.readSkills();
       const skill = skills.find((item) => item.id === skillId);
       if (!skill) return;
-      if (skill.kind !== 'user') throw readOnlySkillError(skill.kind, skillId);
-      await rm(path.join(this.userSkillsDir, skillId), { recursive: true, force: true });
+      if (skill.kind === 'builtin') throw readOnlySkillError(skillId);
+      if (skill.kind === 'plugin') await this.deletePluginSkill(skillId);
+      else {
+        const managedRoot = path.resolve(this.userSkillsDir);
+        const skillDirectory = path.resolve(path.dirname(skill.path));
+        if (skillDirectory !== managedRoot && pathIsInside(managedRoot, skillDirectory)) {
+          await rm(skillDirectory, { recursive: true, force: true });
+        } else {
+          // Extra roots are not runtime-owned. Remove only their Skill entrypoint
+          // instead of recursively deleting an externally managed directory.
+          await rm(skill.path, { force: true });
+        }
+      }
       const state = await this.readState();
       delete state.states[skillId];
       await this.writeState(state);
@@ -180,8 +203,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         .map(({ parsed }) => toSummary(parsed, state)),
       selectedInjections: resolvedSkills
         .filter(({ parsed, detail }) => detail.enabled && (
-          detail.selected
-          || explicitSkillIds.has(detail.id)
+          explicitSkillIds.has(detail.id)
           || (allowAutomaticPluginActivation && pluginSkillMatchesActivation(parsed, activation?.text ?? ''))
         ))
         .map(({ parsed, detail }) => ({
@@ -246,8 +268,11 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
     const skills = await Promise.all(index.plugins.flatMap((plugin) => plugin.skillEntries.map(async (entry) => {
       const pluginRoot = path.resolve(plugin.installPath);
-      const skillPath = path.resolve(pluginRoot, entry.relativePath, 'SKILL.md');
-      if (!pathIsInside(pluginRoot, skillPath)) return null;
+      const sourceSkillPath = path.resolve(pluginRoot, entry.relativePath, 'SKILL.md');
+      if (!pathIsInside(pluginRoot, sourceSkillPath)) return null;
+      const override = await this.pluginSkillOverrides.read(plugin, entry.id);
+      if (override?.deleted) return null;
+      const skillPath = override?.skillPath ?? sourceSkillPath;
       const content = await readFile(skillPath, 'utf8').catch(() => '');
       if (!content) return null;
       const dependencyManifest = await readSkillDependencyManifest(skillPath);
@@ -280,7 +305,14 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   }
 
   private async readState(): Promise<SkillStateFile> {
-    return readJsonFile<SkillStateFile>(this.statePath, { version: 1, states: {} });
+    const state = await readJsonFile<SkillStateFile>(this.statePath, { version: 1, states: {} });
+    return {
+      version: 1,
+      states: Object.fromEntries(Object.entries(state.states).map(([id, skillState]) => [
+        id,
+        { ...(typeof skillState.enabled === 'boolean' ? { enabled: skillState.enabled } : {}) },
+      ])),
+    };
   }
 
   private async writeState(state: SkillStateFile): Promise<void> {
@@ -288,14 +320,57 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
     await writeJsonFile(this.statePath, state);
   }
 
-  private async writeUserSkill(id: string, files: PreparedUserSkillFiles): Promise<string> {
+  private async writeUserSkill(id: string, files: PreparedSkillFiles): Promise<string> {
     const skillPath = path.join(this.userSkillsDir, id, 'SKILL.md');
-    await mkdir(path.dirname(skillPath), { recursive: true });
-    await writeTextFile(skillPath, files.markdown);
-    if (files.dependencyManifest !== undefined) {
-      await writeSkillDependencyManifest(skillPath, files.dependencyManifest);
-    }
+    await writeSkillFiles(skillPath, files);
     return skillPath;
+  }
+
+  private async writeExistingSkill(
+    skill: ParsedSkill,
+    input: RuntimeSkillInput,
+    files: PreparedSkillFiles,
+  ): Promise<void> {
+    if (skill.kind !== 'plugin') {
+      await writeSkillFiles(skill.path, files);
+      return;
+    }
+    await withFileStateUpdate(this.pluginIndexPath, async () => {
+      const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
+      const location = pluginSkillLocation(index, skill.id);
+      if (!location) throw new Error(`Plugin skill not found: ${skill.id}`);
+      await this.pluginSkillOverrides.write(
+        location.plugin,
+        location.skillId,
+        location.skillPath,
+        (skillPath) => writeSkillFiles(skillPath, files),
+      );
+      const metadata = {
+        id: skill.id,
+        name: input.name.trim(),
+        ...(input.description?.trim() ? { description: input.description.trim() } : {}),
+      };
+      const skills = location.plugin.skills.some((item) => item.id === skill.id)
+        ? location.plugin.skills.map((item) => (item.id === skill.id ? metadata : item))
+        : [...location.plugin.skills, metadata];
+      await writeJsonFile(this.pluginIndexPath, {
+        version: 1,
+        plugins: index.plugins.map((plugin) => (
+          plugin.id === location.plugin.id ? { ...plugin, skills } : plugin
+        )),
+      } satisfies PluginIndexFile);
+    });
+  }
+
+  private async deletePluginSkill(skillId: string): Promise<void> {
+    await withFileStateUpdate(this.pluginIndexPath, async () => {
+      const index = await readJsonFile<PluginIndexFile>(this.pluginIndexPath, { version: 1, plugins: [] });
+      const location = pluginSkillLocation(index, skillId);
+      if (!location) return;
+      // Keep the signed Plugin snapshot untouched. The installation timestamp
+      // scopes this tombstone so uninstalling and reinstalling restores the Skill.
+      await this.pluginSkillOverrides.markDeleted(location.plugin, skillId);
+    });
   }
 
   private queueChangeNotification(): void {
@@ -314,6 +389,7 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
   private async refreshChangeWatchers(): Promise<void> {
     if (!this.changeSubscribers.size) return;
     await mkdir(this.userSkillsDir, { recursive: true }).catch(() => undefined);
+    await this.pluginSkillOverrides.ensureRoot().catch(() => undefined);
     const directories = new Set(await this.watchDirectories());
     for (const [directory, watcher] of this.watchers.entries()) {
       if (directories.has(directory)) continue;
@@ -342,7 +418,13 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
       plugin.installPath,
       ...plugin.skillEntries.map((entry) => path.join(plugin.installPath, entry.relativePath)),
     ]);
-    const roots = [this.builtinSkillsDir, this.userSkillsDir, ...this.extraSkillRoots, ...pluginRoots].map((root) => path.resolve(root));
+    const roots = [
+      this.builtinSkillsDir,
+      this.userSkillsDir,
+      ...this.extraSkillRoots,
+      ...pluginRoots,
+      ...this.pluginSkillOverrides.watchRoots(pluginIndex.plugins),
+    ].map((root) => path.resolve(root));
     const directories = new Set<string>();
     await Promise.all(roots.map(async (root) => {
       if (!await isDirectory(root)) return;
@@ -440,6 +522,17 @@ function parseFrontmatter(rawContent: string): { name?: string; description?: st
   }
 }
 
+function existingSkillMetadata(rawContent?: string): Record<string, unknown> {
+  if (!rawContent) return {};
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(rawContent);
+  if (!match) return {};
+  try {
+    return { ...recordValue(parseYaml(match[1], { maxAliasCount: 0, uniqueKeys: true })) };
+  } catch {
+    return {};
+  }
+}
+
 function frontmatterStringArray(value: unknown): string[] {
   if (typeof value === 'string') return value.trim() ? [value.trim()] : [];
   if (!Array.isArray(value)) return [];
@@ -534,13 +627,21 @@ function skillId(value: string): string {
     .slice(0, 80);
 }
 
-function formatSkillMarkdown(input: RuntimeSkillInput): string {
+function formatSkillMarkdown(input: RuntimeSkillInput, existingRawContent?: string): string {
   const name = input.name.trim();
   const description = input.description?.trim();
-  const frontmatter = ['---', `name: ${quoteYamlValue(name || 'Untitled Skill')}`];
-  if (description) frontmatter.push(`description: ${quoteYamlValue(description)}`);
-  frontmatter.push('---', '');
-  return `${frontmatter.join('\n')}${input.content.trim()}\n`;
+  if (!existingRawContent) {
+    const frontmatter = ['---', `name: ${quoteYamlValue(name || 'Untitled Skill')}`];
+    if (description) frontmatter.push(`description: ${quoteYamlValue(description)}`);
+    frontmatter.push('---', '');
+    return `${frontmatter.join('\n')}${input.content.trim()}\n`;
+  }
+  const metadata = existingSkillMetadata(existingRawContent);
+  metadata.name = name || 'Untitled Skill';
+  if (description) metadata.description = description;
+  else delete metadata.description;
+  const frontmatter = stringifyYaml(metadata, { lineWidth: 0 }).trimEnd();
+  return `---\n${frontmatter}\n---\n\n${input.content.trim()}\n`;
 }
 
 function quoteYamlValue(value: string): string {
@@ -556,7 +657,6 @@ function toSummary(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillSumma
     contentVersion: skill.contentVersion,
     kind: skill.kind,
     enabled: skillState?.enabled ?? true,
-    selected: skillState?.selected ?? false,
     description: skill.description,
     path: skill.path,
     mcpDependencies: skill.mcpDependencies,
@@ -609,23 +709,47 @@ async function readSkillDependencyManifest(skillPath: string): Promise<SkillDepe
   }
 }
 
-type PreparedUserSkillFiles = {
+type PreparedSkillFiles = {
   markdown: string;
   /** undefined 保留现有清单，null 则将其移除。 */
   dependencyManifest?: string | null;
 };
 
-function prepareUserSkillFiles(input: RuntimeSkillInput): PreparedUserSkillFiles {
+function prepareSkillFiles(
+  input: RuntimeSkillInput,
+  options: {
+    existingRawContent?: string;
+    existingDependencyManifest?: string;
+    updateDisplayName?: boolean;
+  } = {},
+): PreparedSkillFiles {
+  const dependencyManifest = mergeSkillDependencyManifest(
+    options.existingDependencyManifest,
+    input.mcpDependencies,
+    options.updateDisplayName ? input.name : undefined,
+  );
   return {
-    markdown: formatSkillMarkdown(input),
-    ...(input.mcpDependencies !== undefined
-      ? { dependencyManifest: serializeSkillDependencyManifest(input.mcpDependencies) }
+    markdown: formatSkillMarkdown(input, options.existingRawContent),
+    ...(dependencyManifest !== undefined
+      ? { dependencyManifest }
       : {}),
   };
 }
 
-function serializeSkillDependencyManifest(dependencies: RuntimeSkillMcpDependencyInput[]): string | null {
-  if (!dependencies.length) return null;
+async function writeSkillFiles(skillPath: string, files: PreparedSkillFiles): Promise<void> {
+  await mkdir(path.dirname(skillPath), { recursive: true });
+  await writeTextFile(skillPath, files.markdown);
+  if (files.dependencyManifest !== undefined) {
+    await writeSkillDependencyManifest(skillPath, files.dependencyManifest);
+  }
+}
+
+function mergeSkillDependencyManifest(
+  existingContent: string | undefined,
+  dependencies: RuntimeSkillMcpDependencyInput[] | undefined,
+  displayName: string | undefined,
+): string | null | undefined {
+  if (dependencies === undefined) return mergeSkillManifest(existingContent, undefined, displayName);
   const normalized = dependencies.map((dependency) => normalizeMcpDependency(dependency));
   const keys = new Set<string>();
   for (const dependency of normalized) {
@@ -633,7 +757,7 @@ function serializeSkillDependencyManifest(dependencies: RuntimeSkillMcpDependenc
     keys.add(dependency.value);
   }
   const tools = normalized.map(dependencyManifestValue);
-  return stringifyYaml({ dependencies: { tools } }, { lineWidth: 0 });
+  return mergeSkillManifest(existingContent, tools, displayName);
 }
 
 async function writeSkillDependencyManifest(skillPath: string, content: string | null): Promise<void> {
@@ -686,11 +810,6 @@ function dependencyManifestValue(dependency: RuntimeSkillMcpDependencyInput): Re
     ...(dependency.oauthClientId ? { oauth_client_id: dependency.oauthClientId } : {}),
     ...(dependency.oauthResource ? { oauth_resource: dependency.oauthResource } : {}),
   };
-}
-
-function dependencyInput(dependency: RuntimeSkillMcpDependency): RuntimeSkillMcpDependencyInput {
-  const { status: _status, authStatus: _authStatus, error: _error, ...input } = dependency;
-  return input;
 }
 
 function normalizeMcpKey(value: string): string {
@@ -747,10 +866,26 @@ function pathIsInside(root: string, target: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-function readOnlySkillError(kind: RuntimeSkillKind, skillId: string): Error {
-  return new Error(kind === 'builtin'
-    ? `Built-in skill is read-only: ${skillId}`
-    : `Plugin skill is read-only: ${skillId}`);
+function pluginSkillLocation(index: PluginIndexFile, skillId: string): {
+  plugin: InstalledPluginRecord;
+  skillId: string;
+  skillPath: string;
+} | null {
+  for (const plugin of index.plugins) {
+    const entry = plugin.skillEntries.find((item) => item.id === skillId);
+    if (!entry) continue;
+    const pluginRoot = path.resolve(plugin.installPath);
+    const skillDirectory = path.resolve(pluginRoot, entry.relativePath);
+    if (!pathIsInside(pluginRoot, skillDirectory) || skillDirectory === pluginRoot) {
+      throw new Error(`Installed Plugin Skill path is invalid: ${skillId}`);
+    }
+    return { plugin, skillId, skillPath: path.join(skillDirectory, 'SKILL.md') };
+  }
+  return null;
+}
+
+function readOnlySkillError(skillId: string): Error {
+  return new Error(`Built-in skill is read-only: ${skillId}`);
 }
 
 function toDetail(skill: ParsedSkill, state: SkillStateFile): RuntimeSkillDetail {

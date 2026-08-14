@@ -8,28 +8,24 @@ const skills: RuntimeSkillSummary[] = [
     name: 'PDF',
     kind: 'builtin',
     enabled: true,
-    selected: false,
   },
   {
     id: 'pdf-documents',
     name: 'PDF 文档处理',
     kind: 'builtin',
     enabled: true,
-    selected: false,
   },
   {
     id: 'review-builtin',
     name: 'Review',
     kind: 'builtin',
     enabled: true,
-    selected: false,
   },
   {
     id: 'review-user',
     name: 'Review',
     kind: 'user',
     enabled: true,
-    selected: false,
   },
 ];
 

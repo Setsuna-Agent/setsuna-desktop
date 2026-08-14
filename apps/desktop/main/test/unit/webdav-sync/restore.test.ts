@@ -173,7 +173,7 @@ describe('WebDAV restore planning and commit', () => {
       version: 1,
       states: {
         'local-skill': { enabled: false },
-        'bundled-skill': { selected: true },
+        'bundled-skill': { enabled: true },
       },
     }));
     await mkdir(path.join(stagingRoot, 'runtime', 'user-skills', 'backup-skill'), { recursive: true });
@@ -245,7 +245,7 @@ describe('WebDAV restore planning and commit', () => {
       .toEqual({
         version: 1,
         states: {
-          'bundled-skill': { selected: true },
+          'bundled-skill': { enabled: true },
           'backup-skill': { enabled: true },
         },
       });

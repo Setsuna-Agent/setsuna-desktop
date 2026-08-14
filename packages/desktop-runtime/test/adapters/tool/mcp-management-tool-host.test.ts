@@ -27,7 +27,6 @@ describe('mcp management tool host', () => {
         transport: 'streamableHttp',
         url: mcpServer.baseUrl,
         headers: { Authorization: 'Bearer secret-token' },
-        require_approval: 'smart',
       });
       expect(approval?.reason).toContain('创建 MCP 服务');
       expect(JSON.parse(approval?.argumentsPreview ?? '{}')).toMatchObject({ configPath });
@@ -41,8 +40,6 @@ describe('mcp management tool host', () => {
         headers: { Authorization: 'Bearer secret-token' },
         oauth_client_id: 'client-123',
         oauth_resource: 'https://resource.example.com',
-        require_approval: 'smart',
-        trust_level: 'trusted',
       }, context);
 
       expect(created.content).toContain(`Config: ${configPath}`);
@@ -59,8 +56,6 @@ describe('mcp management tool host', () => {
             description: 'Search remote docs',
             transport: 'streamableHttp',
             url: mcpServer.baseUrl,
-            requireApproval: 'auto',
-            trustLevel: 'trusted',
             headerKeys: ['Authorization'],
             oauthClientId: 'client-123',
             oauthResource: 'https://resource.example.com',

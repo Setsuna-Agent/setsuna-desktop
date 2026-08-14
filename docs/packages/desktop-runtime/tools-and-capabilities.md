@@ -236,7 +236,7 @@ Renderer 通过 runtime REST 查看后台进程；运行中心只读取生命周
 - `McpManagementToolHost`：让 Agent 管理 server。
 - `McpRuntimeToolHost`：把启用 server tools 暴露为 `mcp__server__tool`。
 
-MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/resource 都是外部不可信上下文。
+MCP server 只维护启用状态和工具可用范围，不再提供必需、调用确认或信任级别配置。Result/resource 仍统一作为外部不可信上下文处理。
 
 ## Skills
 
@@ -245,14 +245,14 @@ MCP 默认审批，除非 server 明确 `requireApproval: "never"`。Result/reso
 - 读取 packaged builtins。
 - 读取 Plugin Skills。
 - 管理 `runtime/user-skills/<id>/SKILL.md`。
-- `skills.json` 保存 enabled/selected。
-- Builtin/Plugin 只读，user 可 CRUD。
+- `skills.json` 保存 enabled。
+- Builtin 只读；Plugin 和 user Skill 可编辑、删除。Plugin Skill 的编辑副本和删除标记位于 `plugin-skill-overrides/`，不修改完整性校验覆盖的 Plugin 目录；卸载并重新安装后恢复 Plugin 原始内容。删除 Extra root Skill 时只移除其 `SKILL.md` 入口，不递归删除外部源目录中的其他文件。
 - 每轮从同一 registry 快照暴露所有 enabled Skill 的 `id/name/description/path/contentVersion` 路由元数据；`contentVersion` 由当前 SKILL.md 正文摘要生成。
-- 显式 Skill 优先；default、显式选择和 auto-activation 只决定哪些 Skill 额外注入完整正文。
+- 显式 Skill 优先；显式选择和 auto-activation 只决定哪些 Skill 额外注入完整正文。
 
 `SkillMcpDependencyCoordinator` 管理 Skill 声明的 MCP dependency 安装、状态和认证。
 
-`SkillManagementToolHost` 提供只读 `read_skill`，按 `contentVersion` 分页加载未选择 Skill 的正文，并将单次结果限制在 16 KiB；版本变化时必须从 offset 0 重读，防止线程历史继续使用旧正文或混合两个版本。它也提供 Agent 创建/更新用户 Skill 的工具。Host system prompt 只描述当前采样实际暴露的工具。元数据目录受模型上下文预算约束，会先公平缩短 description，再在必要时省略条目并明确报告数量。
+`SkillManagementToolHost` 提供只读 `read_skill`，按 `contentVersion` 分页加载当前轮未注入 Skill 的正文，并将单次结果限制在 16 KiB；版本变化时必须从 offset 0 重读，防止线程历史继续使用旧正文或混合两个版本。它也提供 Agent 创建/更新用户 Skill 的工具。Host system prompt 只描述当前采样实际暴露的工具。元数据目录受模型上下文预算约束，会先公平缩短 description，再在必要时省略条目并明确报告数量。
 
 仓库内置 Skill 见 [Skills 文档](../../skills/README.md)。
 

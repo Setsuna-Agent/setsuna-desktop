@@ -781,7 +781,6 @@ export function stepSnapshotSkillRegistry(): SkillRegistry {
         description: 'Use the step snapshot fixture.',
         kind: 'user',
         enabled: true,
-        selected: false,
       }],
       selectedInjections: skillIds?.includes('skill_step')
         ? [{ id: 'skill_step', name: 'Step Skill', content: 'Use the step snapshot fixture.' }]

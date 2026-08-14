@@ -111,7 +111,6 @@ function skill(index: number): RuntimeSkillSummary {
     name: `Deploy ${index}`,
     kind: 'user',
     enabled: true,
-    selected: false,
     description: 'Deployment workflow',
   };
 }

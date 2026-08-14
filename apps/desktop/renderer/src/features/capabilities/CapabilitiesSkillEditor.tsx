@@ -10,7 +10,6 @@ type SkillEditorDraft = {
   description: string;
   content: string;
   enabled: boolean;
-  selected: boolean;
 };
 
 export function CapabilitiesSkillEditor({
@@ -34,13 +33,6 @@ export function CapabilitiesSkillEditor({
   }, [skill]);
 
   const creating = mode === 'create';
-  const setEnabled = (enabled: boolean) => {
-    setDraft((current) => ({
-      ...current,
-      enabled,
-      selected: enabled ? current.selected : false,
-    }));
-  };
   return (
     <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
       <PageHeader
@@ -90,17 +82,10 @@ export function CapabilitiesSkillEditor({
         </label>
         <div className="desktop-capabilities-skill-form__checks">
           <label className="sd-check" title={t('capabilities.skill.enableHint')}>
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setEnabled(event.currentTarget.checked)} />
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraftField(setDraft, 'enabled', event.currentTarget.checked)} />
             <span>{t('capabilities.skill.enabled')}</span>
           </label>
-          <label className="sd-check" title={t('capabilities.skill.defaultHint')}>
-            <input type="checkbox" checked={draft.selected} disabled={!draft.enabled} onChange={(event) => setDraftField(setDraft, 'selected', event.currentTarget.checked)} />
-            <span>{t('capabilities.skill.editor.default')}</span>
-          </label>
         </div>
-        <p className="desktop-capabilities-skill-usage-help desktop-capabilities-skill-form__full">
-          {t('capabilities.skill.editor.defaultDescription')}
-        </p>
       </div>
     </section>
   );
@@ -113,7 +98,6 @@ function createDraft(skill?: RuntimeSkillDetail | null): SkillEditorDraft {
     description: skill?.description ?? '',
     content: skill?.content ?? '',
     enabled: skill?.enabled ?? true,
-    selected: skill?.selected ?? false,
   };
 }
 
@@ -124,7 +108,6 @@ function toInput(draft: SkillEditorDraft, includeId: boolean): RuntimeSkillInput
     description: draft.description.trim() || undefined,
     content: draft.content.trim(),
     enabled: draft.enabled,
-    selected: draft.enabled && draft.selected,
   };
 }
 

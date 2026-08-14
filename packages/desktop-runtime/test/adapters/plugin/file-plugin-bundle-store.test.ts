@@ -242,7 +242,6 @@ describe('file plugin bundle store', () => {
       expect.objectContaining({
         key: 'plugin_docs',
         enabled: true,
-        trustLevel: 'untrusted',
         url: 'https://docs.example/mcp',
       }),
     ]);

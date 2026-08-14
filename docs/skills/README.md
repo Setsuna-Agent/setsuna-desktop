@@ -2,7 +2,7 @@
 
 源码目录：`skills/`
 
-这里存放随应用直接打包、无需安装 Plugin 就可用的内置 Skill。用户创建的 Skill 写入数据根 `runtime/user-skills/`；Plugin Skill 位于已安装 Plugin 私有副本。
+这里存放随应用直接打包、无需安装 Plugin 就可用的内置 Skill。用户创建的 Skill 写入数据根 `runtime/user-skills/`；Plugin Skill 从已安装 Plugin 私有副本读取，编辑内容写入独立 override，避免改变 Plugin 完整性哈希。
 
 ## 当前内置 Skill
 
@@ -20,10 +20,10 @@
 | Kind | 来源 | 正文是否可编辑 |
 | --- | --- | --- |
 | Builtin | 应用包 `skills/` | 否 |
-| Plugin | `runtime/plugins/<plugin>/skills/` | 否 |
+| Plugin | `runtime/plugins/<plugin>/skills/` + `runtime/plugin-skill-overrides/` | 是 |
 | User | `runtime/user-skills/<id>/SKILL.md` | 是 |
 
-Enable/selected 状态统一保存在 `runtime/skills.json`。
+Enable 状态统一保存在 `runtime/skills.json`。
 
 ## Runtime 加载链路
 
@@ -47,6 +47,8 @@ main RuntimeHost
 - 规范化 ID/name/description。
 - 读取 MCP dependency manifest。
 - 合并状态。
+- 以安装时间标识限定 Plugin Skill override；卸载并重新安装后回到 Plugin 原始内容。
+- 删除目录型 extra root Skill 时只移除 `SKILL.md`，不递归删除外部目录中的其他文件。
 - 监视目录变化并通知 app-server。
 - 返回 prompt injection。
 
@@ -55,7 +57,6 @@ main RuntimeHost
 注入来源：
 
 - 用户在当前输入显式选择的 Skill。
-- `selected: true` 的默认 Skill。
 - Plugin Skill 的 auto-activation。
 
 显式选择存在时，不再追加自动匹配的 Plugin Skill。自动匹配可使用：

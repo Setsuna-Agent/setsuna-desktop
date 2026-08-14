@@ -28,13 +28,12 @@ describe('runtime server REST skills and capabilities', () => {
   
       const updated = await harness.runtimeFetch('/v1/skills/create-skill-in-chat', {
         method: 'PATCH',
-        body: JSON.stringify({ selected: true }),
+        body: JSON.stringify({ enabled: false }),
       });
   
       expect(updated).toMatchObject({
         id: 'create-skill-in-chat',
-        selected: true,
-        enabled: true,
+        enabled: false,
       });
     });
   
@@ -251,8 +250,6 @@ describe('runtime server REST skills and capabilities', () => {
           transport: 'streamableHttp',
           url: 'https://mcp.context7.com/mcp',
           enabled: true,
-          requireApproval: 'prompt',
-          trustLevel: 'untrusted',
         })],
       });
       await expect(harness.runtimeFetch('/v1/plugins')).resolves.toMatchObject({
@@ -273,7 +270,17 @@ describe('runtime server REST skills and capabilities', () => {
           }),
         ]),
       });
-  
+      await expect(harness.appServerRpc('skills/list', { cwds: [process.cwd()] })).resolves.toMatchObject({
+        data: [{
+          skills: expect.arrayContaining([
+            expect.objectContaining({
+              name: 'Context7 文档查询',
+              scope: 'user',
+            }),
+          ]),
+        }],
+      });
+
       await expect(harness.runtimeFetch('/v1/plugins/context7-docs', { method: 'DELETE' })).resolves.toEqual({
         pluginId: 'context7-docs',
         removedMcpServers: ['context7'],
