@@ -14,6 +14,10 @@ import { RuntimeHttpError } from './http-error.js';
 import { decodeRuntimeId, readBinaryBody, readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
 
+// Local files bypass this route entirely. Keep only the pathless managed-image
+// fallback bounded so a synthetic renderer payload cannot exhaust the runtime.
+const MAX_MANAGED_ATTACHMENT_BODY_BYTES = 256 * 1024 * 1024;
+
 export async function handleRuntimeResourceRequest(
   runtime: RuntimeFactory,
   request: IncomingMessage,
@@ -37,7 +41,7 @@ export async function handleRuntimeResourceRequest(
   if (request.method === 'POST' && url.pathname === '/v1/attachments') {
     const name = url.searchParams.get('name') ?? '';
     const type = url.searchParams.get('type') ?? '';
-    const data = await readBinaryBody(request);
+    const data = await readBinaryBody(request, MAX_MANAGED_ATTACHMENT_BODY_BYTES);
     try {
       sendJson(response, 201, await runtime.attachmentStore.create({ name, type, data }));
     } catch (error) {

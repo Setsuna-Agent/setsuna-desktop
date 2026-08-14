@@ -5,7 +5,7 @@ import {
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import { mkdir, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, open, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
   RuntimeAttachmentValidationError,
@@ -145,8 +145,8 @@ export class FileAttachmentStore implements AttachmentStore {
         throw new RuntimeAttachmentValidationError('附件路径无效。', 'attachment_invalid');
       }
       const absolutePath = await realpath(input.path).catch(() => '');
-      const info = absolutePath ? await stat(absolutePath).catch(() => null) : null;
-      if (!absolutePath || !info?.isFile()) {
+      const size = absolutePath ? await readableRegularFileSize(absolutePath) : null;
+      if (!absolutePath || size === null) {
         throw new RuntimeAttachmentValidationError('本地文件不存在或不可读取。', 'attachment_invalid');
       }
       const name = safeAttachmentDisplayName(path.basename(input.path));
@@ -156,7 +156,7 @@ export class FileAttachmentStore implements AttachmentStore {
         id,
         name,
         type,
-        size: info.size,
+        size,
         storage: 'linked',
         absolutePath,
         createdAt: this.clock.now().toISOString(),
@@ -246,10 +246,10 @@ export class FileAttachmentStore implements AttachmentStore {
       const record = recordsById.get(attachment.assetId);
       if (!record || !record.threadIds.includes(safeThreadId) || !attachmentMatchesRecord(attachment, record)) continue;
       const absolutePath = this.recordPath(record);
-      const info = await stat(absolutePath).catch(() => null);
-      if (!info?.isFile()) continue;
+      const size = await readableRegularFileSize(absolutePath);
+      if (size === null) continue;
       resolved.push({
-        attachment: storedAttachment(record, info.size),
+        attachment: storedAttachment(record, size),
         absolutePath,
         readableRoot: record.storage === 'linked' ? absolutePath : this.assetDirectory(record.id),
       });
@@ -292,6 +292,17 @@ export class FileAttachmentStore implements AttachmentStore {
     const candidate = path.resolve(this.filesRoot, name);
     if (path.dirname(candidate) !== path.resolve(this.filesRoot)) return Promise.resolve();
     return removeDirectory(candidate);
+  }
+}
+
+async function readableRegularFileSize(filePath: string): Promise<number | null> {
+  const handle = await open(filePath, 'r').catch(() => null);
+  if (!handle) return null;
+  try {
+    const info = await handle.stat();
+    return info.isFile() ? info.size : null;
+  } finally {
+    await handle.close().catch(() => undefined);
   }
 }
 

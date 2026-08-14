@@ -143,7 +143,7 @@ Legacy import 测试使用冻结的历史 JSON/JSONL fixture，避免由当前�
 
 - 本地文件只保存原路径引用和 metadata，不复制源文件；只有无本地路径的图片保存受管字节。
 - 本地引用解析为精确文件只读 root；删除引用或 thread 不会删除用户的原文件。
-- 受管图片验证名称、MIME 以及 PNG/JPEG/GIF/WebP 的真实文件签名，不设置固定文件大小上限。
+- 受管图片验证名称、MIME 以及 PNG/JPEG/GIF/WebP 的真实文件签名；本地链接不设大小上限，无路径图片的单次托管请求保留独立的内存安全边界。
 - 临时 asset 在 turn/thread 认领后转为持久化归属。
 - Recovery 清理无主或不完整 staging。
 - Thread 删除/消息截断时由协调层清理不再引用 asset。

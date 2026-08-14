@@ -1,5 +1,7 @@
+import type { IncomingMessage } from 'node:http';
+import { Readable } from 'node:stream';
 import { describe, expect, it } from 'vitest';
-import { isRuntimeMessageAttachment } from '../../src/server/http-utils.js';
+import { isRuntimeMessageAttachment, readBinaryBody } from '../../src/server/http-utils.js';
 
 describe('runtime HTTP attachment validation', () => {
   it('accepts input attachment sources and rejects generated output assets', () => {
@@ -14,5 +16,16 @@ describe('runtime HTTP attachment validation', () => {
       assetId: 'generated_image_1',
       url: 'data:image/png;base64,AA==',
     })).toBe(false);
+  });
+
+  it('bounds streamed binary request bodies before concatenating them', async () => {
+    const request = Object.assign(Readable.from([Buffer.from('123'), Buffer.from('45')]), {
+      headers: {},
+    }) as IncomingMessage;
+
+    await expect(readBinaryBody(request, 4)).rejects.toMatchObject({
+      code: 'body_too_large',
+      statusCode: 413,
+    });
   });
 });
