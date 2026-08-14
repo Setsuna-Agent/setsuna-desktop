@@ -93,6 +93,7 @@ export type PcLocalFileState = FileMutationState & FileReadCacheState & {
   environmentId?: string;
   permissionProfile?: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  directToolReadableRoots?: readonly string[];
   workspaceSearchEngine?: WorkspaceSearchEngine;
 };
 

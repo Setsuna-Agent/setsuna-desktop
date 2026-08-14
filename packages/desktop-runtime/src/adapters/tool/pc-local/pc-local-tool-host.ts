@@ -558,6 +558,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
       permissionProfile: context.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),
+      directToolReadableRoots: [...(context.directToolReadableRoots ?? [])],
       osSandbox: context.sandbox?.mode !== 'bypass',
       shellPolicyRules: [...(projectState.toolState.shellPolicyRules ?? [])],
       networkPolicyAmendments: [...(projectState.toolState.networkPolicyAmendments ?? [])],

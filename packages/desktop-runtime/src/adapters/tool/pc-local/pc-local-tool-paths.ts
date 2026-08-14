@@ -20,6 +20,7 @@ export type PcLocalPathState = {
   root?: string;
   permissionProfile?: unknown;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite | null;
+  directToolReadableRoots?: readonly string[];
 };
 
 export function resolveWorkspacePath(value: unknown, root?: string): string {
@@ -95,6 +96,19 @@ export function resolveReadablePath(value: unknown, state: PcLocalPathState): st
 }
 
 export function readableRootsForState(state: PcLocalPathState): string[] {
+  const roots = sandboxReadableRootsForState(state);
+  const directToolRoots = Array.isArray(state?.directToolReadableRoots)
+    ? state.directToolReadableRoots
+    : [];
+  for (const rawRoot of directToolRoots) {
+    const text = String(rawRoot || '').trim();
+    if (!text) continue;
+    roots.push(resolvePolicyPath(text, state?.root || process.cwd()));
+  }
+  return [...new Set(roots.map((root) => resolvePolicyPath(root)))];
+}
+
+export function sandboxReadableRootsForState(state: PcLocalPathState): string[] {
   const roots = [state?.root || process.cwd()];
   const configuredRoots = Array.isArray(state?.sandboxWorkspaceWrite?.readableRoots)
     ? state.sandboxWorkspaceWrite.readableRoots

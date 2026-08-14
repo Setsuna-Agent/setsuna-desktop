@@ -22,6 +22,8 @@ export type ToolExecutionContext = {
   environment?: ToolExecutionEnvironment;
   permissionProfile?: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  /** Per-turn roots available to host file-reading tools but never delegated to a shell sandbox. */
+  directToolReadableRoots?: string[];
   features?: Record<string, boolean>;
   sandbox?: ToolSandboxAttempt;
   signal?: AbortSignal;

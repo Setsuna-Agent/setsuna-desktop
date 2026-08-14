@@ -176,16 +176,7 @@ export class RuntimeSamplingContextBuilder {
     });
     const activeModelSupportsImages = samplingModel.model?.supportsImages === true;
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
-    const sandboxWorkspaceWrite = attachmentContext.readableRoots.length
-      ? {
-          ...configuredSandbox,
-          readableRoots: [...new Set([
-            environment.workspaceRoot,
-            ...(configuredSandbox.readableRoots ?? []),
-            ...attachmentContext.readableRoots,
-          ])],
-        }
-      : configuredSandbox;
+    const sandboxWorkspaceWrite = configuredSandbox;
     const goalExecution = goalExecutionForTurn({
       messages: [...(snapshotThread?.messages ?? thread.messages), ...orderedConversationMessages],
       skillIds,
@@ -203,6 +194,9 @@ export class RuntimeSamplingContextBuilder {
       },
       permissionProfile: stepRuntimeConfig?.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite,
+      ...(attachmentContext.readableRoots.length
+        ? { directToolReadableRoots: attachmentContext.readableRoots }
+        : {}),
       features: runtimeToolFeatureFlags(stepRuntimeConfig?.features),
       signal,
     };

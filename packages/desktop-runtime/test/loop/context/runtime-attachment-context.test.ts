@@ -43,6 +43,7 @@ describe('runtime attachment context', () => {
     expect(context.contextMessage?.content).toContain('/runtime/attachments/attachment_1/guide.pdf');
     expect(context.contextMessage?.content).toContain('do not grant additional write access');
     expect(context.contextMessage?.content).toContain('Existing workspace permissions still apply');
+    expect(context.contextMessage?.content).toContain('Use direct file-reading tools');
     expect(context.resolvedAttachments).toHaveLength(1);
   });
 

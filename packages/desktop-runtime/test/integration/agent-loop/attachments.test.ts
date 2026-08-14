@@ -10,9 +10,10 @@ import { BrowserToolHost } from '../../../src/adapters/tool/browser-tool-host.js
 import { WorkspaceImageToolHost } from '../../../src/adapters/tool/workspace-image-tool-host.js';
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
+import type { AttachmentStore } from '../../../src/ports/attachment-store.js';
 import type { BrowserControlPort } from '../../../src/ports/browser-control.js';
 import { systemClock } from '../../../src/ports/clock.js';
-import { type ToolHost } from '../../../src/ports/tool-host.js';
+import { type ToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
 import {
   BrowserScreenshotModelClient,
   ImageCapabilityConfigStore,
@@ -25,6 +26,55 @@ import {
 } from '../../support/agent-loop/shared.js';
 
 describe('agent loop reasoning and attachments', () => {
+  it('keeps attachment read grants out of shell sandbox permissions', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Attachment read boundary' });
+      const attachment = {
+        id: 'attachment_message_1',
+        assetId: 'attachment_asset_1',
+        name: 'private-notes.txt',
+        type: 'text/plain',
+        size: 7,
+        source: 'runtime' as const,
+      };
+      const attachmentPath = path.join(await mkDataDir(), 'private-notes.txt');
+      const contexts: ToolExecutionContext[] = [];
+      const attachmentStore: AttachmentStore = {
+        async recover() {},
+        async link() { throw new Error('unused'); },
+        async create() { throw new Error('unused'); },
+        async deletePending() { return false; },
+        async claimForThread(_threadId, attachments) { return attachments; },
+        async retainForThread() {},
+        async releaseThread() {},
+        async resolveForThread() {
+          return [{ attachment, absolutePath: attachmentPath, readableRoot: attachmentPath }];
+        },
+      };
+      const toolHost: ToolHost = {
+        async listTools(context) {
+          contexts.push(context);
+          return [];
+        },
+        async runTool() { throw new Error('unused'); },
+      };
+      const loop = new AgentLoop({
+        threadStore,
+        attachmentStore,
+        modelClient: new ReasoningModelClient(),
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost,
+      });
+
+      await loop.sendTurn(thread.id, { input: 'Read the attachment.', attachments: [attachment] });
+
+      expect(contexts[0]?.directToolReadableRoots).toEqual([attachmentPath]);
+      expect(contexts[0]?.sandboxWorkspaceWrite?.readableRoots ?? []).not.toContain(attachmentPath);
+    });
+
   it('passes per-turn thinking options and stores reasoning deltas', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

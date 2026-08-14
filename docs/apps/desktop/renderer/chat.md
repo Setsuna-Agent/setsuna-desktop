@@ -188,7 +188,7 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
 - 文件打开仍走 main/workspace API。
 - 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
-- runtime 将被引用的原文件作为该 turn 的精确 readable root 暴露给 Agent，但链接本身不新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。
+- runtime 将被引用的原文件作为该 turn 的 direct-tool-only readable root 暴露给 Agent，但不会把动态附件根加入 shell sandbox plan，也不会新增写权限；文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。文件移动或删除后引用变为不可用，不会生成第二份副本。
 - 原生视觉模型由 runtime 在 provider 请求边界临时读取并复验本地图片；剪贴板截图等没有本地路径的图片才写入受管 attachment store。
 - 已发送图片通过带 thread 归属校验的窄 bridge 按需读取并继续使用消息图片画廊预览；Base64 不进入 renderer 持久状态或线程事件。
 - Thread/project 切换时迟到的引用登记或图片存储不得附加到新 composer。
