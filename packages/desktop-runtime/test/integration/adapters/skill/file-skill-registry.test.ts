@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 import { InMemoryEventBus } from '../../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../../src/adapters/id/random-id-generator.js';
 import { FileSkillRegistry } from '../../../../src/adapters/skill/file-skill-registry.js';
@@ -125,8 +126,18 @@ describe('file skill registry', () => {
   it('updates and removes Plugin Skills without dropping their Plugin declaration', async () => {
     const { builtinDir, dataDir } = await createSkillFixture();
     await installDocumentsPluginFixture(dataDir);
+    const sourceSkillDirectory = path.join(dataDir, 'plugins', 'documents', 'skills', 'documents');
+    const sourceManifest = [
+      'interface:',
+      '  display_name: Documents',
+      '  default_prompt: Create a document',
+      'dependencies:',
+      '  tools: []',
+    ].join('\n');
+    await mkdir(path.join(sourceSkillDirectory, 'agents'), { recursive: true });
+    await writeFile(path.join(sourceSkillDirectory, 'agents', 'openai.yaml'), sourceManifest);
     const registry = new FileSkillRegistry(builtinDir, dataDir);
-    const sourceSkillPath = path.join(dataDir, 'plugins', 'documents', 'skills', 'documents', 'SKILL.md');
+    const sourceSkillPath = path.join(sourceSkillDirectory, 'SKILL.md');
     const sourceContent = await readFile(sourceSkillPath, 'utf8');
 
     await expect(registry.updateSkill('documents.documents', {
@@ -140,9 +151,23 @@ describe('file skill registry', () => {
       content: expect.stringContaining('customized workflow'),
     });
     expect(await readFile(sourceSkillPath, 'utf8')).toBe(sourceContent);
-    await expect(registry.getSkill('documents.documents')).resolves.toMatchObject({
+    const updatedSkill = await registry.getSkill('documents.documents');
+    expect(updatedSkill).toMatchObject({
       path: expect.stringContaining('plugin-skill-overrides'),
     });
+    const overrideManifest = await readFile(
+      path.join(path.dirname(updatedSkill?.path ?? ''), 'agents', 'openai.yaml'),
+      'utf8',
+    );
+    expect(parseYaml(overrideManifest)).toMatchObject({
+      interface: {
+        display_name: 'Custom Documents',
+        default_prompt: 'Create a document',
+      },
+      dependencies: { tools: [] },
+    });
+    await expect(readFile(path.join(sourceSkillDirectory, 'agents', 'openai.yaml'), 'utf8'))
+      .resolves.toBe(sourceManifest);
 
     const indexPath = path.join(dataDir, 'plugins.json');
     await expect(readFile(indexPath, 'utf8').then(JSON.parse)).resolves.toMatchObject({
@@ -171,7 +196,7 @@ describe('file skill registry', () => {
     await writeFile(indexPath, JSON.stringify(reinstalledIndex));
     await expect(registry.getSkill('documents.documents')).resolves.toMatchObject({
       id: 'documents.documents',
-      name: 'Word 文档处理',
+      name: 'Documents',
       path: sourceSkillPath,
     });
   });

@@ -83,7 +83,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 644 total files
+apps/desktop/renderer/ — 0 direct / 645 total files
 ├── src/ — 2 direct / 471 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -143,15 +143,15 @@ apps/desktop/renderer/ — 0 direct / 644 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 173 files
-    └── unit/ — 173 files
+└── test/ — 174 files
+    └── unit/ — 174 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 134 files
-        │   ├── capabilities/ — 10 direct / 11 total files
+        ├── features/ — 135 files
+        │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 68 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
@@ -203,9 +203,9 @@ packages/contracts/ — 4 direct / 76 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 538 total files
-├── src/ — 2 direct / 311 total files
-│   ├── adapters/ — 132 files
+packages/desktop-runtime/ — 4 direct / 539 total files
+├── src/ — 2 direct / 312 total files
+│   ├── adapters/ — 133 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -219,7 +219,7 @@ packages/desktop-runtime/ — 4 direct / 538 total files
 │   │   ├── sandbox/ — 1 files
 │   │   │   └── windows-native/ — 1 direct / 1 total files
 │   │   ├── search/ — 5 direct / 5 total files
-│   │   ├── skill/ — 3 direct / 3 total files
+│   │   ├── skill/ — 4 direct / 4 total files
 │   │   ├── store/ — 28 direct / 28 total files
 │   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files

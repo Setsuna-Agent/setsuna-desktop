@@ -11,6 +11,7 @@ import type {
   RuntimePluginItemKind,
   RuntimePluginMarketplaceItem,
   RuntimePluginSummary,
+  RuntimeSkillDetail,
   RuntimeSkillSummary,
   RuntimeVisionRecognitionConfigInput,
   RuntimeVisionRecognitionTestInput,
@@ -48,6 +49,7 @@ export function CapabilitiesPluginDetail({
   runtimeSkills,
   onBack,
   onGetItemContent,
+  onGetSkillDetail,
   onInstall,
   onRemove,
   onUseInConversation,
@@ -74,6 +76,7 @@ export function CapabilitiesPluginDetail({
   runtimeSkills?: RuntimeSkillSummary[];
   onBack: () => void;
   onGetItemContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
+  onGetSkillDetail?: (skillId: string) => Promise<RuntimeSkillDetail>;
   onInstall: (plugin: RuntimePluginMarketplaceItem) => Promise<void>;
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   onUseInConversation?: (skillId: string) => void;
@@ -420,9 +423,30 @@ export function CapabilitiesPluginDetail({
           onSetHookEnabled={installedPlugin ? onSetHookEnabled : undefined}
           onSetHookTrust={installedPlugin && !marketplaceMetadata ? onSetHookTrust : undefined}
           onClose={() => setSelectedItem(null)}
-          onGetContent={onGetItemContent}
+          onGetContent={selectedItem.kind === 'skill' && installedPlugin && onGetSkillDetail
+            ? (_kind, itemId) => runtimeSkillItemContent(plugin.id, itemId, onGetSkillDetail)
+            : onGetItemContent}
         />
       ) : null}
     </section>
   );
+}
+
+async function runtimeSkillItemContent(
+  pluginId: string,
+  skillId: string,
+  getSkillDetail: (skillId: string) => Promise<RuntimeSkillDetail>,
+): Promise<RuntimePluginItemContent> {
+  const detail = await getSkillDetail(skillId);
+  return {
+    pluginId,
+    itemId: skillId,
+    kind: 'skill',
+    files: [{
+      path: 'SKILL.md',
+      size: new TextEncoder().encode(detail.content).byteLength,
+      mimeType: 'text/markdown',
+      text: detail.content,
+    }],
+  };
 }

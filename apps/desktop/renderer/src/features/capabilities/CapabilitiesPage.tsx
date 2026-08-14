@@ -203,8 +203,9 @@ export function CapabilitiesPage({
     !normalizedCapabilityQuery ||
     `${skill.name} ${skill.description} ${skill.id}`.toLowerCase().includes(normalizedCapabilityQuery),
   );
+  const installedPluginById = new Map(plugins.map((plugin) => [plugin.id, plugin]));
   const selectedInstalledPlugin = selectedPluginId
-    ? plugins.find((plugin) => plugin.id === selectedPluginId)
+    ? installedPluginById.get(selectedPluginId)
     : undefined;
   const localPlugins = installedPluginsOutsideCatalog(plugins, pluginMarketplace);
   const selectedMarketplacePlugin = selectedInstalledPlugin && selectedInstalledPlugin.installationSource !== 'marketplace'
@@ -225,7 +226,7 @@ export function CapabilitiesPage({
     resources: [],
   } : undefined;
   const visibleMarketplacePlugins = pluginMarketplace.filter((plugin) =>
-    pluginMatchesQuery(plugin, normalizedCapabilityQuery));
+    pluginMatchesQuery(plugin, normalizedCapabilityQuery, installedPluginById.get(plugin.id)));
   const visibleLocalPlugins = localPlugins.filter((plugin) =>
     pluginMatchesQuery(plugin, normalizedCapabilityQuery));
   const visibleLegacyHooksPlugin = legacyHooksPlugin
@@ -527,6 +528,7 @@ export function CapabilitiesPage({
             }}
             onInstall={installOrUpdateMarketplacePlugin}
             onGetItemContent={getSelectedPluginItemContent}
+            onGetSkillDetail={onGetSkillDetail}
             onRemove={removePlugin}
             onUseInConversation={onCreateInConversation}
             onSetExtensionTrust={selectedInstalledPlugin?.installationSource === 'marketplace'

@@ -26,6 +26,7 @@ import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, writeJsonFile, writeTextFile } from '../store/json-file.js';
 import { PluginSkillOverrideStore } from './plugin-skill-override-store.js';
+import { mergeSkillManifest, readOptionalSkillManifest } from './skill-manifest-editor.js';
 
 type SkillStateFile = {
   version: 1;
@@ -139,12 +140,21 @@ export class FileSkillRegistry implements SkillRegistry, PluginSkillRegistry {
         name: patch.name ?? skill.name,
         description: patch.description ?? skill.description,
         content: patch.content ?? skill.content,
-        mcpDependencies: patch.mcpDependencies ?? skill.mcpDependencies.map(dependencyInput),
+        ...(patch.mcpDependencies !== undefined
+          ? { mcpDependencies: patch.mcpDependencies }
+          : {}),
         enabled: state.states[skillId]?.enabled,
       };
       // 修改任一持久化文件前，先对两个文件完成规范化与校验。
-      const rawContent = await readFile(skill.path, 'utf8');
-      const preparedFiles = prepareSkillFiles(nextInput, rawContent);
+      const [rawContent, existingDependencyManifest] = await Promise.all([
+        readFile(skill.path, 'utf8'),
+        readOptionalSkillManifest(skill.path),
+      ]);
+      const preparedFiles = prepareSkillFiles(nextInput, {
+        existingRawContent: rawContent,
+        existingDependencyManifest,
+        updateDisplayName: patch.name !== undefined,
+      });
       await this.writeState(state);
       await this.writeExistingSkill(skill, nextInput, preparedFiles);
       const updatedSkill = (await this.readSkills()).find((item) => item.id === skillId);
@@ -705,11 +715,23 @@ type PreparedSkillFiles = {
   dependencyManifest?: string | null;
 };
 
-function prepareSkillFiles(input: RuntimeSkillInput, existingRawContent?: string): PreparedSkillFiles {
+function prepareSkillFiles(
+  input: RuntimeSkillInput,
+  options: {
+    existingRawContent?: string;
+    existingDependencyManifest?: string;
+    updateDisplayName?: boolean;
+  } = {},
+): PreparedSkillFiles {
+  const dependencyManifest = mergeSkillDependencyManifest(
+    options.existingDependencyManifest,
+    input.mcpDependencies,
+    options.updateDisplayName ? input.name : undefined,
+  );
   return {
-    markdown: formatSkillMarkdown(input, existingRawContent),
-    ...(input.mcpDependencies !== undefined
-      ? { dependencyManifest: serializeSkillDependencyManifest(input.mcpDependencies) }
+    markdown: formatSkillMarkdown(input, options.existingRawContent),
+    ...(dependencyManifest !== undefined
+      ? { dependencyManifest }
       : {}),
   };
 }
@@ -722,8 +744,12 @@ async function writeSkillFiles(skillPath: string, files: PreparedSkillFiles): Pr
   }
 }
 
-function serializeSkillDependencyManifest(dependencies: RuntimeSkillMcpDependencyInput[]): string | null {
-  if (!dependencies.length) return null;
+function mergeSkillDependencyManifest(
+  existingContent: string | undefined,
+  dependencies: RuntimeSkillMcpDependencyInput[] | undefined,
+  displayName: string | undefined,
+): string | null | undefined {
+  if (dependencies === undefined) return mergeSkillManifest(existingContent, undefined, displayName);
   const normalized = dependencies.map((dependency) => normalizeMcpDependency(dependency));
   const keys = new Set<string>();
   for (const dependency of normalized) {
@@ -731,7 +757,7 @@ function serializeSkillDependencyManifest(dependencies: RuntimeSkillMcpDependenc
     keys.add(dependency.value);
   }
   const tools = normalized.map(dependencyManifestValue);
-  return stringifyYaml({ dependencies: { tools } }, { lineWidth: 0 });
+  return mergeSkillManifest(existingContent, tools, displayName);
 }
 
 async function writeSkillDependencyManifest(skillPath: string, content: string | null): Promise<void> {
@@ -784,11 +810,6 @@ function dependencyManifestValue(dependency: RuntimeSkillMcpDependencyInput): Re
     ...(dependency.oauthClientId ? { oauth_client_id: dependency.oauthClientId } : {}),
     ...(dependency.oauthResource ? { oauth_resource: dependency.oauthResource } : {}),
   };
-}
-
-function dependencyInput(dependency: RuntimeSkillMcpDependency): RuntimeSkillMcpDependencyInput {
-  const { status: _status, authStatus: _authStatus, error: _error, ...input } = dependency;
-  return input;
 }
 
 function normalizeMcpKey(value: string): string {

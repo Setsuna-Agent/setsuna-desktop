@@ -74,6 +74,12 @@ describe('plugin display helpers', () => {
     expect(pluginMatchesQuery(plugin, 'docx')).toBe(true);
     expect(pluginMatchesQuery(plugin, 'render')).toBe(true);
     expect(pluginMatchesQuery(plugin, 'spreadsheet')).toBe(false);
+
+    const installed = installedPlugin({
+      id: 'documents',
+      skills: [{ id: 'documents.edit', name: 'Custom legal brief', description: 'Firm workflow' }],
+    });
+    expect(pluginMatchesQuery(plugin, 'legal brief', installed)).toBe(true);
   });
 
   it('builds a featured section and keeps the remaining catalog grouped by capability', () => {
