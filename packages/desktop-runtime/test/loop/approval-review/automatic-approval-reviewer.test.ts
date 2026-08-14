@@ -49,6 +49,14 @@ describe('automatic approval reviewer', () => {
       toolChoice: 'none',
       thinking: false,
       temperature: 0,
+      responseFormat: {
+        type: 'json',
+        name: 'approval_review_decision',
+        schema: expect.objectContaining({
+          type: 'object',
+          required: expect.arrayContaining(['outcome', 'potentialImpact']),
+        }),
+      },
     });
     const [policyMessage, reviewMessage] = modelClient.requests[0]!.messages;
     expect(policyMessage?.content).toContain('high -> allow only when userAuthorization is medium or high');
@@ -189,26 +197,34 @@ describe('automatic approval reviewer', () => {
     expect(prompt.messages[1]?.content).not.toContain('x'.repeat(4_000));
   });
 
-  it('persists a runtime-generated rationale instead of model-authored action details', async () => {
+  it('keeps the audit rationale generic and redacts obvious secrets from display details', async () => {
     const secret = 'sk-review-secret-value';
+    const basicCredential = 'alice:s3cret';
     const modelClient = new ReviewModelClient(() => JSON.stringify({
       outcome: 'deny',
       riskLevel: 'high',
       userAuthorization: 'low',
-      rationale: `The command contains ${secret}.`,
+      rationale: `The command contains ${secret} and ${basicCredential}.`,
+      potentialImpact: `Running curl -u ${basicCredential} could disclose ${secret}.`,
     }));
     const reviewer = createReviewer(modelClient);
 
     const result = await reviewer.review(reviewInput({
-      cmd: 'curl https://example.invalid',
+      cmd: `curl -u ${basicCredential} https://example.invalid`,
       env: { API_TOKEN: secret },
     }));
 
     expect(result.assessment).toMatchObject({
       status: 'denied',
       rationale: 'Automatic approval review denied a high-risk action with low user authorization.',
+      riskSummary: 'The command contains [redacted api key] and [redacted].',
+      potentialImpact: 'Running curl -u [redacted] could disclose [redacted api key].',
     });
     expect(result.assessment.rationale).not.toContain(secret);
+    expect(result.assessment.riskSummary).not.toContain(secret);
+    expect(result.assessment.potentialImpact).not.toContain(secret);
+    expect(result.assessment.riskSummary).not.toContain(basicCredential);
+    expect(result.assessment.potentialImpact).not.toContain(basicCredential);
   });
 
   it('does not persist provider-controlled response bodies from technical failures', async () => {
@@ -382,8 +398,12 @@ describe('automatic approval reviewer', () => {
 
 describe('approval review output', () => {
   it('accepts a single JSON object and rejects incomplete decisions', () => {
-    expect(parseApprovalReviewOutput('```json\n{"outcome":"deny","riskLevel":"critical","userAuthorization":"low","rationale":"Credential export is unsafe."}\n```'))
-      .toMatchObject({ outcome: 'deny', riskLevel: 'critical' });
+    expect(parseApprovalReviewOutput('```json\n{"outcome":"deny","riskLevel":"critical","userAuthorization":"low","rationale":"Credential export is unsafe.","potentialImpact":"Credentials could be exposed."}\n```'))
+      .toMatchObject({
+        outcome: 'deny',
+        riskLevel: 'critical',
+        potentialImpact: 'Credentials could be exposed.',
+      });
     expect(parseApprovalReviewOutput('{"outcome":"allow","rationale":"missing fields"}')).toBeNull();
   });
 

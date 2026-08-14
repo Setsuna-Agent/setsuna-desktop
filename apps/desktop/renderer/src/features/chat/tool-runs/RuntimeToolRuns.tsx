@@ -209,7 +209,7 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
   const kind = toolRunGroupKind(run);
   const fileChanges = kind === 'fileMutation' ? fileChangesFromToolRun(run) : [];
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
-  if (!toolRunHasDetails(run, pendingApprovalId)) return <FlatToolRunRow run={run} />;
+  if (!toolRunHasDetails(run, pendingApprovalId, t)) return <FlatToolRunRow run={run} />;
   return (
     <ToolRunDisclosure
       autoOpenKey={pendingApprovalDisclosureKey([run])}
@@ -657,7 +657,7 @@ function ToolRunDetails({
       </>
     );
   }
-  const diagnostic = genericToolRunDiagnostic(run);
+  const diagnostic = displayedGenericToolRunDiagnostic(run, t);
   return (
     <>
       {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
@@ -674,14 +674,37 @@ function ToolRunDetails({
   );
 }
 
-function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boolean {
+function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId: string | undefined, t: Translate): boolean {
   if (isShellRun(run) || toolRunGroupKind(run) === 'inspection' || isFileOperationRun(run)) return true;
   if (pendingApprovalId) return true;
   if (run.proposedExecPolicyAmendment?.length) return true;
   if (run.networkApprovalContext) return true;
   if (run.permissionApprovalContext) return true;
   if (run.hookRuns?.length) return true;
-  return Boolean(genericToolRunDiagnostic(run));
+  if (run.approvalReviewAssessment?.status === 'denied') return true;
+  return Boolean(displayedGenericToolRunDiagnostic(run, t));
+}
+
+function displayedGenericToolRunDiagnostic(run: RuntimeToolRun, t: Translate): string {
+  const diagnostic = genericToolRunDiagnostic(run);
+  if (!diagnostic) return '';
+
+  // Terminal summaries already carry the status and tool label. Suppress only
+  // their exact boilerplate; policy explanations and other diagnostics remain
+  // available behind the disclosure.
+  if (toolRunSummary(run, t).title.includes(diagnostic)) return '';
+  if (run.status === 'cancelled' && /^Turn cancelled(?: by approval decision)?\.?$/iu.test(diagnostic)) return '';
+  if (run.status === 'rejected' && /^Tool\s+.+?\s+was rejected(?: by runtime policy)?\.?$/iu.test(diagnostic)) return '';
+
+  const assessment = run.approvalReviewAssessment;
+  if (
+    assessment?.status === 'denied'
+    && [assessment.rationale, assessment.riskSummary, assessment.potentialImpact]
+      .some((value) => value?.trim() === diagnostic)
+  ) {
+    return '';
+  }
+  return diagnostic;
 }
 
 function execPolicyApprovalSummary(run: RuntimeToolRun): string {

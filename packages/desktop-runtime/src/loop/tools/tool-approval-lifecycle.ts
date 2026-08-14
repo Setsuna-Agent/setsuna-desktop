@@ -21,6 +21,7 @@ export type ApprovalResolutionMetadata = {
 };
 
 export type ResolvedToolApprovalAnswer = AnswerRuntimeApprovalInput & {
+  automaticReviewFallback?: boolean;
   resolution?: ApprovalResolutionMetadata;
 };
 
@@ -58,6 +59,7 @@ export async function requestToolApproval({
   reviewer = 'user',
   signal,
 }: RequestToolApprovalInput): Promise<ResolvedToolApprovalAnswer> {
+  let fellBackFromAutomaticReview = false;
   if (
     reviewer === 'automatic'
     && automaticReviewer
@@ -75,16 +77,33 @@ export async function requestToolApproval({
       signal,
     });
     if (automatic) return automatic;
+    fellBackFromAutomaticReview = true;
   }
-  return requestUserApproval({ approvalGate, events, request, signal });
+  return requestUserApproval({
+    approvalGate,
+    events,
+    automaticReviewFallback: fellBackFromAutomaticReview,
+    request: fellBackFromAutomaticReview
+      ? {
+          ...request,
+          // A manual override of automatic review is intentionally scoped to
+          // this exact action; it must not create reusable permission grants.
+          availableDecisions: [{ type: 'approve' }, { type: 'reject' }],
+        }
+      : request,
+    signal,
+  });
 }
 
 async function requestUserApproval({
   approvalGate,
   events,
+  automaticReviewFallback = false,
   request,
   signal,
-}: Pick<RequestToolApprovalInput, 'approvalGate' | 'events' | 'request' | 'signal'>): Promise<ResolvedToolApprovalAnswer> {
+}: Pick<RequestToolApprovalInput, 'approvalGate' | 'events' | 'request' | 'signal'> & {
+  automaticReviewFallback?: boolean;
+}): Promise<ResolvedToolApprovalAnswer> {
   const approval = await approvalGate.createApproval({ ...request, reviewer: 'user' });
   await events.publishApprovalRequested(approval);
 
@@ -117,7 +136,11 @@ async function requestUserApproval({
     resolution,
   );
   throwIfApprovalCancelled(answer.decision);
-  return { ...answer, resolution };
+  return {
+    ...answer,
+    ...(automaticReviewFallback ? { automaticReviewFallback: true } : {}),
+    resolution,
+  };
 }
 
 async function requestAutomaticApproval({
@@ -167,6 +190,7 @@ async function requestAutomaticApproval({
   }
 
   const technicalFailure = assessment.status === 'failed' || assessment.status === 'timed_out';
+  const requiresManualReview = assessment.status === 'denied';
   const decision: RuntimeApprovalDecision = assessment.status === 'allowed' ? 'approve' : 'reject';
   const resolution: ApprovalResolutionMetadata = {
     source: 'automatic',
@@ -184,7 +208,7 @@ async function requestAutomaticApproval({
     resolution,
   );
 
-  if (technicalFailure) return null;
+  if (technicalFailure || requiresManualReview) return null;
   if (interruptTurn) {
     throw new TurnCancelledError(
       `Automatic approval review interrupted this turn after repeated denials: ${assessment.rationale}`,

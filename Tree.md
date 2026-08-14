@@ -83,15 +83,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 645 total files
-├── src/ — 2 direct / 471 total files
+apps/desktop/renderer/ — 0 direct / 646 total files
+├── src/ — 2 direct / 472 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 12 direct / 12 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── features/ — 344 files
+│   ├── features/ — 345 files
 │   │   ├── capabilities/ — 25 direct / 35 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
@@ -121,8 +121,8 @@ apps/desktop/renderer/ — 0 direct / 645 total files
 │   │   │   ├── usage/ — 9 direct / 9 total files
 │   │   │   ├── webdav-sync/ — 7 direct / 7 total files
 │   │   │   └── windows-sandbox/ — 2 direct / 2 total files
-│   │   └── workspace/ — 35 direct / 82 total files
-│   │       ├── assets/ — 20 direct / 20 total files
+│   │   └── workspace/ — 35 direct / 83 total files
+│   │       ├── assets/ — 21 direct / 21 total files
 │   │       ├── browser/ — 1 direct / 1 total files
 │   │       ├── editor/ — 3 direct / 3 total files
 │   │       ├── git/ — 2 direct / 2 total files
@@ -203,16 +203,16 @@ packages/contracts/ — 4 direct / 76 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 539 total files
-├── src/ — 2 direct / 312 total files
-│   ├── adapters/ — 133 files
+packages/desktop-runtime/ — 4 direct / 540 total files
+├── src/ — 2 direct / 313 total files
+│   ├── adapters/ — 134 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── id/ — 1 direct / 1 total files
 │   │   ├── mcp/ — 6 direct / 6 total files
-│   │   ├── model/ — 28 direct / 28 total files
+│   │   ├── model/ — 29 direct / 29 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 1 direct / 1 total files
 │   │   ├── plugin/ — 6 direct / 6 total files

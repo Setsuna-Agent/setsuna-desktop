@@ -83,14 +83,14 @@
 }
 
 .desktop-settings-sidebar .chat-user-settings__tabs button:hover,
-.desktop-settings-sidebar .chat-user-settings__tabs button:focus-visible,
-.desktop-settings-sidebar .chat-user-settings__tabs button.is-active {
+.desktop-settings-sidebar .chat-user-settings__tabs button:focus-visible {
   color: var(--app-text);
   background: var(--desktop-agent-sidebar-hover-bg);
 }
 
 .desktop-settings-sidebar .chat-user-settings__tabs button.is-active {
-  background: var(--desktop-agent-sidebar-hover-bg);
+  color: var(--app-text);
+  background: var(--desktop-agent-sidebar-active-bg);
 }
 
 .desktop-settings-sidebar .chat-user-settings__tabs svg {

@@ -436,7 +436,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
       run.approvalStatus = cancelled ? 'cancelled' : rejected ? 'rejected' : 'approved';
       run.approvalMessage = event.payload.message;
       run.approvalResolutionSource = event.payload.source;
-      run.approvalReviewAssessment = event.payload.assessment;
+      // A manual fallback resolves a new approval without producing another
+      // assessment. Keep the automatic review so the final audit entry can
+      // still explain the risk that led to the user decision.
+      if (event.payload.assessment !== undefined) {
+        run.approvalReviewAssessment = event.payload.assessment;
+      }
       if (!rejected && !cancelled) {
         run.status = 'running';
       } else {

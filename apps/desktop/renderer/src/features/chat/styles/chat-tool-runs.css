@@ -990,6 +990,33 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
   overflow-wrap: anywhere;
 }
 
+.chat-tool-run__approval-review--denied {
+  display: grid;
+  width: min(560px, 100%);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--app-warning) 78%, var(--app-text));
+  background: color-mix(in srgb, var(--app-warning) 7%, var(--app-surface));
+}
+
+.chat-tool-run__approval-review-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--app-text-muted);
+}
+
+.chat-tool-run__approval-review-details > span {
+  overflow-wrap: anywhere;
+}
+
+.chat-tool-run__approval-review-details strong {
+  margin-right: 4px;
+  color: var(--app-text);
+  font-weight: 500;
+}
+
 .chat-tool-run__elicitation {
   display: flex;
   width: min(560px, 100%);

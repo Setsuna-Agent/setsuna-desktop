@@ -5,9 +5,32 @@ import type {
 
 export type ParsedApprovalReview = {
   outcome: 'allow' | 'deny';
+  potentialImpact?: string;
   rationale: string;
   riskLevel: RuntimeApprovalReviewRiskLevel;
   userAuthorization: RuntimeApprovalUserAuthorization;
+};
+
+export const APPROVAL_REVIEW_RESPONSE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'outcome',
+    'riskLevel',
+    'userAuthorization',
+    'rationale',
+    'potentialImpact',
+  ],
+  properties: {
+    outcome: { type: 'string', enum: ['allow', 'deny'] },
+    riskLevel: { type: 'string', enum: ['low', 'medium', 'high', 'critical'] },
+    userAuthorization: {
+      type: 'string',
+      enum: ['unknown', 'low', 'medium', 'high'],
+    },
+    rationale: { type: 'string' },
+    potentialImpact: { type: 'string' },
+  },
 };
 
 const RISK_LEVELS = new Set<RuntimeApprovalReviewRiskLevel>([
@@ -23,6 +46,7 @@ const AUTHORIZATION_LEVELS = new Set<RuntimeApprovalUserAuthorization>([
   'high',
 ]);
 const MAX_RATIONALE_CHARS = 2_000;
+const MAX_IMPACT_CHARS = 2_000;
 const SAFE_NETWORK_ERROR_CODES = new Set([
   'CERT_HAS_EXPIRED',
   'EAI_AGAIN',
@@ -51,11 +75,15 @@ export function parseApprovalReviewOutput(value: string): ParsedApprovalReview |
   if (!RISK_LEVELS.has(record.riskLevel as RuntimeApprovalReviewRiskLevel)) return null;
   if (!AUTHORIZATION_LEVELS.has(record.userAuthorization as RuntimeApprovalUserAuthorization)) return null;
   if (typeof record.rationale !== 'string' || !record.rationale.trim()) return null;
+  if (record.potentialImpact !== undefined && (typeof record.potentialImpact !== 'string' || !record.potentialImpact.trim())) return null;
   return {
     outcome: record.outcome,
     riskLevel: record.riskLevel as RuntimeApprovalReviewRiskLevel,
     userAuthorization: record.userAuthorization as RuntimeApprovalUserAuthorization,
     rationale: Array.from(record.rationale.trim()).slice(0, MAX_RATIONALE_CHARS).join(''),
+    ...(typeof record.potentialImpact === 'string'
+      ? { potentialImpact: Array.from(record.potentialImpact.trim()).slice(0, MAX_IMPACT_CHARS).join('') }
+      : {}),
   };
 }
 
@@ -84,6 +112,22 @@ export function approvalReviewAuditRationale(
   return `Automatic approval review ${verb} a ${review.riskLevel}-risk action with ${review.userAuthorization} user authorization.`;
 }
 
+/** Keeps reviewer explanations useful without persisting obvious secret values or full argument payloads. */
+export function approvalReviewDisplayText(value: string, actionArguments: unknown): string {
+  let sanitized = value
+    .replace(/\bBearer\s+\S+/giu, 'Bearer [redacted]')
+    .replace(/\bBasic\s+\S+/giu, 'Basic [redacted]')
+    .replace(/\bsk-[a-z0-9_-]+\b/giu, '[redacted api key]')
+    .replace(/([?&](?:api[_-]?key|token|secret|password)=)[^&\s]+/giu, '$1[redacted]')
+    .replace(/(https?:\/\/)[^/@\s:]+:[^/@\s]+@/giu, '$1[redacted]@')
+    .replace(/((?:^|\s)(?:-u|--user)(?:=|\s+))(?:(?:"[^"]*")|(?:'[^']*')|\S+)/giu, '$1[redacted]')
+    .replace(/(\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\s*[=:]\s*)(?:(?:"[^"]*")|(?:'[^']*')|[^\s,;]+)/giu, '$1[redacted]');
+  for (const sensitiveValue of sensitiveArgumentValues(actionArguments)) {
+    sanitized = sanitized.replaceAll(sensitiveValue, '[redacted]');
+  }
+  return sanitized.trim();
+}
+
 /** Preserves useful failure categories without persisting provider-controlled text. */
 export function approvalReviewTechnicalFailureRationale(error: unknown): string {
   const status = providerHttpStatus(error);
@@ -99,6 +143,44 @@ export function approvalReviewTechnicalFailureRationale(error: unknown): string 
 
 function stripThinking(value: string): string {
   return value.replace(/<think>[\s\S]*?<\/think>/giu, '');
+}
+
+function sensitiveArgumentValues(value: unknown, key = ''): string[] {
+  if (typeof value === 'string') {
+    if (value.length < 4) return [];
+    return [...new Set([
+      ...(sensitiveArgumentKey(key) || value.length >= 80 ? [value] : []),
+      ...inlineSensitiveValues(value),
+    ])];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => sensitiveArgumentValues(item, key));
+  }
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([childKey, item]) => (
+    sensitiveArgumentValues(item, childKey)
+  ));
+}
+
+function sensitiveArgumentKey(key: string): boolean {
+  return /(?:authorization|cookie|credential|password|passwd|private[_-]?key|secret|token|api[_-]?key)/iu.test(key);
+}
+
+function inlineSensitiveValues(value: string): string[] {
+  const values: string[] = [];
+  for (const match of value.matchAll(/\b(?:Basic|Bearer)\s+([^\s"']+)/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/(?:^|\s)(?:-u|--user)(?:=|\s+)["']?([^\s"']+)["']?/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/https?:\/\/([^/@\s]+)@/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  for (const match of value.matchAll(/\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\s*[=:]\s*["']?([^\s"',;]+)/giu)) {
+    if (match[1]) values.push(match[1]);
+  }
+  return values.filter((item) => item.length >= 3);
 }
 
 function fencedJson(value: string): string | null {

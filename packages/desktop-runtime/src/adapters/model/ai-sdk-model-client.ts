@@ -15,6 +15,7 @@ import {
 } from './ai-sdk-prompt.js';
 import { bridgeAiSdkStream } from './ai-sdk-stream-bridge.js';
 import { requireFetch, type FetchImpl } from './provider-http.js';
+import { aiSdkOutputForRequest } from './provider-response-format.js';
 import { openAiCompatibleAiSdkProviderOptions } from './provider-thinking.js';
 
 type ProviderOptionJson = string | number | boolean | null | ProviderOptionJson[] | { [key: string]: ProviderOptionJson };
@@ -37,6 +38,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       includeUsage: true,
     });
     const thinkingProviderOptions = toThinkingProviderOptions(providerName, openAiCompatibleAiSdkProviderOptions(this.provider, request));
+    const output = aiSdkOutputForRequest(request);
     const result = streamText({
       model: provider.chatModel(modelId),
       instructions: toAiSdkInstructions(request.messages),
@@ -45,6 +47,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
       toolChoice: toAiSdkToolChoice(request.toolChoice),
       maxOutputTokens: request.maxOutputTokens ?? activeModel?.maxOutputTokens ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
       ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
+      ...(output ? { output } : {}),
       ...(thinkingProviderOptions ? { providerOptions: thinkingProviderOptions } : {}),
       abortSignal: request.signal,
       maxRetries: 0,

@@ -41,6 +41,18 @@ describe('OpenAI-compatible Chat provider', () => {
     expect(events.at(-1)).toEqual({ type: 'done', finishReason: 'stop' });
   });
 
+  it('requests JSON output when the caller requires a structured response', async () => {
+    const captured: CapturedRequest = {};
+    const client = new OpenAiChatModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"{\\"ok\\":true}"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, { responseFormat: { type: 'json' } });
+
+    expect(expectBody(captured).response_format).toEqual({ type: 'json_object' });
+  });
+
   it('keeps Generic Chat semantic-only when history carries foreign native envelopes', async () => {
     const captured: CapturedRequest = {};
     const client = new OpenAiChatModelClient(

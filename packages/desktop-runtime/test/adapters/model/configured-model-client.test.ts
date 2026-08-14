@@ -607,6 +607,24 @@ describe('configured model routing and options', () => {
     expect(expectBody(captured).reasoning_effort).toBe('max');
   });
 
+  it('requests JSON output through AI SDK OpenAI compatible requests', async () => {
+    const captured: CapturedRequest = {};
+    const client = new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch('data: {"choices":[{"delta":{"content":"{\\"ok\\":true}"}}]}\n\ndata: [DONE]\n\n', captured),
+    );
+
+    await collect(client, {
+      responseFormat: {
+        type: 'json',
+        name: 'approval_review_decision',
+        description: 'One approval decision.',
+      },
+    });
+
+    expect(expectBody(captured).response_format).toEqual({ type: 'json_object' });
+  });
+
   it.each([
     ['SiliconFlow', 'https://api.siliconflow.cn/v1', 'deepseek-v3'],
     ['Qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'qwen3-coder'],

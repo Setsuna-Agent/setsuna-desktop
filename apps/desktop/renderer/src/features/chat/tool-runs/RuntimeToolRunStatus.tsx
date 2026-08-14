@@ -46,9 +46,18 @@ export function statusTextFromStatus(
       ? ''
       : t('toolRun.status.confirm');
   }
-  if (status === 'cancelled') return t('toolRun.status.cancelled');
-  if (status === 'rejected') return t('toolRun.status.rejected');
-  if (status === 'error') return t('toolRun.status.failed');
+  if (status === 'cancelled') {
+    const cancelledLabel = t('toolRun.status.cancelled');
+    return summaryTitle.includes(cancelledLabel) ? '' : cancelledLabel;
+  }
+  if (status === 'rejected') {
+    const rejectedLabel = t('toolRun.status.rejected');
+    return summaryTitle.includes(rejectedLabel) ? '' : rejectedLabel;
+  }
+  if (status === 'error') {
+    const failedLabel = t('toolRun.status.failed');
+    return summaryTitle.includes(failedLabel) ? '' : failedLabel;
+  }
   return '';
 }
 

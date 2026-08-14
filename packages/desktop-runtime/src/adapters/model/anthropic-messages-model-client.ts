@@ -18,6 +18,7 @@ import { AnthropicNativeMetadataCollector } from './anthropic-native-metadata.js
 import { anthropicAiSdkPromptOptions } from './anthropic-provider-messages.js';
 import { requireFetch, type FetchImpl } from './provider-http.js';
 import { providerReplayContext } from './provider-replay-context.js';
+import { aiSdkOutputForRequest } from './provider-response-format.js';
 import { anthropicThinkingBody } from './provider-thinking.js';
 
 const EMPTY_API_KEY_PLACEHOLDER = 'setsuna-no-anthropic-api-key';
@@ -50,6 +51,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
       replayContext,
       requestedModel,
     );
+    const output = aiSdkOutputForRequest(request);
     const result = streamText({
       model: anthropic(requestedModel),
       instructions: toAiSdkInstructions(request.messages),
@@ -62,6 +64,7 @@ export class AnthropicMessagesModelClient implements ModelClient {
       // Anthropic counts thinking inside max_tokens. AI SDK treats
       // maxOutputTokens as visible output and adds the budget itself.
       maxOutputTokens: anthropicVisibleOutputTokens(configuredMaxOutputTokens, thinking),
+      ...(output ? { output } : {}),
       ...(thinking ? { providerOptions: { anthropic: { thinking: toAiSdkThinking(thinking) } } } : {}),
       abortSignal: request.signal,
       maxRetries: 0,

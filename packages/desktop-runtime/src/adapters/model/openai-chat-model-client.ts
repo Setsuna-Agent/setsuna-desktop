@@ -16,6 +16,7 @@ import {
   type FetchImpl,
 } from './provider-http.js';
 import { doneEvent, parseJson, parseSse } from './provider-stream.js';
+import { openAiCompatibleResponseFormatBody } from './provider-response-format.js';
 import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 import { normalizeOpenAiUsage } from './provider-usage.js';
 import { arrayValue, objectValue, stringValue } from './provider-values.js';
@@ -45,6 +46,7 @@ export class OpenAiChatModelClient implements ModelClient {
         ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
         ...(request.tools?.length ? { tools: toOpenAiChatTools(request.tools) } : {}),
         ...(request.toolChoice ? { tool_choice: toOpenAiChatToolChoice(request.toolChoice) } : {}),
+        ...openAiCompatibleResponseFormatBody(request),
         ...openAiCompatibleThinkingBody(this.provider, request),
       }),
     });

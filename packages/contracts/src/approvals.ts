@@ -14,6 +14,10 @@ export type RuntimeApprovalReviewStatus = 'allowed' | 'denied' | 'failed' | 'tim
 export type RuntimeApprovalReviewAssessment = {
   status: RuntimeApprovalReviewStatus;
   rationale: string;
+  /** Reviewer-authored summary for display. Must not include raw secrets or full arguments. */
+  riskSummary?: string;
+  /** Material side effects the user should consider before manually approving. */
+  potentialImpact?: string;
   riskLevel?: RuntimeApprovalReviewRiskLevel;
   userAuthorization?: RuntimeApprovalUserAuthorization;
   providerId?: string;

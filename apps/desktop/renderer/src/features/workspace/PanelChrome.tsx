@@ -73,15 +73,6 @@ function workspaceAppSystemIcon(icon: string) {
       </svg>
     );
   }
-  if (icon === 'trae') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <rect x="3" y="3" width="18" height="18" rx="5" fill="#111827" />
-        <path d="M7 8h10M12 8v8M8.2 16h7.6" stroke="#ffffff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M17 6.8 19 5v4l-2-2.2Z" fill="#22c55e" />
-      </svg>
-    );
-  }
   if (icon === 'fleet') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">

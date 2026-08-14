@@ -62,7 +62,7 @@ describe('approval review event projection', () => {
     expect(resolved.messages[0]?.toolRuns?.[0]?.resultPreview).toBeUndefined();
   });
 
-  it('keeps a technical failure visible while replacing it with a pending user approval', () => {
+  it('keeps an automatic denial visible while replacing it with a pending user approval', () => {
     const automaticallyRequested = applyRuntimeEventToThread(threadFixture(), approvalRequestedEvent({
       approvalId: 'approval_auto',
       reviewer: 'automatic',
@@ -77,11 +77,15 @@ describe('approval review event projection', () => {
       payload: {
         approvalId: 'approval_auto',
         decision: 'reject',
-        message: 'Automatic approval review failed: reviewer unavailable',
+        message: 'Automatic approval review denied a high-risk action with medium user authorization.',
         source: 'automatic',
         assessment: {
-          status: 'failed',
-          rationale: 'Automatic approval review failed: reviewer unavailable',
+          status: 'denied',
+          riskLevel: 'high',
+          userAuthorization: 'medium',
+          rationale: 'Automatic approval review denied a high-risk action with medium user authorization.',
+          riskSummary: 'The tool may modify files outside the workspace.',
+          potentialImpact: 'Files outside the current project could be overwritten.',
         },
       },
     } satisfies RuntimeEvent);
@@ -95,14 +99,76 @@ describe('approval review event projection', () => {
       approvalId: 'approval_user',
       approvalReviewer: 'user',
       approvalStatus: 'pending',
-      approvalMessage: 'Automatic approval review failed: reviewer unavailable',
+      approvalMessage: 'Automatic approval review denied a high-risk action with medium user authorization.',
       approvalReviewAssessment: {
-        status: 'failed',
-        rationale: 'Automatic approval review failed: reviewer unavailable',
+        status: 'denied',
+        riskLevel: 'high',
+        riskSummary: 'The tool may modify files outside the workspace.',
+        potentialImpact: 'Files outside the current project could be overwritten.',
       },
       status: 'pending_approval',
     });
     expect(awaitingUser.messages[0]?.toolRuns?.[0]?.completedAt).toBeUndefined();
+  });
+
+  it('keeps the automatic risk assessment after the user rejects the fallback approval', () => {
+    const automaticallyRequested = applyRuntimeEventToThread(threadFixture(), approvalRequestedEvent({
+      approvalId: 'approval_auto',
+      reviewer: 'automatic',
+    }));
+    const automaticallyDenied = applyRuntimeEventToThread(automaticallyRequested, {
+      id: 'event_auto_denied',
+      seq: 2,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.resolved',
+      createdAt: '2026-08-13T00:00:02.000Z',
+      payload: {
+        approvalId: 'approval_auto',
+        decision: 'reject',
+        message: 'Automatic review denied the action.',
+        source: 'automatic',
+        assessment: {
+          status: 'denied',
+          riskLevel: 'high',
+          userAuthorization: 'medium',
+          rationale: 'Automatic review denied the action.',
+          riskSummary: 'The tool may modify files outside the workspace.',
+          potentialImpact: 'Files outside the current project could be overwritten.',
+        },
+      },
+    } satisfies RuntimeEvent);
+    const awaitingUser = applyRuntimeEventToThread(automaticallyDenied, approvalRequestedEvent({
+      approvalId: 'approval_user',
+      reviewer: 'user',
+      seq: 3,
+    }));
+    const rejectedByUser = applyRuntimeEventToThread(awaitingUser, {
+      id: 'event_user_rejected',
+      seq: 4,
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      type: 'approval.resolved',
+      createdAt: '2026-08-13T00:00:04.000Z',
+      payload: {
+        approvalId: 'approval_user',
+        decision: 'reject',
+        source: 'user',
+      },
+    } satisfies RuntimeEvent);
+
+    expect(rejectedByUser.messages[0]?.toolRuns?.[0]).toMatchObject({
+      approvalReviewer: 'user',
+      approvalStatus: 'rejected',
+      approvalResolutionSource: 'user',
+      approvalReviewAssessment: {
+        status: 'denied',
+        riskLevel: 'high',
+        riskSummary: 'The tool may modify files outside the workspace.',
+        potentialImpact: 'Files outside the current project could be overwritten.',
+      },
+      status: 'rejected',
+    });
   });
 });
 

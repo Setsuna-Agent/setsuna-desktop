@@ -175,7 +175,7 @@ export function workspaceFileRevealLabel(platform?: string, t: Translate = defau
 }
 
 function openInAppLabel(app: DesktopWorkspaceApp, line: number | undefined, t: Translate): string {
-  const supportsLine = ['cursor', 'intellij-idea', 'pycharm', 'vscode', 'webstorm'].includes(app.id);
+  const supportsLine = ['cursor', 'intellij-idea', 'pycharm', 'trae', 'vscode', 'webstorm'].includes(app.id);
   return line && supportsLine
     ? t('workspace.fileMenu.openLineInApp', { app: app.label, line })
     : t('workspace.fileMenu.openInApp', { app: app.label });

@@ -39,7 +39,9 @@ export function ShellTerminalResult({ run }: { run: RuntimeToolRun }) {
           </div>
         ) : null}
       </div>
-      {run.status !== 'pending_approval' ? (
+      {run.status !== 'pending_approval'
+        && run.status !== 'cancelled'
+        && run.status !== 'rejected' ? (
         <div className="chat-mcp-terminal__footer">
           {diagnostic ? `${status} · ${diagnostic}` : status}
         </div>
@@ -60,6 +62,9 @@ export function shellCommand(run: RuntimeToolRun): string {
 export function shellResultPreviewForDisplay(
   run: RuntimeToolRun,
 ): string | undefined {
+  // Rejected and cancelled commands never ran. A retained automatic-review
+  // denial may instead describe a command the user subsequently approved.
+  if (run.status === 'rejected' || run.status === 'cancelled') return undefined;
   const preview = run.resultPreview ?? '';
   if (isApprovalMetadataPreview(run, preview)) return undefined;
   if (run.status !== 'pending_approval' && run.status !== 'running') {

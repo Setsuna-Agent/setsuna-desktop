@@ -16,7 +16,6 @@ import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
 import {
   generateThreadTitle,
-  THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
   type GeneratedThreadTitle,
 } from './runtime-thread-title-generator.js';
 
@@ -66,12 +65,6 @@ export class RuntimeThreadTitleCoordinator {
           if (!selection) return null;
           return generateThreadTitle({
             attachmentCount: attachments.length,
-            // 部分 OpenAI-compatible 思考模型即使收到 thinking=false，仍会先输出
-            // reasoning；预算必须覆盖这部分，才能收集到最终可见标题。
-            maxOutputTokens: Math.max(1, Math.min(
-              THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
-              selection.maxOutputTokens,
-            )),
             model: selection.model,
             modelClient: this.options.modelClient,
             ...(selection.providerId ? { providerId: selection.providerId } : {}),
@@ -122,7 +115,7 @@ export class RuntimeThreadTitleCoordinator {
 function threadTitleModelSelection(
   config: RuntimeConfigState,
   activeProvider: RuntimeProviderConfig | null,
-): { maxOutputTokens: number; model: string; providerId?: string } | null {
+): { model: string; providerId?: string } | null {
   const fallbackModel = activeProvider?.enabled ? activeProvider.activeModel?.code.trim() : '';
   const request = runtimeTaskModelRequest(config, 'threadTitle', fallbackModel || '');
   const model = request.model.trim();
@@ -141,7 +134,6 @@ function threadTitleModelSelection(
     );
     if (!usable || !configuredModel || !provider) return null;
     return {
-      maxOutputTokens: configuredModel.maxOutputTokens,
       model,
       providerId: provider.id,
     };
@@ -154,7 +146,6 @@ function threadTitleModelSelection(
   );
   if (!usable || !activeProvider?.activeModel) return null;
   return {
-    maxOutputTokens: activeProvider.activeModel.maxOutputTokens,
     model,
   };
 }

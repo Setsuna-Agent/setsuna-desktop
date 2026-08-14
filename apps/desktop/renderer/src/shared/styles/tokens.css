@@ -100,7 +100,7 @@
   --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
   --desktop-agent-input-shadow: 0 14px 32px rgba(0, 0, 0, 0.045);
   --desktop-agent-sidebar-hover-bg: #f2f2f2;
-  --desktop-agent-sidebar-active-bg: #ffffff;
+  --desktop-agent-sidebar-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, var(--app-sidebar-bg));
   --desktop-agent-sidebar-active-text: #111111;
   --desktop-agent-sidebar-active-shadow: none;
   --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 72%, transparent);
@@ -206,7 +206,6 @@
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
   --desktop-agent-input-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
   --desktop-agent-sidebar-hover-bg: #34383b;
-  --desktop-agent-sidebar-active-bg: #383c40;
   --desktop-agent-sidebar-active-text: #fafafa;
   --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 68%, transparent);
   --desktop-agent-accent: var(--app-primary);
@@ -224,28 +223,24 @@
 :root[data-theme='light'][data-sidebar-background-style='plain'] {
   --app-sidebar-bg: #ffffff;
   --desktop-agent-sidebar-hover-bg: #f5f5f5;
-  --desktop-agent-sidebar-active-bg: #ededed;
   --desktop-agent-sidebar-edge: #e5e5e5;
 }
 
 :root[data-theme='light'][data-sidebar-background-style='contrast'] {
   --app-sidebar-bg: #edf1f5;
   --desktop-agent-sidebar-hover-bg: #e3e8ee;
-  --desktop-agent-sidebar-active-bg: #ffffff;
   --desktop-agent-sidebar-edge: #d3dae3;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='plain'] {
   --app-sidebar-bg: #202020;
   --desktop-agent-sidebar-hover-bg: #2a2a2a;
-  --desktop-agent-sidebar-active-bg: #303030;
   --desktop-agent-sidebar-edge: #343434;
 }
 
 :root[data-theme='dark'][data-sidebar-background-style='contrast'] {
   --app-sidebar-bg: #30343a;
   --desktop-agent-sidebar-hover-bg: #3a3f46;
-  --desktop-agent-sidebar-active-bg: #424850;
   --desktop-agent-sidebar-edge: #484e56;
 }
 

@@ -230,7 +230,9 @@ export function mixedToolRunBucketSummary(
   if (kind === 'shell') return shellCountSummary(runs, status, t);
   if (kind === 'search') return searchCountSummary(runs, status, t);
   if (kind === 'webContent') return webContentGroupSummary(runs, t)?.title ?? '';
-  const name = toolDisplayName(runs[0]?.name ?? t('toolRun.tool'), t);
+  const name = runs[0]
+    ? toolRunDisplayName(runs[0], t)
+    : t('toolRun.tool');
   if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
   if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
   if (status === 'rejected') return t('toolRun.generic.rejected', { name });
@@ -247,7 +249,9 @@ export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaul
   if (kind === 'search') return searchCountSummary(runs, status, t);
   const webContentSummary = webContentGroupSummary(runs, t);
   if (webContentSummary) return webContentSummary.title;
-  const name = toolDisplayName(runs[0]?.name ?? t('toolRun.tool'), t);
+  const name = runs[0]
+    ? toolRunDisplayName(runs[0], t)
+    : t('toolRun.tool');
   if (status === 'running' || status === 'pending_approval') return t('toolRun.generic.running', { name });
   if (status === 'cancelled') return t('toolRun.generic.cancelled', { name });
   if (status === 'rejected') return t('toolRun.generic.rejected', { name });
@@ -334,7 +338,9 @@ export function toolRunGroupSummary(
   const webContentSummary = webContentGroupSummary(group.runs, t);
   if (webContentSummary) return webContentSummary;
   const status = toolRunGroupStatus(group.runs);
-  const name = toolDisplayName(group.runs[0]?.name ?? t('toolRun.tool'), t);
+  const name = group.runs[0]
+    ? toolRunDisplayName(group.runs[0], t)
+    : t('toolRun.tool');
   if (status === 'running' || status === 'pending_approval') return { title: t('toolRun.generic.running', { name }) };
   if (status === 'error') return { title: t('toolRun.generic.failed', { name }) };
   if (status === 'cancelled') return { title: t('toolRun.generic.cancelled', { name }) };
@@ -781,7 +787,7 @@ export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTransl
   if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
   if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
   if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, t('toolRun.action.publishArtifact'), t('toolRun.action.publishArtifactDone'), t), target: path };
-  const displayName = toolDisplayName(name, t);
+  const displayName = toolRunDisplayName(run, t);
   return { title: runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t) };
 }
 
@@ -871,4 +877,15 @@ export function inspectionEntryIcon(kind: InspectionEntryKind) {
 
 export function toolDisplayName(name: string, t: Translate = defaultTranslate): string {
   return name.replace(/^mcp\s+\S+\s+/iu, '').replace(/_/g, ' ').trim() || t('toolRun.tool');
+}
+
+function toolRunDisplayName(run: RuntimeToolRun, t: Translate): string {
+  const pluginName = run.plugin?.name.trim();
+  if (!pluginName) return toolDisplayName(run.name, t);
+  const extensionPrefix = 'extension__';
+  const separatorIndex = run.name.indexOf('__', extensionPrefix.length);
+  const localName = run.name.startsWith(extensionPrefix) && separatorIndex >= 0
+    ? run.name.slice(separatorIndex + 2).trim()
+    : run.name.trim();
+  return localName ? `${pluginName} / ${localName}` : pluginName;
 }

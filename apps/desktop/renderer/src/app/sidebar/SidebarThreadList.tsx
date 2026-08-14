@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
 
-const THREAD_BATCH_SIZE = 5;
+const THREAD_BATCH_SIZE = 20;
 
 export function SidebarThreadList({
   menuThreadId,
