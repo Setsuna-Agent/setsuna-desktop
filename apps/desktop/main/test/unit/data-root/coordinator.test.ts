@@ -12,6 +12,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   newPendingLegacyDataImport,
@@ -211,6 +212,50 @@ describe('desktop data root coordinator', () => {
       await readFile(dataRootBootstrapLayout(fixture.appDataRoot).pointerPath, 'utf8'),
     ) as { dataRoot: string };
     expect(pointer.dataRoot).toBe(fixture.sourceRoot);
+  });
+
+  it('waits out a stale SQLite runtime lease before copying the data root', async () => {
+    const fixture = await createMigrationFixture();
+    const sourceDatabasePath = desktopDataLayout(fixture.sourceRoot).runtimeDatabasePath;
+    await mkdir(path.dirname(sourceDatabasePath), { recursive: true });
+    const leaseExpiresAt = Date.now() + 500;
+    const sourceDatabase = new DatabaseSync(sourceDatabasePath);
+    try {
+      sourceDatabase.exec(`
+        CREATE TABLE runtime_owner (
+          slot INTEGER PRIMARY KEY,
+          owner_id TEXT NOT NULL,
+          fence_token INTEGER NOT NULL,
+          lease_expires_at INTEGER NOT NULL
+        );
+        CREATE TABLE threads (id TEXT PRIMARY KEY);
+        CREATE TABLE runtime_events (id TEXT PRIMARY KEY);
+        CREATE TABLE store_metadata (key TEXT PRIMARY KEY);
+      `);
+      sourceDatabase.prepare(`
+        INSERT INTO runtime_owner(slot, owner_id, fence_token, lease_expires_at)
+        VALUES (1, 'stale-runtime', 1, ?)
+      `).run(leaseExpiresAt);
+    } finally {
+      sourceDatabase.close();
+    }
+    const coordinator = migratingCoordinator(fixture, vi.fn());
+
+    await expect(coordinator.runMigration()).resolves.toEqual({ ok: true });
+
+    expect(Date.now()).toBeGreaterThanOrEqual(leaseExpiresAt);
+    const targetDatabase = new DatabaseSync(
+      desktopDataLayout(fixture.targetRoot).runtimeDatabasePath,
+      { readOnly: true },
+    );
+    try {
+      const ownership = targetDatabase.prepare(
+        'SELECT COUNT(*) AS count FROM runtime_owner',
+      ).get() as { count: number };
+      expect(Number(ownership.count)).toBe(0);
+    } finally {
+      targetDatabase.close();
+    }
   });
 
   it('finishes an interrupted post-rename commit and removes the staging owner marker', async () => {

@@ -55,6 +55,7 @@ import {
   requiredBundleDirectory,
   trustPluginHooks
 } from './file-plugin-bundle-model.js';
+import { sameLegacyMarketplaceSource, samePath } from './legacy-marketplace-source.js';
 
 export class FilePluginBundleStore implements PluginBundleStore {
   private readonly indexPath: string;
@@ -110,14 +111,20 @@ export class FilePluginBundleStore implements PluginBundleStore {
     await withFileStateUpdate(this.indexPath, async () => {
       const index = await this.readIndex();
       let changed = false;
-      const plugins = index.plugins.map((plugin) => {
+      const plugins: InstalledPluginRecord[] = [];
+      for (const plugin of index.plugins) {
         const catalogSource = sourceById.get(plugin.id);
-        if (plugin.installationSource || !catalogSource || !sameLegacyMarketplaceSource(plugin.sourcePath, catalogSource)) {
-          return plugin;
+        if (
+          plugin.installationSource
+          || !catalogSource
+          || !await sameLegacyMarketplaceSource(plugin.sourcePath, catalogSource)
+        ) {
+          plugins.push(plugin);
+          continue;
         }
         changed = true;
-        return { ...plugin, installationSource: 'marketplace' as const };
-      });
+        plugins.push({ ...plugin, installationSource: 'marketplace' });
+      }
       if (changed) {
         await writeJsonFile(this.indexPath, { version: 1, plugins } satisfies PluginIndexFile);
       }
@@ -785,14 +792,6 @@ function assertExtensionCapabilitySource(
   }
 }
 
-function samePath(left: string, right: string): boolean {
-  const normalizedLeft = path.resolve(left);
-  const normalizedRight = path.resolve(right);
-  return process.platform === 'win32'
-    ? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-    : normalizedLeft === normalizedRight;
-}
-
 function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
   const resolvedRoot = path.resolve(pluginsDir);
   const installPath = path.resolve(resolvedRoot, pluginId);
@@ -801,49 +800,6 @@ function strictPluginInstallPath(pluginsDir: string, pluginId: string): string {
     throw new Error(`Plugin install path must be inside the plugin directory: ${pluginId}`);
   }
   return installPath;
-}
-
-function sameLegacyMarketplaceSource(left: string, right: string): boolean {
-  if (samePath(left, right)) return true;
-  const leftLocation = appImageApplicationLocation(left);
-  const rightLocation = appImageApplicationLocation(right);
-  return Boolean(
-    leftLocation
-    && rightLocation
-    && leftLocation.mountIdentity === rightLocation.mountIdentity
-    && samePath(leftLocation.applicationSuffix, rightLocation.applicationSuffix),
-  );
-}
-
-function appImageApplicationLocation(value: string): {
-  applicationSuffix: string;
-  mountIdentity: string;
-} | null {
-  const segments = path.resolve(value).split(path.sep);
-  let mountIndex = -1;
-  let mountIdentity = '';
-  for (let index = 0; index < segments.length; index += 1) {
-    const match = /^\.mount_(.+)[a-z0-9]{6}$/iu.exec(segments[index]);
-    if (!match) continue;
-    mountIndex = index;
-    mountIdentity = match[1].toLowerCase();
-    break;
-  }
-  if (mountIndex < 0) return null;
-
-  let appAsarIndex = -1;
-  for (let index = mountIndex + 1; index < segments.length; index += 1) {
-    if (segments[index].toLowerCase() === 'app.asar') appAsarIndex = index;
-  }
-  if (appAsarIndex < 0) return null;
-
-  // AppImage mount directories preserve the application-derived prefix and
-  // replace only their six-character mkdtemp suffix between launches. Requiring
-  // that identity keeps an unrelated Electron app's app.asar out of migration.
-  return {
-    applicationSuffix: segments.slice(appAsarIndex).join(path.sep),
-    mountIdentity,
-  };
 }
 
 async function readManifestItemContent(

@@ -110,6 +110,87 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('migrates legacy marketplace provenance across macOS application locations', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-macos-'));
+    const oldCatalogDir = path.join(
+      root,
+      'Applications',
+      'Setsuna Desktop.app',
+      'Contents',
+      'Resources',
+      'app.asar',
+      'plugins',
+    );
+    const currentCatalogDir = path.join(
+      root,
+      'release-artifacts',
+      'Setsuna Desktop.app',
+      'Contents',
+      'Resources',
+      'app.asar',
+      'plugins',
+    );
+    await Promise.all([
+      createCatalogPlugin(oldCatalogDir, 'docs', { name: 'Docs Helper' }),
+      createCatalogPlugin(currentCatalogDir, 'docs', { name: 'Docs Helper' }),
+    ]);
+    const runtime = await createPluginRuntime(root, currentCatalogDir);
+    await new FilePluginMarketplace(oldCatalogDir, runtime.plugins).installPlugin('docs');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(currentCatalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      errors: [],
+      plugins: [{ id: 'docs', installed: true }],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
+  it('migrates legacy marketplace provenance from a source checkout to a packaged catalog', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-source-release-'));
+    const sourceAppRoot = path.join(root, 'checkout');
+    const packagedAppRoot = path.join(root, 'release', 'app.asar');
+    const sourceCatalogDir = path.join(sourceAppRoot, 'plugins');
+    const packagedCatalogDir = path.join(packagedAppRoot, 'plugins');
+    await Promise.all([
+      createApplicationPackage(sourceAppRoot, 'setsuna-desktop'),
+      createApplicationPackage(packagedAppRoot, 'setsuna-desktop'),
+      createCatalogPlugin(sourceCatalogDir, 'docs', { name: 'Docs Helper' }),
+      createCatalogPlugin(packagedCatalogDir, 'docs', { name: 'Docs Helper' }),
+    ]);
+    const runtime = await createPluginRuntime(root, packagedCatalogDir);
+    await new FilePluginMarketplace(sourceCatalogDir, runtime.plugins).installPlugin('docs');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(packagedCatalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      errors: [],
+      plugins: [{ id: 'docs', installed: true }],
+    });
+  });
+
+  it('does not migrate a legacy local bundle from another application catalog', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-package-'));
+    const setsunaRoot = path.join(root, 'setsuna');
+    const otherAppRoot = path.join(root, 'other-app');
+    const catalogDir = path.join(setsunaRoot, 'plugins');
+    const localDir = path.join(otherAppRoot, 'plugins');
+    await Promise.all([
+      createApplicationPackage(setsunaRoot, 'setsuna-desktop'),
+      createApplicationPackage(otherAppRoot, 'other-desktop'),
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Other App Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(catalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+  });
+
   it('does not migrate a local bundle imported from another Electron app', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-electron-'));
     const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');
@@ -343,6 +424,11 @@ async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
     bundledPluginsDir,
   );
   return { config, plugins };
+}
+
+async function createApplicationPackage(applicationRoot: string, name: string): Promise<void> {
+  await mkdir(applicationRoot, { recursive: true });
+  await writeFile(path.join(applicationRoot, 'package.json'), JSON.stringify({ name }, null, 2));
 }
 
 async function createCatalogPlugin(

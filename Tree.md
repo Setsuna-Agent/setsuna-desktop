@@ -203,9 +203,9 @@ packages/contracts/ — 4 direct / 76 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 540 total files
-├── src/ — 2 direct / 313 total files
-│   ├── adapters/ — 134 files
+packages/desktop-runtime/ — 4 direct / 541 total files
+├── src/ — 2 direct / 314 total files
+│   ├── adapters/ — 135 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -215,7 +215,7 @@ packages/desktop-runtime/ — 4 direct / 540 total files
 │   │   ├── model/ — 29 direct / 29 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 1 direct / 1 total files
-│   │   ├── plugin/ — 6 direct / 6 total files
+│   │   ├── plugin/ — 7 direct / 7 total files
 │   │   ├── sandbox/ — 1 files
 │   │   │   └── windows-native/ — 1 direct / 1 total files
 │   │   ├── search/ — 5 direct / 5 total files
