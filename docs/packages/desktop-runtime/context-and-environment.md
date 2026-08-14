@@ -155,9 +155,9 @@ Workflow 以 user/external fragment 注入，项目 script 不能提升为 runti
 `runtime-attachment-context.ts` / `runtime-base-instructions`：
 
 - 只接受 AttachmentStore 已认领给 thread 的 asset。
-- 本地文件引用在每次 turn 开始时重新确认存在且为普通文件，并将该文件自身作为精确只读 root；不授予同目录其他文件的访问权。
-- 图片在线程事件中始终保持为 runtime 引用；仅当当前模型支持图片且文件低于独立的内存安全边界时，runtime 才在 provider 请求边界读取、复验签名并临时转换为图片内容，Base64 不写入线程。更大的本地图片仍可由 Agent 通过精确只读路径访问。
-- 用户安装视觉识别插件并选定已配置的视觉模型后，Bundle 内的 `analyze_image` 只把附件 ID 与问题交给 host bridge；host 再次校验 thread 归属并复用 provider client，扩展 worker 不会直接获得附件路径，主 Agent 则通过附件上下文获得原文件的只读路径。
+- 本地文件引用在每次 turn 开始时重新确认存在且为普通文件，并将该文件自身作为精确 readable root；链接不授予额外写权限，也不授予同目录其他文件的访问权。文件若本来位于 workspace 或已配置的 writable root 内，仍遵循原有 workspace 权限。
+- 图片在线程事件中始终保持为 runtime 引用；仅当当前模型支持图片且文件低于独立的内存安全边界时，runtime 才在 provider 请求边界读取、复验签名并临时转换为图片内容，Base64 不写入线程。更大的本地图片仍可由 Agent 通过精确链接路径访问。
+- 用户安装视觉识别插件并选定已配置的视觉模型后，Bundle 内的 `analyze_image` 只把附件 ID 与问题交给 host bridge；host 再次校验 thread 归属并复用 provider client，扩展 worker 不会直接获得附件路径，主 Agent 则通过附件上下文获得原文件的精确路径。
 - 文件名/MIME 可参与 Skill auto-activation。
 - composer 和排队编辑会把 legacy 内联图片归一化为托管附件；本地文件保持引用，切换模型不需要改写持久化消息。
 

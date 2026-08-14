@@ -91,7 +91,7 @@ describe('runtime server REST threads and attachments', () => {
       await expect(invalid.json()).resolves.toMatchObject({ code: 'attachment_unsupported' });
     });
   
-  it('claims a linked local file for a turn and exposes its read-only source path to the agent', async () => {
+  it('claims a linked local file for a turn without granting additional write access', async () => {
       const capture = await createOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('attachment-provider', capture.baseUrl);
@@ -126,7 +126,8 @@ describe('runtime server REST threads and attachments', () => {
         expect(serializedMessages).toContain('User attachments available to this thread');
         expect(serializedMessages).toContain('notes.txt');
         expect(serializedMessages).toContain(canonicalSourcePath);
-        expect(serializedMessages).toContain('read-only');
+        expect(serializedMessages).toContain('do not grant additional write access');
+        expect(serializedMessages).toContain('Existing workspace permissions still apply');
         expect(serializedMessages).not.toContain('plugin-readable local file');
         expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
           .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'notes.txt' })] });
