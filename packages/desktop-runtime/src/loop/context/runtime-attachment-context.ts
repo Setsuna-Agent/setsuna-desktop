@@ -6,9 +6,8 @@ import {
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
-import { readFile } from 'node:fs/promises';
 import type { AttachmentStore, RuntimeResolvedAttachment } from '../../ports/attachment-store.js';
-import { detectSafeImageMimeType } from '../../utils/safe-image.js';
+import { readSafeRasterImageFile } from '../../utils/safe-image.js';
 
 export type RuntimeAttachmentContext = {
   contextMessage?: RuntimeMessage;
@@ -158,13 +157,14 @@ async function resolvedImageDataUrls(
 async function resolvedImageDataUrl(
   resolved: RuntimeResolvedAttachment,
 ): Promise<readonly [string, string] | null> {
-  const data = await readFile(resolved.absolutePath).catch(() => null);
-  if (!data
-    || !data.byteLength
-    || data.byteLength !== resolved.attachment.size) return null;
-  const mimeType = detectSafeImageMimeType(data);
-  if (!mimeType || mimeType !== resolved.attachment.type) return null;
-  return [resolved.attachment.assetId, `data:${mimeType};base64,${data.toString('base64')}`] as const;
+  if (!isRuntimeRasterImageMimeType(resolved.attachment.type)) return null;
+  const data = await readSafeRasterImageFile({
+    filePath: resolved.absolutePath,
+    expectedMimeType: resolved.attachment.type,
+    expectedSize: resolved.attachment.size,
+  });
+  if (!data) return null;
+  return [resolved.attachment.assetId, `data:${resolved.attachment.type};base64,${data.toString('base64')}`] as const;
 }
 
 function uniqueStoredAttachments(attachments: RuntimeMessageAttachment[]): RuntimeStoredMessageAttachment[] {

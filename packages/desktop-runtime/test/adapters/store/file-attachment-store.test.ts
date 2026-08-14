@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process';
 import { access, mkdir, readFile, realpath, truncate, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { FileAttachmentStore } from '../../../src/adapters/store/file-attachment-store.js';
 import { RuntimeAttachmentValidationError } from '../../../src/ports/attachment-store.js';
@@ -41,6 +43,31 @@ describe('file attachment store', () => {
 
     await reloadedStore.releaseThread('thread_1');
     await expect(access(sourcePath)).resolves.toBeUndefined();
+  });
+
+  it('detects a linked raster image when its declared MIME type is empty', async () => {
+    const fixture = await attachmentStoreFixture();
+    const sourcePath = path.join(fixture.dataDir, 'image-without-mime');
+    await writeFile(sourcePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+
+    await expect(fixture.store.link({ path: sourcePath, type: '' })).resolves.toMatchObject({
+      name: 'image-without-mime',
+      type: 'image/png',
+    });
+  });
+
+  it('rejects named pipes without blocking the attachment mutation queue', async () => {
+    if (process.platform === 'win32') return;
+    const fixture = await attachmentStoreFixture();
+    const pipePath = path.join(fixture.dataDir, 'attachment.fifo');
+    await promisify(execFile)('mkfifo', [pipePath]);
+
+    await expect(fixture.store.link({ path: pipePath, type: '' })).rejects.toThrow('不可读取');
+    const sourcePath = path.join(fixture.dataDir, 'after-pipe.txt');
+    await writeFile(sourcePath, 'still available');
+    await expect(fixture.store.link({ path: sourcePath, type: 'text/plain' })).resolves.toMatchObject({
+      name: 'after-pipe.txt',
+    });
   });
 
   it('claims uploaded documents for a thread and keeps fork references until the last thread is released', async () => {

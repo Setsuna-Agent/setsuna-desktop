@@ -4,12 +4,14 @@ import {
   isRuntimeRasterImageMimeType,
   type RuntimeAttachmentLinkInput,
 } from '@setsuna-desktop/contracts';
-import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
-import { detectSafeImageMimeType } from '../utils/safe-image.js';
+import {
+  MAX_IN_MEMORY_RASTER_IMAGE_BYTES,
+  readSafeRasterImageFile,
+} from '../utils/safe-image.js';
 import { RuntimeHttpError } from './http-error.js';
 import { decodeRuntimeId, readBinaryBody, readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
@@ -67,22 +69,28 @@ export async function handleRuntimeResourceRequest(
     if (!attachment) {
       throw new RuntimeHttpError(404, 'Image attachment not found', 'attachment_not_found');
     }
+    if (!isRuntimeRasterImageMimeType(attachment.type)) {
+      throw new RuntimeHttpError(415, 'Image attachment is unavailable', 'attachment_invalid');
+    }
     const resolved = (await runtime.attachmentStore.resolveForThread(threadId, [attachment]))[0];
     if (!resolved) {
       throw new RuntimeHttpError(404, 'Image attachment not found', 'attachment_not_found');
     }
-    const data = await readFile(resolved.absolutePath).catch(() => null);
-    const mimeType = data ? detectSafeImageMimeType(data) : null;
-    if (!data
-      || !data.byteLength
-      || data.byteLength !== resolved.attachment.size
-      || mimeType !== attachment.type) {
+    if (resolved.attachment.size > MAX_IN_MEMORY_RASTER_IMAGE_BYTES) {
+      throw new RuntimeHttpError(413, 'Image attachment is too large to preview', 'attachment_too_large');
+    }
+    const data = await readSafeRasterImageFile({
+      filePath: resolved.absolutePath,
+      expectedMimeType: attachment.type,
+      expectedSize: resolved.attachment.size,
+    });
+    if (!data) {
       throw new RuntimeHttpError(415, 'Image attachment is unavailable', 'attachment_invalid');
     }
     response.writeHead(200, {
       'Cache-Control': 'no-store',
       'Content-Length': data.byteLength,
-      'Content-Type': mimeType,
+      'Content-Type': attachment.type,
       'X-Content-Type-Options': 'nosniff',
     });
     response.end(data);

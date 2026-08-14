@@ -13,7 +13,6 @@ import {
   type RuntimeVisionRecognitionTestInput,
   type RuntimeVisionRecognitionTestResult,
 } from '@setsuna-desktop/contracts';
-import { readFile } from 'node:fs/promises';
 import type { AttachmentStore } from '../ports/attachment-store.js';
 import type { Clock } from '../ports/clock.js';
 import type { ConfigStore } from '../ports/config-store.js';
@@ -21,7 +20,12 @@ import type { ModelClient } from '../ports/model-client.js';
 import type { ThreadStore } from '../ports/thread-store.js';
 import type { UsageStore } from '../ports/usage-store.js';
 import type { ToolExecutionContext } from '../ports/tool-host.js';
-import { detectSafeImageMimeType, type SafeImageMimeType } from '../utils/safe-image.js';
+import {
+  detectSafeImageMimeType,
+  MAX_IN_MEMORY_RASTER_IMAGE_BYTES,
+  readSafeRasterImageFile,
+  type SafeImageMimeType,
+} from '../utils/safe-image.js';
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { objectInput, requiredStringArg } from '../adapters/tool/tool-input.js';
 
@@ -194,21 +198,27 @@ export class ExtensionVisionRecognitionCoordinator {
         ...inline,
       };
     }
+    if (!isRuntimeRasterImageMimeType(attachment.type)) {
+      throw new Error('图片附件不是受支持的 PNG、JPEG、GIF 或 WebP 文件。');
+    }
 
     const resolved = (await this.attachmentStore.resolveForThread(threadId, [attachment]))[0];
     if (!resolved) throw new Error(`图片附件不可用或不属于当前会话：${requestedId}`);
-    const data = await readFile(resolved.absolutePath);
-    if (!data.byteLength || data.byteLength !== resolved.attachment.size) {
-      throw new Error('图片附件为空或读取不完整。');
+    if (resolved.attachment.size > MAX_IN_MEMORY_RASTER_IMAGE_BYTES) {
+      throw new Error('图片附件过大，无法载入视觉模型；Agent 仍可通过本地文件路径读取。');
     }
-    const mimeType = detectSafeImageMimeType(data);
-    if (!mimeType || mimeType !== attachment.type) {
+    const data = await readSafeRasterImageFile({
+      filePath: resolved.absolutePath,
+      expectedMimeType: attachment.type,
+      expectedSize: resolved.attachment.size,
+    });
+    if (!data) {
       throw new Error('图片附件不是受支持的 PNG、JPEG、GIF 或 WebP 文件。');
     }
     return {
       id: attachment.assetId,
       name: attachment.name,
-      mimeType,
+      mimeType: attachment.type,
       data,
     };
   }
@@ -250,7 +260,13 @@ function decodeInlineImage(
   if (!match?.[1] || !match[2]) return null;
   const mimeType = match[1].toLowerCase() as SafeImageMimeType;
   const payload = match[2].replace(/\s/gu, '');
-  if (mimeType !== attachment.type || !payload.length || payload.length % 4 !== 0) return null;
+  if (
+    mimeType !== attachment.type
+    || attachment.size > MAX_IN_MEMORY_RASTER_IMAGE_BYTES
+    || !payload.length
+    || payload.length % 4 !== 0
+    || payload.length > Math.ceil(MAX_IN_MEMORY_RASTER_IMAGE_BYTES / 3) * 4
+  ) return null;
   const data = Buffer.from(payload, 'base64');
   if (!data.byteLength
     || data.byteLength !== attachment.size

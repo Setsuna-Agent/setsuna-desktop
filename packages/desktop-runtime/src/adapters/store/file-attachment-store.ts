@@ -5,6 +5,7 @@ import {
   type RuntimeMessageAttachment,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
+import { constants } from 'node:fs';
 import { mkdir, open, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -15,7 +16,9 @@ import {
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
+import { detectSafeImageMimeType, type SafeImageMimeType } from '../../utils/safe-image.js';
 import {
+  DEFAULT_STORED_ATTACHMENT_MIME_TYPE,
   normalizeAttachmentLinkMimeType,
   normalizeStoredAttachmentMimeType,
   safeAttachmentDisplayName,
@@ -145,18 +148,21 @@ export class FileAttachmentStore implements AttachmentStore {
         throw new RuntimeAttachmentValidationError('附件路径无效。', 'attachment_invalid');
       }
       const absolutePath = await realpath(input.path).catch(() => '');
-      const size = absolutePath ? await readableRegularFileSize(absolutePath) : null;
-      if (!absolutePath || size === null) {
+      const file = absolutePath ? await readableRegularFileInfo(absolutePath, true) : null;
+      if (!absolutePath || !file) {
         throw new RuntimeAttachmentValidationError('本地文件不存在或不可读取。', 'attachment_invalid');
       }
       const name = safeAttachmentDisplayName(path.basename(input.path));
-      const type = normalizeAttachmentLinkMimeType(input.type);
+      const declaredType = normalizeAttachmentLinkMimeType(input.type);
+      const type = declaredType === DEFAULT_STORED_ATTACHMENT_MIME_TYPE && file.detectedImageType
+        ? file.detectedImageType
+        : declaredType;
       const id = assertSafeRuntimeId(this.ids.id('attachment'), 'Attachment id');
       const record: LinkedStoredAttachmentRecord = {
         id,
         name,
         type,
-        size,
+        size: file.size,
         storage: 'linked',
         absolutePath,
         createdAt: this.clock.now().toISOString(),
@@ -246,10 +252,10 @@ export class FileAttachmentStore implements AttachmentStore {
       const record = recordsById.get(attachment.assetId);
       if (!record || !record.threadIds.includes(safeThreadId) || !attachmentMatchesRecord(attachment, record)) continue;
       const absolutePath = this.recordPath(record);
-      const size = await readableRegularFileSize(absolutePath);
-      if (size === null) continue;
+      const file = await readableRegularFileInfo(absolutePath);
+      if (!file) continue;
       resolved.push({
-        attachment: storedAttachment(record, size),
+        attachment: storedAttachment(record, file.size),
         absolutePath,
         readableRoot: record.storage === 'linked' ? absolutePath : this.assetDirectory(record.id),
       });
@@ -295,12 +301,24 @@ export class FileAttachmentStore implements AttachmentStore {
   }
 }
 
-async function readableRegularFileSize(filePath: string): Promise<number | null> {
-  const handle = await open(filePath, 'r').catch(() => null);
+async function readableRegularFileInfo(
+  filePath: string,
+  sniffImage = false,
+): Promise<{ size: number; detectedImageType: SafeImageMimeType | null } | null> {
+  const pathInfo = await stat(filePath).catch(() => null);
+  if (!pathInfo?.isFile()) return null;
+  const handle = await open(filePath, constants.O_RDONLY | constants.O_NONBLOCK).catch(() => null);
   if (!handle) return null;
   try {
     const info = await handle.stat();
-    return info.isFile() ? info.size : null;
+    if (!info.isFile()) return null;
+    let detectedImageType: SafeImageMimeType | null = null;
+    if (sniffImage && info.size > 0) {
+      const header = Buffer.alloc(12);
+      const { bytesRead } = await handle.read(header, 0, header.byteLength, 0);
+      detectedImageType = detectSafeImageMimeType(header.subarray(0, bytesRead));
+    }
+    return { size: info.size, detectedImageType };
   } finally {
     await handle.close().catch(() => undefined);
   }
