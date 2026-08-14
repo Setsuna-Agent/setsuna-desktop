@@ -1,5 +1,6 @@
 import {
   isRuntimeInlineMessageAttachment,
+  isRuntimeRasterImageMimeType,
   isRuntimeStoredMessageAttachment,
   RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
   type ProviderConfigState,
@@ -24,7 +25,6 @@ import { detectSafeImageMimeType, type SafeImageMimeType } from '../utils/safe-i
 import { createModelStreamTextCollector } from '../utils/model-stream-text-collector.js';
 import { objectInput, requiredStringArg } from '../adapters/tool/tool-input.js';
 
-const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_RESULT_CHARS = 64_000;
 const MAX_OUTPUT_TOKENS = 4_096;
 const TEST_IMAGE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -174,13 +174,15 @@ export class ExtensionVisionRecognitionCoordinator {
       .flatMap((message) => [...(message.attachments ?? [])].reverse())
       .find((item): item is RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment => (
         (isRuntimeInlineMessageAttachment(item) || isRuntimeStoredMessageAttachment(item))
-        && item.type.startsWith('image/')
+        && (isRuntimeInlineMessageAttachment(item)
+          ? item.type.startsWith('image/')
+          : isRuntimeRasterImageMimeType(item.type))
         && (
           item.id === requestedId
           || (isRuntimeStoredMessageAttachment(item) && item.assetId === requestedId)
         )
       ));
-    if (!attachment || !attachment.type.startsWith('image/')) {
+    if (!attachment) {
       throw new Error(`当前会话中没有可用的图片附件：${requestedId}`);
     }
     if (isRuntimeInlineMessageAttachment(attachment)) {
@@ -196,8 +198,8 @@ export class ExtensionVisionRecognitionCoordinator {
     const resolved = (await this.attachmentStore.resolveForThread(threadId, [attachment]))[0];
     if (!resolved) throw new Error(`图片附件不可用或不属于当前会话：${requestedId}`);
     const data = await readFile(resolved.absolutePath);
-    if (!data.byteLength || data.byteLength !== attachment.size || data.byteLength > MAX_IMAGE_BYTES) {
-      throw new Error('图片附件为空或超过 20 MB 限制。');
+    if (!data.byteLength || data.byteLength !== resolved.attachment.size) {
+      throw new Error('图片附件为空或读取不完整。');
     }
     const mimeType = detectSafeImageMimeType(data);
     if (!mimeType || mimeType !== attachment.type) {
@@ -252,7 +254,6 @@ function decodeInlineImage(
   const data = Buffer.from(payload, 'base64');
   if (!data.byteLength
     || data.byteLength !== attachment.size
-    || data.byteLength > MAX_IMAGE_BYTES
     || data.toString('base64') !== payload) return null;
   return detectSafeImageMimeType(data) === mimeType ? { mimeType, data } : null;
 }

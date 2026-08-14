@@ -1,45 +1,30 @@
 import type { RuntimeStoredMessageAttachment } from '@setsuna-desktop/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  chatAttachmentValidationError,
   createChatMessageAttachment,
   formatAttachmentTypeLabel,
 } from '../../../../../src/features/chat/composer/chatAttachments.js';
 
 describe('chat attachments', () => {
-  it('accepts PDF and DOCX by extension even when the browser omits their MIME type', () => {
-    expect(chatAttachmentValidationError(file('guide.pdf', '%PDF-1.4', ''))).toBeNull();
-    expect(chatAttachmentValidationError(file('notes.docx', 'PK document', ''))).toBeNull();
-    expect(chatAttachmentValidationError(file('notes.txt', 'plain text', 'text/plain')))
-      .toBe('目前仅支持图片、PDF 和 DOCX 文件');
-  });
-
-  it('accepts images independently of the active model capability', () => {
-    const image = file('diagram.png', 'image', 'image/png');
-    expect(chatAttachmentValidationError(image)).toBeNull();
-  });
-
-  it('uploads document bytes through the narrow runtime client API', async () => {
-    const uploaded: RuntimeStoredMessageAttachment = {
+  it('links a local file without reading or uploading its bytes', async () => {
+    const linked: RuntimeStoredMessageAttachment = {
       id: 'attachment_1',
       assetId: 'attachment_1',
       source: 'runtime',
-      name: 'guide.pdf',
-      type: 'application/pdf',
-      size: 8,
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 10,
     };
-    const uploadAttachment = vi.fn(async () => uploaded);
-    const document = file('guide.pdf', '%PDF-1.4', 'application/pdf');
+    const linkAttachment = vi.fn(async () => linked);
+    const uploadAttachment = vi.fn();
+    const document = file('notes.txt', 'local file', 'text/plain');
 
-    await expect(createChatMessageAttachment(document, { uploadAttachment })).resolves.toBe(uploaded);
-    expect(uploadAttachment).toHaveBeenCalledWith({
-      name: 'guide.pdf',
-      type: 'application/pdf',
-      data: expect.any(Uint8Array),
-    });
+    await expect(createChatMessageAttachment(document, { linkAttachment, uploadAttachment })).resolves.toBe(linked);
+    expect(linkAttachment).toHaveBeenCalledWith(document);
+    expect(uploadAttachment).not.toHaveBeenCalled();
   });
 
-  it('uploads images as runtime-managed assets independently of the active model', async () => {
+  it('stores only pathless clipboard images as runtime-managed bytes', async () => {
     const bytes = pngBytes();
     const uploaded: RuntimeStoredMessageAttachment = {
       id: 'attachment_1',
@@ -49,10 +34,11 @@ describe('chat attachments', () => {
       type: 'image/png',
       size: bytes.byteLength,
     };
+    const linkAttachment = vi.fn(async () => null);
     const uploadAttachment = vi.fn(async () => uploaded);
     const image = new File([bytes], 'diagram.png', { type: 'image/png' });
 
-    await expect(createChatMessageAttachment(image, { uploadAttachment })).resolves.toBe(uploaded);
+    await expect(createChatMessageAttachment(image, { linkAttachment, uploadAttachment })).resolves.toBe(uploaded);
     expect(uploadAttachment).toHaveBeenCalledWith({
       name: 'diagram.png',
       type: 'image/png',
@@ -60,8 +46,20 @@ describe('chat attachments', () => {
     });
   });
 
+  it('does not copy a non-image file when no trusted local path is available', async () => {
+    const linkAttachment = vi.fn(async () => null);
+    const uploadAttachment = vi.fn();
+
+    await expect(createChatMessageAttachment(
+      file('notes.txt', 'clipboard text', 'text/plain'),
+      { linkAttachment, uploadAttachment },
+    )).rejects.toThrow('无法获取该文件的本地路径');
+    expect(uploadAttachment).not.toHaveBeenCalled();
+  });
+
   it('formats compact file type labels from extension or MIME type', () => {
     expect(formatAttachmentTypeLabel('guide.PDF', '')).toBe('PDF');
+    expect(formatAttachmentTypeLabel('notes.txt', '')).toBe('TXT');
     expect(formatAttachmentTypeLabel('notes', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('DOCX');
     expect(formatAttachmentTypeLabel('attachment', 'application/octet-stream')).toBe('文件');
   });

@@ -12,7 +12,7 @@ import type {
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { ArrowDown, Bug, Hammer, SearchCode, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import setsunaAppIconUrl from '../../shared/assets/setsuna-app.png';
 import type {
@@ -23,7 +23,6 @@ import type {
   ConversationOverviewVisibility,
 } from '../../app/types.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
   DesktopReviewLoadOptions,
@@ -72,40 +71,6 @@ import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from './markdown/MarkdownViewportProvider.js';
 import { SkillReferenceCatalogProvider } from './skills/SkillReference.js';
-
-type StarterSuggestion = {
-  accent: 'blue' | 'green' | 'orange' | 'purple';
-  icon: LucideIcon;
-  labelKey: MessageKey;
-  promptKey: MessageKey;
-};
-
-const starterSuggestions: StarterSuggestion[] = [
-  {
-    accent: 'blue',
-    icon: SearchCode,
-    labelKey: 'chat.starter.explore',
-    promptKey: 'chat.starter.explorePrompt',
-  },
-  {
-    accent: 'purple',
-    icon: Hammer,
-    labelKey: 'chat.starter.build',
-    promptKey: 'chat.starter.buildPrompt',
-  },
-  {
-    accent: 'green',
-    icon: ShieldCheck,
-    labelKey: 'chat.starter.review',
-    promptKey: 'chat.starter.reviewPrompt',
-  },
-  {
-    accent: 'orange',
-    icon: Bug,
-    labelKey: 'chat.starter.fix',
-    promptKey: 'chat.starter.fixPrompt',
-  },
-];
 
 export function ChatWorkspace({
   activeTurnId,
@@ -442,7 +407,7 @@ export function ChatWorkspace({
             <MarkdownViewportProvider scrollRef={scrollRef}>
               <div className="chat-content-frame" ref={contentRef}>
                 {showEmptyStarter ? (
-                  <ChatStarter composer={composer(true)} modelSetupNotice={modelSetupNotice} title={starterTitle} onSelectSuggestion={onDraftChange} />
+                  <ChatStarter composer={composer(true)} modelSetupNotice={modelSetupNotice} title={starterTitle} />
                 ) : (
                   <StreamingScrollPinProvider key={currentThread?.id ?? 'no-thread'}>
                     <SkillReferenceCatalogProvider skills={skills}>
@@ -565,9 +530,7 @@ export function ChatWorkspace({
   );
 }
 
-function ChatStarter({ composer, modelSetupNotice, title, onSelectSuggestion }: { composer: ReactNode; modelSetupNotice?: ReactNode; title: string; onSelectSuggestion: (prompt: string) => void }) {
-  const { t } = useI18n();
-
+function ChatStarter({ composer, modelSetupNotice, title }: { composer: ReactNode; modelSetupNotice?: ReactNode; title: string }) {
   return (
     <div className="chat-starter">
       <div className="chat-starter__intro">
@@ -576,17 +539,6 @@ function ChatStarter({ composer, modelSetupNotice, title, onSelectSuggestion }: 
           <h1>{title}</h1>
         </div>
         {modelSetupNotice}
-        <div className="chat-starter__suggestions" role="group" aria-label={t('chat.starter.suggestions')}>
-          {starterSuggestions.map((suggestion) => {
-            const Icon = suggestion.icon;
-            return (
-              <button key={suggestion.labelKey} className={`chat-starter-suggestion chat-starter-suggestion--${suggestion.accent}`} type="button" onClick={() => onSelectSuggestion(t(suggestion.promptKey))}>
-                <Icon size={16} strokeWidth={1.8} aria-hidden="true" />
-                <span>{t(suggestion.labelKey)}</span>
-              </button>
-            );
-          })}
-        </div>
       </div>
       {composer}
     </div>

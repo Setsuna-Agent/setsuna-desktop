@@ -2,6 +2,7 @@ import {
   cloneRuntimeSkillReferences,
   cloneRuntimeThreadGoal,
   isRuntimeInlineMessageAttachment,
+  isRuntimeRasterImageMimeType,
   isRuntimeStoredMessageAttachment,
   normalizeRuntimeMessageProviderMetadata,
   type RuntimeContextCompactionNotice,
@@ -397,7 +398,9 @@ function estimateMessageTokens(message: RuntimeMessage): number {
   // the transcript, but model adapters deliberately omit them from requests. Counting
   // their Base64 payload here would immediately trigger a false context compaction.
   const attachmentTokens = modelVisibleAttachments(message).reduce((total, attachment) => {
-    if (attachment.type.startsWith('image/')) {
+    if (isRuntimeStoredMessageAttachment(attachment)
+      ? isRuntimeRasterImageMimeType(attachment.type)
+      : attachment.type.startsWith('image/')) {
       return total + APPROX_MODEL_IMAGE_TOKENS
         + estimateTextTokens(`${attachment.name} ${attachment.type} ${attachment.size}`);
     }

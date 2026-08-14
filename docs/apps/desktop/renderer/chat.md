@@ -79,7 +79,7 @@ Active turn 时普通提交默认排队；显式立即发送才尝试 steer。Go
 - `useChatComposerModeController.ts`：Goal、thinking、model/usage view state 与 send options。
 - `ChatComposerFooter.tsx`：命令入口、thinking、审批策略、模式徽标、模型选择与 send/stop/queue 主操作的纯展示组合。
 - `ChatComposerOverlays.tsx`：mention、slash 和 usage 浮层的纯展示组合。
-- `chatAttachments.ts` / `chatImageAttachments.ts`：附件选择、上传、清理。
+- `chatAttachments.ts` / `chatImageAttachments.ts`：本地文件引用、无路径图片托管与清理。
 - `chatCommandUtils.ts`：slash/command 解析。
 - `chatComposerCommandState.ts`：mention/slash visibility、dismiss 和 cursor-local query 的纯状态模型。
 - `useChatCommandController.ts`：菜单 focus、键盘导航、光标监听和 workspace 搜索生命周期。
@@ -187,10 +187,11 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 
 - Workspace mention 使用明确 parser，不从渲染后的 Markdown 反推。
 - 文件打开仍走 main/workspace API。
-- 图片统一上传为 runtime 管理 asset；composer 仅保留不持久化的本地预览 URL，不根据当前模型能力来回改写附件类型。
-- 原生视觉模型由 runtime 在 provider 请求边界临时取得受管图片字节；非视觉模型只接收附件 ID、元数据和只读工具上下文。
-- 已发送的托管图片通过带 thread 归属校验的窄 bridge 按需读取，并继续使用消息图片画廊预览；本地路径和 Base64 不进入 renderer 状态或线程事件。
-- Thread/project 切换时迟到 upload 不得附加到新 composer。
+- 文件选择器中的本地文件通过 preload 从 Electron `File` 提取可信路径并登记为 runtime 引用；renderer 和线程事件只保留不透明 attachment ID，不读取或复制文件字节。
+- runtime 将被引用的原文件作为该 turn 的精确只读 root 暴露给 Agent；文件移动或删除后引用变为不可用，不会生成第二份副本。
+- 原生视觉模型由 runtime 在 provider 请求边界临时读取并复验本地图片；剪贴板截图等没有本地路径的图片才写入受管 attachment store。
+- 已发送图片通过带 thread 归属校验的窄 bridge 按需读取并继续使用消息图片画廊预览；Base64 不进入 renderer 持久状态或线程事件。
+- Thread/project 切换时迟到的引用登记或图片存储不得附加到新 composer。
 - 仅附件输入也是合法输入。
 
 ## Artifacts 与 Plugin usage

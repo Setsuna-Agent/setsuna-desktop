@@ -36,7 +36,6 @@ import { ChatGoalStatusBar } from './composer/ChatGoalStatusBar.js';
 import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
-import { chatAttachmentAccept } from './composer/chatAttachments.js';
 import { parseMentionCommand, parseSlashCommand } from './composer/chatCommandUtils.js';
 import { createComposerDraftSyncPlan } from './composer/chatComposerDraftSync.js';
 import type { ChatComposerSendOptions } from './composer/chatComposerSendOptions.js';
@@ -625,7 +624,6 @@ export function ChatComposer({
       <input
         ref={fileInputRef}
         type="file"
-        accept={chatAttachmentAccept}
         multiple
         className="chat-sender__file-input"
         onChange={(event) => {

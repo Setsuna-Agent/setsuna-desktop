@@ -1,28 +1,21 @@
 import {
-  RUNTIME_FILE_ATTACHMENT_EXTENSIONS,
-  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
-  RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
+  isRuntimeRasterImageMimeType,
   type DesktopRuntimeClient,
   type RuntimeMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { maxChatImageAttachments, maxChatImageSize } from './chatImageAttachments.js';
+import { maxChatImageAttachments } from './chatImageAttachments.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export const maxChatAttachments = maxChatImageAttachments;
-export const chatAttachmentAccept = [
-  'image/*',
-  ...RUNTIME_FILE_ATTACHMENT_EXTENSIONS,
-  ...RUNTIME_FILE_ATTACHMENT_MIME_TYPES,
-].join(',');
 
 const attachmentTypeLabelsByMime: Readonly<Record<string, string>> = {
   'application/pdf': 'PDF',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
 };
 
-export type ChatComposerAttachmentStatus = 'uploading' | 'ready' | 'error' | 'removing';
+export type ChatComposerAttachmentStatus = 'preparing' | 'ready' | 'error' | 'removing';
 
 export type ChatComposerAttachmentItem = {
   key: string;
@@ -36,24 +29,18 @@ export type ChatComposerAttachmentItem = {
   error?: string;
 };
 
-export function chatAttachmentValidationError(file: File, t: Translate = defaultTranslate): string | null {
-  if (!file.size) return t('chat.composer.fileEmpty');
-  if (file.type.startsWith('image/')) {
-    if (file.size > maxChatImageSize) return t('chat.composer.imageTooLarge');
-    return null;
-  }
-  if (!isSupportedDocumentName(file.name)) return t('chat.composer.fileUnsupported');
-  if (file.size > RUNTIME_FILE_ATTACHMENT_MAX_BYTES) return t('chat.composer.documentTooLarge');
-  return null;
-}
-
 export async function createChatMessageAttachment(
   file: File,
-  client: Pick<DesktopRuntimeClient, 'uploadAttachment'>,
+  client: Pick<DesktopRuntimeClient, 'linkAttachment' | 'uploadAttachment'>,
   t: Translate = defaultTranslate,
 ): Promise<RuntimeMessageAttachment> {
-  const validationError = chatAttachmentValidationError(file, t);
-  if (validationError) throw new Error(validationError);
+  const linkedAttachment = await client.linkAttachment(file);
+  if (linkedAttachment) return linkedAttachment;
+  if (!isChatPreviewableImageType(file.type)) {
+    throw new Error(t('chat.composer.fileLinkUnavailable'));
+  }
+  // Clipboard-created images do not have an Electron-backed local path, so they
+  // remain the only File objects that need managed byte storage.
   return client.uploadAttachment({
     name: file.name,
     type: file.type,
@@ -62,15 +49,17 @@ export async function createChatMessageAttachment(
 }
 
 export function formatAttachmentTypeLabel(name: string, mimeType: string, t: Translate = defaultTranslate): string {
-  const normalizedName = name.trim().toLowerCase();
-  const extension = RUNTIME_FILE_ATTACHMENT_EXTENSIONS.find((value) => normalizedName.endsWith(value));
-  if (extension) return extension.slice(1).toUpperCase();
+  const normalizedName = name.trim();
+  const extensionStart = normalizedName.lastIndexOf('.');
+  if (extensionStart > 0 && extensionStart < normalizedName.length - 1) {
+    const extension = normalizedName.slice(extensionStart + 1);
+    if (extension.length <= 12 && /^[a-z\d][a-z\d+_-]*$/iu.test(extension)) return extension.toUpperCase();
+  }
 
   const normalizedMimeType = mimeType.split(';', 1)[0]?.trim().toLowerCase() ?? '';
   return attachmentTypeLabelsByMime[normalizedMimeType] ?? t('chat.composer.fileType');
 }
 
-function isSupportedDocumentName(name: string): boolean {
-  const normalized = name.trim().toLowerCase();
-  return RUNTIME_FILE_ATTACHMENT_EXTENSIONS.some((extension) => normalized.endsWith(extension));
+export function isChatPreviewableImageType(mimeType: string): boolean {
+  return isRuntimeRasterImageMimeType(mimeType.trim().toLowerCase());
 }

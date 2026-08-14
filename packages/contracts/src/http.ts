@@ -125,6 +125,7 @@ export type RuntimeThreadGoalClearResponse = {
 };
 
 export type DesktopRuntimeClient = {
+  linkAttachment(file: File): Promise<RuntimeStoredMessageAttachment | null>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   deleteAttachment(assetId: string): Promise<RuntimeAttachmentDeleteResponse>;
   listThreads(query?: ThreadQuery): Promise<ThreadList>;

@@ -1,13 +1,17 @@
-export const RUNTIME_FILE_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
-
-export const RUNTIME_FILE_ATTACHMENT_EXTENSIONS = ['.pdf', '.docx'] as const;
-
-export const RUNTIME_FILE_ATTACHMENT_MIME_TYPES = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+export const RUNTIME_RASTER_IMAGE_MIME_TYPES = [
+  'image/gif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
 ] as const;
 
-export type RuntimeFileAttachmentMimeType = typeof RUNTIME_FILE_ATTACHMENT_MIME_TYPES[number];
+export const RUNTIME_LOCAL_ATTACHMENT_LINK_PATH = '/internal/attachments/link' as const;
+
+export type RuntimeRasterImageMimeType = typeof RUNTIME_RASTER_IMAGE_MIME_TYPES[number];
+
+export function isRuntimeRasterImageMimeType(value: string): value is RuntimeRasterImageMimeType {
+  return (RUNTIME_RASTER_IMAGE_MIME_TYPES as readonly string[]).includes(value);
+}
 
 type RuntimeMessageAttachmentBase = {
   id: string;
@@ -54,6 +58,12 @@ export type RuntimeAttachmentUploadInput = {
   name: string;
   type: string;
   data: Uint8Array;
+};
+
+/** Main-only input produced from Electron's trusted path for a renderer-selected File. */
+export type RuntimeAttachmentLinkInput = {
+  path: string;
+  type: string;
 };
 
 export type RuntimeAttachmentDeleteResponse = {

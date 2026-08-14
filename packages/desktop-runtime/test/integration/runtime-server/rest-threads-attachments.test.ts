@@ -1,4 +1,5 @@
-import { mkdtemp } from 'node:fs/promises';
+import { RUNTIME_LOCAL_ATTACHMENT_LINK_PATH } from '@setsuna-desktop/contracts';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -89,17 +90,22 @@ describe('runtime server REST threads and attachments', () => {
       await expect(invalid.json()).resolves.toMatchObject({ code: 'attachment_unsupported' });
     });
   
-  it('claims stored documents for a turn and exposes only a read-only path to the model', async () => {
+  it('claims a linked local file for a turn and exposes its read-only source path to the agent', async () => {
       const capture = await createOpenAiCaptureServer();
       try {
         await harness.configureOpenAiProvider('attachment-provider', capture.baseUrl);
-        const query = new URLSearchParams({ name: 'guide.pdf', type: 'application/pdf' });
-        const upload = await fetch(`${harness.baseUrl}/v1/attachments?${query}`, {
+        const sourceDirectory = path.join(harness.runtimeDataDir, 'local-files');
+        const sourcePath = path.join(sourceDirectory, 'notes.txt');
+        await mkdir(sourceDirectory, { recursive: true });
+        await writeFile(sourcePath, 'plugin-readable local file');
+        const canonicalSourcePath = await realpath(sourcePath);
+        const link = await fetch(`${harness.baseUrl}${RUNTIME_LOCAL_ATTACHMENT_LINK_PATH}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/octet-stream' },
-          body: Buffer.from('%PDF-1.7\nplugin-readable attachment'),
+          headers: { Authorization: `Bearer ${harness.token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: sourcePath, type: 'text/plain' }),
         });
-        const attachment = await upload.json();
+        expect(link.status).toBe(201);
+        const attachment = await link.json();
         const thread = await harness.runtimeFetch('/v1/threads', {
           method: 'POST',
           body: JSON.stringify({ title: 'Attachment context' }),
@@ -116,12 +122,13 @@ describe('runtime server REST threads and attachments', () => {
           (item) => item.messages.some((message) => message.turnId === started.turnId && message.role === 'user'),
         );
   
-        expect(serializedMessages).toContain('Runtime-managed user attachments for this thread');
-        expect(serializedMessages).toContain('guide.pdf');
+        expect(serializedMessages).toContain('User attachments available to this thread');
+        expect(serializedMessages).toContain('notes.txt');
+        expect(serializedMessages).toContain(canonicalSourcePath);
         expect(serializedMessages).toContain('read-only');
-        expect(serializedMessages).not.toContain('plugin-readable attachment');
+        expect(serializedMessages).not.toContain('plugin-readable local file');
         expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
-          .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'guide.pdf' })] });
+          .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'notes.txt' })] });
       } finally {
         await capture.close();
       }
@@ -152,7 +159,7 @@ describe('runtime server REST threads and attachments', () => {
         const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for image attachment model request');
         const serializedRequest = JSON.stringify(request);
 
-        expect(serializedRequest).toContain('Runtime-managed user attachments for this thread');
+        expect(serializedRequest).toContain('User attachments available to this thread');
         expect(serializedRequest).toContain('diagram.png');
         expect(serializedRequest).not.toContain('input_image');
         expect(serializedRequest).not.toContain('image_url');

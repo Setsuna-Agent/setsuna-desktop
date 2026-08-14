@@ -198,7 +198,15 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
-  it('uses the binary bridge for uploads and the authenticated request bridge for pending deletes', async () => {
+  it('uses narrow bridges for local links, managed uploads, and pending deletes', async () => {
+    const linkAttachment = vi.fn(async () => ({
+      id: 'attachment_link_1',
+      assetId: 'attachment_link_1',
+      source: 'runtime' as const,
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 5,
+    }));
     const uploadAttachment = vi.fn(async () => ({
       id: 'attachment_1',
       assetId: 'attachment_1',
@@ -210,14 +218,17 @@ describe('desktop runtime client advanced thread methods', () => {
     const request = vi.fn(async () => ({ deleted: true }));
     vi.stubGlobal('window', {
       setsunaDesktop: {
-        runtime: { request, uploadAttachment, startSse: vi.fn(() => vi.fn()) },
+        runtime: { linkAttachment, request, uploadAttachment, startSse: vi.fn(() => vi.fn()) },
       },
     });
     const client = createDesktopRuntimeClient();
+    const file = new File(['notes'], 'notes.txt', { type: 'text/plain' });
     const input = { name: 'guide.pdf', type: 'application/pdf', data: new Uint8Array([1, 2, 3]) };
 
+    await expect(client.linkAttachment(file)).resolves.toMatchObject({ assetId: 'attachment_link_1' });
     await expect(client.uploadAttachment(input)).resolves.toMatchObject({ assetId: 'attachment_1' });
     await expect(client.deleteAttachment('attachment / 1')).resolves.toEqual({ deleted: true });
+    expect(linkAttachment).toHaveBeenCalledWith(file);
     expect(uploadAttachment).toHaveBeenCalledWith(input);
     expect(request).toHaveBeenCalledWith({ path: '/v1/attachments/attachment%20%2F%201', method: 'DELETE' });
   });

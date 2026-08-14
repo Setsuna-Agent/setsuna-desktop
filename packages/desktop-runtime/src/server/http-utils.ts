@@ -29,17 +29,10 @@ export async function readBody<T = unknown>(request: IncomingMessage, fallback?:
   }
 }
 
-export async function readBinaryBody(request: IncomingMessage, maxBytes: number): Promise<Buffer> {
-  const declaredLength = Number(request.headers['content-length']);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    throw new RuntimeHttpError(413, 'Attachment is too large', 'attachment_too_large');
-  }
+export async function readBinaryBody(request: IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
-  let total = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    total += buffer.byteLength;
-    if (total > maxBytes) throw new RuntimeHttpError(413, 'Attachment is too large', 'attachment_too_large');
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);

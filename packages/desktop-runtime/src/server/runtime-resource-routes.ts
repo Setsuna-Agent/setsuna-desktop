@@ -1,6 +1,8 @@
 import {
-  RUNTIME_FILE_ATTACHMENT_MAX_BYTES,
+  RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
   isRuntimeStoredMessageAttachment,
+  isRuntimeRasterImageMimeType,
+  type RuntimeAttachmentLinkInput,
 } from '@setsuna-desktop/contracts';
 import { readFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -9,7 +11,7 @@ import { RuntimeAttachmentValidationError } from '../ports/attachment-store.js';
 import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { detectSafeImageMimeType } from '../utils/safe-image.js';
 import { RuntimeHttpError } from './http-error.js';
-import { decodeRuntimeId, readBinaryBody, sendJson } from './http-utils.js';
+import { decodeRuntimeId, readBinaryBody, readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
 
 export async function handleRuntimeResourceRequest(
@@ -18,19 +20,29 @@ export async function handleRuntimeResourceRequest(
   response: ServerResponse,
   url: URL,
 ): Promise<boolean> {
+  if (request.method === 'POST' && url.pathname === RUNTIME_LOCAL_ATTACHMENT_LINK_PATH) {
+    const input = await readBody<Partial<RuntimeAttachmentLinkInput>>(request);
+    try {
+      sendJson(response, 201, await runtime.attachmentStore.link({
+        path: typeof input.path === 'string' ? input.path : '',
+        type: typeof input.type === 'string' ? input.type : '',
+      }));
+    } catch (error) {
+      if (!(error instanceof RuntimeAttachmentValidationError)) throw error;
+      throw new RuntimeHttpError(400, error.message, error.code);
+    }
+    return true;
+  }
+
   if (request.method === 'POST' && url.pathname === '/v1/attachments') {
     const name = url.searchParams.get('name') ?? '';
     const type = url.searchParams.get('type') ?? '';
-    const data = await readBinaryBody(request, RUNTIME_FILE_ATTACHMENT_MAX_BYTES);
+    const data = await readBinaryBody(request);
     try {
       sendJson(response, 201, await runtime.attachmentStore.create({ name, type, data }));
     } catch (error) {
       if (!(error instanceof RuntimeAttachmentValidationError)) throw error;
-      const statusCode = error.code === 'attachment_too_large'
-        ? 413
-        : error.code === 'attachment_unsupported'
-          ? 415
-          : 400;
+      const statusCode = error.code === 'attachment_unsupported' ? 415 : 400;
       throw new RuntimeHttpError(statusCode, error.message, error.code);
     }
     return true;
@@ -46,7 +58,7 @@ export async function handleRuntimeResourceRequest(
       .find((item) => (
         isRuntimeStoredMessageAttachment(item)
         && item.assetId === assetId
-        && item.type.startsWith('image/')
+        && isRuntimeRasterImageMimeType(item.type)
       ));
     if (!attachment) {
       throw new RuntimeHttpError(404, 'Image attachment not found', 'attachment_not_found');
@@ -59,8 +71,7 @@ export async function handleRuntimeResourceRequest(
     const mimeType = data ? detectSafeImageMimeType(data) : null;
     if (!data
       || !data.byteLength
-      || data.byteLength !== attachment.size
-      || data.byteLength > RUNTIME_FILE_ATTACHMENT_MAX_BYTES
+      || data.byteLength !== resolved.attachment.size
       || mimeType !== attachment.type) {
       throw new RuntimeHttpError(415, 'Image attachment is unavailable', 'attachment_invalid');
     }

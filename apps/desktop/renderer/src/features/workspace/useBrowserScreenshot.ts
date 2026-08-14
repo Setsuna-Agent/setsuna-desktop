@@ -71,8 +71,6 @@ export function browserScreenshotOutcomeFeedback(
       return { tone: 'warning', message: t('workspace.browser.screenshot.unsupported') };
     case 'limit-reached':
       return { tone: 'warning', message: t('workspace.browser.screenshot.limitReached') };
-    case 'too-large':
-      return { tone: 'warning', message: t('workspace.browser.screenshot.tooLarge') };
     case 'unavailable':
       return { tone: 'warning', message: t('workspace.browser.screenshot.unavailable') };
   }

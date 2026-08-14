@@ -1,6 +1,7 @@
 import {
   isRuntimeGeneratedMessageAttachment,
   isRuntimeInlineMessageAttachment,
+  isRuntimeRasterImageMimeType,
   isRuntimeStoredMessageAttachment,
   type RuntimeGeneratedMessageAttachment,
   type RuntimeInlineMessageAttachment,
@@ -23,7 +24,9 @@ export function ChatMessageAttachments({
   const { t } = useI18n();
   const threadId = useChatThreadId();
   const imageAttachments = attachments.filter((attachment): attachment is RuntimeGeneratedMessageAttachment | RuntimeInlineMessageAttachment | RuntimeStoredMessageAttachment => (
-    attachment.type.startsWith('image/')
+    (isRuntimeStoredMessageAttachment(attachment)
+      ? isRuntimeRasterImageMimeType(attachment.type)
+      : attachment.type.startsWith('image/'))
     && (
       isRuntimeGeneratedMessageAttachment(attachment)
       || isRuntimeInlineMessageAttachment(attachment)

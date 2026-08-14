@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises';
+import { access, mkdir, readFile, realpath, truncate, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FileAttachmentStore } from '../../../src/adapters/store/file-attachment-store.js';
@@ -8,6 +8,41 @@ import type { IdGenerator } from '../../../src/ports/id-generator.js';
 import { createTestTempDirectory } from '../../support/test-temp-directory.js';
 
 describe('file attachment store', () => {
+  it('links a local file in place without copying it into attachment storage', async () => {
+    const fixture = await attachmentStoreFixture();
+    const sourceDirectory = path.join(fixture.dataDir, 'user-files');
+    const sourcePath = path.join(sourceDirectory, 'large-notes.txt');
+    await mkdir(sourceDirectory, { recursive: true });
+    await writeFile(sourcePath, 'local source');
+    await truncate(sourcePath, 24 * 1024 * 1024);
+
+    const attachment = await fixture.store.link({ path: sourcePath, type: 'text/plain' });
+    expect(attachment).toMatchObject({
+      source: 'runtime',
+      name: 'large-notes.txt',
+      type: 'text/plain',
+      size: 24 * 1024 * 1024,
+    });
+    await expect(access(path.join(
+      fixture.dataDir,
+      'attachments',
+      'files',
+      attachment.assetId,
+    ))).rejects.toThrow();
+
+    await fixture.store.claimForThread('thread_1', [attachment]);
+    const reloadedStore = new FileAttachmentStore(fixture.dataDir, fixture.clock, new SequentialIdGenerator());
+    const [resolved] = await reloadedStore.resolveForThread('thread_1', [attachment]);
+    const canonicalSourcePath = await realpath(sourcePath);
+    expect(resolved).toMatchObject({
+      absolutePath: canonicalSourcePath,
+      readableRoot: canonicalSourcePath,
+    });
+
+    await reloadedStore.releaseThread('thread_1');
+    await expect(access(sourcePath)).resolves.toBeUndefined();
+  });
+
   it('claims uploaded documents for a thread and keeps fork references until the last thread is released', async () => {
     const fixture = await attachmentStoreFixture();
     const bytes = Buffer.from('%PDF-1.7\nattachment body');
