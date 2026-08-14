@@ -5,7 +5,6 @@ import { createModelStreamTextCollector } from '../../utils/model-stream-text-co
 
 const TITLE_SOURCE_MAX_LENGTH = 6_000;
 const TITLE_GENERATION_TIMEOUT_MS = 12_000;
-export const THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS = 512;
 const GENERIC_THREAD_TITLE_KEYS = new Set([
   DEFAULT_THREAD_TITLE.toLowerCase(),
   'new chat',
@@ -34,7 +33,6 @@ export type GeneratedThreadTitle = {
 
 export async function generateThreadTitle({
   attachmentCount,
-  maxOutputTokens = THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
   model,
   modelClient,
   providerId,
@@ -42,7 +40,6 @@ export async function generateThreadTitle({
   userContent,
 }: {
   attachmentCount: number;
-  maxOutputTokens?: number;
   model: string;
   modelClient: ModelClient;
   providerId?: string;
@@ -51,6 +48,7 @@ export async function generateThreadTitle({
 }): Promise<GeneratedThreadTitle> {
   const titleSignal = AbortSignal.any([signal, AbortSignal.timeout(TITLE_GENERATION_TIMEOUT_MS)]);
   const output = createModelStreamTextCollector();
+  let finishReason: string | undefined;
   let usage: RuntimeUsage | undefined;
 
   for await (const event of modelClient.stream({
@@ -58,17 +56,24 @@ export async function generateThreadTitle({
     ...(providerId ? { providerId } : {}),
     messages: titlePromptMessages(userContent, attachmentCount),
     toolChoice: 'none',
-    maxOutputTokens,
     thinking: false,
     signal: titleSignal,
   })) {
     output.consume(event);
+    if (event.type === 'done') finishReason = event.finishReason;
     if (event.type === 'usage' || event.type === 'token_count') {
       usage = event.usage;
     }
   }
 
-  return { title: normalizeGeneratedThreadTitle(output.text()), usage };
+  // Different reasoning providers account for hidden tokens differently. A
+  // title-specific maxOutputTokens value can therefore exhaust the response
+  // before the visible title. Keep the provider's configured model limit and
+  // reject any response that was nevertheless truncated.
+  const title = isLengthFinishReason(finishReason)
+    ? null
+    : normalizeGeneratedThreadTitle(output.text());
+  return { title, usage };
 }
 
 export function normalizeGeneratedThreadTitle(value: string): string | null {
@@ -89,10 +94,19 @@ export function normalizeGeneratedThreadTitle(value: string): string | null {
   // 兼容端点可能把 reasoning 混在文本里；若输出预算耗尽在未闭合的思考块中，
   // 该内容不是标题，必须保留首条消息 fallback。
   if (/<think>/iu.test(candidate)) return null;
-  candidate = Array.from(candidate).slice(0, THREAD_TITLE_MAX_LENGTH).join('').trim();
+  // A verbose answer is not a title. Do not turn its first 48 characters into
+  // one; let the deterministic first-message title remain in place instead.
+  if (Array.from(candidate).length > THREAD_TITLE_MAX_LENGTH) return null;
 
   if (candidate.length < 2 || GENERIC_THREAD_TITLE_KEYS.has(candidate.toLowerCase())) return null;
   return candidate;
+}
+
+function isLengthFinishReason(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'length'
+    || normalized === 'max_tokens'
+    || normalized === 'max_output_tokens';
 }
 
 function titlePromptMessages(userContent: string, attachmentCount: number): RuntimeMessage[] {

@@ -47,11 +47,15 @@ export function approvalReviewPolicy(): string {
     '- If missing context could materially change whether an action is high or critical, deny and explain the missing fact concisely.',
     '',
     '# Output format',
-    '- Return exactly one JSON object with keys outcome, riskLevel, userAuthorization, and rationale.',
+    '- Return exactly one JSON object with keys outcome, riskLevel, userAuthorization, rationale, and potentialImpact.',
     '- outcome must be allow or deny.',
     '- riskLevel must be low, medium, high, or critical.',
     '- userAuthorization must be unknown, low, medium, or high.',
-    '- Keep rationale concise and specific, using the language of the latest trusted user message when clear.',
+    '- rationale must concisely explain why the action received this decision.',
+    '- potentialImpact must concisely explain the material side effects the user should consider before approving the action.',
+    '- Use the language of the latest trusted user message when clear.',
+    '- Never quote credentials, secrets, full command payloads, or other sensitive argument values in rationale or potentialImpact.',
     '- Do not return Markdown or any text outside the JSON object.',
+    '- Example shape: {"outcome":"deny","riskLevel":"high","userAuthorization":"low","rationale":"...","potentialImpact":"..."}',
   ].join('\n');
 }

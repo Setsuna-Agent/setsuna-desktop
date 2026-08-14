@@ -11,6 +11,7 @@ import pycharmIconUrl from './assets/pycharm.svg';
 import riderIconUrl from './assets/rider.svg';
 import rubymineIconUrl from './assets/rubymine.svg';
 import sublimeTextIconUrl from './assets/sublime-text.svg';
+import traeIconUrl from './assets/trae.svg';
 import visualStudioIconUrl from './assets/visual-studio.svg';
 import vscodeIconUrl from './assets/vscode.svg';
 import webstormIconUrl from './assets/webstorm.svg';
@@ -31,6 +32,7 @@ export const workspaceAppIconAssets: Readonly<Record<string, WorkspaceAppIconAss
   vscode: { src: vscodeIconUrl },
   'vscode-insiders': { src: vscodeIconUrl },
   cursor: monochromeIcon(cursorIconUrl),
+  trae: { src: traeIconUrl },
   windsurf: monochromeIcon(windsurfIconUrl),
   zed: { src: zedIconUrl },
   'sublime-text': { src: sublimeTextIconUrl },

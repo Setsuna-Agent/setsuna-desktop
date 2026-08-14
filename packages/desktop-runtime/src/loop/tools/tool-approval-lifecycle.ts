@@ -58,6 +58,7 @@ export async function requestToolApproval({
   reviewer = 'user',
   signal,
 }: RequestToolApprovalInput): Promise<ResolvedToolApprovalAnswer> {
+  let fellBackFromAutomaticReview = false;
   if (
     reviewer === 'automatic'
     && automaticReviewer
@@ -75,8 +76,21 @@ export async function requestToolApproval({
       signal,
     });
     if (automatic) return automatic;
+    fellBackFromAutomaticReview = true;
   }
-  return requestUserApproval({ approvalGate, events, request, signal });
+  return requestUserApproval({
+    approvalGate,
+    events,
+    request: fellBackFromAutomaticReview
+      ? {
+          ...request,
+          // A manual override of automatic review is intentionally scoped to
+          // this exact action; it must not create reusable permission grants.
+          availableDecisions: [{ type: 'approve' }, { type: 'reject' }],
+        }
+      : request,
+    signal,
+  });
 }
 
 async function requestUserApproval({
@@ -167,6 +181,7 @@ async function requestAutomaticApproval({
   }
 
   const technicalFailure = assessment.status === 'failed' || assessment.status === 'timed_out';
+  const requiresManualReview = assessment.status === 'denied';
   const decision: RuntimeApprovalDecision = assessment.status === 'allowed' ? 'approve' : 'reject';
   const resolution: ApprovalResolutionMetadata = {
     source: 'automatic',
@@ -184,7 +199,7 @@ async function requestAutomaticApproval({
     resolution,
   );
 
-  if (technicalFailure) return null;
+  if (technicalFailure || requiresManualReview) return null;
   if (interruptTurn) {
     throw new TurnCancelledError(
       `Automatic approval review interrupted this turn after repeated denials: ${assessment.rationale}`,

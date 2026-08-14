@@ -12,6 +12,7 @@
   --desktop-agent-mac-close-center: 23px;
   --desktop-agent-row-action-inset: 6px;
   --desktop-agent-row-action-size: 22px;
+  --desktop-agent-row-height: 32px;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -110,16 +111,15 @@
 
 .desktop-agent-sidebar__project-list {
   display: grid;
-  gap: 4px;
   min-width: 0;
-  padding: 0 8px 8px;
+  padding: 0 8px;
 }
 
 .app-sidebar__list {
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   padding: 0 8px 4px;
   overflow: visible;
 }
@@ -129,7 +129,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 30px;
+  height: var(--desktop-agent-row-height);
   padding: 0 15px 0 var(--desktop-agent-content-start);
   color: color-mix(in srgb, var(--app-sidebar-text-secondary) 72%, transparent);
   font-size: 12px;
@@ -324,7 +324,7 @@
 
 .project-list {
   display: grid;
-  gap: 2px;
+  gap: 0;
   width: 100%;
   min-width: 0;
 }
@@ -334,7 +334,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 32px;
+  min-height: var(--desktop-agent-row-height);
   padding: 0 10px;
   border: 1px dashed var(--desktop-agent-divider);
   border-radius: var(--app-radius-md);
@@ -365,24 +365,15 @@
 
 .desktop-agent-project-node {
   display: grid;
-  gap: 1px;
+  gap: 0;
   min-width: 0;
   position: relative;
-}
-
-.desktop-agent-project-node + .desktop-agent-project-node {
-  margin-top: 2px;
-}
-
-.desktop-agent-project-node > .desktop-agent-session-list,
-.desktop-agent-project-node > .desktop-agent-sidebar__empty-session {
-  margin-top: 4px;
 }
 
 .desktop-agent-session-list {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   width: 100%;
   min-width: 0;
 }
@@ -391,7 +382,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 28px;
+  min-height: var(--desktop-agent-row-height);
   padding: 0 6px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   border: 0;
   border-radius: var(--app-radius-md);
@@ -420,7 +411,7 @@
   gap: 0;
   width: 100%;
   min-width: 0;
-  height: 32px;
+  height: var(--desktop-agent-row-height);
   margin-left: 0;
   padding: 0 var(--desktop-agent-row-action-inset) 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   border: 1px solid transparent;
@@ -460,7 +451,7 @@
 .desktop-agent-session.is-active {
   color: var(--app-text);
   border-color: transparent;
-  background: var(--desktop-agent-sidebar-hover-bg);
+  background: var(--desktop-agent-sidebar-active-bg);
 }
 
 .desktop-agent-session:has(.desktop-agent-session__select:focus-visible) {
@@ -568,7 +559,7 @@
   gap: 8px;
   width: 100%;
   min-width: 0;
-  height: 34px;
+  height: var(--desktop-agent-row-height);
   padding: 0 var(--desktop-agent-row-action-inset) 0 calc(
     var(--desktop-agent-leading-center)
     - var(--desktop-agent-row-start)
@@ -657,7 +648,7 @@
 .desktop-agent-sidebar__empty-session {
   display: flex;
   align-items: center;
-  min-height: 28px;
+  min-height: var(--desktop-agent-row-height);
   margin-left: 0;
   padding: 0 8px 0 calc(var(--desktop-agent-text-start) - var(--desktop-agent-row-start));
   color: var(--app-sidebar-text-secondary);

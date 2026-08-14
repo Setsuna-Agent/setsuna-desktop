@@ -13,9 +13,6 @@ import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bu
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { closeTestThreadStores, createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
-import {
-  THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
-} from '../../../src/loop/lifecycle/runtime-thread-title-generator.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
@@ -51,7 +48,7 @@ describe('agent loop thread titles', () => {
     const events = await threadStore.listEvents(thread.id);
     expect(saved?.title).toBe('恢复模型自动生成标题');
     const titleRequest = modelClient.requests.find((request) => request.model === 'current-model');
-    expect(titleRequest?.maxOutputTokens).toBe(THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS);
+    expect(titleRequest?.maxOutputTokens).toBeUndefined();
     expect(events.some((event) => event.type === 'thread.updated' && event.payload.title === '恢复模型自动生成标题')).toBe(true);
     expect(publishedEvents).toContain('thread.updated');
     expect(events.findIndex((event) => event.type === 'thread.updated')).toBeLessThan(events.findIndex((event) => event.type === 'turn.completed'));
@@ -75,10 +72,10 @@ describe('agent loop thread titles', () => {
 
     expect((await threadStore.getThread(thread.id))?.title).toBe('专用模型生成标题');
     expect(modelClient.requests.find((request) => request.toolChoice === 'none')).toMatchObject({
-      maxOutputTokens: 128,
       model: 'title-model',
       providerId: 'title-provider',
     });
+    expect(modelClient.requests.find((request) => request.toolChoice === 'none')?.maxOutputTokens).toBeUndefined();
   });
 
   it('keeps the deterministic fallback when title generation fails', async () => {

@@ -29,7 +29,8 @@ export function RuntimeToolApprovalControl({
   const approvalPending = run.approvalStatus === 'pending'
     || (!run.approvalStatus && run.status === 'pending_approval');
   const showAutomaticReview = assessment?.status === 'failed'
-    || assessment?.status === 'timed_out';
+    || assessment?.status === 'timed_out'
+    || assessment?.status === 'denied';
   const showUserActions = Boolean(
     approvalId
     && run.approvalReviewer !== 'automatic'
@@ -51,6 +52,7 @@ export function RuntimeToolApprovalControl({
             <ApprovalActions
               approvalId={approvalId}
               availableDecisions={run.availableApprovalDecisions}
+              manualRiskOverride={assessment?.status === 'denied'}
               onAnswerApproval={onAnswerApproval}
             />
           )
@@ -66,28 +68,97 @@ function AutomaticApprovalReviewResult({
 }) {
   const { t } = useI18n();
   const assessment = run.approvalReviewAssessment;
-  if (!assessment || (assessment.status !== 'failed' && assessment.status !== 'timed_out')) return null;
+  if (!assessment || assessment.status === 'allowed') return null;
   const status = assessment.status;
-  const label = status === 'timed_out'
-    ? t('toolRun.approvalReview.timedOut')
-    : t('toolRun.approvalReview.failed');
+  const manualReviewPending = status === 'denied'
+    && run.approvalReviewer === 'user'
+    && (run.approvalStatus === 'pending' || run.status === 'pending_approval');
+  const label = status === 'denied'
+    ? t(manualReviewPending
+      ? 'toolRun.approvalReview.manualRequired'
+      : 'toolRun.approvalReview.denied')
+    : status === 'timed_out'
+      ? t('toolRun.approvalReview.timedOut')
+      : t('toolRun.approvalReview.failed');
   const technicalDetail = approvalReviewTechnicalDetail(assessment.rationale);
+  const potentialImpact = status === 'denied'
+    ? approvalReviewPotentialImpact(assessment, t)
+    : '';
 
   return (
     <div
       className={`chat-tool-run__approval-review chat-tool-run__approval-review--${status}`}
-      role="status"
+      role={status === 'denied' ? 'alert' : 'status'}
     >
       <span className="chat-tool-run__approval-review-label">{label}</span>
-      {technicalDetail
+      {status === 'denied'
         ? (
-            <span className="chat-tool-run__approval-review-detail">
-              {t('toolRun.approvalReview.detail', { detail: technicalDetail })}
+            <span className="chat-tool-run__approval-review-details">
+              {assessment.riskLevel
+                ? (
+                    <span>
+                      <strong>{t('toolRun.approvalReview.riskLevel')}</strong>
+                      {approvalReviewRiskLabel(assessment.riskLevel, t)}
+                    </span>
+                  )
+                : null}
+              <span>
+                <strong>{t('toolRun.approvalReview.reason')}</strong>
+                {approvalReviewReason(assessment, t)}
+              </span>
+              <span>
+                <strong>{t('toolRun.approvalReview.potentialImpact')}</strong>
+                {potentialImpact}
+              </span>
             </span>
           )
-        : null}
+        : technicalDetail
+          ? (
+              <span className="chat-tool-run__approval-review-detail">
+                {t('toolRun.approvalReview.detail', { detail: technicalDetail })}
+              </span>
+            )
+          : null}
     </div>
   );
+}
+
+function approvalReviewReason(
+  assessment: NonNullable<RuntimeToolRun['approvalReviewAssessment']>,
+  t: Translate,
+): string {
+  const riskSummary = assessment.riskSummary?.trim();
+  if (riskSummary) return riskSummary;
+
+  const rationale = assessment.rationale.trim();
+  if (rationale && !/^Automatic approval review denied\b/iu.test(rationale)) {
+    return rationale;
+  }
+  return t('toolRun.approvalReview.reasonFallback');
+}
+
+function approvalReviewRiskLabel(
+  riskLevel: NonNullable<NonNullable<RuntimeToolRun['approvalReviewAssessment']>['riskLevel']>,
+  t: Translate,
+): string {
+  if (riskLevel === 'low') return t('toolRun.approvalReview.risk.low');
+  if (riskLevel === 'medium') return t('toolRun.approvalReview.risk.medium');
+  if (riskLevel === 'high') return t('toolRun.approvalReview.risk.high');
+  return t('toolRun.approvalReview.risk.critical');
+}
+
+function approvalReviewPotentialImpact(
+  assessment: NonNullable<RuntimeToolRun['approvalReviewAssessment']>,
+  t: Translate,
+): string {
+  if (assessment.potentialImpact) return assessment.potentialImpact;
+  if (assessment.riskLevel === 'critical') {
+    return t('toolRun.approvalReview.potentialImpactFallback.critical');
+  }
+  if (assessment.riskLevel === 'high') {
+    return t('toolRun.approvalReview.potentialImpactFallback.high');
+  }
+  return t('toolRun.approvalReview.potentialImpactFallback.default');
 }
 
 function approvalReviewTechnicalDetail(rationale: string): string {
@@ -99,10 +170,12 @@ function approvalReviewTechnicalDetail(rationale: string): string {
 export function ApprovalActions({
   approvalId,
   availableDecisions,
+  manualRiskOverride = false,
   onAnswerApproval,
 }: {
   approvalId: string;
   availableDecisions?: RuntimeApprovalAvailableDecision[];
+  manualRiskOverride?: boolean;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
   const { t } = useI18n();
@@ -139,7 +212,7 @@ export function ApprovalActions({
       <div className="chat-tool-run__actions">
         {decisions.map((decision) => {
           const decisionKey = approvalDecisionKey(decision);
-          const decisionLabel = approvalDecisionLabel(decision, t);
+          const decisionLabel = approvalDecisionLabel(decision, t, manualRiskOverride);
           return (
             <button
               key={decisionKey}
@@ -328,8 +401,13 @@ function approvalDecisionKey(
 function approvalDecisionLabel(
   decision: RuntimeApprovalAvailableDecision,
   t: Translate,
+  manualRiskOverride = false,
 ): string {
-  if (decision.type === 'approve') return t('toolRun.approval.approve');
+  if (decision.type === 'approve') {
+    return t(manualRiskOverride
+      ? 'toolRun.approval.manualApprove'
+      : 'toolRun.approval.approve');
+  }
   if (decision.type === 'approve_for_turn_with_strict_auto_review') {
     return t('toolRun.approval.strictReview');
   }

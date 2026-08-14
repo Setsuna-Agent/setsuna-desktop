@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   generateThreadTitle,
   normalizeGeneratedThreadTitle,
-  THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
 } from '../../../src/loop/lifecycle/runtime-thread-title-generator.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 
@@ -35,10 +34,10 @@ describe('runtime thread title generator', () => {
     });
     expect(modelClient.request).toMatchObject({
       model: 'current-model',
-      maxOutputTokens: THREAD_TITLE_GENERATION_MAX_OUTPUT_TOKENS,
       thinking: false,
       toolChoice: 'none',
     });
+    expect(modelClient.request?.maxOutputTokens).toBeUndefined();
     expect(modelClient.request?.messages[0]?.role).toBe('system');
     expect(modelClient.request?.messages[0]?.content).toContain('Never return a generic placeholder');
     expect(modelClient.request?.messages[1]?.content).toContain('现在标题直接截取用户输入');
@@ -54,6 +53,42 @@ describe('runtime thread title generator', () => {
     expect(normalizeGeneratedThreadTitle('日常问候')).toBe('日常问候');
     expect(normalizeGeneratedThreadTitle('')).toBeNull();
     expect(normalizeGeneratedThreadTitle('<think>仍在分析标题但输出已被截断')).toBeNull();
+    expect(normalizeGeneratedThreadTitle('这个 URL 看起来是一个**远程（HTTP）MCP 服务**，配置方法取决于你用的客户端。常见配置方式如下。')).toBeNull();
+  });
+
+  it('uses only visible output when the provider also emits reasoning', async () => {
+    const modelClient = new CapturingTitleModelClient([
+      { type: 'reasoning_delta', text: '分析用户消息并选择标题。' },
+      { type: 'text_delta', text: '安装远程 MCP 服务' },
+      { type: 'done', finishReason: 'stop' },
+    ]);
+
+    const result = await generateThreadTitle({
+      attachmentCount: 0,
+      model: 'reasoning-model',
+      modelClient,
+      signal: new AbortController().signal,
+      userContent: '帮我安装这个 MCP 服务',
+    });
+
+    expect(result.title).toBe('安装远程 MCP 服务');
+  });
+
+  it('rejects visible output truncated by the provider limit', async () => {
+    const modelClient = new CapturingTitleModelClient([
+      { type: 'text_delta', text: '安装远程 MCP 服务' },
+      { type: 'done', finishReason: 'length' },
+    ]);
+
+    const result = await generateThreadTitle({
+      attachmentCount: 0,
+      model: 'reasoning-model',
+      modelClient,
+      signal: new AbortController().signal,
+      userContent: '帮我安装这个 MCP 服务',
+    });
+
+    expect(result.title).toBeNull();
   });
 });
 

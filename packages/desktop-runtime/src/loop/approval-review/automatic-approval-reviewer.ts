@@ -16,16 +16,16 @@ import { createModelStreamTextCollector } from '../../utils/model-stream-text-co
 import { abortReason } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
+  APPROVAL_REVIEW_RESPONSE_SCHEMA,
   approvalReviewAuditRationale,
+  approvalReviewDisplayText,
   approvalReviewTechnicalFailureRationale,
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
 } from './approval-review-output.js';
 import { buildApprovalReviewPrompt } from './approval-review-prompt.js';
 
-const APPROVAL_REVIEW_TIMEOUT_MS = 60_000;
 const APPROVAL_REVIEW_MAX_ATTEMPTS = 2;
-const APPROVAL_REVIEW_MAX_OUTPUT_TOKENS = 1_200;
 const MAX_TRACKED_TURNS = 100;
 const MAX_REVIEW_HISTORY = 50;
 const CONSECUTIVE_DENIAL_LIMIT = 3;
@@ -85,8 +85,6 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       return this.failedResult(input.request.turnId, prompt.unavailableReason, modelRequest);
     }
 
-    const timeoutSignal = AbortSignal.timeout(APPROVAL_REVIEW_TIMEOUT_MS);
-    const reviewSignal = AbortSignal.any([input.signal, timeoutSignal]);
     let lastFailure = 'Automatic approval review returned no valid decision.';
     for (let attempt = 0; attempt < APPROVAL_REVIEW_MAX_ATTEMPTS; attempt += 1) {
       let usage: RuntimeUsage | undefined;
@@ -96,10 +94,15 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
           ...modelRequest,
           messages: prompt.messages,
           toolChoice: 'none',
-          maxOutputTokens: APPROVAL_REVIEW_MAX_OUTPUT_TOKENS,
           temperature: 0,
           thinking: false,
-          signal: reviewSignal,
+          responseFormat: {
+            type: 'json',
+            name: 'approval_review_decision',
+            description: 'One approval decision for the exact action under review.',
+            schema: APPROVAL_REVIEW_RESPONSE_SCHEMA,
+          },
+          signal: input.signal,
         })) {
           output.consume(event);
           if (event.type === 'usage' || event.type === 'token_count') usage = event.usage;
@@ -118,6 +121,10 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
           riskLevel: parsed.riskLevel,
           userAuthorization: parsed.userAuthorization,
           rationale,
+          riskSummary: approvalReviewDisplayText(parsed.rationale, input.arguments),
+          ...(parsed.potentialImpact
+            ? { potentialImpact: approvalReviewDisplayText(parsed.potentialImpact, input.arguments) }
+            : {}),
           ...(auditModel.providerId ? { providerId: auditModel.providerId } : {}),
           model: auditModel.model,
         };
@@ -131,7 +138,7 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       } catch (error) {
         await this.recordUsage(input, usage);
         if (input.signal.aborted) throw abortReason(input.signal);
-        if (timeoutSignal.aborted) {
+        if (isTimeoutError(error)) {
           return this.technicalResult(
             input.request.turnId,
             'timed_out',
@@ -218,6 +225,10 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       ...usage,
     }).catch(() => undefined);
   }
+}
+
+function isTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'TimeoutError';
 }
 
 export function createAutomaticApprovalReviewer(

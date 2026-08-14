@@ -657,7 +657,7 @@ function ToolRunDetails({
       </>
     );
   }
-  const diagnostic = genericToolRunDiagnostic(run);
+  const diagnostic = displayedGenericToolRunDiagnostic(run);
   return (
     <>
       {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
@@ -681,7 +681,15 @@ function toolRunHasDetails(run: RuntimeToolRun, pendingApprovalId?: string): boo
   if (run.networkApprovalContext) return true;
   if (run.permissionApprovalContext) return true;
   if (run.hookRuns?.length) return true;
-  return Boolean(genericToolRunDiagnostic(run));
+  if (run.approvalReviewAssessment?.status === 'denied') return true;
+  return Boolean(displayedGenericToolRunDiagnostic(run));
+}
+
+function displayedGenericToolRunDiagnostic(run: RuntimeToolRun): string {
+  // The summary is the canonical display for rejected and cancelled runs. The
+  // preview of a tool that never executed only repeats its label or terminal state.
+  if (run.status === 'cancelled' || run.status === 'rejected') return '';
+  return genericToolRunDiagnostic(run);
 }
 
 function execPolicyApprovalSummary(run: RuntimeToolRun): string {

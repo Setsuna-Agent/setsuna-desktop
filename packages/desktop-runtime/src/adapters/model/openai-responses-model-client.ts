@@ -41,6 +41,7 @@ import {
   providerMetadataSource,
   providerReplayContext,
 } from './provider-replay-context.js';
+import { aiSdkOutputForRequest } from './provider-response-format.js';
 import { openAiResponsesReasoningBody } from './provider-thinking.js';
 import { normalizeOpenAiUsage } from './provider-usage.js';
 import { objectValue, stringValue } from './provider-values.js';
@@ -77,6 +78,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
     );
     const reasoningEffort = stringValue(reasoning.effort);
     const instructions = systemText(request.messages);
+    const output = aiSdkOutputForRequest(request);
     const result = streamText({
       model: openai.responses(requestedModel),
       messages: prompt.messages,
@@ -87,6 +89,7 @@ export class OpenAiResponsesModelClient implements ModelClient {
         ?? activeModel?.maxOutputTokens
         ?? DEFAULT_MODEL_MAX_OUTPUT_TOKENS,
       ...(typeof request.temperature === 'number' ? { temperature: request.temperature } : {}),
+      ...(output ? { output } : {}),
       providerOptions: {
         openai: {
           store: false,

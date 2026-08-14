@@ -8,6 +8,7 @@ import path from 'node:path';
 type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAppName?: string;
   macExecutableName?: string;
+  macExecutableRelativePaths?: string[];
   macPaths?: string[];
   macAlways?: boolean;
   linuxCommands?: string[];
@@ -53,6 +54,30 @@ const WORKSPACE_APPS: WorkspaceAppDefinition[] = [
       ['LOCALAPPDATA', 'Programs\\Cursor\\Cursor.exe'],
       ['LOCALAPPDATA', 'Programs\\cursor\\Cursor.exe'],
       ['ProgramFiles', 'Cursor\\Cursor.exe'],
+    ],
+  },
+  {
+    id: 'trae',
+    label: 'Trae',
+    icon: 'trae',
+    macAppName: 'Trae',
+    macExecutableRelativePaths: [
+      'Contents/Resources/app/bin/trae',
+      'Contents/Resources/app/bin/trae-cn',
+    ],
+    macPaths: [
+      '/Applications/Trae.app',
+      '/Applications/Trae CN.app',
+      '${HOME}/Applications/Trae.app',
+      '${HOME}/Applications/Trae CN.app',
+    ],
+    linuxCommands: ['trae', 'trae-cn'],
+    windowsCommands: ['trae', 'trae-cn', 'Trae.exe', 'Trae CN.exe'],
+    windowsPaths: [
+      ['LOCALAPPDATA', 'Programs\\Trae\\Trae.exe'],
+      ['LOCALAPPDATA', 'Programs\\Trae CN\\Trae CN.exe'],
+      ['ProgramFiles', 'Trae\\Trae.exe'],
+      ['ProgramFiles', 'Trae CN\\Trae CN.exe'],
     ],
   },
   {
@@ -172,7 +197,11 @@ function workspaceAppIsAvailable(definition: WorkspaceAppDefinition): boolean {
     return Boolean(definition.macAlways || definition.macPaths?.some((item) => existsSync(expandHome(item))));
   }
   if (process.platform === 'win32') {
-    return Boolean(definition.windowsAlways || definition.windowsCommands?.some((item) => findCommandInPath(item)));
+    return Boolean(
+      definition.windowsAlways
+      || definition.windowsCommands?.some((item) => findCommandInPath(item))
+      || windowsKnownPaths(definition).some((item) => existsSync(item)),
+    );
   }
   if (process.platform === 'linux') {
     return Boolean(definition.linuxCommands?.some((item) => findCommandInPath(item)));
@@ -201,6 +230,7 @@ function macWorkspaceAppLaunchSpec(
   filePath: string | null,
   line?: number,
 ): WorkspaceAppLaunchSpec {
+  const appName = installedMacWorkspaceAppName(definition);
   if (filePath) {
     const scheme = workspaceAppFileUriScheme(definition.id);
     if (scheme) return { program: 'open', args: [workspaceAppFileUri(scheme, filePath, line)] };
@@ -212,11 +242,11 @@ function macWorkspaceAppLaunchSpec(
     );
     if (lineAwareEditorSpec) return lineAwareEditorSpec;
     if (definition.id === 'finder') return { program: 'open', args: ['-R', filePath] };
-    if (definition.macAppName) return { program: 'open', args: ['-a', definition.macAppName, filePath] };
+    if (appName) return { program: 'open', args: ['-a', appName, filePath] };
   }
   if (definition.id === 'finder') return { program: 'open', args: [workspaceRoot] };
-  if (!definition.macAppName) throw new Error('当前系统不支持此应用。');
-  return { program: 'open', args: ['-a', definition.macAppName, workspaceRoot] };
+  if (!appName) throw new Error('当前系统不支持此应用。');
+  return { program: 'open', args: ['-a', appName, workspaceRoot] };
 }
 
 export function macLineAwareWorkspaceAppLaunchSpec(
@@ -230,20 +260,33 @@ export function macLineAwareWorkspaceAppLaunchSpec(
     || typeof line !== 'number'
     || !Number.isSafeInteger(line)
     || line <= 0
-    || !['intellij-idea', 'pycharm', 'webstorm'].includes(appId)
+    || !['intellij-idea', 'pycharm', 'trae', 'webstorm'].includes(appId)
   ) return null;
   return { program: executablePath, args: workspaceAppFileArgs(appId, filePath, line) };
 }
 
 function macWorkspaceAppExecutable(definition: WorkspaceAppDefinition): string | null {
-  if (!definition.macExecutableName) return null;
+  const relativePaths = [
+    ...(definition.macExecutableRelativePaths ?? []),
+    ...(definition.macExecutableName ? [`Contents/MacOS/${definition.macExecutableName}`] : []),
+  ];
+  if (!relativePaths.length) return null;
   for (const appPathValue of definition.macPaths ?? []) {
     const appPath = expandHome(appPathValue);
     if (!existsSync(appPath)) continue;
-    const executablePath = path.join(appPath, 'Contents', 'MacOS', definition.macExecutableName);
-    if (existsSync(executablePath)) return executablePath;
+    for (const relativePath of relativePaths) {
+      const executablePath = path.join(appPath, relativePath);
+      if (existsSync(executablePath)) return executablePath;
+    }
   }
   return null;
+}
+
+function installedMacWorkspaceAppName(definition: WorkspaceAppDefinition): string | null {
+  const installedPath = definition.macPaths
+    ?.map(expandHome)
+    .find((candidate) => existsSync(candidate));
+  return installedPath ? path.basename(installedPath, '.app') : definition.macAppName ?? null;
 }
 
 function windowsWorkspaceAppLaunchSpec(
@@ -279,7 +322,7 @@ function linuxWorkspaceAppLaunchSpec(
 
 function workspaceAppFileArgs(appId: string, filePath: string, line?: number): string[] {
   const lineValue = typeof line === 'number' && line > 0 ? line : undefined;
-  if (appId === 'vscode' || appId === 'cursor') return ['-g', lineValue ? `${filePath}:${lineValue}` : filePath];
+  if (appId === 'vscode' || appId === 'cursor' || appId === 'trae') return ['-g', lineValue ? `${filePath}:${lineValue}` : filePath];
   if (['intellij-idea', 'pycharm', 'webstorm'].includes(appId) && lineValue) return ['--line', String(lineValue), filePath];
   return [lineValue ? `${filePath}:${lineValue}` : filePath];
 }

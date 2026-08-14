@@ -84,6 +84,18 @@ describe('desktop workspace app spawning', () => {
     )).toBeNull();
   });
 
+  it('opens files at the requested line through the Trae CLI', () => {
+    expect(macLineAwareWorkspaceAppLaunchSpec(
+      'trae',
+      '/Users/tester/project/src/main.ts',
+      27,
+      '/Applications/Trae CN.app/Contents/Resources/app/bin/trae-cn',
+    )).toEqual({
+      program: '/Applications/Trae CN.app/Contents/Resources/app/bin/trae-cn',
+      args: ['-g', '/Users/tester/project/src/main.ts:27'],
+    });
+  });
+
   it('prefers Windows launchable command extensions over extensionless shims', () => {
     const pathValue = 'C:\\Tools\\VS Code\\bin';
 

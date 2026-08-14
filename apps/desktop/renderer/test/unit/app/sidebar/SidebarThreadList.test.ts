@@ -9,19 +9,19 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('SidebarThreadList', () => {
-  it('initially renders at most five conversations and offers the next batch', () => {
-    const html = renderThreadList(6);
+  it('initially renders at most twenty conversations and offers the next batch', () => {
+    const html = renderThreadList(21);
 
-    expect(html).toContain('conversation-5');
-    expect(html).not.toContain('conversation-6');
+    expect(html).toContain('conversation-20');
+    expect(html).not.toContain('conversation-21');
     expect(html).toContain('aria-label="再显示 1 个对话"');
     expect(html).toContain('展开显示');
   });
 
   it('hides the expansion control after every conversation is visible', () => {
-    const html = renderThreadList(5);
+    const html = renderThreadList(20);
 
-    expect(html).toContain('conversation-5');
+    expect(html).toContain('conversation-20');
     expect(html).not.toContain('展开显示');
   });
 });
