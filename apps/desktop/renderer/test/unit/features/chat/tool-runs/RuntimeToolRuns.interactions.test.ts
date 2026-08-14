@@ -86,6 +86,21 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(rejectedHtml).not.toContain('<details');
   });
 
+  it('keeps a substantive runtime-policy rejection available in details', () => {
+    const rejectedHtml = renderedHtml([{
+      id: 'permissions_policy_rejected',
+      name: 'request_permissions',
+      status: 'rejected',
+      argumentsPreview: '{"permissions":{"network":true}}',
+      resultPreview: 'Tool request_permissions was rejected by runtime policy: network access is disabled for this workspace.',
+    }]);
+    const rejected = renderedTextFromHtml(rejectedHtml);
+
+    expect(rejected).toContain('已拒绝 request permissions');
+    expect(rejectedHtml).toContain('<details');
+    expect(rejected).toContain('network access is disabled for this workspace.');
+  });
+
   it('shows automatic review progress and technical fallback without decision badges', () => {
     const automaticPendingRun: RuntimeToolRun = {
       id: 'exec_automatic',
