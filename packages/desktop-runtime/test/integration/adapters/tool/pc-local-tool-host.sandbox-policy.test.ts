@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { realPathIfExists } from '../../../../src/adapters/tool/pc-local/pc-local-tool-paths.js';
 import { createShellSandboxExecutionPlan, shellSandboxCapability, shellSandboxProfile, shellSandboxUnavailableReason } from '../../../../src/adapters/tool/pc-local/pc-local-tools.js';
 import { ToolExecutionError } from '../../../../src/ports/tool-host.js';
 import { restrictedShellExecutionUnavailable, expectRestrictedShellUnavailable, createHost, StaticPolicyAmendmentStore, nodeCommand } from './pc-local-tool-host.support.js';
@@ -120,7 +121,7 @@ describe('pc local shell sandbox policy', () => {
     const root = path.join(tmpdir(), 'setsuna seatbelt workspace');
     const writableRoot = path.join(tmpdir(), 'setsuna approved writes');
     const deniedRoot = path.join(root, 'blocked');
-    const shellTempRoot = await realpath(tmpdir());
+    const shellTempRoot = realPathIfExists(tmpdir());
     const capability = { supported: true, provider: 'macos-seatbelt', reason: '' };
     const workspaceFilter = `(require-not (subpath ${JSON.stringify(path.resolve(root))}))`;
     const writableRootFilter = `(require-not (subpath ${JSON.stringify(path.resolve(writableRoot))}))`;
@@ -173,7 +174,7 @@ describe('pc local shell sandbox policy', () => {
   it('builds one explicit sandbox execution plan for the provider', async () => {
     const root = path.join(tmpdir(), 'setsuna-explicit-plan');
     const toolchainRoot = path.join(tmpdir(), 'setsuna-toolchain');
-    const canonicalTempRoot = await realpath(tmpdir());
+    const canonicalTempRoot = realPathIfExists(tmpdir());
     const environment = {
       PATH: path.join(toolchainRoot, 'bin'),
       COREPACK_HOME: path.join(root, '.cache'),
@@ -285,8 +286,8 @@ describe('pc local shell sandbox policy', () => {
       provider: 'windows-native',
       providerExecutable: capability.executablePath,
     });
-    expect(plan.writableRoots).toContain(await realpath(root));
-    expect(plan.ephemeralWritableRoots).toEqual([await realpath(root)]);
+    expect(plan.writableRoots).toContain(realPathIfExists(root));
+    expect(plan.ephemeralWritableRoots).toEqual([realPathIfExists(root)]);
     expect(shellSandboxUnavailableReason({
       osSandbox: true,
       permissionProfile: 'workspace-write',
