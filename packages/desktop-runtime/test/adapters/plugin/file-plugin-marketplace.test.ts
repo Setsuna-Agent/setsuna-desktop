@@ -223,8 +223,8 @@ describe('file plugin marketplace', () => {
     const oldCatalogDir = path.join(oldAsarRoot, 'plugins');
     const currentCatalogDir = path.join(currentAsarRoot, 'plugins');
     await Promise.all([
-      createApplicationPackage(oldAsarRoot, 'setsuna-desktop'),
-      createApplicationPackage(currentAsarRoot, 'setsuna-desktop'),
+      createApplicationPackage(oldAsarRoot, 'setsuna-desktop', 'com.setsuna.desktop'),
+      createApplicationPackage(currentAsarRoot, 'setsuna-desktop', 'com.setsuna.desktop'),
       createCatalogPlugin(oldCatalogDir, 'docs', { name: 'Docs Helper' }),
       createCatalogPlugin(currentCatalogDir, 'docs', { name: 'Docs Helper' }),
     ]);
@@ -238,6 +238,31 @@ describe('file plugin marketplace', () => {
     });
     await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
       plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
+  it('rejects a legacy record when equal package names carry different appIds', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-appid-veto-'));
+    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const otherAsarRoot = path.join(root, 'other', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const catalogDir = path.join(setsunaAsarRoot, 'plugins');
+    const localDir = path.join(otherAsarRoot, 'plugins');
+    await Promise.all([
+      createApplicationPackage(setsunaAsarRoot, 'desktop', 'com.setsuna.desktop'),
+      createApplicationPackage(otherAsarRoot, 'desktop', 'com.other.desktop'),
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Other App Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(catalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
     });
   });
 
@@ -476,9 +501,12 @@ async function createPluginRuntime(root: string, bundledPluginsDir?: string) {
   return { config, plugins };
 }
 
-async function createApplicationPackage(applicationRoot: string, name: string): Promise<void> {
+async function createApplicationPackage(applicationRoot: string, name: string, appId?: string): Promise<void> {
   await mkdir(applicationRoot, { recursive: true });
-  await writeFile(path.join(applicationRoot, 'package.json'), JSON.stringify({ name }, null, 2));
+  await writeFile(path.join(applicationRoot, 'package.json'), JSON.stringify({
+    name,
+    ...(appId ? { build: { appId } } : {}),
+  }, null, 2));
 }
 
 async function createCatalogPlugin(

@@ -37,11 +37,11 @@ export async function sameLegacyMarketplaceSource(left: string, right: string): 
   const rightCatalog = catalogApplicationLocation(right);
   if (!leftCatalog || !rightCatalog || !samePath(leftCatalog.suffix, rightCatalog.suffix)) return false;
 
-  const [leftIdentities, rightIdentities] = await Promise.all([
-    readApplicationIdentities(leftCatalog.root),
-    readApplicationIdentities(rightCatalog.root),
+  const [leftIdentity, rightIdentity] = await Promise.all([
+    readApplicationIdentity(leftCatalog.root),
+    readApplicationIdentity(rightCatalog.root),
   ]);
-  return leftIdentities.some((identity) => rightIdentities.includes(identity));
+  return sameApplicationIdentity(leftIdentity, rightIdentity);
 }
 
 function sameApplicationLocation(left: ApplicationLocation | null, right: ApplicationLocation | null): boolean {
@@ -61,11 +61,11 @@ async function samePackagedApplicationLocation(
 ): Promise<boolean> {
   if (!sameApplicationLocation(left, right) || !left || !right) return false;
   if (!GENERIC_UNPACKED_DIRECTORY.test(left.identity)) return true;
-  const [leftIdentities, rightIdentities] = await Promise.all([
-    readApplicationIdentities(left.root),
-    readApplicationIdentities(right.root),
+  const [leftIdentity, rightIdentity] = await Promise.all([
+    readApplicationIdentity(left.root),
+    readApplicationIdentity(right.root),
   ]);
-  return leftIdentities.some((identity) => rightIdentities.includes(identity));
+  return sameApplicationIdentity(leftIdentity, rightIdentity);
 }
 
 function catalogApplicationLocation(value: string): { root: string; suffix: string } | null {
@@ -78,18 +78,42 @@ function catalogApplicationLocation(value: string): { root: string; suffix: stri
   };
 }
 
-async function readApplicationIdentities(applicationRoot: string): Promise<string[]> {
+type ApplicationIdentity = {
+  appId?: string;
+  name?: string;
+};
+
+async function readApplicationIdentity(applicationRoot: string): Promise<ApplicationIdentity | null> {
   try {
     const value = JSON.parse(await readFile(path.join(applicationRoot, 'package.json'), 'utf8')) as {
       build?: { appId?: unknown };
       name?: unknown;
     };
-    return [value.build?.appId, value.name]
-      .filter((identity): identity is string => typeof identity === 'string' && Boolean(identity.trim()))
-      .map((identity) => identity.trim().toLowerCase());
+    const appId = normalizeIdentityField(value.build?.appId);
+    const name = normalizeIdentityField(value.name);
+    if (!appId && !name) return null;
+    return { ...(appId ? { appId } : {}), ...(name ? { name } : {}) };
   } catch {
-    return [];
+    return null;
   }
+}
+
+function normalizeIdentityField(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : undefined;
+}
+
+/**
+ * appId is the strong identity: when both packages declare one, differing IDs
+ * veto the weaker name fallback. A missing appId must not veto, because
+ * electron-builder can strip the `build` section from the packaged package.json.
+ */
+function sameApplicationIdentity(
+  left: ApplicationIdentity | null,
+  right: ApplicationIdentity | null,
+): boolean {
+  if (!left || !right) return false;
+  if (left.appId && right.appId) return left.appId === right.appId;
+  return Boolean(left.name && left.name === right.name);
 }
 
 function packagedApplicationLocation(value: string): PackagedApplicationLocation | null {
