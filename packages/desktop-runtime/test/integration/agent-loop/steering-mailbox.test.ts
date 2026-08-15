@@ -71,6 +71,13 @@ describe('agent loop turn steering and mailbox input', () => {
       }));
       expect(events).toContainEqual(expect.objectContaining({
         turnId,
+        type: 'message.created',
+        payload: expect.objectContaining({
+          message: expect.objectContaining({ role: 'assistant', streamParts: [] }),
+        }),
+      }));
+      expect(events).toContainEqual(expect.objectContaining({
+        turnId,
         type: 'turn.cancelled',
         payload: expect.objectContaining({ taskKind: 'user_shell' }),
       }));

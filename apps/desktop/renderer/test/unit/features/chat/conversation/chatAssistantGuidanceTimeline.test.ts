@@ -11,7 +11,6 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const after = assistantMessage('assistant_after', 'after');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      active: true,
       blocks: [workBlock('work_1', [before, after])],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_before', 'user_steer', 'assistant_after'],
@@ -30,31 +29,32 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     )).toEqual(['assistant_before:content', 'user_steer', 'assistant_after:content']);
   });
 
-  it('collapses completed guidance into the completed work history plan', () => {
+  it('preserves guidance position inside completed work history', () => {
     const before = assistantMessage('assistant_before', 'before');
+    const after = assistantMessage('assistant_after', 'after');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      active: false,
-      blocks: [workBlock('work_1', [before])],
+      blocks: [workBlock('work_1', [before, after])],
       guidanceMessages: [guidance],
-      messageOrderIds: ['assistant_before', 'user_steer'],
+      messageOrderIds: ['assistant_before', 'user_steer', 'assistant_after'],
       workHistoryActive: false,
     });
 
     expect(plan.nodes[0]).toMatchObject({ type: 'workHistory' });
     if (plan.nodes[0]?.type !== 'workHistory') throw new Error('Expected work history plan');
-    expect(plan.nodes[0].entries.at(-1)).toMatchObject({
-      type: 'guidance',
-      id: 'completed-guidance-inline',
-      messages: [expect.objectContaining({ id: 'user_steer' })],
-    });
+    expect(plan.nodes[0].entries.map((entry) =>
+      entry.type === 'guidance'
+        ? entry.messages.map((message) => message.id).join(',')
+        : entry.item.type === 'pluginUses'
+          ? entry.item.id
+          : entry.item.segment.id,
+    )).toEqual(['assistant_before:content', 'user_steer', 'assistant_after:content']);
   });
 
   it('keeps active guidance after non-work blocks when it follows that block', () => {
     const assistant = assistantMessage('assistant_content', 'answer');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      active: true,
       blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_content', 'user_steer'],
@@ -74,7 +74,6 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const assistant = assistantMessage('assistant_content', 'answer');
     const guidance = userMessage('user_steer', 'extra guidance');
     const plan = createAssistantGuidanceTimelinePlan({
-      active: true,
       blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
       guidanceMessages: [guidance],
       messageOrderIds: ['user_steer', 'assistant_content'],
@@ -95,12 +94,11 @@ describe('createAssistantGuidanceTimelinePlan', () => {
         plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理' }],
       }],
     };
-    const createPlan = (active: boolean) => createAssistantGuidanceTimelinePlan({
-      active,
+    const createPlan = (workHistoryActive: boolean) => createAssistantGuidanceTimelinePlan({
       blocks: [pluginBlock],
       guidanceMessages: [],
       messageOrderIds: [message.id],
-      workHistoryActive: active,
+      workHistoryActive,
     });
 
     expect(createPlan(true).nodes[0]).toMatchObject({
@@ -126,7 +124,6 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const body = assistantMessage('assistant_body', '正文');
     const after = assistantMessage('assistant_after', 'after');
     const plan = createAssistantGuidanceTimelinePlan({
-      active: true,
       blocks: [
         workBlock('work_before', [before]),
         { type: 'content', id: 'assistant_body:content', segment: body, content: body.content },

@@ -5,7 +5,6 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { AssistantContent, ModelMessage } from 'ai';
 import {
-  portableRuntimeAssistantText,
   providerMetadataMatchesSemanticMessage,
   runtimeJsonValuesEqual,
 } from '../../utils/runtime-message-semantic-fingerprint.js';
@@ -15,7 +14,7 @@ import {
   parseAiSdkToolInput,
   type AiSdkPromptOptions,
 } from './ai-sdk-prompt.js';
-import { portableAssistantText } from './provider-message-content.js';
+import { providerAssistantText } from './provider-message-content.js';
 import {
   isLegacyAnthropicMetadata,
   providerMetadataMatchesReplayContext,
@@ -69,7 +68,7 @@ function anthropicAssistantContent(
   if (replayBlocks.length) return replayBlocks.map(toAiSdkAnthropicBlock);
 
   const parts: AiSdkAssistantPart[] = [];
-  const assistantText = portableAssistantText(message.content);
+  const assistantText = providerAssistantText(message);
   if (assistantText) parts.push({ type: 'text', text: assistantText });
   for (const toolCall of message.toolCalls ?? []) {
     parts.push({
@@ -161,7 +160,7 @@ function anthropicBlocksMatchSemanticMessage(
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
     .join('');
-  if (nativeText !== portableRuntimeAssistantText(message.content)) return false;
+  if (nativeText !== providerAssistantText(message)) return false;
 
   const nativeCalls = blocks
     .filter((block) => block.type === 'tool_use')

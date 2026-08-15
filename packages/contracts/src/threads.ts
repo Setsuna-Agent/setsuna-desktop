@@ -28,8 +28,9 @@ import type {
   RuntimeStreamItem,
   RuntimeToolCall,
 } from './provider.js';
+import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
 import type { RuntimeUsage } from './usage.js';
-import { thinkTagMatches } from './swe/think-tag-scanner.js';
+import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 
@@ -97,6 +98,8 @@ export type RuntimeMessage = {
   inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
+  /** Ordered structured stream channels; absent only for historical tag-based messages. */
+  streamParts?: RuntimeMessageStreamPart[];
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
   skillIds?: string[];
   /** 精确记录序列化 Skill 词槽的位置，避免把同名普通正文误渲染成引用。 */
@@ -120,6 +123,11 @@ export type RuntimeMessage = {
   toolCalls?: RuntimeToolCall[];
   toolRuns?: RuntimeToolRun[];
   hookRuns?: RuntimeHookRun[];
+};
+
+export type RuntimeMessageStreamPart = {
+  type: 'content' | 'reasoning';
+  content: string;
 };
 
 export type RuntimeContextCompactionNotice = {
@@ -149,6 +157,8 @@ export type RuntimeContextCompactionNotice = {
 export type RuntimeReviewModeNotice = {
   kind: 'entered' | 'exited';
   review: string;
+  /** Provider-boundary reasoning was already separated; absent on historical tag envelopes. */
+  reasoningSeparated?: true;
   /** Parsed review output used by the transcript summary and diff annotations. */
   findings?: RuntimeReviewFinding[];
   summary?: string;
@@ -169,8 +179,13 @@ export type RuntimeReviewResult = {
 };
 
 /** Parse the stable review profile output into data shared by runtime and UI. */
-export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
-  const normalized = stripReviewThinking(review).trim();
+export function parseRuntimeReviewResult(
+  review: string,
+  options: { legacyThinkTags?: boolean } = {},
+): RuntimeReviewResult {
+  const normalized = (
+    options.legacyThinkTags === false ? review : visibleTextOutsideThinkTags(review)
+  ).trim();
   if (!normalized) return { findings: [], summary: '' };
 
   const lines = normalized.split(/\r?\n/u);
@@ -221,6 +236,7 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   let resolvedVersion = -1;
   let titleEnd = -1;
   let pathStart = -1;
+  const markdownLinksByLabelStart = reviewMarkdownLinksByLabelStart(line);
   let locationCandidate: {
     endLine?: number;
     pathEnd: number;
@@ -230,6 +246,46 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   } | null = null;
 
   while (cursor < line.length) {
+    if (cursor === pathStart && line[cursor] === '[') {
+      const markdownLink = markdownLinksByLabelStart.get(cursor);
+      if (markdownLink) {
+        const labelLocation = reviewLocationWithin(
+          line,
+          cursor + 1,
+          markdownLink.labelEnd,
+        );
+        const targetLocation = reviewLocationWithin(
+          line,
+          markdownLink.targetStart,
+          markdownLink.targetEnd,
+        );
+        const linkedLocation = targetLocation ?? labelLocation;
+        if (linkedLocation) {
+          locationCandidate = {
+            titleEnd,
+            pathStart: targetLocation ? markdownLink.targetStart : cursor + 1,
+            pathEnd: linkedLocation.pathEnd,
+            startLine: linkedLocation.startLine,
+            ...(linkedLocation.endLine !== undefined ? { endLine: linkedLocation.endLine } : {}),
+          };
+          resolvedVersion = delimiterVersion;
+          cursor = markdownLink.targetEnd + 1;
+          continue;
+        }
+        // A descriptive link without a location belongs to the title; the real location may
+        // still follow it, so resume path scanning after the link instead of treating the
+        // delimiter as resolved.
+        cursor = markdownLink.targetEnd + 1;
+        while (cursor < line.length && (
+          isReviewWhitespace(line[cursor]) || line[cursor] === ',' || line[cursor] === ';'
+        )) {
+          cursor += 1;
+        }
+        pathStart = cursor;
+        continue;
+      }
+    }
+
     if (isReviewWhitespace(line[cursor])) {
       const whitespaceStart = cursor;
       while (isReviewWhitespace(line[cursor])) cursor += 1;
@@ -305,7 +361,7 @@ function reviewPriorityPrefix(line: string): {
   };
 }
 
-function reviewLocationAt(line: string, colonIndex: number): {
+function reviewLocationAt(line: string, colonIndex: number, additionalSuffix?: string): {
   end: number;
   endLine?: number;
   startLine: number;
@@ -335,10 +391,20 @@ function reviewLocationAt(line: string, colonIndex: number): {
     && suffixStart !== '，'
     && suffixStart !== ','
     && suffixStart !== ';'
+    && suffixStart !== ')'
+    && suffixStart !== additionalSuffix
   ) return null;
   if (!Number.isSafeInteger(startLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) return null;
 
   return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
+}
+
+function reviewLocationWithin(line: string, start: number, end: number) {
+  for (let cursor = start; cursor < end; cursor += 1) {
+    const location = line[cursor] === ':' ? reviewLocationAt(line, cursor, ']') : null;
+    if (location && location.end <= end) return { ...location, pathEnd: cursor };
+  }
+  return null;
 }
 
 function isReviewFindingDelimiter(value: string | undefined): boolean {
@@ -353,39 +419,14 @@ function isAsciiDigit(value: string | undefined): boolean {
   return value !== undefined && value >= '0' && value <= '9';
 }
 
-function stripReviewThinking(review: string): string {
-  const visible: string[] = [];
-  let cursor = 0;
-  let blockStart: number | null = null;
-  let foundThinkTag = false;
-
-  for (const match of thinkTagMatches(review)) {
-    if (!match.closing && blockStart === null) {
-      foundThinkTag = true;
-      blockStart = match.index;
-      continue;
-    }
-    if (!match.closing || blockStart === null) continue;
-
-    visible.push(review.slice(cursor, blockStart));
-    cursor = match.end;
-    blockStart = null;
-  }
-
-  if (blockStart !== null) {
-    visible.push(review.slice(cursor, blockStart));
-    cursor = review.length;
-  }
-
-  return foundThinkTag ? visible.join('') + review.slice(cursor) : review;
-}
-
 /** Reparse persisted raw text so historical notices benefit from parser fixes. */
 export function normalizeRuntimeReviewNotice(
   notice: RuntimeReviewModeNotice,
 ): RuntimeReviewModeNotice {
   if (notice.kind !== 'exited') return notice;
-  const parsed = parseRuntimeReviewResult(notice.review);
+  const parsed = parseRuntimeReviewResult(notice.review, {
+    legacyThinkTags: notice.reasoningSeparated !== true,
+  });
   if (parsed.findings.length || !notice.findings?.length) {
     return { ...notice, ...parsed };
   }

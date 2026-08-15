@@ -248,10 +248,18 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   if (event.type === 'message.delta') {
     const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
-      // delta 只追加文本；完整状态、usage 和 toolCalls 等到 message.completed 再定稿。
-      message.content += event.payload.text;
+      // Reasoning and visible text share ordering but not storage: renderer state must never infer
+      // their boundary from model-authored markup. Channel-less legacy events must stay legacy.
+      if (message.streamParts !== undefined || event.payload.channel !== undefined) {
+        appendMessageStreamPart(message, event.payload.channel ?? 'content', event.payload.text);
+      }
+      if (event.payload.channel !== 'reasoning') {
+        message.content += event.payload.text;
+      }
       message.status = 'streaming';
-      if (isTranscriptVisibleMessage(message)) updatePreviewFromMessage(next, message);
+      if (event.payload.channel !== 'reasoning' && isTranscriptVisibleMessage(message)) {
+        updatePreviewFromMessage(next, message);
+      }
     }
     return next;
   }
@@ -608,6 +616,22 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (isRuntimeThreadProjectionIgnoredEvent(event)) return next;
   return assertNeverRuntimeEvent(event);
+}
+
+function appendMessageStreamPart(
+  message: RuntimeMessage,
+  type: 'content' | 'reasoning',
+  content: string,
+): void {
+  if (!content) return;
+  const parts = message.streamParts ?? [];
+  const previous = parts.at(-1);
+  if (previous?.type === type) {
+    previous.content += content;
+  } else {
+    parts.push({ type, content });
+  }
+  message.streamParts = parts;
 }
 
 function assertNeverRuntimeEvent(event: never): never {

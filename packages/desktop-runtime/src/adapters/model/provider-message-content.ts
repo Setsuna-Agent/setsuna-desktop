@@ -3,9 +3,17 @@ import {
   type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
 } from '@setsuna-desktop/contracts';
-import { portableRuntimeAssistantText } from '../../utils/runtime-message-semantic-fingerprint.js';
+import { portableRuntimeAssistantMessageText } from '../../utils/runtime-message-semantic-fingerprint.js';
 
-export const portableAssistantText = portableRuntimeAssistantText;
+/**
+ * Structured messages already store only the visible provider-facing answer in `content`.
+ * Legacy messages need the deprecated think-tag envelope removed before replay.
+ */
+export function providerAssistantText(
+  message: Pick<RuntimeMessage, 'content' | 'streamParts'>,
+): string {
+  return portableRuntimeAssistantMessageText(message);
+}
 
 export function systemText(messages: RuntimeMessage[]): string {
   return instructionText(messages, new Set(['system']));

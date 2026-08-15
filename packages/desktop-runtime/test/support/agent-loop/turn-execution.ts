@@ -19,6 +19,16 @@ export class EmptyModelClient implements ModelClient {
   }
 }
 
+export class HiddenOnlyModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'reasoning_delta', text: 'I still need to finish the task.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 export class ProviderMetadataToolModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 
@@ -49,6 +59,26 @@ export class ProviderMetadataToolModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'The metadata-backed tool continuation completed.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+export class StructuredToolContinuationModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'reasoning_delta', text: 'Need to inspect the file.' };
+      yield { type: 'text_delta', text: 'Keep <think>literal text</think> visible.' };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_structured_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Structured continuation completed.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

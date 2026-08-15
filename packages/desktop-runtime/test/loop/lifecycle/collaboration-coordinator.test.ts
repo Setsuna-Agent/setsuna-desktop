@@ -123,6 +123,52 @@ describe('runtime collaboration coordinator', () => {
     expect(result.content).not.toContain('I will inspect the repository.');
   });
 
+  it('normalizes each child answer before creating structured parent history', async () => {
+    const parent = runtimeThread('thread_parent', 'Parent');
+    const child = runtimeThread('thread_child', 'Mixed history child');
+    child.messages = [
+      {
+        id: 'message_child_legacy',
+        turnId: 'turn_child',
+        role: 'assistant',
+        content: '<think>private legacy reasoning</think>Legacy answer.',
+        phase: 'final_answer',
+        createdAt: '2026-07-11T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'message_child_structured',
+        turnId: 'turn_child',
+        role: 'assistant',
+        content: '<think>literal example</think> Structured answer.',
+        streamParts: [{ type: 'content', content: '<think>literal example</think> Structured answer.' }],
+        phase: 'final_answer',
+        createdAt: '2026-07-11T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    child.messageCount = child.messages.length;
+    child.turns = [{ id: 'turn_child', items: [], status: 'completed' }];
+    const coordinator = createCoordinator({
+      threadStore: {
+        createThread: vi.fn(async () => child),
+        getThread: vi.fn(async (threadId) => threadId === parent.id ? parent : child),
+      } as unknown as ThreadStore,
+    });
+
+    await coordinator.execute('spawn_agent', { prompt: 'Inspect the repository.' }, toolContext());
+    const [result] = await coordinator.collectPendingChildren(
+      parent.id,
+      'turn_parent',
+      new AbortController().signal,
+    );
+
+    expect(result?.content).not.toContain('private legacy reasoning');
+    expect(result?.content).toContain('Legacy answer.');
+    expect(result?.content).toContain('<think>literal example</think> Structured answer.');
+    expect(result?.streamParts).toEqual([{ type: 'content', content: result?.content }]);
+  });
+
   it('reports a failed child outcome without reusing its stale thread preview', async () => {
     const parent = runtimeThread('thread_parent', 'Parent');
     const child = runtimeThread('thread_child', 'Failed child');

@@ -49,6 +49,7 @@ describe('thread event structural sharing', () => {
     expect(projected.messages[0]).toBe(thread.messages[0]);
     expect(projected.messages[1]).not.toBe(thread.messages[1]);
     expect(projected.messages[1]?.content).toBe('Partial answer.');
+    expect(projected.messages[1]?.streamParts).toBeUndefined();
     expect(thread.messages[1]?.content).toBe('Partial');
     expect(projected.turns).toBe(thread.turns);
   });
@@ -81,6 +82,49 @@ describe('thread event structural sharing', () => {
     expect(projected.title).toBe('After');
     expect(projected.messages).toBe(messages);
     expect(projected.turns).toBe(turns);
+  });
+
+  it('projects reasoning and visible text into separate ordered message parts', () => {
+    const thread: RuntimeThread = {
+      id: 'thread_stream_parts',
+      title: 'Structured stream',
+      createdAt: '2026-08-15T00:00:00.000Z',
+      updatedAt: '2026-08-15T00:00:00.000Z',
+      archived: false,
+      messageCount: 1,
+      lastMessagePreview: '',
+      lastSeq: 1,
+      messages: [{
+        id: 'assistant_stream',
+        turnId: 'turn_stream',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-15T00:00:00.000Z',
+        status: 'streaming',
+      }],
+    };
+    const events = [
+      { channel: 'reasoning' as const, text: 'private <think>example</think>' },
+      { channel: 'content' as const, text: 'Visible answer.' },
+      { channel: 'reasoning' as const, text: 'more private analysis' },
+    ];
+
+    const projected = events.reduce((current, payload, index) => applyRuntimeEventToThread(current, {
+      id: `event_part_${index}`,
+      seq: index + 2,
+      threadId: thread.id,
+      turnId: 'turn_stream',
+      type: 'message.delta',
+      createdAt: '2026-08-15T00:00:01.000Z',
+      payload: { messageId: 'assistant_stream', ...payload },
+    }), thread);
+
+    expect(projected.messages[0]?.content).toBe('Visible answer.');
+    expect(projected.messages[0]?.streamParts).toEqual([
+      { type: 'reasoning', content: 'private <think>example</think>' },
+      { type: 'content', content: 'Visible answer.' },
+      { type: 'reasoning', content: 'more private analysis' },
+    ]);
   });
 
   it('normalizes missing and removed Plan queued input kinds during unrelated projections', () => {

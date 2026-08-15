@@ -385,6 +385,170 @@ describe('runtime context compaction', () => {
     })).not.toBeNull();
   });
 
+  it('counts structured reasoning only when a native provider envelope can replay it', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Inspect the implementation.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: 'Inspection complete.',
+        streamParts: [
+          { type: 'reasoning', content: 'x'.repeat(4_000) },
+          { type: 'content', content: 'Inspection complete.' },
+        ],
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_2',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(estimateRuntimeMessageTokens(messages)).toBeLessThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages,
+    })).toBeNull();
+
+    const nativeReplayMessages = messages.map((message) => (
+      message.id === 'assistant_1'
+        ? {
+            ...message,
+            providerMetadata: {
+              anthropic: {
+                contentBlocks: [
+                  { type: 'thinking' as const, thinking: 'x'.repeat(4_000), signature: 'sig_1' },
+                  { type: 'text' as const, text: 'Inspection complete.' },
+                ],
+              },
+            },
+          }
+        : message
+    ));
+
+    expect(estimateRuntimeMessageTokens(nativeReplayMessages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages: nativeReplayMessages,
+    })).not.toBeNull();
+  });
+
+  it('counts opaque native reasoning state even without a visible reasoning delta', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Inspect the implementation.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: 'Inspection complete.',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_2',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    const withAssistantMetadata = (
+      providerMetadata: NonNullable<RuntimeMessage['providerMetadata']>,
+    ): RuntimeMessage[] => messages.map((message) => (
+      message.id === 'assistant_1' ? { ...message, providerMetadata } : message
+    ));
+    const opaquePayload = 'x'.repeat(4_000);
+    const anthropicMessages = withAssistantMetadata({
+      anthropic: {
+        contentBlocks: [{ type: 'redacted_thinking', data: opaquePayload }],
+      },
+    });
+    const openAiResponsesMessages = withAssistantMetadata({
+      schemaVersion: 2,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses',
+        model: 'gpt-test',
+        endpointFingerprint: 'a'.repeat(64),
+      },
+      openAiResponses: {
+        kind: 'response',
+        items: [{ type: 'reasoning', encrypted_content: opaquePayload }],
+      },
+    });
+
+    for (const nativeMessages of [anthropicMessages, openAiResponsesMessages]) {
+      expect(estimateRuntimeMessageTokens(nativeMessages)).toBeGreaterThan(1_000);
+      expect(createRuntimeContextCompactionCandidate({
+        budget: { maxContextTokens: 1_000 },
+        messages: nativeMessages,
+      })).not.toBeNull();
+    }
+  });
+
+  it('counts replayed native compaction envelopes toward context usage', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'compact_1',
+        role: 'user',
+        content: 'Portable summary.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 4,
+          compactedTokens: 800,
+          keptRecentMessageCount: 2,
+          maxContextTokensK: 128,
+          originalMessageCount: 5,
+          originalTokens: 900,
+        },
+        providerMetadata: {
+          schemaVersion: 2,
+          source: {
+            providerId: 'provider-1',
+            providerKind: 'openai-responses',
+            model: 'gpt-test',
+            endpointFingerprint: 'a'.repeat(64),
+          },
+          openAiResponses: {
+            kind: 'compaction',
+            items: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'x'.repeat(4_000) }],
+          },
+        },
+      },
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+    ];
+
+    const withoutEnvelope = messages.map((message) => ({ ...message, providerMetadata: undefined }));
+    expect(estimateRuntimeMessageTokens(withoutEnvelope)).toBeLessThan(1_000);
+    expect(estimateRuntimeMessageTokens(messages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages,
+    })).not.toBeNull();
+  });
+
   it('does not count display-only generated image data as model context', () => {
     const baseMessages: RuntimeMessage[] = [
       {

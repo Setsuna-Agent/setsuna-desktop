@@ -29,4 +29,34 @@ describe('chatThinkingContent', () => {
     expect(hasThinkingSegments('<think>plan</think>answer')).toBe(true);
     expect(hasThinkingSegments('answer')).toBe(false);
   });
+
+  it('keeps nested tag examples inside the outer thinking segment', () => {
+    const content = '<think>inspect "before<think>private</think>after" and keep reasoning';
+
+    expect(splitThinkingContent(content, true)).toEqual([{
+      type: 'think',
+      content: 'inspect "before<think>private</think>after" and keep reasoning',
+      closed: false,
+    }]);
+  });
+
+  it('keeps streaming final text visible when it mentions the old protocol as inline code', () => {
+    const content = '审查范围主要是将 `<think>` 标签迁移为结构化通道。';
+
+    expect(splitThinkingContent(content, true)).toEqual([{
+      type: 'markdown',
+      content,
+      closed: true,
+    }]);
+  });
+
+  it('does not expose a legacy streaming tail after an ambiguous closing-tag example', () => {
+    const content = '<think>private reasoning mentions </think> but is still running';
+
+    expect(splitThinkingContent(content, true)).toEqual([{
+      type: 'think',
+      content: 'private reasoning mentions </think> but is still running',
+      closed: false,
+    }]);
+  });
 });

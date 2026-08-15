@@ -4,20 +4,53 @@ export type ThinkTagMatch = {
   index: number;
 };
 
+export type ThinkTaggedTextSegment = {
+  closed: boolean;
+  content: string;
+  type: 'markdown' | 'think';
+};
+
+type TextRange = {
+  end: number;
+  start: number;
+};
+
+type MarkdownContainerFrame =
+  | { type: 'quote' }
+  | { continuationIndent: number; type: 'list' };
+
+type MarkdownFenceDelimiter = {
+  end: number;
+  length: number;
+  marker: '`' | '~';
+  start: number;
+};
+
 const RAW_TAG_WITHOUT_END = Symbol('raw-tag-without-end');
 
 /**
- * Finds raw and HTML-escaped think tags in one forward pass.
+ * Finds raw and HTML-escaped think tags in linear forward passes.
  *
  * Model output is untrusted and can be large, so this deliberately avoids a
  * backtracking expression whose failed matches rescan the remaining content.
  */
 export function* thinkTagMatches(text: string): Generator<ThinkTagMatch> {
+  const codeRanges = markdownCodeRanges(text);
+  let codeRangeIndex = 0;
   let rawTagsPossible = true;
 
   for (let index = 0; index < text.length; index += 1) {
+    const codeRange = codeRanges[codeRangeIndex];
+    if (codeRange && index >= codeRange.start) {
+      index = codeRange.end - 1;
+      codeRangeIndex += 1;
+      continue;
+    }
+
     const code = text.charCodeAt(index);
-    if (code === 0x3c && rawTagsPossible) {
+    // A backslash-escaped angle bracket is literal Markdown text, not a protocol boundary;
+    // only an odd backslash run escapes the following tag candidate.
+    if (code === 0x3c && rawTagsPossible && !isEscapedDelimiter(text, index)) {
       const match = rawThinkTagAt(text, index);
       if (match === RAW_TAG_WITHOUT_END) {
         // No later raw tag can close when the remaining text contains no `>`.
@@ -37,6 +70,624 @@ export function* thinkTagMatches(text: string): Generator<ThinkTagMatch> {
       }
     }
   }
+}
+
+/**
+ * Returns only user-visible text, treating an unterminated think block as a hidden tail.
+ * This matches the transcript renderer and prevents malformed private reasoning from being
+ * mistaken for a usable final answer.
+ */
+export function visibleTextOutsideThinkTags(text: string): string {
+  return splitThinkTaggedText(text)
+    .filter((segment) => segment.type === 'markdown')
+    .map((segment) => segment.content)
+    .join('');
+}
+
+/**
+ * Splits the deprecated tag-based transcript representation. Markdown code spans, fences, and
+ * indented code blocks are excluded before matching because model-authored answers discuss the old
+ * protocol as code. Nested blocks use balanced matching, while separate blocks retain the visible
+ * text between them. During streaming or after an unterminated opening, that block owns the tail.
+ */
+export function splitThinkTaggedText(
+  text: string,
+  options: { legacyStreaming?: boolean } = {},
+): ThinkTaggedTextSegment[] {
+  const matches = [...thinkTagMatches(text)];
+  const segments: ThinkTaggedTextSegment[] = [];
+  let cursor = 0;
+  let matchIndex = 0;
+
+  const firstOpeningIndex = matches.findIndex((match) => !match.closing);
+  if (options.legacyStreaming && firstOpeningIndex >= 0) {
+    const opening = matches[firstOpeningIndex];
+    return [
+      { type: 'markdown', content: text.slice(0, opening.index), closed: true },
+      { type: 'think', content: text.slice(opening.end), closed: false },
+    ];
+  }
+  if (firstOpeningIndex >= 0 && hasAmbiguousTagOrder(matches, firstOpeningIndex)) {
+    const opening = matches[firstOpeningIndex];
+    const closingIndex = findLastClosingIndex(matches, firstOpeningIndex + 1);
+    segments.push({ type: 'markdown', content: text.slice(0, opening.index), closed: true });
+    if (closingIndex < 0) {
+      segments.push({ type: 'think', content: text.slice(opening.end), closed: false });
+      return segments;
+    }
+    const closing = matches[closingIndex];
+    segments.push({ type: 'think', content: text.slice(opening.end, closing.index), closed: true });
+    if (closing.end < text.length) {
+      segments.push({ type: 'markdown', content: text.slice(closing.end), closed: true });
+    }
+    return segments;
+  }
+
+  while (matchIndex < matches.length) {
+    let openingIndex = matchIndex;
+    while (openingIndex < matches.length && matches[openingIndex]?.closing) openingIndex += 1;
+    if (openingIndex >= matches.length) break;
+    const opening = matches[openingIndex];
+    segments.push({ type: 'markdown', content: text.slice(cursor, opening.index), closed: true });
+
+    const closingIndex = findMatchingClosingIndex(matches, openingIndex + 1);
+    if (closingIndex < 0) {
+      segments.push({ type: 'think', content: text.slice(opening.end), closed: false });
+      cursor = text.length;
+      matchIndex = matches.length;
+      break;
+    }
+
+    const closing = matches[closingIndex];
+    segments.push({ type: 'think', content: text.slice(opening.end, closing.index), closed: true });
+    cursor = closing.end;
+    matchIndex = closingIndex + 1;
+  }
+
+  if (cursor < text.length || !segments.length) {
+    segments.push({ type: 'markdown', content: text.slice(cursor), closed: true });
+  }
+  return segments;
+}
+
+function findMatchingClosingIndex(matches: ThinkTagMatch[], startIndex: number): number {
+  let depth = 1;
+  for (let index = startIndex; index < matches.length; index += 1) {
+    if (matches[index]?.closing) {
+      depth -= 1;
+      if (depth === 0) return index;
+    } else {
+      depth += 1;
+    }
+  }
+  return -1;
+}
+
+function findLastClosingIndex(matches: ThinkTagMatch[], startIndex: number): number {
+  for (let index = matches.length - 1; index >= startIndex; index -= 1) {
+    if (matches[index]?.closing) return index;
+  }
+  return -1;
+}
+
+/**
+ * A standalone closing tag proves that the string no longer contains an unambiguous sequence of
+ * balanced legacy blocks. In that case the only privacy-safe boundary is the final closing tag.
+ */
+function hasAmbiguousTagOrder(matches: ThinkTagMatch[], startIndex: number): boolean {
+  let depth = 0;
+  for (let index = startIndex; index < matches.length; index += 1) {
+    if (!matches[index]?.closing) {
+      depth += 1;
+      continue;
+    }
+    if (depth === 0) return true;
+    depth -= 1;
+  }
+  return false;
+}
+
+/**
+ * Returns valid Markdown code ranges. Delimited spans/fences must be closed; an unmatched marker
+ * cannot conceal later private reasoning. Indented blocks end at the next nonblank, unindented line.
+ */
+function markdownCodeRanges(text: string): TextRange[] {
+  const blockRanges = mergeOrderedTextRanges(
+    markdownFencedCodeRanges(text),
+    markdownIndentedCodeRanges(text),
+  );
+  const ranges: TextRange[] = [];
+  let opening: { length: number; start: number } | null = null;
+  let blockRangeIndex = 0;
+  let lineStart = 0;
+  let lineEnd = markdownLineEnd(text, lineStart);
+  let lineContainerContentStart = markdownContainerContentStart(text, lineStart, lineEnd);
+
+  for (let index = 0; index < text.length;) {
+    const blockRange = blockRanges[blockRangeIndex];
+    if (blockRange && index >= blockRange.start) {
+      opening = null;
+      ranges.push(blockRange);
+      index = blockRange.end;
+      blockRangeIndex += 1;
+      continue;
+    }
+    if (text[index] === '\n') {
+      lineStart = index + 1;
+      lineEnd = markdownLineEnd(text, lineStart);
+      lineContainerContentStart = markdownContainerContentStart(text, lineStart, lineEnd);
+      index += 1;
+      continue;
+    }
+    if (text[index] !== '`') {
+      index += 1;
+      continue;
+    }
+
+    const start = index;
+    const escapedOpening = !opening && isEscapedDelimiter(text, index);
+    while (text[index] === '`') index += 1;
+    const length = index - start;
+    if (
+      length >= 3
+      && lineContainerContentStart === start
+    ) {
+      // A line-start run is fence syntax only when it is a valid opener or closer; an info
+      // string containing a backtick is not a fence, so CommonMark treats the run as an
+      // inline code span delimiter that a later equal run can close across lines.
+      const validFenceDelimiter = isFenceOpening(text, { end: index, marker: '`' }, lineEnd)
+        || isWhitespaceOnly(text, index, lineEnd);
+      if (validFenceDelimiter) {
+        opening = null;
+        continue;
+      }
+    }
+    if (!opening && !escapedOpening) {
+      opening = { length, start };
+    } else if (opening?.length === length) {
+      ranges.push({ start: opening.start, end: index });
+      opening = null;
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Indented code has no closing delimiter, so only start a block at a document/blank-line boundary.
+ * This preserves CommonMark code examples without letting paragraph-continuation indentation hide
+ * a malformed legacy privacy boundary.
+ */
+function markdownIndentedCodeRanges(text: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let rangeStart: number | null = null;
+  let rangeEnd = 0;
+  let previousLineBlank = true;
+  let previousFrames: MarkdownContainerBodyFrame[] = [];
+
+  for (let lineStart = 0; lineStart < text.length;) {
+    const lineEnd = markdownLineEnd(text, lineStart);
+    const { contentStart, frames } = markdownContainerBody(text, lineStart, lineEnd);
+    const blank = isWhitespaceOnly(text, contentStart, lineEnd);
+    const indented = !blank && markdownIndentColumns(text, contentStart, lineEnd) >= 4;
+
+    if (rangeStart !== null) {
+      if (indented) {
+        rangeEnd = lineEnd;
+      } else if (!blank) {
+        ranges.push({ start: rangeStart, end: rangeEnd });
+        rangeStart = null;
+      }
+    } else if (indented && (previousLineBlank || enteredFreshContainerScope(frames, previousFrames, previousLineBlank))) {
+      // A newly entered container interrupts any outer paragraph, so its first content line
+      // may start an indented code block without a preceding blank line.
+      rangeStart = lineStart;
+      rangeEnd = lineEnd;
+    }
+
+    previousLineBlank = blank;
+    previousFrames = frames;
+    lineStart = lineEnd < text.length ? lineEnd + 1 : text.length;
+  }
+
+  if (rangeStart !== null) ranges.push({ start: rangeStart, end: rangeEnd });
+  return ranges;
+}
+
+/**
+ * A line begins fresh container content when it deepens the container nesting, switches to a
+ * different container path, or repeats a list marker at the same depth (a new list item).
+ * Repeated quote markers at the same depth continue the same quote, and a shallower line may
+ * still lazily continue an outer paragraph, so neither can start an indented code block.
+ * An ordered list marker that interrupts a paragraph must start at 1; a marker nested inside
+ * the previous item's content interrupts its paragraph directly, while a same-column marker
+ * of a different kind ends the previous list and starts a sibling list instead.
+ */
+function enteredFreshContainerScope(
+  frames: MarkdownContainerBodyFrame[],
+  previousFrames: MarkdownContainerBodyFrame[],
+  previousLineBlank: boolean,
+): boolean {
+  if (frames.length > previousFrames.length) {
+    const introducedList = frames.slice(previousFrames.length).find((frame) => frame.type === 'list');
+    return orderedListStartsBlock(introducedList, previousLineBlank);
+  }
+  if (!frames.length || frames.length < previousFrames.length) return false;
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index]!;
+    const previous = previousFrames[index]!;
+    if (frame.type !== previous.type) return true;
+    if (frame.type !== 'list' || previous.type !== 'list') continue;
+    if (frame.markerColumn > previous.markerColumn) {
+      if (frame.signature === previous.signature) return true;
+      return orderedListStartsBlock(frame, previousLineBlank);
+    }
+    // A same-column or outdented marker ends the previous list and starts a sibling list.
+    return true;
+  }
+  // Identical quote-only paths continue the same quote.
+  return false;
+}
+
+function orderedListStartsBlock(
+  frame: MarkdownContainerBodyFrame | undefined,
+  previousLineBlank: boolean,
+): boolean {
+  if (!frame || frame.type !== 'list' || !frame.ordered) return true;
+  return previousLineBlank || frame.startNumber === 1;
+}
+
+function markdownIndentColumns(text: string, lineStart: number, lineEnd: number): number {
+  let columns = 0;
+  for (let index = lineStart; index < lineEnd; index += 1) {
+    if (text[index] === ' ') {
+      columns += 1;
+    } else if (text[index] === '\t') {
+      columns += 4 - (columns % 4);
+    } else {
+      break;
+    }
+    if (columns >= 4) return columns;
+  }
+  return columns;
+}
+
+function mergeOrderedTextRanges(left: TextRange[], right: TextRange[]): TextRange[] {
+  const merged: TextRange[] = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+
+  while (leftIndex < left.length || rightIndex < right.length) {
+    const takeLeft = rightIndex >= right.length
+      || (leftIndex < left.length && left[leftIndex]!.start <= right[rightIndex]!.start);
+    const next = takeLeft ? left[leftIndex++]! : right[rightIndex++]!;
+    const previous = merged.at(-1);
+    if (previous && next.start <= previous.end) {
+      previous.end = Math.max(previous.end, next.end);
+    } else {
+      merged.push({ ...next });
+    }
+  }
+
+  return merged;
+}
+
+function markdownFencedCodeRanges(text: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let opening: MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] } | null = null;
+
+  for (let lineStart = 0; lineStart < text.length;) {
+    const lineEnd = markdownLineEnd(text, lineStart);
+    const scopedContentStart = opening
+      ? markdownContainerScopeContentStart(text, lineStart, lineEnd, opening.scope)
+      : null;
+    if (opening && scopedContentStart === null) {
+      // A fence inside a quote/list ends when a line leaves that container. Whitespace-only
+      // lines continue a pure list scope (loose list items allow interior blanks), but
+      // CommonMark ends a block quote at any blank it does not mark. Keeping such a fence
+      // open would let a later in-scope delimiter hide a private legacy block as code.
+      const blankContinuesPureListScope = isWhitespaceOnly(text, lineStart, lineEnd)
+        && !opening.scope.some((frame) => frame.type === 'quote');
+      if (!blankContinuesPureListScope) opening = null;
+    }
+
+    const delimiter = opening && scopedContentStart !== null
+      ? markdownFenceDelimiterAt(text, scopedContentStart, lineEnd)
+      : null;
+    const candidate: (MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] }) | null = opening
+      ? null
+      : markdownFenceOpeningDelimiter(text, lineStart, lineEnd);
+    if (candidate && isFenceOpening(text, candidate, lineEnd)) {
+      opening = candidate;
+    } else if (
+      opening
+      && delimiter?.marker === opening.marker
+      && delimiter.length >= opening.length
+      && isWhitespaceOnly(text, delimiter.end, lineEnd)
+    ) {
+      ranges.push({ start: opening.start, end: lineEnd });
+      opening = null;
+    }
+    lineStart = lineEnd < text.length ? lineEnd + 1 : text.length;
+  }
+  return ranges;
+}
+
+function markdownFenceOpeningDelimiter(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): (MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] }) | null {
+  const container = markdownOpeningContainer(text, lineStart, lineEnd);
+  const delimiter = markdownFenceDelimiterAt(text, container.contentStart, lineEnd);
+  return delimiter ? { ...delimiter, scope: container.scope } : null;
+}
+
+function markdownFenceDelimiterAt(
+  text: string,
+  contentStart: number,
+  lineEnd: number,
+): MarkdownFenceDelimiter | null {
+  let start = contentStart;
+  while (start < lineEnd && text[start] === ' ' && start - contentStart < 3) start += 1;
+  const marker = text[start];
+  if (marker !== '`' && marker !== '~') return null;
+
+  let end = start;
+  while (end < lineEnd && text[end] === marker) end += 1;
+  const length = end - start;
+  return length >= 3 ? { end, length, marker, start } : null;
+}
+
+function markdownOpeningContainer(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): { contentStart: number; scope: MarkdownContainerFrame[] } {
+  const scope: MarkdownContainerFrame[] = [];
+  let cursor = lineStart;
+
+  while (cursor < lineEnd) {
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+    if (text[markerStart] === '>') {
+      scope.push({ type: 'quote' });
+      cursor = markerStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listContentStart = markdownListContentStart(text, markerStart, lineEnd);
+    if (listContentStart !== null) {
+      scope.push({
+        continuationIndent: markdownTextColumns(text, cursor, listContentStart),
+        type: 'list',
+      });
+      cursor = listContentStart;
+      continue;
+    }
+    break;
+  }
+  return { contentStart: cursor, scope };
+}
+
+function markdownContainerScopeContentStart(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+  scope: MarkdownContainerFrame[],
+): number | null {
+  let cursor = lineStart;
+  for (const frame of scope) {
+    if (frame.type === 'list') {
+      cursor = markdownIndentedContentStart(text, cursor, lineEnd, frame.continuationIndent);
+      if (cursor < 0) return null;
+      continue;
+    }
+
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+    if (text[markerStart] !== '>') return null;
+    cursor = markerStart + 1;
+    if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+  }
+  return cursor;
+}
+
+function markdownIndentedContentStart(
+  text: string,
+  start: number,
+  lineEnd: number,
+  requiredColumns: number,
+): number {
+  let columns = 0;
+  let cursor = start;
+  while (cursor < lineEnd && columns < requiredColumns) {
+    if (text[cursor] === ' ') {
+      columns += 1;
+    } else if (text[cursor] === '\t') {
+      columns += 4 - (columns % 4);
+    } else {
+      return -1;
+    }
+    cursor += 1;
+  }
+  return columns >= requiredColumns ? cursor : -1;
+}
+
+function markdownTextColumns(text: string, start: number, end: number): number {
+  let columns = 0;
+  for (let cursor = start; cursor < end; cursor += 1) {
+    columns += text[cursor] === '\t' ? 4 - (columns % 4) : 1;
+  }
+  return columns;
+}
+
+function isFenceOpening(
+  text: string,
+  delimiter: { end: number; marker: '`' | '~' },
+  lineEnd: number,
+): boolean {
+  return delimiter.marker === '~' || !text.slice(delimiter.end, lineEnd).includes('`');
+}
+
+/**
+ * Keeps indentation after valid quote/list prefixes so nested code can be measured locally.
+ * Also reports the consumed container marker sequence so callers can tell when a line enters
+ * fresh container content instead of continuing an outer block.
+ */
+type MarkdownContainerBodyFrame =
+  | { type: 'quote' }
+  | {
+      type: 'list';
+      continuationIndent: number;
+      markerColumn: number;
+      ordered: boolean;
+      signature: string;
+      startNumber: number;
+    };
+
+function markdownContainerBody(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): { contentStart: number; frames: MarkdownContainerBodyFrame[] } {
+  const frames: MarkdownContainerBodyFrame[] = [];
+  let cursor = lineStart;
+  while (cursor < lineEnd) {
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+
+    if (text[markerStart] === '>') {
+      frames.push({ type: 'quote' });
+      cursor = markerStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listMarker = markdownListMarker(text, markerStart, lineEnd);
+    if (listMarker) {
+      frames.push({
+        type: 'list',
+        continuationIndent: markdownTextColumns(text, cursor, listMarker.contentStart),
+        markerColumn: markdownTextColumns(text, lineStart, markerStart),
+        ordered: listMarker.ordered,
+        signature: listMarker.signature,
+        startNumber: listMarker.startNumber,
+      });
+      cursor = listMarker.contentStart;
+      continue;
+    }
+    return { contentStart: cursor, frames };
+  }
+  return { contentStart: cursor, frames };
+}
+
+/** Returns the first content byte after valid block quote/list container prefixes. */
+function markdownContainerContentStart(text: string, lineStart: number, lineEnd: number): number {
+  let cursor = lineStart;
+  while (cursor < lineEnd) {
+    let contentStart = cursor;
+    while (contentStart < lineEnd && text[contentStart] === ' ' && contentStart - cursor < 3) {
+      contentStart += 1;
+    }
+
+    if (text[contentStart] === '>') {
+      cursor = contentStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listContentStart = markdownListContentStart(text, contentStart, lineEnd);
+    if (listContentStart !== null) {
+      cursor = listContentStart;
+      continue;
+    }
+    return contentStart;
+  }
+  return cursor;
+}
+
+function markdownListContentStart(text: string, start: number, lineEnd: number): number | null {
+  return markdownListMarker(text, start, lineEnd)?.contentStart ?? null;
+}
+
+function markdownListMarker(
+  text: string,
+  start: number,
+  lineEnd: number,
+): { contentStart: number; ordered: boolean; signature: string; startNumber: number } | null {
+  let markerEnd = start;
+  const marker = text[markerEnd];
+  let ordered = false;
+  let signature = '';
+  let startNumber = 0;
+  if (marker === '-' || marker === '+' || marker === '*') {
+    signature = `bullet:${marker}`;
+    markerEnd += 1;
+  } else {
+    const digitsStart = markerEnd;
+    while (markerEnd < lineEnd && markerEnd - start < 9 && isAsciiDigit(text[markerEnd])) {
+      markerEnd += 1;
+    }
+    if (markerEnd === start || (text[markerEnd] !== '.' && text[markerEnd] !== ')')) return null;
+    startNumber = Number(text.slice(digitsStart, markerEnd));
+    signature = `ordered:${text[markerEnd]}`;
+    ordered = true;
+    markerEnd += 1;
+  }
+
+  if (markerEnd === lineEnd) return { contentStart: lineEnd, ordered, signature, startNumber };
+  let contentStart = markerEnd;
+  let paddingColumns = 0;
+  while (contentStart < lineEnd) {
+    if (text[contentStart] === ' ') {
+      paddingColumns += 1;
+    } else if (text[contentStart] === '\t') {
+      paddingColumns += 4 - (paddingColumns % 4);
+    } else {
+      break;
+    }
+    contentStart += 1;
+  }
+  if (paddingColumns === 0) return null;
+  // CommonMark treats 5+ columns after a list marker as one column of list padding; the rest
+  // remains content indentation and can therefore open an indented code block.
+  return {
+    contentStart: paddingColumns <= 4 ? contentStart : markerEnd + 1,
+    ordered,
+    signature,
+    startNumber,
+  };
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
+}
+
+function isWhitespaceOnly(text: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
+    if (text[index] !== ' ' && text[index] !== '\t' && text[index] !== '\r') return false;
+  }
+  return true;
+}
+
+function markdownLineEnd(text: string, lineStart: number): number {
+  const lineFeed = text.indexOf('\n', lineStart);
+  return lineFeed < 0 ? text.length : lineFeed;
+}
+
+function isEscapedDelimiter(text: string, index: number): boolean {
+  let backslashCount = 0;
+  for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor -= 1) {
+    backslashCount += 1;
+  }
+  return backslashCount % 2 === 1;
 }
 
 function rawThinkTagAt(

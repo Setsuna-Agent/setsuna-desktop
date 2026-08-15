@@ -230,6 +230,180 @@ describe('runtime event writer', () => {
     });
   });
 
+  it('preserves reasoning and content order when a channel resumes inside one batch', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-channel-order-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000);
+    const thread = await store.createThread({ title: 'Channel order' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    for (const [index, delta] of [
+      { channel: 'reasoning' as const, text: 'reasoning-1' },
+      { channel: 'content' as const, text: 'content-1' },
+      { channel: 'reasoning' as const, text: 'reasoning-2' },
+    ].entries()) {
+      await writer.append(thread.id, {
+        id: `event_delta_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'message.delta',
+        createdAt,
+        payload: { messageId: 'msg_1', ...delta },
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt,
+      payload: { messageId: 'msg_1', content: 'content-1' },
+    });
+
+    const persistedDeltas = (await store.listEvents(thread.id))
+      .filter((event) => event.type === 'message.delta')
+      .map((event) => event.payload);
+    expect(persistedDeltas).toEqual([
+      { messageId: 'msg_1', channel: 'reasoning', text: 'reasoning-1' },
+      { messageId: 'msg_1', channel: 'content', text: 'content-1' },
+      { messageId: 'msg_1', channel: 'reasoning', text: 'reasoning-2' },
+    ]);
+    await expect(store.getThread(thread.id)).resolves.toMatchObject({
+      messages: [expect.objectContaining({
+        content: 'content-1',
+        streamParts: [
+          { type: 'reasoning', content: 'reasoning-1' },
+          { type: 'content', content: 'content-1' },
+          { type: 'reasoning', content: 'reasoning-2' },
+        ],
+      })],
+    });
+  });
+
+  it('coalesces dual-written item and message deltas from one stream', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-dual-stream-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000);
+    const thread = await store.createThread({ title: 'Dual stream batching' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    for (const [index, text] of ['a', 'b', 'c'].entries()) {
+      await writer.append(thread.id, {
+        id: `event_item_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'item.delta',
+        createdAt,
+        payload: { itemId: 'msg_1', delta: text },
+      });
+      await writer.append(thread.id, {
+        id: `event_message_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'message.delta',
+        createdAt,
+        payload: { messageId: 'msg_1', text },
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt,
+      payload: { messageId: 'msg_1', content: 'abc' },
+    });
+
+    const events = await store.listEvents(thread.id);
+    expect(events.map((event) => event.type)).toEqual([
+      'thread.created', 'message.created', 'item.delta', 'message.delta', 'message.completed',
+    ]);
+    expect(events[2]).toMatchObject({ type: 'item.delta', payload: { itemId: 'msg_1', delta: 'abc' } });
+    expect(events[3]).toMatchObject({ type: 'message.delta', payload: { messageId: 'msg_1', text: 'abc' } });
+  });
+
+  it('does not move a reasoning delta backwards past an intervening item stream', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-cross-type-order-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000);
+    const thread = await store.createThread({ title: 'Cross-type order' });
+    const createdAt = systemClock.now().toISOString();
+
+    const deltas = [
+      {
+        id: 'event_reasoning_1',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 0, delta: 'first ' },
+      },
+      {
+        id: 'event_item_1',
+        type: 'item.delta',
+        payload: { itemId: 'msg_1', delta: 'content' },
+      },
+      {
+        id: 'event_reasoning_2',
+        type: 'reasoning.raw_delta',
+        payload: { itemId: 'reasoning_item', contentIndex: 0, delta: 'second' },
+      },
+    ] as const;
+    for (const delta of deltas) {
+      await writer.append(thread.id, {
+        ...delta,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        createdAt,
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_turn_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'turn.completed',
+      createdAt,
+      payload: {},
+    });
+
+    expect((await store.listEvents(thread.id)).slice(1)).toMatchObject([
+      { id: 'event_reasoning_1', type: 'reasoning.raw_delta', payload: { delta: 'first ' } },
+      { id: 'event_item_1', type: 'item.delta', payload: { delta: 'content' } },
+      { id: 'event_reasoning_2', type: 'reasoning.raw_delta', payload: { delta: 'second' } },
+      { id: 'event_turn_completed', type: 'turn.completed' },
+    ]);
+  });
+
   it('coalesces plan and reasoning parts without crossing turn or lifecycle boundaries', async () => {
     const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-structured-delta-test-')),

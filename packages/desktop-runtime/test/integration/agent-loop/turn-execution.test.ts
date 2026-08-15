@@ -24,12 +24,14 @@ import {
 import {
   EmptyModelClient,
   FailingCleanupToolHost,
+  HiddenOnlyModelClient,
   ProviderMetadataToolModelClient,
   RefreshingToolHost,
   ResponsesPhaseToolModelClient,
   StepSnapshotConfigStore,
   stepSnapshotMcpStore,
   StepSnapshotModelClient,
+  StructuredToolContinuationModelClient,
 } from '../../support/agent-loop/turn-execution.js';
 
 describe('agent loop turn execution', () => {
@@ -152,6 +154,64 @@ describe('agent loop turn execution', () => {
       ]);
     });
 
+  it('detaches the published assistant snapshot from live stream parts', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Created snapshot', projectId: 'project_1' });
+      const eventBus = new InMemoryEventBus();
+      const createdAssistantMessages: RuntimeEvent[] = [];
+      eventBus.subscribe(thread.id, (event) => {
+        if (event.type === 'message.created' && event.payload.message.role === 'assistant') {
+          createdAssistantMessages.push(event);
+        }
+      });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient: new StructuredToolContinuationModelClient(),
+        eventBus,
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'inspect the structured answer' });
+
+      // The published message.created event must not accumulate parts that streamed after
+      // publication; subscribers apply those through the persisted message.delta events.
+      expect(createdAssistantMessages.length).toBeGreaterThan(0);
+      for (const event of createdAssistantMessages) {
+        expect(event.payload).toMatchObject({ message: { streamParts: [] } });
+      }
+    });
+
+  it('carries structured assistant channels into a tool-result sampling step', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Structured tool continuation', projectId: 'project_1' });
+      const modelClient = new StructuredToolContinuationModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'inspect the structured answer' });
+
+      const continuedAssistant = modelClient.requests[1]?.messages.find(
+        (message) => message.role === 'assistant' && message.toolCalls?.length,
+      );
+      expect(continuedAssistant).toMatchObject({
+        content: 'Keep <think>literal text</think> visible.',
+        streamParts: [
+          { type: 'reasoning', content: 'Need to inspect the file.' },
+          { type: 'content', content: 'Keep <think>literal text</think> visible.' },
+        ],
+      });
+    });
+
   it('ignores provider phase and classifies canonical messages when runtime decides continuation', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -220,7 +280,40 @@ describe('agent loop turn execution', () => {
       expect(events.some((event) => event.type === 'runtime.error')).toBe(true);
       expect(events.some((event) => event.type === 'turn.completed')).toBe(false);
     });
-  
+
+  it('fails a hidden-only model response at the sampling boundary without retrying', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Hidden-only final response' });
+      const modelClient = new HiddenOnlyModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await expect(loop.sendTurn(thread.id, { input: 'finish the task' }))
+        .rejects.toThrow('只返回了思考内容');
+
+      const saved = await threadStore.getThread(thread.id);
+      const events = await threadStore.listEvents(thread.id, 0);
+      expect(modelClient.requests).toHaveLength(1);
+      expect(saved?.turns?.at(-1)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('只返回了思考内容'),
+      });
+      expect(saved?.messages.find((message) => message.role === 'assistant')).toMatchObject({
+        content: '',
+        streamParts: [{ type: 'reasoning', content: 'I still need to finish the task.' }],
+        status: 'error',
+        error: expect.stringContaining('只返回了思考内容'),
+      });
+      expect(events.some((event) => event.type === 'runtime.error')).toBe(true);
+      expect(events.some((event) => event.type === 'turn.completed')).toBe(false);
+    });
+
   it('keeps a completed turn terminal when tool cleanup fails', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

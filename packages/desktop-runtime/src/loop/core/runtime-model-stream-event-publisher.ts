@@ -92,6 +92,19 @@ export class RuntimeModelStreamEventPublisher {
     });
   }
 
+  /** Publishes provider reasoning on a structured message channel, never into visible content. */
+  async publishAssistantReasoningDelta(threadId: string, turnId: string, messageId: string, text: string): Promise<void> {
+    if (!text) return;
+    await this.options.appendEvent(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      turnId,
+      type: 'message.delta',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { messageId, text, channel: 'reasoning' },
+    });
+  }
+
   /** App Server agentMessage items contain only assistant text, never transcript <think> tags. */
   async publishAssistantItemDelta(
     threadId: string,

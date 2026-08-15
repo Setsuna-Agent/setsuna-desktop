@@ -116,7 +116,7 @@ describe('runtime server AppServer thread lifecycle', () => {
             id: 'injected_assistant',
             type: 'message',
             role: 'assistant',
-            content: [{ type: 'output_text', text: 'Injected assistant context.' }],
+            content: [{ type: 'output_text', text: 'Injected <think>literal assistant context</think>.' }],
           },
           {
             id: 'injected_call',
@@ -139,10 +139,17 @@ describe('runtime server AppServer thread lifecycle', () => {
       expect(thread.lastMessagePreview).toBe('');
       expect(thread.messages).toEqual([
         expect.objectContaining({ id: 'injected_boundary', role: 'user', content: 'Side conversation boundary.', visibility: 'model' }),
-        expect.objectContaining({ id: 'injected_assistant', role: 'assistant', content: 'Injected assistant context.', visibility: 'model' }),
+        expect.objectContaining({
+          id: 'injected_assistant',
+          role: 'assistant',
+          content: 'Injected <think>literal assistant context</think>.',
+          streamParts: [{ type: 'content', content: 'Injected <think>literal assistant context</think>.' }],
+          visibility: 'model',
+        }),
         expect.objectContaining({
           id: 'injected_call',
           role: 'assistant',
+          streamParts: [],
           visibility: 'model',
           toolCalls: [{ id: 'call_injected', name: 'workspace_search_text', arguments: '{"query":"needle"}' }],
         }),

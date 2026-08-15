@@ -2,37 +2,71 @@ import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { SidebarThreadList } from '../../../../src/app/sidebar/SidebarThreadList.js';
+import {
+  nextSidebarVisibleCount,
+  SidebarThreadList,
+} from '../../../../src/app/sidebar/SidebarThreadList.js';
 
 vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
   SidebarFloatingMenu: ({ children }: { children: ReactNode }) => children,
 }));
 
 describe('SidebarThreadList', () => {
-  it('initially renders at most twenty conversations and offers the next batch', () => {
-    const html = renderThreadList(21);
+  it('initially renders five project conversations', () => {
+    const html = renderThreadList(6, 'project');
 
-    expect(html).toContain('conversation-20');
-    expect(html).not.toContain('conversation-21');
+    expect(html).toContain('conversation-5');
+    expect(html).not.toContain('conversation-6');
     expect(html).toContain('aria-label="再显示 1 个对话"');
     expect(html).toContain('展开显示');
   });
 
-  it('hides the expansion control after every conversation is visible', () => {
-    const html = renderThreadList(20);
+  it('initially renders twenty global conversations', () => {
+    const html = renderThreadList(21, 'global');
 
     expect(html).toContain('conversation-20');
+    expect(html).not.toContain('conversation-21');
+    expect(html).toContain('aria-label="再显示 1 个对话"');
+  });
+
+  it.each([
+    ['project', 5],
+    ['global', 20],
+  ] as const)('hides the %s expansion control at its batch boundary', (variant, count) => {
+    const html = renderThreadList(count, variant);
+
+    expect(html).toContain(`conversation-${count}`);
     expect(html).not.toContain('展开显示');
+  });
+
+  it('keeps selected and running conversations visible beyond the initial batch', () => {
+    const html = renderThreadList(22, 'project', {
+      runningThreadId: 'thread-22',
+      selectedThreadId: 'thread-21',
+    });
+
+    expect(html).toContain('conversation-21');
+    expect(html).toContain('conversation-22');
+    expect(html).not.toContain('展开显示');
+  });
+
+  it('expands from a pinned conversation instead of the stale page boundary', () => {
+    expect(nextSidebarVisibleCount(5, 11, 5, 22)).toBe(16);
+    expect(nextSidebarVisibleCount(20, 20, 20, 22)).toBe(22);
   });
 });
 
-function renderThreadList(threadCount: number) {
+function renderThreadList(
+  threadCount: number,
+  variant: 'global' | 'project',
+  active: { runningThreadId?: string | null; selectedThreadId?: string | null } = {},
+) {
   return renderToStaticMarkup(createElement(SidebarThreadList, {
     menuThreadId: null,
-    runningThreadId: null,
-    selectedThreadId: null,
+    runningThreadId: active.runningThreadId ?? null,
+    selectedThreadId: active.selectedThreadId ?? null,
     threads: Array.from({ length: threadCount }, (_, index) => createThread(index + 1)),
-    variant: 'global',
+    variant,
     onArchive: () => undefined,
     onRename: () => undefined,
     onSelect: () => undefined,

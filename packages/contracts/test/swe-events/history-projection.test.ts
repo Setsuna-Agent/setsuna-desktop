@@ -111,6 +111,52 @@ describe('runtime AppServer SWE persisted history projection', () => {
       }]);
     });
   
+  it('keeps structured literal think tags when projecting stored assistant messages', () => {
+      const thread: RuntimeThread = {
+        id: 'thread_1',
+        title: 'Structured stored thread',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        updatedAt: '2026-06-27T00:00:02.000Z',
+        archived: false,
+        messageCount: 2,
+        lastMessagePreview: '示例',
+        lastSeq: 2,
+        messages: [
+          {
+            id: 'msg_user',
+            turnId: 'turn_1',
+            role: 'user',
+            content: 'Give a literal example.',
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+          },
+          {
+            id: 'msg_assistant',
+            turnId: 'turn_1',
+            role: 'assistant',
+            content: '示例：<think>literal</think> 保留',
+            streamParts: [
+              { type: 'reasoning', content: 'structured reasoning' },
+              { type: 'content', content: '示例：<think>literal</think> 保留' },
+            ],
+            createdAt: '2026-06-27T00:00:01.000Z',
+            completedAt: '2026-06-27T00:00:02.000Z',
+            status: 'complete',
+          },
+        ],
+      };
+
+      expect(runtimeThreadToSweTurns(thread)).toMatchObject([{
+        id: 'turn_1',
+        status: 'completed',
+        items: [
+          { type: 'userMessage', id: 'msg_user' },
+          { type: 'reasoning', id: 'msg_assistant:reasoning', summary: ['structured reasoning'] },
+          { type: 'agentMessage', id: 'msg_assistant', text: '示例：<think>literal</think> 保留' },
+        ],
+      }]);
+    });
+
   it('projects persisted runtime turn stream items ahead of transcript fallbacks', () => {
       const thread: RuntimeThread = {
         id: 'thread_1',

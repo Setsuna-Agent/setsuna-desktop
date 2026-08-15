@@ -1,6 +1,7 @@
 import {
   normalizeRuntimeMessageProviderMetadata,
   sanitizeRuntimeJsonValue,
+  visibleTextOutsideThinkTags,
   type RuntimeJsonValue,
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
@@ -51,7 +52,16 @@ export function providerMetadataMatchesSemanticMessage(
 }
 
 export function portableRuntimeAssistantText(value: string): string {
-  return value.replace(/<think>[\s\S]*?<\/think>/giu, '');
+  return visibleTextOutsideThinkTags(value);
+}
+
+/** Current structured content is authoritative; only persisted legacy text uses tag envelopes. */
+export function portableRuntimeAssistantMessageText(
+  message: Pick<RuntimeMessage, 'content' | 'streamParts'>,
+): string {
+  return message.streamParts === undefined
+    ? portableRuntimeAssistantText(message.content)
+    : message.content;
 }
 
 export function runtimeJsonValuesEqual(left: unknown, right: unknown): boolean {

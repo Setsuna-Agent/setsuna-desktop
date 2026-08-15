@@ -43,12 +43,79 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
+  it('extracts a repository location from a Markdown-linked finding header', () => {
+    expect(parseRuntimeReviewResult([
+      '审查完成，发现一个问题。',
+      '',
+      '**[P1] 非流式路径会重复显示 reasoning — [chatAssistantTimeline.ts:205](apps/desktop/renderer/src/features/chat/conversation/chatAssistantTimeline.ts:205)**',
+      '同一段 reasoning 会同时出现在思考面板和正文中。',
+    ].join('\n'))).toEqual({
+      summary: '审查完成，发现一个问题。',
+      findings: [{
+        priority: 'P1',
+        title: '非流式路径会重复显示 reasoning',
+        path: 'apps/desktop/renderer/src/features/chat/conversation/chatAssistantTimeline.ts',
+        startLine: 205,
+        body: '同一段 reasoning 会同时出现在思考面板和正文中。',
+      }],
+    });
+  });
+
+  it('uses a Markdown link label when a GitHub target encodes the line as a fragment', () => {
+    expect(parseRuntimeReviewResult([
+      '审查完成，发现一个问题。',
+      '',
+      '[P2] 评论卡片不能丢失 — [packages/contracts/src/threads.ts:260](https://github.com/org/repo/blob/rev/packages/contracts/src/threads.ts#L260)',
+      '应当从可读标签恢复文件位置。',
+    ].join('\n'))).toEqual({
+      summary: '审查完成，发现一个问题。',
+      findings: [{
+        priority: 'P2',
+        title: '评论卡片不能丢失',
+        path: 'packages/contracts/src/threads.ts',
+        startLine: 260,
+        body: '应当从可读标签恢复文件位置。',
+      }],
+    });
+  });
+
+  it('does not let a later location overwrite a Markdown-linked finding target', () => {
+    expect(parseRuntimeReviewResult(
+      '[P2] Keep linked location — [src/a.ts:42](https://host/a#L42), related.ts:7',
+    ).findings[0]).toMatchObject({
+      path: 'src/a.ts',
+      startLine: 42,
+    });
+  });
+
+  it('keeps scanning for a location after a descriptive Markdown link', () => {
+    expect(parseRuntimeReviewResult(
+      '[P2] Issue — [context](https://tracker/item), src/a.ts:42',
+    ).findings[0]).toMatchObject({
+      title: 'Issue',
+      path: 'src/a.ts',
+      startLine: 42,
+    });
+  });
+
   it('does not split a title that quotes the finding delimiter', () => {
     expect(parseRuntimeReviewResult([
       '[P3] 解析器对标题内含 " — " 的 finding 误切分 — packages/runtime/src/review.ts:42',
       '标题必须保持完整。',
     ].join('\n')).findings[0]).toMatchObject({
       title: '解析器对标题内含 " — " 的 finding 误切分',
+      path: 'packages/runtime/src/review.ts',
+      startLine: 42,
+    });
+  });
+
+  it('keeps malformed Markdown-link candidates on a linear scan', () => {
+    const malformedCandidates = '候选 — [missing '.repeat(10_000);
+    const finding = parseRuntimeReviewResult(
+      `[P2] ${malformedCandidates}最终问题 — packages/runtime/src/review.ts:42`,
+    ).findings[0];
+
+    expect(finding).toMatchObject({
       path: 'packages/runtime/src/review.ts',
       startLine: 42,
     });
@@ -74,7 +141,7 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
-  it('ignores thinking and accepts markdown-formatted finding headers', () => {
+  it('ignores legacy thinking and accepts markdown-formatted finding headers', () => {
     expect(parseRuntimeReviewResult([
       '<think>[P1] internal draft — src/internal.ts:1</think>',
       '本轮发现两个问题。',
@@ -108,6 +175,37 @@ describe('parseRuntimeReviewResult', () => {
     expect(parseRuntimeReviewResult('<think>internal review only')).toEqual({
       findings: [],
       summary: '',
+    });
+  });
+
+  it('preserves literal think tags after the provider boundary separated reasoning', () => {
+    const review = [
+      'Review discusses <think>literal summary</think> markup.',
+      '',
+      '[P2] Preserve protocol examples — packages/contracts/src/threads.ts:179',
+      'Keep <think>literal body</think> in the visible review.',
+    ].join('\n');
+    const expected = {
+      summary: 'Review discusses <think>literal summary</think> markup.',
+      findings: [{
+        priority: 'P2' as const,
+        title: 'Preserve protocol examples',
+        path: 'packages/contracts/src/threads.ts',
+        startLine: 179,
+        body: 'Keep <think>literal body</think> in the visible review.',
+      }],
+    };
+
+    expect(parseRuntimeReviewResult(review, { legacyThinkTags: false })).toEqual(expected);
+    expect(normalizeRuntimeReviewNotice({
+      kind: 'exited',
+      reasoningSeparated: true,
+      review,
+    })).toEqual({
+      kind: 'exited',
+      reasoningSeparated: true,
+      review,
+      ...expected,
     });
   });
 });

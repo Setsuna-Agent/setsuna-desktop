@@ -116,6 +116,62 @@ describe('createAssistantRunTimeline', () => {
     ]);
   });
 
+  it('keeps leading literal think tags in authoritative structured content', () => {
+    const content = '<think>literal example</think> is valid answer text.';
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_structured_leading_example',
+      role: 'assistant',
+      content,
+      streamParts: [{ type: 'content', content }],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([{
+      type: 'content',
+      content,
+    }]);
+  });
+
+  it('joins completed structured content parts into one Markdown stream', () => {
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_split_construct',
+      role: 'assistant',
+      content: '**bold text**',
+      streamParts: [
+        { type: 'content', content: '**bold' },
+        { type: 'reasoning', content: 'checking emphasis' },
+        { type: 'content', content: ' text**' },
+      ],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([
+      { type: 'content', content: '**bold text**' },
+    ]);
+  });
+
+  it('keeps mid-answer literal tags in authoritative structured content', () => {
+    const content = 'Explain raw <think>example</think> text.';
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_structured_example',
+      role: 'assistant',
+      content,
+      streamParts: [{ type: 'content', content }],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([{
+      type: 'content',
+      content,
+    }]);
+  });
+
   it('renders open streaming thinking as active work', () => {
     const segments: RuntimeMessage[] = [
       {

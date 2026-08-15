@@ -8,7 +8,9 @@ type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
 
 type PendingBatch = {
   events: PendingRuntimeEvent[];
+  lastMergeKey?: string;
   mergeIndexes: Map<string, number>;
+  lastTypeIndexes: Map<string, number>;
   timer: NodeJS.Timeout;
 };
 
@@ -79,15 +81,25 @@ export class RuntimeEventWriter {
         void this.enqueueWrite(threadId, () => this.persistAndPublish(pending)).catch((error) => this.recordFailure(error));
       }, this.flushIntervalMs);
       timer.unref();
-      batch = { events: [], mergeIndexes: new Map(), timer };
+      batch = { events: [], mergeIndexes: new Map(), lastTypeIndexes: new Map(), timer };
       this.batches.set(threadId, batch);
     }
+    const lastEvent = batch.events.at(-1);
+    if (batch.lastMergeKey === mergeKey && lastEvent && mergeBufferedEvent(lastEvent, event)) {
+      return { coalesced: true, eventCount: batch.events.length };
+    }
     const existingIndex = batch.mergeIndexes.get(mergeKey);
-    if (existingIndex !== undefined && mergeBufferedEvent(batch.events[existingIndex], event)) {
+    if (
+      existingIndex !== undefined
+      && canMergeAcrossTypes(batch.lastTypeIndexes, existingIndex, event.type)
+      && mergeBufferedEvent(batch.events[existingIndex]!, event)
+    ) {
       return { coalesced: true, eventCount: batch.events.length };
     }
     batch.mergeIndexes.set(mergeKey, batch.events.length);
+    batch.lastTypeIndexes.set(event.type, batch.events.length);
     batch.events.push(clonePendingEvent(event));
+    batch.lastMergeKey = mergeKey;
     return { coalesced: false, eventCount: batch.events.length };
   }
 
@@ -137,7 +149,7 @@ export class RuntimeEventWriter {
 
 function mergeKeyForEvent(event: PendingRuntimeEvent): string {
   const payload = event.payload as Record<string, unknown>;
-  if (event.type === 'message.delta') return mergeKey(event, payload.messageId);
+  if (event.type === 'message.delta') return mergeKey(event, payload.messageId, payload.channel ?? 'content');
   if (event.type === 'item.delta' || event.type === 'plan.delta') {
     return mergeKey(event, payload.itemId);
   }
@@ -179,4 +191,31 @@ function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEve
 
 function clonePendingEvent(event: PendingRuntimeEvent): PendingRuntimeEvent {
   return structuredClone(event);
+}
+
+/**
+ * Cross-type merging is limited to the dual-written representations of one model chunk: the
+ * App Server item.delta stream mirrors the transcript message.delta stream, and
+ * reasoning.raw_delta mirrors the reasoning message channel. Merging across any other type
+ * would move a delta backwards past a genuinely different stream (another channel or item)
+ * in the persisted append-only order.
+ */
+const DUAL_WRITE_MERGE_PAIRS = new Set(
+  [
+    ['item.delta', 'message.delta'],
+    ['message.delta', 'reasoning.raw_delta'],
+  ].flatMap(([left, right]) => [`${left} ${right}`, `${right} ${left}`]),
+);
+
+function canMergeAcrossTypes(
+  lastTypeIndexes: ReadonlyMap<string, number>,
+  targetIndex: number,
+  type: string,
+): boolean {
+  for (const [otherType, lastIndex] of lastTypeIndexes) {
+    // A later same-type event is never pairable with itself, so this also blocks merging
+    // across another channel or item of the same event family.
+    if (lastIndex > targetIndex && !DUAL_WRITE_MERGE_PAIRS.has(`${type} ${otherType}`)) return false;
+  }
+  return true;
 }

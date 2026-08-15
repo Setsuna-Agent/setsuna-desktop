@@ -485,16 +485,17 @@ describe('OpenAI Responses replay', () => {
     const assistantBase: RuntimeMessage = {
       id: 'assistant-debug-replay',
       role: 'assistant',
-      content: 'Native answer',
+      content: 'Native <think>example</think> answer',
       createdAt: '2026-07-23T00:00:00.000Z',
       status: 'complete',
+      streamParts: [{ type: 'content', content: 'Native <think>example</think> answer' }],
     };
     const metadata = bindProviderMetadataToSemanticMessage(
       responsesMetadata([{
         type: 'message',
         id: 'message-debug-replay',
         role: 'assistant',
-        content: [{ type: 'output_text', text: 'Native answer' }],
+        content: [{ type: 'output_text', text: 'Native <think>example</think> answer' }],
       }]),
       assistantBase,
     );

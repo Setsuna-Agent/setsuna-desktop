@@ -77,7 +77,7 @@ export class RuntimeTurnFinalizer {
     await this.options.threadTitles.commit(threadId, turnId, finalization.threadTitle);
     if (finalization.review !== undefined) {
       const rawReview = finalization.review.content.trim();
-      const parsedReview = parseRuntimeReviewResult(rawReview);
+      const parsedReview = parseRuntimeReviewResult(rawReview, { legacyThinkTags: false });
       const fallbackReview = (
         finalization.review.language === 'zh-CN'
           ? '审查已完成。'
@@ -87,7 +87,7 @@ export class RuntimeTurnFinalizer {
       const review = hasVisibleReview ? rawReview : fallbackReview;
       const result = hasVisibleReview
         ? parsedReview
-        : parseRuntimeReviewResult(fallbackReview);
+        : parseRuntimeReviewResult(fallbackReview, { legacyThinkTags: false });
       await this.publishReviewModeMessage(threadId, turnId, 'exited', review, result);
     }
     await this.options.memory.rememberExplicitUserMemory(threadId, turnId, finalization.explicitMemory);
@@ -121,6 +121,7 @@ export class RuntimeTurnFinalizer {
       reviewMode: {
         kind,
         review,
+        ...(kind === 'exited' ? { reasoningSeparated: true } : {}),
         ...(result?.findings.length ? { findings: result.findings } : {}),
         ...(result?.summary ? { summary: result.summary } : {}),
       },

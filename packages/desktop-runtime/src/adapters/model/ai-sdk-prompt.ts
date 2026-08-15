@@ -13,6 +13,7 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
+import { providerAssistantText } from './provider-message-content.js';
 
 export type AiSdkPromptOptions = {
   assistantContent?: (message: RuntimeMessage) => AssistantContent;
@@ -130,9 +131,10 @@ export function parseAiSdkToolInput(argumentsText: string): unknown {
 }
 
 function defaultAssistantContent(message: RuntimeMessage): AssistantContent {
-  if (!message.toolCalls?.length) return message.content;
+  const assistantText = providerAssistantText(message);
+  if (!message.toolCalls?.length) return assistantText;
   return [
-    ...(message.content.trim() ? [{ type: 'text' as const, text: message.content }] : []),
+    ...(assistantText.trim() ? [{ type: 'text' as const, text: assistantText }] : []),
     ...message.toolCalls.map((toolCall) => ({
       type: 'tool-call' as const,
       toolCallId: toolCall.id,

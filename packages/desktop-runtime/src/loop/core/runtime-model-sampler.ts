@@ -4,6 +4,7 @@ import {
   type ModelStreamEvent,
   type RuntimeMemoryCitation,
   type RuntimeMessage,
+  type RuntimeMessageStreamPart,
   type RuntimeModelRequestStepSnapshot,
   type RuntimeToolCall,
   type RuntimeToolDefinition,
@@ -75,6 +76,7 @@ export class RuntimeModelSampler {
     turnId: string;
   }): Promise<RuntimeSampledAssistant> {
     const assistantMessageId = this.options.ids.id('msg');
+    const assistantStreamParts: RuntimeMessageStreamPart[] = [];
     const assistantMessage: RuntimeMessage = {
       id: assistantMessageId,
       turnId,
@@ -82,9 +84,16 @@ export class RuntimeModelSampler {
       content: '',
       createdAt: this.options.clock.now().toISOString(),
       status: 'streaming',
+      streamParts: assistantStreamParts,
     };
     onAssistantStarted?.(assistantMessageId);
-    await this.options.streamEvents.publishMessage(threadId, turnId, assistantMessage);
+    // The published event must own an immutable snapshot: assistantStreamParts keeps mutating
+    // as deltas stream in, and a queued or replayed subscriber would otherwise observe future
+    // parts ahead of their persisted message.delta events.
+    await this.options.streamEvents.publishMessage(threadId, turnId, {
+      ...assistantMessage,
+      streamParts: [...assistantStreamParts],
+    });
     this.options.streamEvents.prepareAssistantItem(threadId, turnId, assistantMessageId);
 
     let toolCalls: RuntimeToolCall[] = [];
@@ -92,10 +101,24 @@ export class RuntimeModelSampler {
     const partialToolCalls = new Map<string, RuntimeToolCall>();
     const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
     const providerAgentItemIds = new Set<string>();
-    const output = createAssistantOutputAccumulator((delta) =>
-      this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
+    const output = createAssistantOutputAccumulator(async (delta) => {
+      appendAssistantStreamPart(assistantStreamParts, 'content', delta);
+      await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
+    });
+    let reasoningReceived = false;
+    const streamBridge = createAssistantItemStreamBridge(
+      output,
+      async (delta) => {
+        reasoningReceived = true;
+        appendAssistantStreamPart(assistantStreamParts, 'reasoning', delta);
+        await this.options.streamEvents.publishAssistantReasoningDelta(
+          threadId,
+          turnId,
+          assistantMessageId,
+          delta,
+        );
+      },
     );
-    const streamBridge = createAssistantItemStreamBridge(output);
     const mirror = createLegacyModelStreamMirrorState();
     const requestToolChoice = step.toolChoice;
     const requestTools = toolsForModelRequest(step.tools, requestToolChoice);
@@ -198,10 +221,11 @@ export class RuntimeModelSampler {
     const memoryCitation = await output.finish();
     let text = output.text();
     if (!text.trim() && !toolCalls.length) {
-      // A transport can terminate cleanly while returning no usable model output (for example,
-      // when an OpenAI-compatible base URL points at a website instead of its API). Treating that
-      // as success leaves a blank assistant turn and hides the configuration failure from users.
-      throw new Error('模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
+      // Reasoning travels on its own stream channel, so an empty content channel is an explicit
+      // provider-boundary failure instead of a tag-parsing decision.
+      throw new Error(reasoningReceived
+        ? '模型服务只返回了思考内容，未返回可显示的答复。请检查供应商的 reasoning/content 字段映射或模型协议配置。'
+        : '模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
     }
     assistantMessage.providerMetadata = bindProviderMetadataToSemanticMessage(
       assistantMessage.providerMetadata,
@@ -216,6 +240,20 @@ export class RuntimeModelSampler {
       toolCalls,
       usage,
     };
+  }
+}
+
+function appendAssistantStreamPart(
+  parts: RuntimeMessageStreamPart[],
+  type: RuntimeMessageStreamPart['type'],
+  content: string,
+): void {
+  if (!content) return;
+  const previous = parts.at(-1);
+  if (previous?.type === type) {
+    previous.content += content;
+  } else {
+    parts.push({ type, content });
   }
 }
 

@@ -422,10 +422,83 @@ function estimateMessageTokens(message: RuntimeMessage): number {
   const toolResultMetadataTokens = message.role === 'tool'
     ? estimateTextTokens(`${message.toolCallId ?? ''}\n${message.toolName ?? ''}`)
     : 0;
+  // Semantic replay sends only providerAssistantText(message). Native replay can additionally send
+  // structured reasoning and opaque provider state, both of which consume the next request budget.
+  const nativeReasoningReplayLength = nativeReasoningReplayCharacters(message);
+  const structuredReasoningTokens = nativeReasoningReplayLength
+    ? Math.ceil(nativeReasoningReplayLength / APPROX_CHARS_PER_TOKEN)
+    : 0;
   return estimateTextTokens(`${message.role}\n${message.content}`)
     + attachmentTokens
     + toolCallTokens
-    + toolResultMetadataTokens;
+    + toolResultMetadataTokens
+    + structuredReasoningTokens;
+}
+
+function nativeReasoningReplayCharacters(message: RuntimeMessage): number {
+  const metadata = message.providerMetadata;
+  if (!metadata) return 0;
+  const streamedReasoning = message.streamParts?.reduce(
+    (total, part) => total + (part.type === 'reasoning' ? part.content.length : 0),
+    0,
+  ) ?? 0;
+  const anthropicReasoning = metadata.anthropic?.contentBlocks.filter(
+    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
+  );
+  if (
+    anthropicReasoning?.length
+    && (metadata.schemaVersion === undefined || metadata.source?.providerKind === 'anthropic')
+  ) {
+    let nativeText = 0;
+    let opaqueState = 0;
+    for (const block of anthropicReasoning) {
+      if (block.type === 'thinking') {
+        nativeText += block.thinking.length;
+        opaqueState += block.signature.length;
+      } else {
+        opaqueState += block.data.length;
+      }
+    }
+    return Math.max(streamedReasoning, nativeText) + opaqueState;
+  }
+
+  const envelope = metadata.openAiResponses;
+  if (!(metadata.schemaVersion === 2
+    && metadata.source?.providerKind === 'openai-responses'
+    && envelope
+  )) return 0;
+
+  if (envelope.kind === 'compaction') {
+    // Native replay resends the compaction envelope verbatim, so its opaque payload consumes
+    // the next request budget even though it produces no visible reasoning text.
+    let compactionState = 0;
+    for (const item of envelope.items) {
+      if (typeof item.encrypted_content === 'string') compactionState += item.encrypted_content.length;
+    }
+    return compactionState;
+  }
+  if (envelope.kind !== 'response') return 0;
+
+  let nativeSummary = 0;
+  let opaqueState = 0;
+  let hasReasoningItem = false;
+  for (const item of envelope.items) {
+    if (item.type !== 'reasoning') continue;
+    hasReasoningItem = true;
+    if (typeof item.encrypted_content === 'string') opaqueState += item.encrypted_content.length;
+    if (!Array.isArray(item.summary)) continue;
+    for (const summaryPart of item.summary) {
+      if (
+        summaryPart
+        && typeof summaryPart === 'object'
+        && !Array.isArray(summaryPart)
+        && typeof summaryPart.text === 'string'
+      ) {
+        nativeSummary += summaryPart.text.length;
+      }
+    }
+  }
+  return hasReasoningItem ? Math.max(streamedReasoning, nativeSummary) + opaqueState : 0;
 }
 
 export function estimateTextTokens(value: string): number {

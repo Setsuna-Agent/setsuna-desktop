@@ -83,7 +83,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 646 total files
+apps/desktop/renderer/ — 0 direct / 648 total files
 ├── src/ — 2 direct / 472 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -143,20 +143,20 @@ apps/desktop/renderer/ — 0 direct / 646 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 174 files
-    └── unit/ — 174 files
+└── test/ — 176 files
+    └── unit/ — 176 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 135 files
+        ├── features/ — 137 files
         │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 2 direct / 68 total files
+        │   ├── chat/ — 2 direct / 70 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 21 direct / 21 total files
-        │   │   ├── conversation/ — 21 direct / 21 total files
+        │   │   ├── conversation/ — 23 direct / 23 total files
         │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
@@ -188,10 +188,11 @@ apps/desktop/renderer/ — 0 direct / 646 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 76 total files
-├── src/ — 35 direct / 50 total files
+packages/contracts/ — 4 direct / 77 total files
+├── src/ — 35 direct / 51 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
+│   ├── review/ — 1 direct / 1 total files
 │   ├── swe/ — 10 direct / 10 total files
 │   └── webdav-sync/ — 1 direct / 1 total files
 └── test/ — 13 direct / 22 total files
@@ -203,16 +204,16 @@ packages/contracts/ — 4 direct / 76 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 541 total files
-├── src/ — 2 direct / 314 total files
-│   ├── adapters/ — 135 files
+packages/desktop-runtime/ — 4 direct / 543 total files
+├── src/ — 2 direct / 315 total files
+│   ├── adapters/ — 136 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── id/ — 1 direct / 1 total files
 │   │   ├── mcp/ — 6 direct / 6 total files
-│   │   ├── model/ — 29 direct / 29 total files
+│   │   ├── model/ — 30 direct / 30 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 1 direct / 1 total files
 │   │   ├── plugin/ — 7 direct / 7 total files
@@ -241,7 +242,7 @@ packages/desktop-runtime/ — 4 direct / 541 total files
 │   │   └── app-server/ — 21 direct / 21 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 223 files
+└── test/ — 224 files
     ├── adapters/ — 66 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
@@ -272,10 +273,10 @@ packages/desktop-runtime/ — 4 direct / 541 total files
     │   │   └── tool/ — 6 direct / 6 total files
     │   ├── agent-loop/ — 22 direct / 22 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 32 files
+    ├── loop/ — 33 files
     │   ├── approval-review/ — 1 direct / 1 total files
     │   ├── context/ — 12 direct / 12 total files
-    │   ├── core/ — 5 direct / 5 total files
+    │   ├── core/ — 6 direct / 6 total files
     │   ├── lifecycle/ — 9 direct / 9 total files
     │   ├── memory/ — 2 direct / 2 total files
     │   └── tools/ — 3 direct / 3 total files

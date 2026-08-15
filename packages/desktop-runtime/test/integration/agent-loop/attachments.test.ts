@@ -100,7 +100,11 @@ describe('agent loop reasoning and attachments', () => {
         && event.payload.item.transcriptMessageId === assistant?.id);
   
       expect(modelClient.requests[0]).toMatchObject({ thinking: true, reasoningEffort: 'max' });
-      expect(assistant?.content).toBe('<think>plan</think>answer');
+      expect(assistant?.content).toBe('answer');
+      expect(assistant?.streamParts).toEqual([
+        { type: 'reasoning', content: 'plan' },
+        { type: 'content', content: 'answer' },
+      ]);
       expect(agentItemStarted).toBeTruthy();
       expect(reasoningItemStarted).toBeTruthy();
       expect(events).toContainEqual(expect.objectContaining({

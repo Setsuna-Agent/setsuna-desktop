@@ -1,14 +1,32 @@
 import { useMemo, useRef } from 'react';
-import { splitThinkingContent } from '../conversation/chatThinkingContent.js';
+import {
+  literalThinkTagsForMarkdown,
+  splitThinkingContent,
+} from '../conversation/chatThinkingContent.js';
 import { MarkdownVirtualBlock, shouldVirtualizeMarkdownBlocks } from './MarkdownVirtualBlock.js';
 import {
   reconcileMarkdownRenderBlocks,
   type StreamingMarkdownRenderState,
 } from './streamingMarkdown.js';
 
-export function MarkdownRenderer({ content, streaming }: { content: string; streaming: boolean }) {
+export function MarkdownRenderer({
+  content,
+  legacyThinkingTags = true,
+  streaming,
+}: {
+  content: string;
+  legacyThinkingTags?: boolean;
+  streaming: boolean;
+}) {
   const visibleSegments = useMemo(() => {
-    const segments = splitThinkingContent(content);
+    if (!legacyThinkingTags) {
+      return [{
+        activeStreaming: streaming,
+        content: literalThinkTagsForMarkdown(content),
+        key: 'markdown-0',
+      }];
+    }
+    const segments = splitThinkingContent(content, streaming);
     return segments.flatMap((segment, index) => {
       if (segment.type === 'think') return [];
       const activeStreaming = streaming
@@ -20,7 +38,7 @@ export function MarkdownRenderer({ content, streaming }: { content: string; stre
         key: `markdown-${index}`,
       }];
     });
-  }, [content, streaming]);
+  }, [content, legacyThinkingTags, streaming]);
 
   return (
     <>

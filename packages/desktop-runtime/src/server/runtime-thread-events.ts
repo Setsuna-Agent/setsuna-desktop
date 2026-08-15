@@ -236,6 +236,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,
     goalMode: message.goalMode ? {

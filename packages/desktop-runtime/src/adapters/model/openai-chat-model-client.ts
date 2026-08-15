@@ -17,6 +17,7 @@ import {
 } from './provider-http.js';
 import { doneEvent, parseJson, parseSse } from './provider-stream.js';
 import { openAiCompatibleResponseFormatBody } from './provider-response-format.js';
+import { LegacyThinkTagStreamDecoder } from './legacy-think-tag-stream.js';
 import { openAiCompatibleThinkingBody } from './provider-thinking.js';
 import { normalizeOpenAiUsage } from './provider-usage.js';
 import { arrayValue, objectValue, stringValue } from './provider-values.js';
@@ -59,6 +60,8 @@ export class OpenAiChatModelClient implements ModelClient {
     let usage = undefined;
     let finishReason = undefined;
     let toolCallsYielded = false;
+    let dedicatedReasoningObserved = false;
+    const legacyThinkDecoder = new LegacyThinkTagStreamDecoder();
     for await (const { data } of parseSse(response)) {
       if (data === '[DONE]') break;
       const payload = objectValue(parseJson(data));
@@ -68,8 +71,22 @@ export class OpenAiChatModelClient implements ModelClient {
         const delta = objectValue(choiceObject.delta);
         const text = stringValue(delta.content);
         const reasoning = stringValue(delta.reasoning_content ?? delta.reasoning);
-        if (reasoning) yield { type: 'reasoning_delta' as const, text: reasoning };
-        if (text) yield { type: 'text_delta' as const, text };
+        if (reasoning) {
+          if (!dedicatedReasoningObserved) {
+            dedicatedReasoningObserved = true;
+            for (const chunk of legacyThinkDecoder.finishAsContent()) {
+              yield { type: 'text_delta' as const, text: chunk.text };
+            }
+          }
+          yield { type: 'reasoning_delta' as const, text: reasoning };
+        }
+        if (text) {
+          for (const chunk of legacyThinkDecoder.push(text)) {
+            yield chunk.type === 'content'
+              ? { type: 'text_delta' as const, text: chunk.text }
+              : { type: 'reasoning_delta' as const, text: chunk.text };
+          }
+        }
         for (const toolCallDelta of arrayValue(delta.tool_calls)) {
           const parsed = mergeToolCallDelta(
             toolCallsByIndex,
@@ -88,6 +105,11 @@ export class OpenAiChatModelClient implements ModelClient {
         }
         if (reason) finishReason = reason;
       }
+    }
+    for (const chunk of legacyThinkDecoder.finish()) {
+      yield chunk.type === 'content'
+        ? { type: 'text_delta' as const, text: chunk.text }
+        : { type: 'reasoning_delta' as const, text: chunk.text };
     }
     if (!toolCallsYielded && toolCallsByIndex.size) {
       const toolCalls = [...toolCallsByIndex.values()].filter((call) => call.name);
