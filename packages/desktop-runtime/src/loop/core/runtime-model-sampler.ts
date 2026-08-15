@@ -4,6 +4,7 @@ import {
   type ModelStreamEvent,
   type RuntimeMemoryCitation,
   type RuntimeMessage,
+  type RuntimeMessageStreamPart,
   type RuntimeModelRequestStepSnapshot,
   type RuntimeToolCall,
   type RuntimeToolDefinition,
@@ -75,6 +76,7 @@ export class RuntimeModelSampler {
     turnId: string;
   }): Promise<RuntimeSampledAssistant> {
     const assistantMessageId = this.options.ids.id('msg');
+    const assistantStreamParts: RuntimeMessageStreamPart[] = [];
     const assistantMessage: RuntimeMessage = {
       id: assistantMessageId,
       turnId,
@@ -82,6 +84,7 @@ export class RuntimeModelSampler {
       content: '',
       createdAt: this.options.clock.now().toISOString(),
       status: 'streaming',
+      streamParts: assistantStreamParts,
     };
     onAssistantStarted?.(assistantMessageId);
     await this.options.streamEvents.publishMessage(threadId, turnId, assistantMessage);
@@ -92,15 +95,17 @@ export class RuntimeModelSampler {
     const partialToolCalls = new Map<string, RuntimeToolCall>();
     const announcedToolPreviews = new Map<string, ToolPreviewAnnouncement>();
     const providerAgentItemIds = new Set<string>();
-    const output = createAssistantOutputAccumulator((delta) =>
-      this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
-    );
+    const output = createAssistantOutputAccumulator(async (delta) => {
+      appendAssistantStreamPart(assistantStreamParts, 'content', delta);
+      await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
+    });
     let reasoningReceived = false;
     const streamBridge = createAssistantItemStreamBridge(
       output,
-      (delta) => {
+      async (delta) => {
         reasoningReceived = true;
-        return this.options.streamEvents.publishAssistantReasoningDelta(
+        appendAssistantStreamPart(assistantStreamParts, 'reasoning', delta);
+        await this.options.streamEvents.publishAssistantReasoningDelta(
           threadId,
           turnId,
           assistantMessageId,
@@ -229,6 +234,20 @@ export class RuntimeModelSampler {
       toolCalls,
       usage,
     };
+  }
+}
+
+function appendAssistantStreamPart(
+  parts: RuntimeMessageStreamPart[],
+  type: RuntimeMessageStreamPart['type'],
+  content: string,
+): void {
+  if (!content) return;
+  const previous = parts.at(-1);
+  if (previous?.type === type) {
+    previous.content += content;
+  } else {
+    parts.push({ type, content });
   }
 }
 

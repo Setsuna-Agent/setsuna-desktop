@@ -63,6 +63,26 @@ export class ProviderMetadataToolModelClient implements ModelClient {
   }
 }
 
+export class StructuredToolContinuationModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield { type: 'reasoning_delta', text: 'Need to inspect the file.' };
+      yield { type: 'text_delta', text: 'Keep <think>literal text</think> visible.' };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_structured_1', name: 'workspace_read_file', arguments: '{"path":"README.md"}' }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Structured continuation completed.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 /** Simulates provider phase hints that runtime must ignore when it owns turn classification. */
 export class ResponsesPhaseToolModelClient implements ModelClient {
   requests: ModelRequest[] = [];

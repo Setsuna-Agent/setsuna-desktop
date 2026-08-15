@@ -207,7 +207,10 @@ function markdownCodeRanges(text: string): TextRange[] {
     const start = index;
     while (text[index] === '`') index += 1;
     const length = index - start;
-    if (length >= 3 && isFenceLinePrefix(text, lineStart, start)) {
+    if (
+      length >= 3
+      && markdownContainerContentStart(text, lineStart, markdownLineEnd(text, lineStart)) === start
+    ) {
       opening = null;
       continue;
     }
@@ -253,9 +256,7 @@ function markdownFenceDelimiter(
   lineStart: number,
   lineEnd: number,
 ): { end: number; length: number; marker: '`' | '~'; start: number } | null {
-  let start = lineStart;
-  while (start < lineEnd && text[start] === ' ' && start - lineStart < 4) start += 1;
-  if (!isFenceLinePrefix(text, lineStart, start)) return null;
+  const start = markdownContainerContentStart(text, lineStart, lineEnd);
   const marker = text[start];
   if (marker !== '`' && marker !== '~') return null;
 
@@ -273,12 +274,54 @@ function isFenceOpening(
   return delimiter.marker === '~' || !text.slice(delimiter.end, lineEnd).includes('`');
 }
 
-function isFenceLinePrefix(text: string, lineStart: number, delimiterStart: number): boolean {
-  if (delimiterStart - lineStart > 3) return false;
-  for (let index = lineStart; index < delimiterStart; index += 1) {
-    if (text[index] !== ' ') return false;
+/** Returns the first content byte after valid block quote/list container prefixes. */
+function markdownContainerContentStart(text: string, lineStart: number, lineEnd: number): number {
+  let cursor = lineStart;
+  while (cursor < lineEnd) {
+    let contentStart = cursor;
+    while (contentStart < lineEnd && text[contentStart] === ' ' && contentStart - cursor < 3) {
+      contentStart += 1;
+    }
+
+    if (text[contentStart] === '>') {
+      cursor = contentStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listContentStart = markdownListContentStart(text, contentStart, lineEnd);
+    if (listContentStart !== null) {
+      cursor = listContentStart;
+      continue;
+    }
+    return contentStart;
   }
-  return true;
+  return cursor;
+}
+
+function markdownListContentStart(text: string, start: number, lineEnd: number): number | null {
+  let markerEnd = start;
+  const marker = text[markerEnd];
+  if (marker === '-' || marker === '+' || marker === '*') {
+    markerEnd += 1;
+  } else {
+    while (markerEnd < lineEnd && markerEnd - start < 9 && isAsciiDigit(text[markerEnd])) {
+      markerEnd += 1;
+    }
+    if (markerEnd === start || (text[markerEnd] !== '.' && text[markerEnd] !== ')')) return null;
+    markerEnd += 1;
+  }
+
+  let contentStart = markerEnd;
+  while (contentStart < lineEnd && text[contentStart] === ' ' && contentStart - markerEnd < 5) {
+    contentStart += 1;
+  }
+  const padding = contentStart - markerEnd;
+  return padding >= 1 && padding <= 4 ? contentStart : null;
+}
+
+function isAsciiDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= '0' && value <= '9';
 }
 
 function isWhitespaceOnly(text: string, start: number, end: number): boolean {

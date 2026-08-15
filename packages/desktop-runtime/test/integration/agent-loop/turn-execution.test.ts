@@ -31,6 +31,7 @@ import {
   StepSnapshotConfigStore,
   stepSnapshotMcpStore,
   StepSnapshotModelClient,
+  StructuredToolContinuationModelClient,
 } from '../../support/agent-loop/turn-execution.js';
 
 describe('agent loop turn execution', () => {
@@ -151,6 +152,34 @@ describe('agent loop turn execution', () => {
         'commentary',
         'final_answer',
       ]);
+    });
+
+  it('carries structured assistant channels into a tool-result sampling step', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Structured tool continuation', projectId: 'project_1' });
+      const modelClient = new StructuredToolContinuationModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'inspect the structured answer' });
+
+      const continuedAssistant = modelClient.requests[1]?.messages.find(
+        (message) => message.role === 'assistant' && message.toolCalls?.length,
+      );
+      expect(continuedAssistant).toMatchObject({
+        content: 'Keep <think>literal text</think> visible.',
+        streamParts: [
+          { type: 'reasoning', content: 'Need to inspect the file.' },
+          { type: 'content', content: 'Keep <think>literal text</think> visible.' },
+        ],
+      });
     });
 
   it('ignores provider phase and classifies canonical messages when runtime decides continuation', async () => {

@@ -66,10 +66,18 @@ describe('thinkTagMatches', () => {
     const examples = [
       '示例：\n```html\n<think>visible example</think>\n````\n完成。',
       '示例：\n~~~html\n<think>visible example</think>\n~~~\n完成。',
+      '示例：\n> ```html\n> <think>visible example</think>\n> ```\n完成。',
+      '示例：\n- ~~~html\n  <think>visible example</think>\n  ~~~\n完成。',
     ];
 
     for (const content of examples) {
       expect(visibleTextOutsideThinkTags(content)).toBe(content);
     }
+  });
+
+  it('does not let an unclosed container fence conceal a legacy privacy boundary', () => {
+    const content = '> ```html\n<think>private reasoning';
+
+    expect(visibleTextOutsideThinkTags(content)).toBe('> ```html\n');
   });
 });
