@@ -6,9 +6,9 @@ import type {
   RuntimeProviderReplayReason,
 } from '@setsuna-desktop/contracts';
 import {
-  portableRuntimeAssistantText,
   providerMetadataMatchesSemanticMessage,
 } from '../../utils/runtime-message-semantic-fingerprint.js';
+import { providerAssistantText } from './provider-message-content.js';
 import {
   providerMetadataMatchesReplayContext,
   type ProviderReplayContext,
@@ -161,7 +161,7 @@ function nativeItemsMatchSemanticMessage(
     .filter((item) => item.type === 'message' && item.role === 'assistant')
     .map(messageItemText)
     .join('');
-  if (nativeText !== portableRuntimeAssistantText(message.content)) return false;
+  if (nativeText !== providerAssistantText(message)) return false;
 
   const nativeCalls = items
     .filter((item) => item.type === 'function_call')

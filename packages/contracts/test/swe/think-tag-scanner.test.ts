@@ -62,9 +62,14 @@ describe('thinkTagMatches', () => {
     expect(visibleTextOutsideThinkTags(content)).toBe('answer');
   });
 
-  it('does not treat tag examples in a fenced code block as legacy control tags', () => {
-    const content = '示例：\n```html\n<think>visible example</think>\n```\n完成。';
+  it('does not treat tag examples in valid Markdown fences as legacy control tags', () => {
+    const examples = [
+      '示例：\n```html\n<think>visible example</think>\n````\n完成。',
+      '示例：\n~~~html\n<think>visible example</think>\n~~~\n完成。',
+    ];
 
-    expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    for (const content of examples) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    }
   });
 });

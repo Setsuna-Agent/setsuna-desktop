@@ -5,7 +5,6 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { AssistantContent, ModelMessage } from 'ai';
 import {
-  portableRuntimeAssistantText,
   providerMetadataMatchesSemanticMessage,
   runtimeJsonValuesEqual,
 } from '../../utils/runtime-message-semantic-fingerprint.js';
@@ -161,7 +160,7 @@ function anthropicBlocksMatchSemanticMessage(
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
     .join('');
-  if (nativeText !== portableRuntimeAssistantText(message.content)) return false;
+  if (nativeText !== providerAssistantText(message)) return false;
 
   const nativeCalls = blocks
     .filter((block) => block.type === 'tool_use')

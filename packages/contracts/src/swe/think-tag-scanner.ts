@@ -24,7 +24,7 @@ const RAW_TAG_WITHOUT_END = Symbol('raw-tag-without-end');
  * backtracking expression whose failed matches rescan the remaining content.
  */
 export function* thinkTagMatches(text: string): Generator<ThinkTagMatch> {
-  const codeRanges = markdownBacktickCodeRanges(text);
+  const codeRanges = markdownCodeRanges(text);
   let codeRangeIndex = 0;
   let rawTagsPossible = true;
 
@@ -72,8 +72,8 @@ export function visibleTextOutsideThinkTags(text: string): string {
 }
 
 /**
- * Splits the deprecated tag-based transcript representation. Markdown backtick code spans and
- * fences are excluded before matching because model-authored answers frequently discuss the old
+ * Splits the deprecated tag-based transcript representation. Markdown code spans and fences are
+ * excluded before matching because model-authored answers frequently discuss the old
  * protocol as code. Nested blocks use balanced matching, while separate blocks retain the visible
  * text between them. During streaming or after an unterminated opening, that block owns the tail.
  */
@@ -111,8 +111,9 @@ export function splitThinkTaggedText(
   }
 
   while (matchIndex < matches.length) {
-    const openingIndex = matches.findIndex((match, index) => index >= matchIndex && !match.closing);
-    if (openingIndex < 0) break;
+    let openingIndex = matchIndex;
+    while (openingIndex < matches.length && matches[openingIndex]?.closing) openingIndex += 1;
+    if (openingIndex >= matches.length) break;
     const opening = matches[openingIndex];
     segments.push({ type: 'markdown', content: text.slice(cursor, opening.index), closed: true });
 
@@ -174,14 +175,30 @@ function hasAmbiguousTagOrder(matches: ThinkTagMatch[], startIndex: number): boo
 }
 
 /**
- * Returns only closed backtick-code ranges. If a model leaves a delimiter open, tags after it are
+ * Returns only closed Markdown code ranges. If a model leaves a delimiter open, tags after it are
  * still scanned so an unmatched Markdown marker cannot accidentally expose private reasoning.
  */
-function markdownBacktickCodeRanges(text: string): TextRange[] {
+function markdownCodeRanges(text: string): TextRange[] {
+  const fencedRanges = markdownFencedCodeRanges(text);
   const ranges: TextRange[] = [];
   let opening: { length: number; start: number } | null = null;
+  let fencedRangeIndex = 0;
+  let lineStart = 0;
 
   for (let index = 0; index < text.length;) {
+    const fencedRange = fencedRanges[fencedRangeIndex];
+    if (fencedRange && index >= fencedRange.start) {
+      opening = null;
+      ranges.push(fencedRange);
+      index = fencedRange.end;
+      fencedRangeIndex += 1;
+      continue;
+    }
+    if (text[index] === '\n') {
+      lineStart = index + 1;
+      index += 1;
+      continue;
+    }
     if (text[index] !== '`' || isEscapedDelimiter(text, index)) {
       index += 1;
       continue;
@@ -190,6 +207,10 @@ function markdownBacktickCodeRanges(text: string): TextRange[] {
     const start = index;
     while (text[index] === '`') index += 1;
     const length = index - start;
+    if (length >= 3 && isFenceLinePrefix(text, lineStart, start)) {
+      opening = null;
+      continue;
+    }
     if (!opening) {
       opening = { length, start };
     } else if (opening.length === length) {
@@ -198,6 +219,78 @@ function markdownBacktickCodeRanges(text: string): TextRange[] {
     }
   }
   return ranges;
+}
+
+function markdownFencedCodeRanges(text: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let opening: { length: number; marker: '`' | '~'; start: number } | null = null;
+
+  for (let lineStart = 0; lineStart < text.length;) {
+    const lineEnd = markdownLineEnd(text, lineStart);
+    const delimiter = markdownFenceDelimiter(text, lineStart, lineEnd);
+    if (!opening && delimiter && isFenceOpening(text, delimiter, lineEnd)) {
+      opening = {
+        length: delimiter.length,
+        marker: delimiter.marker,
+        start: delimiter.start,
+      };
+    } else if (
+      opening
+      && delimiter?.marker === opening.marker
+      && delimiter.length >= opening.length
+      && isWhitespaceOnly(text, delimiter.end, lineEnd)
+    ) {
+      ranges.push({ start: opening.start, end: lineEnd });
+      opening = null;
+    }
+    lineStart = lineEnd < text.length ? lineEnd + 1 : text.length;
+  }
+  return ranges;
+}
+
+function markdownFenceDelimiter(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): { end: number; length: number; marker: '`' | '~'; start: number } | null {
+  let start = lineStart;
+  while (start < lineEnd && text[start] === ' ' && start - lineStart < 4) start += 1;
+  if (!isFenceLinePrefix(text, lineStart, start)) return null;
+  const marker = text[start];
+  if (marker !== '`' && marker !== '~') return null;
+
+  let end = start;
+  while (end < lineEnd && text[end] === marker) end += 1;
+  const length = end - start;
+  return length >= 3 ? { end, length, marker, start } : null;
+}
+
+function isFenceOpening(
+  text: string,
+  delimiter: { end: number; marker: '`' | '~' },
+  lineEnd: number,
+): boolean {
+  return delimiter.marker === '~' || !text.slice(delimiter.end, lineEnd).includes('`');
+}
+
+function isFenceLinePrefix(text: string, lineStart: number, delimiterStart: number): boolean {
+  if (delimiterStart - lineStart > 3) return false;
+  for (let index = lineStart; index < delimiterStart; index += 1) {
+    if (text[index] !== ' ') return false;
+  }
+  return true;
+}
+
+function isWhitespaceOnly(text: string, start: number, end: number): boolean {
+  for (let index = start; index < end; index += 1) {
+    if (text[index] !== ' ' && text[index] !== '\t' && text[index] !== '\r') return false;
+  }
+  return true;
+}
+
+function markdownLineEnd(text: string, lineStart: number): number {
+  const lineFeed = text.indexOf('\n', lineStart);
+  return lineFeed < 0 ? text.length : lineFeed;
 }
 
 function isEscapedDelimiter(text: string, index: number): boolean {

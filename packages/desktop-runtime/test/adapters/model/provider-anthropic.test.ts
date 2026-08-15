@@ -161,7 +161,7 @@ describe('Anthropic Messages provider', () => {
           'data: {"type":"content_block_stop","index":1}',
           '',
           'event: content_block_start',
-          'data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":"I will search."}}',
+          'data: {"type":"content_block_start","index":2,"content_block":{"type":"text","text":"I will search <think>example</think>."}}',
           '',
           'event: content_block_stop',
           'data: {"type":"content_block_stop","index":2}',
@@ -210,7 +210,7 @@ describe('Anthropic Messages provider', () => {
           contentBlocks: [
             { type: 'thinking', thinking: 'Need context.', signature: 'signed-thinking' },
             { type: 'redacted_thinking', data: 'encrypted-thinking' },
-            { type: 'text', text: 'I will search.' },
+            { type: 'text', text: 'I will search <think>example</think>.' },
             { type: 'tool_use', id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
           ],
         },
@@ -230,8 +230,12 @@ describe('Anthropic Messages provider', () => {
           {
             id: 'assistant-thinking-tool',
             role: 'assistant',
-            content: '<think>Need context.</think>I will search.',
+            content: 'I will search <think>example</think>.',
             createdAt: '2026-06-25T00:00:02.000Z',
+            streamParts: [
+              { type: 'reasoning', content: 'Need context.' },
+              { type: 'content', content: 'I will search <think>example</think>.' },
+            ],
             toolCalls: [{ id: 'toolu_1', name: 'workspace_search_text', arguments: '{"query":"needle"}' }],
             providerMetadata: metadataEvent.providerMetadata,
           },
@@ -254,7 +258,7 @@ describe('Anthropic Messages provider', () => {
         content: [
           { type: 'thinking', thinking: 'Need context.', signature: 'signed-thinking' },
           { type: 'redacted_thinking', data: 'encrypted-thinking' },
-          { type: 'text', text: 'I will search.' },
+          { type: 'text', text: 'I will search <think>example</think>.' },
           { type: 'tool_use', id: 'toolu_1', name: 'workspace_search_text', input: { query: 'needle' } },
         ],
       },
