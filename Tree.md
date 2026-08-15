@@ -83,7 +83,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 647 total files
+apps/desktop/renderer/ — 0 direct / 648 total files
 ├── src/ — 2 direct / 472 total files
 │   ├── app/ — 2 direct / 37 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -143,20 +143,20 @@ apps/desktop/renderer/ — 0 direct / 647 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 175 files
-    └── unit/ — 175 files
+└── test/ — 176 files
+    └── unit/ — 176 files
         ├── app/ — 1 direct / 13 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 4 direct / 4 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 136 files
+        ├── features/ — 137 files
         │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 2 direct / 69 total files
+        │   ├── chat/ — 2 direct / 70 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 21 direct / 21 total files
-        │   │   ├── conversation/ — 22 direct / 22 total files
+        │   │   ├── conversation/ — 23 direct / 23 total files
         │   │   ├── hooks/ — 3 direct / 3 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
@@ -188,10 +188,11 @@ apps/desktop/renderer/ — 0 direct / 647 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 76 total files
-├── src/ — 35 direct / 50 total files
+packages/contracts/ — 4 direct / 77 total files
+├── src/ — 35 direct / 51 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
+│   ├── review/ — 1 direct / 1 total files
 │   ├── swe/ — 10 direct / 10 total files
 │   └── webdav-sync/ — 1 direct / 1 total files
 └── test/ — 13 direct / 22 total files

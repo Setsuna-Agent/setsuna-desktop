@@ -1,5 +1,8 @@
 import { useMemo, useRef } from 'react';
-import { splitThinkingContent } from '../conversation/chatThinkingContent.js';
+import {
+  literalThinkTagsForMarkdown,
+  splitThinkingContent,
+} from '../conversation/chatThinkingContent.js';
 import { MarkdownVirtualBlock, shouldVirtualizeMarkdownBlocks } from './MarkdownVirtualBlock.js';
 import {
   reconcileMarkdownRenderBlocks,
@@ -17,7 +20,11 @@ export function MarkdownRenderer({
 }) {
   const visibleSegments = useMemo(() => {
     if (!legacyThinkingTags) {
-      return [{ activeStreaming: streaming, content, key: 'markdown-0' }];
+      return [{
+        activeStreaming: streaming,
+        content: literalThinkTagsForMarkdown(content),
+        key: 'markdown-0',
+      }];
     }
     const segments = splitThinkingContent(content, streaming);
     return segments.flatMap((segment, index) => {

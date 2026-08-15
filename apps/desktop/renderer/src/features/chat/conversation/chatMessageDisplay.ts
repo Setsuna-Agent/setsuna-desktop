@@ -430,7 +430,9 @@ export function assistantRunCopyText(
     .filter(Boolean);
   if (item.goalExit) content.push(formatGoalExitSummary(item.goalExit, t, locale));
   if (item.reviewExit) {
-    const visibleReview = visibleMarkdownContent(item.reviewExit.review).trim();
+    const visibleReview = (item.reviewExit.reasoningSeparated
+      ? item.reviewExit.review
+      : visibleMarkdownContent(item.reviewExit.review)).trim();
     if (visibleReview) content.push(visibleReview);
   }
   return content.join('\n\n');

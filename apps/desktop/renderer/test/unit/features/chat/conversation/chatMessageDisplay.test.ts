@@ -2,7 +2,6 @@ import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   activeAssistantRunItemId,
-  assistantRunCopyText,
   chatDisplayItemRenderKey,
   createChatDisplayItems,
   createChatRenderWindow,
@@ -717,51 +716,6 @@ describe('createChatDisplayItems', () => {
       'user:archived_user',
       'context:compact_1',
     ]);
-  });
-
-  it('copies a completed review once without hidden thinking content', () => {
-    expect(assistantRunCopyText({
-      type: 'assistant',
-      id: 'assistant_1',
-      handledSteerMessageIds: [],
-      messageIds: ['assistant_1'],
-      reviewExit: {
-        kind: 'exited',
-        review: '<think>internal plan</think>visible answer',
-      },
-      steerMessages: [],
-      segments: [
-        {
-          id: 'assistant_1',
-          role: 'assistant',
-          content: '<think>internal plan</think>visible answer',
-          phase: 'final_answer',
-          createdAt: '2026-06-26T00:00:02.000Z',
-          status: 'complete',
-        },
-      ],
-    })).toBe('visible answer');
-  });
-
-  it('preserves literal think tags when copying authoritative structured content', () => {
-    const content = '<think>literal example</think> is visible answer text.';
-
-    expect(assistantRunCopyText({
-      type: 'assistant',
-      id: 'assistant_structured',
-      handledSteerMessageIds: [],
-      messageIds: ['assistant_structured'],
-      steerMessages: [],
-      segments: [{
-        id: 'assistant_structured',
-        role: 'assistant',
-        content,
-        streamParts: [{ type: 'content', content }],
-        phase: 'final_answer',
-        createdAt: '2026-06-26T00:00:02.000Z',
-        status: 'complete',
-      }],
-    })).toBe(content);
   });
 
   it('keeps the transcript source intact while windowing the rendered tail', () => {

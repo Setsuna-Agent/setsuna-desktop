@@ -199,6 +199,7 @@ function markdownCodeRanges(text: string): TextRange[] {
   let blockRangeIndex = 0;
   let lineStart = 0;
   let lineEnd = markdownLineEnd(text, lineStart);
+  let lineContainerContentStart = markdownContainerContentStart(text, lineStart, lineEnd);
 
   for (let index = 0; index < text.length;) {
     const blockRange = blockRanges[blockRangeIndex];
@@ -212,6 +213,7 @@ function markdownCodeRanges(text: string): TextRange[] {
     if (text[index] === '\n') {
       lineStart = index + 1;
       lineEnd = markdownLineEnd(text, lineStart);
+      lineContainerContentStart = markdownContainerContentStart(text, lineStart, lineEnd);
       index += 1;
       continue;
     }
@@ -226,7 +228,7 @@ function markdownCodeRanges(text: string): TextRange[] {
     const length = index - start;
     if (
       length >= 3
-      && markdownContainerContentStart(text, lineStart, lineEnd) === start
+      && lineContainerContentStart === start
     ) {
       opening = null;
       continue;

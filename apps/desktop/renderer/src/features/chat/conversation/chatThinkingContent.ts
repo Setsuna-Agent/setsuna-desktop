@@ -1,4 +1,8 @@
-import { splitThinkTaggedText, visibleTextOutsideThinkTags } from '@setsuna-desktop/contracts';
+import {
+  splitThinkTaggedText,
+  thinkTagMatches,
+  visibleTextOutsideThinkTags,
+} from '@setsuna-desktop/contracts';
 
 export type ChatThinkingSegment = {
   closed: boolean;
@@ -13,6 +17,23 @@ export function splitThinkingContent(content: string, streaming = false): ChatTh
 
 export function visibleMarkdownContent(content: string): string {
   return visibleTextOutsideThinkTags(content);
+}
+
+/** Keeps authoritative protocol examples visible while the Markdown renderer still drops HTML. */
+export function literalThinkTagsForMarkdown(content: string): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const match of thinkTagMatches(content)) {
+    if (content[match.index] !== '<') continue;
+    chunks.push(
+      content.slice(cursor, match.index),
+      `&lt;${content.slice(match.index + 1, match.end - 1)}&gt;`,
+    );
+    cursor = match.end;
+  }
+  if (!chunks.length) return content;
+  chunks.push(content.slice(cursor));
+  return chunks.join('');
 }
 
 export function hasThinkingSegments(content: string): boolean {

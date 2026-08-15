@@ -302,6 +302,31 @@ describe('OpenAI-compatible Chat provider', () => {
     }
   });
 
+  it('keeps undecided text reversible when dedicated reasoning starts after text ends', async () => {
+    const content = '<think>literal example</think> is visible answer text.';
+    const response = [
+      `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}`,
+      '',
+      'data: {"choices":[{"delta":{"reasoning_content":"private reasoning"}}]}',
+      '',
+      'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+    const events = await collect(new AiSdkOpenAiCompatibleModelClient(
+      provider('openai-compatible', 'https://llm.example/v1'),
+      fakeFetch(response, {}),
+    ));
+    const visible = events.flatMap((event) =>
+      event.type === 'item_delta' ? [event.delta] : []).join('');
+    const reasoning = events.flatMap((event) =>
+      event.type === 'reasoning_raw_delta' ? [event.text] : []).join('');
+
+    expect(visible).toBe(content);
+    expect(reasoning).toBe('private reasoning');
+  });
+
   it('keeps mid-answer think-tag examples on the visible provider channel', async () => {
     const content = 'Explain raw <think>example</think> text.';
     const response = `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;

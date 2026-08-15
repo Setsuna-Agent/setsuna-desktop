@@ -105,10 +105,16 @@ describe('MarkdownRenderer', () => {
   });
 
   it('does not interpret tag examples in structured visible content as reasoning boundaries', () => {
-    const html = renderMarkdown('Use `<think>` only as a protocol example.', false, 'zh-CN', false);
+    const html = renderMarkdown(
+      'Use raw <think>literal</think> and code `<think>` as protocol examples.',
+      false,
+      'zh-CN',
+      false,
+    );
 
+    expect(html).toContain('raw &lt;think&gt;literal&lt;/think&gt;');
     expect(html).toContain('<code>&lt;think&gt;</code>');
-    expect(html).toContain('only as a protocol example.');
+    expect(html).toContain('as protocol examples.');
   });
 
   it('does not truncate legacy visible content that mentions think tags as inline code', () => {

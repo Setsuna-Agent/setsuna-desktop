@@ -602,7 +602,13 @@ function ReviewSummaryCard({
 
   return (
     <section className="chat-review-summary-card" aria-label={t('chat.review.completed')}>
-      {summary ? <MarkdownRenderer content={summary} streaming={false} /> : null}
+      {summary ? (
+        <MarkdownRenderer
+          content={summary}
+          legacyThinkingTags={normalizedNotice.reasoningSeparated !== true}
+          streaming={false}
+        />
+      ) : null}
       {findings.length ? (
         <div className="chat-review-summary-card__panel">
           <div className="chat-review-summary-card__header">

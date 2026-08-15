@@ -28,6 +28,7 @@ import type {
   RuntimeStreamItem,
   RuntimeToolCall,
 } from './provider.js';
+import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
 import type { RuntimeUsage } from './usage.js';
 import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
@@ -248,25 +249,28 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
     if (cursor === pathStart && line[cursor] === '[') {
       const markdownLink = markdownLinksByLabelStart.get(cursor);
       if (markdownLink) {
-        const [labelEnd, targetStart] = markdownLink;
         const labelLocation = reviewLocationWithin(
           line,
           cursor + 1,
-          labelEnd,
+          markdownLink.labelEnd,
         );
-        if (labelLocation) {
+        const targetLocation = reviewLocationWithin(
+          line,
+          markdownLink.targetStart,
+          markdownLink.targetEnd,
+        );
+        const linkedLocation = targetLocation ?? labelLocation;
+        if (linkedLocation) {
           locationCandidate = {
             titleEnd,
-            pathStart: cursor + 1,
-            pathEnd: labelLocation.pathEnd,
-            startLine: labelLocation.startLine,
-            ...(labelLocation.endLine !== undefined ? { endLine: labelLocation.endLine } : {}),
+            pathStart: targetLocation ? markdownLink.targetStart : cursor + 1,
+            pathEnd: linkedLocation.pathEnd,
+            startLine: linkedLocation.startLine,
+            ...(linkedLocation.endLine !== undefined ? { endLine: linkedLocation.endLine } : {}),
           };
         }
-        // Prefer a target containing the full repository path, while retaining the label as a
-        // fallback for ordinary GitHub `#L42` links whose target has no `:42` location.
-        pathStart = targetStart;
-        cursor = targetStart;
+        resolvedVersion = delimiterVersion;
+        cursor = markdownLink.targetEnd + 1;
         continue;
       }
     }
@@ -390,23 +394,6 @@ function reviewLocationWithin(line: string, start: number, end: number) {
     if (location && location.end <= end) return { ...location, pathEnd: cursor };
   }
   return null;
-}
-function reviewMarkdownLinksByLabelStart(line: string) {
-  const links = new Map<number, [labelEnd: number, targetStart: number]>();
-  let labelStart = -1;
-  for (let cursor = 0; cursor + 1 < line.length; cursor += 1) {
-    if (line[cursor] === '\\') {
-      cursor += 1;
-      continue;
-    }
-    if (line[cursor] === '[') {
-      labelStart = cursor;
-    } else if (labelStart >= 0 && line[cursor] === ']' && line[cursor + 1] === '(') {
-      links.set(labelStart, [cursor, cursor + 2]);
-      labelStart = -1;
-    }
-  }
-  return links;
 }
 
 function isReviewFindingDelimiter(value: string | undefined): boolean {

@@ -58,7 +58,7 @@ describe('thinkTagMatches', () => {
   });
 
   it('scans a backtick-heavy untrusted line without repeatedly rescanning its suffix', () => {
-    const visiblePrefix = `prefix ${'``` marker '.repeat(20_000)}`;
+    const visiblePrefix = `${'> '.repeat(5_000)}${'``` marker '.repeat(20_000)}`;
 
     expect(visibleTextOutsideThinkTags(`${visiblePrefix}<think>private`)).toBe(visiblePrefix);
   });

@@ -38,6 +38,7 @@ type AiSdkStreamState = {
   toolItemsCompleted: Set<string>;
   ignoredToolIds: Set<string>;
   legacyThinkDecoders: Map<string, LegacyThinkTagStreamDecoder>;
+  pendingTextCompletions: Set<string>;
 };
 
 export type AiSdkStreamBridgeOptions = {
@@ -82,10 +83,21 @@ export async function* bridgeAiSdkStream(
         yield* textItemDelta(state, part.id, part.text, options);
       }
     } else if (part.type === 'text-end') {
-      if (options.legacyThinkTags && !state.dedicatedReasoningObserved) {
-        yield* finishLegacyTextItem(state, part.id, options);
+      const legacyDecoder = state.legacyThinkDecoders.get(part.id);
+      if (
+        options.legacyThinkTags
+        && !state.dedicatedReasoningObserved
+        && legacyDecoder?.hasUndecidedLegacyEnvelope()
+      ) {
+        // A provider may emit its dedicated reasoning item after ending visible text. Keep the
+        // undecided legacy envelope reversible until the whole stream establishes its protocol.
+        state.pendingTextCompletions.add(part.id);
+      } else {
+        if (options.legacyThinkTags && !state.dedicatedReasoningObserved) {
+          yield* finishLegacyTextItem(state, part.id, options);
+        }
+        yield* completeTextItem(state.textItems, part.id, 'agent_message');
       }
-      yield* completeTextItem(state.textItems, part.id, 'agent_message');
     } else if (part.type === 'reasoning-start') {
       yield* observeDedicatedReasoning(state, options);
       if (options.handleReasoning !== false) yield* startReasoningItem(state, part.id, options);
@@ -223,6 +235,7 @@ function createStreamState(): AiSdkStreamState {
     toolItemsCompleted: new Set(),
     ignoredToolIds: new Set(),
     legacyThinkDecoders: new Map(),
+    pendingTextCompletions: new Set(),
   };
 }
 
@@ -236,6 +249,10 @@ function* observeDedicatedReasoning(
     yield* appendLegacyTextChunks(state, sourceId, decoder.finishAsContent(), options);
   }
   state.legacyThinkDecoders.clear();
+  for (const sourceId of state.pendingTextCompletions) {
+    yield* completeTextItem(state.textItems, sourceId, 'agent_message');
+  }
+  state.pendingTextCompletions.clear();
 }
 
 function* legacyTextItemDelta(

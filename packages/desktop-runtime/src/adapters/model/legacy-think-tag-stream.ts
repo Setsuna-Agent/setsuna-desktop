@@ -47,6 +47,10 @@ export class LegacyThinkTagStreamDecoder {
     return [{ type: 'content', text: content }];
   }
 
+  hasUndecidedLegacyEnvelope(): boolean {
+    return this.legacySource !== null;
+  }
+
   finish(): LegacyThinkTagStreamChunk[] {
     if (this.legacySource !== null) {
       const chunks: LegacyThinkTagStreamChunk[] = [];
