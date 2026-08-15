@@ -15,6 +15,17 @@ type TextRange = {
   start: number;
 };
 
+type MarkdownContainerFrame =
+  | { type: 'quote' }
+  | { continuationIndent: number; type: 'list' };
+
+type MarkdownFenceDelimiter = {
+  end: number;
+  length: number;
+  marker: '`' | '~';
+  start: number;
+};
+
 const RAW_TAG_WITHOUT_END = Symbol('raw-tag-without-end');
 
 /**
@@ -304,17 +315,31 @@ function mergeOrderedTextRanges(left: TextRange[], right: TextRange[]): TextRang
 
 function markdownFencedCodeRanges(text: string): TextRange[] {
   const ranges: TextRange[] = [];
-  let opening: { length: number; marker: '`' | '~'; start: number } | null = null;
+  let opening: MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] } | null = null;
 
   for (let lineStart = 0; lineStart < text.length;) {
     const lineEnd = markdownLineEnd(text, lineStart);
-    const delimiter = markdownFenceDelimiter(text, lineStart, lineEnd);
-    if (!opening && delimiter && isFenceOpening(text, delimiter, lineEnd)) {
-      opening = {
-        length: delimiter.length,
-        marker: delimiter.marker,
-        start: delimiter.start,
-      };
+    const scopedContentStart = opening
+      ? markdownContainerScopeContentStart(text, lineStart, lineEnd, opening.scope)
+      : null;
+    if (
+      opening
+      && scopedContentStart === null
+      && !isWhitespaceOnly(text, lineStart, lineEnd)
+    ) {
+      // A fence inside a quote/list ends when a nonblank line leaves that container. Treating a
+      // later root-level delimiter as its closer could otherwise hide a private legacy block.
+      opening = null;
+    }
+
+    const delimiter = opening && scopedContentStart !== null
+      ? markdownFenceDelimiterAt(text, scopedContentStart, lineEnd)
+      : null;
+    const candidate: (MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] }) | null = opening
+      ? null
+      : markdownFenceOpeningDelimiter(text, lineStart, lineEnd);
+    if (candidate && isFenceOpening(text, candidate, lineEnd)) {
+      opening = candidate;
     } else if (
       opening
       && delimiter?.marker === opening.marker
@@ -329,12 +354,23 @@ function markdownFencedCodeRanges(text: string): TextRange[] {
   return ranges;
 }
 
-function markdownFenceDelimiter(
+function markdownFenceOpeningDelimiter(
   text: string,
   lineStart: number,
   lineEnd: number,
-): { end: number; length: number; marker: '`' | '~'; start: number } | null {
-  const start = markdownContainerContentStart(text, lineStart, lineEnd);
+): (MarkdownFenceDelimiter & { scope: MarkdownContainerFrame[] }) | null {
+  const container = markdownOpeningContainer(text, lineStart, lineEnd);
+  const delimiter = markdownFenceDelimiterAt(text, container.contentStart, lineEnd);
+  return delimiter ? { ...delimiter, scope: container.scope } : null;
+}
+
+function markdownFenceDelimiterAt(
+  text: string,
+  contentStart: number,
+  lineEnd: number,
+): MarkdownFenceDelimiter | null {
+  let start = contentStart;
+  while (start < lineEnd && text[start] === ' ' && start - contentStart < 3) start += 1;
   const marker = text[start];
   if (marker !== '`' && marker !== '~') return null;
 
@@ -342,6 +378,94 @@ function markdownFenceDelimiter(
   while (end < lineEnd && text[end] === marker) end += 1;
   const length = end - start;
   return length >= 3 ? { end, length, marker, start } : null;
+}
+
+function markdownOpeningContainer(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): { contentStart: number; scope: MarkdownContainerFrame[] } {
+  const scope: MarkdownContainerFrame[] = [];
+  let cursor = lineStart;
+
+  while (cursor < lineEnd) {
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+    if (text[markerStart] === '>') {
+      scope.push({ type: 'quote' });
+      cursor = markerStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listContentStart = markdownListContentStart(text, markerStart, lineEnd);
+    if (listContentStart !== null) {
+      scope.push({
+        continuationIndent: markdownTextColumns(text, cursor, listContentStart),
+        type: 'list',
+      });
+      cursor = listContentStart;
+      continue;
+    }
+    break;
+  }
+  return { contentStart: cursor, scope };
+}
+
+function markdownContainerScopeContentStart(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+  scope: MarkdownContainerFrame[],
+): number | null {
+  let cursor = lineStart;
+  for (const frame of scope) {
+    if (frame.type === 'list') {
+      cursor = markdownIndentedContentStart(text, cursor, lineEnd, frame.continuationIndent);
+      if (cursor < 0) return null;
+      continue;
+    }
+
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+    if (text[markerStart] !== '>') return null;
+    cursor = markerStart + 1;
+    if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+  }
+  return cursor;
+}
+
+function markdownIndentedContentStart(
+  text: string,
+  start: number,
+  lineEnd: number,
+  requiredColumns: number,
+): number {
+  let columns = 0;
+  let cursor = start;
+  while (cursor < lineEnd && columns < requiredColumns) {
+    if (text[cursor] === ' ') {
+      columns += 1;
+    } else if (text[cursor] === '\t') {
+      columns += 4 - (columns % 4);
+    } else {
+      return -1;
+    }
+    cursor += 1;
+  }
+  return columns >= requiredColumns ? cursor : -1;
+}
+
+function markdownTextColumns(text: string, start: number, end: number): number {
+  let columns = 0;
+  for (let cursor = start; cursor < end; cursor += 1) {
+    columns += text[cursor] === '\t' ? 4 - (columns % 4) : 1;
+  }
+  return columns;
 }
 
 function isFenceOpening(

@@ -443,6 +443,64 @@ describe('runtime context compaction', () => {
     })).not.toBeNull();
   });
 
+  it('counts opaque native reasoning state even without a visible reasoning delta', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Inspect the implementation.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: 'Inspection complete.',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_2',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+    const withAssistantMetadata = (
+      providerMetadata: NonNullable<RuntimeMessage['providerMetadata']>,
+    ): RuntimeMessage[] => messages.map((message) => (
+      message.id === 'assistant_1' ? { ...message, providerMetadata } : message
+    ));
+    const opaquePayload = 'x'.repeat(4_000);
+    const anthropicMessages = withAssistantMetadata({
+      anthropic: {
+        contentBlocks: [{ type: 'redacted_thinking', data: opaquePayload }],
+      },
+    });
+    const openAiResponsesMessages = withAssistantMetadata({
+      schemaVersion: 2,
+      source: {
+        providerId: 'provider-1',
+        providerKind: 'openai-responses',
+        model: 'gpt-test',
+        endpointFingerprint: 'a'.repeat(64),
+      },
+      openAiResponses: {
+        kind: 'response',
+        items: [{ type: 'reasoning', encrypted_content: opaquePayload }],
+      },
+    });
+
+    for (const nativeMessages of [anthropicMessages, openAiResponsesMessages]) {
+      expect(estimateRuntimeMessageTokens(nativeMessages)).toBeGreaterThan(1_000);
+      expect(createRuntimeContextCompactionCandidate({
+        budget: { maxContextTokens: 1_000 },
+        messages: nativeMessages,
+      })).not.toBeNull();
+    }
+  });
+
   it('does not count display-only generated image data as model context', () => {
     const baseMessages: RuntimeMessage[] = [
       {

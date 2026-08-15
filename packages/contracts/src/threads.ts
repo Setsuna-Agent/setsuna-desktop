@@ -235,8 +235,7 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   let resolvedVersion = -1;
   let titleEnd = -1;
   let pathStart = -1;
-  const markdownLinkTargetStarts = reviewMarkdownLinkTargetStarts(line);
-  let markdownLinkTargetIndex = 0;
+  const markdownLinksByLabelStart = reviewMarkdownLinksByLabelStart(line);
   let locationCandidate: {
     endLine?: number;
     pathEnd: number;
@@ -247,16 +246,27 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
 
   while (cursor < line.length) {
     if (cursor === pathStart && line[cursor] === '[') {
-      while (
-        markdownLinkTargetIndex < markdownLinkTargetStarts.length
-        && markdownLinkTargetStarts[markdownLinkTargetIndex]! <= cursor
-      ) {
-        markdownLinkTargetIndex += 1;
-      }
-      const markdownTargetStart = markdownLinkTargetStarts[markdownLinkTargetIndex];
-      if (markdownTargetStart !== undefined) {
-        pathStart = markdownTargetStart;
-        cursor = markdownTargetStart;
+      const markdownLink = markdownLinksByLabelStart.get(cursor);
+      if (markdownLink) {
+        const [labelEnd, targetStart] = markdownLink;
+        const labelLocation = reviewLocationWithin(
+          line,
+          cursor + 1,
+          labelEnd,
+        );
+        if (labelLocation) {
+          locationCandidate = {
+            titleEnd,
+            pathStart: cursor + 1,
+            pathEnd: labelLocation.pathEnd,
+            startLine: labelLocation.startLine,
+            ...(labelLocation.endLine !== undefined ? { endLine: labelLocation.endLine } : {}),
+          };
+        }
+        // Prefer a target containing the full repository path, while retaining the label as a
+        // fallback for ordinary GitHub `#L42` links whose target has no `:42` location.
+        pathStart = targetStart;
+        cursor = targetStart;
         continue;
       }
     }
@@ -336,7 +346,7 @@ function reviewPriorityPrefix(line: string): {
   };
 }
 
-function reviewLocationAt(line: string, colonIndex: number): {
+function reviewLocationAt(line: string, colonIndex: number, additionalSuffix?: string): {
   end: number;
   endLine?: number;
   startLine: number;
@@ -367,23 +377,36 @@ function reviewLocationAt(line: string, colonIndex: number): {
     && suffixStart !== ','
     && suffixStart !== ';'
     && suffixStart !== ')'
+    && suffixStart !== additionalSuffix
   ) return null;
   if (!Number.isSafeInteger(startLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) return null;
 
   return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
 }
 
-/** Index link targets once so malformed repeated labels cannot rescan the same untrusted suffix. */
-function reviewMarkdownLinkTargetStarts(line: string): number[] {
-  const starts: number[] = [];
+function reviewLocationWithin(line: string, start: number, end: number) {
+  for (let cursor = start; cursor < end; cursor += 1) {
+    const location = line[cursor] === ':' ? reviewLocationAt(line, cursor, ']') : null;
+    if (location && location.end <= end) return { ...location, pathEnd: cursor };
+  }
+  return null;
+}
+function reviewMarkdownLinksByLabelStart(line: string) {
+  const links = new Map<number, [labelEnd: number, targetStart: number]>();
+  let labelStart = -1;
   for (let cursor = 0; cursor + 1 < line.length; cursor += 1) {
     if (line[cursor] === '\\') {
       cursor += 1;
       continue;
     }
-    if (line[cursor] === ']' && line[cursor + 1] === '(') starts.push(cursor + 2);
+    if (line[cursor] === '[') {
+      labelStart = cursor;
+    } else if (labelStart >= 0 && line[cursor] === ']' && line[cursor + 1] === '(') {
+      links.set(labelStart, [cursor, cursor + 2]);
+      labelStart = -1;
+    }
   }
-  return starts;
+  return links;
 }
 
 function isReviewFindingDelimiter(value: string | undefined): boolean {

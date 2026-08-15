@@ -88,10 +88,15 @@ describe('thinkTagMatches', () => {
     }
   });
 
-  it('does not let an unclosed container fence conceal a legacy privacy boundary', () => {
-    const content = '> ```html\n<think>private reasoning';
+  it('does not let a fence closer outside its container conceal a legacy privacy boundary', () => {
+    const examples = [
+      '> ```html\n<think>private reasoning</think>\n```',
+      '- ```html\n<think>private reasoning</think>\n```',
+    ];
 
-    expect(visibleTextOutsideThinkTags(content)).toBe('> ```html\n');
+    for (const content of examples) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(content.replace('<think>private reasoning</think>', ''));
+    }
   });
 
   it('preserves tags in valid indented code blocks without trusting paragraph indentation', () => {

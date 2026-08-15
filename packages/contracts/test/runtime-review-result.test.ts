@@ -61,6 +61,24 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
+  it('uses a Markdown link label when a GitHub target encodes the line as a fragment', () => {
+    expect(parseRuntimeReviewResult([
+      '审查完成，发现一个问题。',
+      '',
+      '[P2] 评论卡片不能丢失 — [packages/contracts/src/threads.ts:260](https://github.com/org/repo/blob/rev/packages/contracts/src/threads.ts#L260)',
+      '应当从可读标签恢复文件位置。',
+    ].join('\n'))).toEqual({
+      summary: '审查完成，发现一个问题。',
+      findings: [{
+        priority: 'P2',
+        title: '评论卡片不能丢失',
+        path: 'packages/contracts/src/threads.ts',
+        startLine: 260,
+        body: '应当从可读标签恢复文件位置。',
+      }],
+    });
+  });
+
   it('does not split a title that quotes the finding delimiter', () => {
     expect(parseRuntimeReviewResult([
       '[P3] 解析器对标题内含 " — " 的 finding 误切分 — packages/runtime/src/review.ts:42',
