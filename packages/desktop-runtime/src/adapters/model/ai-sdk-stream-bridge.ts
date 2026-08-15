@@ -27,6 +27,7 @@ type TextItemState = {
 };
 
 type AiSdkStreamState = {
+  dedicatedReasoningObserved: boolean;
   textItems: Map<string, TextItemState>;
   reasoningItems: Map<string, TextItemState>;
   textOrdinal: number;
@@ -75,18 +76,26 @@ export async function* bridgeAiSdkStream(
     if (part.type === 'text-start') {
       yield* startTextItem(state, part.id, options);
     } else if (part.type === 'text-delta') {
-      if (options.legacyThinkTags) yield* legacyTextItemDelta(state, part.id, part.text, options);
-      else yield* textItemDelta(state, part.id, part.text, options);
+      if (options.legacyThinkTags && !state.dedicatedReasoningObserved) {
+        yield* legacyTextItemDelta(state, part.id, part.text, options);
+      } else {
+        yield* textItemDelta(state, part.id, part.text, options);
+      }
     } else if (part.type === 'text-end') {
-      if (options.legacyThinkTags) yield* finishLegacyTextItem(state, part.id, options);
+      if (options.legacyThinkTags && !state.dedicatedReasoningObserved) {
+        yield* finishLegacyTextItem(state, part.id, options);
+      }
       yield* completeTextItem(state.textItems, part.id, 'agent_message');
     } else if (part.type === 'reasoning-start') {
+      yield* observeDedicatedReasoning(state, options);
       if (options.handleReasoning !== false) yield* startReasoningItem(state, part.id, options);
     } else if (part.type === 'reasoning-delta') {
+      yield* observeDedicatedReasoning(state, options);
       if (options.handleReasoning !== false) {
         yield* reasoningItemDelta(state, part.id, part.text, options);
       }
     } else if (part.type === 'reasoning-end') {
+      yield* observeDedicatedReasoning(state, options);
       if (options.handleReasoning !== false) {
         yield* completeTextItem(state.reasoningItems, part.id, 'reasoning');
       }
@@ -136,7 +145,9 @@ export async function* bridgeAiSdkStream(
     }
   }
 
-  if (options.legacyThinkTags) yield* finishOpenLegacyTextItems(state, options);
+  if (options.legacyThinkTags && !state.dedicatedReasoningObserved) {
+    yield* finishOpenLegacyTextItems(state, options);
+  }
   yield* completeOpenTextItems(state);
   const fallbackCalls = completeToolCalls(state.toolCalls)
     .filter((toolCall) => !state.toolItemsCompleted.has(toolCall.id));
@@ -201,6 +212,7 @@ function taggedNext<T, TKind extends 'part' | 'event'>(
 
 function createStreamState(): AiSdkStreamState {
   return {
+    dedicatedReasoningObserved: false,
     textItems: new Map(),
     reasoningItems: new Map(),
     textOrdinal: 0,
@@ -212,6 +224,18 @@ function createStreamState(): AiSdkStreamState {
     ignoredToolIds: new Set(),
     legacyThinkDecoders: new Map(),
   };
+}
+
+function* observeDedicatedReasoning(
+  state: AiSdkStreamState,
+  options: AiSdkStreamBridgeOptions,
+): Generator<ModelStreamEvent> {
+  if (state.dedicatedReasoningObserved) return;
+  state.dedicatedReasoningObserved = true;
+  for (const [sourceId, decoder] of state.legacyThinkDecoders) {
+    yield* appendLegacyTextChunks(state, sourceId, decoder.finishAsContent(), options);
+  }
+  state.legacyThinkDecoders.clear();
 }
 
 function* legacyTextItemDelta(

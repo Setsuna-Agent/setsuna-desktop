@@ -743,6 +743,27 @@ describe('createChatDisplayItems', () => {
     })).toBe('visible answer');
   });
 
+  it('preserves literal think tags when copying authoritative structured content', () => {
+    const content = '<think>literal example</think> is visible answer text.';
+
+    expect(assistantRunCopyText({
+      type: 'assistant',
+      id: 'assistant_structured',
+      handledSteerMessageIds: [],
+      messageIds: ['assistant_structured'],
+      steerMessages: [],
+      segments: [{
+        id: 'assistant_structured',
+        role: 'assistant',
+        content,
+        streamParts: [{ type: 'content', content }],
+        phase: 'final_answer',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      }],
+    })).toBe(content);
+  });
+
   it('keeps the transcript source intact while windowing the rendered tail', () => {
     const messages: RuntimeMessage[] = Array.from({ length: 6 }, (_, index) => ({
       id: `user_${index + 1}`,

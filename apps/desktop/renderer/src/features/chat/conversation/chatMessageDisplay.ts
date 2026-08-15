@@ -419,7 +419,7 @@ export function assistantRunCopyText(
   const content = item.segments
     .filter((segment) => segment.phase === 'final_answer')
     .flatMap((segment) => [
-      item.reviewExit ? '' : visibleMarkdownContent(segment.content).trim(),
+      item.reviewExit ? '' : assistantSegmentCopyText(segment),
       ...(segment.toolRuns ?? [])
         .filter((run) => !isTranscriptHiddenRuntimeToolRun(run))
         .map((run) => `${toolRunStatusLabel(run.status, t)} ${run.name}`.trim()),
@@ -432,6 +432,13 @@ export function assistantRunCopyText(
     if (visibleReview) content.push(visibleReview);
   }
   return content.join('\n\n');
+}
+
+function assistantSegmentCopyText(segment: RuntimeMessage): string {
+  const content = segment.streamParts === undefined
+    ? visibleMarkdownContent(segment.content)
+    : segment.content;
+  return content.trim();
 }
 
 function sameTurn(nextTurnId: string | undefined, currentTurnId: string | undefined): boolean {

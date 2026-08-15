@@ -264,6 +264,44 @@ describe('OpenAI-compatible Chat provider', () => {
     }
   });
 
+  it('keeps literal think tags visible after a dedicated reasoning channel is observed', async () => {
+    const content = '<think>literal example</think> is visible answer text.';
+    const response = [
+      'data: {"choices":[{"delta":{"reasoning_content":"private reasoning"}}]}',
+      '',
+      `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] })}`,
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    for (const createClient of [
+      () => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+      () => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+    ]) {
+      const events = await collect(createClient());
+      const visible = events.flatMap((event) => {
+        if (event.type === 'text_delta') return [event.text];
+        if (event.type === 'item_delta') return [event.delta];
+        return [];
+      }).join('');
+      const reasoning = events.flatMap((event) => {
+        if (event.type === 'reasoning_delta' || event.type === 'reasoning_raw_delta') return [event.text];
+        return [];
+      }).join('');
+
+      expect(visible).toBe(content);
+      expect(reasoning).toContain('private reasoning');
+      expect(reasoning).not.toContain('literal example');
+    }
+  });
+
   it('keeps mid-answer think-tag examples on the visible provider channel', async () => {
     const content = 'Explain raw <think>example</think> text.';
     const response = `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;

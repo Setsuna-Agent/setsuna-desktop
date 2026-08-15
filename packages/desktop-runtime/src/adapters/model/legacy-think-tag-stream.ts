@@ -63,6 +63,18 @@ export class LegacyThinkTagStreamDecoder {
     this.mode = 'content';
     return content ? [{ type: 'content', text: content }] : [];
   }
+
+  /**
+   * Flushes buffered text without interpreting legacy tags after a dedicated reasoning channel
+   * proves that the provider's visible content is already authoritative.
+   */
+  finishAsContent(): LegacyThinkTagStreamChunk[] {
+    const content = this.legacySource ?? this.pending;
+    this.legacySource = null;
+    this.mode = 'content';
+    this.pending = '';
+    return content ? [{ type: 'content', text: content }] : [];
+  }
 }
 
 function appendChunk(

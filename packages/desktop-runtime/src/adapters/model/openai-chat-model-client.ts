@@ -60,6 +60,7 @@ export class OpenAiChatModelClient implements ModelClient {
     let usage = undefined;
     let finishReason = undefined;
     let toolCallsYielded = false;
+    let dedicatedReasoningObserved = false;
     const legacyThinkDecoder = new LegacyThinkTagStreamDecoder();
     for await (const { data } of parseSse(response)) {
       if (data === '[DONE]') break;
@@ -70,7 +71,15 @@ export class OpenAiChatModelClient implements ModelClient {
         const delta = objectValue(choiceObject.delta);
         const text = stringValue(delta.content);
         const reasoning = stringValue(delta.reasoning_content ?? delta.reasoning);
-        if (reasoning) yield { type: 'reasoning_delta' as const, text: reasoning };
+        if (reasoning) {
+          if (!dedicatedReasoningObserved) {
+            dedicatedReasoningObserved = true;
+            for (const chunk of legacyThinkDecoder.finishAsContent()) {
+              yield { type: 'text_delta' as const, text: chunk.text };
+            }
+          }
+          yield { type: 'reasoning_delta' as const, text: reasoning };
+        }
         if (text) {
           for (const chunk of legacyThinkDecoder.push(text)) {
             yield chunk.type === 'content'
