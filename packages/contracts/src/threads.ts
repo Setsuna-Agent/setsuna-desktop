@@ -228,6 +228,8 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   let resolvedVersion = -1;
   let titleEnd = -1;
   let pathStart = -1;
+  const markdownLinkTargetStarts = reviewMarkdownLinkTargetStarts(line);
+  let markdownLinkTargetIndex = 0;
   let locationCandidate: {
     endLine?: number;
     pathEnd: number;
@@ -238,8 +240,14 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
 
   while (cursor < line.length) {
     if (cursor === pathStart && line[cursor] === '[') {
-      const markdownTargetStart = reviewMarkdownLinkTargetStart(line, cursor);
-      if (markdownTargetStart >= 0) {
+      while (
+        markdownLinkTargetIndex < markdownLinkTargetStarts.length
+        && markdownLinkTargetStarts[markdownLinkTargetIndex]! <= cursor
+      ) {
+        markdownLinkTargetIndex += 1;
+      }
+      const markdownTargetStart = markdownLinkTargetStarts[markdownLinkTargetIndex];
+      if (markdownTargetStart !== undefined) {
         pathStart = markdownTargetStart;
         cursor = markdownTargetStart;
         continue;
@@ -358,16 +366,17 @@ function reviewLocationAt(line: string, colonIndex: number): {
   return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
 }
 
-/** Resolve `[label](path:line)` to the target so review cards open the repository path. */
-function reviewMarkdownLinkTargetStart(line: string, start: number): number {
-  for (let cursor = start + 1; cursor + 1 < line.length; cursor += 1) {
+/** Index link targets once so malformed repeated labels cannot rescan the same untrusted suffix. */
+function reviewMarkdownLinkTargetStarts(line: string): number[] {
+  const starts: number[] = [];
+  for (let cursor = 0; cursor + 1 < line.length; cursor += 1) {
     if (line[cursor] === '\\') {
       cursor += 1;
       continue;
     }
-    if (line[cursor] === ']' && line[cursor + 1] === '(') return cursor + 2;
+    if (line[cursor] === ']' && line[cursor + 1] === '(') starts.push(cursor + 2);
   }
-  return -1;
+  return starts;
 }
 
 function isReviewFindingDelimiter(value: string | undefined): boolean {

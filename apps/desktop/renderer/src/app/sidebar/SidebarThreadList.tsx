@@ -18,6 +18,15 @@ export function minimumSidebarVisibleCount<T extends { id: string }>(
   }, batchSize);
 }
 
+export function nextSidebarVisibleCount(
+  expandedVisibleCount: number,
+  minimumVisibleCount: number,
+  batchSize: number,
+  totalCount: number,
+): number {
+  return Math.min(Math.max(expandedVisibleCount, minimumVisibleCount) + batchSize, totalCount);
+}
+
 export function SidebarThreadList({
   menuThreadId,
   runningThreadId,
@@ -75,10 +84,15 @@ export function SidebarThreadList({
           className="desktop-agent-thread-list__show-more"
           type="button"
           aria-label={t('sidebar.showMoreLabel', { count: Math.min(batchSize, remainingCount) })}
-          onClick={() => setExpansion({
+          onClick={() => setExpansion((current) => ({
             variant,
-            visibleCount: Math.min(expandedVisibleCount + batchSize, threads.length),
-          })}
+            visibleCount: nextSidebarVisibleCount(
+              current.variant === variant ? current.visibleCount : batchSize,
+              minimumVisibleCount,
+              batchSize,
+              threads.length,
+            ),
+          }))}
         >
           {t('sidebar.showMore')}
         </button>

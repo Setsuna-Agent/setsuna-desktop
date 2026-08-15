@@ -2,7 +2,10 @@ import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { SidebarThreadList } from '../../../../src/app/sidebar/SidebarThreadList.js';
+import {
+  nextSidebarVisibleCount,
+  SidebarThreadList,
+} from '../../../../src/app/sidebar/SidebarThreadList.js';
 
 vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
   SidebarFloatingMenu: ({ children }: { children: ReactNode }) => children,
@@ -45,6 +48,11 @@ describe('SidebarThreadList', () => {
     expect(html).toContain('conversation-21');
     expect(html).toContain('conversation-22');
     expect(html).not.toContain('展开显示');
+  });
+
+  it('expands from a pinned conversation instead of the stale page boundary', () => {
+    expect(nextSidebarVisibleCount(5, 11, 5, 22)).toBe(16);
+    expect(nextSidebarVisibleCount(20, 20, 20, 22)).toBe(22);
   });
 });
 

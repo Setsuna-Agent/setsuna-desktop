@@ -72,6 +72,18 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
+  it('keeps malformed Markdown-link candidates on a linear scan', () => {
+    const malformedCandidates = '候选 — [missing '.repeat(10_000);
+    const finding = parseRuntimeReviewResult(
+      `[P2] ${malformedCandidates}最终问题 — packages/runtime/src/review.ts:42`,
+    ).findings[0];
+
+    expect(finding).toMatchObject({
+      path: 'packages/runtime/src/review.ts',
+      startLine: 42,
+    });
+  });
+
   it('reparses persisted findings after parser fixes', () => {
     const notice = normalizeRuntimeReviewNotice({
       kind: 'exited',

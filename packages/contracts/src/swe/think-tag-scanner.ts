@@ -187,6 +187,7 @@ function markdownCodeRanges(text: string): TextRange[] {
   let opening: { length: number; start: number } | null = null;
   let blockRangeIndex = 0;
   let lineStart = 0;
+  let lineEnd = markdownLineEnd(text, lineStart);
 
   for (let index = 0; index < text.length;) {
     const blockRange = blockRanges[blockRangeIndex];
@@ -199,27 +200,29 @@ function markdownCodeRanges(text: string): TextRange[] {
     }
     if (text[index] === '\n') {
       lineStart = index + 1;
+      lineEnd = markdownLineEnd(text, lineStart);
       index += 1;
       continue;
     }
-    if (text[index] !== '`' || isEscapedDelimiter(text, index)) {
+    if (text[index] !== '`') {
       index += 1;
       continue;
     }
 
     const start = index;
+    const escapedOpening = !opening && isEscapedDelimiter(text, index);
     while (text[index] === '`') index += 1;
     const length = index - start;
     if (
       length >= 3
-      && markdownContainerContentStart(text, lineStart, markdownLineEnd(text, lineStart)) === start
+      && markdownContainerContentStart(text, lineStart, lineEnd) === start
     ) {
       opening = null;
       continue;
     }
-    if (!opening) {
+    if (!opening && !escapedOpening) {
       opening = { length, start };
-    } else if (opening.length === length) {
+    } else if (opening?.length === length) {
       ranges.push({ start: opening.start, end: index });
       opening = null;
     }

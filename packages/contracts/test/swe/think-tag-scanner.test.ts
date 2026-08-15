@@ -50,6 +50,19 @@ describe('thinkTagMatches', () => {
     expect([...thinkTagMatches(content)]).toEqual([]);
   });
 
+  it('closes inline code spans even when the closing backtick follows a backslash', () => {
+    const content = '示例：`<think>visible example</think>\\`，完成。';
+
+    expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    expect([...thinkTagMatches(content)]).toEqual([]);
+  });
+
+  it('scans a backtick-heavy untrusted line without repeatedly rescanning its suffix', () => {
+    const visiblePrefix = `prefix ${'``` marker '.repeat(20_000)}`;
+
+    expect(visibleTextOutsideThinkTags(`${visiblePrefix}<think>private`)).toBe(visiblePrefix);
+  });
+
   it('preserves visible text between separate legacy thinking blocks', () => {
     const content = '<think>r1</think>正文<think>r2</think>结尾';
 
