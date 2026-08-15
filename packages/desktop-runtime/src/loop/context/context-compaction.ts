@@ -422,10 +422,20 @@ function estimateMessageTokens(message: RuntimeMessage): number {
   const toolResultMetadataTokens = message.role === 'tool'
     ? estimateTextTokens(`${message.toolCallId ?? ''}\n${message.toolName ?? ''}`)
     : 0;
+  // Structured reasoning is intentionally absent from message.content, but native provider
+  // replay can send it back on the next request and it therefore consumes context budget.
+  const structuredReasoningLength = message.streamParts?.reduce(
+    (total, part) => total + (part.type === 'reasoning' ? part.content.length : 0),
+    0,
+  ) ?? 0;
+  const structuredReasoningTokens = structuredReasoningLength
+    ? Math.ceil(structuredReasoningLength / APPROX_CHARS_PER_TOKEN)
+    : 0;
   return estimateTextTokens(`${message.role}\n${message.content}`)
     + attachmentTokens
     + toolCallTokens
-    + toolResultMetadataTokens;
+    + toolResultMetadataTokens
+    + structuredReasoningTokens;
 }
 
 export function estimateTextTokens(value: string): number {

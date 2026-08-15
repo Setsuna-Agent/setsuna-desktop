@@ -1,4 +1,4 @@
-import { thinkTagMatches, type RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage } from '@setsuna-desktop/contracts';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
@@ -202,15 +202,7 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
     thinkingIndex += 1;
   };
 
-  const legacyStructuredContent = legacyThinkTaggedStructuredContent(segment);
-  if (legacyStructuredContent !== null) {
-    // Affected builds persisted provider-encoded think tags as structured content. Keep a
-    // conservative read path so those messages do not expose reasoning after upgrading.
-    for (const legacySegment of splitThinkingContent(legacyStructuredContent, segment.status === 'streaming')) {
-      if (legacySegment.type === 'markdown') appendContent(legacySegment.content);
-      else if (!legacySegment.closed) appendActiveThinking(legacySegment.content);
-    }
-  } else if (segment.streamParts?.length) {
+  if (segment.streamParts?.length) {
     const lastPartIndex = segment.streamParts.length - 1;
     segment.streamParts.forEach((part, index) => {
       if (part.type === 'content') appendContent(part.content);
@@ -246,13 +238,6 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
     thinkingSegments,
     toolRuns,
   };
-}
-
-function legacyThinkTaggedStructuredContent(segment: RuntimeMessage): string | null {
-  if (!segment.streamParts?.length || segment.streamParts.some((part) => part.type === 'reasoning')) return null;
-  const content = segment.streamParts.map((part) => part.content).join('');
-  const opening = [...thinkTagMatches(content)].find((match) => !match.closing);
-  return opening && !content.slice(0, opening.index).trim() ? content : null;
 }
 
 function defaultWorkItems(

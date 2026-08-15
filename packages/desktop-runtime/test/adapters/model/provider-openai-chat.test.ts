@@ -259,6 +259,7 @@ describe('OpenAI-compatible Chat provider', () => {
 
       expect(visible).toBe('Visible answer.');
       expect(reasoning).toContain('private reasoning');
+      expect(reasoning).not.toContain('Visible answer.');
       expect(visible).not.toContain('private reasoning');
     }
   });

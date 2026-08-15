@@ -116,10 +116,10 @@ describe('createAssistantRunTimeline', () => {
     ]);
   });
 
-  it('repairs content-only structured messages written by legacy compatible streams', () => {
-    const content = '<think>private reasoning</think>Visible answer.';
+  it('keeps leading literal think tags in authoritative structured content', () => {
+    const content = '<think>literal example</think> is valid answer text.';
     const segments: RuntimeMessage[] = [{
-      id: 'assistant_legacy_structured',
+      id: 'assistant_structured_leading_example',
       role: 'assistant',
       content,
       streamParts: [{ type: 'content', content }],
@@ -130,7 +130,7 @@ describe('createAssistantRunTimeline', () => {
 
     expect(createAssistantRunTimeline(segments)).toMatchObject([{
       type: 'content',
-      content: 'Visible answer.',
+      content,
     }]);
   });
 

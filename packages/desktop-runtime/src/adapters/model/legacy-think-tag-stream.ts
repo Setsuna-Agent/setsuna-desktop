@@ -9,9 +9,9 @@ export type LegacyThinkTagStreamChunk = {
  * Decodes providers that still serialize reasoning inside the visible text stream. Only an
  * opening tag at the first non-whitespace position is a protocol envelope; tags in an ordinary
  * answer remain literal content.
- * Once an opening tag is observed, the tail stays on the private channel until completion;
- * only the fully parsed visible segments are then committed as content. This conservative
- * boundary avoids exposing a reasoning tail whose text happens to contain a closing-tag example.
+ * Once an opening tag is observed, the tagged envelope is buffered until completion. A closing
+ * tag can be split across deltas or appear as an example inside the reasoning itself, so publishing
+ * an undecided tail would risk placing the visible answer on the private channel (or vice versa).
  */
 export class LegacyThinkTagStreamDecoder {
   private legacySource: string | null = null;
@@ -23,7 +23,7 @@ export class LegacyThinkTagStreamDecoder {
     if (this.mode === 'content') return [{ type: 'content', text: delta }];
     if (this.mode === 'legacy' && this.legacySource !== null) {
       this.legacySource += delta;
-      return [{ type: 'reasoning', text: delta }];
+      return [];
     }
 
     this.pending += delta;
@@ -37,7 +37,6 @@ export class LegacyThinkTagStreamDecoder {
       appendChunk(chunks, 'content', this.pending.slice(0, envelopeStart));
       this.legacySource = envelope;
       this.mode = 'legacy';
-      appendChunk(chunks, 'reasoning', envelope.slice(opening.end));
       this.pending = '';
       return chunks;
     }
@@ -50,14 +49,14 @@ export class LegacyThinkTagStreamDecoder {
 
   finish(): LegacyThinkTagStreamChunk[] {
     if (this.legacySource !== null) {
-      const visible = splitThinkTaggedText(this.legacySource)
-        .filter((segment) => segment.type === 'markdown')
-        .map((segment) => segment.content)
-        .join('');
+      const chunks: LegacyThinkTagStreamChunk[] = [];
+      for (const segment of splitThinkTaggedText(this.legacySource)) {
+        appendChunk(chunks, segment.type === 'think' ? 'reasoning' : 'content', segment.content);
+      }
       this.legacySource = null;
       this.mode = 'content';
       this.pending = '';
-      return visible ? [{ type: 'content', text: visible }] : [];
+      return chunks;
     }
     const content = this.pending;
     this.pending = '';

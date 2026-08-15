@@ -233,8 +233,8 @@ function* finishLegacyTextItem(
   const decoder = state.legacyThinkDecoders.get(sourceId);
   if (!decoder) return;
   const chunks = decoder.finish();
-  yield* completeTextItem(state.reasoningItems, legacyReasoningSourceId(sourceId), 'reasoning');
   yield* appendLegacyTextChunks(state, sourceId, chunks, options);
+  yield* completeTextItem(state.reasoningItems, legacyReasoningSourceId(sourceId), 'reasoning');
   state.legacyThinkDecoders.delete(sourceId);
 }
 

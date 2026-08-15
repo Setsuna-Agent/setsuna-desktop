@@ -385,6 +385,42 @@ describe('runtime context compaction', () => {
     })).not.toBeNull();
   });
 
+  it('counts structured reasoning that native replay can send back to the provider', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Inspect the implementation.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_1',
+        role: 'assistant',
+        content: 'Inspection complete.',
+        streamParts: [
+          { type: 'reasoning', content: 'x'.repeat(4_000) },
+          { type: 'content', content: 'Inspection complete.' },
+        ],
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_2',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:02.000Z',
+        status: 'complete',
+      },
+    ];
+
+    expect(estimateRuntimeMessageTokens(messages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages,
+    })).not.toBeNull();
+  });
+
   it('does not count display-only generated image data as model context', () => {
     const baseMessages: RuntimeMessage[] = [
       {
