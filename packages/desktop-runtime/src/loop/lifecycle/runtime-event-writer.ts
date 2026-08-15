@@ -9,6 +9,8 @@ type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
 type PendingBatch = {
   events: PendingRuntimeEvent[];
   lastMergeKey?: string;
+  mergeIndexes: Map<string, number>;
+  lastTypeIndexes: Map<string, number>;
   timer: NodeJS.Timeout;
 };
 
@@ -79,15 +81,27 @@ export class RuntimeEventWriter {
         void this.enqueueWrite(threadId, () => this.persistAndPublish(pending)).catch((error) => this.recordFailure(error));
       }, this.flushIntervalMs);
       timer.unref();
-      batch = { events: [], timer };
+      batch = { events: [], mergeIndexes: new Map(), lastTypeIndexes: new Map(), timer };
       this.batches.set(threadId, batch);
     }
     const lastEvent = batch.events.at(-1);
-    // Only adjacent deltas may coalesce. Reusing an earlier slot after another channel or item has
-    // streamed would move the new delta backwards in the persisted event order.
     if (batch.lastMergeKey === mergeKey && lastEvent && mergeBufferedEvent(lastEvent, event)) {
       return { coalesced: true, eventCount: batch.events.length };
     }
+    // A non-adjacent slot may be reused only while it is still the latest event of its type.
+    // Dual-written streams (for example item.delta and message.delta for one chunk) project
+    // independently, so cross-type merging is safe; merging across a same-type event would
+    // move the new delta backwards past another channel or item in the persisted order.
+    const existingIndex = batch.mergeIndexes.get(mergeKey);
+    if (
+      existingIndex !== undefined
+      && batch.lastTypeIndexes.get(event.type) === existingIndex
+      && mergeBufferedEvent(batch.events[existingIndex]!, event)
+    ) {
+      return { coalesced: true, eventCount: batch.events.length };
+    }
+    batch.mergeIndexes.set(mergeKey, batch.events.length);
+    batch.lastTypeIndexes.set(event.type, batch.events.length);
     batch.events.push(clonePendingEvent(event));
     batch.lastMergeKey = mergeKey;
     return { coalesced: false, eventCount: batch.events.length };

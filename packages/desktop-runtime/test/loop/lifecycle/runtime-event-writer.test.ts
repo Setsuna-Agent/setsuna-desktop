@@ -295,6 +295,63 @@ describe('runtime event writer', () => {
     });
   });
 
+  it('coalesces dual-written item and message deltas from one stream', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-dual-stream-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000);
+    const thread = await store.createThread({ title: 'Dual stream batching' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    for (const [index, text] of ['a', 'b', 'c'].entries()) {
+      await writer.append(thread.id, {
+        id: `event_item_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'item.delta',
+        createdAt,
+        payload: { itemId: 'msg_1', delta: text },
+      });
+      await writer.append(thread.id, {
+        id: `event_message_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'message.delta',
+        createdAt,
+        payload: { messageId: 'msg_1', text },
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt,
+      payload: { messageId: 'msg_1', content: 'abc' },
+    });
+
+    const events = await store.listEvents(thread.id);
+    expect(events.map((event) => event.type)).toEqual([
+      'thread.created', 'message.created', 'item.delta', 'message.delta', 'message.completed',
+    ]);
+    expect(events[2]).toMatchObject({ type: 'item.delta', payload: { itemId: 'msg_1', delta: 'abc' } });
+    expect(events[3]).toMatchObject({ type: 'message.delta', payload: { messageId: 'msg_1', text: 'abc' } });
+  });
+
   it('coalesces plan and reasoning parts without crossing turn or lifecycle boundaries', async () => {
     const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-structured-delta-test-')),

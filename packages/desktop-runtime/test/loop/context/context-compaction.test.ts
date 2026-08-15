@@ -501,6 +501,54 @@ describe('runtime context compaction', () => {
     }
   });
 
+  it('counts replayed native compaction envelopes toward context usage', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'compact_1',
+        role: 'user',
+        content: 'Portable summary.',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 4,
+          compactedTokens: 800,
+          keptRecentMessageCount: 2,
+          maxContextTokensK: 128,
+          originalMessageCount: 5,
+          originalTokens: 900,
+        },
+        providerMetadata: {
+          schemaVersion: 2,
+          source: {
+            providerId: 'provider-1',
+            providerKind: 'openai-responses',
+            model: 'gpt-test',
+            endpointFingerprint: 'a'.repeat(64),
+          },
+          openAiResponses: {
+            kind: 'compaction',
+            items: [{ type: 'compaction', id: 'cmp_1', encrypted_content: 'x'.repeat(4_000) }],
+          },
+        },
+      },
+      {
+        id: 'user_1',
+        role: 'user',
+        content: 'Continue.',
+        createdAt: '2026-06-25T00:00:01.000Z',
+        status: 'complete',
+      },
+    ];
+
+    const withoutEnvelope = messages.map((message) => ({ ...message, providerMetadata: undefined }));
+    expect(estimateRuntimeMessageTokens(withoutEnvelope)).toBeLessThan(1_000);
+    expect(estimateRuntimeMessageTokens(messages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages,
+    })).not.toBeNull();
+  });
+
   it('does not count display-only generated image data as model context', () => {
     const baseMessages: RuntimeMessage[] = [
       {

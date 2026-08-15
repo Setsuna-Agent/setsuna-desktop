@@ -462,15 +462,27 @@ function nativeReasoningReplayCharacters(message: RuntimeMessage): number {
     return Math.max(streamedReasoning, nativeText) + opaqueState;
   }
 
+  const envelope = metadata.openAiResponses;
   if (!(metadata.schemaVersion === 2
     && metadata.source?.providerKind === 'openai-responses'
-    && metadata.openAiResponses?.kind === 'response'
+    && envelope
   )) return 0;
+
+  if (envelope.kind === 'compaction') {
+    // Native replay resends the compaction envelope verbatim, so its opaque payload consumes
+    // the next request budget even though it produces no visible reasoning text.
+    let compactionState = 0;
+    for (const item of envelope.items) {
+      if (typeof item.encrypted_content === 'string') compactionState += item.encrypted_content.length;
+    }
+    return compactionState;
+  }
+  if (envelope.kind !== 'response') return 0;
 
   let nativeSummary = 0;
   let opaqueState = 0;
   let hasReasoningItem = false;
-  for (const item of metadata.openAiResponses.items) {
+  for (const item of envelope.items) {
     if (item.type !== 'reasoning') continue;
     hasReasoningItem = true;
     if (typeof item.encrypted_content === 'string') opaqueState += item.encrypted_content.length;

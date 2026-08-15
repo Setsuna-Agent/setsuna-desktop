@@ -99,6 +99,16 @@ describe('thinkTagMatches', () => {
     }
   });
 
+  it('closes a quoted fence at an unmarked blank but keeps a loose list fence open', () => {
+    // CommonMark ends a block quote at a blank line without the quote marker, so the fence
+    // opened inside it cannot conceal the legacy reasoning that follows the blank.
+    expect(visibleTextOutsideThinkTags('> ```html\n\n> <think>private reasoning</think>\n> ```'))
+      .toBe('> ```html\n\n> \n> ```');
+    // A loose list item may contain blank lines, so an in-scope fence stays open there.
+    const listExample = '- ```html\n\n  <think>visible example</think>\n  ```';
+    expect(visibleTextOutsideThinkTags(listExample)).toBe(listExample);
+  });
+
   it('preserves tags in valid indented code blocks without trusting paragraph indentation', () => {
     const examples = [
       '示例：\n\n    <think>visible example</think>\n\n完成。',

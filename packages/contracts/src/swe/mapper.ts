@@ -59,6 +59,7 @@ import {
 import { FILE_MUTATION_TOOL_NAMES, SHELL_TOOL_NAMES } from './tool-names.js';
 import {
   appendPlanMessageDelta,
+  assistantStreamPartItems,
   collabToolCallItemFromMailbox,
   compareRuntimeSweTurnEntries,
   completedAssistantContentNotifications,
@@ -417,6 +418,14 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     }
     if (message.status === 'streaming') {
       return startAssistantMessageStream(state, event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.phase ?? null);
+    }
+    if (message.streamParts !== undefined) {
+      const completedAtMs = toEpochMs(event.createdAt);
+      return assistantStreamPartItems(message.id, message.content, message.streamParts, message.memoryCitation ?? null, message.phase ?? null)
+        .map((item) => ({
+          method: 'item/completed' as const,
+          params: { threadId: event.threadId, turnId, item, completedAtMs },
+        }));
     }
     return completedAssistantContentNotifications(event.threadId, turnId, message.id, message.content, toEpochMs(event.createdAt), message.memoryCitation ?? null, message.phase ?? null);
   }

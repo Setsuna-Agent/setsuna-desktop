@@ -370,6 +370,8 @@ export function runtimeMessageToSweItems(message: RuntimeMessage, options: { ski
   if (!options.skipTranscriptContent && message.role === 'assistant' && !message.contextCompaction && message.content.trim()) {
     if (message.planMode) {
       items.push(planItem(message.id, message.content, message.planMode.status));
+    } else if (message.streamParts !== undefined) {
+      items.push(...assistantStreamPartItems(message.id, message.content, message.streamParts, message.memoryCitation ?? null, message.phase ?? null));
     } else {
       items.push(...assistantContentItems(message.id, message.content, message.memoryCitation ?? null, message.phase ?? null));
     }
@@ -567,6 +569,38 @@ export function assistantContentItems(
     citationPending = null;
     agentSegmentIndex += 1;
   }
+  return items;
+}
+
+/**
+ * Structured stream parts are authoritative: snapshot and atomic conversions must emit the
+ * recorded channels instead of running the legacy think-tag parser over literal content.
+ */
+export function assistantStreamPartItems(
+  messageId: string,
+  text: string,
+  streamParts: NonNullable<RuntimeMessage['streamParts']>,
+  memoryCitation: RuntimeMessage['memoryCitation'] | null = null,
+  phase: RuntimeMessage['phase'] | null = null,
+): SweThreadItem[] {
+  const items: SweThreadItem[] = [];
+  let agentSegmentIndex = 0;
+  let reasoningSegmentIndex = 0;
+  let citationPending = memoryCitation;
+  for (const part of streamParts) {
+    if (!part.content.trim()) continue;
+    if (part.type === 'reasoning') {
+      items.push(reasoningItem(reasoningItemId(messageId, reasoningSegmentIndex), [part.content]));
+      reasoningSegmentIndex += 1;
+      continue;
+    }
+    items.push(agentMessageItem(agentMessageItemId(messageId, agentSegmentIndex), part.content, citationPending, phase));
+    citationPending = null;
+    agentSegmentIndex += 1;
+  }
+  // A structured message can carry visible text before its parts are filled in; keep that
+  // authoritative text instead of dropping it or legacy-parsing it.
+  if (!items.length && text.trim()) return [agentMessageItem(messageId, text, memoryCitation, phase)];
   return items;
 }
 

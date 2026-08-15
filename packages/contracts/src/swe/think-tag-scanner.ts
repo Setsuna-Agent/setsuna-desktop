@@ -324,14 +324,14 @@ function markdownFencedCodeRanges(text: string): TextRange[] {
     const scopedContentStart = opening
       ? markdownContainerScopeContentStart(text, lineStart, lineEnd, opening.scope)
       : null;
-    if (
-      opening
-      && scopedContentStart === null
-      && !isWhitespaceOnly(text, lineStart, lineEnd)
-    ) {
-      // A fence inside a quote/list ends when a nonblank line leaves that container. Treating a
-      // later root-level delimiter as its closer could otherwise hide a private legacy block.
-      opening = null;
+    if (opening && scopedContentStart === null) {
+      // A fence inside a quote/list ends when a line leaves that container. Whitespace-only
+      // lines continue a pure list scope (loose list items allow interior blanks), but
+      // CommonMark ends a block quote at any blank it does not mark. Keeping such a fence
+      // open would let a later in-scope delimiter hide a private legacy block as code.
+      const blankContinuesPureListScope = isWhitespaceOnly(text, lineStart, lineEnd)
+        && !opening.scope.some((frame) => frame.type === 'quote');
+      if (!blankContinuesPureListScope) opening = null;
     }
 
     const delimiter = opening && scopedContentStart !== null

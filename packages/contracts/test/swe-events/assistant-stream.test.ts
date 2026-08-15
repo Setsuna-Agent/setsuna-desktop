@@ -89,6 +89,65 @@ describe('runtime AppServer SWE assistant streaming', () => {
       ]);
     });
   
+  it('keeps structured literal think tags in atomically completed messages', () => {
+      const mapEvent = createSweNotificationMapper();
+      const created: RuntimeEvent = {
+        id: 'event_1',
+        seq: 1,
+        threadId: 'thread_1',
+        turnId: 'turn_1',
+        type: 'message.created',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        payload: {
+          message: {
+            id: 'msg_1',
+            turnId: 'turn_1',
+            role: 'assistant',
+            content: '示例：<think>literal</think> 保留',
+            streamParts: [
+              { type: 'reasoning', content: 'structured reasoning' },
+              { type: 'content', content: '示例：<think>literal</think> 保留' },
+            ],
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+            phase: 'final_answer',
+          },
+        },
+      };
+
+      expect(mapEvent(created)).toEqual([
+        {
+          method: 'item/completed',
+          params: {
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+            item: {
+              type: 'reasoning',
+              id: 'msg_1:reasoning',
+              summary: ['structured reasoning'],
+              content: [],
+            },
+            completedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+          },
+        },
+        {
+          method: 'item/completed',
+          params: {
+            threadId: 'thread_1',
+            turnId: 'turn_1',
+            item: {
+              type: 'agentMessage',
+              id: 'msg_1',
+              text: '示例：<think>literal</think> 保留',
+              phase: 'final_answer',
+              memoryCitation: null,
+            },
+            completedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+          },
+        },
+      ]);
+    });
+
   it('maps streaming agent message memory citations onto the completed item', () => {
       const mapEvent = createSweNotificationMapper();
       const created: RuntimeEvent = {
