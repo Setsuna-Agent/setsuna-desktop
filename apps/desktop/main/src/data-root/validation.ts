@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { lstat, readFile, readlink, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { DataMigrationManifest } from './model.js';
 import { desktopDataLayout } from './layout.js';
 
@@ -33,6 +34,55 @@ const MANAGED_JSON_PATHS = new Set([
   'runtime/workspace-dependencies/manifest.json',
 ]);
 const MANAGED_JSONL_PATHS = new Set(['runtime/usage.jsonl']);
+const RUNTIME_OWNERSHIP_RELEASE_TIMEOUT_MS = 20_000;
+const RUNTIME_OWNERSHIP_POLL_INTERVAL_MS = 250;
+
+/**
+ * A crashed runtime can leave its fenced ownership row behind until the 15-second
+ * lease expires. Once expired, remove that process-only row atomically so the old
+ * owner is fenced before scanning; a live orphan that renews it still blocks migration.
+ */
+export async function waitForRuntimeOwnershipRelease(dataRoot: string): Promise<void> {
+  const databasePath = desktopDataLayout(dataRoot).runtimeDatabasePath;
+  const databaseStats = await stat(databasePath).catch(() => null);
+  if (!databaseStats?.isFile()) return;
+
+  const sqlite = requireSqlite();
+  const deadline = Date.now() + RUNTIME_OWNERSHIP_RELEASE_TIMEOUT_MS;
+  for (;;) {
+    const database = new sqlite.DatabaseSync(databasePath);
+    let leaseExpiresAt: number | null;
+    try {
+      leaseExpiresAt = runtimeOwnershipLeaseExpiresAt(database);
+      const now = Date.now();
+      if (leaseExpiresAt !== null && leaseExpiresAt <= now) {
+        const removed = database.prepare(`
+          DELETE FROM runtime_owner
+          WHERE slot = 1 AND lease_expires_at = ?
+        `).run(leaseExpiresAt);
+        if (Number(removed.changes) === 1) {
+          database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+          return;
+        }
+        leaseExpiresAt = runtimeOwnershipLeaseExpiresAt(database);
+      }
+    } finally {
+      database.close();
+    }
+
+    const now = Date.now();
+    if (leaseExpiresAt === null) return;
+    const remainingWaitMs = deadline - now;
+    if (remainingWaitMs <= 0) {
+      throw new Error('SQLite runtime ownership lease is still active.');
+    }
+    await delay(Math.min(
+      RUNTIME_OWNERSHIP_POLL_INTERVAL_MS,
+      remainingWaitMs,
+      Math.max(1, leaseExpiresAt - now + 1),
+    ));
+  }
+}
 
 export async function validateCopiedManifest(
   stagingRoot: string,
@@ -133,8 +183,7 @@ function structuredValidationKind(relativePath: string): 'json' | 'jsonl' | unde
 async function validateSqliteDatabase(sourcePath: string, targetPath: string): Promise<void> {
   const targetStats = await stat(targetPath).catch(() => null);
   if (!targetStats?.isFile()) return;
-  const sqlite = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite') | undefined;
-  if (!sqlite) throw new Error('SQLite validation is unavailable in this runtime.');
+  const sqlite = requireSqlite();
   const source = new sqlite.DatabaseSync(sourcePath, { readOnly: true });
   const target = new sqlite.DatabaseSync(targetPath, { readOnly: true });
   try {
@@ -144,11 +193,9 @@ async function validateSqliteDatabase(sourcePath: string, targetPath: string): P
     }
     const foreignKeyErrors = target.prepare('PRAGMA foreign_key_check').all();
     if (foreignKeyErrors.length) throw new Error('SQLite foreign_key_check failed.');
-    const ownership = target.prepare('SELECT COUNT(*) AS count FROM runtime_owner').get() as {
-      count?: number | bigint;
-    } | undefined;
-    if (Number(ownership?.count ?? 0) !== 0) {
-      throw new Error('SQLite runtime ownership lease was not released.');
+    const leaseExpiresAt = runtimeOwnershipLeaseExpiresAt(target);
+    if (leaseExpiresAt !== null && leaseExpiresAt > Date.now()) {
+      throw new Error('SQLite runtime ownership lease is still active.');
     }
     for (const table of ['threads', 'runtime_events', 'store_metadata']) {
       const sourceCount = tableCount(source, table);
@@ -161,6 +208,30 @@ async function validateSqliteDatabase(sourcePath: string, targetPath: string): P
     source.close();
     target.close();
   }
+}
+
+function requireSqlite(): typeof import('node:sqlite') {
+  const sqlite = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite') | undefined;
+  if (!sqlite) throw new Error('SQLite validation is unavailable in this runtime.');
+  return sqlite;
+}
+
+function runtimeOwnershipLeaseExpiresAt(
+  database: import('node:sqlite').DatabaseSync,
+): number | null {
+  const table = database.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'runtime_owner'",
+  ).get();
+  if (!table) return null;
+  const row = database.prepare(
+    'SELECT lease_expires_at FROM runtime_owner WHERE slot = 1',
+  ).get() as { lease_expires_at?: number | bigint } | undefined;
+  if (!row) return null;
+  const leaseExpiresAt = Number(row.lease_expires_at);
+  if (!Number.isFinite(leaseExpiresAt)) {
+    throw new Error('SQLite runtime ownership lease is invalid.');
+  }
+  return leaseExpiresAt;
 }
 
 function tableCount(

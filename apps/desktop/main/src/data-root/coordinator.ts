@@ -73,7 +73,7 @@ import {
   registerRetainedDataRootBackup,
   retainedBackupError,
 } from './retained-backups.js';
-import { validateCopiedManifest, validateMigratedData } from './validation.js';
+import { validateCopiedManifest, validateMigratedData, waitForRuntimeOwnershipRelease } from './validation.js';
 
 type DataRootCoordinatorOptions = {
   appDataRoot: string;
@@ -82,10 +82,7 @@ type DataRootCoordinatorOptions = {
   requestRelaunch: () => Promise<void>;
 };
 
-type CachedPlan = {
-  plan: DesktopDataMigrationPlan;
-  manifest: DataMigrationManifest;
-};
+type CachedPlan = { plan: DesktopDataMigrationPlan; manifest: DataMigrationManifest };
 
 const PROGRESS_EVENT_INTERVAL_MS = 120;
 
@@ -467,6 +464,7 @@ export class DesktopDataRootCoordinator {
       if (await this.finishInterruptedCommit(pending)) return { ok: true };
       await cleanupOwnedStaging(stagingRoot, pending.migrationId);
       this.setProgress(emptyProgress(pending, 'scanning'), true);
+      await waitForRuntimeOwnershipRelease(pending.sourceRoot);
       const { manifest, blockers: manifestBlockers } = await buildDataMigrationManifest(pending.sourceRoot);
       const inspection = await inspectDataMigrationTarget({
         sourceRoot: pending.sourceRoot,
