@@ -240,8 +240,9 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
 
   for (let lineStart = 0; lineStart < text.length;) {
     const lineEnd = markdownLineEnd(text, lineStart);
-    const blank = isWhitespaceOnly(text, lineStart, lineEnd);
-    const indented = !blank && markdownIndentColumns(text, lineStart, lineEnd) >= 4;
+    const contentStart = markdownContainerBodyStart(text, lineStart, lineEnd);
+    const blank = isWhitespaceOnly(text, contentStart, lineEnd);
+    const indented = !blank && markdownIndentColumns(text, contentStart, lineEnd) >= 4;
 
     if (rangeStart !== null) {
       if (indented) {
@@ -348,6 +349,31 @@ function isFenceOpening(
   return delimiter.marker === '~' || !text.slice(delimiter.end, lineEnd).includes('`');
 }
 
+/** Keeps indentation after valid quote/list prefixes so nested code can be measured locally. */
+function markdownContainerBodyStart(text: string, lineStart: number, lineEnd: number): number {
+  let cursor = lineStart;
+  while (cursor < lineEnd) {
+    let markerStart = cursor;
+    while (markerStart < lineEnd && text[markerStart] === ' ' && markerStart - cursor < 3) {
+      markerStart += 1;
+    }
+
+    if (text[markerStart] === '>') {
+      cursor = markerStart + 1;
+      if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
+      continue;
+    }
+
+    const listContentStart = markdownListContentStart(text, markerStart, lineEnd);
+    if (listContentStart !== null) {
+      cursor = listContentStart;
+      continue;
+    }
+    return cursor;
+  }
+  return cursor;
+}
+
 /** Returns the first content byte after valid block quote/list container prefixes. */
 function markdownContainerContentStart(text: string, lineStart: number, lineEnd: number): number {
   let cursor = lineStart;
@@ -386,12 +412,23 @@ function markdownListContentStart(text: string, start: number, lineEnd: number):
     markerEnd += 1;
   }
 
+  if (markerEnd === lineEnd) return lineEnd;
   let contentStart = markerEnd;
-  while (contentStart < lineEnd && text[contentStart] === ' ' && contentStart - markerEnd < 5) {
+  let paddingColumns = 0;
+  while (contentStart < lineEnd) {
+    if (text[contentStart] === ' ') {
+      paddingColumns += 1;
+    } else if (text[contentStart] === '\t') {
+      paddingColumns += 4 - (paddingColumns % 4);
+    } else {
+      break;
+    }
     contentStart += 1;
   }
-  const padding = contentStart - markerEnd;
-  return padding >= 1 && padding <= 4 ? contentStart : null;
+  if (paddingColumns === 0) return null;
+  // CommonMark treats 5+ columns after a list marker as one column of list padding; the rest
+  // remains content indentation and can therefore open an indented code block.
+  return paddingColumns <= 4 ? contentStart : markerEnd + 1;
 }
 
 function isAsciiDigit(value: string | undefined): boolean {

@@ -85,11 +85,15 @@ describe('thinkTagMatches', () => {
     const examples = [
       '示例：\n\n    <think>visible example</think>\n\n完成。',
       '示例：\n\n\t&lt;think&gt;visible example&lt;/think&gt;\n\n完成。',
+      '示例：\n\n>     <think>visible quote example</think>\n\n完成。',
+      '示例：\n\n-     <think>visible list example</think>\n\n完成。',
+      '示例：\n\n> -     <think>visible nested example</think>\n\n完成。',
     ];
 
     for (const content of examples) {
       expect(visibleTextOutsideThinkTags(content)).toBe(content);
     }
     expect(visibleTextOutsideThinkTags('可见段落\n    <think>private reasoning')).toBe('可见段落\n    ');
+    expect(visibleTextOutsideThinkTags('> 可见段落\n>     <think>private reasoning')).toBe('> 可见段落\n>     ');
   });
 });
