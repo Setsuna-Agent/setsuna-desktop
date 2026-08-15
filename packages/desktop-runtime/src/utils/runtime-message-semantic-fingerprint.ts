@@ -55,6 +55,15 @@ export function portableRuntimeAssistantText(value: string): string {
   return visibleTextOutsideThinkTags(value);
 }
 
+/** Current structured content is authoritative; only persisted legacy text uses tag envelopes. */
+export function portableRuntimeAssistantMessageText(
+  message: Pick<RuntimeMessage, 'content' | 'streamParts'>,
+): string {
+  return message.streamParts === undefined
+    ? portableRuntimeAssistantText(message.content)
+    : message.content;
+}
+
 export function runtimeJsonValuesEqual(left: unknown, right: unknown): boolean {
   const leftValue = sanitizeRuntimeJsonValue(left);
   const rightValue = sanitizeRuntimeJsonValue(right);

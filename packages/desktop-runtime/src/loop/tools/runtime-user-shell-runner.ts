@@ -81,6 +81,7 @@ export class RuntimeUserShellRunner {
             turnId,
             role: 'assistant',
             content: '',
+            streamParts: [],
             createdAt: startedAt,
             status: 'streaming',
           },

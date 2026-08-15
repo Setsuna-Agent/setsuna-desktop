@@ -72,8 +72,8 @@ export function visibleTextOutsideThinkTags(text: string): string {
 }
 
 /**
- * Splits the deprecated tag-based transcript representation. Markdown code spans and fences are
- * excluded before matching because model-authored answers frequently discuss the old
+ * Splits the deprecated tag-based transcript representation. Markdown code spans, fences, and
+ * indented code blocks are excluded before matching because model-authored answers discuss the old
  * protocol as code. Nested blocks use balanced matching, while separate blocks retain the visible
  * text between them. During streaming or after an unterminated opening, that block owns the tail.
  */
@@ -175,23 +175,26 @@ function hasAmbiguousTagOrder(matches: ThinkTagMatch[], startIndex: number): boo
 }
 
 /**
- * Returns only closed Markdown code ranges. If a model leaves a delimiter open, tags after it are
- * still scanned so an unmatched Markdown marker cannot accidentally expose private reasoning.
+ * Returns valid Markdown code ranges. Delimited spans/fences must be closed; an unmatched marker
+ * cannot conceal later private reasoning. Indented blocks end at the next nonblank, unindented line.
  */
 function markdownCodeRanges(text: string): TextRange[] {
-  const fencedRanges = markdownFencedCodeRanges(text);
+  const blockRanges = mergeOrderedTextRanges(
+    markdownFencedCodeRanges(text),
+    markdownIndentedCodeRanges(text),
+  );
   const ranges: TextRange[] = [];
   let opening: { length: number; start: number } | null = null;
-  let fencedRangeIndex = 0;
+  let blockRangeIndex = 0;
   let lineStart = 0;
 
   for (let index = 0; index < text.length;) {
-    const fencedRange = fencedRanges[fencedRangeIndex];
-    if (fencedRange && index >= fencedRange.start) {
+    const blockRange = blockRanges[blockRangeIndex];
+    if (blockRange && index >= blockRange.start) {
       opening = null;
-      ranges.push(fencedRange);
-      index = fencedRange.end;
-      fencedRangeIndex += 1;
+      ranges.push(blockRange);
+      index = blockRange.end;
+      blockRangeIndex += 1;
       continue;
     }
     if (text[index] === '\n') {
@@ -222,6 +225,77 @@ function markdownCodeRanges(text: string): TextRange[] {
     }
   }
   return ranges;
+}
+
+/**
+ * Indented code has no closing delimiter, so only start a block at a document/blank-line boundary.
+ * This preserves CommonMark code examples without letting paragraph-continuation indentation hide
+ * a malformed legacy privacy boundary.
+ */
+function markdownIndentedCodeRanges(text: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  let rangeStart: number | null = null;
+  let rangeEnd = 0;
+  let previousLineBlank = true;
+
+  for (let lineStart = 0; lineStart < text.length;) {
+    const lineEnd = markdownLineEnd(text, lineStart);
+    const blank = isWhitespaceOnly(text, lineStart, lineEnd);
+    const indented = !blank && markdownIndentColumns(text, lineStart, lineEnd) >= 4;
+
+    if (rangeStart !== null) {
+      if (indented) {
+        rangeEnd = lineEnd;
+      } else if (!blank) {
+        ranges.push({ start: rangeStart, end: rangeEnd });
+        rangeStart = null;
+      }
+    } else if (indented && previousLineBlank) {
+      rangeStart = lineStart;
+      rangeEnd = lineEnd;
+    }
+
+    previousLineBlank = blank;
+    lineStart = lineEnd < text.length ? lineEnd + 1 : text.length;
+  }
+
+  if (rangeStart !== null) ranges.push({ start: rangeStart, end: rangeEnd });
+  return ranges;
+}
+
+function markdownIndentColumns(text: string, lineStart: number, lineEnd: number): number {
+  let columns = 0;
+  for (let index = lineStart; index < lineEnd; index += 1) {
+    if (text[index] === ' ') {
+      columns += 1;
+    } else if (text[index] === '\t') {
+      columns += 4 - (columns % 4);
+    } else {
+      break;
+    }
+    if (columns >= 4) return columns;
+  }
+  return columns;
+}
+
+function mergeOrderedTextRanges(left: TextRange[], right: TextRange[]): TextRange[] {
+  const merged: TextRange[] = [];
+  let leftIndex = 0;
+  let rightIndex = 0;
+
+  while (leftIndex < left.length || rightIndex < right.length) {
+    const takeLeft = rightIndex >= right.length
+      || (leftIndex < left.length && left[leftIndex]!.start <= right[rightIndex]!.start);
+    const next = takeLeft ? left[leftIndex++]! : right[rightIndex++]!;
+    const previous = merged.at(-1);
+    if (previous && next.start <= previous.end) {
+      previous.end = Math.max(previous.end, next.end);
+    } else {
+      merged.push({ ...next });
+    }
+  }
+
+  return merged;
 }
 
 function markdownFencedCodeRanges(text: string): TextRange[] {

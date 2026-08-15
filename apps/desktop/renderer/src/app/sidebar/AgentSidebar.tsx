@@ -14,7 +14,6 @@ import {
 } from 'lucide-react';
 import {
   useRef,
-  useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
@@ -23,13 +22,11 @@ import {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
-import { minimumSidebarVisibleCount, SidebarThreadList } from './SidebarThreadList.js';
+import { SidebarThreadList } from './SidebarThreadList.js';
 import { SidebarUserMenu } from './SidebarUserMenu.js';
 
 const isProjectActionTarget = (target: EventTarget | null) =>
   target instanceof HTMLElement && Boolean(target.closest('.desktop-agent-project__actions'));
-
-const SIDEBAR_PROJECT_BATCH_SIZE = 5;
 
 export function AgentSidebar({
   activeProjectId,
@@ -253,18 +250,6 @@ function ProjectSection({
   onToggleThreadActions: (threadId: string) => void;
 }) {
   const { t } = useI18n();
-  const runningProjectId = runningThreadId
-    ? projects.find((project) => threadsByProjectId.get(project.id)?.some((thread) => thread.id === runningThreadId))?.id
-    : null;
-  const minimumVisibleProjectCount = minimumSidebarVisibleCount(
-    projects,
-    SIDEBAR_PROJECT_BATCH_SIZE,
-    [activeProjectId, runningProjectId],
-  );
-  const [expandedProjectCount, setExpandedProjectCount] = useState(SIDEBAR_PROJECT_BATCH_SIZE);
-  const visibleProjectCount = Math.max(expandedProjectCount, minimumVisibleProjectCount);
-  const visibleProjects = projects.slice(0, visibleProjectCount);
-  const remainingProjectCount = projects.length - visibleProjects.length;
 
   return (
     <section className="desktop-agent-sidebar__group">
@@ -290,89 +275,73 @@ function ProjectSection({
         <div className="desktop-agent-sidebar__project-list">
           <div className="project-list">
             {projects.length ? (
-              <>
-                {visibleProjects.map((project) => {
-                  const projectThreads = threadsByProjectId.get(project.id) ?? [];
-                  const isActiveProject = project.id === activeProjectId;
-                  const isForceExpandedProject = forceExpandedProjectIds.has(project.id);
-                  const isProjectCollapsed = collapsedProjectIds.has(project.id) && !isForceExpandedProject;
-                  const shouldShowChildren = !isProjectCollapsed && (isForceExpandedProject || isActiveProject || projectThreads.length > 0);
+              projects.map((project) => {
+                const projectThreads = threadsByProjectId.get(project.id) ?? [];
+                const isActiveProject = project.id === activeProjectId;
+                const isForceExpandedProject = forceExpandedProjectIds.has(project.id);
+                const isProjectCollapsed = collapsedProjectIds.has(project.id) && !isForceExpandedProject;
+                const shouldShowChildren = !isProjectCollapsed && (isForceExpandedProject || isActiveProject || projectThreads.length > 0);
 
-                  return (
-                    <div className="desktop-agent-project-node" key={project.id}>
-                      <div
-                        className="desktop-agent-project"
-                        title={project.path ?? t('sidebar.projectDirectoryUnbound')}
-                        onContextMenu={(event) => {
-                          if (isProjectActionTarget(event.target)) return;
+                return (
+                  <div className="desktop-agent-project-node" key={project.id}>
+                    <div
+                      className="desktop-agent-project"
+                      title={project.path ?? t('sidebar.projectDirectoryUnbound')}
+                      onContextMenu={(event) => {
+                        if (isProjectActionTarget(event.target)) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
+                      }}
+                    >
+                      <button
+                        className="desktop-agent-project__select"
+                        type="button"
+                        onClick={() => onSelectProject(project)}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
                           event.preventDefault();
-                          event.stopPropagation();
                           if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
                         }}
                       >
-                        <button
-                          className="desktop-agent-project__select"
-                          type="button"
-                          onClick={() => onSelectProject(project)}
-                          onKeyDown={(event) => {
-                            if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
-                            event.preventDefault();
-                            if (projectActionMenuId !== project.id) onToggleProjectActions(project.id);
-                          }}
-                        >
-                          {project.path && !isProjectCollapsed
-                            ? <FolderOpen className="desktop-agent-project__icon" size={14} />
-                            : <Folder className="desktop-agent-project__icon" size={14} />}
-                          <span className="desktop-agent-project__text">
-                            <span className="desktop-agent-project__name">{project.name}</span>
-                            {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
-                          </span>
-                        </button>
-                        <ProjectActionMenu
-                          open={projectActionMenuId === project.id}
-                          project={project}
-                          onArchiveProject={onArchiveProject}
-                          onCreateProjectThread={onCreateProjectThread}
-                          onEditProject={onEditProject}
-                          onRemoveProject={onRemoveProject}
-                          onToggleProjectActions={onToggleProjectActions}
-                        />
-                      </div>
-                      {shouldShowChildren ? (
-                        projectThreads.length ? (
-                          <SidebarThreadList
-                            menuThreadId={threadActionMenuId}
-                            runningThreadId={runningThreadId}
-                            selectedThreadId={isActiveProject ? activeThreadId : null}
-                            threads={projectThreads}
-                            variant="project"
-                            onArchive={onArchiveThread}
-                            onRename={onRenameThread}
-                            onSelect={onSelectThread}
-                            onToggleMenu={onToggleThreadActions}
-                          />
-                        ) : (
-                          <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyChats')}</div>
-                        )
-                      ) : null}
+                        {project.path && !isProjectCollapsed
+                          ? <FolderOpen className="desktop-agent-project__icon" size={14} />
+                          : <Folder className="desktop-agent-project__icon" size={14} />}
+                        <span className="desktop-agent-project__text">
+                          <span className="desktop-agent-project__name">{project.name}</span>
+                          {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}
+                        </span>
+                      </button>
+                      <ProjectActionMenu
+                        open={projectActionMenuId === project.id}
+                        project={project}
+                        onArchiveProject={onArchiveProject}
+                        onCreateProjectThread={onCreateProjectThread}
+                        onEditProject={onEditProject}
+                        onRemoveProject={onRemoveProject}
+                        onToggleProjectActions={onToggleProjectActions}
+                      />
                     </div>
-                  );
-                })}
-                {remainingProjectCount > 0 ? (
-                  <button
-                    className="desktop-agent-thread-list__show-more"
-                    type="button"
-                    aria-label={t('sidebar.showMoreProjectsLabel', {
-                      count: Math.min(SIDEBAR_PROJECT_BATCH_SIZE, remainingProjectCount),
-                    })}
-                    onClick={() => setExpandedProjectCount((current) => (
-                      Math.min(current + SIDEBAR_PROJECT_BATCH_SIZE, projects.length)
-                    ))}
-                  >
-                    {t('sidebar.showMore')}
-                  </button>
-                ) : null}
-              </>
+                    {shouldShowChildren ? (
+                      projectThreads.length ? (
+                        <SidebarThreadList
+                          menuThreadId={threadActionMenuId}
+                          runningThreadId={runningThreadId}
+                          selectedThreadId={isActiveProject ? activeThreadId : null}
+                          threads={projectThreads}
+                          variant="project"
+                          onArchive={onArchiveThread}
+                          onRename={onRenameThread}
+                          onSelect={onSelectThread}
+                          onToggleMenu={onToggleThreadActions}
+                        />
+                      ) : (
+                        <div className="desktop-agent-sidebar__empty-session">{t('sidebar.emptyChats')}</div>
+                      )
+                    ) : null}
+                  </div>
+                );
+              })
             ) : (
               <button className="desktop-agent-sidebar__empty-project" type="button" onClick={onCreateProject}>
                 {t('sidebar.createProject')}

@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
 
-const SIDEBAR_CONVERSATION_BATCH_SIZE = 20;
+const PROJECT_CONVERSATION_BATCH_SIZE = 5;
+const GLOBAL_CONVERSATION_BATCH_SIZE = 20;
 
 export function minimumSidebarVisibleCount<T extends { id: string }>(
   items: T[],
@@ -39,12 +40,16 @@ export function SidebarThreadList({
   onToggleMenu: (threadId: string) => void;
 }) {
   const { t } = useI18n();
+  const batchSize = variant === 'project'
+    ? PROJECT_CONVERSATION_BATCH_SIZE
+    : GLOBAL_CONVERSATION_BATCH_SIZE;
   const minimumVisibleCount = minimumSidebarVisibleCount(
     threads,
-    SIDEBAR_CONVERSATION_BATCH_SIZE,
+    batchSize,
     [selectedThreadId, runningThreadId],
   );
-  const [expandedVisibleCount, setExpandedVisibleCount] = useState(SIDEBAR_CONVERSATION_BATCH_SIZE);
+  const [expansion, setExpansion] = useState({ variant, visibleCount: batchSize });
+  const expandedVisibleCount = expansion.variant === variant ? expansion.visibleCount : batchSize;
   const visibleCount = Math.max(expandedVisibleCount, minimumVisibleCount);
   const visibleThreads = threads.slice(0, visibleCount);
   const remainingCount = threads.length - visibleThreads.length;
@@ -69,8 +74,11 @@ export function SidebarThreadList({
         <button
           className="desktop-agent-thread-list__show-more"
           type="button"
-          aria-label={t('sidebar.showMoreLabel', { count: Math.min(SIDEBAR_CONVERSATION_BATCH_SIZE, remainingCount) })}
-          onClick={() => setExpandedVisibleCount((current) => Math.min(current + SIDEBAR_CONVERSATION_BATCH_SIZE, threads.length))}
+          aria-label={t('sidebar.showMoreLabel', { count: Math.min(batchSize, remainingCount) })}
+          onClick={() => setExpansion({
+            variant,
+            visibleCount: Math.min(expandedVisibleCount + batchSize, threads.length),
+          })}
         >
           {t('sidebar.showMore')}
         </button>

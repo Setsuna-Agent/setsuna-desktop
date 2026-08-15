@@ -80,4 +80,16 @@ describe('thinkTagMatches', () => {
 
     expect(visibleTextOutsideThinkTags(content)).toBe('> ```html\n');
   });
+
+  it('preserves tags in valid indented code blocks without trusting paragraph indentation', () => {
+    const examples = [
+      '示例：\n\n    <think>visible example</think>\n\n完成。',
+      '示例：\n\n\t&lt;think&gt;visible example&lt;/think&gt;\n\n完成。',
+    ];
+
+    for (const content of examples) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    }
+    expect(visibleTextOutsideThinkTags('可见段落\n    <think>private reasoning')).toBe('可见段落\n    ');
+  });
 });

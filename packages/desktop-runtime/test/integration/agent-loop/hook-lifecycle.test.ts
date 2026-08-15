@@ -101,6 +101,9 @@ describe('agent loop hook lifecycle', () => {
       expect(toolHost.calls).toEqual([]);
       expect(saved?.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
       expect(saved?.messages.find((message) => message.role === 'assistant')?.content).toBe('session start paused');
+      expect(saved?.messages.find((message) => message.role === 'assistant')?.streamParts).toEqual([
+        { type: 'content', content: 'session start paused' },
+      ]);
       expect(saved?.messages.find((message) => message.role === 'user')?.hookRuns).toMatchObject([
         {
           eventName: 'SessionStart',

@@ -1,5 +1,5 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import { createElement, createRef, type ComponentProps, type ReactNode } from 'react';
+import { createElement, createRef, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AgentSidebar } from '../../../../src/app/sidebar/AgentSidebar.js';
@@ -10,12 +10,54 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 
 describe('AgentSidebar project actions', () => {
   it('renders the shared project creation and editing entries', () => {
-    const project = createProject('project_test', 'test-project');
-    const html = renderSidebar({
+    const project: WorkspaceProject = {
+      id: 'project_test',
+      name: 'test-project',
+      path: '/workspace/test-project',
+      createdAt: '2026-07-13T00:00:00.000Z',
+      updatedAt: '2026-07-13T00:00:00.000Z',
+    };
+    const noop = () => undefined;
+    const html = renderToStaticMarkup(createElement(AgentSidebar, {
       activeProjectId: project.id,
+      activeThreadId: null,
+      activeView: 'chat',
+      collapsedProjectIds: new Set<string>(),
+      forceExpandedProjectIds: new Set<string>(),
+      globalThreads: [],
+      maxWidth: 420,
+      minWidth: 180,
       projectActionMenuId: project.id,
       projects: [project],
-    });
+      projectsCollapsed: false,
+      searchOpen: false,
+      searchTriggerRef: createRef<HTMLButtonElement>(),
+      sessionsCollapsed: false,
+      threadActionMenuId: null,
+      threadsByProjectId: new Map(),
+      width: 240,
+      onArchiveProject: noop,
+      onArchiveThread: noop,
+      onCreateCurrentThread: noop,
+      onCreateGlobalThread: noop,
+      onCreateProjectThread: noop,
+      onEnterChatMode: noop,
+      onEditProject: noop,
+      onOpenCapabilities: noop,
+      onOpenSettings: noop,
+      onRemoveProject: noop,
+      onRenameThread: noop,
+      onResizeStart: noop,
+      onResizeStep: noop,
+      onCreateProject: noop,
+      onSelectProject: noop,
+      onSelectThread: noop,
+      onToggleProjectActions: noop,
+      onToggleProjectsCollapsed: noop,
+      onToggleSearch: noop,
+      onToggleSessionsCollapsed: noop,
+      onToggleThreadActions: noop,
+    }));
 
     expect(html).toContain('aria-label="新建项目"');
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
@@ -23,77 +65,4 @@ describe('AgentSidebar project actions', () => {
     expect(html).toContain('>归档项目</button>');
     expect(html).toContain('>插件</span>');
   });
-
-  it('shows projects in batches of five while keeping the active project visible', () => {
-    const projects = Array.from({ length: 6 }, (_, index) => (
-      createProject(`project_${index + 1}`, `project-${index + 1}`)
-    ));
-
-    const foldedHtml = renderSidebar({ projects });
-    expect(foldedHtml).toContain('project-5');
-    expect(foldedHtml).not.toContain('project-6');
-    expect(foldedHtml).toContain('aria-label="再显示 1 个项目"');
-
-    const activeHtml = renderSidebar({ activeProjectId: 'project_6', projects });
-    expect(activeHtml).toContain('project-6');
-    expect(activeHtml).not.toContain('aria-label="再显示 1 个项目"');
-  });
 });
-
-type AgentSidebarProps = ComponentProps<typeof AgentSidebar>;
-
-function renderSidebar(overrides: Partial<AgentSidebarProps> = {}): string {
-  const noop = () => undefined;
-  const props: AgentSidebarProps = {
-    activeProjectId: null,
-    activeThreadId: null,
-    activeView: 'chat',
-    collapsedProjectIds: new Set<string>(),
-    forceExpandedProjectIds: new Set<string>(),
-    globalThreads: [],
-    maxWidth: 420,
-    minWidth: 180,
-    projectActionMenuId: null,
-    projects: [],
-    projectsCollapsed: false,
-    searchOpen: false,
-    searchTriggerRef: createRef<HTMLButtonElement>(),
-    sessionsCollapsed: false,
-    threadActionMenuId: null,
-    threadsByProjectId: new Map(),
-    width: 240,
-    onArchiveProject: noop,
-    onArchiveThread: noop,
-    onCreateCurrentThread: noop,
-    onCreateGlobalThread: noop,
-    onCreateProjectThread: noop,
-    onEnterChatMode: noop,
-    onEditProject: noop,
-    onOpenCapabilities: noop,
-    onOpenSettings: noop,
-    onRemoveProject: noop,
-    onRenameThread: noop,
-    onResizeStart: noop,
-    onResizeStep: noop,
-    onCreateProject: noop,
-    onSelectProject: noop,
-    onSelectThread: noop,
-    onToggleProjectActions: noop,
-    onToggleProjectsCollapsed: noop,
-    onToggleSearch: noop,
-    onToggleSessionsCollapsed: noop,
-    onToggleThreadActions: noop,
-    ...overrides,
-  };
-  return renderToStaticMarkup(createElement(AgentSidebar, props));
-}
-
-function createProject(id: string, name: string): WorkspaceProject {
-  return {
-    id,
-    name,
-    path: `/workspace/${name}`,
-    createdAt: '2026-07-13T00:00:00.000Z',
-    updatedAt: '2026-07-13T00:00:00.000Z',
-  };
-}

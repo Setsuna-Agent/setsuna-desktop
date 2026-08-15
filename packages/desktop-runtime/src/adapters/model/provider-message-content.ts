@@ -3,7 +3,7 @@ import {
   type RuntimeInlineMessageAttachment,
   type RuntimeMessage,
 } from '@setsuna-desktop/contracts';
-import { portableRuntimeAssistantText } from '../../utils/runtime-message-semantic-fingerprint.js';
+import { portableRuntimeAssistantMessageText } from '../../utils/runtime-message-semantic-fingerprint.js';
 
 /**
  * Structured messages already store only the visible provider-facing answer in `content`.
@@ -12,9 +12,7 @@ import { portableRuntimeAssistantText } from '../../utils/runtime-message-semant
 export function providerAssistantText(
   message: Pick<RuntimeMessage, 'content' | 'streamParts'>,
 ): string {
-  return message.streamParts === undefined
-    ? portableRuntimeAssistantText(message.content)
-    : message.content;
+  return portableRuntimeAssistantMessageText(message);
 }
 
 export function systemText(messages: RuntimeMessage[]): string {
