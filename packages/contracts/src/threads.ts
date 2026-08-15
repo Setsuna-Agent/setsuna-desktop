@@ -29,7 +29,7 @@ import type {
   RuntimeToolCall,
 } from './provider.js';
 import type { RuntimeUsage } from './usage.js';
-import { thinkTagMatches } from './swe/think-tag-scanner.js';
+import { visibleTextOutsideThinkTags } from './swe/think-tag-scanner.js';
 
 export type * from './message-metadata.js';
 
@@ -97,6 +97,8 @@ export type RuntimeMessage = {
   inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
+  /** Ordered structured stream channels; absent only for historical tag-based messages. */
+  streamParts?: RuntimeMessageStreamPart[];
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
   skillIds?: string[];
   /** 精确记录序列化 Skill 词槽的位置，避免把同名普通正文误渲染成引用。 */
@@ -120,6 +122,11 @@ export type RuntimeMessage = {
   toolCalls?: RuntimeToolCall[];
   toolRuns?: RuntimeToolRun[];
   hookRuns?: RuntimeHookRun[];
+};
+
+export type RuntimeMessageStreamPart = {
+  type: 'content' | 'reasoning';
+  content: string;
 };
 
 export type RuntimeContextCompactionNotice = {
@@ -170,7 +177,7 @@ export type RuntimeReviewResult = {
 
 /** Parse the stable review profile output into data shared by runtime and UI. */
 export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
-  const normalized = stripReviewThinking(review).trim();
+  const normalized = visibleTextOutsideThinkTags(review).trim();
   if (!normalized) return { findings: [], summary: '' };
 
   const lines = normalized.split(/\r?\n/u);
@@ -230,6 +237,15 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
   } | null = null;
 
   while (cursor < line.length) {
+    if (cursor === pathStart && line[cursor] === '[') {
+      const markdownTargetStart = reviewMarkdownLinkTargetStart(line, cursor);
+      if (markdownTargetStart >= 0) {
+        pathStart = markdownTargetStart;
+        cursor = markdownTargetStart;
+        continue;
+      }
+    }
+
     if (isReviewWhitespace(line[cursor])) {
       const whitespaceStart = cursor;
       while (isReviewWhitespace(line[cursor])) cursor += 1;
@@ -335,10 +351,23 @@ function reviewLocationAt(line: string, colonIndex: number): {
     && suffixStart !== '，'
     && suffixStart !== ','
     && suffixStart !== ';'
+    && suffixStart !== ')'
   ) return null;
   if (!Number.isSafeInteger(startLine) || (endLine !== undefined && !Number.isSafeInteger(endLine))) return null;
 
   return { end: cursor, startLine, ...(endLine !== undefined ? { endLine } : {}) };
+}
+
+/** Resolve `[label](path:line)` to the target so review cards open the repository path. */
+function reviewMarkdownLinkTargetStart(line: string, start: number): number {
+  for (let cursor = start + 1; cursor + 1 < line.length; cursor += 1) {
+    if (line[cursor] === '\\') {
+      cursor += 1;
+      continue;
+    }
+    if (line[cursor] === ']' && line[cursor + 1] === '(') return cursor + 2;
+  }
+  return -1;
 }
 
 function isReviewFindingDelimiter(value: string | undefined): boolean {
@@ -351,33 +380,6 @@ function isReviewWhitespace(value: string | undefined): boolean {
 
 function isAsciiDigit(value: string | undefined): boolean {
   return value !== undefined && value >= '0' && value <= '9';
-}
-
-function stripReviewThinking(review: string): string {
-  const visible: string[] = [];
-  let cursor = 0;
-  let blockStart: number | null = null;
-  let foundThinkTag = false;
-
-  for (const match of thinkTagMatches(review)) {
-    if (!match.closing && blockStart === null) {
-      foundThinkTag = true;
-      blockStart = match.index;
-      continue;
-    }
-    if (!match.closing || blockStart === null) continue;
-
-    visible.push(review.slice(cursor, blockStart));
-    cursor = match.end;
-    blockStart = null;
-  }
-
-  if (blockStart !== null) {
-    visible.push(review.slice(cursor, blockStart));
-    cursor = review.length;
-  }
-
-  return foundThinkTag ? visible.join('') + review.slice(cursor) : review;
 }
 
 /** Reparse persisted raw text so historical notices benefit from parser fixes. */

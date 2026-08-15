@@ -8,7 +8,7 @@ type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
 
 type PendingBatch = {
   events: PendingRuntimeEvent[];
-  mergeIndexes: Map<string, number>;
+  lastMergeKey?: string;
   timer: NodeJS.Timeout;
 };
 
@@ -79,15 +79,17 @@ export class RuntimeEventWriter {
         void this.enqueueWrite(threadId, () => this.persistAndPublish(pending)).catch((error) => this.recordFailure(error));
       }, this.flushIntervalMs);
       timer.unref();
-      batch = { events: [], mergeIndexes: new Map(), timer };
+      batch = { events: [], timer };
       this.batches.set(threadId, batch);
     }
-    const existingIndex = batch.mergeIndexes.get(mergeKey);
-    if (existingIndex !== undefined && mergeBufferedEvent(batch.events[existingIndex], event)) {
+    const lastEvent = batch.events.at(-1);
+    // Only adjacent deltas may coalesce. Reusing an earlier slot after another channel or item has
+    // streamed would move the new delta backwards in the persisted event order.
+    if (batch.lastMergeKey === mergeKey && lastEvent && mergeBufferedEvent(lastEvent, event)) {
       return { coalesced: true, eventCount: batch.events.length };
     }
-    batch.mergeIndexes.set(mergeKey, batch.events.length);
     batch.events.push(clonePendingEvent(event));
+    batch.lastMergeKey = mergeKey;
     return { coalesced: false, eventCount: batch.events.length };
   }
 
@@ -137,7 +139,7 @@ export class RuntimeEventWriter {
 
 function mergeKeyForEvent(event: PendingRuntimeEvent): string {
   const payload = event.payload as Record<string, unknown>;
-  if (event.type === 'message.delta') return mergeKey(event, payload.messageId);
+  if (event.type === 'message.delta') return mergeKey(event, payload.messageId, payload.channel ?? 'content');
   if (event.type === 'item.delta' || event.type === 'plan.delta') {
     return mergeKey(event, payload.itemId);
   }

@@ -156,6 +156,40 @@ describe('OpenAI-compatible Chat provider', () => {
     expect(JSON.stringify(expectBody(captured))).not.toContain('resp_foreign');
   });
 
+  it('never replays transcript think blocks as ordinary assistant text through Chat adapters', async () => {
+    const history = [
+      ...request.messages,
+      {
+        id: 'assistant-with-reasoning',
+        role: 'assistant' as const,
+        content: 'Visible first.<think>closed private reasoning</think>Visible second.<think>unfinished private reasoning',
+        createdAt: '2026-06-25T00:00:02.000Z',
+      },
+    ];
+    const response = 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+
+    for (const createClient of [
+      (captured: CapturedRequest) => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, captured),
+      ),
+      (captured: CapturedRequest) => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, captured),
+      ),
+    ]) {
+      const captured: CapturedRequest = {};
+      await collect(createClient(captured), { messages: history });
+
+      expect(expectBody(captured).messages).toContainEqual({
+        role: 'assistant',
+        content: 'Visible first.Visible second.',
+      });
+      expect(JSON.stringify(expectBody(captured))).not.toContain('<think>');
+      expect(JSON.stringify(expectBody(captured))).not.toContain('private reasoning');
+    }
+  });
+
   it('parses CRLF-delimited SSE events without collapsing the stream', async () => {
     const client = new OpenAiChatModelClient(
       provider('openai-compatible', 'https://llm.example/v1'),

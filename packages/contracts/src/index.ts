@@ -21,6 +21,12 @@ export * from './plugins.js';
 export * from './provider.js';
 export * from './runtime-process.js';
 export * from './skills.js';
+export {
+  splitThinkTaggedText,
+  thinkTagMatches,
+  visibleTextOutsideThinkTags,
+  type ThinkTaggedTextSegment,
+} from './swe/think-tag-scanner.js';
 export * from './swe-events.js';
 export * from './thread-events.js';
 export * from './thread-title.js';

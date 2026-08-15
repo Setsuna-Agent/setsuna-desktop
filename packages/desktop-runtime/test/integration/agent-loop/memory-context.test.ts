@@ -101,7 +101,13 @@ describe('agent loop memory context', () => {
         entries: [{ path: 'MEMORY.md', lineStart: 1, lineEnd: 2, note: 'summary' }],
         rolloutIds: ['thread_a', 'thread_b'],
       });
-      expect(events.filter((event) => event.type === 'message.delta').map((event) => event.payload.text).join('')).toBe('Answer  done.');
+      expect(events
+        .flatMap((event) => (
+          event.type === 'message.delta' && event.payload.channel !== 'reasoning'
+            ? [event.payload.text]
+            : []
+        ))
+        .join('')).toBe('Answer  done.');
       expect(events.find((event) => event.type === 'message.completed')).toMatchObject({
         payload: {
           memoryCitation: {

@@ -21,11 +21,14 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
     if (message.visibility === 'transcript') continue;
     if (message.role !== 'tool') flushToolVisuals();
     if (message.role === 'system' || message.role === 'developer' || message.role === 'user' || message.role === 'assistant') {
+      const content = message.role === 'assistant'
+        ? portableAssistantText(message.content)
+        : message.content;
       output.push({
         role: message.role,
         content: message.role === 'user' && inlineImageAttachments(message).length
           ? openAiChatContentParts(message)
-          : message.content || (message.toolCalls?.length ? null : ''),
+          : content || (message.toolCalls?.length ? null : ''),
         ...(message.toolCalls?.length
           ? {
               tool_calls: message.toolCalls.map((toolCall) => ({

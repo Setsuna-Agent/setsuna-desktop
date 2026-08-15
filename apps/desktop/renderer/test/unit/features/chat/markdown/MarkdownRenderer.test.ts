@@ -15,8 +15,13 @@ import {
 } from '../../../../../src/features/chat/markdown/MarkdownVirtualBlock.js';
 import { I18nProvider, type AppLocale } from '../../../../../src/shared/i18n/I18nProvider.js';
 
-function renderMarkdown(content: string, streaming = false, locale: AppLocale = 'zh-CN'): string {
-  const children = createElement(MarkdownRenderer, { content, streaming });
+function renderMarkdown(
+  content: string,
+  streaming = false,
+  locale: AppLocale = 'zh-CN',
+  legacyThinkingTags = true,
+): string {
+  const children = createElement(MarkdownRenderer, { content, legacyThinkingTags, streaming });
   return renderToStaticMarkup(
     createElement(
       I18nProvider,
@@ -97,6 +102,22 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('class="chat-markdown__file-icon"');
     expect(html).not.toContain('<script>');
     expect(html).not.toContain('alert(1)');
+  });
+
+  it('does not interpret tag examples in structured visible content as reasoning boundaries', () => {
+    const html = renderMarkdown('Use `<think>` only as a protocol example.', false, 'zh-CN', false);
+
+    expect(html).toContain('<code>&lt;think&gt;</code>');
+    expect(html).toContain('only as a protocol example.');
+  });
+
+  it('does not truncate legacy visible content that mentions think tags as inline code', () => {
+    const html = renderMarkdown('审查范围主要是将 `<think>` 标签迁移为 `streamParts`。');
+
+    expect(html).toContain('审查范围主要是将');
+    expect(html).toContain('<code>&lt;think&gt;</code>');
+    expect(html).toContain('标签迁移为');
+    expect(html).toContain('<code>streamParts</code>');
   });
 
   it('promotes inline code file references without changing identifiers', () => {

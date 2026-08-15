@@ -35,6 +35,7 @@ import {
   type AssistantRunTimelineBlock,
 } from './chatAssistantTimeline.js';
 import { memoryCitationEntriesFromMessages } from './chatMemoryCitations.js';
+import { visibleMarkdownContent } from './chatThinkingContent.js';
 import { ChatMessageAttachments } from './ChatMessageAttachments.js';
 import { ChatMessageFooter } from './ChatMessageFooter.js';
 import {
@@ -140,7 +141,12 @@ export function MessageItem({
   const workHistoryExpanded = assistantItemId
     ? hasExpandedWorkHistoryPanel(expandedWorkHistoryItemIds, assistantItemId)
     : false;
-  const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && item.guidanceProcessed && item.steerMessages.length && !workHistoryExpanded);
+  const assistantTimelineSteerMessageIds = new Set(item.assistantTimelineSteerMessageIds);
+  const fallbackGuidanceMessages = item.steerMessages
+    .filter((steerMessage) => !assistantTimelineSteerMessageIds.has(steerMessage.id));
+  // Handled guidance belongs to the assistant work timeline at its real event position. Only keep
+  // this fallback for a failed/unhandled steer that has no completed assistant response to own it.
+  const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
   if (editing) {
     return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
   }
@@ -157,7 +163,7 @@ export function MessageItem({
           variant="filled"
         />
         <RuntimeHookRuns runs={message.hookRuns} />
-        {showExtractedGuidance ? <GuidanceMessageList handledMessageIds={new Set(item.handledSteerMessageIds)} messages={item.steerMessages} /> : null}
+        {showExtractedGuidance ? <GuidanceMessageList handledMessageIds={new Set(item.handledSteerMessageIds)} messages={fallbackGuidanceMessages} /> : null}
       </div>
     </article>
   );
@@ -344,6 +350,12 @@ function AssistantRunContent({
   const hasRenderableContent = timelineBlocks.length > 0 || toolAttachments.length > 0;
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
+  const hasHiddenOnlyFinalAnswer = !hasFinalAnswerContent && displaySegments.some((segment) => (
+    segment.phase === 'final_answer'
+    && segment.status !== 'streaming'
+    && Boolean(segment.content.trim())
+    && !visibleMarkdownContent(segment.content).trim()
+  ));
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   // 工具行本身已经提供实时进度，只有模型继续处理且没有活动工具时才显示尾部等待反馈。
@@ -358,7 +370,6 @@ function AssistantRunContent({
   const timelinePlan = useMemo(
     () =>
       createAssistantGuidanceTimelinePlan({
-        active,
         blocks: timelineBlocks,
         guidanceMessages: assistantGuidanceMessages,
         messageOrderIds: item.messageIds,
@@ -366,8 +377,8 @@ function AssistantRunContent({
       }),
     [active, assistantGuidanceMessages, item.messageIds, timelineBlocks, workHistoryState.active],
   );
-  const activeGuidanceBeforeFirstBlock = timelinePlan.placeholderGuidance;
-  const activePlaceholderGuidance = activeGuidanceBeforeFirstBlock.length ? <GuidanceMessageList handledMessageIds={guidanceMessageIds} markerMode="handled" messages={activeGuidanceBeforeFirstBlock} /> : null;
+  const guidanceBeforeFirstBlock = timelinePlan.placeholderGuidance;
+  const leadingGuidance = guidanceBeforeFirstBlock.length ? <GuidanceMessageList handledMessageIds={guidanceMessageIds} markerMode="handled" messages={guidanceBeforeFirstBlock} /> : null;
   const fileChangeSummary = useMemo(() => {
     if (active || !hasFinalAnswerContent) return null;
     return fileChangeSummaryFromRuns(toolRuns);
@@ -379,7 +390,7 @@ function AssistantRunContent({
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
     return active ? (
       <div className="chat-assistant-run">
-        <ActiveWorkPlaceholder segments={displaySegments}>{activePlaceholderGuidance}</ActiveWorkPlaceholder>
+        <ActiveWorkPlaceholder segments={displaySegments}>{leadingGuidance}</ActiveWorkPlaceholder>
       </div>
     ) : (
       <AssistantLoadingIndicator label={t('chat.assistant.thinking')} />
@@ -397,9 +408,9 @@ function AssistantRunContent({
     <div className="chat-assistant-run">
       {showActiveWorkPlaceholder ? (
         <ActiveWorkPlaceholder segments={displaySegments} showLoading={!showTrailingLoading}>
-          {activePlaceholderGuidance}
+          {leadingGuidance}
         </ActiveWorkPlaceholder>
-      ) : null}
+      ) : leadingGuidance}
       {renderAssistantTimelinePlan({
         active,
         handledGuidanceMessageIds: guidanceMessageIds,
@@ -411,6 +422,9 @@ function AssistantRunContent({
         t,
         hideFinalContent: Boolean(reviewExit),
       })}
+      {!active && hasHiddenOnlyFinalAnswer && !reviewExit && !goalExitSummary ? (
+        <div className="chat-message-error">{t('chat.assistant.noVisibleFinalAnswer')}</div>
+      ) : null}
       {toolAttachments.length ? (
         <div className="chat-assistant-run__segment chat-assistant-run__attachments">
           <ChatMessageAttachments attachments={toolAttachments} variant="assistant" />
@@ -565,7 +579,7 @@ function renderAssistantTimelinePlan({
     if (!(hideFinalContent && node.block.type === 'content')) {
       nodes.push(assistantTimelineNode(node.block, active, t));
     }
-    if (active && node.guidanceAfter.length) {
+    if (node.guidanceAfter.length) {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={`${node.block.id}:guidance`} markerMode="handled" messages={node.guidanceAfter} />);
     }
   });
@@ -675,7 +689,11 @@ function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type:
   if (block.type === 'content') {
     return (
       <div className="chat-assistant-run__segment" key={block.id}>
-        <MarkdownRenderer content={block.content} streaming={block.segment.status === 'streaming'} />
+        <MarkdownRenderer
+          content={block.content}
+          legacyThinkingTags={block.segment.streamParts === undefined}
+          streaming={block.segment.status === 'streaming'}
+        />
       </div>
     );
   }
@@ -718,7 +736,14 @@ function assistantWorkItemNodes(
   onAnswerApproval: AnswerApprovalHandler,
 ): ReactNode[] {
   if (item.type === 'content') {
-    return [<MarkdownRenderer key={item.segment.id} content={item.segment.content} streaming={item.segment.segment.status === 'streaming'} />];
+    return [
+      <MarkdownRenderer
+        key={item.segment.id}
+        content={item.segment.content}
+        legacyThinkingTags={item.segment.segment.streamParts === undefined}
+        streaming={item.segment.segment.status === 'streaming'}
+      />,
+    ];
   }
   if (item.type === 'pluginUses') {
     return [<RuntimePluginUses key={item.id} plugins={item.plugins} />];

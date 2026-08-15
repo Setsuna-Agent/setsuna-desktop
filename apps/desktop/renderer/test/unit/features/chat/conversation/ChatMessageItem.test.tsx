@@ -10,6 +10,7 @@ function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'us
   return {
     type: 'user',
     id: message.id,
+    assistantTimelineSteerMessageIds: [],
     handledSteerMessageIds: [],
     guidanceProcessed: false,
     message,
@@ -31,7 +32,11 @@ function renderUserMessage(
   inputKind: RuntimeMessage['inputKind'],
   editing = false,
   content = 'Inspect the queue.',
-  options: { skillReferences?: RuntimeSkillReference[]; skills?: RuntimeSkillSummary[] } = {},
+  options: {
+    item?: Partial<Extract<ChatDisplayItem, { type: 'user' }>>;
+    skillReferences?: RuntimeSkillReference[];
+    skills?: RuntimeSkillSummary[];
+  } = {},
 ): string {
   const message: RuntimeMessage = {
     id: `message_${inputKind}`,
@@ -54,7 +59,7 @@ function renderUserMessage(
         editingMessageId={editing ? message.id : null}
         editingSubmitting={false}
         expandedWorkHistoryItemIds={new Set()}
-        item={userItem(message)}
+        item={{ ...userItem(message), ...options.item }}
         onAnswerApproval={async () => undefined}
         onCancelEdit={() => undefined}
         onEditDraftChange={() => undefined}
@@ -182,6 +187,50 @@ describe('MessageItem user messages', () => {
     expect(editorHtml).not.toContain('<time');
   });
 
+  it('does not duplicate handled guidance above the assistant timeline', () => {
+    const guidance: RuntimeMessage = {
+      id: 'user_steer',
+      turnId: 'turn_message',
+      role: 'user',
+      content: 'extra guidance',
+      createdAt: '2026-07-27T00:00:01.000Z',
+      status: 'complete',
+    };
+    const html = renderUserMessage('message', false, 'initial prompt', {
+      item: {
+        guidanceProcessed: true,
+        handledSteerMessageIds: [guidance.id],
+        messageIds: ['message_message', guidance.id],
+        steerMessages: [guidance],
+      },
+    });
+
+    expect(html).toContain('initial prompt');
+    expect(html).not.toContain('extra guidance');
+  });
+
+  it('does not duplicate unhandled guidance already owned by the assistant timeline', () => {
+    const guidance: RuntimeMessage = {
+      id: 'user_steer',
+      turnId: 'turn_message',
+      role: 'user',
+      content: 'late extra guidance',
+      createdAt: '2026-07-27T00:00:01.000Z',
+      status: 'complete',
+    };
+    const html = renderUserMessage('message', false, 'initial prompt', {
+      item: {
+        assistantTimelineSteerMessageIds: [guidance.id],
+        guidanceProcessed: false,
+        messageIds: ['message_message', guidance.id],
+        steerMessages: [guidance],
+      },
+    });
+
+    expect(html).toContain('initial prompt');
+    expect(html).not.toContain('late extra guidance');
+  });
+
   it('keeps workspace mentions inline with the surrounding message text', () => {
     const html = renderUserMessage('message', false, '请看 @agent-pc/ 以及 @agent-mobile/ 现在处理');
 
@@ -269,10 +318,67 @@ describe('MessageItem user messages', () => {
 });
 
 describe('MessageItem assistant tool history', () => {
+  it('renders structured reasoning only inside the collapsed thinking disclosure', () => {
+    const reasoning = 'after: inspect "before<think>private</think>after", then continue private analysis';
+    const html = renderAssistantMessage([{
+      id: 'assistant_nested_thinking',
+      turnId: 'turn_nested_thinking',
+      role: 'assistant',
+      content: 'Visible answer.',
+      streamParts: [
+        { type: 'reasoning', content: reasoning },
+        { type: 'content', content: 'Visible answer.' },
+        { type: 'reasoning', content: reasoning },
+      ],
+      createdAt: '2026-08-15T00:00:00.000Z',
+      status: 'streaming',
+    }], true);
+
+    expect(html).toContain('chat-thinking-disclosure');
+    expect(html).toContain('正在思考');
+    expect(html).toContain('Visible answer.');
+    expect(html).not.toContain(reasoning);
+  });
+
+  it('renders completed structured content without falling back to mixed raw text', () => {
+    const reasoning = 'private completed reasoning';
+    const html = renderAssistantMessage([{
+      id: 'assistant_completed_reasoning',
+      turnId: 'turn_completed_reasoning',
+      role: 'assistant',
+      content: `<think>${reasoning}</think>Visible answer.`,
+      streamParts: [
+        { type: 'reasoning', content: reasoning },
+        { type: 'content', content: 'Visible answer.' },
+      ],
+      phase: 'final_answer',
+      createdAt: '2026-08-15T00:00:00.000Z',
+      status: 'complete',
+    }]);
+
+    expect(html).toContain('Visible answer.');
+    expect(html).not.toContain(reasoning);
+  });
+
+  it('shows an explicit notice for a completed hidden-only final response', () => {
+    const html = renderAssistantMessage([{
+      id: 'assistant_hidden_final',
+      turnId: 'turn_hidden_final',
+      role: 'assistant',
+      content: '<think>private unfinished reasoning',
+      phase: 'final_answer',
+      createdAt: '2026-07-27T00:00:00.000Z',
+      status: 'complete',
+    }]);
+
+    expect(html).toContain('模型未返回可显示的最终答复');
+    expect(html).not.toContain('private unfinished reasoning');
+  });
+
   it('replaces completed review prose with a compact findings card', () => {
     const review = [
       '发现 1 个需要修复的问题。',
-      '[P1] 复制不能吞掉换行 — apps/desktop/renderer/src/chat.ts:211',
+      '**[P1] 复制不能吞掉换行 — [chat.ts:211](apps/desktop/renderer/src/chat.ts:211)**',
       '这段详细说明只应该出现在 diff 行内。',
     ].join('\n');
     const html = renderAssistantMessage([{
@@ -286,14 +392,8 @@ describe('MessageItem assistant tool history', () => {
     }], false, {
       kind: 'exited',
       review,
-      summary: '发现 1 个需要修复的问题。',
-      findings: [{
-        priority: 'P1',
-        title: '复制不能吞掉换行',
-        body: '这段详细说明只应该出现在 diff 行内。',
-        path: 'apps/desktop/renderer/src/chat.ts',
-        startLine: 211,
-      }],
+      // Older runtimes persisted only the raw review when their parser missed linked locations.
+      summary: review,
     });
 
     expect(html).toContain('chat-review-summary-card');

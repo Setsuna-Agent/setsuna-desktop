@@ -423,6 +423,8 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
 
   if (event.type === 'message.delta') {
     if (!turnId) return [];
+    // App Server receives reasoning through its dedicated item/reasoning events.
+    if (event.payload.channel === 'reasoning') return [];
     if (hasItemTranscriptMessage(state, event.threadId, turnId, event.payload.messageId)) return [];
     if (isPlanMessage(state, event.threadId, turnId, event.payload.messageId)) {
       return appendPlanMessageDelta(state, event.threadId, turnId, event.payload.messageId, event.payload.text, toEpochMs(event.createdAt));

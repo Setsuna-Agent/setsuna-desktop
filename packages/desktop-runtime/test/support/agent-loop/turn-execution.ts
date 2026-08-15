@@ -19,6 +19,16 @@ export class EmptyModelClient implements ModelClient {
   }
 }
 
+export class HiddenOnlyModelClient implements ModelClient {
+  requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    yield { type: 'reasoning_delta', text: 'I still need to finish the task.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
 export class ProviderMetadataToolModelClient implements ModelClient {
   requests: ModelRequest[] = [];
 

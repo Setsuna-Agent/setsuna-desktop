@@ -1,9 +1,10 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
 
-const THREAD_BATCH_SIZE = 20;
+const PROJECT_CONVERSATION_BATCH_SIZE = 5;
+const GLOBAL_CONVERSATION_BATCH_SIZE = 20;
 
 export function SidebarThreadList({
   menuThreadId,
@@ -27,7 +28,13 @@ export function SidebarThreadList({
   onToggleMenu: (threadId: string) => void;
 }) {
   const { t } = useI18n();
-  const [visibleCount, setVisibleCount] = useState(THREAD_BATCH_SIZE);
+  const batchSize = variant === 'project'
+    ? PROJECT_CONVERSATION_BATCH_SIZE
+    : GLOBAL_CONVERSATION_BATCH_SIZE;
+  const [visibleCount, setVisibleCount] = useState(batchSize);
+  useEffect(() => {
+    setVisibleCount(batchSize);
+  }, [batchSize]);
   const visibleThreads = threads.slice(0, visibleCount);
   const remainingCount = threads.length - visibleThreads.length;
 
@@ -51,8 +58,8 @@ export function SidebarThreadList({
         <button
           className="desktop-agent-thread-list__show-more"
           type="button"
-          aria-label={t('sidebar.showMoreLabel', { count: Math.min(THREAD_BATCH_SIZE, remainingCount) })}
-          onClick={() => setVisibleCount((current) => Math.min(current + THREAD_BATCH_SIZE, threads.length))}
+          aria-label={t('sidebar.showMoreLabel', { count: Math.min(batchSize, remainingCount) })}
+          onClick={() => setVisibleCount((current) => Math.min(current + batchSize, threads.length))}
         >
           {t('sidebar.showMore')}
         </button>

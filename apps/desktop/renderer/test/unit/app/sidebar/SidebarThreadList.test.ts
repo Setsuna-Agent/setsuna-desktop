@@ -9,8 +9,8 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('SidebarThreadList', () => {
-  it('initially renders at most twenty conversations and offers the next batch', () => {
-    const html = renderThreadList(21);
+  it('initially renders at most twenty global conversations and offers the next batch', () => {
+    const html = renderThreadList(21, 'global');
 
     expect(html).toContain('conversation-20');
     expect(html).not.toContain('conversation-21');
@@ -18,21 +18,37 @@ describe('SidebarThreadList', () => {
     expect(html).toContain('展开显示');
   });
 
-  it('hides the expansion control after every conversation is visible', () => {
-    const html = renderThreadList(20);
+  it('hides the global expansion control when exactly twenty conversations exist', () => {
+    const html = renderThreadList(20, 'global');
 
     expect(html).toContain('conversation-20');
     expect(html).not.toContain('展开显示');
   });
+
+  it('initially renders at most five project conversations and offers the next batch', () => {
+    const html = renderThreadList(6, 'project');
+
+    expect(html).toContain('conversation-5');
+    expect(html).not.toContain('conversation-6');
+    expect(html).toContain('aria-label="再显示 1 个对话"');
+    expect(html).toContain('展开显示');
+  });
+
+  it('hides the project expansion control when exactly five conversations exist', () => {
+    const html = renderThreadList(5, 'project');
+
+    expect(html).toContain('conversation-5');
+    expect(html).not.toContain('展开显示');
+  });
 });
 
-function renderThreadList(threadCount: number) {
+function renderThreadList(threadCount: number, variant: 'global' | 'project') {
   return renderToStaticMarkup(createElement(SidebarThreadList, {
     menuThreadId: null,
     runningThreadId: null,
     selectedThreadId: null,
     threads: Array.from({ length: threadCount }, (_, index) => createThread(index + 1)),
-    variant: 'global',
+    variant,
     onArchive: () => undefined,
     onRename: () => undefined,
     onSelect: () => undefined,

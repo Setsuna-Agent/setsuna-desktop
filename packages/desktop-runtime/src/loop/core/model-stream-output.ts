@@ -58,6 +58,7 @@ export function createLegacyModelStreamMirrorState(): LegacyModelStreamMirrorSta
 
 export function createAssistantItemStreamBridge(
   output: AssistantOutputAccumulator,
+  publishReasoningDelta: (delta: string) => Promise<void> = async () => undefined,
 ): {
   appendAgent(delta: string): Promise<void>;
   appendReasoning(delta: string): Promise<void>;
@@ -66,19 +67,13 @@ export function createAssistantItemStreamBridge(
 } {
   const items = new Map<string, RuntimeStreamItem>();
   const emittedTextItemIds = new Set<string>();
-  let reasoningOpen = false;
 
   const appendReasoning = async (delta: string) => {
     if (!delta) return;
-    await output.append(`${reasoningOpen ? '' : '<think>'}${delta}`);
-    reasoningOpen = true;
+    await publishReasoningDelta(delta);
   };
   const appendAgent = async (delta: string) => {
     if (!delta) return;
-    if (reasoningOpen) {
-      await output.append('</think>');
-      reasoningOpen = false;
-    }
     await output.append(delta);
   };
   const appendItemText = async (item: RuntimeStreamItem, text: string) => {
@@ -108,9 +103,6 @@ export function createAssistantItemStreamBridge(
         await appendReasoning(event.text);
       }
     },
-    async finish() {
-      if (reasoningOpen) await output.append('</think>');
-      reasoningOpen = false;
-    },
+    async finish() {},
   };
 }

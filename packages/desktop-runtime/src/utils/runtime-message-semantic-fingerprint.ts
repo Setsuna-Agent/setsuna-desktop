@@ -1,6 +1,7 @@
 import {
   normalizeRuntimeMessageProviderMetadata,
   sanitizeRuntimeJsonValue,
+  visibleTextOutsideThinkTags,
   type RuntimeJsonValue,
   type RuntimeMessage,
   type RuntimeMessageProviderMetadata,
@@ -51,7 +52,7 @@ export function providerMetadataMatchesSemanticMessage(
 }
 
 export function portableRuntimeAssistantText(value: string): string {
-  return value.replace(/<think>[\s\S]*?<\/think>/giu, '');
+  return visibleTextOutsideThinkTags(value);
 }
 
 export function runtimeJsonValuesEqual(left: unknown, right: unknown): boolean {

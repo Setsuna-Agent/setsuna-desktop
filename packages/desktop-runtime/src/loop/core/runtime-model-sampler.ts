@@ -95,7 +95,19 @@ export class RuntimeModelSampler {
     const output = createAssistantOutputAccumulator((delta) =>
       this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta)
     );
-    const streamBridge = createAssistantItemStreamBridge(output);
+    let reasoningReceived = false;
+    const streamBridge = createAssistantItemStreamBridge(
+      output,
+      (delta) => {
+        reasoningReceived = true;
+        return this.options.streamEvents.publishAssistantReasoningDelta(
+          threadId,
+          turnId,
+          assistantMessageId,
+          delta,
+        );
+      },
+    );
     const mirror = createLegacyModelStreamMirrorState();
     const requestToolChoice = step.toolChoice;
     const requestTools = toolsForModelRequest(step.tools, requestToolChoice);
@@ -198,10 +210,11 @@ export class RuntimeModelSampler {
     const memoryCitation = await output.finish();
     let text = output.text();
     if (!text.trim() && !toolCalls.length) {
-      // A transport can terminate cleanly while returning no usable model output (for example,
-      // when an OpenAI-compatible base URL points at a website instead of its API). Treating that
-      // as success leaves a blank assistant turn and hides the configuration failure from users.
-      throw new Error('模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
+      // Reasoning travels on its own stream channel, so an empty content channel is an explicit
+      // provider-boundary failure instead of a tag-parsing decision.
+      throw new Error(reasoningReceived
+        ? '模型服务只返回了思考内容，未返回可显示的答复。请检查供应商的 reasoning/content 字段映射或模型协议配置。'
+        : '模型服务返回了空响应，请检查 API Base URL、模型 ID 和供应商协议配置。');
     }
     assistantMessage.providerMetadata = bindProviderMetadataToSemanticMessage(
       assistantMessage.providerMetadata,

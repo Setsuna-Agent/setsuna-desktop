@@ -179,30 +179,50 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
   let contentIndex = 0;
   let thinkingIndex = 0;
 
-  for (const thinkingSegment of splitThinkingContent(segment.content)) {
-    if (thinkingSegment.type === 'markdown') {
-      if (thinkingSegment.content.trim()) {
-        const content = {
-          id: contentBlockId(segment.id, contentIndex),
-          segment,
-          content: thinkingSegment.content,
-        };
-        contentSegments.push(content);
-        items.push({ type: 'content', segment: content });
-        contentIndex += 1;
-      }
-      continue;
-    }
+  const appendContent = (contentValue: string) => {
+    if (!contentValue.trim()) return;
+    const content = {
+      id: contentBlockId(segment.id, contentIndex),
+      segment,
+      content: contentValue,
+    };
+    contentSegments.push(content);
+    items.push({ type: 'content', segment: content });
+    contentIndex += 1;
+  };
+  const appendActiveThinking = (contentValue: string) => {
+    if (segment.status !== 'streaming' || !contentValue.trim()) return;
+    const thinking = {
+      id: thinkingSegmentId(segment.id, thinkingIndex),
+      segment,
+      content: contentValue,
+    };
+    thinkingSegments.push(thinking);
+    items.push({ type: 'thinking', segment: thinking });
+    thinkingIndex += 1;
+  };
 
-    if (segment.status === 'streaming' && !thinkingSegment.closed && thinkingSegment.content.trim()) {
-      const thinking = {
-        id: thinkingSegmentId(segment.id, thinkingIndex),
-        segment,
-        content: thinkingSegment.content,
-      };
-      thinkingSegments.push(thinking);
-      items.push({ type: 'thinking', segment: thinking });
-      thinkingIndex += 1;
+  if (segment.streamParts?.length) {
+    const lastPartIndex = segment.streamParts.length - 1;
+    segment.streamParts.forEach((part, index) => {
+      if (part.type === 'content') appendContent(part.content);
+      else if (index === lastPartIndex) appendActiveThinking(part.content);
+    });
+  } else if (segment.streamParts) {
+    // An explicitly structured message with no streamed parts can still receive its final content
+    // atomically at completion. Once parts exist, their channel boundary remains authoritative.
+    appendContent(segment.content);
+  } else {
+    // Historical messages serialized reasoning into content. Keep this parser only as a
+    // conservative read path; new messages carry ordered structured stream parts.
+    for (const thinkingSegment of splitThinkingContent(segment.content, segment.status === 'streaming')) {
+      if (thinkingSegment.type === 'markdown') {
+        appendContent(thinkingSegment.content);
+        continue;
+      }
+      if (!thinkingSegment.closed) {
+        appendActiveThinking(thinkingSegment.content);
+      }
     }
   }
 
@@ -280,7 +300,12 @@ function thinkingSegmentId(segmentId: string, index: number): string {
 }
 
 function isEmptyStreamingAssistantSegment(segment: RuntimeMessage): boolean {
-  return segment.status === 'streaming' && !hasRenderableThinkingContent(segment.content, true) && !segment.toolRuns?.length && !segment.error;
+  const hasStructuredPart = segment.streamParts?.some((part) => Boolean(part.content.trim()));
+  return segment.status === 'streaming'
+    && !hasStructuredPart
+    && !hasRenderableThinkingContent(segment.content, true)
+    && !segment.toolRuns?.length
+    && !segment.error;
 }
 
 export function shouldShowAssistantTrailingLoading({

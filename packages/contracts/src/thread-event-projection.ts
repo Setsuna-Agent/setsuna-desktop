@@ -23,6 +23,7 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillIds: message.skillIds ? [...message.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,

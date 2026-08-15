@@ -130,7 +130,11 @@ describe('agent loop stream history and regeneration', () => {
       const saved = await threadStore.getThread(thread.id);
       const assistant = saved?.messages.find((message) => message.role === 'assistant');
   
-      expect(assistant?.content).toBe('<think>Need context.</think>Hello from item stream.');
+      expect(assistant?.content).toBe('Hello from item stream.');
+      expect(assistant?.streamParts).toEqual([
+        { type: 'reasoning', content: 'Need context.' },
+        { type: 'content', content: 'Hello from item stream.' },
+      ]);
       expect(events).toContainEqual(expect.objectContaining({
         type: 'item.started',
         payload: {

@@ -43,6 +43,24 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
+  it('extracts a repository location from a Markdown-linked finding header', () => {
+    expect(parseRuntimeReviewResult([
+      '审查完成，发现一个问题。',
+      '',
+      '**[P1] 非流式路径会重复显示 reasoning — [chatAssistantTimeline.ts:205](apps/desktop/renderer/src/features/chat/conversation/chatAssistantTimeline.ts:205)**',
+      '同一段 reasoning 会同时出现在思考面板和正文中。',
+    ].join('\n'))).toEqual({
+      summary: '审查完成，发现一个问题。',
+      findings: [{
+        priority: 'P1',
+        title: '非流式路径会重复显示 reasoning',
+        path: 'apps/desktop/renderer/src/features/chat/conversation/chatAssistantTimeline.ts',
+        startLine: 205,
+        body: '同一段 reasoning 会同时出现在思考面板和正文中。',
+      }],
+    });
+  });
+
   it('does not split a title that quotes the finding delimiter', () => {
     expect(parseRuntimeReviewResult([
       '[P3] 解析器对标题内含 " — " 的 finding 误切分 — packages/runtime/src/review.ts:42',

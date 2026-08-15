@@ -230,6 +230,71 @@ describe('runtime event writer', () => {
     });
   });
 
+  it('preserves reasoning and content order when a channel resumes inside one batch', async () => {
+    const store = createTestThreadStore(
+      await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-channel-order-test-')),
+      systemClock,
+      new RandomIdGenerator(),
+    );
+    const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000);
+    const thread = await store.createThread({ title: 'Channel order' });
+    const createdAt = systemClock.now().toISOString();
+
+    await writer.append(thread.id, {
+      id: 'event_message',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.created',
+      createdAt,
+      payload: {
+        message: {
+          id: 'msg_1', turnId: 'turn_1', role: 'assistant', content: '', createdAt, status: 'streaming',
+        },
+      },
+    });
+    for (const [index, delta] of [
+      { channel: 'reasoning' as const, text: 'reasoning-1' },
+      { channel: 'content' as const, text: 'content-1' },
+      { channel: 'reasoning' as const, text: 'reasoning-2' },
+    ].entries()) {
+      await writer.append(thread.id, {
+        id: `event_delta_${index}`,
+        threadId: thread.id,
+        turnId: 'turn_1',
+        type: 'message.delta',
+        createdAt,
+        payload: { messageId: 'msg_1', ...delta },
+      });
+    }
+    await writer.append(thread.id, {
+      id: 'event_completed',
+      threadId: thread.id,
+      turnId: 'turn_1',
+      type: 'message.completed',
+      createdAt,
+      payload: { messageId: 'msg_1', content: 'content-1' },
+    });
+
+    const persistedDeltas = (await store.listEvents(thread.id))
+      .filter((event) => event.type === 'message.delta')
+      .map((event) => event.payload);
+    expect(persistedDeltas).toEqual([
+      { messageId: 'msg_1', channel: 'reasoning', text: 'reasoning-1' },
+      { messageId: 'msg_1', channel: 'content', text: 'content-1' },
+      { messageId: 'msg_1', channel: 'reasoning', text: 'reasoning-2' },
+    ]);
+    await expect(store.getThread(thread.id)).resolves.toMatchObject({
+      messages: [expect.objectContaining({
+        content: 'content-1',
+        streamParts: [
+          { type: 'reasoning', content: 'reasoning-1' },
+          { type: 'content', content: 'content-1' },
+          { type: 'reasoning', content: 'reasoning-2' },
+        ],
+      })],
+    });
+  });
+
   it('coalesces plan and reasoning parts without crossing turn or lifecycle boundaries', async () => {
     const store = createTestThreadStore(
       await mkdtemp(path.join(tmpdir(), 'setsuna-event-writer-structured-delta-test-')),

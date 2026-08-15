@@ -24,6 +24,7 @@ import {
 import {
   EmptyModelClient,
   FailingCleanupToolHost,
+  HiddenOnlyModelClient,
   ProviderMetadataToolModelClient,
   RefreshingToolHost,
   ResponsesPhaseToolModelClient,
@@ -220,7 +221,40 @@ describe('agent loop turn execution', () => {
       expect(events.some((event) => event.type === 'runtime.error')).toBe(true);
       expect(events.some((event) => event.type === 'turn.completed')).toBe(false);
     });
-  
+
+  it('fails a hidden-only model response at the sampling boundary without retrying', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Hidden-only final response' });
+      const modelClient = new HiddenOnlyModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+      });
+
+      await expect(loop.sendTurn(thread.id, { input: 'finish the task' }))
+        .rejects.toThrow('只返回了思考内容');
+
+      const saved = await threadStore.getThread(thread.id);
+      const events = await threadStore.listEvents(thread.id, 0);
+      expect(modelClient.requests).toHaveLength(1);
+      expect(saved?.turns?.at(-1)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('只返回了思考内容'),
+      });
+      expect(saved?.messages.find((message) => message.role === 'assistant')).toMatchObject({
+        content: '',
+        streamParts: [{ type: 'reasoning', content: 'I still need to finish the task.' }],
+        status: 'error',
+        error: expect.stringContaining('只返回了思考内容'),
+      });
+      expect(events.some((event) => event.type === 'runtime.error')).toBe(true);
+      expect(events.some((event) => event.type === 'turn.completed')).toBe(false);
+    });
+
   it('keeps a completed turn terminal when tool cleanup fails', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

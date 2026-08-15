@@ -139,7 +139,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'turn.step_snapshot', { snapshot: RuntimeModelRequestStepSnapshot }>
   | RuntimeEventBase<'mailbox.delivered', RuntimeMailboxDelivery>
   | RuntimeEventBase<'message.created', { message: RuntimeMessage; queuedInputId?: string }>
-  | RuntimeEventBase<'message.delta', { messageId: string; text: string }>
+  | RuntimeEventBase<'message.delta', { messageId: string; text: string; channel?: 'content' | 'reasoning' }>
   | RuntimeEventBase<
       'message.updated',
       {

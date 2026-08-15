@@ -156,7 +156,44 @@ describe('runtime AppServer SWE assistant streaming', () => {
           },
         },
       ]);
+  });
+
+  it('does not forward the structured reasoning message channel as agent text', () => {
+    const mapEvent = createSweNotificationMapper();
+    const base = {
+      threadId: 'thread_reasoning_channel',
+      turnId: 'turn_reasoning_channel',
+      createdAt: '2026-08-15T00:00:00.000Z',
+    };
+    mapEvent({
+      ...base,
+      id: 'event_created',
+      seq: 1,
+      type: 'message.created',
+      payload: {
+        message: {
+          id: 'assistant_reasoning_channel',
+          turnId: base.turnId,
+          role: 'assistant',
+          content: '',
+          createdAt: base.createdAt,
+          status: 'streaming',
+        },
+      },
     });
+
+    expect(mapEvent({
+      ...base,
+      id: 'event_reasoning',
+      seq: 2,
+      type: 'message.delta',
+      payload: {
+        messageId: 'assistant_reasoning_channel',
+        text: 'private reasoning',
+        channel: 'reasoning',
+      },
+    })).toEqual([]);
+  });
   
   it('completes streaming agent messages that start with initial text', () => {
       const mapEvent = createSweNotificationMapper();

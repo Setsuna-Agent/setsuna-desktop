@@ -20,7 +20,7 @@ import { visibleMarkdownContent } from './chatThinkingContent.js';
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
 export type ChatTranscriptItem =
-  | { type: 'user'; id: string; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
+  | { type: 'user'; id: string; assistantTimelineSteerMessageIds: string[]; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
   | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
@@ -66,10 +66,21 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   let assistantRunSteerMessages: RuntimeMessage[] = [];
   let assistantRunToolAttachments: RuntimeMessageAttachment[] = [];
   let assistantRunTurnId: string | undefined;
-  const pendingSteerMessageIdsByTurnId = new Map<string, string[]>();
+  const pendingSteerMessagesByTurnId = new Map<string, RuntimeMessage[]>();
   const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
   const seenUserTurnIds = new Set<string>();
   let lastUserItem: Extract<ChatTranscriptItem, { type: 'user' }> | null = null;
+
+  const attachPendingSteersToAssistantRun = (turnId: string) => {
+    const pending = pendingSteerMessagesByTurnId.get(turnId) ?? [];
+    const attachedIds = new Set(assistantRunSteerMessages.map((message) => message.id));
+    for (const message of pending) {
+      if (attachedIds.has(message.id)) continue;
+      assistantRunMessageIds.push(message.id);
+      assistantRunSteerMessages.push(message);
+      attachedIds.add(message.id);
+    }
+  };
 
   const flushAssistantRun = () => {
     if (!assistantRun.length) return;
@@ -142,8 +153,9 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       if (turnId && !userItemByTurnId.has(turnId) && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === turnId)) {
         userItemByTurnId.set(turnId, lastUserItem);
       }
+      if (turnId) attachPendingSteersToAssistantRun(turnId);
       const handledSteerMessageIds = turnId && assistantHasProcessingEvidence(message)
-        ? (pendingSteerMessageIdsByTurnId.get(turnId) ?? [])
+        ? (pendingSteerMessagesByTurnId.get(turnId) ?? []).map((pendingMessage) => pendingMessage.id)
         : [];
       if (turnId && handledSteerMessageIds.length) {
         assistantRunHandledSteerMessageIds.push(...handledSteerMessageIds);
@@ -152,7 +164,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
           userItem.handledSteerMessageIds.push(...handledSteerMessageIds);
           userItem.guidanceProcessed = true;
         }
-        pendingSteerMessageIdsByTurnId.delete(turnId);
+        pendingSteerMessagesByTurnId.delete(turnId);
       }
       assistantRun.push(message);
       assistantRunMessageIds.push(message.id);
@@ -177,14 +189,15 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
         assistantRunMessageIds.push(message.id);
         assistantRunSteerMessages.push(message);
       }
-      const pending = pendingSteerMessageIdsByTurnId.get(message.turnId) ?? [];
-      pending.push(message.id);
-      pendingSteerMessageIdsByTurnId.set(message.turnId, pending);
+      const pending = pendingSteerMessagesByTurnId.get(message.turnId) ?? [];
+      pending.push(message);
+      pendingSteerMessagesByTurnId.set(message.turnId, pending);
       if (userItem || (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId))) continue;
     }
     flushAssistantRun();
     const item: Extract<ChatTranscriptItem, { type: 'user' }> = {
       type: 'user',
+      assistantTimelineSteerMessageIds: [],
       handledSteerMessageIds: [],
       id: message.id,
       message,
@@ -199,7 +212,19 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   }
 
   flushAssistantRun();
+  assignAssistantTimelineSteerOwnership(items);
   return items;
+}
+
+function assignAssistantTimelineSteerOwnership(items: ChatTranscriptItem[]): void {
+  const ownedIds = new Set(items.flatMap((item) =>
+    item.type === 'assistant' ? item.steerMessages.map((message) => message.id) : []));
+  for (const item of items) {
+    if (item.type !== 'user') continue;
+    item.assistantTimelineSteerMessageIds = item.steerMessages
+      .filter((message) => ownedIds.has(message.id))
+      .map((message) => message.id);
+  }
 }
 
 function messagesInTranscriptOrder(messages: RuntimeMessage[]): RuntimeMessage[] {

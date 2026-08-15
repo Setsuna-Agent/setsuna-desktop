@@ -50,7 +50,7 @@ function ActiveThinkingContent({
         onTouchMoveCapture={handleTouchMove}
         onWheelCapture={handleWheel}
       >
-        <MarkdownRenderer content={content} streaming />
+        <MarkdownRenderer content={content} legacyThinkingTags={false} streaming />
       </div>
     </div>
   );
