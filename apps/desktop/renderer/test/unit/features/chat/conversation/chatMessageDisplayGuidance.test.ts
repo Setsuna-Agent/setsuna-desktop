@@ -160,4 +160,66 @@ describe('chat message guidance display', () => {
     });
     expect(assistantItems.flatMap((item) => item.steerMessages)).toHaveLength(1);
   });
+
+  it('does not assign current guidance to a legacy assistant run without a turn id', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'legacy_user',
+        role: 'user',
+        content: 'legacy prompt',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'legacy_assistant',
+        role: 'assistant',
+        content: 'legacy answer',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'context_boundary',
+        role: 'user',
+        content: '<context_compaction_summary>summary</context_compaction_summary>',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+        contextCompaction: {
+          compactedMessageCount: 1,
+          compactedTokens: 12,
+          keptRecentMessageCount: 2,
+          maxContextTokensK: 128,
+          originalMessageCount: 2,
+          originalTokens: 24,
+        },
+      },
+      {
+        id: 'current_user',
+        role: 'user',
+        turnId: 'turn_current',
+        content: 'current prompt',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'current_steer',
+        role: 'user',
+        turnId: 'turn_current',
+        content: 'current guidance',
+        createdAt: '2026-06-26T00:00:04.000Z',
+        status: 'complete',
+      },
+    ];
+
+    const items = createChatDisplayItems(messages);
+
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      id: 'legacy_assistant',
+      steerMessages: [],
+    });
+    expect(items.find((item) => item.id === 'current_user')).toMatchObject({
+      type: 'user',
+      assistantTimelineSteerMessageIds: [],
+      steerMessages: [expect.objectContaining({ id: 'current_steer' })],
+    });
+  });
 });

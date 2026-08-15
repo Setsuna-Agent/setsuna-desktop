@@ -232,9 +232,11 @@ function assistantTimelineOwner(
   steerMessage: RuntimeMessage,
   messageOrder: ReadonlyMap<string, number>,
 ): Extract<ChatTranscriptItem, { type: 'assistant' }> | null {
+  const steerTurnId = steerMessage.turnId;
+  if (!steerTurnId) return null;
   const steerIndex = messageIndex(messageOrder, steerMessage.id);
   const candidates = items
-    .filter((item) => sameTurn(item.turnId, steerMessage.turnId))
+    .filter((item) => item.turnId === steerTurnId)
     .map((item) => ({
       item,
       firstIndex: Math.min(...item.segments.map((segment) => messageIndex(messageOrder, segment.id))),

@@ -1,10 +1,21 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { SidebarThreadRow } from './SidebarThreadRow.js';
 
-const PROJECT_CONVERSATION_BATCH_SIZE = 5;
-const GLOBAL_CONVERSATION_BATCH_SIZE = 20;
+const SIDEBAR_CONVERSATION_BATCH_SIZE = 20;
+
+export function minimumSidebarVisibleCount<T extends { id: string }>(
+  items: T[],
+  batchSize: number,
+  pinnedIds: Array<string | null | undefined>,
+): number {
+  return pinnedIds.reduce((minimum, id) => {
+    if (!id) return minimum;
+    const index = items.findIndex((item) => item.id === id);
+    return index < 0 ? minimum : Math.max(minimum, index + 1);
+  }, batchSize);
+}
 
 export function SidebarThreadList({
   menuThreadId,
@@ -28,13 +39,13 @@ export function SidebarThreadList({
   onToggleMenu: (threadId: string) => void;
 }) {
   const { t } = useI18n();
-  const batchSize = variant === 'project'
-    ? PROJECT_CONVERSATION_BATCH_SIZE
-    : GLOBAL_CONVERSATION_BATCH_SIZE;
-  const [visibleCount, setVisibleCount] = useState(batchSize);
-  useEffect(() => {
-    setVisibleCount(batchSize);
-  }, [batchSize]);
+  const minimumVisibleCount = minimumSidebarVisibleCount(
+    threads,
+    SIDEBAR_CONVERSATION_BATCH_SIZE,
+    [selectedThreadId, runningThreadId],
+  );
+  const [expandedVisibleCount, setExpandedVisibleCount] = useState(SIDEBAR_CONVERSATION_BATCH_SIZE);
+  const visibleCount = Math.max(expandedVisibleCount, minimumVisibleCount);
   const visibleThreads = threads.slice(0, visibleCount);
   const remainingCount = threads.length - visibleThreads.length;
 
@@ -58,8 +69,8 @@ export function SidebarThreadList({
         <button
           className="desktop-agent-thread-list__show-more"
           type="button"
-          aria-label={t('sidebar.showMoreLabel', { count: Math.min(batchSize, remainingCount) })}
-          onClick={() => setVisibleCount((current) => Math.min(current + batchSize, threads.length))}
+          aria-label={t('sidebar.showMoreLabel', { count: Math.min(SIDEBAR_CONVERSATION_BATCH_SIZE, remainingCount) })}
+          onClick={() => setExpandedVisibleCount((current) => Math.min(current + SIDEBAR_CONVERSATION_BATCH_SIZE, threads.length))}
         >
           {t('sidebar.showMore')}
         </button>

@@ -249,8 +249,10 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
     const message = draft.mutableMessageById(event.payload.messageId);
     if (message) {
       // Reasoning and visible text share ordering but not storage: renderer state must never infer
-      // their boundary from model-authored markup.
-      appendMessageStreamPart(message, event.payload.channel ?? 'content', event.payload.text);
+      // their boundary from model-authored markup. Channel-less legacy events must stay legacy.
+      if (message.streamParts !== undefined || event.payload.channel !== undefined) {
+        appendMessageStreamPart(message, event.payload.channel ?? 'content', event.payload.text);
+      }
       if (event.payload.channel !== 'reasoning') {
         message.content += event.payload.text;
       }

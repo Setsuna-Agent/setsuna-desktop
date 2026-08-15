@@ -9,8 +9,8 @@ vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
 }));
 
 describe('SidebarThreadList', () => {
-  it('initially renders at most twenty global conversations and offers the next batch', () => {
-    const html = renderThreadList(21, 'global');
+  it.each(['global', 'project'] as const)('initially renders at most twenty %s conversations', (variant) => {
+    const html = renderThreadList(21, variant);
 
     expect(html).toContain('conversation-20');
     expect(html).not.toContain('conversation-21');
@@ -18,35 +18,34 @@ describe('SidebarThreadList', () => {
     expect(html).toContain('展开显示');
   });
 
-  it('hides the global expansion control when exactly twenty conversations exist', () => {
-    const html = renderThreadList(20, 'global');
+  it.each(['global', 'project'] as const)('hides the %s expansion control at twenty conversations', (variant) => {
+    const html = renderThreadList(20, variant);
 
     expect(html).toContain('conversation-20');
     expect(html).not.toContain('展开显示');
   });
 
-  it('initially renders at most five project conversations and offers the next batch', () => {
-    const html = renderThreadList(6, 'project');
+  it('keeps selected and running conversations visible beyond the initial batch', () => {
+    const html = renderThreadList(22, 'project', {
+      runningThreadId: 'thread-22',
+      selectedThreadId: 'thread-21',
+    });
 
-    expect(html).toContain('conversation-5');
-    expect(html).not.toContain('conversation-6');
-    expect(html).toContain('aria-label="再显示 1 个对话"');
-    expect(html).toContain('展开显示');
-  });
-
-  it('hides the project expansion control when exactly five conversations exist', () => {
-    const html = renderThreadList(5, 'project');
-
-    expect(html).toContain('conversation-5');
+    expect(html).toContain('conversation-21');
+    expect(html).toContain('conversation-22');
     expect(html).not.toContain('展开显示');
   });
 });
 
-function renderThreadList(threadCount: number, variant: 'global' | 'project') {
+function renderThreadList(
+  threadCount: number,
+  variant: 'global' | 'project',
+  active: { runningThreadId?: string | null; selectedThreadId?: string | null } = {},
+) {
   return renderToStaticMarkup(createElement(SidebarThreadList, {
     menuThreadId: null,
-    runningThreadId: null,
-    selectedThreadId: null,
+    runningThreadId: active.runningThreadId ?? null,
+    selectedThreadId: active.selectedThreadId ?? null,
     threads: Array.from({ length: threadCount }, (_, index) => createThread(index + 1)),
     variant,
     onArchive: () => undefined,

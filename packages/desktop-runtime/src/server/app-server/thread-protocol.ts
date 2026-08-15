@@ -418,6 +418,9 @@ function sweInjectedMessageToRuntimeMessage(item: Record<string, unknown>, index
     id: stringInput(item.id) || randomRuntimeId('msg_injected'),
     role,
     content: parsed.text,
+    streamParts: role === 'assistant'
+      ? (parsed.text ? [{ type: 'content', content: parsed.text }] : [])
+      : undefined,
     attachments: parsed.attachments.length ? parsed.attachments : undefined,
     createdAt: new Date().toISOString(),
     status: 'complete',
@@ -431,6 +434,7 @@ function sweInjectedFunctionCallToRuntimeMessage(item: Record<string, unknown>, 
     id: stringInput(item.id) || randomRuntimeId('msg_injected'),
     role: 'assistant',
     content: '',
+    streamParts: [],
     createdAt: new Date().toISOString(),
     status: 'complete',
     visibility: 'model',

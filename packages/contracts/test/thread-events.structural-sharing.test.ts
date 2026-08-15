@@ -49,6 +49,7 @@ describe('thread event structural sharing', () => {
     expect(projected.messages[0]).toBe(thread.messages[0]);
     expect(projected.messages[1]).not.toBe(thread.messages[1]);
     expect(projected.messages[1]?.content).toBe('Partial answer.');
+    expect(projected.messages[1]?.streamParts).toBeUndefined();
     expect(thread.messages[1]?.content).toBe('Partial');
     expect(projected.turns).toBe(thread.turns);
   });
