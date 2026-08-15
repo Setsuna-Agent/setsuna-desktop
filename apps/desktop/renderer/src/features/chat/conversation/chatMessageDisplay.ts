@@ -70,6 +70,9 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
   const seenUserTurnIds = new Set<string>();
   let lastUserItem: Extract<ChatTranscriptItem, { type: 'user' }> | null = null;
+  // Steers for turns without a visible user row (for example hidden-input continuations)
+  // still belong to an assistant timeline; collect them for the ownership pass below.
+  const orphanSteerMessages: RuntimeMessage[] = [];
 
   const flushAssistantRun = () => {
     if (!assistantRun.length) return;
@@ -171,6 +174,8 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       if (userItem) {
         userItem.messageIds.push(message.id);
         userItem.steerMessages.push(message);
+      } else {
+        orphanSteerMessages.push(message);
       }
       const pending = pendingSteerMessagesByTurnId.get(message.turnId) ?? [];
       pending.push(message);
@@ -195,13 +200,14 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   }
 
   flushAssistantRun();
-  assignAssistantTimelineSteerOwnership(items, orderedMessages);
+  assignAssistantTimelineSteerOwnership(items, orderedMessages, orphanSteerMessages);
   return items;
 }
 
 function assignAssistantTimelineSteerOwnership(
   items: ChatTranscriptItem[],
   orderedMessages: RuntimeMessage[],
+  orphanSteerMessages: RuntimeMessage[],
 ): void {
   const messageOrder = new Map(orderedMessages.map((message, index) => [message.id, index]));
   const assistantItems = items.filter(
@@ -219,6 +225,15 @@ function assignAssistantTimelineSteerOwnership(
       if (!owner.messageIds.includes(steerMessage.id)) owner.messageIds.push(steerMessage.id);
       item.assistantTimelineSteerMessageIds.push(steerMessage.id);
     }
+  }
+
+  for (const steerMessage of orphanSteerMessages) {
+    const owner = assistantTimelineOwner(assistantItems, steerMessage, messageOrder);
+    if (!owner) continue;
+    if (!owner.steerMessages.some((message) => message.id === steerMessage.id)) {
+      owner.steerMessages.push(steerMessage);
+    }
+    if (!owner.messageIds.includes(steerMessage.id)) owner.messageIds.push(steerMessage.id);
   }
 
   for (const item of assistantItems) {

@@ -109,6 +109,22 @@ describe('thinkTagMatches', () => {
     expect(visibleTextOutsideThinkTags(listExample)).toBe(listExample);
   });
 
+  it('treats indented code at the start of a newly entered container as code', () => {
+    const examples = [
+      '段落\n>     <think>visible example</think>',
+      'paragraph\n-     <think>visible example</think>',
+      'paragraph\n> >     <think>visible example</think>',
+      '- item text\n-     <think>visible example</think>',
+    ];
+
+    for (const content of examples) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    }
+    // Same-container paragraph continuation and lazy root indentation still cannot start code.
+    expect(visibleTextOutsideThinkTags('> quoted text\n>     <think>private reasoning')).toBe('> quoted text\n>     ');
+    expect(visibleTextOutsideThinkTags('> para\n    <think>private reasoning')).toBe('> para\n    ');
+  });
+
   it('preserves tags in valid indented code blocks without trusting paragraph indentation', () => {
     const examples = [
       '示例：\n\n    <think>visible example</think>\n\n完成。',

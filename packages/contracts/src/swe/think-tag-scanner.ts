@@ -253,10 +253,11 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
   let rangeStart: number | null = null;
   let rangeEnd = 0;
   let previousLineBlank = true;
+  let previousFrames: Array<MarkdownContainerFrame['type']> = [];
 
   for (let lineStart = 0; lineStart < text.length;) {
     const lineEnd = markdownLineEnd(text, lineStart);
-    const contentStart = markdownContainerBodyStart(text, lineStart, lineEnd);
+    const { contentStart, frames } = markdownContainerBody(text, lineStart, lineEnd);
     const blank = isWhitespaceOnly(text, contentStart, lineEnd);
     const indented = !blank && markdownIndentColumns(text, contentStart, lineEnd) >= 4;
 
@@ -267,17 +268,38 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
         ranges.push({ start: rangeStart, end: rangeEnd });
         rangeStart = null;
       }
-    } else if (indented && previousLineBlank) {
+    } else if (indented && (previousLineBlank || enteredFreshContainerScope(frames, previousFrames))) {
+      // A newly entered container interrupts any outer paragraph, so its first content line
+      // may start an indented code block without a preceding blank line.
       rangeStart = lineStart;
       rangeEnd = lineEnd;
     }
 
     previousLineBlank = blank;
+    previousFrames = frames;
     lineStart = lineEnd < text.length ? lineEnd + 1 : text.length;
   }
 
   if (rangeStart !== null) ranges.push({ start: rangeStart, end: rangeEnd });
   return ranges;
+}
+
+/**
+ * A line begins fresh container content when it deepens the container nesting, switches to a
+ * different container path, or repeats a list marker at the same depth (a new list item).
+ * Repeated quote markers at the same depth continue the same quote, and a shallower line may
+ * still lazily continue an outer paragraph, so neither can start an indented code block.
+ */
+function enteredFreshContainerScope(
+  frames: Array<MarkdownContainerFrame['type']>,
+  previousFrames: Array<MarkdownContainerFrame['type']>,
+): boolean {
+  if (frames.length > previousFrames.length) return true;
+  if (!frames.length || frames.length < previousFrames.length) return false;
+  for (let index = 0; index < previousFrames.length; index += 1) {
+    if (previousFrames[index] !== frames[index]) return true;
+  }
+  return frames[frames.length - 1] === 'list';
 }
 
 function markdownIndentColumns(text: string, lineStart: number, lineEnd: number): number {
@@ -478,8 +500,17 @@ function isFenceOpening(
   return delimiter.marker === '~' || !text.slice(delimiter.end, lineEnd).includes('`');
 }
 
-/** Keeps indentation after valid quote/list prefixes so nested code can be measured locally. */
-function markdownContainerBodyStart(text: string, lineStart: number, lineEnd: number): number {
+/**
+ * Keeps indentation after valid quote/list prefixes so nested code can be measured locally.
+ * Also reports the consumed container marker sequence so callers can tell when a line enters
+ * fresh container content instead of continuing an outer block.
+ */
+function markdownContainerBody(
+  text: string,
+  lineStart: number,
+  lineEnd: number,
+): { contentStart: number; frames: Array<MarkdownContainerFrame['type']> } {
+  const frames: Array<MarkdownContainerFrame['type']> = [];
   let cursor = lineStart;
   while (cursor < lineEnd) {
     let markerStart = cursor;
@@ -488,6 +519,7 @@ function markdownContainerBodyStart(text: string, lineStart: number, lineEnd: nu
     }
 
     if (text[markerStart] === '>') {
+      frames.push('quote');
       cursor = markerStart + 1;
       if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
       continue;
@@ -495,12 +527,13 @@ function markdownContainerBodyStart(text: string, lineStart: number, lineEnd: nu
 
     const listContentStart = markdownListContentStart(text, markerStart, lineEnd);
     if (listContentStart !== null) {
+      frames.push('list');
       cursor = listContentStart;
       continue;
     }
-    return cursor;
+    return { contentStart: cursor, frames };
   }
-  return cursor;
+  return { contentStart: cursor, frames };
 }
 
 /** Returns the first content byte after valid block quote/list container prefixes. */

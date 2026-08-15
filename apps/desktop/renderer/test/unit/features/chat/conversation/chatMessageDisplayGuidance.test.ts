@@ -161,6 +161,55 @@ describe('chat message guidance display', () => {
     expect(assistantItems.flatMap((item) => item.steerMessages)).toHaveLength(1);
   });
 
+  it('retains a steer for a turn without a visible user row on the assistant timeline', () => {
+    const messages: RuntimeMessage[] = [
+      {
+        id: 'hidden_input',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'hidden continuation input',
+        createdAt: '2026-06-26T00:00:00.000Z',
+        status: 'complete',
+        visibility: 'model',
+      },
+      {
+        id: 'assistant_before',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'work before guidance',
+        createdAt: '2026-06-26T00:00:01.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'user_steer',
+        role: 'user',
+        turnId: 'turn_1',
+        content: 'extra guidance',
+        createdAt: '2026-06-26T00:00:02.000Z',
+        status: 'complete',
+      },
+      {
+        id: 'assistant_after',
+        role: 'assistant',
+        turnId: 'turn_1',
+        content: 'handled guidance',
+        phase: 'final_answer',
+        createdAt: '2026-06-26T00:00:03.000Z',
+        status: 'complete',
+      },
+    ];
+
+    const items = createChatDisplayItems(messages);
+
+    expect(items.some((item) => item.type === 'user')).toBe(false);
+    expect(items.find((item) => item.type === 'assistant')).toMatchObject({
+      type: 'assistant',
+      handledSteerMessageIds: ['user_steer'],
+      messageIds: expect.arrayContaining(['user_steer']),
+      steerMessages: [expect.objectContaining({ id: 'user_steer', content: 'extra guidance' })],
+    });
+  });
+
   it('does not assign current guidance to a legacy assistant run without a turn id', () => {
     const messages: RuntimeMessage[] = [
       {

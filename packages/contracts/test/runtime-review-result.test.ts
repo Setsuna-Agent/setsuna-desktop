@@ -88,6 +88,16 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
+  it('keeps scanning for a location after a descriptive Markdown link', () => {
+    expect(parseRuntimeReviewResult(
+      '[P2] Issue — [context](https://tracker/item), src/a.ts:42',
+    ).findings[0]).toMatchObject({
+      title: 'Issue',
+      path: 'src/a.ts',
+      startLine: 42,
+    });
+  });
+
   it('does not split a title that quotes the finding delimiter', () => {
     expect(parseRuntimeReviewResult([
       '[P3] 解析器对标题内含 " — " 的 finding 误切分 — packages/runtime/src/review.ts:42',

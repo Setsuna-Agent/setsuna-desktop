@@ -88,14 +88,10 @@ export class RuntimeEventWriter {
     if (batch.lastMergeKey === mergeKey && lastEvent && mergeBufferedEvent(lastEvent, event)) {
       return { coalesced: true, eventCount: batch.events.length };
     }
-    // A non-adjacent slot may be reused only while it is still the latest event of its type.
-    // Dual-written streams (for example item.delta and message.delta for one chunk) project
-    // independently, so cross-type merging is safe; merging across a same-type event would
-    // move the new delta backwards past another channel or item in the persisted order.
     const existingIndex = batch.mergeIndexes.get(mergeKey);
     if (
       existingIndex !== undefined
-      && batch.lastTypeIndexes.get(event.type) === existingIndex
+      && canMergeAcrossTypes(batch.lastTypeIndexes, existingIndex, event.type)
       && mergeBufferedEvent(batch.events[existingIndex]!, event)
     ) {
       return { coalesced: true, eventCount: batch.events.length };
@@ -195,4 +191,31 @@ function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEve
 
 function clonePendingEvent(event: PendingRuntimeEvent): PendingRuntimeEvent {
   return structuredClone(event);
+}
+
+/**
+ * Cross-type merging is limited to the dual-written representations of one model chunk: the
+ * App Server item.delta stream mirrors the transcript message.delta stream, and
+ * reasoning.raw_delta mirrors the reasoning message channel. Merging across any other type
+ * would move a delta backwards past a genuinely different stream (another channel or item)
+ * in the persisted append-only order.
+ */
+const DUAL_WRITE_MERGE_PAIRS = new Set(
+  [
+    ['item.delta', 'message.delta'],
+    ['message.delta', 'reasoning.raw_delta'],
+  ].flatMap(([left, right]) => [`${left} ${right}`, `${right} ${left}`]),
+);
+
+function canMergeAcrossTypes(
+  lastTypeIndexes: ReadonlyMap<string, number>,
+  targetIndex: number,
+  type: string,
+): boolean {
+  for (const [otherType, lastIndex] of lastTypeIndexes) {
+    // A later same-type event is never pairable with itself, so this also blocks merging
+    // across another channel or item of the same event family.
+    if (lastIndex > targetIndex && !DUAL_WRITE_MERGE_PAIRS.has(`${type} ${otherType}`)) return false;
+  }
+  return true;
 }

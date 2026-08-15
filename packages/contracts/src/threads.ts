@@ -268,9 +268,20 @@ function parseReviewFindingHeader(line: string): RuntimeReviewFinding | null {
             startLine: linkedLocation.startLine,
             ...(linkedLocation.endLine !== undefined ? { endLine: linkedLocation.endLine } : {}),
           };
+          resolvedVersion = delimiterVersion;
+          cursor = markdownLink.targetEnd + 1;
+          continue;
         }
-        resolvedVersion = delimiterVersion;
+        // A descriptive link without a location belongs to the title; the real location may
+        // still follow it, so resume path scanning after the link instead of treating the
+        // delimiter as resolved.
         cursor = markdownLink.targetEnd + 1;
+        while (cursor < line.length && (
+          isReviewWhitespace(line[cursor]) || line[cursor] === ',' || line[cursor] === ';'
+        )) {
+          cursor += 1;
+        }
+        pathStart = cursor;
         continue;
       }
     }
