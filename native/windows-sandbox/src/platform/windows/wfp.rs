@@ -37,9 +37,11 @@ const SUBLAYER_DESCRIPTION: &str =
     "Persistent WFP sublayer for Setsuna Windows sandbox network isolation";
 const PROVIDER_KEY: GUID = GUID::from_u128(0x5437d01b_8b38_4c87_b575_5534519728a1);
 const SUBLAYER_KEY: GUID = GUID::from_u128(0x437fbe51_8169_423d_8f53_4e2b5a076d43);
-// BFE may persist a requested 0xffff sublayer weight as 0xfffe. Use that stable
-// high priority so install and post-install verification agree.
-const SUBLAYER_WEIGHT: u16 = u16::MAX - 1;
+// BFE may clamp near-maximum sublayer weights before persisting them (0xffff
+// has been observed as 0xfffe, and 0xfffe as 0xfffd), which breaks post-install
+// verification. Use a high but non-edge priority that BFE persists verbatim so
+// install and verification agree on every machine.
+const SUBLAYER_WEIGHT: u16 = 0xff00;
 const LOOPBACK_V4: u32 = 0x7f00_0001;
 const TCP_PROTOCOL: u8 = 6;
 
@@ -341,8 +343,8 @@ fn add_sublayer(engine: HANDLE, security: &ObjectSecurityDescriptor) -> Result<(
         flags: FWPM_SUBLAYER_FLAG_PERSISTENT,
         providerKey: &mut provider_key,
         providerData: empty_blob(),
-        // Loopback can be hard-permitted by built-in policy. The highest
-        // sublayer priority ensures the account-scoped deny filters arbitrate first.
+        // Loopback can be hard-permitted by built-in policy. A high sublayer
+        // priority ensures the account-scoped deny filters arbitrate first.
         weight: SUBLAYER_WEIGHT,
     };
     ensure_success(
@@ -810,19 +812,23 @@ mod tests {
 
     #[test]
     fn accepts_the_stable_high_priority_sublayer_weight() {
-        assert_eq!(SUBLAYER_WEIGHT, 0xfffe);
+        assert_eq!(SUBLAYER_WEIGHT, 0xff00);
         assert!(sublayer_metadata_matches(
             true,
             FWPM_SUBLAYER_FLAG_PERSISTENT,
             true,
             SUBLAYER_WEIGHT,
         ));
-        assert!(sublayer_metadata_matches(
-            true,
-            FWPM_SUBLAYER_FLAG_PERSISTENT,
-            true,
-            u16::MAX,
-        ));
+        // Weights persisted by older builds (and BFE-clamped variants of them)
+        // stay valid so existing installs do not flap into NeedsRepair.
+        for legacy_weight in [0xfffd, 0xfffe, u16::MAX] {
+            assert!(sublayer_metadata_matches(
+                true,
+                FWPM_SUBLAYER_FLAG_PERSISTENT,
+                true,
+                legacy_weight,
+            ));
+        }
         assert!(!sublayer_metadata_matches(
             true,
             FWPM_SUBLAYER_FLAG_PERSISTENT,
