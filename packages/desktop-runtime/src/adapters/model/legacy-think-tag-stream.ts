@@ -97,6 +97,9 @@ function isPotentialThinkTag(text: string): boolean {
 }
 
 function isPotentialRawThinkTag(tail: string): boolean {
+  // The caller slices from the first non-whitespace character; anything other than a raw
+  // opening bracket can never become a legacy envelope, so stop buffering ordinary answers.
+  if (tail[0] !== '<') return false;
   const lower = tail.toLowerCase();
   let cursor = 1;
   if (lower[cursor] === '/') cursor += 1;

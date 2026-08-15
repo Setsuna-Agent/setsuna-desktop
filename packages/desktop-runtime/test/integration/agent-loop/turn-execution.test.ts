@@ -154,6 +154,36 @@ describe('agent loop turn execution', () => {
       ]);
     });
 
+  it('detaches the published assistant snapshot from live stream parts', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Created snapshot', projectId: 'project_1' });
+      const eventBus = new InMemoryEventBus();
+      const createdAssistantMessages: RuntimeEvent[] = [];
+      eventBus.subscribe(thread.id, (event) => {
+        if (event.type === 'message.created' && event.payload.message.role === 'assistant') {
+          createdAssistantMessages.push(event);
+        }
+      });
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient: new StructuredToolContinuationModelClient(),
+        eventBus,
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'inspect the structured answer' });
+
+      // The published message.created event must not accumulate parts that streamed after
+      // publication; subscribers apply those through the persisted message.delta events.
+      expect(createdAssistantMessages.length).toBeGreaterThan(0);
+      for (const event of createdAssistantMessages) {
+        expect(event.payload).toMatchObject({ message: { streamParts: [] } });
+      }
+    });
+
   it('carries structured assistant channels into a tool-result sampling step', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

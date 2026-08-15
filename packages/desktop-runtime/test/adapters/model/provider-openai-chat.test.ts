@@ -264,6 +264,40 @@ describe('OpenAI-compatible Chat provider', () => {
     }
   });
 
+  it('streams ordinary answers that merely start with a think-like word', async () => {
+    const response = [
+      'data: {"choices":[{"delta":{"content":"我think about "}}]}',
+      '',
+      'data: {"choices":[{"delta":{"content":"this answer."},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    for (const createClient of [
+      () => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+      () => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+    ]) {
+      const events = await collect(createClient());
+      // Each delta must stream immediately; buffering to completion would defeat streaming
+      // for an ordinary answer without any tag bracket.
+      expect(events.flatMap((event) => {
+        if (event.type === 'item_delta') return [event.delta];
+        if (event.type === 'text_delta') return [event.text];
+        return [];
+      })).toEqual([
+        '我think about ',
+        'this answer.',
+      ]);
+    }
+  });
+
   it('keeps literal think tags visible after a dedicated reasoning channel is observed', async () => {
     const content = '<think>literal example</think> is visible answer text.';
     const response = [

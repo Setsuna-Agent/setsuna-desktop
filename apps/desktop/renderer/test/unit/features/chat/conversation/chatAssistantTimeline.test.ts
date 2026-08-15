@@ -134,6 +134,26 @@ describe('createAssistantRunTimeline', () => {
     }]);
   });
 
+  it('joins completed structured content parts into one Markdown stream', () => {
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_split_construct',
+      role: 'assistant',
+      content: '**bold text**',
+      streamParts: [
+        { type: 'content', content: '**bold' },
+        { type: 'reasoning', content: 'checking emphasis' },
+        { type: 'content', content: ' text**' },
+      ],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([
+      { type: 'content', content: '**bold text**' },
+    ]);
+  });
+
   it('keeps mid-answer literal tags in authoritative structured content', () => {
     const content = 'Explain raw <think>example</think> text.';
     const segments: RuntimeMessage[] = [{

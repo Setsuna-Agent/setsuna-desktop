@@ -203,11 +203,21 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
   };
 
   if (segment.streamParts?.length) {
-    const lastPartIndex = segment.streamParts.length - 1;
-    segment.streamParts.forEach((part, index) => {
-      if (part.type === 'content') appendContent(part.content);
-      else if (index === lastPartIndex) appendActiveThinking(part.content);
-    });
+    if (segment.status !== 'streaming') {
+      // Completed parts only record channel boundaries; hidden reasoning is not a visible
+      // separator, so the finished answer must render as one cohesive Markdown stream
+      // instead of splitting constructs that span two content parts.
+      appendContent(segment.streamParts
+        .filter((part) => part.type === 'content')
+        .map((part) => part.content)
+        .join(''));
+    } else {
+      const lastPartIndex = segment.streamParts.length - 1;
+      segment.streamParts.forEach((part, index) => {
+        if (part.type === 'content') appendContent(part.content);
+        else if (index === lastPartIndex) appendActiveThinking(part.content);
+      });
+    }
   } else if (segment.streamParts) {
     // An explicitly structured message with no streamed parts can still receive its final content
     // atomically at completion. Once parts exist, their channel boundary remains authoritative.

@@ -87,7 +87,13 @@ export class RuntimeModelSampler {
       streamParts: assistantStreamParts,
     };
     onAssistantStarted?.(assistantMessageId);
-    await this.options.streamEvents.publishMessage(threadId, turnId, assistantMessage);
+    // The published event must own an immutable snapshot: assistantStreamParts keeps mutating
+    // as deltas stream in, and a queued or replayed subscriber would otherwise observe future
+    // parts ahead of their persisted message.delta events.
+    await this.options.streamEvents.publishMessage(threadId, turnId, {
+      ...assistantMessage,
+      streamParts: [...assistantStreamParts],
+    });
     this.options.streamEvents.prepareAssistantItem(threadId, turnId, assistantMessageId);
 
     let toolCalls: RuntimeToolCall[] = [];
