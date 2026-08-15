@@ -385,7 +385,7 @@ describe('runtime context compaction', () => {
     })).not.toBeNull();
   });
 
-  it('counts structured reasoning that native replay can send back to the provider', () => {
+  it('counts structured reasoning only when a native provider envelope can replay it', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'user_1',
@@ -414,10 +414,32 @@ describe('runtime context compaction', () => {
       },
     ];
 
-    expect(estimateRuntimeMessageTokens(messages)).toBeGreaterThan(1_000);
+    expect(estimateRuntimeMessageTokens(messages)).toBeLessThan(1_000);
     expect(createRuntimeContextCompactionCandidate({
       budget: { maxContextTokens: 1_000 },
       messages,
+    })).toBeNull();
+
+    const nativeReplayMessages = messages.map((message) => (
+      message.id === 'assistant_1'
+        ? {
+            ...message,
+            providerMetadata: {
+              anthropic: {
+                contentBlocks: [
+                  { type: 'thinking' as const, thinking: 'x'.repeat(4_000), signature: 'sig_1' },
+                  { type: 'text' as const, text: 'Inspection complete.' },
+                ],
+              },
+            },
+          }
+        : message
+    ));
+
+    expect(estimateRuntimeMessageTokens(nativeReplayMessages)).toBeGreaterThan(1_000);
+    expect(createRuntimeContextCompactionCandidate({
+      budget: { maxContextTokens: 1_000 },
+      messages: nativeReplayMessages,
     })).not.toBeNull();
   });
 

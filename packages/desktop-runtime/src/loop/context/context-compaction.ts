@@ -422,12 +422,14 @@ function estimateMessageTokens(message: RuntimeMessage): number {
   const toolResultMetadataTokens = message.role === 'tool'
     ? estimateTextTokens(`${message.toolCallId ?? ''}\n${message.toolName ?? ''}`)
     : 0;
-  // Structured reasoning is intentionally absent from message.content, but native provider
-  // replay can send it back on the next request and it therefore consumes context budget.
-  const structuredReasoningLength = message.streamParts?.reduce(
-    (total, part) => total + (part.type === 'reasoning' ? part.content.length : 0),
-    0,
-  ) ?? 0;
+  // Semantic replay sends only providerAssistantText(message). Dedicated reasoning consumes the
+  // next request budget only when the persisted native envelope can carry it back to that provider.
+  const structuredReasoningLength = nativeEnvelopeReplaysReasoning(message)
+    ? message.streamParts?.reduce(
+        (total, part) => total + (part.type === 'reasoning' ? part.content.length : 0),
+        0,
+      ) ?? 0
+    : 0;
   const structuredReasoningTokens = structuredReasoningLength
     ? Math.ceil(structuredReasoningLength / APPROX_CHARS_PER_TOKEN)
     : 0;
@@ -436,6 +438,23 @@ function estimateMessageTokens(message: RuntimeMessage): number {
     + toolCallTokens
     + toolResultMetadataTokens
     + structuredReasoningTokens;
+}
+
+function nativeEnvelopeReplaysReasoning(message: RuntimeMessage): boolean {
+  const metadata = message.providerMetadata;
+  if (!metadata) return false;
+  const anthropicReasoning = metadata.anthropic?.contentBlocks.some(
+    (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
+  );
+  if (
+    anthropicReasoning
+    && (metadata.schemaVersion === undefined || metadata.source?.providerKind === 'anthropic')
+  ) return true;
+
+  return metadata?.schemaVersion === 2
+    && metadata.source?.providerKind === 'openai-responses'
+    && metadata.openAiResponses?.kind === 'response'
+    && metadata.openAiResponses.items.some((item) => item.type === 'reasoning');
 }
 
 export function estimateTextTokens(value: string): number {

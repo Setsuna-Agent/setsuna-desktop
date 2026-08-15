@@ -104,7 +104,7 @@ describe('parseRuntimeReviewResult', () => {
     });
   });
 
-  it('ignores thinking and accepts markdown-formatted finding headers', () => {
+  it('ignores legacy thinking and accepts markdown-formatted finding headers', () => {
     expect(parseRuntimeReviewResult([
       '<think>[P1] internal draft — src/internal.ts:1</think>',
       '本轮发现两个问题。',
@@ -138,6 +138,37 @@ describe('parseRuntimeReviewResult', () => {
     expect(parseRuntimeReviewResult('<think>internal review only')).toEqual({
       findings: [],
       summary: '',
+    });
+  });
+
+  it('preserves literal think tags after the provider boundary separated reasoning', () => {
+    const review = [
+      'Review discusses <think>literal summary</think> markup.',
+      '',
+      '[P2] Preserve protocol examples — packages/contracts/src/threads.ts:179',
+      'Keep <think>literal body</think> in the visible review.',
+    ].join('\n');
+    const expected = {
+      summary: 'Review discusses <think>literal summary</think> markup.',
+      findings: [{
+        priority: 'P2' as const,
+        title: 'Preserve protocol examples',
+        path: 'packages/contracts/src/threads.ts',
+        startLine: 179,
+        body: 'Keep <think>literal body</think> in the visible review.',
+      }],
+    };
+
+    expect(parseRuntimeReviewResult(review, { legacyThinkTags: false })).toEqual(expected);
+    expect(normalizeRuntimeReviewNotice({
+      kind: 'exited',
+      reasoningSeparated: true,
+      review,
+    })).toEqual({
+      kind: 'exited',
+      reasoningSeparated: true,
+      review,
+      ...expected,
     });
   });
 });

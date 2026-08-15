@@ -130,7 +130,7 @@ describe('runtime server reviews and message mutations', () => {
         'Review completed.',
         '',
         '[P1] Keep the review boundary narrow — packages/desktop-runtime/src/server/runtime-rest-routes.ts:1',
-        'Only expose the scoped review route.',
+        'Only expose the scoped review route and preserve <think>literal examples</think>.',
       ].join('\n');
       const capture = await createOpenAiCaptureServer(reviewResponse);
       try {
@@ -175,10 +175,11 @@ describe('runtime server reviews and message mutations', () => {
           message.turnId === started.turnId && message.reviewMode?.kind === 'exited'
         ))?.reviewMode).toMatchObject({
           kind: 'exited',
+          reasoningSeparated: true,
           review: reviewResponse,
           summary: 'Review completed.',
           findings: [{
-            body: 'Only expose the scoped review route.',
+            body: 'Only expose the scoped review route and preserve <think>literal examples</think>.',
             path: 'packages/desktop-runtime/src/server/runtime-rest-routes.ts',
             priority: 'P1',
             startLine: 1,

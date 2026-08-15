@@ -156,6 +156,8 @@ export type RuntimeContextCompactionNotice = {
 export type RuntimeReviewModeNotice = {
   kind: 'entered' | 'exited';
   review: string;
+  /** Provider-boundary reasoning was already separated; absent on historical tag envelopes. */
+  reasoningSeparated?: true;
   /** Parsed review output used by the transcript summary and diff annotations. */
   findings?: RuntimeReviewFinding[];
   summary?: string;
@@ -176,8 +178,13 @@ export type RuntimeReviewResult = {
 };
 
 /** Parse the stable review profile output into data shared by runtime and UI. */
-export function parseRuntimeReviewResult(review: string): RuntimeReviewResult {
-  const normalized = visibleTextOutsideThinkTags(review).trim();
+export function parseRuntimeReviewResult(
+  review: string,
+  options: { legacyThinkTags?: boolean } = {},
+): RuntimeReviewResult {
+  const normalized = (
+    options.legacyThinkTags === false ? review : visibleTextOutsideThinkTags(review)
+  ).trim();
   if (!normalized) return { findings: [], summary: '' };
 
   const lines = normalized.split(/\r?\n/u);
@@ -396,7 +403,9 @@ export function normalizeRuntimeReviewNotice(
   notice: RuntimeReviewModeNotice,
 ): RuntimeReviewModeNotice {
   if (notice.kind !== 'exited') return notice;
-  const parsed = parseRuntimeReviewResult(notice.review);
+  const parsed = parseRuntimeReviewResult(notice.review, {
+    legacyThinkTags: notice.reasoningSeparated !== true,
+  });
   if (parsed.findings.length || !notice.findings?.length) {
     return { ...notice, ...parsed };
   }
