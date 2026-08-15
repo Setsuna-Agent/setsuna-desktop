@@ -48,7 +48,9 @@ export function* thinkTagMatches(text: string): Generator<ThinkTagMatch> {
     }
 
     const code = text.charCodeAt(index);
-    if (code === 0x3c && rawTagsPossible) {
+    // A backslash-escaped angle bracket is literal Markdown text, not a protocol boundary;
+    // only an odd backslash run escapes the following tag candidate.
+    if (code === 0x3c && rawTagsPossible && !isEscapedDelimiter(text, index)) {
       const match = rawThinkTagAt(text, index);
       if (match === RAW_TAG_WITHOUT_END) {
         // No later raw tag can close when the remaining text contains no `>`.
@@ -230,8 +232,15 @@ function markdownCodeRanges(text: string): TextRange[] {
       length >= 3
       && lineContainerContentStart === start
     ) {
-      opening = null;
-      continue;
+      // A line-start run is fence syntax only when it is a valid opener or closer; an info
+      // string containing a backtick is not a fence, so CommonMark treats the run as an
+      // inline code span delimiter that a later equal run can close across lines.
+      const validFenceDelimiter = isFenceOpening(text, { end: index, marker: '`' }, lineEnd)
+        || isWhitespaceOnly(text, index, lineEnd);
+      if (validFenceDelimiter) {
+        opening = null;
+        continue;
+      }
     }
     if (!opening && !escapedOpening) {
       opening = { length, start };
@@ -253,7 +262,7 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
   let rangeStart: number | null = null;
   let rangeEnd = 0;
   let previousLineBlank = true;
-  let previousFrames: Array<MarkdownContainerFrame['type']> = [];
+  let previousFrames: MarkdownContainerBodyFrame[] = [];
 
   for (let lineStart = 0; lineStart < text.length;) {
     const lineEnd = markdownLineEnd(text, lineStart);
@@ -268,7 +277,7 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
         ranges.push({ start: rangeStart, end: rangeEnd });
         rangeStart = null;
       }
-    } else if (indented && (previousLineBlank || enteredFreshContainerScope(frames, previousFrames))) {
+    } else if (indented && (previousLineBlank || enteredFreshContainerScope(frames, previousFrames, previousLineBlank))) {
       // A newly entered container interrupts any outer paragraph, so its first content line
       // may start an indented code block without a preceding blank line.
       rangeStart = lineStart;
@@ -289,17 +298,42 @@ function markdownIndentedCodeRanges(text: string): TextRange[] {
  * different container path, or repeats a list marker at the same depth (a new list item).
  * Repeated quote markers at the same depth continue the same quote, and a shallower line may
  * still lazily continue an outer paragraph, so neither can start an indented code block.
+ * An ordered list marker that interrupts a paragraph must start at 1; a marker nested inside
+ * the previous item's content interrupts its paragraph directly, while a same-column marker
+ * of a different kind ends the previous list and starts a sibling list instead.
  */
 function enteredFreshContainerScope(
-  frames: Array<MarkdownContainerFrame['type']>,
-  previousFrames: Array<MarkdownContainerFrame['type']>,
+  frames: MarkdownContainerBodyFrame[],
+  previousFrames: MarkdownContainerBodyFrame[],
+  previousLineBlank: boolean,
 ): boolean {
-  if (frames.length > previousFrames.length) return true;
-  if (!frames.length || frames.length < previousFrames.length) return false;
-  for (let index = 0; index < previousFrames.length; index += 1) {
-    if (previousFrames[index] !== frames[index]) return true;
+  if (frames.length > previousFrames.length) {
+    const introducedList = frames.slice(previousFrames.length).find((frame) => frame.type === 'list');
+    return orderedListStartsBlock(introducedList, previousLineBlank);
   }
-  return frames[frames.length - 1] === 'list';
+  if (!frames.length || frames.length < previousFrames.length) return false;
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index]!;
+    const previous = previousFrames[index]!;
+    if (frame.type !== previous.type) return true;
+    if (frame.type !== 'list' || previous.type !== 'list') continue;
+    if (frame.markerColumn > previous.markerColumn) {
+      if (frame.signature === previous.signature) return true;
+      return orderedListStartsBlock(frame, previousLineBlank);
+    }
+    // A same-column or outdented marker ends the previous list and starts a sibling list.
+    return true;
+  }
+  // Identical quote-only paths continue the same quote.
+  return false;
+}
+
+function orderedListStartsBlock(
+  frame: MarkdownContainerBodyFrame | undefined,
+  previousLineBlank: boolean,
+): boolean {
+  if (!frame || frame.type !== 'list' || !frame.ordered) return true;
+  return previousLineBlank || frame.startNumber === 1;
 }
 
 function markdownIndentColumns(text: string, lineStart: number, lineEnd: number): number {
@@ -505,12 +539,23 @@ function isFenceOpening(
  * Also reports the consumed container marker sequence so callers can tell when a line enters
  * fresh container content instead of continuing an outer block.
  */
+type MarkdownContainerBodyFrame =
+  | { type: 'quote' }
+  | {
+      type: 'list';
+      continuationIndent: number;
+      markerColumn: number;
+      ordered: boolean;
+      signature: string;
+      startNumber: number;
+    };
+
 function markdownContainerBody(
   text: string,
   lineStart: number,
   lineEnd: number,
-): { contentStart: number; frames: Array<MarkdownContainerFrame['type']> } {
-  const frames: Array<MarkdownContainerFrame['type']> = [];
+): { contentStart: number; frames: MarkdownContainerBodyFrame[] } {
+  const frames: MarkdownContainerBodyFrame[] = [];
   let cursor = lineStart;
   while (cursor < lineEnd) {
     let markerStart = cursor;
@@ -519,16 +564,23 @@ function markdownContainerBody(
     }
 
     if (text[markerStart] === '>') {
-      frames.push('quote');
+      frames.push({ type: 'quote' });
       cursor = markerStart + 1;
       if (text[cursor] === ' ' || text[cursor] === '\t') cursor += 1;
       continue;
     }
 
-    const listContentStart = markdownListContentStart(text, markerStart, lineEnd);
-    if (listContentStart !== null) {
-      frames.push('list');
-      cursor = listContentStart;
+    const listMarker = markdownListMarker(text, markerStart, lineEnd);
+    if (listMarker) {
+      frames.push({
+        type: 'list',
+        continuationIndent: markdownTextColumns(text, cursor, listMarker.contentStart),
+        markerColumn: markdownTextColumns(text, lineStart, markerStart),
+        ordered: listMarker.ordered,
+        signature: listMarker.signature,
+        startNumber: listMarker.startNumber,
+      });
+      cursor = listMarker.contentStart;
       continue;
     }
     return { contentStart: cursor, frames };
@@ -562,19 +614,35 @@ function markdownContainerContentStart(text: string, lineStart: number, lineEnd:
 }
 
 function markdownListContentStart(text: string, start: number, lineEnd: number): number | null {
+  return markdownListMarker(text, start, lineEnd)?.contentStart ?? null;
+}
+
+function markdownListMarker(
+  text: string,
+  start: number,
+  lineEnd: number,
+): { contentStart: number; ordered: boolean; signature: string; startNumber: number } | null {
   let markerEnd = start;
   const marker = text[markerEnd];
+  let ordered = false;
+  let signature = '';
+  let startNumber = 0;
   if (marker === '-' || marker === '+' || marker === '*') {
+    signature = `bullet:${marker}`;
     markerEnd += 1;
   } else {
+    const digitsStart = markerEnd;
     while (markerEnd < lineEnd && markerEnd - start < 9 && isAsciiDigit(text[markerEnd])) {
       markerEnd += 1;
     }
     if (markerEnd === start || (text[markerEnd] !== '.' && text[markerEnd] !== ')')) return null;
+    startNumber = Number(text.slice(digitsStart, markerEnd));
+    signature = `ordered:${text[markerEnd]}`;
+    ordered = true;
     markerEnd += 1;
   }
 
-  if (markerEnd === lineEnd) return lineEnd;
+  if (markerEnd === lineEnd) return { contentStart: lineEnd, ordered, signature, startNumber };
   let contentStart = markerEnd;
   let paddingColumns = 0;
   while (contentStart < lineEnd) {
@@ -590,7 +658,12 @@ function markdownListContentStart(text: string, start: number, lineEnd: number):
   if (paddingColumns === 0) return null;
   // CommonMark treats 5+ columns after a list marker as one column of list padding; the rest
   // remains content indentation and can therefore open an indented code block.
-  return paddingColumns <= 4 ? contentStart : markerEnd + 1;
+  return {
+    contentStart: paddingColumns <= 4 ? contentStart : markerEnd + 1,
+    ordered,
+    signature,
+    startNumber,
+  };
 }
 
 function isAsciiDigit(value: string | undefined): boolean {

@@ -125,6 +125,45 @@ describe('thinkTagMatches', () => {
     expect(visibleTextOutsideThinkTags('> para\n    <think>private reasoning')).toBe('> para\n    ');
   });
 
+  it('does not let an ordered list above one interrupt a paragraph to hide tags', () => {
+    const stripped = [
+      ['paragraph\n2.     <think>private reasoning</think>', 'paragraph\n2.     '],
+      ['> para\n> 2.     <think>private reasoning</think>', '> para\n> 2.     '],
+      ['- a\n  3.     <think>private reasoning</think>', '- a\n  3.     '],
+    ];
+    for (const [content, expected] of stripped) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(expected);
+    }
+    // A list starting at 1, a continuing ordered list, a sibling list after a bullet, and a
+    // list after a blank line all begin valid fresh content whose indented code is preserved.
+    const preserved = [
+      'paragraph\n1.     <think>visible example</think>',
+      '1. a\n2.     <think>visible example</think>',
+      '1. a\n  3.     <think>visible example</think>',
+      '- a\n2.     <think>visible example</think>',
+      '> - a\n> 2.     <think>visible example</think>',
+      '- a\n\n2.     <think>visible example</think>',
+    ];
+    for (const content of preserved) {
+      expect(visibleTextOutsideThinkTags(content)).toBe(content);
+    }
+  });
+
+  it('lets an invalid fence-like run open a multiline code span', () => {
+    const spanned = '```info`x\n<think>visible example</think>\ntail```';
+    expect(visibleTextOutsideThinkTags(spanned)).toBe(spanned);
+    // A closing run at line start is itself a fence, so no inline span forms.
+    expect(visibleTextOutsideThinkTags('```info`x\n<think>private reasoning</think>\n```'))
+      .toBe('```info`x\n\n```');
+  });
+
+  it('preserves backslash-escaped think-tag examples', () => {
+    const escaped = '\\<think>literal\\</think>';
+    expect(visibleTextOutsideThinkTags(escaped)).toBe(escaped);
+    // An even backslash run leaves the tag itself unescaped.
+    expect(visibleTextOutsideThinkTags('\\\\<think>private reasoning</think>')).toBe('\\\\');
+  });
+
   it('preserves tags in valid indented code blocks without trusting paragraph indentation', () => {
     const examples = [
       '示例：\n\n    <think>visible example</think>\n\n完成。',
