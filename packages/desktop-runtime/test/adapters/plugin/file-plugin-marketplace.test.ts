@@ -191,6 +191,56 @@ describe('file plugin marketplace', () => {
     });
   });
 
+  it('does not migrate a legacy local bundle from another application\'s unpacked build', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-unpacked-'));
+    const setsunaAsarRoot = path.join(root, 'setsuna', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const otherAsarRoot = path.join(root, 'other-app', 'dist', 'linux-unpacked', 'resources', 'app.asar');
+    const catalogDir = path.join(setsunaAsarRoot, 'plugins');
+    const localDir = path.join(otherAsarRoot, 'plugins');
+    await Promise.all([
+      createApplicationPackage(setsunaAsarRoot, 'setsuna-desktop'),
+      createApplicationPackage(otherAsarRoot, 'other-desktop'),
+      createCatalogPlugin(catalogDir, 'docs', { name: 'Bundled Docs' }),
+      createCatalogPlugin(localDir, 'docs', { name: 'Other App Docs' }),
+    ]);
+    const runtime = await createPluginRuntime(root, catalogDir);
+    await runtime.plugins.installPlugin({ path: path.join(localDir, 'docs') });
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(catalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      plugins: [],
+      errors: [expect.stringContaining('conflicts with an installed local plugin')],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'local' }],
+    });
+  });
+
+  it('migrates legacy marketplace provenance across unpacked builds of the same application', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-same-unpacked-'));
+    const oldAsarRoot = path.join(root, 'old-checkout', 'dist', 'win-unpacked', 'resources', 'app.asar');
+    const currentAsarRoot = path.join(root, 'new-checkout', 'dist', 'win-unpacked', 'resources', 'app.asar');
+    const oldCatalogDir = path.join(oldAsarRoot, 'plugins');
+    const currentCatalogDir = path.join(currentAsarRoot, 'plugins');
+    await Promise.all([
+      createApplicationPackage(oldAsarRoot, 'setsuna-desktop'),
+      createApplicationPackage(currentAsarRoot, 'setsuna-desktop'),
+      createCatalogPlugin(oldCatalogDir, 'docs', { name: 'Docs Helper' }),
+      createCatalogPlugin(currentCatalogDir, 'docs', { name: 'Docs Helper' }),
+    ]);
+    const runtime = await createPluginRuntime(root, currentCatalogDir);
+    await new FilePluginMarketplace(oldCatalogDir, runtime.plugins).installPlugin('docs');
+    await removePersistedInstallationSource(path.join(root, 'runtime', 'plugins.json'));
+
+    await expect(new FilePluginMarketplace(currentCatalogDir, runtime.plugins).listPlugins()).resolves.toMatchObject({
+      errors: [],
+      plugins: [{ id: 'docs', installed: true }],
+    });
+    await expect(runtime.plugins.listPlugins()).resolves.toMatchObject({
+      plugins: [{ id: 'docs', installationSource: 'marketplace' }],
+    });
+  });
+
   it('does not migrate a local bundle imported from another Electron app', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-plugin-marketplace-other-electron-'));
     const catalogDir = path.join(root, '.mount_SetsunaXYZ789', 'resources', 'app.asar', 'plugins');

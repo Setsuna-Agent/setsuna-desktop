@@ -6,6 +6,16 @@ type ApplicationLocation = {
   suffix: string;
 };
 
+type PackagedApplicationLocation = ApplicationLocation & {
+  /** Path up to and including app.asar; its package.json carries the app identity. */
+  root: string;
+};
+
+// electron-builder unpacked output directories (win-unpacked, linux-unpacked, …)
+// share the same names across products, so the directory name alone cannot prove
+// both paths belong to the same application.
+const GENERIC_UNPACKED_DIRECTORY = /^(?:win(?:-(?:ia32|x64|arm64))?-unpacked|linux(?:-(?:arm|armv7l|arm64|x64))?-unpacked|mac(?:-(?:x64|arm64|universal))?)$/u;
+
 /**
  * Legacy plugin records predate the persisted marketplace provenance. The
  * catalog can move between a source checkout and a packaged application (or
@@ -21,7 +31,7 @@ export async function sameLegacyMarketplaceSource(left: string, right: string): 
 
   const leftPackaged = packagedApplicationLocation(left);
   const rightPackaged = packagedApplicationLocation(right);
-  if (sameApplicationLocation(leftPackaged, rightPackaged)) return true;
+  if (await samePackagedApplicationLocation(leftPackaged, rightPackaged)) return true;
 
   const leftCatalog = catalogApplicationLocation(left);
   const rightCatalog = catalogApplicationLocation(right);
@@ -36,6 +46,26 @@ export async function sameLegacyMarketplaceSource(left: string, right: string): 
 
 function sameApplicationLocation(left: ApplicationLocation | null, right: ApplicationLocation | null): boolean {
   return Boolean(left && right && left.identity === right.identity && samePath(left.suffix, right.suffix));
+}
+
+/**
+ * A product-named install directory or `<Name>.app` is already a strong identity
+ * and the old install location may have been deleted, so it cannot rely on
+ * reading files there. Generic build-output directory names are weak identities:
+ * require the packaged applications' package identities (appId or name) to
+ * overlap before reclaiming the record.
+ */
+async function samePackagedApplicationLocation(
+  left: PackagedApplicationLocation | null,
+  right: PackagedApplicationLocation | null,
+): Promise<boolean> {
+  if (!sameApplicationLocation(left, right) || !left || !right) return false;
+  if (!GENERIC_UNPACKED_DIRECTORY.test(left.identity)) return true;
+  const [leftIdentities, rightIdentities] = await Promise.all([
+    readApplicationIdentities(left.root),
+    readApplicationIdentities(right.root),
+  ]);
+  return leftIdentities.some((identity) => rightIdentities.includes(identity));
 }
 
 function catalogApplicationLocation(value: string): { root: string; suffix: string } | null {
@@ -62,11 +92,12 @@ async function readApplicationIdentities(applicationRoot: string): Promise<strin
   }
 }
 
-function packagedApplicationLocation(value: string): ApplicationLocation | null {
+function packagedApplicationLocation(value: string): PackagedApplicationLocation | null {
   const segments = path.resolve(value).split(path.sep);
   const appAsarIndex = segments.findIndex((segment) => segment.toLowerCase() === 'app.asar');
   if (appAsarIndex < 2 || segments[appAsarIndex - 1].toLowerCase() !== 'resources') return null;
 
+  const root = segments.slice(0, appAsarIndex + 1).join(path.sep);
   const macContentsIndex = appAsarIndex - 2;
   const macApplicationIndex = appAsarIndex - 3;
   if (
@@ -76,6 +107,7 @@ function packagedApplicationLocation(value: string): ApplicationLocation | null 
     return {
       identity: segments[macApplicationIndex].toLowerCase(),
       suffix: segments.slice(macContentsIndex).join(path.sep),
+      root,
     };
   }
 
@@ -84,6 +116,7 @@ function packagedApplicationLocation(value: string): ApplicationLocation | null 
   return {
     identity: applicationDirectory.toLowerCase(),
     suffix: segments.slice(appAsarIndex - 1).join(path.sep),
+    root,
   };
 }
 
