@@ -190,6 +190,109 @@ describe('OpenAI-compatible Chat provider', () => {
     }
   });
 
+  it('preserves literal think-tag examples in structured assistant history', async () => {
+    const content = 'Visible raw <think>example</think> and escaped &lt;think&gt;example&lt;/think&gt; text.';
+    const history = [
+      ...request.messages,
+      {
+        id: 'assistant-structured-example',
+        role: 'assistant' as const,
+        content,
+        streamParts: [{ type: 'content' as const, content }],
+        createdAt: '2026-06-25T00:00:02.000Z',
+      },
+    ];
+    const response = 'data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n';
+
+    for (const createClient of [
+      (captured: CapturedRequest) => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, captured),
+      ),
+      (captured: CapturedRequest) => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, captured),
+      ),
+    ]) {
+      const captured: CapturedRequest = {};
+      await collect(createClient(captured), { messages: history });
+
+      expect(expectBody(captured).messages).toContainEqual({ role: 'assistant', content });
+    }
+  });
+
+  it('separates legacy think tags split across compatible-provider deltas', async () => {
+    const response = [
+      'data: {"choices":[{"delta":{"content":"<thi"}}]}',
+      '',
+      'data: {"choices":[{"delta":{"content":"nk>private reasoning"}}]}',
+      '',
+      'data: {"choices":[{"delta":{"content":"</think>Visible answer."},"finish_reason":"stop"}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    for (const createClient of [
+      () => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+      () => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+    ]) {
+      const events = await collect(createClient());
+      const completedContent = events.find(
+        (event) => event.type === 'item_completed' && event.item.kind === 'agent_message',
+      );
+      const visible = completedContent?.type === 'item_completed'
+        ? completedContent.item.content
+        : events.flatMap((event) => event.type === 'text_delta' ? [event.text] : []).join('');
+      const completedReasoning = events.find(
+        (event) => event.type === 'item_completed' && event.item.kind === 'reasoning',
+      );
+      const reasoning = completedReasoning?.type === 'item_completed'
+        ? completedReasoning.item.content
+        : events.flatMap((event) => event.type === 'reasoning_delta' ? [event.text] : []).join('');
+
+      expect(visible).toBe('Visible answer.');
+      expect(reasoning).toContain('private reasoning');
+      expect(visible).not.toContain('private reasoning');
+    }
+  });
+
+  it('keeps mid-answer think-tag examples on the visible provider channel', async () => {
+    const content = 'Explain raw <think>example</think> text.';
+    const response = `data: ${JSON.stringify({ choices: [{ delta: { content }, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;
+
+    for (const createClient of [
+      () => new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+      () => new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch(response, {}),
+      ),
+    ]) {
+      const events = await collect(createClient());
+      const completedContent = events.find(
+        (event) => event.type === 'item_completed' && event.item.kind === 'agent_message',
+      );
+      const visible = completedContent?.type === 'item_completed'
+        ? completedContent.item.content
+        : events.flatMap((event) => event.type === 'text_delta' ? [event.text] : []).join('');
+
+      expect(visible).toBe(content);
+      expect(events.some((event) =>
+        event.type === 'reasoning_delta'
+        || event.type === 'reasoning_raw_delta'
+        || (event.type === 'item_completed' && event.item.kind === 'reasoning'))).toBe(false);
+    }
+  });
+
   it('parses CRLF-delimited SSE events without collapsing the stream', async () => {
     const client = new OpenAiChatModelClient(
       provider('openai-compatible', 'https://llm.example/v1'),

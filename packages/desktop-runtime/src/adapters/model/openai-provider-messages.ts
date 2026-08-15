@@ -4,7 +4,7 @@ import { parseAiSdkToolInput } from './ai-sdk-prompt.js';
 import { compatibleOpenAiResponsesItems } from './openai-responses-provider-metadata.js';
 import {
   inlineImageAttachments,
-  portableAssistantText,
+  providerAssistantText,
   toolVisualMessage,
 } from './provider-message-content.js';
 import type { ProviderReplayContext } from './provider-replay-context.js';
@@ -22,7 +22,7 @@ export function toOpenAiMessages(messages: RuntimeMessage[]): Array<Record<strin
     if (message.role !== 'tool') flushToolVisuals();
     if (message.role === 'system' || message.role === 'developer' || message.role === 'user' || message.role === 'assistant') {
       const content = message.role === 'assistant'
-        ? portableAssistantText(message.content)
+        ? providerAssistantText(message)
         : message.content;
       output.push({
         role: message.role,
@@ -108,7 +108,7 @@ function buildOpenAiResponsesInput(
     } else if (message.role === 'user') {
       output.push({ role: 'user', content: openAiResponsesContentParts(message) });
     } else if (message.role === 'assistant') {
-      const assistantText = portableAssistantText(message.content);
+      const assistantText = providerAssistantText(message);
       if (assistantText) output.push({ role: 'assistant', content: assistantText });
       for (const toolCall of message.toolCalls ?? []) {
         output.push({

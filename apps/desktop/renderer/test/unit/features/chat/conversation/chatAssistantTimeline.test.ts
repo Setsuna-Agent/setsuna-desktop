@@ -116,6 +116,42 @@ describe('createAssistantRunTimeline', () => {
     ]);
   });
 
+  it('repairs content-only structured messages written by legacy compatible streams', () => {
+    const content = '<think>private reasoning</think>Visible answer.';
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_legacy_structured',
+      role: 'assistant',
+      content,
+      streamParts: [{ type: 'content', content }],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([{
+      type: 'content',
+      content: 'Visible answer.',
+    }]);
+  });
+
+  it('keeps mid-answer literal tags in authoritative structured content', () => {
+    const content = 'Explain raw <think>example</think> text.';
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_structured_example',
+      role: 'assistant',
+      content,
+      streamParts: [{ type: 'content', content }],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(segments)).toMatchObject([{
+      type: 'content',
+      content,
+    }]);
+  });
+
   it('renders open streaming thinking as active work', () => {
     const segments: RuntimeMessage[] = [
       {

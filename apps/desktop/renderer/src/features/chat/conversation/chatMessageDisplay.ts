@@ -60,27 +60,16 @@ type TranscriptMessageEntry = {
  */
 export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptItem[] {
   const items: ChatTranscriptItem[] = [];
+  const orderedMessages = messagesInTranscriptOrder(messages);
   let assistantRun: RuntimeMessage[] = [];
   let assistantRunHandledSteerMessageIds: string[] = [];
   let assistantRunMessageIds: string[] = [];
-  let assistantRunSteerMessages: RuntimeMessage[] = [];
   let assistantRunToolAttachments: RuntimeMessageAttachment[] = [];
   let assistantRunTurnId: string | undefined;
   const pendingSteerMessagesByTurnId = new Map<string, RuntimeMessage[]>();
   const userItemByTurnId = new Map<string, Extract<ChatTranscriptItem, { type: 'user' }>>();
   const seenUserTurnIds = new Set<string>();
   let lastUserItem: Extract<ChatTranscriptItem, { type: 'user' }> | null = null;
-
-  const attachPendingSteersToAssistantRun = (turnId: string) => {
-    const pending = pendingSteerMessagesByTurnId.get(turnId) ?? [];
-    const attachedIds = new Set(assistantRunSteerMessages.map((message) => message.id));
-    for (const message of pending) {
-      if (attachedIds.has(message.id)) continue;
-      assistantRunMessageIds.push(message.id);
-      assistantRunSteerMessages.push(message);
-      attachedIds.add(message.id);
-    }
-  };
 
   const flushAssistantRun = () => {
     if (!assistantRun.length) return;
@@ -91,20 +80,19 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       handledSteerMessageIds: assistantRunHandledSteerMessageIds,
       messageIds: assistantRunMessageIds,
       segments: assistantRun,
-      steerMessages: assistantRunSteerMessages,
+      steerMessages: [],
       ...(assistantRunToolAttachments.length ? { toolAttachments: assistantRunToolAttachments } : {}),
       turnId: assistantRunTurnId,
     });
     assistantRun = [];
     assistantRunHandledSteerMessageIds = [];
     assistantRunMessageIds = [];
-    assistantRunSteerMessages = [];
     assistantRunToolAttachments = [];
     assistantRunTurnId = undefined;
   };
 
   // 压缩结果里的 messages 是模型窗口顺序；分隔符需要恢复到真实 transcript 时间线。
-  for (const message of messagesInTranscriptOrder(messages)) {
+  for (const message of orderedMessages) {
     // model-only 消息只服务 prompt，不应该出现在用户 transcript。
     if (message.visibility === 'model') continue;
     if (message.role === 'tool') {
@@ -153,7 +141,6 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       if (turnId && !userItemByTurnId.has(turnId) && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === turnId)) {
         userItemByTurnId.set(turnId, lastUserItem);
       }
-      if (turnId) attachPendingSteersToAssistantRun(turnId);
       const handledSteerMessageIds = turnId && assistantHasProcessingEvidence(message)
         ? (pendingSteerMessagesByTurnId.get(turnId) ?? []).map((pendingMessage) => pendingMessage.id)
         : [];
@@ -185,10 +172,6 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
         userItem.messageIds.push(message.id);
         userItem.steerMessages.push(message);
       }
-      if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) {
-        assistantRunMessageIds.push(message.id);
-        assistantRunSteerMessages.push(message);
-      }
       const pending = pendingSteerMessagesByTurnId.get(message.turnId) ?? [];
       pending.push(message);
       pendingSteerMessagesByTurnId.set(message.turnId, pending);
@@ -212,19 +195,62 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   }
 
   flushAssistantRun();
-  assignAssistantTimelineSteerOwnership(items);
+  assignAssistantTimelineSteerOwnership(items, orderedMessages);
   return items;
 }
 
-function assignAssistantTimelineSteerOwnership(items: ChatTranscriptItem[]): void {
-  const ownedIds = new Set(items.flatMap((item) =>
-    item.type === 'assistant' ? item.steerMessages.map((message) => message.id) : []));
+function assignAssistantTimelineSteerOwnership(
+  items: ChatTranscriptItem[],
+  orderedMessages: RuntimeMessage[],
+): void {
+  const messageOrder = new Map(orderedMessages.map((message, index) => [message.id, index]));
+  const assistantItems = items.filter(
+    (item): item is Extract<ChatTranscriptItem, { type: 'assistant' }> => item.type === 'assistant',
+  );
+
   for (const item of items) {
     if (item.type !== 'user') continue;
-    item.assistantTimelineSteerMessageIds = item.steerMessages
-      .filter((message) => ownedIds.has(message.id))
-      .map((message) => message.id);
+    for (const steerMessage of item.steerMessages) {
+      const owner = assistantTimelineOwner(assistantItems, steerMessage, messageOrder);
+      if (!owner) continue;
+      if (!owner.steerMessages.some((message) => message.id === steerMessage.id)) {
+        owner.steerMessages.push(steerMessage);
+      }
+      if (!owner.messageIds.includes(steerMessage.id)) owner.messageIds.push(steerMessage.id);
+      item.assistantTimelineSteerMessageIds.push(steerMessage.id);
+    }
   }
+
+  for (const item of assistantItems) {
+    item.steerMessages.sort((left, right) => messageIndex(messageOrder, left.id) - messageIndex(messageOrder, right.id));
+    item.messageIds.sort((left, right) => messageIndex(messageOrder, left) - messageIndex(messageOrder, right));
+  }
+}
+
+function assistantTimelineOwner(
+  items: Array<Extract<ChatTranscriptItem, { type: 'assistant' }>>,
+  steerMessage: RuntimeMessage,
+  messageOrder: ReadonlyMap<string, number>,
+): Extract<ChatTranscriptItem, { type: 'assistant' }> | null {
+  const steerIndex = messageIndex(messageOrder, steerMessage.id);
+  const candidates = items
+    .filter((item) => sameTurn(item.turnId, steerMessage.turnId))
+    .map((item) => ({
+      item,
+      firstIndex: Math.min(...item.segments.map((segment) => messageIndex(messageOrder, segment.id))),
+      lastIndex: Math.max(...item.segments.map((segment) => messageIndex(messageOrder, segment.id))),
+    }));
+  const following = candidates
+    .filter((candidate) => candidate.lastIndex > steerIndex)
+    .sort((left, right) => left.firstIndex - right.firstIndex)[0];
+  if (following) return following.item;
+  return candidates
+    .filter((candidate) => candidate.firstIndex < steerIndex)
+    .sort((left, right) => right.lastIndex - left.lastIndex)[0]?.item ?? null;
+}
+
+function messageIndex(messageOrder: ReadonlyMap<string, number>, messageId: string): number {
+  return messageOrder.get(messageId) ?? Number.MAX_SAFE_INTEGER;
 }
 
 function messagesInTranscriptOrder(messages: RuntimeMessage[]): RuntimeMessage[] {

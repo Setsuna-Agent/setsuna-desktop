@@ -10,6 +10,7 @@ import type {
   ToolSet,
 } from 'ai';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
+import { LegacyThinkTagStreamDecoder } from './legacy-think-tag-stream.js';
 import { doneEvent } from './provider-stream.js';
 import { stringValue } from './provider-values.js';
 
@@ -35,6 +36,7 @@ type AiSdkStreamState = {
   toolItemsStarted: Set<string>;
   toolItemsCompleted: Set<string>;
   ignoredToolIds: Set<string>;
+  legacyThinkDecoders: Map<string, LegacyThinkTagStreamDecoder>;
 };
 
 export type AiSdkStreamBridgeOptions = {
@@ -45,6 +47,7 @@ export type AiSdkStreamBridgeOptions = {
   reasoningItemId?: (sourceId: string, ordinal: number) => string;
   toolCallArguments?: (toolCallId: string) => string | undefined;
   includeToolName?: boolean;
+  legacyThinkTags?: boolean;
   useRawFinishReason?: boolean;
   handleReasoning?: boolean;
   onPart?: (part: TextStreamPart<ToolSet>) => void;
@@ -72,8 +75,10 @@ export async function* bridgeAiSdkStream(
     if (part.type === 'text-start') {
       yield* startTextItem(state, part.id, options);
     } else if (part.type === 'text-delta') {
-      yield* textItemDelta(state, part.id, part.text, options);
+      if (options.legacyThinkTags) yield* legacyTextItemDelta(state, part.id, part.text, options);
+      else yield* textItemDelta(state, part.id, part.text, options);
     } else if (part.type === 'text-end') {
+      if (options.legacyThinkTags) yield* finishLegacyTextItem(state, part.id, options);
       yield* completeTextItem(state.textItems, part.id, 'agent_message');
     } else if (part.type === 'reasoning-start') {
       if (options.handleReasoning !== false) yield* startReasoningItem(state, part.id, options);
@@ -131,6 +136,7 @@ export async function* bridgeAiSdkStream(
     }
   }
 
+  if (options.legacyThinkTags) yield* finishOpenLegacyTextItems(state, options);
   yield* completeOpenTextItems(state);
   const fallbackCalls = completeToolCalls(state.toolCalls)
     .filter((toolCall) => !state.toolItemsCompleted.has(toolCall.id));
@@ -204,7 +210,57 @@ function createStreamState(): AiSdkStreamState {
     toolItemsStarted: new Set(),
     toolItemsCompleted: new Set(),
     ignoredToolIds: new Set(),
+    legacyThinkDecoders: new Map(),
   };
+}
+
+function* legacyTextItemDelta(
+  state: AiSdkStreamState,
+  sourceId: string,
+  delta: string,
+  options: AiSdkStreamBridgeOptions,
+): Generator<ModelStreamEvent> {
+  const decoder = state.legacyThinkDecoders.get(sourceId) ?? new LegacyThinkTagStreamDecoder();
+  state.legacyThinkDecoders.set(sourceId, decoder);
+  yield* appendLegacyTextChunks(state, sourceId, decoder.push(delta), options);
+}
+
+function* finishLegacyTextItem(
+  state: AiSdkStreamState,
+  sourceId: string,
+  options: AiSdkStreamBridgeOptions,
+): Generator<ModelStreamEvent> {
+  const decoder = state.legacyThinkDecoders.get(sourceId);
+  if (!decoder) return;
+  const chunks = decoder.finish();
+  yield* completeTextItem(state.reasoningItems, legacyReasoningSourceId(sourceId), 'reasoning');
+  yield* appendLegacyTextChunks(state, sourceId, chunks, options);
+  state.legacyThinkDecoders.delete(sourceId);
+}
+
+function* finishOpenLegacyTextItems(
+  state: AiSdkStreamState,
+  options: AiSdkStreamBridgeOptions,
+): Generator<ModelStreamEvent> {
+  for (const sourceId of [...state.legacyThinkDecoders.keys()]) {
+    yield* finishLegacyTextItem(state, sourceId, options);
+  }
+}
+
+function* appendLegacyTextChunks(
+  state: AiSdkStreamState,
+  sourceId: string,
+  chunks: ReturnType<LegacyThinkTagStreamDecoder['push']>,
+  options: AiSdkStreamBridgeOptions,
+): Generator<ModelStreamEvent> {
+  for (const chunk of chunks) {
+    if (chunk.type === 'content') yield* textItemDelta(state, sourceId, chunk.text, options);
+    else yield* reasoningItemDelta(state, legacyReasoningSourceId(sourceId), chunk.text, options);
+  }
+}
+
+function legacyReasoningSourceId(sourceId: string): string {
+  return `${sourceId}:legacy-think`;
 }
 
 function* startTextItem(

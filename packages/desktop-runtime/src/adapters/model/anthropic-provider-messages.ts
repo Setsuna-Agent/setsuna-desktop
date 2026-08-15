@@ -15,7 +15,7 @@ import {
   parseAiSdkToolInput,
   type AiSdkPromptOptions,
 } from './ai-sdk-prompt.js';
-import { portableAssistantText } from './provider-message-content.js';
+import { providerAssistantText } from './provider-message-content.js';
 import {
   isLegacyAnthropicMetadata,
   providerMetadataMatchesReplayContext,
@@ -69,7 +69,7 @@ function anthropicAssistantContent(
   if (replayBlocks.length) return replayBlocks.map(toAiSdkAnthropicBlock);
 
   const parts: AiSdkAssistantPart[] = [];
-  const assistantText = portableAssistantText(message.content);
+  const assistantText = providerAssistantText(message);
   if (assistantText) parts.push({ type: 'text', text: assistantText });
   for (const toolCall of message.toolCalls ?? []) {
     parts.push({

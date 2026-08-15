@@ -59,6 +59,7 @@ export class AiSdkOpenAiCompatibleModelClient implements ModelClient {
     yield* bridgeAiSdkStream(result.fullStream, {
       provider: this.provider,
       model: modelId,
+      legacyThinkTags: true,
     });
   }
 }

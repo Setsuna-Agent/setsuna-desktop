@@ -13,7 +13,7 @@ import {
   type ToolSet,
   type UserContent,
 } from 'ai';
-import { portableAssistantText } from './provider-message-content.js';
+import { providerAssistantText } from './provider-message-content.js';
 
 export type AiSdkPromptOptions = {
   assistantContent?: (message: RuntimeMessage) => AssistantContent;
@@ -131,9 +131,7 @@ export function parseAiSdkToolInput(argumentsText: string): unknown {
 }
 
 function defaultAssistantContent(message: RuntimeMessage): AssistantContent {
-  // Current messages keep reasoning in structured stream parts. Strip the deprecated tag-based
-  // encoding as well so historical transcripts cannot replay private reasoning to providers.
-  const assistantText = portableAssistantText(message.content);
+  const assistantText = providerAssistantText(message);
   if (!message.toolCalls?.length) return assistantText;
   return [
     ...(assistantText.trim() ? [{ type: 'text' as const, text: assistantText }] : []),
