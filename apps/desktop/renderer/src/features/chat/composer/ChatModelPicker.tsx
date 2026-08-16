@@ -51,7 +51,7 @@ export function ChatModelPicker({
       : t('chat.model.switch')
     : t('chat.model.select');
   const focusedOptionKey = visibleOptions[activeIndex]?.key;
-  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(focusedOptionKey, open);
+  const { activeOptionRef, floatingCursorRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(focusedOptionKey, open);
 
   const closePicker = useCallback(() => {
     setOpen(false);
@@ -123,6 +123,7 @@ export function ChatModelPicker({
             />
           </div>
           <div ref={scrollContainerRef} className="chat-skill-command-menu__list chat-command-menu__list chat-model-command-menu__list">
+            <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
             {visibleOptions.length ? (
               visibleOptions.map((option, index) => {
                 const selected = option.key === activeKey;

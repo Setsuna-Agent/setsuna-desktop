@@ -47,6 +47,12 @@
   --app-accent-border: color-mix(in srgb, var(--app-primary) 30%, var(--app-border));
   --app-danger: #dc2626;
   --app-danger-bg: #fef2f2;
+  --app-success-bg: color-mix(in srgb, var(--app-green) 12%, transparent);
+  --app-warning-bg: color-mix(in srgb, var(--app-orange) 12%, transparent);
+  --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 4%, transparent);
+  /* 等宽数字 chip（diff 统计、优先级徽章等），对齐参考站代码徽章风格。 */
+  --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 5%, transparent);
+  --app-mono-chip-radius: var(--app-radius-xs);
   --app-success: var(--app-green-active);
   --app-warning: var(--app-orange-active);
   --file-icon-seti-blue: #519aba;
@@ -60,10 +66,15 @@
   --file-icon-seti-white: #6d8086;
   --file-icon-seti-yellow: #a18f24;
   --file-icon-seti-ignore: #899599;
-  --app-radius-xs: 5px;
-  --app-radius-sm: 6px;
-  --app-radius-md: 8px;
-  --app-radius-lg: 10px;
+  /* 圆角层级：xs 行内 chip、sm 小控件、md 标准控件、lg 卡片、xl 浮层。 */
+  --app-radius-xs: 6px;
+  --app-radius-sm: 7px;
+  --app-radius-md: 9px;
+  --app-radius-lg: 12px;
+  --app-radius-xl: 16px;
+  /* Win11 DWM 按约 8px 裁剪 HWND 外沿；窗口壳圆角必须与系统圆角同心，
+     不能跟随卡片圆角令牌放大，否则壳边框与系统裁剪之间露出底色带。 */
+  --app-window-radius: 8px;
   --app-topbar-height: 42px;
   --app-topbar-item-gap: 8px;
   --app-topbar-navigation-control-size: 28px;
@@ -192,6 +203,10 @@
   --app-primary-text: #181818;
   --app-danger: #f87171;
   --app-danger-bg: rgba(248, 113, 113, 0.11);
+  --app-success-bg: color-mix(in srgb, var(--app-green) 16%, transparent);
+  --app-warning-bg: color-mix(in srgb, var(--app-orange) 16%, transparent);
+  --app-shadow-card: 0 1px 2px color-mix(in srgb, #000000 22%, transparent);
+  --app-mono-chip-bg: color-mix(in srgb, var(--app-text) 8%, transparent);
   --app-success: var(--app-green-hover);
   --app-warning: var(--app-orange-hover);
   --file-icon-seti-white: #d4d7d6;

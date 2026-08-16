@@ -259,7 +259,7 @@
 .chat-review-summary-card__panel {
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-surface);
 }
 
@@ -310,10 +310,12 @@
 }
 
 .chat-review-summary-card__priority {
-  padding: 1px 5px;
-  border: 1px solid var(--app-border);
-  border-radius: 4px;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text-secondary);
+  background: var(--app-mono-chip-bg);
+  font-family: var(--app-code-font-family);
   font-size: 11px;
 }
 
@@ -350,7 +352,7 @@
   max-width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   color: var(--app-text);
   background: var(--chat-message-user-bg);
   box-sizing: border-box;
@@ -489,7 +491,7 @@
   max-width: 100%;
   padding: 10px 14px;
   border: 0;
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   background: var(--chat-message-user-bg);
 }
 
@@ -525,7 +527,7 @@
 .chat-message-image {
   min-width: 0;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-lg);
   overflow: hidden;
   background: var(--app-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
@@ -590,7 +592,7 @@
   min-height: 56px;
   padding: 7px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: 0 1px 2px color-mix(in srgb, #000 5%, transparent);
@@ -744,7 +746,7 @@
   min-width: 0;
   max-width: min(680px, 100%);
   border: 0;
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   color: var(--app-text);
   background: var(--chat-message-user-bg);
   box-shadow: none;

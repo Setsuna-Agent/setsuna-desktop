@@ -246,6 +246,14 @@
     transition: none;
   }
 
+  .chat-command-menu {
+    animation: none;
+  }
+
+  .chat-command-menu__cursor {
+    transition: none;
+  }
+
   .chat-attachment {
     animation: none;
     transition: none;
@@ -263,6 +271,7 @@
 
 .chat-command-menu {
   display: grid;
+  position: relative;
   gap: 2px;
   width: min(var(--chat-content-max-width), 100%);
   max-height: 280px;
@@ -270,9 +279,22 @@
   padding: 8px;
   overflow: auto;
   border: 1px solid var(--desktop-agent-panel-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   background: var(--desktop-agent-main-surface);
   box-shadow: var(--desktop-agent-input-shadow);
+  animation: chat-command-menu-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes chat-command-menu-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
 }
 
 .chat-sender > .chat-command-menu {
@@ -414,14 +436,8 @@
   color: var(--app-text);
   background: transparent;
   text-align: left;
-}
-
-.chat-command-menu__item:hover {
-  background: var(--desktop-agent-control-hover-bg);
-}
-
-.chat-command-menu__item.is-active {
-  background: var(--desktop-agent-control-active-bg);
+  position: relative;
+  z-index: 1;
 }
 
 .chat-command-menu__item:disabled {
@@ -523,8 +539,35 @@
 
 .chat-command-menu__list {
   display: grid;
+  position: relative;
   gap: 4px;
   overflow-y: auto;
+}
+
+/* 浮动高亮块：键盘/鼠标切换 active 时在条目间滑动，替代逐项变色。 */
+.chat-command-menu__cursor {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  left: 8px;
+  z-index: 0;
+  border-radius: var(--app-radius-sm);
+  background: var(--desktop-agent-control-active-bg);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    translate 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 120ms ease;
+}
+
+.chat-command-menu__cursor.is-visible {
+  opacity: 1;
+}
+
+/* 模型菜单的光标挂在无内边距的 __list 内，与条目等宽。 */
+.chat-command-menu__list > .chat-command-menu__cursor {
+  right: 0;
+  left: 0;
 }
 
 .chat-selected-skills {
@@ -580,7 +623,7 @@
   width: min(var(--chat-content-max-width), 100%);
   overflow: visible;
   border: 1px solid var(--desktop-agent-panel-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   background: var(--desktop-agent-main-surface);
   box-shadow: var(--desktop-agent-input-shadow) !important;
   transition: border-color 160ms ease, box-shadow 160ms ease;
@@ -1164,7 +1207,7 @@
   overflow: hidden;
   padding: 0;
   border: 1px solid var(--app-border);
-  border-radius: 18px;
+  border-radius: var(--app-radius-xl);
   color: var(--app-text);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-modal);
