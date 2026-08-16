@@ -50,11 +50,12 @@ export function ChatSlashCommandMenu({
   onSelect: (item: SlashCommandMenuItem) => void;
 }) {
   const { t } = useI18n();
-  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(items[activeIndex]?.key);
+  const { activeOptionRef, floatingCursorRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(items[activeIndex]?.key);
   const sections = createSlashCommandMenuSections(items);
 
   return (
     <div ref={scrollContainerRef} className="chat-command-menu chat-skill-command-menu" role="listbox" aria-label={t('chat.command.label')}>
+      <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
       {items.length ? (
         sections.map((section) => {
           const sectionLabel = section.id === 'skills' ? t('chat.command.skill') : t('chat.command.label');

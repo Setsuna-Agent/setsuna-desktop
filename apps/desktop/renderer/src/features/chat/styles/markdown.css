@@ -180,11 +180,11 @@ a.chat-markdown__file-link:focus-visible {
 }
 
 .chat-markdown code:not(pre code) {
-  padding: 0.11em 0.36em;
-  border: 1px solid color-mix(in srgb, var(--app-border) 78%, transparent);
-  border-radius: 4px;
+  padding: 0.14em 0.4em;
+  border: 0;
+  border-radius: var(--app-radius-xs);
   color: var(--app-text);
-  background: color-mix(in srgb, var(--app-text) 7%, transparent);
+  background: var(--app-mono-chip-bg);
   font-family: var(--app-code-font-family);
   font-size: 0.91em;
   line-height: inherit;

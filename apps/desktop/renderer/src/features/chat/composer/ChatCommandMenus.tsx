@@ -26,10 +26,11 @@ export function ProjectEntryCommandMenu({
   const { t } = useI18n();
   const activeEntry = entries[activeIndex];
   const activeEntryKey = activeEntry ? `${activeEntry.kind}:${activeEntry.path}` : null;
-  const { activeOptionRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(activeEntryKey);
+  const { activeOptionRef, floatingCursorRef, scrollContainerRef } = useActiveOptionScroll<HTMLDivElement, HTMLButtonElement>(activeEntryKey);
 
   return (
     <div ref={scrollContainerRef} className="chat-command-menu chat-project-entry-command-menu" role="listbox" aria-label={t('chat.command.projectFiles')}>
+      <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
       <div className="chat-command-menu__title">{t('chat.command.projectFiles')}</div>
       {!hasProject ? (
         <div className="chat-command-menu__state">{t('chat.command.chooseProject')}</div>

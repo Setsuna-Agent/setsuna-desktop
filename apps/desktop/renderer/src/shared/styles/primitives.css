@@ -129,7 +129,7 @@
   width: min(360px, 100%);
   padding: 16px;
   border: 1px solid var(--desktop-agent-subtle-divider);
-  border-radius: var(--app-radius-lg);
+  border-radius: var(--app-radius-xl);
   background: var(--app-surface);
   box-shadow: var(--app-shadow-modal);
 }
@@ -410,7 +410,7 @@
   min-width: 24px;
   padding: 1px 6px;
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
-  border-radius: 5px;
+  border-radius: var(--app-radius-xs);
   color: inherit;
   background: color-mix(in srgb, currentColor 7%, transparent);
   font-family: var(--app-font-family);
@@ -433,7 +433,7 @@
   min-height: 28px;
   padding: 4px 8px;
   border: 1px solid var(--app-tooltip-border);
-  border-radius: 7px;
+  border-radius: var(--app-radius-md);
   color: var(--app-text);
   background-color: var(--app-tooltip-bg);
   box-shadow: var(--app-shadow-popover);
@@ -628,7 +628,7 @@
   gap: 2px;
   padding: 6px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
+  border-radius: var(--app-radius-lg);
   color: var(--app-text);
   background: color-mix(in srgb, var(--app-surface) 98%, var(--app-bg));
   box-shadow: 0 14px 34px rgb(0 0 0 / 14%), 0 2px 8px rgb(0 0 0 / 7%);
@@ -649,7 +649,7 @@
   min-height: 34px;
   padding: 6px 9px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--app-radius-md);
   color: var(--app-text);
   background: transparent;
   font: inherit;
@@ -747,14 +747,20 @@
 
 .sd-status--success {
   color: var(--app-success);
+  border-color: color-mix(in srgb, var(--app-success) 26%, transparent);
+  background: var(--app-success-bg);
 }
 
 .sd-status--warning {
   color: var(--app-warning);
+  border-color: color-mix(in srgb, var(--app-warning) 26%, transparent);
+  background: var(--app-warning-bg);
 }
 
 .sd-status--danger {
   color: var(--app-danger);
+  border-color: color-mix(in srgb, var(--app-danger) 26%, transparent);
+  background: var(--app-danger-bg);
 }
 
 .sd-check {

@@ -30,15 +30,25 @@ export function useActiveOptionScroll<TContainer extends HTMLElement, TOption ex
   enabled = true,
 ): {
   activeOptionRef: RefObject<TOption>;
+  floatingCursorRef: RefObject<HTMLDivElement>;
   scrollContainerRef: RefObject<TContainer>;
 } {
   const scrollContainerRef = useRef<TContainer>(null);
   const activeOptionRef = useRef<TOption>(null);
+  const floatingCursorRef = useRef<HTMLDivElement>(null);
+  const floatingCursorReadyRef = useRef(false);
 
   useLayoutEffect(() => {
     const container = scrollContainerRef.current;
     const option = activeOptionRef.current;
-    if (!enabled || !container || !option) return;
+    const cursor = floatingCursorRef.current;
+    /* 菜单关闭后重开时，光标应重新“无过渡”落位，而不是从旧位置飞回。 */
+    if (!enabled) floatingCursorReadyRef.current = false;
+    if (!enabled || !container) return;
+    if (!option) {
+      cursor?.classList.remove('is-visible');
+      return;
+    }
 
     const containerRect = container.getBoundingClientRect();
     const optionRect = option.getBoundingClientRect();
@@ -52,7 +62,25 @@ export function useActiveOptionScroll<TContainer extends HTMLElement, TOption ex
       viewportTop: containerRect.top,
     });
     if (nextScrollTop !== container.scrollTop) container.scrollTop = nextScrollTop;
+
+    /* 浮动高亮块跟随 active 项滑动；首次定位关闭过渡，避免从菜单顶部飞入。 */
+    if (cursor && cursor.parentElement === container) {
+      const placeCursor = () => {
+        cursor.style.height = `${option.offsetHeight}px`;
+        cursor.style.translate = `0 ${option.offsetTop}px`;
+      };
+      if (!floatingCursorReadyRef.current) {
+        cursor.style.transition = 'none';
+        placeCursor();
+        void cursor.offsetHeight;
+        cursor.style.transition = '';
+        floatingCursorReadyRef.current = true;
+      } else {
+        placeCursor();
+      }
+      cursor.classList.add('is-visible');
+    }
   }, [activeOptionKey, enabled]);
 
-  return { activeOptionRef, scrollContainerRef };
+  return { activeOptionRef, floatingCursorRef, scrollContainerRef };
 }
