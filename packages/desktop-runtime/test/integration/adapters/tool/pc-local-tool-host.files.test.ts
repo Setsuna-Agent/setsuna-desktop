@@ -260,7 +260,7 @@ describe('pc local file tools and previews', () => {
       patch: [
         '*** Begin Patch',
         '*** Update File: src/index.css',
-        '@@',
+        '@@   ',
         '-body { color: red; }',
         '+body { color: blue; }',
         '*** End Patch',

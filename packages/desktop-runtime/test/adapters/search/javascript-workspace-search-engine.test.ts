@@ -165,10 +165,10 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     },
   );
 
-  it('preserves significant spaces in security ignore patterns', async () => {
+  it('parses UTF-8 BOMs and significant spaces in security ignore patterns', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-spaces-'));
     await writeFile(path.join(root, '.setsunaignore'), [
-      ' leading-secret.txt',
+      '\uFEFF leading-secret.txt',
       'trailing-secret.txt\\ ',
       'ordinary-trailing-spaces.txt   ',
       '',
@@ -181,5 +181,13 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(matcher.ignores('trailing-secret.txt ')).toBe(true);
     expect(matcher.ignores('trailing-secret.txt')).toBe(false);
     expect(matcher.ignores('ordinary-trailing-spaces.txt')).toBe(true);
+  });
+
+  it('fails closed when a security ignore source exists but cannot be read', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-unreadable-ignore-'));
+    await mkdir(path.join(root, '.setsunaignore'));
+
+    await expect(createWorkspaceIgnoreMatcher(root, { securityOnly: true }))
+      .rejects.toThrow('Unable to read security ignore file');
   });
 });

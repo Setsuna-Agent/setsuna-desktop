@@ -115,14 +115,20 @@ export async function createWorkspaceIgnoreMatcher(
     : DEFAULT_IGNORE_PATTERNS.map((line) => parseIgnoreLine(line, caseInsensitive)).filter(isIgnoreRule);
   const fileNames = options.securityOnly ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : IGNORE_FILES;
   for (const fileName of fileNames) {
+    const ignoreFilePath = path.join(root, fileName);
     try {
-      const content = await readFile(path.join(root, fileName), 'utf8');
+      const content = (await readFile(ignoreFilePath, 'utf8')).replace(/^\uFEFF/u, '');
       rules.push(...content
         .split(/\r?\n/)
         .map((line) => parseIgnoreLine(line, caseInsensitive))
         .filter(isIgnoreRule));
-    } catch {
-      // 忽略规则文件是可选的，缺失时不应影响工作区索引。
+    } catch (error) {
+      if (isNodeError(error) && error.code === 'ENOENT') continue;
+      if (WORKSPACE_SECURITY_IGNORE_FILE_NAMES.some((name) => name === fileName)) {
+        throw new Error(`Unable to read security ignore file: ${ignoreFilePath}`, { cause: error });
+      }
+      // Ordinary ignore files are optional for the file index. Security-specific
+      // sources above fail closed because silently skipping them can expose secrets.
     }
   }
   return new WorkspaceIgnoreMatcher(rules);

@@ -112,7 +112,8 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
           if (previous && !chunkHasChanges(previous)) {
             return { ok: false, error: `更新文件 ${filePath} 的 hunk 不包含变更行。` };
           }
-          chunks.push(createUpdateChunk(hunkLine === '@@' ? null : hunkLine.slice(3)));
+          const changeContext = hunkLine.slice(3);
+          chunks.push(createUpdateChunk(changeContext.trim() ? changeContext : null));
           index += 1;
           continue;
         }
