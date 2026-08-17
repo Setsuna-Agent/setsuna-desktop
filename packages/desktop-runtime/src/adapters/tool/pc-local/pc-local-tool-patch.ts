@@ -259,7 +259,8 @@ export function applyPatchHunks(
     nextLines.splice(replacement.start, replacement.oldLength, ...replacement.newLines);
   }
   let nextContent = nextLines.join('\n');
-  if (hasFinalNewline) nextContent += '\n';
+  // Codex update patches normalize every non-empty result to a terminated text file.
+  if (nextLines.length) nextContent += '\n';
   if (useCrLf) nextContent = nextContent.replace(/\n/g, '\r\n');
   return { ok: true, content: nextContent };
 }

@@ -317,12 +317,12 @@ describe('pc local file tools and previews', () => {
     ].join('\n'));
   });
 
-  it('preserves the order of multiple append-only patch chunks', async () => {
+  it('preserves append-only patch order and terminates a non-empty result', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
     const filePath = path.join(projectDir, 'ordered-appends.txt');
 
-    await writeFile(filePath, 'existing\n', 'utf8');
+    await writeFile(filePath, 'existing', 'utf8');
 
     await host.runTool('apply_patch', {
       patch: [
