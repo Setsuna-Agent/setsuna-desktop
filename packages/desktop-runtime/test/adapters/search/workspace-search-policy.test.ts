@@ -25,6 +25,7 @@ describe('workspace search policy', () => {
     const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
 
     expect(includeIgnoredDefaults).not.toContain('**/node_modules/**');
+    expect(includeIgnoredDefaults).toContain('**/.git');
     expect(includeIgnoredDefaults).toContain('**/.git/**');
     expect(includeIgnoredDefaults).toContain('**/.env');
     expect(includeIgnoredDefaults).toContain('**/.git-credentials');
@@ -37,6 +38,13 @@ describe('workspace search policy', () => {
       [],
       includeIgnoredDefaults,
     )).toBe(false);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, '.git'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
     expect(isWorkspaceSearchPathExcluded(
       root,
       path.join(root, '.git', 'config'),
@@ -88,6 +96,29 @@ describe('workspace search policy', () => {
     )).toBe(true);
   });
 
+  it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
+    'matches built-in sensitive paths case-insensitively on case-insensitive desktop platforms',
+    () => {
+      const root = path.resolve('/workspace');
+      const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
+
+      expect(isWorkspaceSearchPathExcluded(
+        root,
+        path.join(root, 'node_modules', 'pkg', '.ENVRC'),
+        [],
+        [],
+        includeIgnoredDefaults,
+      )).toBe(true);
+      expect(isWorkspaceSearchPathExcluded(
+        root,
+        path.join(root, '.GIT', 'config'),
+        [],
+        [],
+        includeIgnoredDefaults,
+      )).toBe(true);
+    },
+  );
+
   it('ripgrep globs for include-ignored searches drop generated paths but keep VCS and secrets', () => {
     const root = path.resolve('/workspace');
 
@@ -95,6 +126,7 @@ describe('workspace search policy', () => {
 
     expect(globs).not.toContain('**/node_modules/**');
     expect(globs).toEqual(expect.arrayContaining([
+      '**/.git',
       '**/.git/**',
       '**/.env',
       '**/.env.*',

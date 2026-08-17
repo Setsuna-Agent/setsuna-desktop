@@ -90,7 +90,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
       },
       include_ignored: {
         type: 'boolean',
-        description: 'Also search generated and dependency paths that are excluded by default, such as node_modules, dist, build, and files matched by workspace ignore files. Defaults to false. Credential and secret files are never searched.',
+        description: 'Also search generated and dependency paths that are excluded by default, such as node_modules, dist, build, and files matched by ordinary workspace ignore files. Defaults to false. Known sensitive paths and rules from .setsunaignore or .qwenignore remain excluded.',
       },
     },
     ['query'],

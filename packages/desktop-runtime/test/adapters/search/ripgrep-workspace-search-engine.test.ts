@@ -155,6 +155,8 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       await Promise.all([
         mkdir(path.join(root, '.github'), { recursive: true }),
         mkdir(path.join(root, 'src'), { recursive: true }),
+      ]);
+      await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
         writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
         writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { JavaScriptWorkspaceSearchEngine } from '../../../src/adapters/search/javascript-workspace-search-engine.js';
+import { createWorkspaceIgnoreMatcher } from '../../../src/adapters/tool/file-mentions.js';
 
 describe('JavaScriptWorkspaceSearchEngine', () => {
   it('applies ignore, hidden-file, sensitive-file, unicode, and symlink policy consistently', async () => {
@@ -11,6 +12,8 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     await Promise.all([
       mkdir(path.join(root, '.github'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
+    ]);
+    await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
       writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
       writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
@@ -161,4 +164,22 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       expect(result.matches).toEqual([]);
     },
   );
+
+  it('preserves significant spaces in security ignore patterns', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-spaces-'));
+    await writeFile(path.join(root, '.setsunaignore'), [
+      ' leading-secret.txt',
+      'trailing-secret.txt\\ ',
+      'ordinary-trailing-spaces.txt   ',
+      '',
+    ].join('\n'));
+
+    const matcher = await createWorkspaceIgnoreMatcher(root, { securityOnly: true });
+
+    expect(matcher.ignores(' leading-secret.txt')).toBe(true);
+    expect(matcher.ignores('leading-secret.txt')).toBe(false);
+    expect(matcher.ignores('trailing-secret.txt ')).toBe(true);
+    expect(matcher.ignores('trailing-secret.txt')).toBe(false);
+    expect(matcher.ignores('ordinary-trailing-spaces.txt')).toBe(true);
+  });
 });

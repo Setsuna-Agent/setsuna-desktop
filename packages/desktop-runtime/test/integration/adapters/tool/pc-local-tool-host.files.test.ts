@@ -314,6 +314,26 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(secondPath, 'utf8')).resolves.toBe('ALPHA\n\nOMEGA\n');
   });
 
+  it('rejects update hunks without additions or removals', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'unchanged.txt');
+
+    await writeFile(filePath, 'unchanged', 'utf8');
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: unchanged.txt',
+        '@@',
+        ' unchanged',
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow('hunk 不包含变更行');
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('unchanged');
+  });
+
   it('allows Add File patches to create empty files', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

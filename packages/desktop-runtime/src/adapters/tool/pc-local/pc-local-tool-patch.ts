@@ -109,7 +109,7 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         const hunkLine = lines[index];
         if (hunkLine === '@@' || hunkLine.startsWith('@@ ')) {
           const previous = chunks[chunks.length - 1];
-          if (previous && !chunkHasLines(previous)) {
+          if (previous && !chunkHasChanges(previous)) {
             return { ok: false, error: `更新文件 ${filePath} 的 hunk 不包含变更行。` };
           }
           chunks.push(createUpdateChunk(hunkLine === '@@' ? null : hunkLine.slice(3)));
@@ -118,7 +118,7 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         }
         if (hunkLine === '*** End of File') {
           const chunk = chunks[chunks.length - 1];
-          if (!chunk || !chunkHasLines(chunk)) {
+          if (!chunk || !chunkHasChanges(chunk)) {
             return { ok: false, error: `更新文件 ${filePath} 的 End of File 前缺少变更行。` };
           }
           chunk.isEndOfFile = true;
@@ -160,8 +160,8 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         index += 1;
       }
 
-      if ((!chunks.length && !moveTo) || chunks.some((chunk) => !chunkHasLines(chunk))) {
-        return { ok: false, error: `更新文件 ${filePath} 的 hunk 不能为空。` };
+      if ((!chunks.length && !moveTo) || chunks.some((chunk) => !chunkHasChanges(chunk))) {
+        return { ok: false, error: `更新文件 ${filePath} 的 hunk 不包含变更行。` };
       }
       operations.push({ type: 'update', path: filePath, moveTo, chunks });
       continue;
@@ -187,8 +187,9 @@ function pushContextLine(chunk: ApplyPatchUpdateChunk, line: string): void {
   chunk.newLines.push(line);
 }
 
-function chunkHasLines(chunk: ApplyPatchUpdateChunk): boolean {
-  return chunk.oldLines.length > 0 || chunk.newLines.length > 0;
+function chunkHasChanges(chunk: ApplyPatchUpdateChunk): boolean {
+  return chunk.oldLines.length !== chunk.contextLineIndices.length
+    || chunk.newLines.length !== chunk.contextLineIndices.length;
 }
 
 function hasFollowingChangeLineInChunk(lines: readonly string[], currentIndex: number, endIndex: number): boolean {

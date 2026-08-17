@@ -212,16 +212,31 @@ export class WorkspaceIgnoreMatcher {
 }
 
 function parseIgnoreLine(line: unknown, caseInsensitive = false): IgnoreRule | null {
-  let raw = String(line || '').trim();
+  // Gitignore keeps leading spaces and escaped trailing spaces significant.
+  // Only ordinary, unescaped trailing spaces are discarded.
+  let raw = trimUnescapedTrailingSpaces(String(line || ''));
   if (!raw || raw.startsWith('#')) return null;
   const escapedLeading = raw.startsWith('\\#') || raw.startsWith('\\!');
   if (escapedLeading) raw = raw.slice(1);
 
   const negated = !escapedLeading && raw.startsWith('!');
-  if (negated) raw = raw.slice(1).trim();
+  if (negated) raw = raw.slice(1);
   if (!raw) return null;
 
   return new IgnoreRule(raw, negated, caseInsensitive);
+}
+
+function trimUnescapedTrailingSpaces(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === ' ') {
+    let backslashes = 0;
+    for (let index = end - 2; index >= 0 && value[index] === '\\'; index -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1) break;
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 class IgnoreRule {

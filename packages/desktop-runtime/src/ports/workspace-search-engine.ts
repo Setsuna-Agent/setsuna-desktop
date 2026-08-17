@@ -24,8 +24,8 @@ export type WorkspaceTextSearchRequest = {
   /**
    * Opt back into content that the ignore policy normally hides, such as
    * dependency and build output directories (e.g. node_modules) and paths
-   * excluded by workspace ignore files. Credential and secret files remain
-   * excluded regardless of this flag.
+   * excluded by ordinary workspace ignore files. Known sensitive paths and
+   * rules from .setsunaignore or .qwenignore remain excluded.
    */
   includeIgnored?: boolean;
   excludeRoots?: readonly string[];

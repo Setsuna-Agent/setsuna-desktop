@@ -28,16 +28,19 @@ export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
 ] as const;
 
 /**
- * VCS metadata, credential, and secret paths are never searchable, even when an
- * include-ignored search opts generated directories back in. VCS config can
- * embed credentials (for example remote URLs with tokens), and well-known
+ * Listed VCS metadata, credential, and secret paths are never searchable, even
+ * when an include-ignored search opts generated directories back in. VCS config
+ * can embed credentials (for example remote URLs with tokens), and well-known
  * credential file names stay protected even when the ignore files that usually
  * hide them are lifted. This list is deliberately conservative; arbitrarily
  * named secrets still need .qwenignore/.setsunaignore protection.
  */
 export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
+  '**/.git',
   '**/.git/**',
+  '**/.hg',
   '**/.hg/**',
+  '**/.svn',
   '**/.svn/**',
   '**/.env',
   '**/.env.*',
@@ -51,6 +54,7 @@ export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.netrc',
   '**/.git-credentials',
   '**/.pypirc',
+  '**/.ssh',
   '**/.ssh/**',
   '**/.aws/credentials',
   '**/.docker/config.json',
@@ -208,8 +212,9 @@ function relativePolicyGlob(root: string, value: string): string | null {
 }
 
 function stripWorkspaceGlobRoot(normalizedRoot: string, raw: string): string | null {
-  const comparableRoot = process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot;
-  const comparableRaw = process.platform === 'win32' ? raw.toLowerCase() : raw;
+  const caseInsensitive = workspacePathComparisonCaseInsensitive();
+  const comparableRoot = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+  const comparableRaw = caseInsensitive ? raw.toLowerCase() : raw;
   if (comparableRaw === comparableRoot) return '**';
   if (!comparableRaw.startsWith(`${comparableRoot}/`)) return null;
   return raw.slice(normalizedRoot.length + 1);
@@ -235,11 +240,19 @@ function isAbsoluteGlob(value: string): boolean {
 function globMatchesPath(glob: string, relativePath: string): boolean {
   try {
     const normalizedGlob = glob.replace(/^\//u, '');
-    return new RegExp(`^${globToRegExpSource(normalizedGlob)}$`, process.platform === 'win32' ? 'i' : '').test(relativePath);
+    return new RegExp(
+      `^${globToRegExpSource(normalizedGlob)}$`,
+      workspacePathComparisonCaseInsensitive() ? 'i' : '',
+    ).test(relativePath);
   } catch {
     // Invalid deny patterns fail closed.
     return true;
   }
+}
+
+/** Fail conservatively on desktop platforms whose default filesystems ignore case. */
+function workspacePathComparisonCaseInsensitive(): boolean {
+  return process.platform === 'win32' || process.platform === 'darwin';
 }
 
 function globToRegExpSource(glob: string): string {
