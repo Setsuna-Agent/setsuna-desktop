@@ -138,8 +138,8 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(explicitlyScopedSecretSearch.matches).toEqual([]);
   });
 
-  it.runIf(process.platform === 'win32')(
-    'matches security ignore rules case-insensitively on Windows',
+  it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
+    'matches security ignore rules case-insensitively on case-insensitive desktop platforms',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-case-'));
       await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });

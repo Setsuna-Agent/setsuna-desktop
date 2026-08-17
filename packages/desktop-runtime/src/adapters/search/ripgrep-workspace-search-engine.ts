@@ -16,6 +16,7 @@ import {
   workspaceRelativeSearchPath,
   workspaceSearchDefaultExcludeGlobs,
   workspaceSearchIgnoreFiles,
+  workspaceIgnoreRulesCaseInsensitive,
 } from './workspace-search-policy.js';
 import { createWorkspaceIgnoreMatcher, type WorkspaceIgnoreMatcher } from '../tool/file-mentions.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
@@ -84,7 +85,8 @@ export function buildRipgrepArguments(input: {
   // Ignore files are pre-filtered by workspaceSearchIgnoreFiles: include-ignored
   // searches keep only security-specific sources so protected credential files
   // stay excluded while generated paths are opted back in.
-  if (process.platform === 'win32' && input.ignoreFiles?.length) {
+  if (workspaceIgnoreRulesCaseInsensitive({ securityOnly: Boolean(request.includeIgnored) })
+    && input.ignoreFiles?.length) {
     args.push('--ignore-file-case-insensitive');
   }
   for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);

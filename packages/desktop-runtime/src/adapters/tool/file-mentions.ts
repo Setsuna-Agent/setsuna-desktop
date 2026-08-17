@@ -1,6 +1,9 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { WORKSPACE_SECURITY_IGNORE_FILE_NAMES } from '../search/workspace-search-policy.js';
+import {
+  workspaceIgnoreRulesCaseInsensitive,
+  WORKSPACE_SECURITY_IGNORE_FILE_NAMES,
+} from '../search/workspace-search-policy.js';
 import { isNodeError } from '../../shared/node-errors.js';
 
 export type FileMentionEntry = {
@@ -106,7 +109,7 @@ export async function createWorkspaceIgnoreMatcher(
   // Security-only matchers serve include-ignored searches: they skip built-in
   // generated/secret patterns and ordinary ignore files, keeping only the
   // security-specific sources that protect arbitrarily named credential files.
-  const caseInsensitive = process.platform === 'win32';
+  const caseInsensitive = workspaceIgnoreRulesCaseInsensitive(options);
   const rules = options.securityOnly
     ? []
     : DEFAULT_IGNORE_PATTERNS.map((line) => parseIgnoreLine(line, caseInsensitive)).filter(isIgnoreRule);

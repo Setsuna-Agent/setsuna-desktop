@@ -75,6 +75,15 @@ export const WORKSPACE_IGNORE_FILE_NAMES = ['.gitignore', '.ignore', '.qwenignor
 export const WORKSPACE_SECURITY_IGNORE_FILE_NAMES = ['.qwenignore', '.setsunaignore'] as const;
 
 /**
+ * Windows paths are case-insensitive by default. macOS security-only matching
+ * is also conservative because its default volumes are case-insensitive, while
+ * ordinary ignore rules retain their native case semantics on case-sensitive volumes.
+ */
+export function workspaceIgnoreRulesCaseInsensitive(options: { securityOnly?: boolean } = {}): boolean {
+  return process.platform === 'win32' || (process.platform === 'darwin' && Boolean(options.securityOnly));
+}
+
+/**
  * Resolves the effective default exclusion layer for one search request.
  * Include-ignored searches lift generated-directory globs and ignore-file
  * rules, but sensitive file globs always stay in force.
