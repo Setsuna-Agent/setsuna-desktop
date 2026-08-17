@@ -126,6 +126,13 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
           continue;
         }
 
+        // Codex permits bare blank separators between hunks and file sections.
+        // Keep a bare blank as context only when another change follows in this hunk.
+        if (hunkLine === '' && !hasFollowingChangeLineInChunk(lines, index, endIndex)) {
+          index += 1;
+          continue;
+        }
+
         let chunk = chunks[chunks.length - 1];
         if (!chunk || chunk.isEndOfFile) {
           if (chunk?.isEndOfFile && hunkLine === '') {
@@ -182,6 +189,17 @@ function pushContextLine(chunk: ApplyPatchUpdateChunk, line: string): void {
 
 function chunkHasLines(chunk: ApplyPatchUpdateChunk): boolean {
   return chunk.oldLines.length > 0 || chunk.newLines.length > 0;
+}
+
+function hasFollowingChangeLineInChunk(lines: readonly string[], currentIndex: number, endIndex: number): boolean {
+  for (let index = currentIndex + 1; index < endIndex; index += 1) {
+    const line = lines[index];
+    if (line === '@@' || line.startsWith('@@ ') || line === '*** End of File' || isApplyPatchFileHeader(line)) {
+      return false;
+    }
+    if (line.startsWith('+') || line.startsWith('-')) return true;
+  }
+  return false;
 }
 
 function patchFilePath(line: string, marker: string): string {

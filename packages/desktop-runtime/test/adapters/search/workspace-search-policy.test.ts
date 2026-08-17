@@ -53,6 +53,13 @@ describe('workspace search policy', () => {
     )).toBe(true);
     expect(isWorkspaceSearchPathExcluded(
       root,
+      path.join(root, 'node_modules', 'pkg', '.envrc'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
       path.join(root, '.git-credentials'),
       [],
       [],

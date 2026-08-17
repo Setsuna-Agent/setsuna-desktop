@@ -41,6 +41,7 @@ export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.svn/**',
   '**/.env',
   '**/.env.*',
+  '**/.envrc',
   '**/*.pem',
   '**/*.key',
   '**/*.p12',

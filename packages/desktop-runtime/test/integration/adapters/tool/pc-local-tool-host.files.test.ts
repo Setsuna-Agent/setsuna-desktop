@@ -277,6 +277,43 @@ describe('pc local file tools and previews', () => {
       .resolves.toBe('body { color: blue; }\n');
   });
 
+  it('ignores bare separator blanks while preserving blank hunk context', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const firstPath = path.join(projectDir, 'first.txt');
+    const secondPath = path.join(projectDir, 'second.txt');
+
+    await writeFile(firstPath, 'one\ntwo\n', 'utf8');
+    await writeFile(secondPath, 'alpha\n\nomega\n', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: first.txt',
+        '@@',
+        '-one',
+        '+ONE',
+        '',
+        '@@',
+        '-two',
+        '+TWO',
+        '',
+        '*** Update File: second.txt',
+        '@@',
+        '-alpha',
+        '+ALPHA',
+        '',
+        '-omega',
+        '+OMEGA',
+        '',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(firstPath, 'utf8')).resolves.toBe('ONE\nTWO\n');
+    await expect(readFile(secondPath, 'utf8')).resolves.toBe('ALPHA\n\nOMEGA\n');
+  });
+
   it('allows Add File patches to create empty files', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
