@@ -142,7 +142,7 @@ dev 启动流程：
 
 ## CI
 
-`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。`master` 的严格分支保护要求 PR 基于最新基线通过通用 CI 和 Codex review gate，因此合入后不再为同一变更重复运行通用 CI。CodeQL Default setup 不扫描来自 fork 的 pull request，所以 CodeQL checks 不作为合并前 required checks；变更合入 `master` 后，由 GitHub code scanning 的默认分支 push 扫描统一覆盖。
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。`master` 的严格分支保护要求 PR 基于最新基线通过通用 CI，因此合入后不再为同一变更重复运行通用 CI。CodeQL Default setup 不扫描来自 fork 的 pull request，所以 CodeQL checks 不作为合并前 required checks；变更合入 `master` 后，由 GitHub code scanning 的默认分支 push 扫描统一覆盖。
 
 CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
 
@@ -152,7 +152,7 @@ CI 使用单个 `ubuntu-24.04` job，固定 pnpm `7.33.7`、Node.js `22` 和 Pyt
 4. `pnpm lint`。
 5. `pnpm test`（unit + integration）。
 
-`master` 还要求最新提交通过 Codex review gate：
+Codex review 不再是 `master` 的必需合并门禁；分支保护的 required checks 只包含通用 CI。`.github/workflows/codex-review.yml` 继续运行并写入 `Codex Review Gate` commit status，但仅作为 advisory 信号，不阻塞合并：
 
 1. `.github/workflows/codex-review.yml` 通过 `pull_request_target` 从受信任的默认分支执行，只 checkout 事件记录的 base SHA 来运行 gate helper，不 checkout 或运行 PR 代码。
 2. 仓库的 Codex Automatic Review 触发条件必须设置为“每次推送时”，由 Codex 在 PR 打开、转为 ready 和 push 新提交后自动审查当前 HEAD。
