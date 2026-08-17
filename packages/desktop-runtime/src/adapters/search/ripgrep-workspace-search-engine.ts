@@ -84,6 +84,9 @@ export function buildRipgrepArguments(input: {
   // Ignore files are pre-filtered by workspaceSearchIgnoreFiles: include-ignored
   // searches keep only security-specific sources so protected credential files
   // stay excluded while generated paths are opted back in.
+  if (process.platform === 'win32' && input.ignoreFiles?.length) {
+    args.push('--ignore-file-case-insensitive');
+  }
   for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
   const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
   for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {

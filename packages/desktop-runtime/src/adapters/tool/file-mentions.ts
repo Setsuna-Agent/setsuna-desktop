@@ -106,12 +106,18 @@ export async function createWorkspaceIgnoreMatcher(
   // Security-only matchers serve include-ignored searches: they skip built-in
   // generated/secret patterns and ordinary ignore files, keeping only the
   // security-specific sources that protect arbitrarily named credential files.
-  const rules = options.securityOnly ? [] : DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(isIgnoreRule);
+  const caseInsensitive = process.platform === 'win32';
+  const rules = options.securityOnly
+    ? []
+    : DEFAULT_IGNORE_PATTERNS.map((line) => parseIgnoreLine(line, caseInsensitive)).filter(isIgnoreRule);
   const fileNames = options.securityOnly ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : IGNORE_FILES;
   for (const fileName of fileNames) {
     try {
       const content = await readFile(path.join(root, fileName), 'utf8');
-      rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(isIgnoreRule));
+      rules.push(...content
+        .split(/\r?\n/)
+        .map((line) => parseIgnoreLine(line, caseInsensitive))
+        .filter(isIgnoreRule));
     } catch {
       // 忽略规则文件是可选的，缺失时不应影响工作区索引。
     }
@@ -202,7 +208,7 @@ export class WorkspaceIgnoreMatcher {
   }
 }
 
-function parseIgnoreLine(line: unknown): IgnoreRule | null {
+function parseIgnoreLine(line: unknown, caseInsensitive = false): IgnoreRule | null {
   let raw = String(line || '').trim();
   if (!raw || raw.startsWith('#')) return null;
   const escapedLeading = raw.startsWith('\\#') || raw.startsWith('\\!');
@@ -212,7 +218,7 @@ function parseIgnoreLine(line: unknown): IgnoreRule | null {
   if (negated) raw = raw.slice(1).trim();
   if (!raw) return null;
 
-  return new IgnoreRule(raw, negated);
+  return new IgnoreRule(raw, negated, caseInsensitive);
 }
 
 class IgnoreRule {
@@ -225,7 +231,7 @@ class IgnoreRule {
   readonly regex: RegExp;
   readonly descendantRegex: RegExp | null;
 
-  constructor(pattern: string, negated: boolean) {
+  constructor(pattern: string, negated: boolean, caseInsensitive = false) {
     this.original = pattern;
     this.negated = negated;
     this.directoryOnly = pattern.endsWith('/');
@@ -235,11 +241,11 @@ class IgnoreRule {
       .replace(/^\/+/, '')
       .replace(/\/+$/, '');
     this.hasSlash = this.pattern.includes('/');
-    this.regex = globToRegExp(this.pattern);
+    this.regex = globToRegExp(this.pattern, caseInsensitive);
     // Slash-qualified rules can name directories even without a trailing slash;
     // gitignore semantics then exclude every descendant of the matched directory.
     this.descendantRegex = this.anchored || this.hasSlash
-      ? globToRegExp(`${this.pattern}/**`)
+      ? globToRegExp(`${this.pattern}/**`, caseInsensitive)
       : null;
   }
 
@@ -287,7 +293,7 @@ function scoreFile(file: FileMentionEntry, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function globToRegExp(pattern: unknown): RegExp {
+function globToRegExp(pattern: unknown, caseInsensitive = false): RegExp {
   const text = String(pattern || '');
   let source = '';
   for (let index = 0; index < text.length; index += 1) {
@@ -325,7 +331,7 @@ function globToRegExp(pattern: unknown): RegExp {
     }
     source += escapeRegExp(char);
   }
-  return new RegExp(`^${source}$`);
+  return new RegExp(`^${source}$`, caseInsensitive ? 'i' : '');
 }
 
 function parseGlobCharacterClass(text: string, start: number): { end: number; source: string } | null {

@@ -137,4 +137,28 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     ]);
     expect(explicitlyScopedSecretSearch.matches).toEqual([]);
   });
+
+  it.runIf(process.platform === 'win32')(
+    'matches security ignore rules case-insensitively on Windows',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-case-'));
+      await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });
+      await Promise.all([
+        writeFile(path.join(root, '.setsunaignore'), 'vendor-secret.txt\n'),
+        writeFile(path.join(root, 'node_modules', 'dep', 'Vendor-Secret.txt'), 'NEEDLE credential\n'),
+      ]);
+
+      const result = await new JavaScriptWorkspaceSearchEngine().search({
+        root,
+        query: 'NEEDLE',
+        regex: false,
+        caseSensitive: true,
+        contextLines: 0,
+        maxResults: 20,
+        includeIgnored: true,
+      });
+
+      expect(result.matches).toEqual([]);
+    },
+  );
 });

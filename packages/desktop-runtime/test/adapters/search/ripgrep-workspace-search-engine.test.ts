@@ -66,6 +66,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     });
 
     expect(args).toEqual(expect.arrayContaining(['--ignore-file', path.join(root, '.setsunaignore')]));
+    expect(args.includes('--ignore-file-case-insensitive')).toBe(process.platform === 'win32');
     expect(args).not.toContain('!**/node_modules/**');
     expect(args).not.toContain('!**/dist/**');
     expect(args).toContain('!**/.git/**');
