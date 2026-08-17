@@ -129,9 +129,19 @@ export function ReviewSummarySection({
       : null,
     [focusRequest?.finding, summary],
   );
+  // The focus request carries provider/workspace coordinates while diff files
+  // are keyed by repository paths. Resolve before navigation so target keys
+  // match the registered file cards even when git root ≠ workspace root.
+  const resolvedFocusRequest = useMemo(() => {
+    if (!focusRequest?.path) return focusRequest ?? null;
+    const resolvedPath = resolveReviewFile(summary, focusRequest.path)?.path;
+    return resolvedPath && resolvedPath !== focusRequest.path
+      ? { ...focusRequest, path: resolvedPath }
+      : focusRequest;
+  }, [focusRequest, summary]);
   const { getDiffTargetRegistration, getTargetRef } = useReviewNavigation({
     findingTarget: focusedFindingTarget,
-    focusRequest,
+    focusRequest: resolvedFocusRequest,
   });
   const unanchoredFindingTarget = focusedFindingTarget
     && (!focusedFindingTarget.file || !focusedFindingTarget.anchor)
