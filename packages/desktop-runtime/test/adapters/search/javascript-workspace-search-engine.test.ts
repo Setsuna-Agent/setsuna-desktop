@@ -77,12 +77,13 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       mkdir(path.join(root, '.git'), { recursive: true }),
       mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
       mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
+      mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
       mkdir(path.join(root, 'dist'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
     ]);
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
-      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n**/private/\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n**/private/\nsecrets/vault\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
       writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
       writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
@@ -91,6 +92,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       writeFile(path.join(root, 'node_modules', 'dep', 'secret-artifact.dat'), 'NEEDLE nested class credential\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'custom secret.txt'), 'NEEDLE escaped credential\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'private', 'token.txt'), 'NEEDLE directory credential\n'),
+      writeFile(path.join(root, 'secrets', 'vault', 'token.txt'), 'NEEDLE slash-qualified credential\n'),
       writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
       writeFile(path.join(root, 'Secret-artifact.dat'), 'NEEDLE root class credential\n'),
       writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
@@ -116,6 +118,16 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       maxResults: 20,
       includeIgnored: true,
     });
+    const explicitlyScopedSecretSearch = await engine.search({
+      root,
+      query: 'NEEDLE',
+      regex: true,
+      caseSensitive: true,
+      contextLines: 0,
+      maxResults: 20,
+      includeIgnored: true,
+      scopePath: path.join(root, 'secrets', 'vault', 'token.txt'),
+    });
 
     expect(defaultSearch.matches.map((match) => match.path)).toEqual(['src/app.ts']);
     expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
@@ -123,5 +135,6 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       'node_modules/dep/index.js',
       'src/app.ts',
     ]);
+    expect(explicitlyScopedSecretSearch.matches).toEqual([]);
   });
 });

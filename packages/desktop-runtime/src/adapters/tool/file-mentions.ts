@@ -236,7 +236,9 @@ class IgnoreRule {
       .replace(/\/+$/, '');
     this.hasSlash = this.pattern.includes('/');
     this.regex = globToRegExp(this.pattern);
-    this.descendantRegex = this.directoryOnly && (this.anchored || this.hasSlash)
+    // Slash-qualified rules can name directories even without a trailing slash;
+    // gitignore semantics then exclude every descendant of the matched directory.
+    this.descendantRegex = this.anchored || this.hasSlash
       ? globToRegExp(`${this.pattern}/**`)
       : null;
   }
@@ -245,7 +247,9 @@ class IgnoreRule {
     const target = relativePath.replace(/^\.?\//, '').replace(/\/+$/, '');
     if (!target) return false;
     if (this.directoryOnly) return this.matchesDirectory(target, isDirectory);
-    if (this.anchored || this.hasSlash) return this.regex.test(target);
+    if (this.anchored || this.hasSlash) {
+      return this.regex.test(target) || Boolean(this.descendantRegex?.test(target));
+    }
     return target.split('/').some((segment) => this.regex.test(segment));
   }
 

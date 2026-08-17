@@ -248,11 +248,15 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     'rechecks security ignore rules when the scope explicitly names a file',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-secret-'));
-      await mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true });
-      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\n');
+      await Promise.all([
+        mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
+        mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
+      ]);
+      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\nsecrets/vault\n');
       const secretPaths = [
         path.join(root, 'node_modules', 'dep', 'custom secret.txt'),
         path.join(root, 'node_modules', 'dep', 'private', 'token.txt'),
+        path.join(root, 'secrets', 'vault', 'token.txt'),
       ];
       await Promise.all(secretPaths.map((secretPath) => writeFile(secretPath, 'NEEDLE custom credential\n')));
       const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
@@ -262,7 +266,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         scopePath,
       })));
 
-      expect(results.map((result) => result.matches)).toEqual([[], []]);
+      expect(results.map((result) => result.matches)).toEqual([[], [], []]);
     },
   );
 });
