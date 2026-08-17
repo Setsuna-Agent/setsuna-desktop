@@ -486,7 +486,7 @@ export async function calculateApplyPatch(
       continue;
     }
 
-    const update = applyPatchHunks(previousContent, operation.hunks, formatPath(filePath, state.root));
+    const update = applyPatchHunks(previousContent, operation.chunks, formatPath(filePath, state.root));
     if (!update.ok) return update;
     if (!moveToPath && update.content === previousContent) return { ok: false, error: `补丁没有改变文件：${formatPath(filePath, state.root)}` };
     if (moveToPath) {
@@ -666,9 +666,10 @@ export async function calculateEditFile(
     };
   }
 
+  const matchIndex = previousContent.indexOf(oldString);
   const nextContent = replaceAll
     ? previousContent.split(oldString).join(newString)
-    : previousContent.replace(oldString, newString);
+    : `${previousContent.slice(0, matchIndex)}${newString}${previousContent.slice(matchIndex + oldString.length)}`;
   const diff = buildFileDiff({
     filePath,
     root: state.root,

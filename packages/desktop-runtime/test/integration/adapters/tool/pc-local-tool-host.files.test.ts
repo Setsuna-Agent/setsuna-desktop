@@ -55,6 +55,28 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(path.join(projectDir, 'src', 'generated.txt'), 'utf8')).resolves.toBe('generated\n');
   });
 
+  it('treats precise edit replacement text literally', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'src', 'literal-replacement.ts');
+    const replacement = 'return new RegExp(`^${source}$`);';
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, 'prefix\nTARGET\nsuffix\n', 'utf8');
+
+    const edited = await host.runTool('edit', {
+      file_path: 'src/literal-replacement.ts',
+      old_string: 'TARGET',
+      new_string: replacement,
+    }, context);
+
+    expect(JSON.parse(edited.preview ?? '{}')).toMatchObject({
+      diff: { additions: 1, deletions: 1 },
+    });
+    await expect(readFile(filePath, 'utf8'))
+      .resolves.toBe(`prefix\n${replacement}\nsuffix\n`);
+  });
+
   it('keeps built-in Git output scoped and relative to a selected repository subdirectory', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-git-paths-'));
     const repositoryRoot = path.join(root, 'repo');
@@ -253,6 +275,46 @@ describe('pc local file tools and previews', () => {
     });
     await expect(readFile(path.join(projectDir, 'src', 'index.css'), 'utf8'))
       .resolves.toBe('body { color: blue; }\n');
+  });
+
+  it('uses Codex @@ context to target repeated patch content', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'src', 'repeated.ts');
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, [
+      'function first() {',
+      "  return 'same';",
+      '}',
+      '',
+      'function second() {',
+      "  return 'same';",
+      '}',
+      '',
+    ].join('\n'), 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/repeated.ts',
+        '@@ function second() {',
+        "-  return 'same';",
+        "+  return 'second';",
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe([
+      'function first() {',
+      "  return 'same';",
+      '}',
+      '',
+      'function second() {',
+      "  return 'second';",
+      '}',
+      '',
+    ].join('\n'));
   });
 
   it('accepts multi-file apply_patch calls', async () => {
