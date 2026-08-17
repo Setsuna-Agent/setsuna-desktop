@@ -277,6 +277,43 @@ describe('pc local file tools and previews', () => {
       .resolves.toBe('body { color: blue; }\n');
   });
 
+  it('allows Add File patches to create empty files', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'empty.txt');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: empty.txt',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('');
+  });
+
+  it('preserves file bytes in move-only patches', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const sourcePath = path.join(projectDir, 'source.txt');
+    const destinationPath = path.join(projectDir, 'destination.txt');
+
+    await writeFile(sourcePath, 'alpha', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: source.txt',
+        '*** Move to: destination.txt',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(destinationPath, 'utf8')).resolves.toBe('alpha');
+    await expect(readFile(sourcePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('uses Codex @@ context to target repeated patch content', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

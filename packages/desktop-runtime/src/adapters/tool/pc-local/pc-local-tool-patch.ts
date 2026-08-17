@@ -79,11 +79,10 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         contentLines.push(contentLine.slice(1));
         index += 1;
       }
-      if (!contentLines.length) return { ok: false, error: `新增文件 ${filePath} 的内容不能为空。` };
       operations.push({
         type: 'add',
         path: filePath,
-        content: `${contentLines.join('\n')}\n`,
+        content: contentLines.length ? `${contentLines.join('\n')}\n` : '',
       });
       continue;
     }
@@ -217,6 +216,7 @@ export function applyPatchHunks(
   label: string,
 ): ApplyPatchHunksResult {
   const original = String(content || '');
+  if (!chunks.length) return { ok: true, content: original };
   const useCrLf = /\r\n/.test(original);
   const normalized = original.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const hasFinalNewline = normalized.endsWith('\n');
