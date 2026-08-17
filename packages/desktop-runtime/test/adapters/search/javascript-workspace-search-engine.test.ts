@@ -81,12 +81,13 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     ]);
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
-      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
       writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
       writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'secret-artifact.dat'), 'NEEDLE nested class credential\n'),
+      writeFile(path.join(root, 'node_modules', 'dep', 'custom secret.txt'), 'NEEDLE escaped credential\n'),
       writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
       writeFile(path.join(root, 'Secret-artifact.dat'), 'NEEDLE root class credential\n'),
       writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),

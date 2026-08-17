@@ -247,8 +247,8 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-secret-'));
       await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });
-      await writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n');
-      const secretPath = path.join(root, 'node_modules', 'dep', 'custom-secret.txt');
+      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n');
+      const secretPath = path.join(root, 'node_modules', 'dep', 'custom secret.txt');
       await writeFile(secretPath, 'NEEDLE custom credential\n');
       const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
 

@@ -229,7 +229,8 @@ class IgnoreRule {
     this.negated = negated;
     this.directoryOnly = pattern.endsWith('/');
     this.anchored = pattern.startsWith('/');
-    this.pattern = slashPath(pattern)
+    // Ignore files use backslash as an escape character, not as a Windows separator.
+    this.pattern = pattern
       .replace(/^\/+/, '')
       .replace(/\/+$/, '');
     this.hasSlash = this.pattern.includes('/');
@@ -299,6 +300,11 @@ function globToRegExp(pattern: unknown): RegExp {
     }
     if (char === '?') {
       source += '[^/]';
+      continue;
+    }
+    if (char === '\\' && index + 1 < text.length) {
+      source += escapeRegExp(text[index + 1]);
+      index += 1;
       continue;
     }
     if (char === '[') {
