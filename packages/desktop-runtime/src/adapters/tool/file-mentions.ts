@@ -301,9 +301,40 @@ function globToRegExp(pattern: unknown): RegExp {
       source += '[^/]';
       continue;
     }
+    if (char === '[') {
+      const characterClass = parseGlobCharacterClass(text, index);
+      if (characterClass) {
+        source += characterClass.source;
+        index = characterClass.end;
+        continue;
+      }
+    }
     source += escapeRegExp(char);
   }
   return new RegExp(`^${source}$`);
+}
+
+function parseGlobCharacterClass(text: string, start: number): { end: number; source: string } | null {
+  let end = start + 1;
+  if (text[end] === '!' || text[end] === '^') end += 1;
+  if (text[end] === ']') end += 1;
+  while (end < text.length && (text[end] !== ']' || text[end - 1] === '\\')) end += 1;
+  if (end >= text.length) return null;
+
+  let body = text.slice(start + 1, end);
+  const negated = body.startsWith('!') || body.startsWith('^');
+  if (negated) body = body.slice(1);
+  if (!body) return null;
+  if (body.startsWith(']')) body = `\\${body}`;
+
+  // A glob character class never crosses a path separator, including negated classes.
+  const source = negated ? `[^/${body}]` : `(?=[^/])[${body}]`;
+  try {
+    new RegExp(source);
+  } catch {
+    return null;
+  }
+  return { end, source };
 }
 
 function normalizeIgnorePath(value: unknown): { directory: boolean; path: string } {
