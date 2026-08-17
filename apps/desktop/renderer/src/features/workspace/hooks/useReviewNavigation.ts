@@ -20,6 +20,15 @@ const REVIEW_NAVIGATION_TOLERANCE_PX = 2;
 const REVIEW_NAVIGATION_STABLE_FRAMES = 4;
 const REVIEW_NAVIGATION_TIMEOUT_MS = 5_000;
 const REVIEW_NAVIGATION_SETTLE_WINDOW_MS = 1_500;
+// Same intent signals CodeView uses to abort programmatic scrolls. Programmatic
+// scrollTo never emits these, so they cleanly separate user scrolling from the
+// alignment loop.
+const REVIEW_NAVIGATION_USER_INTENT_EVENTS = [
+  'wheel',
+  'touchstart',
+  'pointerdown',
+  'keydown',
+] as const;
 
 type ReviewNavigationAlignment = 'center' | 'start';
 type ReviewDiffLinePosition = { top: number; height: number };
@@ -215,8 +224,9 @@ export function useReviewNavigation({
         return;
       }
       // Keep the session briefly available for Pierre's delayed height
-      // reconciliation. ResizeObserver may resume it, but ordinary user scroll
-      // does not, so navigation never fights subsequent manual scrolling.
+      // reconciliation. ResizeObserver may resume it; explicit user scroll
+      // intent cancels it through the listener below, so navigation never
+      // fights subsequent manual scrolling.
       session.settledUntil ??= now + REVIEW_NAVIGATION_SETTLE_WINDOW_MS;
       return;
     }
@@ -292,6 +302,49 @@ export function useReviewNavigation({
       if (observerRef.current === observer) observerRef.current = null;
     };
   }, [scheduleAlignment, virtualizer]);
+
+  // A settled session survives briefly for Pierre's delayed height
+  // reconciliation, and ResizeObserver callbacks can resume it. Without this
+  // guard any user scroll inside that window is fought by repeated alignment
+  // scrolls, which reads as the panel snapping back. Manual scroll intent ends
+  // the session immediately so the user always wins.
+  useEffect(() => {
+    const root = virtualizer?.getRoot();
+    const scrollContainer = root instanceof Document
+      ? null
+      : root instanceof HTMLElement
+        ? root
+        : null;
+    const cancelForUserScroll = () => {
+      if (sessionRef.current !== null) {
+        sessionRef.current = null;
+        if (frameRef.current !== null) {
+          window.cancelAnimationFrame(frameRef.current);
+          frameRef.current = null;
+        }
+      }
+    };
+    for (const eventName of REVIEW_NAVIGATION_USER_INTENT_EVENTS) {
+      window.addEventListener(eventName, cancelForUserScroll, {
+        capture: true,
+        passive: true,
+      });
+      scrollContainer?.addEventListener(eventName, cancelForUserScroll, {
+        capture: true,
+        passive: true,
+      });
+    }
+    return () => {
+      for (const eventName of REVIEW_NAVIGATION_USER_INTENT_EVENTS) {
+        window.removeEventListener(eventName, cancelForUserScroll, {
+          capture: true,
+        });
+        scrollContainer?.removeEventListener(eventName, cancelForUserScroll, {
+          capture: true,
+        });
+      }
+    };
+  }, [virtualizer]);
 
   useEffect(() => () => {
     sessionRef.current = null;
