@@ -253,11 +253,11 @@ export function applyPatchHunks(
   }
 
   const nextLines = [...lines];
-  replacements
-    .sort((left, right) => right.start - left.start)
-    .forEach((replacement) => {
-      nextLines.splice(replacement.start, replacement.oldLength, ...replacement.newLines);
-    });
+  replacements.sort((left, right) => left.start - right.start);
+  for (let index = replacements.length - 1; index >= 0; index -= 1) {
+    const replacement = replacements[index];
+    nextLines.splice(replacement.start, replacement.oldLength, ...replacement.newLines);
+  }
   let nextContent = nextLines.join('\n');
   if (hasFinalNewline) nextContent += '\n';
   if (useCrLf) nextContent = nextContent.replace(/\n/g, '\r\n');

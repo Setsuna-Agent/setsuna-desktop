@@ -317,6 +317,28 @@ describe('pc local file tools and previews', () => {
     ].join('\n'));
   });
 
+  it('preserves the order of multiple append-only patch chunks', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'ordered-appends.txt');
+
+    await writeFile(filePath, 'existing\n', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: ordered-appends.txt',
+        '@@',
+        '+first',
+        '@@',
+        '+second',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('existing\nfirst\nsecond\n');
+  });
+
   it('accepts multi-file apply_patch calls', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
