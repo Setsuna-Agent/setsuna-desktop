@@ -4,11 +4,8 @@ import path from 'node:path';
 
 export const MAX_WORKSPACE_SEARCH_FILE_BYTES = 1024 * 1024;
 
-/** Generated, dependency, VCS, and cache directories stay out of searches by default. */
+/** Generated, dependency, and cache directories stay out of searches by default. */
 export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
-  '**/.git/**',
-  '**/.hg/**',
-  '**/.svn/**',
   '**/.next/**',
   '**/.nuxt/**',
   '**/.output/**',
@@ -30,8 +27,15 @@ export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/release-artifacts/**',
 ] as const;
 
-/** Credential and secret files are never searchable, even when generated directories are opted back in. */
+/**
+ * VCS metadata, credential, and secret paths are never searchable, even when an
+ * include-ignored search opts generated directories back in. VCS config can
+ * embed credentials (for example remote URLs with tokens).
+ */
 export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
+  '**/.git/**',
+  '**/.hg/**',
+  '**/.svn/**',
   '**/.env',
   '**/.env.*',
   '**/*.pem',
@@ -42,6 +46,15 @@ export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   ...GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
   ...SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ] as const;
+
+/** Ordinary plus security-specific ignore sources consulted by default searches. */
+export const WORKSPACE_IGNORE_FILE_NAMES = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'] as const;
+
+/**
+ * Security-specific ignore sources. They protect arbitrarily named credential
+ * files and stay active even for include-ignored searches.
+ */
+export const WORKSPACE_SECURITY_IGNORE_FILE_NAMES = ['.qwenignore', '.setsunaignore'] as const;
 
 /**
  * Resolves the effective default exclusion layer for one search request.
@@ -65,9 +78,15 @@ export async function resolveWorkspaceSearchScope(root: string, scopePath?: stri
   return { root: resolvedRoot, scopePath: resolvedScope, scopeStat };
 }
 
-export async function workspaceSearchIgnoreFiles(root: string): Promise<string[]> {
+export async function workspaceSearchIgnoreFiles(
+  root: string,
+  options: { includeIgnored?: boolean } = {},
+): Promise<string[]> {
   // Root files are explicit so non-Git project folders get the same policy as repositories.
-  const candidates = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'].map((name) => path.join(root, name));
+  // Include-ignored searches keep only security-specific ignore sources; ordinary ignore
+  // files commonly re-exclude generated directories the search opts back into.
+  const fileNames = options.includeIgnored ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : WORKSPACE_IGNORE_FILE_NAMES;
+  const candidates = [...fileNames].map((name) => path.join(root, name));
   const available = await Promise.all(candidates.map(async (candidate) => {
     try {
       return (await stat(candidate)).isFile() ? candidate : null;

@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { WORKSPACE_SECURITY_IGNORE_FILE_NAMES } from '../search/workspace-search-policy.js';
 import { isNodeError } from '../../shared/node-errors.js';
 
 export type FileMentionEntry = {
@@ -98,9 +99,16 @@ export function findFileMentionSuggestions(
     .map((item) => item.file);
 }
 
-export async function createWorkspaceIgnoreMatcher(root: string): Promise<WorkspaceIgnoreMatcher> {
-  const rules = DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(isIgnoreRule);
-  for (const fileName of IGNORE_FILES) {
+export async function createWorkspaceIgnoreMatcher(
+  root: string,
+  options: { securityOnly?: boolean } = {},
+): Promise<WorkspaceIgnoreMatcher> {
+  // Security-only matchers serve include-ignored searches: they skip built-in
+  // generated/secret patterns and ordinary ignore files, keeping only the
+  // security-specific sources that protect arbitrarily named credential files.
+  const rules = options.securityOnly ? [] : DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(isIgnoreRule);
+  const fileNames = options.securityOnly ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : IGNORE_FILES;
+  for (const fileName of fileNames) {
     try {
       const content = await readFile(path.join(root, fileName), 'utf8');
       rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(isIgnoreRule));

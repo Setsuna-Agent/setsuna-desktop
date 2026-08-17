@@ -71,16 +71,20 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(result.truncated).toBe(true);
   });
 
-  it('include-ignored searches reach generated directories but never credential files', async () => {
+  it('include-ignored searches reach generated directories but never credential, security-ignored, or VCS files', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-include-ignored-'));
     await Promise.all([
+      mkdir(path.join(root, '.git'), { recursive: true }),
       mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
       mkdir(path.join(root, 'dist'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
     ]);
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+      writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
+      writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
       writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
       writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),

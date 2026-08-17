@@ -80,11 +80,10 @@ export function buildRipgrepArguments(input: {
   if (!request.caseSensitive) args.push('--ignore-case');
   if (!request.regex) args.push('--fixed-strings');
   if (request.contextLines) args.push('--context', String(request.contextLines));
-  // Include-ignored searches must also bypass ignore files, which commonly
-  // re-exclude generated directories like node_modules.
-  if (!request.includeIgnored) {
-    for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
-  }
+  // Ignore files are pre-filtered by workspaceSearchIgnoreFiles: include-ignored
+  // searches keep only security-specific sources so protected credential files
+  // stay excluded while generated paths are opted back in.
+  for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
   const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
   for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
     args.push('--glob', `!${glob}`);
@@ -101,7 +100,7 @@ async function runRipgrepSearch(
   if (request.signal?.aborted) throw abortReason(request.signal);
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   if (request.signal?.aborted) throw abortReason(request.signal);
-  const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root);
+  const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root, { includeIgnored: request.includeIgnored });
   if (request.signal?.aborted) throw abortReason(request.signal);
   const args = buildRipgrepArguments({ request, root: scope.root, scopePath: scope.scopePath, ignoreFiles });
   const spawnProcess = options.spawnProcess ?? spawn;

@@ -54,19 +54,21 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     expect(args).not.toContain('--follow');
   });
 
-  it('drops ignore files and generated-directory globs for include-ignored searches while keeping secret globs', () => {
+  it('keeps security ignore files and sensitive globs while lifting generated globs for include-ignored searches', () => {
     const root = path.resolve('/workspace');
     const args = buildRipgrepArguments({
       root,
       scopePath: root,
+      // Callers pre-filter ignore files via workspaceSearchIgnoreFiles; only
+      // security-specific sources arrive for include-ignored requests.
       ignoreFiles: [path.join(root, '.setsunaignore')],
       request: request(root, { includeIgnored: true }),
     });
 
-    expect(args).not.toContain('--ignore-file');
+    expect(args).toEqual(expect.arrayContaining(['--ignore-file', path.join(root, '.setsunaignore')]));
     expect(args).not.toContain('!**/node_modules/**');
     expect(args).not.toContain('!**/dist/**');
-    expect(args).toEqual(expect.arrayContaining(['--glob']));
+    expect(args).toContain('!**/.git/**');
     expect(args).toContain('!**/.env');
     expect(args).toContain('!**/*.key');
   });
@@ -203,17 +205,21 @@ describe('RipgrepWorkspaceSearchEngine', () => {
   );
 
   it.runIf(existsSync(preparedRipgrepPath))(
-    'include-ignored searches reach generated directories but never credential files',
+    'include-ignored searches reach generated directories but never credential, security-ignored, or VCS files',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-include-ignored-'));
       await Promise.all([
+        mkdir(path.join(root, '.git'), { recursive: true }),
         mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
         mkdir(path.join(root, 'dist'), { recursive: true }),
         mkdir(path.join(root, 'src'), { recursive: true }),
       ]);
       await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
+        writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
         writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
         writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
