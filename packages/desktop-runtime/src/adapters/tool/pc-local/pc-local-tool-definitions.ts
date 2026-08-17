@@ -97,7 +97,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   ),
   localTool(
     'edit',
-    'Qwen-style precise file edit. Replace exact text within a UTF-8 file.',
+    'Precisely edit a UTF-8 file by replacing exact literal text.',
     {
       file_path: {
         type: 'string',
