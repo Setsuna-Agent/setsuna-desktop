@@ -4,8 +4,8 @@ import path from 'node:path';
 
 export const MAX_WORKSPACE_SEARCH_FILE_BYTES = 1024 * 1024;
 
-/** Hidden source files stay searchable; generated, VCS, credential, and secret files do not. */
-export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
+/** Generated, dependency, VCS, and cache directories stay out of searches by default. */
+export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.git/**',
   '**/.hg/**',
   '**/.svn/**',
@@ -28,11 +28,33 @@ export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/target/**',
   '**/node_modules/**',
   '**/release-artifacts/**',
+] as const;
+
+/** Credential and secret files are never searchable, even when generated directories are opted back in. */
+export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.env',
   '**/.env.*',
   '**/*.pem',
   '**/*.key',
 ] as const;
+
+export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
+  ...GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
+  ...SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
+] as const;
+
+/**
+ * Resolves the effective default exclusion layer for one search request.
+ * Include-ignored searches lift generated-directory globs and ignore-file
+ * rules, but sensitive file globs always stay in force.
+ */
+export function workspaceSearchDefaultExcludeGlobs(
+  options: { includeIgnored?: boolean } = {},
+): readonly string[] {
+  return options.includeIgnored
+    ? SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS
+    : DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS;
+}
 
 export async function resolveWorkspaceSearchScope(root: string, scopePath?: string) {
   const resolvedRoot = await realpath(path.resolve(root));
@@ -60,8 +82,9 @@ export function ripgrepExcludeGlobs(
   root: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
+  defaultExcludeGlobs: readonly string[] = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): string[] {
-  const globs: string[] = [...DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS];
+  const globs: string[] = [...defaultExcludeGlobs];
   for (const excludedRoot of excludeRoots) {
     const relative = relativePolicyPath(root, excludedRoot);
     if (relative === null) continue;
@@ -86,11 +109,12 @@ export function isWorkspaceSearchPathExcluded(
   filePath: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
+  defaultExcludeGlobs: readonly string[] = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): boolean {
   const absolutePath = path.resolve(filePath);
   if (!isPathWithin(root, absolutePath)) return true;
   const relativePath = slashPath(path.relative(root, absolutePath));
-  const defaultExcluded = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS.some((glob) => globMatchesPath(glob, relativePath));
+  const defaultExcluded = defaultExcludeGlobs.some((glob) => globMatchesPath(glob, relativePath));
   if (defaultExcluded) return true;
   if (excludeRoots.some((excludedRoot) => isPathWithin(resolvePolicyRoot(root, excludedRoot), absolutePath))) return true;
   return excludeGlobs.some((glob) => {

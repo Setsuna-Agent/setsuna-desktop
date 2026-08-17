@@ -54,6 +54,23 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     expect(args).not.toContain('--follow');
   });
 
+  it('drops ignore files and generated-directory globs for include-ignored searches while keeping secret globs', () => {
+    const root = path.resolve('/workspace');
+    const args = buildRipgrepArguments({
+      root,
+      scopePath: root,
+      ignoreFiles: [path.join(root, '.setsunaignore')],
+      request: request(root, { includeIgnored: true }),
+    });
+
+    expect(args).not.toContain('--ignore-file');
+    expect(args).not.toContain('!**/node_modules/**');
+    expect(args).not.toContain('!**/dist/**');
+    expect(args).toEqual(expect.arrayContaining(['--glob']));
+    expect(args).toContain('!**/.env');
+    expect(args).toContain('!**/*.key');
+  });
+
   it('parses UTF-8 byte offsets into character columns', () => {
     const line = '前缀 needle\n';
     const parsed = parseRipgrepJsonLine(JSON.stringify({
@@ -182,6 +199,36 @@ describe('RipgrepWorkspaceSearchEngine', () => {
 
       expect(result.matches.map((match) => match.path)).toEqual(['blocked1/allowed.txt']);
       expect(result.scannedFiles).toBe(1);
+    },
+  );
+
+  it.runIf(existsSync(preparedRipgrepPath))(
+    'include-ignored searches reach generated directories but never credential files',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-include-ignored-'));
+      await Promise.all([
+        mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
+        mkdir(path.join(root, 'dist'), { recursive: true }),
+        mkdir(path.join(root, 'src'), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+        writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
+        writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
+        writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
+      ]);
+      const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
+
+      const defaultSearch = await engine.search(request(root, { regex: false }));
+      const includeIgnoredSearch = await engine.search(request(root, { regex: false, includeIgnored: true }));
+
+      expect(defaultSearch.matches.map((match) => match.path)).toEqual(['src/app.ts']);
+      expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
+        'dist/bundle.js',
+        'node_modules/dep/index.js',
+        'src/app.ts',
+      ]);
     },
   );
 });

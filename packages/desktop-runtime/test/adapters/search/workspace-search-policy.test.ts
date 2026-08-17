@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isWorkspaceSearchPathExcluded,
   ripgrepExcludeGlobs,
+  workspaceSearchDefaultExcludeGlobs,
 } from '../../../src/adapters/search/workspace-search-policy.js';
 
 describe('workspace search policy', () => {
@@ -16,6 +17,47 @@ describe('workspace search policy', () => {
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'app', '.env.local'))).toBe(true);
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'node_modules', 'pkg', 'index.js'))).toBe(true);
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'certs', 'private.key'))).toBe(true);
+  });
+
+  it('include-ignored searches keep sensitive files excluded but lift generated directories', () => {
+    const root = path.resolve('/workspace');
+    const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
+
+    expect(includeIgnoredDefaults).not.toContain('**/node_modules/**');
+    expect(includeIgnoredDefaults).toContain('**/.env');
+    expect(includeIgnoredDefaults).toContain('**/*.key');
+
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'node_modules', 'pkg', 'index.js'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(false);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, '.env'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'certs', 'private.key'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+  });
+
+  it('ripgrep globs for include-ignored searches drop generated paths but keep secrets', () => {
+    const root = path.resolve('/workspace');
+
+    const globs = ripgrepExcludeGlobs(root, [], [], workspaceSearchDefaultExcludeGlobs({ includeIgnored: true }));
+
+    expect(globs).not.toContain('**/node_modules/**');
+    expect(globs).toEqual(expect.arrayContaining(['**/.env', '**/.env.*', '**/*.pem', '**/*.key']));
+    expect(globs.some((glob) => glob.includes('node_modules'))).toBe(false);
   });
 
   it('normalizes relative denied roots that use Windows separators', () => {

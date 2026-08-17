@@ -14,6 +14,7 @@ import {
   resolveWorkspaceSearchScope,
   ripgrepExcludeGlobs,
   workspaceRelativeSearchPath,
+  workspaceSearchDefaultExcludeGlobs,
   workspaceSearchIgnoreFiles,
 } from './workspace-search-policy.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
@@ -79,8 +80,13 @@ export function buildRipgrepArguments(input: {
   if (!request.caseSensitive) args.push('--ignore-case');
   if (!request.regex) args.push('--fixed-strings');
   if (request.contextLines) args.push('--context', String(request.contextLines));
-  for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
-  for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs)) {
+  // Include-ignored searches must also bypass ignore files, which commonly
+  // re-exclude generated directories like node_modules.
+  if (!request.includeIgnored) {
+    for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
+  }
+  const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
+  for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
     args.push('--glob', `!${glob}`);
   }
   const relativeScope = path.relative(root, scopePath);
@@ -116,6 +122,7 @@ function collectRipgrepResult(
   return new Promise((resolve, reject) => {
     const matches: RipgrepMatch[] = [];
     const linesByPath = new Map<string, Map<number, string>>();
+    const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
     let stdoutBuffer = '';
     let stderr = '';
     let scannedFiles: number | undefined;
@@ -152,7 +159,7 @@ function collectRipgrepResult(
             continue;
           }
           const relativePath = workspaceRelativeSearchPath(root, event.path);
-          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs)) {
+          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
             continue;
           }
           const fileLines = linesByPath.get(relativePath) ?? new Map<number, string>();

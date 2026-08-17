@@ -70,4 +70,46 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(result.matches[0]?.path).toBe('visible.txt');
     expect(result.truncated).toBe(true);
   });
+
+  it('include-ignored searches reach generated directories but never credential files', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-include-ignored-'));
+    await Promise.all([
+      mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
+      mkdir(path.join(root, 'dist'), { recursive: true }),
+      mkdir(path.join(root, 'src'), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+      writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+      writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
+      writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
+      writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
+    ]);
+    const engine = new JavaScriptWorkspaceSearchEngine();
+
+    const defaultSearch = await engine.search({
+      root,
+      query: 'NEEDLE',
+      regex: true,
+      caseSensitive: true,
+      contextLines: 0,
+      maxResults: 20,
+    });
+    const includeIgnoredSearch = await engine.search({
+      root,
+      query: 'NEEDLE',
+      regex: true,
+      caseSensitive: true,
+      contextLines: 0,
+      maxResults: 20,
+      includeIgnored: true,
+    });
+
+    expect(defaultSearch.matches.map((match) => match.path)).toEqual(['src/app.ts']);
+    expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
+      'dist/bundle.js',
+      'node_modules/dep/index.js',
+      'src/app.ts',
+    ]);
+  });
 });

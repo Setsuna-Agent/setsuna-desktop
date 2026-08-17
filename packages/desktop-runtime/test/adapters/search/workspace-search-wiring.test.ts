@@ -44,6 +44,38 @@ describe('workspace search wiring', () => {
     expect(agentResult.content).toContain('src/shared.ts:7:7: const needle = true;');
   });
 
+  it('passes include_ignored through to the search engine and labels the result', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-search-include-ignored-'));
+    const projectDir = path.join(root, 'project');
+    await mkdir(projectDir);
+    const engine = new RecordingSearchEngine();
+    const store = new FileWorkspaceProjectStore(path.join(root, 'data'), systemClock, {
+      searchEngine: engine,
+      temporaryWorkspacePath: path.join(root, 'temporary'),
+    });
+    const project = await store.addProject({ path: projectDir });
+    const host = new PcLocalToolHost(store, undefined, undefined, engine);
+
+    const result = await host.runTool('search_text', {
+      query: 'needle',
+      regex: false,
+      include_ignored: true,
+    }, {
+      threadId: 'thread_1',
+      turnId: 'turn_1',
+      environment: {
+        id: 'local',
+        cwd: project.path!,
+        workspaceRoot: project.path!,
+        workspaceRoots: [project.path!],
+      },
+    });
+
+    expect(engine.requests).toHaveLength(1);
+    expect(engine.requests[0]?.includeIgnored).toBe(true);
+    expect(result.content).toContain('(including ignored paths)');
+  });
+
   it('leaves generic project-store searches unkeyed unless the caller opts in', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-search-unkeyed-store-'));
     const projectDir = path.join(root, 'project');

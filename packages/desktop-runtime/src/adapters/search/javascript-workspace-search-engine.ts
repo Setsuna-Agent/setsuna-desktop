@@ -13,6 +13,7 @@ import {
   MAX_WORKSPACE_SEARCH_FILE_BYTES,
   resolveWorkspaceSearchScope,
   workspaceRelativeSearchPath,
+  workspaceSearchDefaultExcludeGlobs,
 } from './workspace-search-policy.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
@@ -35,17 +36,22 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   throwIfAborted(request.signal);
   const matcher = createLineMatcher(request);
-  const ignoreMatcher = await createWorkspaceIgnoreMatcher(scope.root);
+  // Include-ignored searches bypass ignore files as well; sensitive files are
+  // still enforced through workspaceSearchDefaultExcludeGlobs below.
+  const ignoreMatcher = request.includeIgnored
+    ? null
+    : await createWorkspaceIgnoreMatcher(scope.root);
   throwIfAborted(request.signal);
+  const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
   const matches: WorkspaceTextSearchMatch[] = [];
   let scannedFiles = 0;
   let truncated = false;
 
   const visitFile = async (filePath: string): Promise<boolean> => {
     throwIfAborted(request.signal);
-    if (isWorkspaceSearchPathExcluded(scope.root, filePath, request.excludeRoots, request.excludeGlobs)) return true;
+    if (isWorkspaceSearchPathExcluded(scope.root, filePath, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) return true;
     const relativePath = workspaceRelativeSearchPath(scope.root, filePath);
-    if (ignoreMatcher.ignores(relativePath)) return true;
+    if (ignoreMatcher?.ignores(relativePath)) return true;
     const fileStat = await stat(filePath).catch(() => null);
     throwIfAborted(request.signal);
     if (!fileStat?.isFile() || fileStat.size > MAX_WORKSPACE_SEARCH_FILE_BYTES) return true;
@@ -81,8 +87,8 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
         const entryPath = path.join(directory, entry.name);
         const relativePath = workspaceRelativeSearchPath(scope.root, entryPath);
         if (entry.isDirectory()) {
-          if (!ignoreMatcher.shouldSkipDirectory(`${relativePath}/`)
-            && !isWorkspaceSearchPathExcluded(scope.root, entryPath, request.excludeRoots, request.excludeGlobs)) {
+          if (!(ignoreMatcher?.shouldSkipDirectory(`${relativePath}/`))
+            && !isWorkspaceSearchPathExcluded(scope.root, entryPath, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
             stack.push(entryPath);
           }
         } else if (entry.isFile() && !await visitFile(entryPath)) {
