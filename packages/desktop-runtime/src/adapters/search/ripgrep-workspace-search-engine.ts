@@ -17,6 +17,7 @@ import {
   workspaceSearchDefaultExcludeGlobs,
   workspaceSearchIgnoreFiles,
 } from './workspace-search-policy.js';
+import { createWorkspaceIgnoreMatcher, type WorkspaceIgnoreMatcher } from '../tool/file-mentions.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
@@ -101,6 +102,9 @@ async function runRipgrepSearch(
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   if (request.signal?.aborted) throw abortReason(request.signal);
   const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root, { includeIgnored: request.includeIgnored });
+  const ignoreMatcher = await createWorkspaceIgnoreMatcher(scope.root, {
+    securityOnly: Boolean(request.includeIgnored),
+  });
   if (request.signal?.aborted) throw abortReason(request.signal);
   const args = buildRipgrepArguments({ request, root: scope.root, scopePath: scope.scopePath, ignoreFiles });
   const spawnProcess = options.spawnProcess ?? spawn;
@@ -110,13 +114,14 @@ async function runRipgrepSearch(
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  return collectRipgrepResult(child, scope.root, request);
+  return collectRipgrepResult(child, scope.root, request, ignoreMatcher);
 }
 
 function collectRipgrepResult(
   child: RipgrepChildProcess,
   root: string,
   request: WorkspaceTextSearchRequest,
+  ignoreMatcher: WorkspaceIgnoreMatcher,
 ): Promise<WorkspaceTextSearchResponse> {
   return new Promise((resolve, reject) => {
     const matches: RipgrepMatch[] = [];
@@ -158,7 +163,8 @@ function collectRipgrepResult(
             continue;
           }
           const relativePath = workspaceRelativeSearchPath(root, event.path);
-          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
+          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)
+            || ignoreMatcher.ignores(relativePath)) {
             continue;
           }
           const fileLines = linesByPath.get(relativePath) ?? new Map<number, string>();

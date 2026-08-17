@@ -30,7 +30,10 @@ export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
 /**
  * VCS metadata, credential, and secret paths are never searchable, even when an
  * include-ignored search opts generated directories back in. VCS config can
- * embed credentials (for example remote URLs with tokens).
+ * embed credentials (for example remote URLs with tokens), and well-known
+ * credential file names stay protected even when the ignore files that usually
+ * hide them are lifted. This list is deliberately conservative; arbitrarily
+ * named secrets still need .qwenignore/.setsunaignore protection.
  */
 export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.git/**',
@@ -40,6 +43,19 @@ export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.env.*',
   '**/*.pem',
   '**/*.key',
+  '**/*.p12',
+  '**/*.pfx',
+  '**/*.keystore',
+  '**/.npmrc',
+  '**/.netrc',
+  '**/.pypirc',
+  '**/.ssh/**',
+  '**/.aws/credentials',
+  '**/.docker/config.json',
+  '**/credentials.json',
+  '**/*credentials*.json',
+  '**/service-account*.json',
+  '**/*service-account*.json',
 ] as const;
 
 export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [

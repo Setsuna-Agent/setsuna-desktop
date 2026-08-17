@@ -17,15 +17,22 @@ import {
 } from './workspace-search-policy.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
+const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
+
 /** Development fallback for machines where a prepared rg is intentionally unavailable. */
 export class JavaScriptWorkspaceSearchEngine implements WorkspaceSearchEngine {
   private readonly supersession = new WorkspaceSearchSupersessionCoordinator();
 
   async search(request: WorkspaceTextSearchRequest): Promise<WorkspaceTextSearchResponse> {
     const lease = this.supersession.start(request);
+    const timeout = setTimeout(
+      () => lease.controller.abort(new Error(`Workspace search timed out after ${DEFAULT_SEARCH_TIMEOUT_MS}ms.`)),
+      DEFAULT_SEARCH_TIMEOUT_MS,
+    );
     try {
       return await runJavaScriptSearch({ ...request, signal: lease.controller.signal });
     } finally {
+      clearTimeout(timeout);
       lease.dispose();
     }
   }

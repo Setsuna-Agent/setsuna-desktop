@@ -57,6 +57,20 @@ describe('workspace search policy', () => {
       [],
       includeIgnoredDefaults,
     )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'node_modules', 'pkg', '.npmrc'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'node_modules', 'pkg', 'credentials.json'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
   });
 
   it('ripgrep globs for include-ignored searches drop generated paths but keep VCS and secrets', () => {

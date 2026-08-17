@@ -71,6 +71,8 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     expect(args).toContain('!**/.git/**');
     expect(args).toContain('!**/.env');
     expect(args).toContain('!**/*.key');
+    expect(args).toContain('!**/.npmrc');
+    expect(args).toContain('!**/credentials.json');
   });
 
   it('parses UTF-8 byte offsets into character columns', () => {
@@ -218,7 +220,9 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         writeFile(path.join(root, '.gitignore'), 'dist/\n'),
         writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
         writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
+        writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
         writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
         writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
@@ -235,6 +239,25 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         'node_modules/dep/index.js',
         'src/app.ts',
       ]);
+    },
+  );
+
+  it.runIf(existsSync(preparedRipgrepPath))(
+    'rechecks security ignore rules when the scope explicitly names a file',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-secret-'));
+      await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });
+      await writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n');
+      const secretPath = path.join(root, 'node_modules', 'dep', 'custom-secret.txt');
+      await writeFile(secretPath, 'NEEDLE custom credential\n');
+      const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
+
+      const result = await engine.search({
+        ...request(root, { regex: false, includeIgnored: true }),
+        scopePath: secretPath,
+      });
+
+      expect(result.matches).toEqual([]);
     },
   );
 });

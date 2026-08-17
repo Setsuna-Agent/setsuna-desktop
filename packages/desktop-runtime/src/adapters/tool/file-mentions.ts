@@ -279,11 +279,29 @@ function scoreFile(file: FileMentionEntry, query: string): number {
 }
 
 function globToRegExp(pattern: unknown): RegExp {
+  const text = String(pattern || '');
   let source = '';
-  for (const char of String(pattern || '')) {
-    if (char === '*') source += '[^/]*';
-    else if (char === '?') source += '[^/]';
-    else source += escapeRegExp(char);
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '*') {
+      if (text[index + 1] === '*') {
+        if (text[index + 2] === '/') {
+          source += '(?:[^/]+/)*';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+    if (char === '?') {
+      source += '[^/]';
+      continue;
+    }
+    source += escapeRegExp(char);
   }
   return new RegExp(`^${source}$`);
 }
