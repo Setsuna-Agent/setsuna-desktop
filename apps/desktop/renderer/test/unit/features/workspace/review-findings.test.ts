@@ -9,6 +9,7 @@ import {
   latestCompletedReview,
   reviewFindingAnnotationAnchor,
   reviewPathsMatch,
+  resolveReviewFile,
   resolveReviewFindingTarget,
 } from '../../../../src/features/workspace/review-findings.js';
 
@@ -49,6 +50,37 @@ describe('latestCompletedReview', () => {
     expect(latestCompletedReview([completed, readOnlyTurn, mutationTurn], null)).toBeNull();
     expect(latestCompletedReview([completed, readOnlyTurn, shellTurn], null)).toBeNull();
     expect(latestCompletedReview([completed, failedShellTurn], null)).toBeNull();
+  });
+});
+
+describe('resolveReviewFile', () => {
+  it('maps workspace-relative focus paths to repository-prefixed diff files', () => {
+    const repoFile = diffFile([], 'front-end/agent/src/domain/memory/help.ts');
+
+    expect(resolveReviewFile({
+      files: [repoFile],
+      additions: 0,
+      deletions: 0,
+    }, 'src/domain/memory/help.ts')).toBe(repoFile);
+  });
+
+  it('prefers an exact normalized path over an earlier suffix match', () => {
+    const prefixed = diffFile([], 'packages/app/src/config.ts');
+    const exact = diffFile([], 'src/config.ts');
+
+    expect(resolveReviewFile({
+      files: [prefixed, exact],
+      additions: 0,
+      deletions: 0,
+    }, 'src/config.ts')).toBe(exact);
+  });
+
+  it('returns null when no displayed file matches the focus path', () => {
+    expect(resolveReviewFile({
+      files: [diffFile([], 'src/other.ts')],
+      additions: 0,
+      deletions: 0,
+    }, 'src/domain/memory/help.ts')).toBeNull();
   });
 });
 
