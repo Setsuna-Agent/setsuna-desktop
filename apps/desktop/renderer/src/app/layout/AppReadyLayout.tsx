@@ -12,6 +12,7 @@ import { AppTopbarActions } from './AppTopbarActions.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { ShellFrame } from './ShellFrame.js';
+import { useSecondaryRoutePrefetch } from './useSecondaryRoutePrefetch.js';
 
 export function AppReadyLayout({ controller }: { controller: DesktopAppController }) {
   const {
@@ -204,6 +205,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     workspacePanels.toggleSidePanel,
   ]);
   useAppKeyboardShortcuts(shortcutHandlers);
+  useSecondaryRoutePrefetch();
 
   return (
     <ShellFrame
