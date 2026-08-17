@@ -48,6 +48,7 @@ export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/*.keystore',
   '**/.npmrc',
   '**/.netrc',
+  '**/.git-credentials',
   '**/.pypirc',
   '**/.ssh/**',
   '**/.aws/credentials',

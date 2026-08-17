@@ -27,6 +27,7 @@ describe('workspace search policy', () => {
     expect(includeIgnoredDefaults).not.toContain('**/node_modules/**');
     expect(includeIgnoredDefaults).toContain('**/.git/**');
     expect(includeIgnoredDefaults).toContain('**/.env');
+    expect(includeIgnoredDefaults).toContain('**/.git-credentials');
     expect(includeIgnoredDefaults).toContain('**/*.key');
 
     expect(isWorkspaceSearchPathExcluded(
@@ -46,6 +47,13 @@ describe('workspace search policy', () => {
     expect(isWorkspaceSearchPathExcluded(
       root,
       path.join(root, '.env'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, '.git-credentials'),
       [],
       [],
       includeIgnoredDefaults,
@@ -79,7 +87,14 @@ describe('workspace search policy', () => {
     const globs = ripgrepExcludeGlobs(root, [], [], workspaceSearchDefaultExcludeGlobs({ includeIgnored: true }));
 
     expect(globs).not.toContain('**/node_modules/**');
-    expect(globs).toEqual(expect.arrayContaining(['**/.git/**', '**/.env', '**/.env.*', '**/*.pem', '**/*.key']));
+    expect(globs).toEqual(expect.arrayContaining([
+      '**/.git/**',
+      '**/.env',
+      '**/.env.*',
+      '**/*.pem',
+      '**/*.key',
+      '**/.git-credentials',
+    ]));
     expect(globs.some((glob) => glob.includes('node_modules'))).toBe(false);
   });
 

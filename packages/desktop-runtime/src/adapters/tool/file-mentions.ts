@@ -223,6 +223,7 @@ class IgnoreRule {
   readonly pattern: string;
   readonly hasSlash: boolean;
   readonly regex: RegExp;
+  readonly descendantRegex: RegExp | null;
 
   constructor(pattern: string, negated: boolean) {
     this.original = pattern;
@@ -235,6 +236,9 @@ class IgnoreRule {
       .replace(/\/+$/, '');
     this.hasSlash = this.pattern.includes('/');
     this.regex = globToRegExp(this.pattern);
+    this.descendantRegex = this.directoryOnly && (this.anchored || this.hasSlash)
+      ? globToRegExp(`${this.pattern}/**`)
+      : null;
   }
 
   matches(relativePath: string, isDirectory: boolean): boolean {
@@ -248,7 +252,7 @@ class IgnoreRule {
   matchesDirectory(target: string, isDirectory: boolean): boolean {
     if (!isDirectory && !target.includes('/')) return false;
     if (this.anchored || this.hasSlash) {
-      return this.regex.test(target) || target.startsWith(`${this.pattern}/`);
+      return this.regex.test(target) || Boolean(this.descendantRegex?.test(target));
     }
     return target.split('/').some((segment) => this.regex.test(segment));
   }

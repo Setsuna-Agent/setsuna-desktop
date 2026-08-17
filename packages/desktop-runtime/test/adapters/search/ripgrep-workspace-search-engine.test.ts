@@ -157,6 +157,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
         writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
         writeFile(path.join(root, '.github', 'workflow.yml'), 'name: NEEDLE hidden source\n'),
         writeFile(path.join(root, 'ignored.txt'), 'NEEDLE ignored\n'),
         writeFile(path.join(root, 'rg-only-ignore.txt'), 'NEEDLE must remain searchable\n'),
@@ -220,6 +221,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         writeFile(path.join(root, '.gitignore'), 'dist/\n'),
         writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
         writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
         writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
@@ -246,18 +248,21 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     'rechecks security ignore rules when the scope explicitly names a file',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-secret-'));
-      await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });
-      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n');
-      const secretPath = path.join(root, 'node_modules', 'dep', 'custom secret.txt');
-      await writeFile(secretPath, 'NEEDLE custom credential\n');
+      await mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true });
+      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\n');
+      const secretPaths = [
+        path.join(root, 'node_modules', 'dep', 'custom secret.txt'),
+        path.join(root, 'node_modules', 'dep', 'private', 'token.txt'),
+      ];
+      await Promise.all(secretPaths.map((secretPath) => writeFile(secretPath, 'NEEDLE custom credential\n')));
       const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
 
-      const result = await engine.search({
+      const results = await Promise.all(secretPaths.map((scopePath) => engine.search({
         ...request(root, { regex: false, includeIgnored: true }),
-        scopePath: secretPath,
-      });
+        scopePath,
+      })));
 
-      expect(result.matches).toEqual([]);
+      expect(results.map((result) => result.matches)).toEqual([[], []]);
     },
   );
 });
