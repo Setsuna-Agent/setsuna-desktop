@@ -376,6 +376,29 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(filePath, 'utf8')).resolves.toBe('existing\nfirst\nsecond\n');
   });
 
+  it('requires End of File hunks to match the file ending', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'strict-eof.txt');
+    const original = 'target\nmiddle\nending\n';
+
+    await writeFile(filePath, original, 'utf8');
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: strict-eof.txt',
+        '@@',
+        '-target',
+        '+changed',
+        '*** End of File',
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow('未找到匹配的旧内容');
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(original);
+  });
+
   it('accepts multi-file apply_patch calls', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

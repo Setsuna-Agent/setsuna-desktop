@@ -306,9 +306,9 @@ function seekSequence(
   const lastStart = lines.length - pattern.length;
   const searchStart = Math.max(0, start);
   if (searchStart > lastStart) return null;
-  const ranges: Array<[from: number, to: number]> = [];
-  if (endOfFile && lastStart >= searchStart) ranges.push([lastStart, lastStart]);
-  ranges.push([searchStart, lastStart]);
+  const ranges: Array<[from: number, to: number]> = endOfFile
+    ? [[lastStart, lastStart]]
+    : [[searchStart, lastStart]];
 
   const matchers: Array<(value: string) => string> = [
     (value) => value,
