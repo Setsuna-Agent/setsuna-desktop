@@ -116,6 +116,45 @@ describe('createAssistantRunTimeline', () => {
     ]);
   });
 
+  it('keeps completed structured thinking in the transcript when enabled', () => {
+    const segments: RuntimeMessage[] = [{
+      id: 'assistant_answer',
+      role: 'assistant',
+      content: 'Visible answer.',
+      streamParts: [
+        { type: 'reasoning', content: 'Inspect the relevant chain.' },
+        { type: 'content', content: 'Visible answer.' },
+      ],
+      createdAt: '2026-06-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }];
+
+    expect(createAssistantRunTimeline(
+      segments,
+      [],
+      { showThinkingInTranscript: true },
+    )).toMatchObject([
+      {
+        type: 'work',
+        thinkingSegments: [{
+          id: 'assistant_answer:thinking',
+          content: 'Inspect the relevant chain.',
+          active: false,
+        }],
+        items: [{
+          type: 'thinking',
+          segment: { content: 'Inspect the relevant chain.', active: false },
+        }],
+      },
+      {
+        type: 'content',
+        id: 'assistant_answer:content',
+        content: 'Visible answer.',
+      },
+    ]);
+  });
+
   it('keeps leading literal think tags in authoritative structured content', () => {
     const content = '<think>literal example</think> is valid answer text.';
     const segments: RuntimeMessage[] = [{

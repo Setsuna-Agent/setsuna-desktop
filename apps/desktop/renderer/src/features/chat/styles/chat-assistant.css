@@ -157,6 +157,36 @@
   color: var(--app-text-muted);
 }
 
+.chat-thinking-disclosure__status {
+  display: inline-grid;
+  grid-template-columns: 16px minmax(0, auto);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chat-thinking-disclosure__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  width: 16px;
+  height: 20px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.chat-thinking-disclosure__icon > .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.chat-thinking-disclosure__icon svg {
+  display: block;
+}
+
 .chat-thinking-disclosure__label {
   min-width: 0;
   overflow: hidden;
@@ -280,6 +310,17 @@
   overflow-wrap: anywhere;
   color: currentColor;
   font-weight: var(--app-font-weight);
+}
+
+.chat-work-history__chevron {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, currentColor 76%, transparent);
+  transform: rotate(-90deg);
+  transition: transform 0.16s ease;
+}
+
+.chat-work-history.is-expanded .chat-work-history__chevron {
+  transform: rotate(0);
 }
 
 .chat-work-history__body {

@@ -107,6 +107,41 @@ describe('DesktopNetworkProxyStore', () => {
     }
   });
 
+  it('lets Chromium derive content length for system-routed request bodies', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-body-'));
+    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+      path.join(root, 'network-proxies.json'),
+      new MemoryCredentialVault(),
+    ));
+    let receivedInit: RequestInit | undefined;
+    const proxyFetch = new DesktopNetworkProxyFetch(service, {
+      systemFetch: async (_input, init) => {
+        receivedInit = init;
+        return new Response(null, { status: 201 });
+      },
+    });
+
+    try {
+      const body = Buffer.from('hello');
+      await proxyFetch.fetch('sync', 'https://dav.example.com/file', {
+        method: 'PUT',
+        headers: {
+          'Content-Length': String(body.byteLength),
+          'Content-Type': 'application/octet-stream',
+        },
+        body,
+      });
+
+      const receivedHeaders = new Headers(receivedInit?.headers);
+      expect(receivedHeaders.has('content-length')).toBe(false);
+      expect(receivedHeaders.get('content-type')).toBe('application/octet-stream');
+      expect(receivedInit?.body).toBe(body);
+    } finally {
+      await proxyFetch.close();
+      await service.close();
+    }
+  });
+
   it('bypasses configured updater proxies for loopback update sources', async () => {
     const target = createHttpServer((_request, response) => response.end('local-update'));
     await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));

@@ -110,7 +110,11 @@ function portableConfig(value: Record<string, unknown>): Record<string, unknown>
 
   const desktopSettings = recordValue(value.desktopSettings);
   if (desktopSettings) {
-    const exported = pick(desktopSettings, ['interfaceLanguage', 'markdownLinkOpenMode'] as const);
+    const exported = pick(desktopSettings, [
+      'interfaceLanguage',
+      'markdownLinkOpenMode',
+      'showThinkingInTranscript',
+    ] as const);
     if (Object.keys(exported).length) portable.desktopSettings = exported;
   }
   const imageGeneration = recordValue(value.imageGeneration);

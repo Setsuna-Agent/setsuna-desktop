@@ -29,6 +29,7 @@ export type AssistantWorkThinkingSegment = {
   id: string;
   segment: RuntimeMessage;
   content: string;
+  active: boolean;
 };
 
 export type AssistantWorkItem =
@@ -40,8 +41,12 @@ export type AssistantWorkItem =
 export function createAssistantRunTimeline(
   segments: RuntimeMessage[],
   pluginUses: RuntimePluginUse[] = [],
+  options: { showThinkingInTranscript?: boolean } = {},
 ): AssistantRunTimelineBlock[] {
-  const parsedSegments = segments.map(parseAssistantSegment);
+  const parsedSegments = segments.map((segment) => parseAssistantSegment(
+    segment,
+    options.showThinkingInTranscript === true,
+  ));
   const finalStartIndex = assistantFinalStartIndex(parsedSegments);
   const finalStarted = finalStartIndex >= 0;
   const blocks: AssistantRunTimelineBlock[] = [];
@@ -108,47 +113,42 @@ export function createAssistantRunTimeline(
 
   parsedSegments.forEach((parsed, index) => {
     const inFinalAnswer = finalStarted && index >= finalStartIndex;
-    if (!inFinalAnswer) {
-      if (parsed.contentSegments.length || parsed.thinkingSegments.length || parsed.toolRuns.length) {
-        appendWork(parsed.segment, parsed);
+    // Walk the item stream directly so retained thinking and any work that follows
+    // final content stay at their real transcript positions.
+    parsed.items.forEach((item) => {
+      if (item.type === 'thinking') {
+        appendWork(parsed.segment, {
+          items: [item],
+          thinkingSegments: [item.segment],
+        });
+        return;
       }
-    } else {
-      // A provider may interleave visible text, reasoning, and tool items. Walk the
-      // parsed item stream directly so later work can only be appended below text
-      // that has already become part of the transcript.
-      parsed.items.forEach((item) => {
-        if (item.type === 'content') {
-          if (!isCommittedFinalAnswer(item.segment.segment)) {
-            appendWork(parsed.segment, {
-              contentSegments: [item.segment],
-              items: [item],
-            });
-            return;
-          }
-          flushWork();
-          blocks.push({
-            type: 'content',
-            id: item.segment.id,
-            segment: parsed.segment,
-            content: item.segment.content,
+      if (item.type === 'content') {
+        if (!inFinalAnswer || !isCommittedFinalAnswer(item.segment.segment)) {
+          appendWork(parsed.segment, {
+            contentSegments: [item.segment],
+            items: [item],
           });
           return;
         }
-        if (item.type === 'thinking') {
-          appendWork(parsed.segment, {
-            items: [item],
-            thinkingSegments: [item.segment],
-          });
-          return;
-        }
-        if (item.type === 'toolRuns') {
-          appendWork(parsed.segment, {
-            items: [item],
-            toolRuns: item.toolRuns,
-          });
-        }
+        flushWork();
+        blocks.push({
+          type: 'content',
+          id: item.segment.id,
+          segment: parsed.segment,
+          content: item.segment.content,
+        });
+        return;
+      }
+      if (item.type === 'pluginUses') {
+        appendWork(parsed.segment, { items: [item] });
+        return;
+      }
+      appendWork(parsed.segment, {
+        items: [item],
+        toolRuns: item.toolRuns,
       });
-    }
+    });
 
     if (isEmptyStreamingAssistantSegment(parsed.segment)) {
       flushWork();
@@ -172,7 +172,10 @@ type ParsedAssistantSegment = {
   toolRuns: NonNullable<RuntimeMessage['toolRuns']>;
 };
 
-function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment {
+function parseAssistantSegment(
+  segment: RuntimeMessage,
+  showThinkingInTranscript: boolean,
+): ParsedAssistantSegment {
   const contentSegments: AssistantWorkContentSegment[] = [];
   const items: AssistantWorkItem[] = [];
   const thinkingSegments: AssistantWorkThinkingSegment[] = [];
@@ -190,12 +193,13 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
     items.push({ type: 'content', segment: content });
     contentIndex += 1;
   };
-  const appendActiveThinking = (contentValue: string) => {
-    if (segment.status !== 'streaming' || !contentValue.trim()) return;
+  const appendThinking = (contentValue: string, active: boolean) => {
+    if ((!active && !showThinkingInTranscript) || !contentValue.trim()) return;
     const thinking = {
       id: thinkingSegmentId(segment.id, thinkingIndex),
       segment,
       content: contentValue,
+      active,
     };
     thinkingSegments.push(thinking);
     items.push({ type: 'thinking', segment: thinking });
@@ -207,6 +211,10 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
       // Completed parts only record channel boundaries; hidden reasoning is not a visible
       // separator, so the finished answer must render as one cohesive Markdown stream
       // instead of splitting constructs that span two content parts.
+      appendThinking(segment.streamParts
+        .filter((part) => part.type === 'reasoning')
+        .map((part) => part.content)
+        .join(''), false);
       appendContent(segment.streamParts
         .filter((part) => part.type === 'content')
         .map((part) => part.content)
@@ -215,7 +223,7 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
       const lastPartIndex = segment.streamParts.length - 1;
       segment.streamParts.forEach((part, index) => {
         if (part.type === 'content') appendContent(part.content);
-        else if (index === lastPartIndex) appendActiveThinking(part.content);
+        else appendThinking(part.content, index === lastPartIndex);
       });
     }
   } else if (segment.streamParts) {
@@ -230,9 +238,10 @@ function parseAssistantSegment(segment: RuntimeMessage): ParsedAssistantSegment 
         appendContent(thinkingSegment.content);
         continue;
       }
-      if (!thinkingSegment.closed) {
-        appendActiveThinking(thinkingSegment.content);
-      }
+      appendThinking(
+        thinkingSegment.content,
+        segment.status === 'streaming' && !thinkingSegment.closed,
+      );
     }
   }
 

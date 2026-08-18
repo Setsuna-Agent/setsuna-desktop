@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   workspaceFileRevealLabel,
 } from '../../../../src/features/workspace/WorkspaceFileContextMenu.js';
-import { workspaceFileMentionEntry } from '../../../../src/features/workspace/workspaceFileMention.js';
+import {
+  workspaceDirectoryMentionEntry,
+  workspaceFileMentionEntry,
+} from '../../../../src/features/workspace/workspaceFileMention.js';
 import { translate, type Translate } from '../../../../src/shared/i18n/I18nProvider.js';
 
 describe('workspace file context menu helpers', () => {
@@ -20,6 +23,12 @@ describe('workspace file context menu helpers', () => {
       name: 'agent.ts',
       parent: 'src/domain',
       path: 'src/domain/agent.ts',
+    });
+    expect(workspaceDirectoryMentionEntry('./src/domain/')).toEqual({
+      kind: 'directory',
+      name: 'domain',
+      parent: 'src',
+      path: 'src/domain',
     });
   });
 });

@@ -13,8 +13,8 @@
 }
 
 .chat-tool-run {
-  /* 标题默认深色，与灰色图标、灰色 chip 形成三层层次；状态类只覆盖该变量。 */
-  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text) 80%, var(--app-text-muted));
+  /* 普通工具汇总、展开子项和思考记录共用同一灰度；异常与审批状态仍由状态类覆盖。 */
+  --chat-tool-run-title-color: color-mix(in srgb, var(--app-text-muted) 86%, transparent);
   width: fit-content;
   max-width: 100%;
   border: 0;
@@ -1006,7 +1006,8 @@ a.chat-markdown__file-link.chat-tool-run__file-list-target,
 
 .chat-tool-run__approval-review--denied {
   display: grid;
-  width: min(560px, 100%);
+  box-sizing: border-box;
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid color-mix(in srgb, var(--app-warning) 34%, var(--app-border));
   border-radius: 8px;

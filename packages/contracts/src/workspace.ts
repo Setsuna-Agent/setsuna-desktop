@@ -122,6 +122,128 @@ export type WorkspaceFilePreview =
   | { kind: 'image'; base64: string; mimeType: WorkspaceFilePreviewImageMimeType }
   | { kind: 'unsupported'; reason: 'binary' | 'image-too-large' };
 
+const BINARY_SAMPLE_BYTES = 8 * 1024;
+const SVG_SAMPLE_BYTES = 64 * 1024;
+
+/** Detect browser-previewable images by content instead of trusting a spoofable extension. */
+export function detectWorkspacePreviewImageMimeType(content: Uint8Array): WorkspaceFilePreviewImageMimeType | null {
+  if (startsWithBytes(content, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return 'image/png';
+  if (startsWithBytes(content, [0xff, 0xd8, 0xff])) return 'image/jpeg';
+  if (startsWithAscii(content, 'GIF87a') || startsWithAscii(content, 'GIF89a')) return 'image/gif';
+  if (startsWithAscii(content, 'RIFF') && matchesAsciiAt(content, 8, 'WEBP')) return 'image/webp';
+  if (startsWithAscii(content, 'BM')) return 'image/bmp';
+  if (isIcon(content)) return 'image/x-icon';
+  if (looksLikeSvg(content)) return 'image/svg+xml';
+  return null;
+}
+
+/** Classify a bounded content sample before any caller decodes a workspace file as text. */
+export function isProbablyBinaryFileContent(content: Uint8Array): boolean {
+  if (!content.length) return false;
+  const sample = content.subarray(0, Math.min(content.length, BINARY_SAMPLE_BYTES));
+  if (hasKnownBinarySignature(sample) || sample.includes(0)) return true;
+  if (new TextDecoder().decode(sample).includes('\uFFFD')) return true;
+
+  let controlBytes = 0;
+  for (const byte of sample) {
+    const allowedWhitespace = byte === 0x09 || byte === 0x0a || byte === 0x0c || byte === 0x0d;
+    if (!allowedWhitespace && (byte < 0x20 || byte === 0x7f)) controlBytes += 1;
+  }
+  return controlBytes / sample.length > 0.1;
+}
+
+function hasKnownBinarySignature(content: Uint8Array): boolean {
+  return startsWithAscii(content, '%PDF-')
+    || startsWithAscii(content, 'MZ')
+    || startsWithAscii(content, 'Rar!')
+    || startsWithBytes(content, [0x7f, 0x45, 0x4c, 0x46])
+    || startsWithBytes(content, [0x1f, 0x8b])
+    || startsWithBytes(content, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])
+    || startsWithBytes(content, [0x50, 0x4b, 0x03, 0x04])
+    || startsWithBytes(content, [0x50, 0x4b, 0x05, 0x06])
+    || startsWithBytes(content, [0x50, 0x4b, 0x07, 0x08]);
+}
+
+function startsWithAscii(content: Uint8Array, value: string): boolean {
+  return matchesAsciiAt(content, 0, value);
+}
+
+function startsWithBytes(content: Uint8Array, value: number[]): boolean {
+  return content.length >= value.length && value.every((byte, index) => content[index] === byte);
+}
+
+function matchesAsciiAt(content: Uint8Array, offset: number, value: string): boolean {
+  if (content.length < offset + value.length) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    if (content[offset + index] !== value.charCodeAt(index)) return false;
+  }
+  return true;
+}
+
+function isIcon(content: Uint8Array): boolean {
+  return content.length >= 6
+    && startsWithBytes(content, [0x00, 0x00, 0x01, 0x00])
+    && (content[4] | (content[5] << 8)) > 0;
+}
+
+function looksLikeSvg(content: Uint8Array): boolean {
+  const source = new TextDecoder()
+    .decode(content.subarray(0, Math.min(content.length, SVG_SAMPLE_BYTES)))
+    .replace(/^\uFEFF/u, '');
+  if (source.includes('\uFFFD') || source.includes('\u0000')) return false;
+  return hasSvgRootElement(source);
+}
+
+/** Walk the bounded SVG preamble once so crafted comments cannot trigger regex backtracking. */
+function hasSvgRootElement(source: string): boolean {
+  let cursor = skipWhitespace(source, 0);
+
+  if (startsWithAsciiIgnoreCase(source, cursor, '<?xml')) {
+    cursor = indexAfter(source, '>', cursor + '<?xml'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  while (source.startsWith('<!--', cursor)) {
+    cursor = indexAfter(source, '-->', cursor + '<!--'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  if (startsWithAsciiIgnoreCase(source, cursor, '<!doctype')) {
+    cursor += '<!doctype'.length;
+    if (!isWhitespace(source[cursor])) return false;
+    cursor = skipWhitespace(source, cursor);
+    if (!startsWithAsciiIgnoreCase(source, cursor, 'svg')) return false;
+    cursor = indexAfter(source, '>', cursor + 'svg'.length);
+    if (cursor < 0) return false;
+    cursor = skipWhitespace(source, cursor);
+  }
+
+  if (!startsWithAsciiIgnoreCase(source, cursor, '<svg')) return false;
+  const boundary = source[cursor + '<svg'.length];
+  return boundary === '>' || isWhitespace(boundary);
+}
+
+function indexAfter(source: string, marker: string, fromIndex: number): number {
+  const index = source.indexOf(marker, fromIndex);
+  return index < 0 ? -1 : index + marker.length;
+}
+
+function skipWhitespace(source: string, fromIndex: number): number {
+  let index = fromIndex;
+  while (isWhitespace(source[index])) index += 1;
+  return index;
+}
+
+function startsWithAsciiIgnoreCase(source: string, index: number, expected: string): boolean {
+  return source.slice(index, index + expected.length).toLowerCase() === expected;
+}
+
+function isWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === '';
+}
+
 /** Maximum text prefix returned by the lightweight file preview request. */
 export const WORKSPACE_TEXT_FILE_MAX_BYTES = 256 * 1024;
 

@@ -68,7 +68,7 @@ describe('openWorkspaceFileWithDefaultApp', () => {
     expect(openPath).toHaveBeenCalledOnce();
   });
 
-  it('copies and reveals only resolved files inside the workspace', async () => {
+  it('copies and reveals resolved files and directories inside the workspace', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-file-actions-'));
     await mkdir(path.join(workspaceRoot, 'src'));
     const targetPath = path.join(workspaceRoot, 'src', 'main.ts');
@@ -81,8 +81,13 @@ describe('openWorkspaceFileWithDefaultApp', () => {
     expect(copyText).toHaveBeenCalledWith(await realpath(targetPath));
     expect(showItemInFolder).toHaveBeenCalledWith(await realpath(targetPath));
 
+    await expect(copyWorkspaceFilePath(workspaceRoot, 'src', copyText)).resolves.toEqual({ ok: true });
+    await expect(revealWorkspaceFileInFolder(workspaceRoot, 'src', showItemInFolder)).resolves.toEqual({ ok: true });
+    expect(copyText).toHaveBeenLastCalledWith(await realpath(path.join(workspaceRoot, 'src')));
+    expect(showItemInFolder).toHaveBeenLastCalledWith(await realpath(path.join(workspaceRoot, 'src')));
+
     await expect(copyWorkspaceFilePath(workspaceRoot, '../outside.ts', copyText)).resolves.toMatchObject({ ok: false });
-    expect(copyText).toHaveBeenCalledOnce();
+    expect(copyText).toHaveBeenCalledTimes(2);
   });
 
   it('creates previews only for PDF and image files inside the workspace', async () => {

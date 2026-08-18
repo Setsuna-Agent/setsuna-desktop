@@ -2,6 +2,7 @@ export type DesktopReviewSource = 'unstaged' | 'staged' | 'branch' | 'latest';
 export type DesktopReviewDiffLayout = 'unified' | 'split';
 
 export type ReviewPathContext = {
+  baseRef?: string | null;
   source: DesktopReviewSource;
   workspaceRoot?: string | null;
   gitRoot?: string | null;

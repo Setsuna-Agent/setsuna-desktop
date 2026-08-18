@@ -28,10 +28,15 @@ export function WorkspaceFileLink({
   line,
   linkKind,
   onClick,
+  onContextMenu,
   unavailableClassName = 'chat-markdown__unavailable-link',
   ...props
 }: WorkspaceFileLinkProps) {
-  const { onOpenWorkspaceFile, workspaceRoot } = useMarkdownNavigation();
+  const {
+    onOpenWorkspaceFile,
+    onOpenWorkspaceFileContextMenu,
+    workspaceRoot,
+  } = useMarkdownNavigation();
   const target = resolveMarkdownLinkTarget(filePath, workspaceRoot);
   const label = children ?? (target.kind === 'workspace' ? target.path : filePath);
 
@@ -45,6 +50,17 @@ export function WorkspaceFileLink({
     event.preventDefault();
     openWorkspaceFileReference(workspaceRoot, target.path, line ?? target.line, onOpenWorkspaceFile);
   };
+  const handleWorkspaceContextMenu = (event: MouseEvent<HTMLAnchorElement>) => {
+    onContextMenu?.(event);
+    if (event.defaultPrevented || !onOpenWorkspaceFileContextMenu) return;
+    event.preventDefault();
+    onOpenWorkspaceFileContextMenu({
+      filePath: target.path,
+      line: line ?? target.line,
+      x: event.clientX,
+      y: event.clientY,
+    });
+  };
 
   return (
     <a
@@ -54,6 +70,7 @@ export function WorkspaceFileLink({
       href={href ?? filePath}
       title={target.path}
       onClick={handleWorkspaceClick}
+      onContextMenu={handleWorkspaceContextMenu}
     >
       <WorkspaceFileIcon className="chat-markdown__file-icon" path={target.path} type="file" />
       <span>{label}</span>

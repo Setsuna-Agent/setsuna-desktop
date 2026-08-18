@@ -95,6 +95,7 @@ export type RuntimeDesktopSettings = {
   [key: string]: unknown;
   interfaceLanguage?: RuntimeInterfaceLanguage;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
+  showThinkingInTranscript?: boolean;
   npmRegistryUrl?: string;
   pythonPackageIndexUrl?: string;
 };

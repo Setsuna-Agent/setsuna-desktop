@@ -14,7 +14,7 @@ import {
   TextArea,
 } from '../../../shared/ui/primitives.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { MemorySettingToggle, SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
+import { SettingsChoiceGroup, SettingsToggle, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 import { errorMessage, formatSettingsDate } from '../settings-utils.js';
 
@@ -219,9 +219,9 @@ export function PersonalizationSettings({
         </div>
         {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
-          <MemorySettingToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
-          <MemorySettingToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
-          <MemorySettingToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
+          <SettingsToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
+          <SettingsToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
+          <SettingsToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
           <div className="chat-user-settings__row chat-user-settings__local-action-row">
             <span className="chat-user-settings__row-label">
               <Eye size={14} />

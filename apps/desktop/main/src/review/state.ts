@@ -1,21 +1,29 @@
-import type {
-  DesktopCommitMessageGenerationSource,
-  DesktopDiffFile,
-  DesktopDiffLine,
-  DesktopDiffSummary,
-  DesktopReviewActionResult,
-  DesktopReviewBranch,
-  DesktopReviewCommitInput,
-  DesktopReviewCommitResult,
-  DesktopReviewCreateBranchOptions,
-  DesktopReviewPushResult,
-  DesktopReviewState,
-  DesktopReviewStateOptions,
+import {
+  detectWorkspacePreviewImageMimeType,
+  isProbablyBinaryFileContent,
+  type DesktopCommitMessageGenerationSource,
+  type DesktopDiffFile,
+  type DesktopDiffLine,
+  type DesktopDiffSummary,
+  type DesktopReviewActionResult,
+  type DesktopReviewBranch,
+  type DesktopReviewCommitInput,
+  type DesktopReviewCommitResult,
+  type DesktopReviewCreateBranchOptions,
+  type DesktopReviewPushResult,
+  type DesktopReviewState,
+  type DesktopReviewStateOptions,
 } from '@setsuna-desktop/contracts';
 import { execFile } from 'node:child_process';
-import { readFile, realpath, rm, stat } from 'node:fs/promises';
+import { realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import {
+  classifyReviewImages,
+  readResolvedReviewFile,
+  resolveReviewWorkspaceFile,
+  type ReviewDiffVersionContext,
+} from './image-classification.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -23,6 +31,7 @@ const MAX_DIFF_LINES_PER_FILE = 2500;
 const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
 const MAX_COMMIT_MESSAGE_SOURCE_CHARS = 24_000;
 const REVIEW_DIFF_CONTEXT_LINES = 6;
+const REVIEW_FILE_KIND_SAMPLE_BYTES = 64 * 1024;
 
 export type DesktopReviewRepositoryLocation = {
   workspaceRoot: string;
@@ -61,7 +70,10 @@ export async function getDesktopReviewState(workspaceRoot: string, options: Desk
   const [branchSummary, fallbackCurrentRemoteSummary, stagedSummary, unstagedSummary] = await Promise.all([
     baseRef ? branchDiffSummary(gitRoot, baseRef) : Promise.resolve(null),
     currentRemoteRef && currentRemoteRef !== baseRef ? branchDiffSummary(gitRoot, currentRemoteRef) : Promise.resolve(null),
-    diffSummary(gitRoot, ['--cached', '--']),
+    diffSummary(gitRoot, ['--cached', '--'], {
+      before: { kind: 'git', revision: 'HEAD' },
+      after: { kind: 'index' },
+    }),
     unstagedDiffSummary(gitRoot),
   ]);
   const currentRemoteSummary = currentRemoteRef === baseRef ? branchSummary : fallbackCurrentRemoteSummary;
@@ -390,7 +402,10 @@ function defaultBaseRefCandidates(currentBranch: string | null): string[] {
 async function branchDiffSummary(gitRoot: string, baseRef: string): Promise<DesktopDiffSummary> {
   const mergeBase = await runGit(['merge-base', baseRef, 'HEAD'], gitRoot).catch(() => baseRef);
   const [tracked, untracked] = await Promise.all([
-    diffSummary(gitRoot, [mergeBase, '--']),
+    diffSummary(gitRoot, [mergeBase, '--'], {
+      before: { kind: 'git', revision: mergeBase },
+      after: { kind: 'workspace' },
+    }),
     untrackedDiffSummary(gitRoot),
   ]);
   return mergeDiffSummaries(tracked, untracked);
@@ -473,7 +488,10 @@ function truncateCommitMessageSource(value: string): string {
 
 async function unstagedDiffSummary(gitRoot: string): Promise<DesktopDiffSummary> {
   const [tracked, untrackedFiles] = await Promise.all([
-    diffSummary(gitRoot, ['--']),
+    diffSummary(gitRoot, ['--'], {
+      before: { kind: 'index' },
+      after: { kind: 'workspace' },
+    }),
     runGit(['ls-files', '--others', '--exclude-standard'], gitRoot)
       .then((output) => output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
       .catch(() => []),
@@ -498,9 +516,21 @@ function untrackedSummary(files: Array<DesktopDiffFile | null>): DesktopDiffSumm
   };
 }
 
-async function diffSummary(gitRoot: string, diffArgs: string[]): Promise<DesktopDiffSummary> {
-  const output = await runGit(['diff', '--no-ext-diff', `--unified=${REVIEW_DIFF_CONTEXT_LINES}`, ...diffArgs], gitRoot).catch(() => '');
-  return parseUnifiedDiff(output);
+async function diffSummary(
+  gitRoot: string,
+  diffArgs: string[],
+  versions: ReviewDiffVersionContext,
+): Promise<DesktopDiffSummary> {
+  const output = await runGit([
+    'diff',
+    '--no-ext-diff',
+    '--find-renames',
+    `--unified=${REVIEW_DIFF_CONTEXT_LINES}`,
+    ...diffArgs,
+  ], gitRoot).catch(() => '');
+  const summary = parseUnifiedDiff(output);
+  await classifyReviewImages(gitRoot, summary, versions);
+  return summary;
 }
 
 function parseUnifiedDiff(output: string): DesktopDiffSummary {
@@ -513,7 +543,7 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
 
   const finishCurrentFile = () => {
     if (!current) return;
-    if (!current.truncated) {
+    if (!current.truncated && !current.contentKind) {
       current.patch = currentPatchLines.join('\n');
     }
     files.push(current);
@@ -522,8 +552,10 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
   for (const rawLine of output.split(/\r?\n/)) {
     if (rawLine.startsWith('diff --git ')) {
       finishCurrentFile();
+      const diffPaths = parseDiffPaths(rawLine);
       current = {
-        path: parseDiffPath(rawLine),
+        path: diffPaths.path,
+        ...(diffPaths.previousPath ? { previousPath: diffPaths.previousPath } : {}),
         action: 'Modified',
         additions: 0,
         deletions: 0,
@@ -542,7 +574,16 @@ function parseUnifiedDiff(output: string): DesktopDiffSummary {
     if (!current.truncated) currentPatchLines.push(rawLine);
     if (rawLine.startsWith('new file mode')) current.action = 'Created';
     if (rawLine.startsWith('deleted file mode')) current.action = 'Deleted';
-    if (rawLine.startsWith('rename from ')) current.action = 'Renamed';
+    if (rawLine.startsWith('rename from ')) {
+      current.action = 'Renamed';
+      current.previousPath = rawLine.slice('rename from '.length);
+    }
+    if (rawLine.startsWith('rename to ')) current.path = rawLine.slice('rename to '.length);
+    if (rawLine.startsWith('Binary files ') || rawLine === 'GIT binary patch') {
+      current.contentKind = 'binary';
+      current.lines = [];
+      continue;
+    }
     if (rawLine.startsWith('+++ b/')) current.path = rawLine.slice(6);
     if (rawLine.startsWith('@@ ')) {
       const match = rawLine.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
@@ -646,20 +687,50 @@ function pushDiffLine(file: DesktopDiffFile, line: DesktopDiffLine, alreadyTrunc
 }
 
 async function summarizeUntrackedFile(gitRoot: string, relativePath: string): Promise<DesktopDiffFile | null> {
-  const absolutePath = path.resolve(gitRoot, relativePath);
-  const fileStat = await stat(absolutePath).catch(() => null);
-  if (!fileStat?.isFile()) return null;
-  if (fileStat.size > MAX_UNTRACKED_FILE_BYTES) {
+  const resolved = await resolveReviewWorkspaceFile(gitRoot, relativePath);
+  if (!resolved) return null;
+  if (resolved.size > MAX_UNTRACKED_FILE_BYTES) {
+    const sample = await readResolvedReviewFile(resolved.targetPath, REVIEW_FILE_KIND_SAMPLE_BYTES);
+    const contentKind = sample && detectWorkspacePreviewImageMimeType(sample)
+      ? 'image'
+      : sample && isProbablyBinaryFileContent(sample)
+        ? 'binary'
+        : undefined;
     return {
       path: relativePath,
       action: 'Created',
       additions: 0,
       deletions: 0,
-      truncated: true,
+      ...(contentKind ? { contentKind } : {}),
+      truncated: !contentKind,
       lines: [],
     };
   }
-  const content = await readFile(absolutePath, 'utf8').catch(() => '');
+  const buffer = await readResolvedReviewFile(resolved.targetPath, MAX_UNTRACKED_FILE_BYTES);
+  if (!buffer) return null;
+  if (detectWorkspacePreviewImageMimeType(buffer)) {
+    return {
+      path: relativePath,
+      action: 'Created',
+      additions: 0,
+      deletions: 0,
+      contentKind: 'image',
+      truncated: false,
+      lines: [],
+    };
+  }
+  if (isProbablyBinaryFileContent(buffer)) {
+    return {
+      path: relativePath,
+      action: 'Created',
+      additions: 0,
+      deletions: 0,
+      contentKind: 'binary',
+      truncated: false,
+      lines: [],
+    };
+  }
+  const content = buffer.toString('utf8');
   const lines = content.split(/\r?\n/);
   const truncated = lines.length > MAX_DIFF_LINES_PER_FILE;
   return {
@@ -702,9 +773,13 @@ function mergeDiffSummaries(left: DesktopDiffSummary, right: DesktopDiffSummary)
   };
 }
 
-function parseDiffPath(line: string): string {
+function parseDiffPaths(line: string): { path: string; previousPath?: string } {
   const match = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-  return match?.[2] ?? line.replace(/^diff --git /, '');
+  if (!match) return { path: line.replace(/^diff --git /, '') };
+  return {
+    path: match[2],
+    ...(match[1] !== match[2] ? { previousPath: match[1] } : {}),
+  };
 }
 
 async function runGit(args: string[], cwd: string): Promise<string> {

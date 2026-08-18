@@ -50,9 +50,12 @@ import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
-import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
 import { WorkspaceResizeHandle } from './WorkspaceResizeHandle.js';
-import { workspaceFileMentionEntry } from './workspaceFileMention.js';
+import {
+  workspaceDirectoryMentionEntry,
+  workspaceFileMentionEntry,
+} from './workspaceFileMention.js';
 
 const FILE_TREE_INDENT_STEP_PX = 8;
 const LazyEditableWorkspaceFile = lazy(async () => {
@@ -152,6 +155,8 @@ export function WorkspacePanel({
   const showsFileExplorer = activePanel.type === 'files' || activePanel.type === 'file';
   const tree = useMemo(() => buildProjectEntryTree(treeEntries), [treeEntries]);
   const query = treeQuery.trim().toLowerCase();
+  const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
+  const editorPath = filePreview ? `${activeProjectLabel}/${filePreview.path}` : activeProjectLabel;
 
   useEffect(() => {
     if (!activeProject) {
@@ -273,11 +278,11 @@ export function WorkspacePanel({
             className={`desktop-file-row desktop-file-row--${node.type}`}
             type="button"
             title={node.path}
-            onContextMenu={!directory ? (event) => {
+            onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              setContextMenu({ filePath: node.path, x: event.clientX, y: event.clientY });
-            } : undefined}
+              setContextMenu({ filePath: node.path, type: node.type, x: event.clientX, y: event.clientY });
+            }}
             onClick={() => (directory ? toggleDirectory(node.path) : onOpenEntry(node.entry))}
           >
             {directory ? <ChevronDown className={expanded ? '' : 'is-collapsed'} size={12} /> : <span className="desktop-file-row__spacer" />}
@@ -290,6 +295,60 @@ export function WorkspacePanel({
       </div>
     );
   };
+
+  const fileEditorHeader = showsFileExplorer ? (
+    <div className="desktop-editor__crumb">
+      <span className="desktop-editor__crumb-path">
+        <WorkspaceFilePath path={editorPath} />
+        {fileDraft.dirty ? <i aria-label={t('workspace.files.unsaved')}>●</i> : null}
+      </span>
+      <span className="desktop-editor__crumb-actions">
+        {filePreview?.preview?.kind === 'text' ? (
+          fileDraft.editing ? (
+            <>
+              <IconButton
+                className="app-shell-icon-control"
+                disabled={fileDraft.saving}
+                label={t('workspace.files.cancelEdit')}
+                onClick={fileDraft.cancelEditing}
+              >
+                <X size={15} />
+              </IconButton>
+              <IconButton
+                className="app-shell-icon-control"
+                disabled={!fileDraft.dirty || fileDraft.saving}
+                label={t(fileDraft.saving ? 'workspace.files.saving' : 'workspace.files.save')}
+                onClick={() => void fileDraft.save()}
+              >
+                <Save size={15} />
+              </IconButton>
+            </>
+          ) : (
+            <IconButton
+              className="app-shell-icon-control"
+              disabled={!fileDraft.canEdit || fileDraft.preparing}
+              label={t(fileDraft.preparing
+                ? 'workspace.files.loadingEditor'
+                : fileDraft.canEdit
+                  ? 'workspace.files.edit'
+                  : 'workspace.files.editUnavailable')}
+              onClick={() => void fileDraft.startEditing()}
+            >
+              <Pencil size={14} />
+            </IconButton>
+          )
+        ) : null}
+        <IconButton
+          className="app-shell-icon-control desktop-editor__tree-toggle"
+          label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
+          aria-pressed={treeVisible}
+          onClick={() => setTreeVisible((current) => !current)}
+        >
+          {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
+        </IconButton>
+      </span>
+    </div>
+  ) : null;
 
   const mainPanel =
     activePanel.type === 'overview' ? (
@@ -344,62 +403,6 @@ export function WorkspacePanel({
           });
         } : undefined}
       >
-        <div className="desktop-editor__crumb">
-          <span className="desktop-editor__crumb-path">
-            <span>{activeProject?.name ?? t('workspace.files.noProject')}</span>
-            {filePreview ? (
-              <span>
-                {filePreview.path}
-                {fileDraft.dirty ? <i aria-label={t('workspace.files.unsaved')}>●</i> : null}
-              </span>
-            ) : null}
-          </span>
-          <span className="desktop-editor__crumb-actions">
-            {filePreview?.preview?.kind === 'text' ? (
-              fileDraft.editing ? (
-                <>
-                  <IconButton
-                    className="app-shell-icon-control"
-                    disabled={fileDraft.saving}
-                    label={t('workspace.files.cancelEdit')}
-                    onClick={fileDraft.cancelEditing}
-                  >
-                    <X size={15} />
-                  </IconButton>
-                  <IconButton
-                    className="app-shell-icon-control"
-                    disabled={!fileDraft.dirty || fileDraft.saving}
-                    label={t(fileDraft.saving ? 'workspace.files.saving' : 'workspace.files.save')}
-                    onClick={() => void fileDraft.save()}
-                  >
-                    <Save size={15} />
-                  </IconButton>
-                </>
-              ) : (
-                <IconButton
-                  className="app-shell-icon-control"
-                  disabled={!fileDraft.canEdit || fileDraft.preparing}
-                  label={t(fileDraft.preparing
-                    ? 'workspace.files.loadingEditor'
-                    : fileDraft.canEdit
-                      ? 'workspace.files.edit'
-                      : 'workspace.files.editUnavailable')}
-                  onClick={() => void fileDraft.startEditing()}
-                >
-                  <Pencil size={14} />
-                </IconButton>
-              )
-            ) : null}
-            <IconButton
-              className="app-shell-icon-control desktop-editor__tree-toggle"
-              label={t(treeVisible ? 'workspace.files.collapseTree' : 'workspace.files.expandTree')}
-              aria-pressed={treeVisible}
-              onClick={() => setTreeVisible((current) => !current)}
-            >
-              {treeVisible ? <FolderOpen size={16} /> : <Folder size={16} />}
-            </IconButton>
-          </span>
-        </div>
         {fileDraft.errorMessage ? (
           <div className="desktop-editor__save-error" role="alert">
             {fileDraft.errorMessage}
@@ -430,9 +433,10 @@ export function WorkspacePanel({
           />
         ) : null}
         <div
-          className={`desktop-workspace-body ${showsFileExplorer ? '' : 'desktop-workspace-body--single'}`}
+          className={`desktop-workspace-body ${showsFileExplorer ? 'desktop-workspace-body--file-explorer' : 'desktop-workspace-body--single'}`}
           style={showsFileExplorer ? ({ '--desktop-file-tree-width': `${treeVisible ? treeWidth : 0}px` } as CSSProperties) : undefined}
         >
+          {fileEditorHeader}
           {mainPanel}
           {showsFileExplorer ? (
             <section className={`desktop-file-explorer ${treeVisible ? '' : 'desktop-file-explorer--tree-collapsed'}`}>
@@ -495,7 +499,11 @@ export function WorkspacePanel({
         selectedWorkspaceApp={selectedWorkspaceApp}
         target={contextMenu}
         workspaceApps={workspaceApps}
-        onAddToConversation={(filePath) => onAddFileToConversation(workspaceFileMentionEntry(filePath))}
+        onAddToConversation={(entryPath, type) => onAddFileToConversation(
+          type === 'directory'
+            ? workspaceDirectoryMentionEntry(entryPath)
+            : workspaceFileMentionEntry(entryPath),
+        )}
         onClose={() => setContextMenu(null)}
         onCopyPath={onCopyFilePath}
         onOpenWithApp={onOpenFileWithApp}

@@ -39,21 +39,23 @@ export function SettingsChoiceGroup<TValue extends string>({
   );
 }
 
-export function MemorySettingToggle({
+export function SettingsToggle({
   checked,
   description,
+  disabled = false,
   label,
   onChange,
 }: {
   checked: boolean;
   description: string;
+  disabled?: boolean;
   label: string;
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="chat-user-settings__row chat-user-settings__local-enable-row chat-user-settings__memory-toggle-row">
-      <span className="chat-user-settings__row-label chat-user-settings__memory-toggle-label">
-        <span className="chat-user-settings__memory-toggle-copy">
+    <div className="chat-user-settings__row chat-user-settings__local-enable-row chat-user-settings__toggle-row">
+      <span className="chat-user-settings__row-label chat-user-settings__toggle-label">
+        <span className="chat-user-settings__toggle-copy">
           <span>{label}</span>
           <small>{description}</small>
         </span>
@@ -63,6 +65,7 @@ export function MemorySettingToggle({
           aria-label={label}
           type="checkbox"
           checked={checked}
+          disabled={disabled}
           onChange={(event) => onChange(event.currentTarget.checked)}
         />
       </label>

@@ -803,11 +803,11 @@
     justify-self: stretch;
   }
 
-  .desktop-settings-panel .chat-user-settings__memory-toggle-row {
+  .desktop-settings-panel .chat-user-settings__toggle-row {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check {
+  .desktop-settings-panel .chat-user-settings__toggle-row > .sd-check {
     justify-self: start;
     margin-top: 0;
   }

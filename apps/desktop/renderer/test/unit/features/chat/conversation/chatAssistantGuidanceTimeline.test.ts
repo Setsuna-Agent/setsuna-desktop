@@ -14,7 +14,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       blocks: [workBlock('work_1', [before, after])],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_before', 'user_steer', 'assistant_after'],
-      workHistoryActive: true,
+      turnActive: true,
     });
 
     expect(plan.nodes).toHaveLength(1);
@@ -37,7 +37,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       blocks: [workBlock('work_1', [before, after])],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_before', 'user_steer', 'assistant_after'],
-      workHistoryActive: false,
+      turnActive: false,
     });
 
     expect(plan.nodes[0]).toMatchObject({ type: 'workHistory' });
@@ -58,7 +58,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
       guidanceMessages: [guidance],
       messageOrderIds: ['assistant_content', 'user_steer'],
-      workHistoryActive: false,
+      turnActive: false,
     });
 
     expect(plan.placeholderGuidance).toEqual([]);
@@ -77,7 +77,7 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       blocks: [{ type: 'content', id: 'assistant_content:content', segment: assistant, content: 'answer' }],
       guidanceMessages: [guidance],
       messageOrderIds: ['user_steer', 'assistant_content'],
-      workHistoryActive: false,
+      turnActive: false,
     });
 
     expect(plan.placeholderGuidance).toEqual([expect.objectContaining({ id: 'user_steer' })]);
@@ -94,18 +94,17 @@ describe('createAssistantGuidanceTimelinePlan', () => {
         plugins: [{ id: 'documents', installed: true, name: 'Word 文档处理' }],
       }],
     };
-    const createPlan = (workHistoryActive: boolean) => createAssistantGuidanceTimelinePlan({
+    const createPlan = (turnActive: boolean) => createAssistantGuidanceTimelinePlan({
       blocks: [pluginBlock],
       guidanceMessages: [],
       messageOrderIds: [message.id],
-      workHistoryActive,
+      turnActive,
     });
 
     expect(createPlan(true).nodes[0]).toMatchObject({
       type: 'workHistory',
       entries: [{
         type: 'workItem',
-        active: false,
         item: { type: 'pluginUses' },
       }],
     });
@@ -113,7 +112,6 @@ describe('createAssistantGuidanceTimelinePlan', () => {
       type: 'workHistory',
       entries: [{
         type: 'workItem',
-        active: false,
         item: { type: 'pluginUses' },
       }],
     });
@@ -125,13 +123,13 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     const after = assistantMessage('assistant_after', 'after');
     const plan = createAssistantGuidanceTimelinePlan({
       blocks: [
-        workBlock('work_before', [before]),
+        { ...workBlock('work_before', [before]), active: false },
         { type: 'content', id: 'assistant_body:content', segment: body, content: body.content },
-        workBlock('work_after', [after]),
+        { ...workBlock('work_after', [after]), active: false },
       ],
       guidanceMessages: [],
       messageOrderIds: [before.id, body.id, after.id],
-      workHistoryActive: true,
+      turnActive: true,
     });
 
     expect(plan.nodes.map((node) => node.type)).toEqual([
@@ -142,10 +140,14 @@ describe('createAssistantGuidanceTimelinePlan', () => {
     expect(plan.nodes[0]).toMatchObject({
       type: 'workHistory',
       blocks: [{ id: 'work_before' }],
+      active: true,
+      hasFollowingContent: true,
     });
     expect(plan.nodes[2]).toMatchObject({
       type: 'workHistory',
       blocks: [{ id: 'work_after' }],
+      active: true,
+      hasFollowingContent: false,
     });
   });
 });

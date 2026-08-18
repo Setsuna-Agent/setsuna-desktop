@@ -227,6 +227,58 @@ describe('WebDavClient', () => {
     await expect(client.test()).rejects.toThrow('无法解析服务器域名');
   });
 
+  it('follows signed download redirects without forwarding WebDAV credentials', async () => {
+    const requests: Array<{ authorization: string | null; url: string }> = [];
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      async (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        requests.push({
+          authorization: new Headers(init?.headers).get('authorization'),
+          url,
+        });
+        return url.startsWith('https://dav.test/')
+          ? new Response(null, {
+            status: 302,
+            headers: { Location: 'https://download.test/signed-object' },
+          })
+          : new Response(new Uint8Array([1, 2, 3]), { status: 200 });
+      },
+    );
+
+    await expect(client.getBuffer(['object.enc'])).resolves.toEqual(Buffer.from([1, 2, 3]));
+    expect(requests).toEqual([
+      {
+        authorization: `Basic ${Buffer.from('alice:secret').toString('base64')}`,
+        url: 'https://dav.test/dav/Backups/object.enc',
+      },
+      { authorization: null, url: 'https://download.test/signed-object' },
+    ]);
+  });
+
+  it('keeps credentials on redirects within the configured WebDAV path', async () => {
+    const authorizations: Array<string | null> = [];
+    let requestCount = 0;
+    const client = new WebDavClient(
+      normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
+      { username: 'alice', password: 'secret' },
+      async (_input, init) => {
+        authorizations.push(new Headers(init?.headers).get('authorization'));
+        requestCount += 1;
+        return requestCount === 1
+          ? new Response(null, { status: 301, headers: { Location: '/dav/canonical/' } })
+          : new Response(null, { status: 207 });
+      },
+    );
+
+    await expect(client.test()).resolves.toBeUndefined();
+    expect(authorizations).toEqual([
+      `Basic ${Buffer.from('alice:secret').toString('base64')}`,
+      `Basic ${Buffer.from('alice:secret').toString('base64')}`,
+    ]);
+  });
+
   it('reports streamed bytes while downloading a backup object', async () => {
     const client = new WebDavClient(
       normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
