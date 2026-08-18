@@ -156,6 +156,10 @@ export type DesktopReviewStateOptions = {
   baseRef?: string | null;
 };
 
+export type DesktopReviewChangeEvent = {
+  subscriptionId: string;
+};
+
 export type DesktopReviewCommitInput = {
   includeUnstaged?: boolean;
   message: string;
@@ -272,6 +276,7 @@ export type SetsunaDesktopBridge = {
   };
   desktopReview: {
     getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
+    watchChanges(workspaceRoot: string, callback: () => void): () => void;
     discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
     stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
     unstageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;

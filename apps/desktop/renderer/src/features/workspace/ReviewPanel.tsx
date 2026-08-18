@@ -23,7 +23,6 @@ import { ActionTooltip, EmptyState, IconButton } from '../../shared/ui/primitive
 import type {
   DesktopDiffSummary,
   DesktopReviewFocusRequest,
-  DesktopReviewLoadOptions,
   DesktopReviewState,
   DesktopWorkspaceApp,
 } from './model.js';
@@ -94,6 +93,7 @@ export function DesktopReviewPanel({
   onOpenFileWithApp = noopWorkspaceFileAction,
   onOpenProjectFile,
   onRefresh,
+  onSelectBaseRef,
   onRevealFile = noopWorkspaceFileAction,
 }: {
   activeProject?: WorkspaceProject;
@@ -110,13 +110,13 @@ export function DesktopReviewPanel({
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp?: (appId: string, filePath: string, line?: number) => void;
   onOpenProjectFile: (filePath: string, line?: number) => void;
-  onRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onRefresh: () => void;
+  onSelectBaseRef: (baseRef: string) => void;
   onRevealFile?: (filePath: string) => void;
 }) {
   const { t } = useI18n();
   const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
-  const [branchBaseRefByKey, setBranchBaseRefByKey] = useState<Record<string, string>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
   const [reviewLineWrapByKey, setReviewLineWrapByKey] = useState<Record<string, boolean>>({});
   const [fileExpansionRequest, setFileExpansionRequest] = useState<ReviewFileExpansionRequest>({ expanded: true, version: 0 });
@@ -126,11 +126,9 @@ export function DesktopReviewPanel({
   const hasGit = Boolean(reviewState?.isGitRepository);
   const branchComparisonAvailable = canCompareReviewBranch(reviewState);
   const reviewSourceStorageKey = activeProject ? reviewSourcePreferenceKey(activeProject) : null;
-  const branchBaseRefStorageKey = activeProject ? branchBaseRefPreferenceKey(activeProject) : null;
   const reviewDiffLayoutStorageKey = activeProject ? reviewDiffLayoutPreferenceKey(activeProject) : null;
   const reviewLineWrapStorageKey = activeProject ? reviewLineWrapPreferenceKey(activeProject) : null;
   const storedReviewSource = useMemo(() => readReviewSourcePreference(reviewSourceStorageKey), [reviewSourceStorageKey]);
-  const storedBranchBaseRef = useMemo(() => readBranchBaseRefPreference(branchBaseRefStorageKey), [branchBaseRefStorageKey]);
   const storedReviewDiffLayout = useMemo(() => readReviewDiffLayoutPreference(reviewDiffLayoutStorageKey), [reviewDiffLayoutStorageKey]);
   const storedReviewLineWrap = useMemo(() => readReviewLineWrapPreference(reviewLineWrapStorageKey), [reviewLineWrapStorageKey]);
   const reviewSource = reviewSourceStorageKey
@@ -147,10 +145,7 @@ export function DesktopReviewPanel({
     : 'latest';
   const branchCompareVisible = activeSource === 'branch' && hasGit;
   const availableBaseRefs = reviewState?.baseRefs ?? [];
-  const pendingBranchBaseRef = branchBaseRefStorageKey ? branchBaseRefByKey[branchBaseRefStorageKey] : undefined;
-  const activeBranchBaseRef = branchBaseRefStorageKey
-    ? pendingBranchBaseRef ?? reviewState?.baseRef ?? ''
-    : reviewState?.baseRef ?? '';
+  const activeBranchBaseRef = reviewState?.baseRef ?? '';
   const reviewLayoutToggleTip = reviewDiffLayout === 'split'
     ? t('workspace.review.layout.split')
     : t('workspace.review.layout.unified');
@@ -187,23 +182,6 @@ export function DesktopReviewPanel({
       ])
     : null;
 
-  useEffect(() => {
-    if (activeSource !== 'branch') return;
-    if (!branchBaseRefStorageKey) return;
-    const restoredBaseRef = storedBranchBaseRef;
-    if (!restoredBaseRef) return;
-    const preferredRestoredBaseRef = preferredBranchCompareRef(restoredBaseRef, availableBaseRefs);
-    if (!shouldRestoreBranchBaseRefPreference({
-      availableBaseRefs,
-      currentBaseRef: reviewState?.baseRef,
-      pendingBaseRef: pendingBranchBaseRef,
-      storedBaseRef: preferredRestoredBaseRef,
-    })) return;
-    setBranchBaseRefByKey((current) => ({ ...current, [branchBaseRefStorageKey]: preferredRestoredBaseRef }));
-    writeBranchBaseRefPreference(branchBaseRefStorageKey, preferredRestoredBaseRef);
-    onRefresh({ baseRef: preferredRestoredBaseRef });
-  }, [activeSource, availableBaseRefs, branchBaseRefStorageKey, onRefresh, pendingBranchBaseRef, reviewState?.baseRef, storedBranchBaseRef]);
-
   useEffect(() => () => {
     if (refreshFeedbackTimerRef.current) clearTimeout(refreshFeedbackTimerRef.current);
   }, []);
@@ -239,7 +217,7 @@ export function DesktopReviewPanel({
       </section>
     );
   }
-  if (error && !latestSummary?.files.length) {
+  if (error && !reviewState && !latestSummary?.files.length) {
     return (
       <section className="desktop-review-panel">
         <EmptyState title={t('workspace.review.loadFailed')} body={error} />
@@ -275,13 +253,7 @@ export function DesktopReviewPanel({
     }
   };
   const handleBranchBaseRefChange = (baseRef: string) => {
-    if (branchBaseRefStorageKey) {
-      setBranchBaseRefByKey((current) => (
-        current[branchBaseRefStorageKey] === baseRef ? current : { ...current, [branchBaseRefStorageKey]: baseRef }
-      ));
-      writeBranchBaseRefPreference(branchBaseRefStorageKey, baseRef);
-    }
-    onRefresh({ baseRef });
+    onSelectBaseRef(baseRef);
   };
   const handleReviewDiffLayoutToggle = () => {
     const nextLayout: DesktopReviewDiffLayout = reviewDiffLayout === 'split' ? 'unified' : 'split';
@@ -522,10 +494,6 @@ function reviewSourcePreferenceKey(project: WorkspaceProject): string {
   return `setsuna-desktop:review-source:${project.id || project.path}`;
 }
 
-function branchBaseRefPreferenceKey(project: WorkspaceProject): string {
-  return `setsuna-desktop:review-base-ref:${project.id || project.path}`;
-}
-
 function reviewDiffLayoutPreferenceKey(project: WorkspaceProject): string {
   return `setsuna-desktop:review-diff-layout:${project.id || project.path}`;
 }
@@ -538,11 +506,6 @@ function readReviewSourcePreference(key: string | null): DesktopReviewSource | n
   if (!key) return null;
   const value = readBrowserStorageValue(key);
   return isDesktopReviewSource(value) ? value : null;
-}
-
-function readBranchBaseRefPreference(key: string | null): string | null {
-  if (!key) return null;
-  return readBrowserStorageValue(key)?.trim() || null;
 }
 
 function readReviewDiffLayoutPreference(key: string | null): DesktopReviewDiffLayout | null {
@@ -563,10 +526,6 @@ function writeReviewSourcePreference(key: string, source: DesktopReviewSource): 
   writeBrowserStorageValue(key, source);
 }
 
-function writeBranchBaseRefPreference(key: string, baseRef: string): void {
-  writeBrowserStorageValue(key, baseRef);
-}
-
 function writeReviewDiffLayoutPreference(key: string, layout: DesktopReviewDiffLayout): void {
   writeBrowserStorageValue(key, layout);
 }
@@ -581,22 +540,6 @@ function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {
 
 function isDesktopReviewDiffLayout(value: unknown): value is DesktopReviewDiffLayout {
   return value === 'unified' || value === 'split';
-}
-
-export function shouldRestoreBranchBaseRefPreference({
-  availableBaseRefs,
-  currentBaseRef,
-  pendingBaseRef,
-  storedBaseRef,
-}: {
-  availableBaseRefs: string[];
-  currentBaseRef?: string | null;
-  pendingBaseRef?: string;
-  storedBaseRef?: string | null;
-}): boolean {
-  if (!storedBaseRef || !availableBaseRefs.includes(storedBaseRef)) return false;
-  if (pendingBaseRef !== undefined) return false;
-  return currentBaseRef !== storedBaseRef;
 }
 
 function BranchCompareBar({

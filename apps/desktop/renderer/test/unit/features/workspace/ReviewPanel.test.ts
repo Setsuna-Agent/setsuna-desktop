@@ -8,7 +8,6 @@ import {
   consumeReviewFocusRequest,
   reviewFilePathParts,
   reviewWorkspaceFilePath,
-  shouldRestoreBranchBaseRefPreference,
 } from '../../../../src/features/workspace/ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
 
@@ -33,6 +32,7 @@ describe('DesktopReviewPanel', () => {
       onExternalOpenFile: () => undefined,
       onOpenProjectFile: () => undefined,
       onRefresh: () => undefined,
+      onSelectBaseRef: () => undefined,
     }));
 
     const file2Index = html.indexOf('apps/File2.ts');
@@ -73,6 +73,7 @@ describe('DesktopReviewPanel', () => {
       onExternalOpenFile: () => undefined,
       onOpenProjectFile: () => undefined,
       onRefresh: () => undefined,
+      onSelectBaseRef: () => undefined,
     }));
 
     expect(html).toContain('line 40 full diff');
@@ -102,6 +103,7 @@ describe('DesktopReviewPanel', () => {
           onExternalOpenFile: () => undefined,
           onOpenProjectFile: () => undefined,
           onRefresh: () => undefined,
+          onSelectBaseRef: () => undefined,
         }));
 
         expect(html).toContain(`desktop-review-change-counts__addition">+${summaries[source].additions}</span>`);
@@ -147,6 +149,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expect(html).toContain('desktop-review-branch-compare');
@@ -172,6 +175,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expect(html).toContain('未暂存');
@@ -196,23 +200,6 @@ describe('DesktopReviewPanel', () => {
     ]);
   });
 
-  it('does not restore a stale branch compare preference after the user picks a new base ref', () => {
-    expect(shouldRestoreBranchBaseRefPreference({
-      availableBaseRefs: ['master', 'setsuna/temp', 'temp'],
-      currentBaseRef: 'setsuna/temp',
-      pendingBaseRef: 'setsuna/temp',
-      storedBaseRef: 'master',
-    })).toBe(false);
-  });
-
-  it('restores a branch compare preference before any in-memory selection exists', () => {
-    expect(shouldRestoreBranchBaseRefPreference({
-      availableBaseRefs: ['master', 'setsuna/temp', 'temp'],
-      currentBaseRef: 'setsuna/temp',
-      storedBaseRef: 'master',
-    })).toBe(true);
-  });
-
   it('restores the split diff layout for the active project', () => {
     withWindowLocalStorage({
       'setsuna-desktop:review-diff-layout:project_1': 'split',
@@ -227,6 +214,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expect(html).toContain('desktop-review-diff desktop-review-diff--split');
@@ -245,6 +233,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expect(html).toContain('desktop-review-diff--wrap');
@@ -264,6 +253,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expectSharedReviewVirtualizer(html);
@@ -288,6 +278,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expectSharedReviewVirtualizer(html);
@@ -313,6 +304,7 @@ describe('DesktopReviewPanel', () => {
         onExternalOpenFile: () => undefined,
         onOpenProjectFile: () => undefined,
         onRefresh: () => undefined,
+        onSelectBaseRef: () => undefined,
       }));
 
       expectSharedReviewVirtualizer(html);

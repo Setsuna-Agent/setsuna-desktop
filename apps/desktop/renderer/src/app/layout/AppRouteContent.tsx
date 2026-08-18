@@ -371,7 +371,8 @@ export function AppRouteContent({
         workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);
       }}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
-      onReviewRefresh={(options) => workspacePanels.loadReviewState(options)}
+      onReviewBaseRefChange={(baseRef) => workspacePanels.selectReviewBaseRef(baseRef)}
+      onReviewRefresh={() => workspacePanels.loadReviewState()}
       onRevealFile={(filePath) => void workspacePanels.revealWorkspaceFile(filePath)}
       onSetMultiAgentEnabled={(enabled) => runtime.saveRuntimePreferences({
         features: {

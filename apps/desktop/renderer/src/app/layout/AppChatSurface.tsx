@@ -49,7 +49,6 @@ import type {
   DesktopPanelTabPatch,
   DesktopPanelType,
   DesktopReviewFocusRequest,
-  DesktopReviewLoadOptions,
   DesktopReviewOpenHandler,
   DesktopReviewState,
   DesktopTerminalSession,
@@ -164,6 +163,7 @@ export function AppChatSurface({
   onMoveBottomPanel,
   onReorderBottomPanels,
   onReloadThreads,
+  onReviewBaseRefChange,
   onReviewRefresh,
   onRevealFile,
   onSideChatError,
@@ -264,7 +264,8 @@ export function AppChatSurface({
   ) => void;
   onReorderBottomPanels: (panelId: string, targetPanelId: string, placement: DesktopPanelDropPlacement) => void;
   onReloadThreads: () => Promise<unknown>;
-  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onReviewBaseRefChange: (baseRef: string) => void | Promise<void>;
+  onReviewRefresh: () => void | Promise<void>;
   onRevealFile: (filePath: string) => void;
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
@@ -360,6 +361,7 @@ export function AppChatSurface({
     onOpenSideChat,
     onOpenTerminalPanel: onOpenSideTerminalPanel,
     onTerminalTitleChange: (panelId: string, title: string) => onUpdateDesktopPanel(panelId, { title }),
+    onReviewBaseRefChange,
     onReviewRefresh,
     onRevealFile,
     onResizeStep: onWorkspaceResizeStep,

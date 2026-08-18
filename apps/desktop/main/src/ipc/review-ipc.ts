@@ -1,4 +1,6 @@
-import { ipcMain } from 'electron';
+import { randomUUID } from 'node:crypto';
+import { ipcMain, type BrowserWindow, type WebContents } from 'electron';
+import { DesktopReviewChangeMonitor } from '../review/change-monitor.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -11,10 +13,23 @@ import {
   unstageReviewFiles,
 } from '../review/state.js';
 import type { RuntimeHost } from '../runtime/host.js';
+import { isDesktopRendererSender } from './sender.js';
 
-export function registerReviewIpc(runtimeHost: RuntimeHost): void {
+const REVIEW_CHANGED_CHANNEL = 'desktop-review:changed';
+
+export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserWindow): () => void {
+  const monitor = new DesktopReviewChangeMonitor();
+  const subscriptions = new Map<string, {
+    dispose: () => void;
+    handleDestroyed: () => void;
+    sender: WebContents;
+  }>();
+  const subscriptionBySender = new Map<WebContents, string>();
+  const latestSubscriptionRequestBySender = new Map<WebContents, string>();
   const channels = [
     'desktop-review:get-state',
+    'desktop-review:subscribe-changes',
+    'desktop-review:unsubscribe-changes',
     'desktop-review:discard-unstaged',
     'desktop-review:stage-files',
     'desktop-review:unstage-files',
@@ -26,9 +41,60 @@ export function registerReviewIpc(runtimeHost: RuntimeHost): void {
   ];
   for (const channel of channels) ipcMain.removeHandler(channel);
 
+  const disposeSubscription = (subscriptionId: string) => {
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) return;
+    subscription.sender.removeListener('destroyed', subscription.handleDestroyed);
+    subscription.dispose();
+    subscriptions.delete(subscriptionId);
+    if (subscriptionBySender.get(subscription.sender) === subscriptionId) {
+      subscriptionBySender.delete(subscription.sender);
+    }
+    if (latestSubscriptionRequestBySender.get(subscription.sender) === subscriptionId) {
+      latestSubscriptionRequestBySender.delete(subscription.sender);
+    }
+  };
+
   ipcMain.handle('desktop-review:get-state', async (_event, input) =>
     getDesktopReviewState(String(input?.workspaceRoot ?? ''), { baseRef: typeof input?.baseRef === 'string' ? input.baseRef : null }),
   );
+  ipcMain.handle('desktop-review:subscribe-changes', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) throw new Error('Desktop renderer is unavailable.');
+    const subscriptionId = randomUUID();
+    const sender = event.sender;
+    latestSubscriptionRequestBySender.set(sender, subscriptionId);
+    let dispose: () => void;
+    try {
+      dispose = await monitor.subscribe(String(input?.workspaceRoot ?? ''), () => {
+        if (!sender.isDestroyed()) sender.send(REVIEW_CHANGED_CHANNEL, { subscriptionId });
+      });
+    } catch (error) {
+      if (latestSubscriptionRequestBySender.get(sender) === subscriptionId) {
+        latestSubscriptionRequestBySender.delete(sender);
+      }
+      throw error;
+    }
+    if (sender.isDestroyed() || latestSubscriptionRequestBySender.get(sender) !== subscriptionId) {
+      dispose();
+      if (latestSubscriptionRequestBySender.get(sender) === subscriptionId) {
+        latestSubscriptionRequestBySender.delete(sender);
+      }
+      return subscriptionId;
+    }
+    const previousSubscriptionId = subscriptionBySender.get(sender);
+    if (previousSubscriptionId) disposeSubscription(previousSubscriptionId);
+    const handleDestroyed = () => disposeSubscription(subscriptionId);
+    subscriptions.set(subscriptionId, { dispose, handleDestroyed, sender });
+    subscriptionBySender.set(sender, subscriptionId);
+    sender.once('destroyed', handleDestroyed);
+    return subscriptionId;
+  });
+  ipcMain.handle('desktop-review:unsubscribe-changes', (event, rawSubscriptionId) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) throw new Error('Desktop renderer is unavailable.');
+    const subscriptionId = String(rawSubscriptionId ?? '');
+    const subscription = subscriptions.get(subscriptionId);
+    if (subscription?.sender === event.sender) disposeSubscription(subscriptionId);
+  });
   ipcMain.handle('desktop-review:discard-unstaged', async (_event, input) =>
     discardUnstagedReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
   );
@@ -62,6 +128,12 @@ export function registerReviewIpc(runtimeHost: RuntimeHost): void {
     });
     return { message: String(result.message ?? '').trim() };
   });
+
+  return () => {
+    latestSubscriptionRequestBySender.clear();
+    for (const subscriptionId of [...subscriptions.keys()]) disposeSubscription(subscriptionId);
+    monitor.close();
+  };
 }
 
 function normalizeFilePathList(value: unknown): string[] {

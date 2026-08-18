@@ -97,12 +97,14 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `data-root-ipc.ts` | 数据根状态、扫描、迁移、恢复、旧根清理 |
 | `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
 | `browser-ipc.ts` | browser tab 注册、active tab、截图、favicon、设备模拟 |
-| `review-ipc.ts` | review state、stage、unstage、discard |
+| `review-ipc.ts` | review state、worktree 变更订阅、stage、unstage、discard |
 | `terminal-ipc.ts` | terminal open/write/read/resize/close |
 | `updater-ipc.ts` | update state、check、download source、download/open |
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `workspace-ipc.ts` | 外部 workspace app 列表与打开 |
 | `sender.ts` | 可信主窗口 sender 校验 |
+
+Review 变更监控位于 `src/review/change-monitor.ts`。它监听 worktree、worktree Git 目录及共享 Git 目录，合并事件并过滤 ignored 文件后，只向 renderer 发布失效通知；具体 diff 仍由带当前比较基准的 `get-state` 请求生成。
 
 ## IPC 设计规则
 

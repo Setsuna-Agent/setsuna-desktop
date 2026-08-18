@@ -467,11 +467,10 @@ describe('agent loop tool execution', () => {
       const previews = events.filter((event) => event.type === 'tool.preview' && event.payload.toolCallId === 'call_noisy_delta');
       const starts = events.filter((event) => event.type === 'tool.started' && event.payload.toolCallId === 'call_noisy_delta');
   
-      expect(toolHost.partialPreviewCalls.length).toBeGreaterThan(1);
-      expect(toolHost.partialPreviewCalls.length).toBeLessThanOrEqual(6);
+      expect(toolHost.partialPreviewCalls).toHaveLength(1);
       expect(previews).toHaveLength(1);
       expect(previews[0]).toMatchObject({ payload: { argumentsLength: expect.any(Number) } });
-      expect((previews[0] as Extract<RuntimeEvent, { type: 'tool.preview' }>).payload.argumentsLength).toBeGreaterThan(4_000);
+      expect((previews[0] as Extract<RuntimeEvent, { type: 'tool.preview' }>).payload.argumentsLength).toBeGreaterThan(0);
       expect(starts).toHaveLength(1);
       expect(events).toContainEqual(expect.objectContaining({
         type: 'tool.completed',

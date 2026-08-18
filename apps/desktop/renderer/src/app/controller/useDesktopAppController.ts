@@ -78,7 +78,6 @@ export function useDesktopAppController() {
   const workspacePanels = useDesktopWorkspacePanels({
     activeProject: activeWorkspace,
     activeView,
-    autoLoadReview: Boolean(currentThread),
     developerFeaturesEnabled: runtime.config
       ? runtimeDeveloperFeaturesEnabled(runtime.config)
       : null,

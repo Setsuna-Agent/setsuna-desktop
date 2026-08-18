@@ -71,6 +71,7 @@ export function pcLocalToolPrompt(
       lines.push(
         '- Prefer apply_patch for targeted code changes so the runtime can preview and approve a cohesive multi-file patch.',
         '- apply_patch may create, update, or delete multiple files. Keep patches scoped and easy to review.',
+        '- When one requested change touches two or more related existing files, combine those edits into one apply_patch call. Do not split them into sequential full-file rewrites when a cohesive patch can express the change.',
       );
     }
     const singleFileTools = ['edit', 'write_file', 'append_file', 'delete_file'].filter((name) => advertised.has(name));

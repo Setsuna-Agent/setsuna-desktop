@@ -1,6 +1,5 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
@@ -33,13 +32,11 @@ import {
   type DesktopPanelTab,
   type DesktopPanelTabPatch,
   type DesktopPanelType,
-  type DesktopReviewLoadOptions,
-  type DesktopReviewState,
   type DesktopTerminalSession,
   type DesktopWorkspaceApp,
 } from '../model.js';
 import { readPreferredWorkspaceAppId, writePreferredWorkspaceAppId } from '../model/workspaceAppPreference.js';
-import { shouldLoadDesktopReviewState } from './desktopReviewAutoLoad.js';
+import { useDesktopReviewState } from './useDesktopReviewState.js';
 import {
   desktopWorkspaceBrowserPanelInstances,
   useDesktopWorkspacePanelSession,
@@ -51,7 +48,6 @@ import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThrea
 type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
   activeView: string;
-  autoLoadReview: boolean;
   developerFeaturesEnabled: boolean | null;
   setError: (message: string | null) => void;
   targetIdentity: ChatComposerTargetIdentity;
@@ -64,7 +60,6 @@ const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
 export function useDesktopWorkspacePanels({
   activeProject,
   activeView,
-  autoLoadReview,
   developerFeaturesEnabled,
   setError,
   targetIdentity,
@@ -84,6 +79,13 @@ export function useDesktopWorkspacePanels({
     sidePanelSlot,
     updateLayoutForIdentity,
   } = useDesktopWorkspacePanelSession(targetIdentity);
+  const {
+    loadReviewState,
+    reviewError,
+    reviewLoading,
+    reviewState,
+    selectReviewBaseRef,
+  } = useDesktopReviewState({ activeProject });
   // These dispatchers are scoped to targetIdentity, so callbacks using them must
   // include them in their dependency list instead of treating them like useState setters.
   const [terminalSessionsByPanelId, setTerminalSessionsByPanelId] = useState<TerminalSessionsByPanelId>({});
@@ -91,14 +93,10 @@ export function useDesktopWorkspacePanels({
   const [panelLauncherMenuOpen, setPanelLauncherMenuOpen] = useState(false);
   const [workspaceApps, setWorkspaceApps] = useState<DesktopWorkspaceApp[]>([]);
   const [selectedWorkspaceAppId, setSelectedWorkspaceAppId] = useState<string | null>(() => readPreferredWorkspaceAppId() || null);
-  const [reviewState, setReviewState] = useState<DesktopReviewState | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
   const pendingTerminalSessionKeysRef = useRef<Set<string>>(new Set());
   const browserPanelSeqRef = useRef(0);
   const terminalPanelSeqRef = useRef(0);
   const sideChatPanelSeqRef = useRef(0);
-  const reviewRequests = useLatestRequestGuard();
 
   const selectedWorkspaceApp = workspaceApps.find((app) => app.id === selectedWorkspaceAppId) ?? workspaceApps[0] ?? null;
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
@@ -114,8 +112,6 @@ export function useDesktopWorkspacePanels({
     [bottomPanelVisible, layouts, sidePanelVisible, targetIdentity],
   );
   const bottomTerminalPanelOpen = slotHasPanelType(bottomPanelSlot, 'terminal');
-  const sideReviewPanelOpen = slotHasPanelType(sidePanelSlot, 'review');
-  const bottomReviewPanelOpen = slotHasPanelType(bottomPanelSlot, 'review');
   const panelLauncherTypes = useMemo(() => [
     'chat',
     'browser',
@@ -191,10 +187,6 @@ export function useDesktopWorkspacePanels({
   }, [resetPanelSession]);
 
   useEffect(() => {
-    reviewRequests.invalidate();
-    setReviewState(null);
-    setReviewError(null);
-    setReviewLoading(false);
     if (!activeProject?.path) {
       setWorkspaceApps([]);
       setSelectedWorkspaceAppId(null);
@@ -221,50 +213,7 @@ export function useDesktopWorkspacePanels({
     return () => {
       cancelled = true;
     };
-  }, [activeProject?.path, reviewRequests]);
-
-  const loadReviewState = useCallback(async (options: DesktopReviewLoadOptions = {}) => {
-    if (!activeProject?.path) {
-      reviewRequests.invalidate();
-      setReviewState(null);
-      setReviewError(null);
-      setReviewLoading(false);
-      return;
-    }
-    const api = window.setsunaDesktop?.desktopReview;
-    if (!api) {
-      setReviewError('Desktop review bridge is unavailable.');
-      return;
-    }
-    const isLatest = reviewRequests.begin();
-    const projectPath = activeProject.path;
-    setReviewLoading(true);
-    setReviewError(null);
-    try {
-      const state = await api.getState(projectPath, options);
-      if (!isLatest()) return;
-      setReviewState(state);
-    } catch (unknownError) {
-      if (!isLatest()) return;
-      setReviewState(null);
-      setReviewError(unknownError instanceof Error ? unknownError.message : String(unknownError));
-    } finally {
-      if (isLatest()) setReviewLoading(false);
-    }
-  }, [activeProject?.path, reviewRequests]);
-
-  useEffect(() => {
-    if (!shouldLoadDesktopReviewState({
-      activeView,
-      autoLoad: autoLoadReview,
-      error: reviewError,
-      hasState: Boolean(reviewState),
-      hasWorkspace: Boolean(activeProject?.path),
-      loading: reviewLoading,
-      panelOpen: sideReviewPanelOpen || bottomReviewPanelOpen,
-    })) return;
-    void loadReviewState();
-  }, [activeProject?.path, activeView, autoLoadReview, bottomReviewPanelOpen, loadReviewState, reviewError, reviewLoading, reviewState, sideReviewPanelOpen]);
+  }, [activeProject?.path]);
 
   const createTerminalPanel = useCallback((): DesktopPanelTab => {
     terminalPanelSeqRef.current += 1;
@@ -688,6 +637,7 @@ export function useDesktopWorkspacePanels({
       reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,
+      selectReviewBaseRef,
       sideActivePanel,
       sidePanelSlot,
       sidePanelVisible,
@@ -736,6 +686,7 @@ export function useDesktopWorkspacePanels({
       reorderDesktopPanel,
       selectWorkspaceApp,
       selectedWorkspaceApp,
+      selectReviewBaseRef,
       sideActivePanel,
       sidePanelSlot,
       sidePanelVisible,

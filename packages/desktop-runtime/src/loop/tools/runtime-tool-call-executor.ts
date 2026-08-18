@@ -54,10 +54,12 @@ import { RuntimeToolRouter } from './tool-router.js';
 
 const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
 const TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD = 1_024;
+const TOOL_PREVIEW_MIN_INTERVAL_MS = 500;
 
 type RuntimeToolCallDeltaLike = Pick<RuntimeToolCallDelta, 'id' | 'name' | 'argumentsDelta'>;
 
 export type ToolPreviewAnnouncement = {
+  announcedAtMs: number;
   argumentsLength: number;
   signature: string;
 };
@@ -469,9 +471,11 @@ export class RuntimeToolCallExecutor {
 
     const previous = announcedToolPreviews.get(id);
     const argumentsLength = next.arguments.length;
+    const announcedAtMs = this.options.clock.now().getTime();
     // 文件内容可能逐 token 输出。先按参数增长量限频，避免每个 token 都计算 diff、落盘和触发 renderer 更新。
     if (previous && argumentsLength >= previous.argumentsLength
       && argumentsLength - previous.argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
+    if (previous && announcedAtMs - previous.announcedAtMs < TOOL_PREVIEW_MIN_INTERVAL_MS) return;
 
     const preview = await toolRouter.previewPartialToolCall(next.name, next.arguments);
     // 单独的左花括号不包含有用的目标或进度信息。等待首次主机预览，可以让 file_path
@@ -479,10 +483,14 @@ export class RuntimeToolCallExecutor {
     if (!previous && !preview && argumentsLength < TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD) return;
     const argumentsPreview = preview?.argumentsPreview ?? previewPartialArguments(next.arguments);
     const resultPreview = preview?.resultPreview;
-    const signature = JSON.stringify({ name: next.name, argumentsPreview, resultPreview });
-    // 预览内容和参数进度都没变化时不重复发布，避免 UI 闪烁和 toolRun 重复合并。
-    if (previous?.signature === signature && previous.argumentsLength === argumentsLength) return;
-    announcedToolPreviews.set(id, { argumentsLength, signature });
+    const signature = toolPreviewSignature(next.name, argumentsPreview, resultPreview);
+    // 文件流中的正文和行数会持续增长，但路径集合不变时没有新的可操作信息。
+    // 最终完整差异由 tool.started/tool.completed 发布，无需把中间计数反复持久化。
+    if (previous?.signature === signature) {
+      announcedToolPreviews.set(id, { announcedAtMs, argumentsLength, signature });
+      return;
+    }
+    announcedToolPreviews.set(id, { announcedAtMs, argumentsLength, signature });
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -675,5 +683,42 @@ export class RuntimeToolCallExecutor {
         ...(metadata?.assessment ? { assessment: metadata.assessment } : {}),
       },
     });
+  }
+}
+
+function toolPreviewSignature(
+  toolName: string,
+  argumentsPreview: string,
+  resultPreview: string | undefined,
+): string {
+  if (!FILE_MUTATION_TOOL_NAMES.has(toolName)) {
+    return JSON.stringify({ toolName, argumentsPreview, resultPreview });
+  }
+  const targets = new Set<string>();
+  collectFileMutationTargets(parsePreviewJson(resultPreview), targets);
+  collectFileMutationTargets(parsePreviewJson(argumentsPreview), targets);
+  return JSON.stringify({ toolName, targets: [...targets].sort() });
+}
+
+function collectFileMutationTargets(value: unknown, targets: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const item of value) collectFileMutationTargets(item, targets);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const record = value as Record<string, unknown>;
+  const pathValue = record.path ?? record.file_path ?? record.target_path ?? record.file;
+  if (typeof pathValue === 'string' && pathValue.trim()) targets.add(pathValue.trim().replace(/\\/g, '/'));
+  for (const key of ['diff', 'diffs', 'files', 'changes']) {
+    collectFileMutationTargets(record[key], targets);
+  }
+}
+
+function parsePreviewJson(value: string | undefined): unknown {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
   }
 }

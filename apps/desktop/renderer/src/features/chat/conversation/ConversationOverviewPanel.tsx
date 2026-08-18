@@ -5,7 +5,7 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
-import type { DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
+import type { DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
@@ -48,7 +48,7 @@ export function ConversationOverviewPanel({
   onExpand: () => void;
   onOpenReview?: () => void;
   onOpenThread: (threadId: string) => void | Promise<void>;
-  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onReviewRefresh?: () => void | Promise<void>;
   reviewError: string | null;
 }) {
   const { t } = useI18n();

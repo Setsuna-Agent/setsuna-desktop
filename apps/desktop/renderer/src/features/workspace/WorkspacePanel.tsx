@@ -37,7 +37,6 @@ import type {
   DesktopPanelSlot,
   DesktopPanelTab,
   DesktopReviewFocusRequest,
-  DesktopReviewLoadOptions,
   DesktopReviewState,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
@@ -92,6 +91,7 @@ export function WorkspacePanel({
   onOpenTerminalPanel,
   onTerminalTitleChange,
   onReviewRefresh,
+  onReviewBaseRefChange,
   onRevealFile,
   onResizeStep,
   onResizeStart,
@@ -128,7 +128,8 @@ export function WorkspacePanel({
   onOpenSideChat: () => void;
   onOpenTerminalPanel: () => void;
   onTerminalTitleChange?: (panelId: string, title: string) => void;
-  onReviewRefresh: (options?: DesktopReviewLoadOptions) => void;
+  onReviewRefresh: () => void;
+  onReviewBaseRefChange: (baseRef: string) => void;
   onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -319,6 +320,7 @@ export function WorkspacePanel({
         onOpenFileWithApp={onOpenFileWithApp}
         onOpenProjectFile={onOpenProjectFile}
         onRefresh={onReviewRefresh}
+        onSelectBaseRef={onReviewBaseRefChange}
         onRevealFile={onRevealFile}
       />
     ) : activePanel.type === 'terminal' ? (
