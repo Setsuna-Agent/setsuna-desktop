@@ -295,6 +295,16 @@ export function setCustomThinkingEfforts(model: ProviderModelConfig, customEffor
   return setThinkingEfforts(model, [...presetEfforts, ...normalizeThinkingEfforts(customEfforts)]);
 }
 
+export function appendCustomThinkingEfforts(model: ProviderModelConfig, customEfforts: unknown): ProviderModelConfig {
+  const nextCustomEfforts = normalizeThinkingEfforts(customEfforts);
+  if (!nextCustomEfforts.length) return model;
+  const currentCustomEfforts = customThinkingEfforts([
+    ...model.thinkingEfforts,
+    model.defaultThinkingEffort ?? '',
+  ]);
+  return setCustomThinkingEfforts(model, [...currentCustomEfforts, ...nextCustomEfforts]);
+}
+
 export function toggleThinkingEffort(model: ProviderModelConfig, effort: string): ProviderModelConfig {
   const normalizedEffort = nonEmptyString(effort);
   if (!normalizedEffort) return model;

@@ -69,6 +69,7 @@ import type {
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../types.js';
+import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
 
 const ConversationDebugPanel = lazy(async () => {
   const module = await import('../../features/conversation-debug/ConversationDebugPanel.js');
@@ -516,7 +517,6 @@ export function AppChatSurface({
               client={runtimeClient}
               config={config}
               hidden={hidden}
-              key={panel.id}
               parentThread={currentThread}
               placement={placement}
               plugins={plugins}
@@ -541,15 +541,15 @@ export function AppChatSurface({
               workspaceWidth={workspaceWidth}
             />
           );
-          return placement === 'side' ? (
-            <SideWorkspacePanelSlot hidden={hidden} key={panel.id}>
+          return (
+            <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
               {chatPanel}
-            </SideWorkspacePanelSlot>
-          ) : chatPanel;
+            </FloatingWorkspacePanelSlot>
+          );
         })}
         {browserPanelInstances.map((instance) => {
           const browserPanel = (
-            <Suspense fallback={null} key={instance.panel.id}>
+            <Suspense fallback={null}>
               <PersistentBrowserPanel
                 instance={instance}
                 onPanelMetadataChange={onUpdateBrowserPanel}
@@ -562,34 +562,24 @@ export function AppChatSurface({
               />
             </Suspense>
           );
-          return instance.placement === 'side' ? (
-            <SideWorkspacePanelSlot hidden={!instance.active} key={instance.panel.id}>
+          return (
+            <FloatingWorkspacePanelSlot
+              hidden={!instance.active}
+              key={instance.panel.id}
+              placement={instance.placement}
+            >
               {browserPanel}
-            </SideWorkspacePanelSlot>
-          ) : browserPanel;
+            </FloatingWorkspacePanelSlot>
+          );
         })}
         {activeDebugPanel && runtimeDeveloperFeaturesEnabled(config) ? (
-          activeDebugPanel.placement === 'side' ? (
-            <SideWorkspacePanelSlot>
-              <Suspense fallback={null}>
-                <ConversationDebugPanel
-                  client={runtimeClient}
-                  key={activeDebugPanel.panel.id}
-                  placement={activeDebugPanel.placement}
-                  thread={currentThread}
-                  onResizeStep={onWorkspaceResizeStep}
-                  onResizeStart={onWorkspaceResizeStart}
-                  resizeMax={workspaceMaxWidth}
-                  resizeMin={workspaceMinWidth}
-                  resizeValue={workspaceWidth}
-                />
-              </Suspense>
-            </SideWorkspacePanelSlot>
-          ) : (
+          <FloatingWorkspacePanelSlot
+            key={activeDebugPanel.panel.id}
+            placement={activeDebugPanel.placement}
+          >
             <Suspense fallback={null}>
               <ConversationDebugPanel
                 client={runtimeClient}
-                key={activeDebugPanel.panel.id}
                 placement={activeDebugPanel.placement}
                 thread={currentThread}
                 onResizeStep={onWorkspaceResizeStep}
@@ -599,7 +589,7 @@ export function AppChatSurface({
                 resizeValue={workspaceWidth}
               />
             </Suspense>
-          )
+          </FloatingWorkspacePanelSlot>
         ) : null}
       </RuntimePluginNavigationProvider>
     </WorkspaceGitCommitProvider>

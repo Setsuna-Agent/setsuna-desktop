@@ -5,10 +5,10 @@ import { createPortal } from 'react-dom';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../../shared/ui/primitives.js';
 import {
+  appendCustomThinkingEfforts,
   customThinkingEfforts,
   normalizeThinkingEfforts,
   positiveInt,
-  setCustomThinkingEfforts,
   setThinkingEnabled,
   thinkingPresetOptionsForModel,
   toggleThinkingEffort,
@@ -40,6 +40,12 @@ export function ProviderModelSettingsDialog({
 
   const updateDraft = (updater: (current: ProviderModelConfig) => ProviderModelConfig) => {
     setDraftModel((current) => updater(current));
+  };
+
+  const commitCustomEffortDraft = () => {
+    if (!normalizeThinkingEfforts(customEffortDraft).length) return;
+    updateDraft((item) => appendCustomThinkingEfforts(item, customEffortDraft));
+    setCustomEffortDraft('');
   };
 
   useEffect(() => {
@@ -171,16 +177,7 @@ export function ProviderModelSettingsDialog({
                   onKeyDown={(event) => {
                     if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
                     event.preventDefault();
-                    const nextEfforts = normalizeThinkingEfforts(customEffortDraft);
-                    if (!nextEfforts.length) return;
-                    updateDraft((item) => {
-                      const currentCustomEfforts = customThinkingEfforts([
-                        ...item.thinkingEfforts,
-                        item.defaultThinkingEffort ?? '',
-                      ]);
-                      return setCustomThinkingEfforts(item, [...currentCustomEfforts, ...nextEfforts]);
-                    });
-                    setCustomEffortDraft('');
+                    commitCustomEffortDraft();
                   }}
                 />
             </div>
@@ -191,7 +188,11 @@ export function ProviderModelSettingsDialog({
             <Button type="button" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button type="button" variant="primary" onClick={() => onConfirm(draftModel)}>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => onConfirm(appendCustomThinkingEfforts(draftModel, customEffortDraft))}
+            >
               {t('settings.providers.confirm')}
             </Button>
           </div>

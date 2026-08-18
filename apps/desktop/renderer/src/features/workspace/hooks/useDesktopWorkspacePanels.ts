@@ -715,37 +715,44 @@ export function useDesktopWorkspacePanels({
   );
 }
 
-function useSidePanelTransition(visible: boolean): {
+export function useSidePanelTransition(visible: boolean): {
   phase: SidePanelTransitionPhase;
   present: boolean;
 } {
   const [state, setState] = useState(() => ({
+    phase: null as SidePanelTransitionPhase,
     present: visible,
-    settledVisible: visible,
+    targetVisible: visible,
   }));
+  const previousVisibleRef = useRef(visible);
 
   useEffect(() => {
-    if (visible === state.settledVisible) {
-      setState((current) => (
-        current.present === visible ? current : { ...current, present: visible }
-      ));
+    if (previousVisibleRef.current === visible) {
       return undefined;
     }
+    previousVisibleRef.current = visible;
 
-    if (visible) {
-      setState((current) => (
-        current.present ? current : { ...current, present: true }
-      ));
-    }
+    setState((current) => ({
+      phase: visible ? 'opening' : 'closing',
+      present: visible || current.present,
+      targetVisible: visible,
+    }));
     const timeoutId = window.setTimeout(() => {
-      setState({ present: visible, settledVisible: visible });
+      setState((current) => (
+        current.targetVisible === visible
+          ? { phase: null, present: visible, targetVisible: visible }
+          : current
+      ));
     }, SIDE_PANEL_TRANSITION_DURATION_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [state.settledVisible, visible]);
+  }, [visible]);
 
   return {
-    phase: visible === state.settledVisible ? null : visible ? 'opening' : 'closing',
-    // Opening must render synchronously; closing remains mounted until it exits.
+    // Reflect a reversed request before the effect commits its new transition target.
+    phase: visible === state.targetVisible
+      ? state.phase
+      : visible ? 'opening' : 'closing',
+    // Opening renders synchronously; every closing target remains mounted until its timer settles.
     present: visible || state.present,
   };
 }

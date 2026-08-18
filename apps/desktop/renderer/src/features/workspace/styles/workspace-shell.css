@@ -27,6 +27,15 @@
   display: none;
 }
 
+/* Keep the same React/DOM root while floating panels move to the bottom grid row. */
+.desktop-floating-workspace-panel-slot {
+  display: contents;
+}
+
+.desktop-floating-workspace-panel-slot[hidden] {
+  display: none;
+}
+
 .desktop-workspace-panel-slot > .desktop-workspace-panel {
   position: absolute;
   inset: 0 0 0 auto;

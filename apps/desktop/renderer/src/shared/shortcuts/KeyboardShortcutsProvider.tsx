@@ -32,6 +32,8 @@ export type StoredKeyboardShortcutPreferences = {
   platforms: Partial<Record<KeyboardShortcutPlatform, KeyboardShortcutOverrides>>;
 };
 
+const emptyKeyboardShortcutOverrides: KeyboardShortcutOverrides = {};
+
 type KeyboardShortcutsContextValue = {
   platform: KeyboardShortcutPlatform;
   recording: boolean;
@@ -69,12 +71,12 @@ export function KeyboardShortcutsProvider({
   const platform = initialPlatform ?? currentKeyboardShortcutPlatform();
   const [preferences, setPreferences] = useState<StoredKeyboardShortcutPreferences>(readKeyboardShortcutPreferences);
   const [recording, setRecording] = useState(false);
-  const platformOverrides = preferences.platforms[platform] ?? {};
+  const platformOverrides = preferences.platforms[platform] ?? emptyKeyboardShortcutOverrides;
 
-  const bindingsFor = useCallback((commandId: KeyboardShortcutCommandId): readonly string[] => {
-    const override = platformOverrides[commandId];
-    return override ?? keyboardShortcutCommand(commandId).defaultBindings[platform];
-  }, [platform, platformOverrides]);
+  const bindingsFor = useMemo(
+    () => createKeyboardShortcutBindingResolver(platform, platformOverrides),
+    [platform, platformOverrides],
+  );
 
   const isOverridden = useCallback(
     (commandId: KeyboardShortcutCommandId) => Object.hasOwn(platformOverrides, commandId),
@@ -190,6 +192,21 @@ export function normalizeKeyboardShortcutPreferences(value: unknown): StoredKeyb
     normalized.platforms[platform] = overrides;
   }
   return normalized;
+}
+
+export function createKeyboardShortcutBindingResolver(
+  platform: KeyboardShortcutPlatform,
+  overrides: KeyboardShortcutOverrides,
+): (commandId: KeyboardShortcutCommandId) => readonly string[] {
+  const explicitlyClaimedBindings = new Set(
+    Object.values(overrides).flatMap((bindings) => bindings ?? []),
+  );
+  return (commandId) => {
+    const override = overrides[commandId];
+    if (override !== undefined) return override;
+    return keyboardShortcutCommand(commandId).defaultBindings[platform]
+      .filter((binding) => !explicitlyClaimedBindings.has(binding));
+  };
 }
 
 export function resetKeyboardShortcutCommandPreferences(

@@ -74,6 +74,9 @@ export async function createRuntimeSideConversation(
         : 'The primary conversation was idle at snapshot time.',
       '</side_conversation_boundary>',
     ].join('\n'));
+    // Copied AppServer history can contain developer messages. Reassert the
+    // side policy after the snapshot so inherited instructions cannot outrank it.
+    await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
   } catch (error) {
     await runtime.attachmentStore.releaseThread(child.id).catch(() => undefined);
     await runtime.threadStore.deleteThread(child.id).catch(() => undefined);
