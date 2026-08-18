@@ -96,6 +96,40 @@ describe('DesktopReviewChangeMonitor', () => {
       vi.useRealTimers();
     }
   });
+
+  it('bounds the debounce window when ignored-file churn follows a visible change', async () => {
+    const repository = await createGitRepository();
+    const watched: Array<{
+      listener: (eventType: string, filename: string | Buffer | null) => void;
+    }> = [];
+    const resolveVisiblePath = vi.fn(async (_gitRoot: string, paths: string[]) => paths.includes('tracked.txt'));
+    const monitor = new DesktopReviewChangeMonitor(10, (_directoryPath, listener) => {
+      const watcher = new EventEmitter() as EventEmitter & { close: () => void };
+      watcher.close = () => undefined;
+      watched.push({ listener });
+      return watcher as never;
+    }, resolveVisiblePath);
+    let notificationCount = 0;
+    const unsubscribe = await monitor.subscribe(repository, () => { notificationCount += 1; });
+    vi.useFakeTimers();
+
+    try {
+      watched[0]!.listener('change', 'tracked.txt');
+      for (let index = 0; index < 4; index += 1) {
+        await vi.advanceTimersByTimeAsync(9);
+        watched[0]!.listener('change', 'ignored.log');
+      }
+      expect(notificationCount).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(4);
+      expect(notificationCount).toBe(1);
+      expect(resolveVisiblePath).toHaveBeenCalledWith(expect.any(String), ['tracked.txt', 'ignored.log']);
+    } finally {
+      unsubscribe();
+      monitor.close();
+      vi.useRealTimers();
+    }
+  });
 });
 
 async function createGitRepository(): Promise<string> {

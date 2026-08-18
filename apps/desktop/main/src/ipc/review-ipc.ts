@@ -24,6 +24,7 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
     handleDestroyed: () => void;
     sender: WebContents;
   }>();
+  const subscriptionBySender = new Map<WebContents, string>();
   const channels = [
     'desktop-review:get-state',
     'desktop-review:subscribe-changes',
@@ -45,6 +46,9 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
     subscription.sender.removeListener('destroyed', subscription.handleDestroyed);
     subscription.dispose();
     subscriptions.delete(subscriptionId);
+    if (subscriptionBySender.get(subscription.sender) === subscriptionId) {
+      subscriptionBySender.delete(subscription.sender);
+    }
   };
 
   ipcMain.handle('desktop-review:get-state', async (_event, input) =>
@@ -61,8 +65,11 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
       dispose();
       return subscriptionId;
     }
+    const previousSubscriptionId = subscriptionBySender.get(sender);
+    if (previousSubscriptionId) disposeSubscription(previousSubscriptionId);
     const handleDestroyed = () => disposeSubscription(subscriptionId);
     subscriptions.set(subscriptionId, { dispose, handleDestroyed, sender });
+    subscriptionBySender.set(sender, subscriptionId);
     sender.once('destroyed', handleDestroyed);
     return subscriptionId;
   });

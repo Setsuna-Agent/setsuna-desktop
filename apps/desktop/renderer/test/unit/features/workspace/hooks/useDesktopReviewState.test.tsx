@@ -127,6 +127,44 @@ describe('useDesktopReviewState', () => {
     await waitFor(() => expect(screen.getByTestId('error').textContent).toBe('refresh failed'));
     expect(screen.getByTestId('additions').textContent).toBe('4');
   });
+
+  it('surfaces a foreground refresh failure instead of silently retaining stale data', async () => {
+    const getState = vi.fn()
+      .mockResolvedValueOnce(reviewState(4))
+      .mockRejectedValueOnce(new Error('manual refresh failed'));
+    installReviewBridge({ getState, watchChanges: () => () => undefined });
+
+    render(<ReviewStateProbe project={project} />);
+    await waitFor(() => expect(screen.getByTestId('additions').textContent).toBe('4'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'refresh review' }));
+
+    await waitFor(() => expect(screen.getByTestId('error').textContent).toBe('manual refresh failed'));
+    expect(screen.getByTestId('additions').textContent).toBe('0');
+  });
+
+  it('re-subscribes after a refresh discovers that the workspace became a Git repository', async () => {
+    const getState = vi.fn()
+      .mockResolvedValueOnce(nonGitReviewState())
+      .mockResolvedValueOnce(reviewState(1));
+    const disposers: ReturnType<typeof vi.fn>[] = [];
+    const watchChanges = vi.fn(() => {
+      const dispose = vi.fn();
+      disposers.push(dispose);
+      return dispose;
+    });
+    installReviewBridge({ getState, watchChanges });
+
+    render(<ReviewStateProbe project={project} />);
+    await waitFor(() => expect(watchChanges).toHaveBeenCalledTimes(2));
+    expect(disposers[0]).toHaveBeenCalledOnce();
+
+    act(() => window.dispatchEvent(new Event('focus')));
+
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(watchChanges).toHaveBeenCalledTimes(3));
+    expect(disposers[1]).toHaveBeenCalledOnce();
+  });
 });
 
 function ReviewStateProbe({ project: activeProject }: { project: WorkspaceProject }) {
@@ -171,6 +209,20 @@ function reviewState(additions: number): DesktopReviewState {
     branchSummary: { additions, deletions: 0, files: [] },
     stagedSummary: { additions: 0, deletions: 0, files: [] },
     unstagedSummary: { additions: 0, deletions: 0, files: [] },
+  };
+}
+
+function nonGitReviewState(): DesktopReviewState {
+  return {
+    ...reviewState(0),
+    isGitRepository: false,
+    gitRoot: null,
+    currentBranch: null,
+    currentRemoteRef: null,
+    baseRef: null,
+    baseRefs: [],
+    branches: [],
+    branchSummary: null,
   };
 }
 

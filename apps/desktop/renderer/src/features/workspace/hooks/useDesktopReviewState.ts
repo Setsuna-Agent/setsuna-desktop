@@ -15,7 +15,7 @@ type DesktopReviewStateOptions = {
 
 type ReviewLoadRequest = {
   baseRef: string | null;
-  displayLoading: boolean;
+  foreground: boolean;
   persistPreference: boolean;
 };
 
@@ -31,13 +31,16 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
   const refreshCurrentRef = useRef<() => void>(() => undefined);
   const projectPath = activeProject?.path ?? null;
   const preferenceKey = activeProject ? reviewBaseRefPreferenceKey(activeProject) : null;
+  // The initial subscription already resolves the current repository. Only a
+  // confirmed non-Git workspace needs a new subscription after Git appears.
+  const reviewRepositoryKey = reviewState?.isGitRepository === false ? 'not-git' : 'watch';
 
   const runReviewLoad = useCallback(async (
     targetProjectPath: string,
     targetPreferenceKey: string,
     request: ReviewLoadRequest,
   ) => {
-    const { baseRef, displayLoading, persistPreference } = request;
+    const { baseRef, foreground, persistPreference } = request;
     const api = window.setsunaDesktop?.desktopReview;
     if (!api) {
       setReviewError('Desktop review bridge is unavailable.');
@@ -45,7 +48,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     }
     const isLatest = reviewRequests.begin();
     loadingRef.current = true;
-    if (displayLoading) setReviewLoading(true);
+    if (foreground) setReviewLoading(true);
     setReviewError(null);
     try {
       let state = await api.getState(targetProjectPath, { baseRef });
@@ -64,7 +67,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     } catch (unknownError) {
       if (!isLatest()) return;
       // Background refreshes keep the last successful snapshot visible.
-      if (!reviewStateRef.current) setReviewState(null);
+      if (foreground || !reviewStateRef.current) setReviewState(null);
       setReviewError(unknownError instanceof Error ? unknownError.message : String(unknownError));
     } finally {
       if (isLatest()) {
@@ -82,7 +85,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     if (!projectPath || !preferenceKey) return;
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
-      displayLoading: true,
+      foreground: true,
       persistPreference: false,
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
@@ -91,7 +94,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     if (!projectPath || !preferenceKey) return;
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
-      displayLoading: false,
+      foreground: false,
       persistPreference: false,
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
@@ -100,7 +103,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     if (!projectPath || !preferenceKey) return;
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef,
-      displayLoading: true,
+      foreground: true,
       persistPreference: true,
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
@@ -130,21 +133,25 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     preferredBaseRefRef.current = readReviewBaseRefPreference(preferenceKey);
     void runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
-      displayLoading: true,
+      foreground: true,
       persistPreference: preferredBaseRefRef.current !== null,
     });
-    const api = window.setsunaDesktop?.desktopReview;
-    const stopWatching = api?.watchChanges(projectPath, () => refreshCurrentRef.current());
     const handleWindowFocus = () => refreshCurrentRef.current();
     window.addEventListener('focus', handleWindowFocus);
     return () => {
-      stopWatching?.();
       window.removeEventListener('focus', handleWindowFocus);
       reviewRequests.invalidate();
       pendingRefreshRef.current = false;
       loadingRef.current = false;
     };
   }, [preferenceKey, projectPath, reviewRequests, runReviewLoad]);
+
+  useEffect(() => {
+    if (!projectPath) return undefined;
+    const api = window.setsunaDesktop?.desktopReview;
+    if (!api) return undefined;
+    return api.watchChanges(projectPath, () => refreshCurrentRef.current());
+  }, [projectPath, reviewRepositoryKey]);
 
   return {
     loadReviewState,

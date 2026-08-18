@@ -8,11 +8,13 @@ type WatchDirectory = (
   directoryPath: string,
   listener: (eventType: string, filename: string | Buffer | null) => void,
 ) => FSWatcher;
+type VisiblePathResolver = (gitRoot: string, paths: string[]) => Promise<boolean>;
 
 type MonitorEntry = {
   gitMetadataDirty: boolean;
   gitRoot: string;
   listeners: Set<ReviewChangeListener>;
+  maxTimer: ReturnType<typeof setTimeout> | null;
   pendingPaths: Set<string>;
   timer: ReturnType<typeof setTimeout> | null;
   unknownWorktreeChange: boolean;
@@ -20,6 +22,7 @@ type MonitorEntry = {
 };
 
 const DEFAULT_CHANGE_DEBOUNCE_MS = 300;
+const CHANGE_DEBOUNCE_MAX_WAIT_MULTIPLIER = 4;
 const FILE_TRANSACTION_SIBLING_PATTERN = /(^|\/)\.setsuna-(?:stage|backup)-\d+-[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 /**
@@ -34,6 +37,7 @@ export class DesktopReviewChangeMonitor {
   constructor(
     private readonly debounceMs = DEFAULT_CHANGE_DEBOUNCE_MS,
     private readonly watchDirectory: WatchDirectory = nodeWatchDirectory,
+    private readonly resolveVisiblePath: VisiblePathResolver = hasNonIgnoredPath,
   ) {}
 
   async subscribe(workspaceRoot: string, listener: ReviewChangeListener): Promise<() => void> {
@@ -68,6 +72,7 @@ export class DesktopReviewChangeMonitor {
       gitMetadataDirty: false,
       gitRoot,
       listeners: new Set(),
+      maxTimer: null,
       pendingPaths: new Set(),
       timer: null,
       unknownWorktreeChange: false,
@@ -106,10 +111,21 @@ export class DesktopReviewChangeMonitor {
 
   private schedule(entry: MonitorEntry): void {
     if (entry.timer) clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => {
-      entry.timer = null;
-      void this.flush(entry);
-    }, this.debounceMs);
+    entry.timer = setTimeout(() => this.flushScheduled(entry), this.debounceMs);
+    // Ignored build output may never become quiet. Bound the debounce window so
+    // an earlier tracked or Git-metadata change cannot be starved indefinitely.
+    entry.maxTimer ??= setTimeout(
+      () => this.flushScheduled(entry),
+      this.debounceMs * CHANGE_DEBOUNCE_MAX_WAIT_MULTIPLIER,
+    );
+  }
+
+  private flushScheduled(entry: MonitorEntry): void {
+    if (entry.timer) clearTimeout(entry.timer);
+    if (entry.maxTimer) clearTimeout(entry.maxTimer);
+    entry.timer = null;
+    entry.maxTimer = null;
+    void this.flush(entry);
   }
 
   private async flush(entry: MonitorEntry): Promise<void> {
@@ -120,14 +136,16 @@ export class DesktopReviewChangeMonitor {
     entry.unknownWorktreeChange = false;
     entry.pendingPaths.clear();
     const hasVisibleWorktreeChange = unknownWorktreeChange
-      || await hasNonIgnoredPath(entry.gitRoot, pendingPaths);
+      || await this.resolveVisiblePath(entry.gitRoot, pendingPaths);
     if (!gitMetadataDirty && !hasVisibleWorktreeChange) return;
     for (const listener of entry.listeners) listener();
   }
 
   private closeEntry(entry: MonitorEntry): void {
     if (entry.timer) clearTimeout(entry.timer);
+    if (entry.maxTimer) clearTimeout(entry.maxTimer);
     entry.timer = null;
+    entry.maxTimer = null;
     for (const watcher of entry.watchers) watcher.close();
     entry.watchers = [];
   }
