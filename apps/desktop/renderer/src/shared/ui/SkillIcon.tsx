@@ -15,10 +15,13 @@ export function SkillIcon({
   skill?: SkillIconSource;
   variant?: SkillIconVariant;
 }) {
+  const unframedClassName = variant === 'inline' ? 'desktop-skill-icon--unframed' : undefined;
+  const classes = [unframedClassName, className].filter(Boolean).join(' ') || undefined;
+
   if (skill?.kind === 'plugin') {
     return (
       <PluginIcon
-        className={className}
+        className={classes}
         name={skill.icon}
         pluginId={skill.pluginId}
         variant={variant}
@@ -31,7 +34,7 @@ export function SkillIcon({
       className={[
         'desktop-skill-icon',
         `desktop-skill-icon--${variant}`,
-        className,
+        classes,
       ].filter(Boolean).join(' ')}
       data-skill-icon="skill"
       aria-hidden="true"

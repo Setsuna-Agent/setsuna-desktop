@@ -310,7 +310,13 @@
     z-index: -1;
     inset: 0 auto 0 0;
     width: var(--app-sidebar-width);
-    background: var(--app-sidebar-bg);
+    background:
+      linear-gradient(
+        to right,
+        transparent calc(100% - 8px),
+        var(--desktop-agent-sidebar-separator-color) 100%
+      ),
+      var(--app-sidebar-bg);
     box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
     content: '';
     pointer-events: none;
@@ -320,6 +326,11 @@
   :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand {
     border-right: 0;
     background: transparent;
+  }
+
+  :root[data-desktop-platform='darwin'] .desktop-agent-page--sidebar-collapsed > .app-topbar::before {
+    width: 0;
+    opacity: 0;
   }
 }
 
@@ -595,7 +606,7 @@
 }
 
 @media (min-width: 761px) {
-  :root[data-desktop-platform='darwin'] .app-workbench::after {
+  :root:not([data-desktop-platform='win32']) .app-workbench::after {
     position: absolute;
     z-index: 24;
     inset: 0 auto 0 0;
@@ -604,6 +615,22 @@
     content: '';
     pointer-events: none;
     transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
+  }
+
+  :root[data-desktop-platform='darwin'] .app-workbench::after {
+    inset: 0 auto 0 0;
+    width: var(--app-sidebar-width);
+    background: linear-gradient(
+      to right,
+      transparent calc(100% - 8px),
+      var(--desktop-agent-sidebar-separator-color) 100%
+    );
+    box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+  }
+
+  :root[data-desktop-platform='darwin'] .desktop-agent-page--sidebar-collapsed .app-workbench::after {
+    width: 0;
+    opacity: 0;
   }
 }
 
@@ -673,16 +700,21 @@
   box-shadow: var(--app-focus-ring);
 }
 
-/* Windows 主区使用同一条轮廓连接顶边与侧边，避免圆角处叠出直角边线。 */
+/* Windows 与 macOS 一样把分层收在侧栏内部，避免阴影污染主内容区。 */
 :root[data-desktop-platform='win32'] .app-workbench:has(> .app-sidebar)::before {
   position: absolute;
   z-index: 21;
-  inset: 0 0 0 var(--app-sidebar-width);
-  border-top: 1px solid var(--desktop-agent-sidebar-edge);
-  border-left: 1px solid var(--desktop-agent-sidebar-edge);
-  border-top-left-radius: var(--app-radius-lg);
+  inset: 0 auto 0 0;
+  width: var(--app-sidebar-width);
+  background: linear-gradient(
+    to right,
+    transparent calc(100% - 8px),
+    var(--desktop-agent-sidebar-separator-color) 100%
+  );
+  box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
   content: '';
   pointer-events: none;
+  transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-title,
@@ -697,9 +729,8 @@
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench:has(> .app-sidebar)::before {
-  left: 0;
-  border-left: 0;
-  border-top-left-radius: 0;
+  width: 0;
+  opacity: 0;
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench__main-title,
@@ -718,6 +749,7 @@ body.desktop-terminal-resizing .app-workbench {
 body.desktop-agent-sidebar-resizing .app-topbar,
 body.desktop-agent-workspace-resizing .app-topbar,
 body.desktop-agent-sidebar-resizing .app-topbar::before,
+body.desktop-agent-sidebar-resizing .app-workbench::before,
 body.desktop-agent-sidebar-resizing .app-workbench::after {
   transition: none;
 }

@@ -512,7 +512,6 @@ export function AppChatSurface({
               ? !sidePanelVisible || sideActivePanel?.id !== panel.id
               : !bottomPanelVisible || bottomActivePanel?.id !== panel.id}
             key={panel.id}
-            parentActiveTurnId={activeTurnId}
             parentThread={currentThread}
             placement={placement}
             plugins={plugins}

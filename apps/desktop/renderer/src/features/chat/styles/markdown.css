@@ -36,7 +36,7 @@
 .chat-markdown :where(h1, h2, h3, h4, h5, h6) {
   margin: 1.45em 0 0.58em;
   color: var(--app-text);
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1.35;
   letter-spacing: -0.012em;
 }
@@ -69,7 +69,7 @@
 
 .chat-markdown :where(strong, b) {
   color: var(--app-text);
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .chat-markdown :where(ul, ol) {
@@ -77,11 +77,11 @@
 }
 
 .chat-markdown li {
-  padding-left: 0.18em;
+  padding-left: 0.12em;
 }
 
 .chat-markdown li + li {
-  margin-top: 0.36em;
+  margin-top: 0.24em;
 }
 
 .chat-markdown li > :where(p, ul, ol) {
@@ -116,7 +116,7 @@
 }
 
 .chat-markdown a {
-  color: var(--app-primary);
+  color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 38%, transparent);
   text-decoration-thickness: 1px;
@@ -124,7 +124,7 @@
 }
 
 .chat-markdown a:hover {
-  color: var(--app-primary-hover);
+  color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
   text-decoration-color: currentColor;
 }
 
@@ -133,6 +133,8 @@
   width: 0.9em;
   height: 0.9em;
   margin-left: 0.28em;
+  color: var(--app-text-muted);
+  opacity: 0.72;
   vertical-align: -0.12em;
 }
 
@@ -142,7 +144,7 @@ a.chat-markdown__file-link {
   padding: 0;
   border: 0;
   border-radius: 0;
-  color: var(--app-primary);
+  color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
   background: transparent;
   font-size: inherit;
   font-weight: inherit;
@@ -154,7 +156,7 @@ a.chat-markdown__file-link {
 
 a.chat-markdown__file-link:hover,
 a.chat-markdown__file-link:focus-visible {
-  color: var(--app-primary-hover);
+  color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
   background: transparent;
   text-decoration: underline;
   text-decoration-style: dashed;
