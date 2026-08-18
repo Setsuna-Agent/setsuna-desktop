@@ -29,9 +29,9 @@ const pairedInlineMarkers = [
 ] as const;
 
 /**
- * GFM 裸自动链接不会把中文标点视为 URL 边界，这可能导致一个 URL 吞掉中文段落的
- * 剩余内容，包括闭合的强调标记。只修复解析器创建的字面链接；显式 Markdown 链接和
- * 尖括号自动链接保留作者定义的边界。
+ * GFM 裸自动链接不会把中文标点视为 URL 边界，也可能把紧邻 URL 的强调闭合符吞进
+ * 地址。这会令强调符号直接显示，甚至让链接吞掉后续中文。只修复解析器创建的字面
+ * 链接；显式 Markdown 链接和尖括号自动链接保留作者定义的边界。
  */
 export function remarkAutolinkBoundaries() {
   return (tree: unknown, file: MarkdownFile): void => {
@@ -54,12 +54,12 @@ function rewriteLiteralAutolink(parent: MarkdownParent, index: number, source: s
   if (!linkText) return false;
 
   const punctuationIndex = linkText.search(eastAsianPunctuationPattern);
-  if (punctuationIndex < 0) return false;
-
   const previous = parent.children[index - 1];
-  const rawUrl = linkText.slice(0, punctuationIndex);
-  const suffix = linkText.slice(punctuationIndex);
+  const rawUrl = punctuationIndex >= 0 ? linkText.slice(0, punctuationIndex) : linkText;
+  const suffix = punctuationIndex >= 0 ? linkText.slice(punctuationIndex) : '';
   const pairedMarker = findPairedMarker(previous, rawUrl);
+  if (punctuationIndex < 0 && !pairedMarker) return false;
+
   const url = pairedMarker ? rawUrl.slice(0, -pairedMarker.marker.length) : rawUrl;
   if (!isValidHttpUrl(url)) return false;
 
@@ -72,7 +72,9 @@ function rewriteLiteralAutolink(parent: MarkdownParent, index: number, source: s
   const normalizedContent: MarkdownNode = pairedMarker
     ? { children: [normalizedLink], type: pairedMarker.type }
     : normalizedLink;
-  const replacement = [normalizedContent, { type: 'text', value: suffix } satisfies MarkdownNode];
+  const replacement = suffix
+    ? [normalizedContent, { type: 'text', value: suffix } satisfies MarkdownNode]
+    : [normalizedContent];
 
   if (pairedMarker && previous?.type === 'text' && typeof previous.value === 'string') {
     const precedingText = previous.value.slice(0, -pairedMarker.marker.length);

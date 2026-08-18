@@ -2,7 +2,7 @@
   color-scheme: light;
   /* 渲染前默认值与外观设置中的“跟随系统”选项保持一致。 */
   --app-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'PingFang SC', 'Hiragino Sans GB', 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', ui-sans-serif, system-ui, sans-serif;
-  --app-font-weight: 500;
+  --app-font-weight: 400;
   --app-code-font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   --app-font-size: 14px;
   --app-visual-viewport-height: 100dvh;
@@ -13,15 +13,15 @@
   --app-bg: #ffffff;
   --app-window-bg: #fafafa;
   --app-sidebar-bg: #f7f7f7;
-  --app-sidebar-text: #404040;
-  --app-sidebar-text-secondary: #737373;
+  --app-sidebar-text: #454545;
+  --app-sidebar-text-secondary: #7d7d7d;
   --app-surface: #ffffff;
   --app-surface-subtle: #fafafa;
   --app-surface-muted: #f5f5f5;
   --app-border: #eaeaea;
   --app-border-strong: #d4d4d4;
-  --app-text: #171717;
-  --app-text-muted: #737373;
+  --app-text: #242424;
+  --app-text-muted: #7d7d7d;
   --app-text-secondary: var(--app-text-muted);
   --app-text-subtle: #a3a3a3;
   --app-muted: #a3a3a3;
@@ -39,8 +39,8 @@
   --app-orange-hover: #fb923c;
   --app-orange-active: #ea580c;
   --app-orange-text: #ffffff;
-  --app-primary: #15171a;
-  --app-primary-hover: #24272c;
+  --app-primary: #242424;
+  --app-primary-hover: #333333;
   --app-primary-text: #ffffff;
   --app-accent-subtle: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface));
   --app-accent-soft: color-mix(in srgb, var(--app-primary) 10%, var(--app-surface));
@@ -109,12 +109,15 @@
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 9%, var(--app-surface));
   /* 中性控件让悬停与选中状态在不同强调色主题下保持视觉一致。 */
   --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
-  --desktop-agent-input-shadow: 0 14px 32px rgba(0, 0, 0, 0.045);
+  --desktop-agent-input-shadow:
+    0 12px 36px rgba(0, 0, 0, 0.11),
+    0 2px 8px rgba(0, 0, 0, 0.07);
   --desktop-agent-sidebar-hover-bg: #f2f2f2;
   --desktop-agent-sidebar-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, var(--app-sidebar-bg));
-  --desktop-agent-sidebar-active-text: #111111;
+  --desktop-agent-sidebar-active-text: #242424;
   --desktop-agent-sidebar-active-shadow: none;
-  --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 72%, transparent);
+  --desktop-agent-sidebar-edge: #d6d6d6;
+  --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.045);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
@@ -127,10 +130,10 @@
   --chat-message-footer-gap: 3px;
   --chat-scrollbar-width: 8px;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
-  --desktop-inline-icon-size: 17px;
-  --chat-send-bg: #15171a;
-  --chat-send-bg-hover: #24272c;
-  --chat-send-bg-active: #000000;
+  --desktop-inline-icon-size: 18px;
+  --chat-send-bg: #242424;
+  --chat-send-bg-hover: #333333;
+  --chat-send-bg-active: #171717;
 }
 
 :root[data-font-size='80'] {
@@ -183,15 +186,15 @@
   --app-bg: #181818;
   --app-window-bg: #181818;
   --app-sidebar-bg: #282b2e;
-  --app-sidebar-text: #d4d4d4;
-  --app-sidebar-text-secondary: #8f8f8f;
+  --app-sidebar-text: #d0d0d0;
+  --app-sidebar-text-secondary: #999999;
   --app-surface: #202020;
   --app-surface-subtle: #222222;
   --app-surface-muted: #282828;
   --app-border: #303030;
   --app-border-strong: #454545;
-  --app-text: #ededed;
-  --app-text-muted: #a3a3a3;
+  --app-text: #e4e4e4;
+  --app-text-muted: #9d9d9d;
   --app-text-secondary: var(--app-text-muted);
   --app-text-subtle: #737373;
   --app-muted: #737373;
@@ -219,10 +222,13 @@
   --desktop-agent-divider: #34383b;
   --desktop-agent-subtle-divider: #2d3033;
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
-  --desktop-agent-input-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+  --desktop-agent-input-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.4),
+    0 3px 12px rgba(0, 0, 0, 0.24);
   --desktop-agent-sidebar-hover-bg: #34383b;
   --desktop-agent-sidebar-active-text: #fafafa;
   --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 68%, transparent);
+  --desktop-agent-sidebar-separator-color: rgba(0, 0, 0, 0.18);
   --desktop-agent-accent: var(--app-primary);
   --desktop-agent-button-border: color-mix(in srgb, var(--app-border) 88%, transparent);
   --desktop-agent-button-hover-border: color-mix(in srgb, var(--app-text) 28%, var(--app-border));
@@ -238,7 +244,7 @@
 :root[data-theme='light'][data-sidebar-background-style='plain'] {
   --app-sidebar-bg: #ffffff;
   --desktop-agent-sidebar-hover-bg: #f5f5f5;
-  --desktop-agent-sidebar-edge: #e5e5e5;
+  --desktop-agent-sidebar-edge: #d8d8d8;
 }
 
 :root[data-theme='light'][data-sidebar-background-style='contrast'] {
@@ -261,13 +267,13 @@
 
 /* 强调色预设仅用于主要操作、链接、焦点环和显式强调。 */
 :root[data-accent-color='blue'] {
-  --app-primary: #2563eb;
-  --app-primary-hover: #1d4ed8;
+  --app-primary: #3f6fa8;
+  --app-primary-hover: #345f91;
   --app-primary-text: #ffffff;
-  --app-focus: rgb(37 99 235 / 24%);
+  --app-focus: rgb(63 111 168 / 24%);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
-  --chat-send-bg-active: #1e40af;
+  --chat-send-bg-active: #2d527d;
 }
 
 :root[data-accent-color='purple'] {
@@ -301,11 +307,11 @@
 }
 
 :root[data-theme='dark'][data-accent-color='blue'] {
-  --app-primary: #60a5fa;
-  --app-primary-hover: #93c5fd;
+  --app-primary: #82add5;
+  --app-primary-hover: #a3c5e3;
   --app-primary-text: #0b1220;
-  --app-focus: rgb(96 165 250 / 28%);
-  --chat-send-bg-active: #bfdbfe;
+  --app-focus: rgb(130 173 213 / 28%);
+  --chat-send-bg-active: #c5dcef;
 }
 
 :root[data-theme='dark'][data-accent-color='purple'] {

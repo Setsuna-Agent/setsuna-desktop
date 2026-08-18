@@ -145,8 +145,8 @@
 }
 
 .desktop-skill-icon svg {
-  width: 56%;
-  height: 56%;
+  width: 64%;
+  height: 64%;
   stroke-width: 1.75;
 }
 
@@ -166,4 +166,20 @@
   width: 40px;
   height: 40px;
   border-radius: 11px;
+}
+
+.desktop-skill-icon.desktop-skill-icon--unframed,
+.desktop-plugin-icon.desktop-skill-icon--unframed {
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+  box-shadow: none;
+}
+
+.desktop-skill-icon.desktop-skill-icon--unframed svg,
+.desktop-plugin-icon.desktop-skill-icon--unframed svg {
+  width: 78%;
+  height: 78%;
 }

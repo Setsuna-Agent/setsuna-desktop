@@ -31,4 +31,17 @@ describe('MarkdownContentBlock links', () => {
     expect(html).toContain('href="http://localhost:5173/"');
     expect(html).toContain('</a>，然后继续。');
   });
+
+  it('preserves bold around a bare URL when whitespace follows the closing marker', () => {
+    const html = renderToStaticMarkup(
+      <MarkdownNavigationProvider onOpenWebLink={() => undefined}>
+        <MarkdownContentBlock content="地址：**http://localhost:5888/** (项目已配置固定端口)" />
+      </MarkdownNavigationProvider>,
+    );
+
+    expect(html).toContain('<strong><a');
+    expect(html).toContain('href="http://localhost:5888/"');
+    expect(html).not.toContain('href="http://localhost:5888/**');
+    expect(html).not.toContain('**');
+  });
 });

@@ -308,6 +308,13 @@
   transform: translateX(calc(-50% + var(--chat-command-menu-shift)));
 }
 
+/* 弹层和输入框属于同一悬浮组合；相同层级让后渲染的输入框盖住弹层向下扩散的阴影，
+   避免输入框看起来沉到弹层下面。 */
+.chat-sender:has(> .chat-command-menu) > .ant-sender {
+  position: relative;
+  z-index: 30;
+}
+
 .chat-sender--starter > .chat-command-menu {
   bottom: calc(100% + 8px);
   width: 100%;
@@ -638,6 +645,10 @@
 .chat-sender textarea {
   color: var(--app-text);
   background: transparent;
+}
+
+.chat-sender .ant-sender-content {
+  padding-block: 8px;
 }
 
 .chat-sender .ant-sender-input-slot:empty::before,
