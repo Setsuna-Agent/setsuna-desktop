@@ -12,8 +12,33 @@
 
 .desktop-side-chat-panel > .desktop-chat-panel--side {
   flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
   border-radius: 0;
+}
+
+.desktop-side-chat-context {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.desktop-side-chat-context__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--app-text-subtle);
+}
+
+.desktop-side-chat-context__dot.is-running {
+  background: var(--desktop-agent-accent);
 }
 
 .desktop-side-chat-panel[hidden] {

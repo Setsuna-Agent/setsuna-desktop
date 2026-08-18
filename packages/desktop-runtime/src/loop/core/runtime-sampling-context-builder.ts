@@ -48,6 +48,8 @@ import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordina
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeToolRouter } from '../tools/tool-router.js';
 import { goalContinuationContextMessages } from '../lifecycle/runtime-goal-prompts.js';
+import { isCollaborationToolName } from '../lifecycle/collaboration-coordinator.js';
+import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import { runtimeTaskModelRequest } from './runtime-task-model.js';
@@ -226,9 +228,15 @@ export class RuntimeSamplingContextBuilder {
           stepGoal,
           goalCompletionPending,
         );
-    const tools = toolAccess === 'read-only'
-      ? availableTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
+    const sideConversation = (snapshotThread ?? thread).kind === 'side';
+    const scopedTools = sideConversation
+      ? availableTools?.filter((tool) => (
+          !isCollaborationToolName(tool.name) && !isGoalToolName(tool.name)
+        ))
       : availableTools;
+    const tools = toolAccess === 'read-only'
+      ? scopedTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
+      : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
     const toolRuntimes = await samplingToolRuntimes(
       tools ?? [],

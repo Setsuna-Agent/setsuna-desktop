@@ -4,6 +4,7 @@ import type {
   RuntimeConfigState,
   RuntimePluginSummary,
   RuntimeSkillSummary,
+  RuntimeThread,
   RuntimeThreadSummary,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
@@ -31,6 +32,8 @@ export function SideChatPanel({
   client,
   config,
   hidden,
+  parentActiveTurnId,
+  parentThread,
   placement = 'side',
   plugins,
   selectedWorkspaceApp,
@@ -58,6 +61,8 @@ export function SideChatPanel({
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   hidden: boolean;
+  parentActiveTurnId: string | null;
+  parentThread: RuntimeThread | null;
   placement?: DesktopPanelSlot;
   plugins: RuntimePluginSummary[];
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
@@ -84,6 +89,7 @@ export function SideChatPanel({
   const sideChat = useSideChat({
     activeProjectId,
     client,
+    parentThread,
     reloadThreads: onReloadThreads,
     setError: onError,
   });
@@ -94,6 +100,15 @@ export function SideChatPanel({
     thread: sideChat.currentThread,
   });
   const sideWorkspace = sideWorkspaceState.workspace;
+  const contextStatus = !parentThread
+    ? t('chat.sideChat.openMainFirst')
+    : sideChat.currentThread
+      ? (parentActiveTurnId
+          ? t('chat.sideChat.snapshotRunning')
+          : t('chat.sideChat.snapshotIdle'))
+      : (parentActiveTurnId
+          ? t('chat.sideChat.readyRunning')
+          : t('chat.sideChat.readyIdle'));
   // Review state belongs to the main workspace panel. Keep findings static
   // when a global side chat points elsewhere instead of opening the wrong diff.
   const openSideWorkspaceReview = sideWorkspace && activeWorkspace
@@ -162,6 +177,13 @@ export function SideChatPanel({
           onResizeStep={onWorkspaceResizeStep}
         />
       ) : null}
+      <div className="desktop-side-chat-context" role="status">
+        <span
+          aria-hidden="true"
+          className={`desktop-side-chat-context__dot${parentActiveTurnId ? ' is-running' : ''}`}
+        />
+        <span>{contextStatus}</span>
+      </div>
       <MarkdownNavigationProvider
         onOpenInAppBrowser={onOpenInAppBrowser}
         onOpenWebLink={onOpenMarkdownWebLink}

@@ -374,6 +374,7 @@ export function ChatWorkspace({
       skillSelectionRequest={skillSelectionRequest}
       workspaceMentionRequest={workspaceMentionRequest}
       skills={skills}
+      sideConversation={variant === 'side'}
       threadUsage={displayedThreadUsage}
       starter={starter}
       placeholder={variant === 'side' ? t('chat.composer.sidePlaceholder') : undefined}

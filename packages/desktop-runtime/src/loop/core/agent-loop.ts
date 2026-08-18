@@ -172,6 +172,7 @@ export class AgentLoop {
       toolHost: options.toolHost,
       collaborationCoordinator: () => this.collaborationCoordinator,
       goalCoordinator: () => this.goals,
+      threadStore: options.threadStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
     });

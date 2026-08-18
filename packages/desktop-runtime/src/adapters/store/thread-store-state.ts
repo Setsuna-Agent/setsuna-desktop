@@ -13,6 +13,7 @@ import type { RuntimeTurnActivityProjection } from '../../ports/thread-store.js'
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 
 export const DEFAULT_THREAD_MEMORY_MODE: RuntimeThreadMemoryMode = 'enabled';
+export const DEFAULT_THREAD_KIND: NonNullable<RuntimeThreadSummary['kind']> = 'regular';
 
 export function optionalSafeRuntimeId(value: string | undefined, label: string): string | undefined {
   const normalized = value?.trim();
@@ -70,8 +71,10 @@ export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
   const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : undefined;
   // 列表摘要不携带 Goal 的图片数据或执行选项，避免内联附件放大每次线程列表响应。
   if (goal) delete goal.execution;
+  const kind = normalizeThreadKind(thread.kind);
   return {
     id: thread.id,
+    ...(kind === 'side' ? { kind } : {}),
     activeTurnId: thread.activeTurnId,
     forkedFromId: thread.forkedFromId,
     parentThreadId: thread.parentThreadId,
@@ -93,9 +96,14 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
     ? (thread as { parentThreadId: string }).parentThreadId
     : undefined;
   const memoryMode = normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode);
-  let changed = parentThreadId !== thread.parentThreadId || memoryMode !== thread.memoryMode;
+  const kind = normalizeThreadKind((thread as { kind?: unknown }).kind);
+  const persistedKind = kind === 'side' ? kind : undefined;
+  let changed = parentThreadId !== thread.parentThreadId
+    || memoryMode !== thread.memoryMode
+    || persistedKind !== thread.kind;
   let normalized: RuntimeThread = changed ? {
     ...thread,
+    kind: persistedKind,
     parentThreadId,
     memoryMode,
   } : thread;
@@ -171,13 +179,19 @@ function normalizeLegacyCancelledToolRuns(thread: RuntimeThread): RuntimeThread 
 }
 
 export function normalizeThreadSummary(thread: RuntimeThreadSummary): RuntimeThreadSummary {
+  const kind = normalizeThreadKind((thread as { kind?: unknown }).kind);
   return {
     ...thread,
+    kind: kind === 'side' ? kind : undefined,
     parentThreadId: typeof (thread as { parentThreadId?: unknown }).parentThreadId === 'string'
       ? (thread as { parentThreadId: string }).parentThreadId
       : undefined,
     memoryMode: normalizeThreadMemoryMode((thread as { memoryMode?: unknown }).memoryMode),
   };
+}
+
+export function normalizeThreadKind(kind: unknown): NonNullable<RuntimeThreadSummary['kind']> {
+  return kind === 'side' ? 'side' : DEFAULT_THREAD_KIND;
 }
 
 export function threadHasAncestor(

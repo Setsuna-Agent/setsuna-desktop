@@ -189,6 +189,7 @@ describe('sqlite thread store', () => {
       DROP TABLE runtime_event_archives;
       DROP TABLE runtime_event_ids;
       DROP TABLE thread_messages;
+      ALTER TABLE threads DROP COLUMN kind;
       ALTER TABLE threads DROP COLUMN events_archived_through_seq;
       ALTER TABLE threads DROP COLUMN message_index_seq;
       PRAGMA user_version = 1;
@@ -209,7 +210,7 @@ describe('sqlite thread store', () => {
     await migrated.close();
   });
 
-  it('keeps provider envelopes across reopen with SQLite schema version 2', async () => {
+  it('keeps provider envelopes across reopen with the current SQLite schema', async () => {
     const dataDir = await temporaryDirectory();
     const first = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());
     await first.recover();
@@ -262,7 +263,7 @@ describe('sqlite thread store', () => {
     await first.close();
 
     const database = new DatabaseSync(path.join(dataDir, 'threads.sqlite'), { readOnly: true });
-    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 2 });
+    expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
     database.close();
 
     const reopened = new SqliteThreadStore(dataDir, systemClock, new RandomIdGenerator());

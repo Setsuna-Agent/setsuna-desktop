@@ -166,6 +166,11 @@ export const chatZhCN = {
   'chat.duration.hours': '{hours}小时',
   'chat.duration.hoursMinutes': '{hours}小时{minutes}分',
   'chat.sideChat.label': '侧边对话',
+  'chat.sideChat.openMainFirst': '请先打开一个主对话',
+  'chat.sideChat.readyRunning': '主对话运行中；首次发送时读取快照',
+  'chat.sideChat.readyIdle': '首次发送时读取主对话上下文',
+  'chat.sideChat.snapshotRunning': '已继承快照；主对话仍在运行',
+  'chat.sideChat.snapshotIdle': '已继承主对话快照',
 } as const;
 
 export const chatEnUS = {
@@ -336,4 +341,9 @@ export const chatEnUS = {
   'chat.duration.hours': '{hours}h',
   'chat.duration.hoursMinutes': '{hours}h {minutes}m',
   'chat.sideChat.label': 'Side chat',
+  'chat.sideChat.openMainFirst': 'Open a primary conversation first',
+  'chat.sideChat.readyRunning': 'Primary conversation running; snapshot on first send',
+  'chat.sideChat.readyIdle': 'Primary context will be captured on first send',
+  'chat.sideChat.snapshotRunning': 'Snapshot inherited; primary conversation still running',
+  'chat.sideChat.snapshotIdle': 'Primary conversation snapshot inherited',
 } satisfies Record<keyof typeof chatZhCN, string>;

@@ -1,5 +1,4 @@
 import type {
-  CreateThreadInput,
   MessageDeleteInput,
   MessagePatch,
   RuntimeEvent,
@@ -9,7 +8,6 @@ import type {
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
   ThreadPatch,
-  ThreadQuery,
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
@@ -18,7 +16,7 @@ import path from 'node:path';
 import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
+import type { ThreadStore, ThreadStoreCreateInput, ThreadStoreQuery } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
@@ -173,11 +171,11 @@ export class SqliteThreadStore implements ThreadStore {
     if (failure) throw failure;
   }
 
-  async listThreads(query: ThreadQuery = {}): Promise<RuntimeThreadSummary[]> {
+  async listThreads(query: ThreadStoreQuery = {}): Promise<RuntimeThreadSummary[]> {
     await this.ensureReady();
     this.assertOwnership();
     const rows = this.requireDatabase().prepare(`
-      SELECT id, active_turn_id, forked_from_id, parent_thread_id, project_id, title,
+      SELECT id, kind, active_turn_id, forked_from_id, parent_thread_id, project_id, title,
              created_at, updated_at, archived, memory_mode, git_info_json, goal_json,
              message_count, last_message_preview
       FROM threads
@@ -189,7 +187,7 @@ export class SqliteThreadStore implements ThreadStore {
       : new Map<string, string>();
     const parentMap = new Map(summaries.map((thread) => [thread.id, thread.parentThreadId]));
     return summaries
-      .filter((thread) => query.includeArchived || !thread.archived)
+      .filter((thread) => (query.includeSide || thread.kind !== 'side') && (query.includeArchived || !thread.archived))
       .filter((thread) => !query.parentThreadId || thread.parentThreadId === query.parentThreadId)
       .filter((thread) => !query.ancestorThreadId || threadHasAncestor(thread.id, query.ancestorThreadId, parentMap))
       .filter((thread) => {
@@ -237,12 +235,13 @@ export class SqliteThreadStore implements ThreadStore {
     });
   }
 
-  async createThread(input: CreateThreadInput = {}): Promise<RuntimeThread> {
+  async createThread(input: ThreadStoreCreateInput = {}): Promise<RuntimeThread> {
     await this.ensureReady();
     const now = this.clock.now().toISOString();
     const threadId = assertSafeRuntimeId(this.ids.id('thread'), 'Thread id');
     const initial: RuntimeThread = {
       id: threadId,
+      ...(input.kind === 'side' ? { kind: 'side' as const } : {}),
       forkedFromId: optionalSafeRuntimeId(input.forkedFromId, 'Forked thread id'),
       parentThreadId: optionalSafeRuntimeId(input.parentThreadId, 'Parent thread id'),
       projectId: input.projectId?.trim() || undefined,
@@ -621,13 +620,13 @@ export class SqliteThreadStore implements ThreadStore {
     this.withWriteTransaction(() => {
       const summary = toSummary(thread);
       const result = this.requireDatabase().prepare(`
-        UPDATE threads SET
-          active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
+        UPDATE threads SET kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
           created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
           message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?,
           message_index_seq = ?
         WHERE id = ? AND last_seq = ?
       `).run(
+        summary.kind ?? 'regular',
         summary.activeTurnId ?? null,
         summary.forkedFromId ?? null,
         summary.parentThreadId ?? null,
@@ -668,12 +667,12 @@ export class SqliteThreadStore implements ThreadStore {
     this.withWriteTransaction(() => {
       const summary = toSummary(thread);
       const result = this.requireDatabase().prepare(`
-        UPDATE threads SET
-          active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
+        UPDATE threads SET kind = ?, active_turn_id = ?, forked_from_id = ?, parent_thread_id = ?, project_id = ?, title = ?,
           created_at = ?, updated_at = ?, archived = ?, memory_mode = ?, git_info_json = ?, goal_json = ?,
           message_count = ?, last_message_preview = ?, snapshot_json = ?, snapshot_seq = ?
         WHERE id = ? AND last_seq = ? AND snapshot_seq <= ?
       `).run(
+        summary.kind ?? 'regular',
         summary.activeTurnId ?? null,
         summary.forkedFromId ?? null,
         summary.parentThreadId ?? null,
@@ -905,6 +904,7 @@ function withTransaction<T>(database: DatabaseSync, operation: () => T): T {
 function summaryFromRow(row: SqliteThreadRow): RuntimeThreadSummary {
   return {
     id: stringColumn(row, 'id'),
+    ...(stringColumn(row, 'kind') === 'side' ? { kind: 'side' as const } : {}),
     activeTurnId: nullableStringColumn(row, 'active_turn_id'),
     forkedFromId: nullableStringColumn(row, 'forked_from_id'),
     parentThreadId: nullableStringColumn(row, 'parent_thread_id'),

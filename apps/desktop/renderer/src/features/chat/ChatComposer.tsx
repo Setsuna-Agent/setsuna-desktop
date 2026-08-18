@@ -107,6 +107,7 @@ export function ChatComposer({
   skillSelectionRequest,
   workspaceMentionRequest,
   skills,
+  sideConversation = false,
   threadUsage,
   starter = false,
   placeholder,
@@ -144,6 +145,7 @@ export function ChatComposer({
   skillSelectionRequest?: ChatSkillSelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
+  sideConversation?: boolean;
   threadUsage: RuntimeUsageResponse | null;
   starter?: boolean;
   placeholder?: string;
@@ -229,7 +231,8 @@ export function ChatComposer({
     && (draft.trim() || sendableAttachments.length),
   );
   const contextCompactPercent = Math.round(Number(contextUsage.percent || 0));
-  const multiAgentEnabled = config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
+  const multiAgentEnabled = !sideConversation
+    && (config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true);
   const composerHasProtectedState = Boolean(
     draft
     || attachmentItems.length
@@ -286,6 +289,7 @@ export function ChatComposer({
     query: commandController.slashQuery,
     selectedSkills,
     sideChatAvailable: Boolean(onOpenSideChat),
+    sideConversation,
     skills,
     t,
   }), [
@@ -302,6 +306,7 @@ export function ChatComposer({
     modeController.goalModeEnabled,
     multiAgentEnabled,
     onOpenSideChat,
+    sideConversation,
     selectedSkills,
     skills,
     t,

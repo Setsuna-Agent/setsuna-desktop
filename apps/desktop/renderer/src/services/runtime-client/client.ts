@@ -136,6 +136,12 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     createThread(input: CreateThreadInput = {}) {
       return request<RuntimeThread>({ path: '/v1/threads', method: 'POST', body: input });
     },
+    createSideConversation(parentThreadId: string) {
+      return request<RuntimeThread>({
+        path: `/v1/threads/${encodeURIComponent(parentThreadId)}/side-conversations`,
+        method: 'POST',
+      });
+    },
     updateThread(threadId: string, patch: ThreadPatch) {
       return request<RuntimeThread>({
         path: `/v1/threads/${encodeURIComponent(threadId)}`,
