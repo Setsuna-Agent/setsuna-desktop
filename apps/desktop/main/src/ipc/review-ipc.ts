@@ -25,6 +25,7 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
     sender: WebContents;
   }>();
   const subscriptionBySender = new Map<WebContents, string>();
+  const latestSubscriptionRequestBySender = new Map<WebContents, string>();
   const channels = [
     'desktop-review:get-state',
     'desktop-review:subscribe-changes',
@@ -49,6 +50,9 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
     if (subscriptionBySender.get(subscription.sender) === subscriptionId) {
       subscriptionBySender.delete(subscription.sender);
     }
+    if (latestSubscriptionRequestBySender.get(subscription.sender) === subscriptionId) {
+      latestSubscriptionRequestBySender.delete(subscription.sender);
+    }
   };
 
   ipcMain.handle('desktop-review:get-state', async (_event, input) =>
@@ -58,11 +62,23 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
     if (!isDesktopRendererSender(event.sender, mainWindow)) throw new Error('Desktop renderer is unavailable.');
     const subscriptionId = randomUUID();
     const sender = event.sender;
-    const dispose = await monitor.subscribe(String(input?.workspaceRoot ?? ''), () => {
-      if (!sender.isDestroyed()) sender.send(REVIEW_CHANGED_CHANNEL, { subscriptionId });
-    });
-    if (sender.isDestroyed()) {
+    latestSubscriptionRequestBySender.set(sender, subscriptionId);
+    let dispose: () => void;
+    try {
+      dispose = await monitor.subscribe(String(input?.workspaceRoot ?? ''), () => {
+        if (!sender.isDestroyed()) sender.send(REVIEW_CHANGED_CHANNEL, { subscriptionId });
+      });
+    } catch (error) {
+      if (latestSubscriptionRequestBySender.get(sender) === subscriptionId) {
+        latestSubscriptionRequestBySender.delete(sender);
+      }
+      throw error;
+    }
+    if (sender.isDestroyed() || latestSubscriptionRequestBySender.get(sender) !== subscriptionId) {
       dispose();
+      if (latestSubscriptionRequestBySender.get(sender) === subscriptionId) {
+        latestSubscriptionRequestBySender.delete(sender);
+      }
       return subscriptionId;
     }
     const previousSubscriptionId = subscriptionBySender.get(sender);
@@ -114,6 +130,7 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
   });
 
   return () => {
+    latestSubscriptionRequestBySender.clear();
     for (const subscriptionId of [...subscriptions.keys()]) disposeSubscription(subscriptionId);
     monitor.close();
   };

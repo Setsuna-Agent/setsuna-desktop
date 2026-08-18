@@ -35,7 +35,7 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 145 total files
+apps/desktop/main/ — 0 direct / 146 total files
 ├── src/ — 2 direct / 89 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
@@ -53,15 +53,16 @@ apps/desktop/main/ — 0 direct / 145 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   ├── windows-sandbox/ — 1 direct / 1 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 56 files
+└── test/ — 57 files
     ├── integration/ — 3 files
     │   ├── review/ — 2 direct / 2 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 3 direct / 3 total files
-    └── unit/ — 1 direct / 50 total files
+    └── unit/ — 1 direct / 51 total files
         ├── browser/ — 6 direct / 8 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 8 direct / 8 total files
+        ├── ipc/ — 1 direct / 1 total files
         ├── network-proxy/ — 2 direct / 2 total files
         ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files

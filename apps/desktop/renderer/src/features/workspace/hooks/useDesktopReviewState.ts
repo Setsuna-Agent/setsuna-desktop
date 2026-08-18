@@ -16,7 +16,7 @@ type DesktopReviewStateOptions = {
 type ReviewLoadRequest = {
   baseRef: string | null;
   foreground: boolean;
-  persistPreference: boolean;
+  preferenceMode: 'none' | 'restore' | 'select';
 };
 
 export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptions) {
@@ -40,7 +40,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     targetPreferenceKey: string,
     request: ReviewLoadRequest,
   ) => {
-    const { baseRef, foreground, persistPreference } = request;
+    const { baseRef, foreground, preferenceMode } = request;
     const api = window.setsunaDesktop?.desktopReview;
     if (!api) {
       setReviewError('Desktop review bridge is unavailable.');
@@ -53,13 +53,17 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     try {
       let state = await api.getState(targetProjectPath, { baseRef });
       if (!isLatest()) return;
-      if (persistPreference) {
-        const normalizedBaseRef = normalizeReviewBaseRefPreference(baseRef, state.baseRefs);
-        if (normalizedBaseRef && normalizedBaseRef !== state.baseRef) {
-          state = await api.getState(targetProjectPath, { baseRef: normalizedBaseRef });
+      if (preferenceMode !== 'none') {
+        // Stored preferences may need migration to a remote counterpart, while
+        // an explicit selection must preserve the exact local or remote ref.
+        const preferredBaseRef = preferenceMode === 'restore'
+          ? normalizeReviewBaseRefPreference(baseRef, state.baseRefs)
+          : baseRef;
+        if (preferenceMode === 'restore' && preferredBaseRef && preferredBaseRef !== state.baseRef) {
+          state = await api.getState(targetProjectPath, { baseRef: preferredBaseRef });
           if (!isLatest()) return;
         }
-        preferredBaseRefRef.current = state.baseRef === normalizedBaseRef ? normalizedBaseRef : null;
+        preferredBaseRefRef.current = state.baseRef === preferredBaseRef ? preferredBaseRef : null;
         writeReviewBaseRefPreference(targetPreferenceKey, preferredBaseRefRef.current);
       }
       reviewStateRef.current = state;
@@ -86,7 +90,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: true,
-      persistPreference: false,
+      preferenceMode: 'none',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
 
@@ -95,7 +99,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: false,
-      persistPreference: false,
+      preferenceMode: 'none',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
 
@@ -104,7 +108,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef,
       foreground: true,
-      persistPreference: true,
+      preferenceMode: 'select',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
 
@@ -134,7 +138,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     void runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: true,
-      persistPreference: preferredBaseRefRef.current !== null,
+      preferenceMode: preferredBaseRefRef.current === null ? 'none' : 'restore',
     });
     const handleWindowFocus = () => refreshCurrentRef.current();
     window.addEventListener('focus', handleWindowFocus);

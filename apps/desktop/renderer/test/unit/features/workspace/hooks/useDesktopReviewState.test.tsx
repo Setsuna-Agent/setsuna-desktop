@@ -106,6 +106,27 @@ describe('useDesktopReviewState', () => {
     expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBe('origin/master');
   });
 
+  it('preserves an explicitly selected local base ref when a remote counterpart exists', async () => {
+    const localBaseState = {
+      ...reviewState(1),
+      baseRef: 'master',
+      baseRefs: ['origin/master', 'master'],
+    };
+    const getState = vi.fn()
+      .mockResolvedValueOnce(reviewState(1))
+      .mockResolvedValueOnce(localBaseState);
+    installReviewBridge({ getState, watchChanges: () => () => undefined });
+
+    render(<ReviewStateProbe project={project} />);
+    await waitFor(() => expect(getState).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'select local base ref' }));
+
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+    expect(getState).toHaveBeenLastCalledWith(project.path, { baseRef: 'master' });
+    expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBe('master');
+  });
+
   it('keeps the last successful snapshot when a background refresh fails', async () => {
     const getState = vi.fn()
       .mockResolvedValueOnce(reviewState(4))
@@ -176,6 +197,7 @@ function ReviewStateProbe({ project: activeProject }: { project: WorkspaceProjec
       <span data-testid="loading">{String(review.reviewLoading)}</span>
       <button type="button" onClick={() => void review.loadReviewState()}>refresh review</button>
       <button type="button" onClick={() => void review.selectReviewBaseRef('origin/master')}>select base ref</button>
+      <button type="button" onClick={() => void review.selectReviewBaseRef('master')}>select local base ref</button>
     </>
   );
 }
