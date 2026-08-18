@@ -81,13 +81,11 @@ export {
 } from './RuntimeToolRunStatus.js';
 
 export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
-  // Planned preview totals must not look like applied filesystem changes.
-  if (runs.some(isPreparingToolRun)) return null;
   let hasTotals = false;
   let showZero = false;
   let additions = 0;
   let deletions = 0;
-  for (const entry of fileOperationEntries(runs)) {
+  for (const entry of fileOperationStableChangeEntries(runs)) {
     if (!entry.hasChangeCounts) continue;
     hasTotals = true;
     showZero = showZero || entry.showZeroChangeCounts === true;
@@ -96,6 +94,12 @@ export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additi
   }
   if (hasTotals) return { additions, deletions, showZero: showZero || additions !== 0 || deletions !== 0 };
   return null;
+}
+
+export function fileOperationStableChangeEntries(runs: RuntimeToolRun[]): FileOperationEntry[] {
+  // A preparing run contains a streamed preview, not an applied change. Keep
+  // stable counts from the other runs instead of hiding the whole group.
+  return fileOperationEntries(runs.filter((run) => !isPreparingToolRun(run)));
 }
 
 export function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {

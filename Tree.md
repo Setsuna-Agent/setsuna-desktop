@@ -35,15 +35,15 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 146 total files
-├── src/ — 2 direct / 89 total files
+apps/desktop/main/ — 0 direct / 148 total files
+├── src/ — 2 direct / 90 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 14 direct / 14 total files
 │   ├── network-proxy/ — 7 direct / 7 total files
-│   ├── review/ — 2 direct / 2 total files
+│   ├── review/ — 3 direct / 3 total files
 │   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
@@ -53,17 +53,18 @@ apps/desktop/main/ — 0 direct / 146 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   ├── windows-sandbox/ — 1 direct / 1 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 57 files
+└── test/ — 58 files
     ├── integration/ — 3 files
     │   ├── review/ — 2 direct / 2 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 3 direct / 3 total files
-    └── unit/ — 1 direct / 51 total files
+    └── unit/ — 1 direct / 52 total files
         ├── browser/ — 6 direct / 8 total files
         │   └── cdp/ — 2 direct / 2 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── ipc/ — 1 direct / 1 total files
         ├── network-proxy/ — 2 direct / 2 total files
+        ├── review/ — 1 direct / 1 total files
         ├── runtime/ — 7 direct / 7 total files
         ├── security/ — 2 direct / 2 total files
         ├── updater/ — 2 direct / 2 total files

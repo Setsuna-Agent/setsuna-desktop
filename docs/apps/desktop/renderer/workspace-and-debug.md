@@ -31,7 +31,6 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 | `useThreadWorkspace.ts` | Thread 与 project/workspace 关系 |
 | `useWorkspaceDependencies.ts` | Bundled Python/uv 等工作区依赖状态 |
 | `usePanelTabCloseTransition.ts` | Tab 关闭动画/状态收敛 |
-| `desktopReviewAutoLoad.ts` | Review 自动加载判定 |
 | `startThreadReview.ts` | 从 UI 目标创建 review turn |
 | `useDesktopImageAction.ts` | 生成图片复制/reveal 等 main 动作 |
 

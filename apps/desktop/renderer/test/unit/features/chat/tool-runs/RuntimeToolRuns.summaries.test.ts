@@ -208,6 +208,24 @@ describe('RuntimeToolRuns compact summaries', () => {
     }
   });
 
+  it('keeps completed change counts while a later file mutation is preparing', () => {
+    const fileRuns = [
+      fileRun('edit_completed', 'edit_file', 'src/completed.ts', 'Modified'),
+      preparingFileRun('edit_preparing', 'src/preparing.ts'),
+    ];
+    const directText = renderedTextFromHtml(renderedHtml(fileRuns));
+    const mixedText = renderedTextFromHtml(renderedHtml([
+      toolRun('read_before_edit', 'read_file', { file_path: 'src/completed.ts' }),
+      ...fileRuns,
+    ], 'latest'));
+
+    for (const text of [directText, mixedText]) {
+      expect(text).toContain('+1-1');
+      expect(text).not.toContain('+47-19');
+      expect(text).toContain('completed.ts');
+    }
+  });
+
   it('does not render a partial streamed workspace root as a file target', () => {
     const html = renderedHtml([{
       id: 'edit_preparing',

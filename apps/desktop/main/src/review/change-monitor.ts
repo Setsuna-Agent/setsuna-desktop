@@ -1,13 +1,19 @@
 import { spawn } from 'node:child_process';
-import { watch, type FSWatcher } from 'node:fs';
+import { watch } from 'node:fs';
 import path from 'node:path';
+import {
+  createPrunedRecursiveWatcher,
+  type PrunedRecursiveWatchOptions,
+  type ReviewDirectoryWatcher,
+} from './pruned-recursive-watcher.js';
 import { resolveDesktopReviewRepository } from './state.js';
 
 type ReviewChangeListener = () => void;
 type WatchDirectory = (
   directoryPath: string,
   listener: (eventType: string, filename: string | Buffer | null) => void,
-) => FSWatcher;
+  options?: PrunedRecursiveWatchOptions,
+) => Promise<ReviewDirectoryWatcher> | ReviewDirectoryWatcher;
 type VisiblePathResolver = (gitRoot: string, paths: string[]) => Promise<boolean>;
 
 type MonitorEntry = {
@@ -18,7 +24,7 @@ type MonitorEntry = {
   pendingPaths: Set<string>;
   timer: ReturnType<typeof setTimeout> | null;
   unknownWorktreeChange: boolean;
-  watchers: FSWatcher[];
+  watchers: ReviewDirectoryWatcher[];
 };
 
 const DEFAULT_CHANGE_DEBOUNCE_MS = 300;
@@ -32,6 +38,7 @@ const FILE_TRANSACTION_SIBLING_PATTERN = /(^|\/)\.setsuna-(?:stage|backup)-\d+-[
  */
 export class DesktopReviewChangeMonitor {
   private readonly entries = new Map<string, MonitorEntry>();
+  private readonly pendingEntries = new Map<string, Promise<MonitorEntry>>();
   private closed = false;
 
   constructor(
@@ -45,11 +52,12 @@ export class DesktopReviewChangeMonitor {
     if (this.closed) return () => undefined;
     if (!repository.gitRoot || !repository.gitDirectory || !repository.gitCommonDirectory) return () => undefined;
     const key = normalizedPathKey(repository.gitRoot);
-    let entry = this.entries.get(key);
-    if (!entry) {
-      entry = this.createEntry(repository.gitRoot, [repository.gitDirectory, repository.gitCommonDirectory]);
-      this.entries.set(key, entry);
-    }
+    const entry = await this.getOrCreateEntry(
+      key,
+      repository.gitRoot,
+      [repository.gitDirectory, repository.gitCommonDirectory],
+    );
+    if (this.closed) return () => undefined;
     entry.listeners.add(listener);
     return () => {
       const current = this.entries.get(key);
@@ -63,11 +71,42 @@ export class DesktopReviewChangeMonitor {
 
   close(): void {
     this.closed = true;
+    this.pendingEntries.clear();
     for (const entry of this.entries.values()) this.closeEntry(entry);
     this.entries.clear();
   }
 
-  private createEntry(gitRoot: string, gitDirectories: string[]): MonitorEntry {
+  private async getOrCreateEntry(key: string, gitRoot: string, gitDirectories: string[]): Promise<MonitorEntry> {
+    const existing = this.entries.get(key);
+    if (existing) return existing;
+    let pending = this.pendingEntries.get(key);
+    if (!pending) {
+      pending = this.createAndStoreEntry(key, gitRoot, gitDirectories);
+      this.pendingEntries.set(key, pending);
+    }
+    try {
+      return await pending;
+    } finally {
+      if (this.pendingEntries.get(key) === pending) this.pendingEntries.delete(key);
+    }
+  }
+
+  private async createAndStoreEntry(key: string, gitRoot: string, gitDirectories: string[]): Promise<MonitorEntry> {
+    const created = await this.createEntry(gitRoot, gitDirectories);
+    if (this.closed) {
+      this.closeEntry(created);
+      return created;
+    }
+    const existing = this.entries.get(key);
+    if (existing) {
+      this.closeEntry(created);
+      return existing;
+    }
+    this.entries.set(key, created);
+    return created;
+  }
+
+  private async createEntry(gitRoot: string, gitDirectories: string[]): Promise<MonitorEntry> {
     const entry: MonitorEntry = {
       gitMetadataDirty: false,
       gitRoot,
@@ -79,7 +118,7 @@ export class DesktopReviewChangeMonitor {
       watchers: [],
     };
     try {
-      entry.watchers.push(this.watchDirectory(gitRoot, (_eventType, filename) => {
+      entry.watchers.push(await this.watchDirectory(gitRoot, (_eventType, filename) => {
         const relativePath = normalizedWatchPath(filename);
         if (relativePath && pathIsInsideGitMetadata(relativePath)) return;
         // Local file mutations use short-lived sibling files to commit related
@@ -88,14 +127,17 @@ export class DesktopReviewChangeMonitor {
         if (relativePath) entry.pendingPaths.add(relativePath);
         else entry.unknownWorktreeChange = true;
         this.schedule(entry);
+      }, {
+        ignoreDirectories: async (relativePaths) => await ignoredGitPaths(gitRoot, relativePaths) ?? new Set(),
+        shouldDescend: (relativePath) => !pathIsInsideGitMetadata(relativePath),
       }));
       for (const gitDirectory of uniquePaths(gitDirectories)) {
-        entry.watchers.push(this.watchDirectory(gitDirectory, (_eventType, filename) => {
+        entry.watchers.push(await this.watchDirectory(gitDirectory, (_eventType, filename) => {
           const relativePath = normalizedWatchPath(filename);
           if (relativePath && !isRelevantGitMetadataPath(relativePath)) return;
           entry.gitMetadataDirty = true;
           this.schedule(entry);
-        }));
+        }, { shouldDescend: isRelevantGitMetadataPath }));
       }
     } catch (error) {
       for (const watcher of entry.watchers) watcher.close();
@@ -151,7 +193,12 @@ export class DesktopReviewChangeMonitor {
   }
 }
 
-function nodeWatchDirectory(directoryPath: string, listener: Parameters<WatchDirectory>[1]): FSWatcher {
+function nodeWatchDirectory(
+  directoryPath: string,
+  listener: Parameters<WatchDirectory>[1],
+  options: PrunedRecursiveWatchOptions = {},
+): Promise<ReviewDirectoryWatcher> | ReviewDirectoryWatcher {
+  if (process.platform === 'linux') return createPrunedRecursiveWatcher(directoryPath, listener, options);
   return watch(directoryPath, { persistent: false, recursive: true }, listener);
 }
 
@@ -171,7 +218,10 @@ function isFileTransactionSibling(relativePath: string): boolean {
 }
 
 function isRelevantGitMetadataPath(relativePath: string): boolean {
-  return !relativePath.startsWith('objects/') && !relativePath.startsWith('logs/');
+  return relativePath !== 'objects'
+    && !relativePath.startsWith('objects/')
+    && relativePath !== 'logs'
+    && !relativePath.startsWith('logs/');
 }
 
 async function hasNonIgnoredPath(gitRoot: string, paths: string[]): Promise<boolean> {

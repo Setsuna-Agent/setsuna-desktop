@@ -48,6 +48,7 @@ import {
   fileOperationActionLabel,
   fileOperationChangeTotals,
   fileOperationEntries,
+  fileOperationStableChangeEntries,
   fileOperationGroupSummary,
   fileOperationTarget,
   FileOperationTarget,
@@ -247,6 +248,9 @@ function toolRunGroupPanelNode(
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
   const fileOperationGroup = group.kind === 'fileMutation';
+  const stableFileRuns = fileOperationGroup && focusedActiveRun && isPreparingToolRun(focusedActiveRun)
+    ? group.runs.filter((run) => !isPreparingToolRun(run))
+    : [];
   const fileOperationSummary = fileOperationGroup ? fileOperationGroupSummary(group.runs, t) : null;
   const summaryInspectionRun = group.kind === 'inspection' ? activeToolRunOrLast(group.runs) : undefined;
   const summaryInspectionKind = summaryInspectionRun ? inspectionEntryFromRun(summaryInspectionRun)?.kind : undefined;
@@ -285,12 +289,15 @@ function toolRunGroupPanelNode(
         }`}
       >
         {focusedActiveRun ? (
-          // 外层分组已经显示当前活动项的摘要，直接展开详情可避免重复的运行/审批状态。
-          <ToolRunDetails
-            run={focusedActiveRun}
-            onAnswerApproval={onAnswerApproval}
-            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
-          />
+          <>
+            {stableFileRuns.length ? <FileOperationTargetList runs={stableFileRuns} /> : null}
+            {/* 外层分组已经显示当前活动项的摘要，直接展开详情可避免重复的运行/审批状态。 */}
+            <ToolRunDetails
+              run={focusedActiveRun}
+              onAnswerApproval={onAnswerApproval}
+              pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+            />
+          </>
         ) : group.kind === 'inspection' ? (
           <>
             <InspectionTargetList runs={visibleRuns} />
@@ -344,6 +351,15 @@ function mixedToolRunGroupPanelNode(
   const status = toolRunGroupStatus(runs);
   const activeRuns = runs.filter(isActiveRuntimeToolRun);
   const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
+  const focusedGroup = focusedActiveRun
+    ? group.groups.find((childGroup) => toolRunGroupRuns(childGroup).some((run) => run.id === focusedActiveRun.id))
+    : undefined;
+  const stableFileRuns = focusedActiveRun
+    && focusedGroup
+    && isPreparingToolRun(focusedActiveRun)
+    && toolRunGroupKind(focusedActiveRun) === 'fileMutation'
+    ? toolRunGroupRuns(focusedGroup).filter((run) => !isPreparingToolRun(run))
+    : [];
   const visibleGroups = activeRuns.length ? group.groups.map(onlyActiveToolGroup).filter(isToolRunGroup) : group.groups;
   const compactSummary = mixedToolRunGroupSummary(group.groups, group.summaryMode, t);
   const compactSummaryChangeCounts = compactSummary.target && isConcreteFileOperationTarget(compactSummary.target)
@@ -377,12 +393,15 @@ function mixedToolRunGroupPanelNode(
     >
       <div className="chat-tool-run__body chat-tool-run__body--mixed-list">
         {focusedActiveRun ? (
-          // 活动期间只聚焦当前工具；仅有一项时无需再渲染一层相同的进度摘要。
-          <ToolRunDetails
-            run={focusedActiveRun}
-            onAnswerApproval={onAnswerApproval}
-            pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
-          />
+          <>
+            {stableFileRuns.length ? <FileOperationTargetList runs={stableFileRuns} /> : null}
+            {/* 活动期间只聚焦当前工具；仅有一项时无需再渲染一层相同的进度摘要。 */}
+            <ToolRunDetails
+              run={focusedActiveRun}
+              onAnswerApproval={onAnswerApproval}
+              pendingApprovalId={isPendingApprovalRun(focusedActiveRun) ? focusedActiveRun.approvalId : undefined}
+            />
+          </>
         ) : (
           visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
         )}
@@ -543,13 +562,15 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
 function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
   const { t } = useI18n();
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
+  const stableEntriesByPath = new Map(fileOperationStableChangeEntries(runs)
+    .map((entry) => [normalizeFileOperationPath(entry.path), entry]));
   const changesByPath = fileChangesByPath(runs);
-  const preparing = runs.some(isPreparingToolRun);
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
       {entries.map((entry) => {
         const change = changesByPath.get(normalizeFileOperationPath(entry.path));
+        const stableEntry = stableEntriesByPath.get(normalizeFileOperationPath(entry.path));
         const summary = (
           <>
             <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
@@ -565,9 +586,9 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
               {pathBaseName(entry.path, t)}
             </WorkspaceFileLink>
             <ChangeCounts
-              additions={preparing ? undefined : entry.additions}
-              deletions={preparing ? undefined : entry.deletions}
-              showZero={preparing ? false : entry.showZeroChangeCounts}
+              additions={stableEntry?.additions}
+              deletions={stableEntry?.deletions}
+              showZero={stableEntry?.showZeroChangeCounts}
             />
           </>
         );
