@@ -5,10 +5,10 @@ import { createPortal } from 'react-dom';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { Button, IconButton, TextField } from '../../../shared/ui/primitives.js';
 import {
+  appendCustomThinkingEfforts,
   customThinkingEfforts,
   normalizeThinkingEfforts,
   positiveInt,
-  setCustomThinkingEfforts,
   setThinkingEnabled,
   thinkingPresetOptionsForModel,
   toggleThinkingEffort,
@@ -28,16 +28,24 @@ export function ProviderModelSettingsDialog({
 }) {
   const { t } = useI18n();
   const [draftModel, setDraftModel] = useState(model);
+  const [customEffortDraft, setCustomEffortDraft] = useState('');
   const thinkingEfforts = normalizeThinkingEfforts([
     ...draftModel.thinkingEfforts,
     draftModel.defaultThinkingEffort,
   ]);
-  const customThinkingEffortsText = draftModel.thinkingEnabled
-    ? customThinkingEfforts(thinkingEfforts).join(', ')
-    : '';
+  const thinkingEffortOptions = [
+    ...thinkingPresetOptionsForModel(),
+    ...customThinkingEfforts(thinkingEfforts),
+  ];
 
   const updateDraft = (updater: (current: ProviderModelConfig) => ProviderModelConfig) => {
     setDraftModel((current) => updater(current));
+  };
+
+  const commitCustomEffortDraft = () => {
+    if (!normalizeThinkingEfforts(customEffortDraft).length) return;
+    updateDraft((item) => appendCustomThinkingEfforts(item, customEffortDraft));
+    setCustomEffortDraft('');
   };
 
   useEffect(() => {
@@ -146,10 +154,10 @@ export function ProviderModelSettingsDialog({
           </div>
           <div className="settings-model-modal__section">
             <span className="settings-model-label">{t('settings.providers.thinkingLevels')}</span>
-            <div className="settings-thinking-levels__content">
-              <div className="settings-thinking-presets" aria-label={t('settings.providers.commonThinkingLevels')}>
-                {thinkingPresetOptionsForModel().map((effort) => {
-                  const selected = thinkingEfforts.includes(effort);
+              <div className="settings-thinking-levels__content">
+                <div className="settings-thinking-presets" aria-label={t('settings.providers.commonThinkingLevels')}>
+                  {thinkingEffortOptions.map((effort) => {
+                    const selected = thinkingEfforts.includes(effort);
                   return (
                     <button key={effort} className={`settings-thinking-preset ${selected ? 'is-active' : ''}`} type="button" aria-pressed={selected} disabled={!draftModel.thinkingEnabled} onClick={() => updateDraft((item) => toggleThinkingEffort(item, effort))}>
                       {effort}
@@ -158,16 +166,20 @@ export function ProviderModelSettingsDialog({
                 })}
               </div>
               <TextField
-                aria-label={t('settings.providers.customThinkingLevel')}
-                className="settings-thinking-input"
-                disabled={!draftModel.thinkingEnabled}
-                placeholder={t('settings.providers.customLevelPlaceholder')}
-                value={customThinkingEffortsText}
-                onChange={(event) => {
-                  const efforts = event.target.value;
-                  updateDraft((item) => setCustomThinkingEfforts(item, efforts));
-                }}
-              />
+                  aria-label={t('settings.providers.customThinkingLevel')}
+                  className="settings-thinking-input"
+                  disabled={!draftModel.thinkingEnabled}
+                  placeholder={t('settings.providers.customLevelPlaceholder')}
+                  value={customEffortDraft}
+                  onChange={(event) => {
+                    setCustomEffortDraft(event.target.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+                    event.preventDefault();
+                    commitCustomEffortDraft();
+                  }}
+                />
             </div>
           </div>
         </div>
@@ -176,7 +188,11 @@ export function ProviderModelSettingsDialog({
             <Button type="button" onClick={onClose}>
               {t('common.cancel')}
             </Button>
-            <Button type="button" variant="primary" onClick={() => onConfirm(draftModel)}>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={() => onConfirm(appendCustomThinkingEfforts(draftModel, customEffortDraft))}
+            >
               {t('settings.providers.confirm')}
             </Button>
           </div>

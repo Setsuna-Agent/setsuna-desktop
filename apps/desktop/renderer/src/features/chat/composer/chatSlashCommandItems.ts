@@ -18,7 +18,6 @@ export type ChatSlashCommandItemsOptions = {
   contextCompactPercent: number;
   contextCompacting: boolean;
   goalModeEnabled: boolean;
-  hasCurrentThread: boolean;
   hasReviewIncompatibleContent: boolean;
   multiAgentEnabled: boolean;
   query: string;
@@ -38,7 +37,6 @@ export function createChatSlashCommandItems({
   contextCompactPercent,
   contextCompacting,
   goalModeEnabled,
-  hasCurrentThread,
   hasReviewIncompatibleContent,
   multiAgentEnabled,
   query,
@@ -78,16 +76,6 @@ export function createChatSlashCommandItems({
           : goalModeEnabled
             ? t('chat.composer.goalEnabled')
             : t('chat.composer.goalDescription'),
-    },
-    {
-      key: 'usage',
-      kind: 'action',
-      type: 'usage',
-      title: t('chat.composer.usage'),
-      description: hasCurrentThread
-        ? t('chat.composer.usageDescription')
-        : t('chat.composer.openChatFirst'),
-      disabled: !hasCurrentThread,
     },
     {
       key: 'side-chat',

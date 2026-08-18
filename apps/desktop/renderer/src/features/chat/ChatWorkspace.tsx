@@ -375,9 +375,7 @@ export function ChatWorkspace({
       workspaceMentionRequest={workspaceMentionRequest}
       skills={skills}
       sideConversation={variant === 'side'}
-      threadUsage={displayedThreadUsage}
       starter={starter}
-      placeholder={variant === 'side' ? t('chat.composer.sidePlaceholder') : undefined}
       onCancelActiveTurn={onCancelActiveTurn}
       onAccessModeChange={onAccessModeChange}
       onCompactContext={onCompactContext}

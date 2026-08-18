@@ -2,6 +2,7 @@ import type { ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   defaultProviderConfig,
+  defaultProviderModel,
   normalizeSettingsProviders,
 } from '../../../../src/features/settings/providers/provider-model.js';
 
@@ -33,11 +34,21 @@ describe('normalizeSettingsProviders', () => {
   it('uses collision-resistant ids for new providers and models', () => {
     const first = defaultProviderConfig();
     const second = defaultProviderConfig();
+    const firstModel = defaultProviderModel('');
+    const secondModel = defaultProviderModel('');
 
     expect(first.id).toMatch(/^provider-[0-9a-f-]{36}$/u);
-    expect(first.models[0]?.id).toMatch(/^model-[0-9a-f-]{36}$/u);
     expect(second.id).not.toBe(first.id);
-    expect(second.models[0]?.id).not.toBe(first.models[0]?.id);
+    expect(firstModel.id).toMatch(/^model-[0-9a-f-]{36}$/u);
+    expect(secondModel.id).not.toBe(firstModel.id);
+  });
+
+  it('creates a provider without a preset endpoint or placeholder model', () => {
+    const provider = defaultProviderConfig();
+
+    expect(provider.baseUrl).toBe('');
+    expect(provider.models).toEqual([]);
+    expect(normalizeSettingsProviders([provider])[0]?.models).toEqual([]);
   });
 
   it('preserves a provider-specific proxy selection and defaults missing routes to inherit', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  createKeyboardShortcutBindingResolver,
   KEYBOARD_SHORTCUTS_STORAGE_KEY,
   normalizeKeyboardShortcutPreferences,
   readKeyboardShortcutPreferences,
@@ -70,5 +71,14 @@ describe('keyboard shortcut preferences', () => {
           },
         },
       });
+  });
+
+  it('lets stored overrides take precedence over newly introduced defaults', () => {
+    const bindingsFor = createKeyboardShortcutBindingResolver('win32', {
+      'app.newChat': ['Control+KeyT'],
+    });
+
+    expect(bindingsFor('app.newChat')).toEqual(['Control+KeyT']);
+    expect(bindingsFor('workspace.openBrowser')).toEqual([]);
   });
 });

@@ -313,11 +313,11 @@ export function AppRouteContent({
       threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
       sidePanelSlot={workspacePanels.sidePanelSlot}
+      sidePanelPresent={workspacePanels.sidePanelPresent}
       runtimeClient={runtime.client}
       onReloadThreads={runtime.reloadThreads}
       onFocusComposerRequestConsumed={onFocusComposerRequestConsumed}
       onSideChatError={runtime.setError}
-      sidePanelVisible={workspacePanels.sidePanelVisible}
       terminalSessionsByPanelId={workspacePanels.terminalSessionsByPanelId}
       onActivateBottomPanel={(panelId) => {
         const panel = workspacePanels.bottomPanelSlot.panels.find((item) => item.id === panelId);

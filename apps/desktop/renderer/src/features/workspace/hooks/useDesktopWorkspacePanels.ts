@@ -45,6 +45,12 @@ import {
 } from './useDesktopWorkspacePanelSession.js';
 import { readyThreadWorkspacePath, type ThreadWorkspaceStatus } from './useThreadWorkspace.js';
 
+// Keep panel contents mounted for the compositor-only drawer transition. Keep
+// this duration aligned with --app-workspace-motion-duration in shell.css.
+const SIDE_PANEL_TRANSITION_DURATION_MS = 280;
+
+type SidePanelTransitionPhase = 'opening' | 'closing' | null;
+
 type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
   activeView: string;
@@ -102,14 +108,16 @@ export function useDesktopWorkspacePanels({
   const sideActivePanel = activePanelInSlot(sidePanelSlot);
   const bottomActivePanel = activePanelInSlot(bottomPanelSlot);
   const sidePanelVisible = activeView === 'chat' && sidePanelExpanded && Boolean(sideActivePanel);
+  const sidePanelTransition = useSidePanelTransition(sidePanelVisible);
+  const sidePanelPresent = sidePanelTransition.present;
   const bottomPanelVisible = activeView === 'chat' && Boolean(bottomActivePanel);
   const bottomTerminalPanelActive = bottomPanelVisible && bottomActivePanel?.type === 'terminal';
   const browserPanelInstances = useMemo(
     () => desktopWorkspaceBrowserPanelInstances(layouts, targetIdentity, {
       bottomVisible: bottomPanelVisible,
-      sideVisible: sidePanelVisible,
+      sideVisible: sidePanelPresent,
     }),
-    [bottomPanelVisible, layouts, sidePanelVisible, targetIdentity],
+    [bottomPanelVisible, layouts, sidePanelPresent, targetIdentity],
   );
   const bottomTerminalPanelOpen = slotHasPanelType(bottomPanelSlot, 'terminal');
   const panelLauncherTypes = useMemo(() => [
@@ -640,6 +648,8 @@ export function useDesktopWorkspacePanels({
       selectReviewBaseRef,
       sideActivePanel,
       sidePanelSlot,
+      sidePanelPresent,
+      sidePanelTransitionPhase: sidePanelTransition.phase,
       sidePanelVisible,
       terminalSessionsByPanelId: activeTerminalSessionsByPanelId,
       toggleBottomTerminal,
@@ -689,6 +699,8 @@ export function useDesktopWorkspacePanels({
       selectReviewBaseRef,
       sideActivePanel,
       sidePanelSlot,
+      sidePanelPresent,
+      sidePanelTransition.phase,
       sidePanelVisible,
       activeTerminalSessionsByPanelId,
       toggleBottomTerminal,
@@ -701,6 +713,48 @@ export function useDesktopWorkspacePanels({
       workspaceApps,
     ],
   );
+}
+
+export function useSidePanelTransition(visible: boolean): {
+  phase: SidePanelTransitionPhase;
+  present: boolean;
+} {
+  const [state, setState] = useState(() => ({
+    phase: null as SidePanelTransitionPhase,
+    present: visible,
+    targetVisible: visible,
+  }));
+  const previousVisibleRef = useRef(visible);
+
+  useEffect(() => {
+    if (previousVisibleRef.current === visible) {
+      return undefined;
+    }
+    previousVisibleRef.current = visible;
+
+    setState((current) => ({
+      phase: visible ? 'opening' : 'closing',
+      present: visible || current.present,
+      targetVisible: visible,
+    }));
+    const timeoutId = window.setTimeout(() => {
+      setState((current) => (
+        current.targetVisible === visible
+          ? { phase: null, present: visible, targetVisible: visible }
+          : current
+      ));
+    }, SIDE_PANEL_TRANSITION_DURATION_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [visible]);
+
+  return {
+    // Reflect a reversed request before the effect commits its new transition target.
+    phase: visible === state.targetVisible
+      ? state.phase
+      : visible ? 'opening' : 'closing',
+    // Opening renders synchronously; every closing target remains mounted until its timer settles.
+    present: visible || state.present,
+  };
 }
 
 function terminalSessionKey(panelId: string, projectKey: string): string {

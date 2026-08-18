@@ -186,6 +186,22 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       enabled: activeView === 'chat' && Boolean(activeWorkspace),
       execute: openReviewPanel,
     },
+    'workspace.openTerminal': {
+      enabled: activeView === 'chat' && Boolean(activeWorkspace?.path),
+      execute: () => workspacePanels.openDesktopPanel('side', 'terminal'),
+    },
+    'workspace.openSideChat': {
+      enabled: activeView === 'chat',
+      execute: () => workspacePanels.openDesktopPanel('side', 'chat'),
+    },
+    'workspace.openBrowser': {
+      enabled: activeView === 'chat',
+      execute: () => workspacePanels.openBrowserPanel(),
+    },
+    'workspace.openConversationDebug': {
+      enabled: activeView === 'chat' && workspacePanels.developerFeaturesEnabled,
+      execute: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
+    },
   }), [
     activeView,
     activeWorkspace,
@@ -202,6 +218,9 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setActiveView,
     windowMenuActions,
     workspacePanels.toggleBottomTerminal,
+    workspacePanels.developerFeaturesEnabled,
+    workspacePanels.openBrowserPanel,
+    workspacePanels.openDesktopPanel,
     workspacePanels.toggleSidePanel,
   ]);
   useAppKeyboardShortcuts(shortcutHandlers);
@@ -215,13 +234,13 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       sidebarCollapsed={sidebarCollapsed}
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
-      navigationActions={(
+      navigationActions={activeView !== 'settings' ? (
         <RuntimeActivityTrigger
           open={runtimeActivityOpen}
           triggerRef={runtimeActivityTriggerRef}
           onToggle={() => setRuntimeActivityOpen((open) => !open)}
         />
-      )}
+      ) : undefined}
       toolbarTitle={toolbarTitle}
       workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}

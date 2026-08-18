@@ -58,7 +58,6 @@ export function useChatComposerModeController({
   const [modelThinkingSelection, setModelThinkingSelection] = useState<ModelThinkingSelectionState>(() => (
     createModelThinkingSelectionState(modelCapabilities)
   ));
-  const [usagePanelOpen, setUsagePanelOpen] = useState(false);
   const thinkingSelection = modelThinkingSelection.selection;
 
   useEffect(() => {
@@ -90,7 +89,6 @@ export function useChatComposerModeController({
 
   useEffect(() => {
     setLocalModes(resetThreadScopedChatComposerModes);
-    setUsagePanelOpen(false);
   }, [currentThreadId]);
 
   const setThinkingEnabled = useCallback((enabled: boolean) => {
@@ -134,14 +132,6 @@ export function useChatComposerModeController({
     setModelOpenSignal((value) => value + 1);
   }, []);
 
-  const toggleUsagePanel = useCallback(() => {
-    setUsagePanelOpen((value) => !value);
-  }, []);
-
-  const closeUsagePanel = useCallback(() => {
-    setUsagePanelOpen(false);
-  }, []);
-
   const resetAfterSend = useCallback(() => {
     setLocalModes(resetChatComposerModesAfterSend);
   }, []);
@@ -175,7 +165,6 @@ export function useChatComposerModeController({
     activeModelName: modelCapabilities.name,
     clearGoalMode,
     clearReviewMode,
-    closeUsagePanel,
     createSendOptions,
     enableGoalMode,
     enableReviewMode,
@@ -196,8 +185,6 @@ export function useChatComposerModeController({
     thinkingEffort: thinkingSelection.effort,
     thinkingEnabled: thinkingSelection.enabled,
     thinkingMenuOpen,
-    toggleUsagePanel,
-    usagePanelOpen,
   };
 }
 

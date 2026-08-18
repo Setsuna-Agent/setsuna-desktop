@@ -93,6 +93,7 @@ export function useDesktopAppController() {
     openFilePanel,
     panelLauncherMenuOpen,
     sideActivePanel,
+    sidePanelTransitionPhase,
     sidePanelVisible,
     workspaceAppMenuOpen,
   } = workspacePanels;
@@ -240,6 +241,7 @@ export function useDesktopAppController() {
     '--desktop-agent-sidebar-visual-width': `${sidebarWidth}px`,
     '--desktop-settings-nav-width': `${sidebarWidth}px`,
     '--desktop-agent-workspace-width': workspacePanelReservesLayout ? `${workspaceLayoutWidth}px` : '0px',
+    '--desktop-agent-workspace-visual-width': `${workspaceLayoutWidth}px`,
     '--app-bottom-panel-height': bottomPanelReservesLayout ? `${terminalHeight}px` : '0px',
   } as CSSProperties;
 
@@ -248,6 +250,9 @@ export function useDesktopAppController() {
     activeView === 'capabilities' ? 'desktop-agent-page--capabilities-open' : '',
     shellSidebarState.collapsed ? 'desktop-agent-page--sidebar-collapsed' : '',
     bottomPanelVisible ? 'desktop-agent-page--bottom-panel-open' : '',
+    activeView === 'chat' && sidePanelTransitionPhase
+      ? `desktop-agent-page--workspace-${sidePanelTransitionPhase}`
+      : '',
   ].filter(Boolean).join(' ');
 
   const toolbarTitle = activeView === 'chat' ? currentThread?.title ?? t('app.newChat') : undefined;

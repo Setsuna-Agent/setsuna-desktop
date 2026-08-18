@@ -440,7 +440,7 @@ function normalizeModels(
       supportsImages: model.supportsImages ?? false,
     };
   });
-  return normalized.length ? normalized : defaultConfig().providers[0].models;
+  return normalized;
 }
 
 function normalizeSecrets(value: unknown): StoredSecrets {

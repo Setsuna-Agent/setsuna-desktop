@@ -5,9 +5,10 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
-import type { DesktopReviewState } from '../../workspace/model.js';
+import { formatTokens, type DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
@@ -64,12 +65,13 @@ export function ConversationOverviewPanel({
   const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
-  const latestTurn = currentThread.turns?.at(-1);
   // Forks are independent conversations; only derived sub-agents are collaboration tasks.
   const childThreads = threads.filter((thread) => thread.parentThreadId === currentThread.id);
-  const diagnosticLabel = turnDiagnosticLabel(latestTurn, t);
   const callCount = usageSummary?.recordCount ?? 0;
-  const usageDiagnosticLabel = `${formatUsageTokens(usageSummary?.totalTokens ?? 0)} · ${t(callCount === 1 ? 'conversation.overview.callCount.one' : 'conversation.overview.callCount.many', { count: callCount })} · ${diagnosticLabel}`;
+  const totalTokensLabel = formatTokens(usageSummary?.totalTokens ?? 0);
+  const cacheHitRateLabel = formatCacheHitRate(usageSummary?.cachedInputTokens ?? 0, usageSummary?.inputTokens ?? 0);
+  const callCountLabel = t(callCount === 1 ? 'conversation.overview.callCount.one' : 'conversation.overview.callCount.many', { count: callCount });
+  const usageSummaryLabel = [totalTokensLabel, cacheHitRateLabel, callCountLabel].join(' · ');
 
   if (compact) {
     return (
@@ -127,7 +129,20 @@ export function ConversationOverviewPanel({
         <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
           <span className="chat-conversation-overview-panel__icon"><CircleGauge size={14} /></span>
           <span className="chat-conversation-overview-panel__label">{t('conversation.overview.usageDiagnostics')}</span>
-          <span className="chat-conversation-overview-panel__meta" title={usageDiagnosticLabel}>{usageDiagnosticLabel}</span>
+          <AppTooltip
+            placement="left"
+            title={(
+              <UsageSummaryTooltipContent
+                cacheHitRate={cacheHitRateLabel}
+                callCount={callCountLabel}
+                totalTokens={totalTokensLabel}
+              />
+            )}
+          >
+            <span className="chat-conversation-overview-panel__meta">
+              {usageSummaryLabel}
+            </span>
+          </AppTooltip>
         </div>
       </div>
       {shellProcessClient ? <ConversationBackgroundServices client={shellProcessClient} threadId={currentThread.id} /> : null}
@@ -158,32 +173,47 @@ export function ConversationOverviewPanel({
   );
 }
 
-function formatUsageTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return String(value);
+function UsageSummaryTooltipContent({
+  cacheHitRate,
+  callCount,
+  totalTokens,
+}: {
+  cacheHitRate: string;
+  callCount: string;
+  totalTokens: string;
+}) {
+  const { t } = useI18n();
+  const metrics = [
+    {
+      label: t('conversation.overview.usageTooltip.totalTokens'),
+      value: totalTokens,
+    },
+    {
+      label: t('conversation.overview.usageTooltip.cacheHitRate'),
+      value: cacheHitRate,
+    },
+    {
+      label: t('conversation.overview.usageTooltip.callCount'),
+      value: callCount,
+    },
+  ];
+
+  return (
+    <div className="chat-conversation-overview-usage-tooltip">
+      {metrics.map((metric) => (
+        <div className="chat-conversation-overview-usage-tooltip__metric" key={metric.label}>
+          <span>{metric.label}</span>
+          <span className="chat-conversation-overview-usage-tooltip__value">{metric.value}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
-function turnDiagnosticLabel(turn: NonNullable<RuntimeThread['turns']>[number] | undefined, t: Translate): string {
-  if (!turn) return t('conversation.overview.diagnostic.none');
-  const status = turn.status === 'in_progress'
-    ? t('conversation.overview.diagnostic.running')
-    : turn.status === 'completed'
-      ? t('conversation.overview.diagnostic.completed')
-      : turn.status === 'failed'
-        ? t('conversation.overview.diagnostic.failed')
-        : turn.status === 'cancelled'
-          ? t('conversation.overview.diagnostic.cancelled')
-          : t('conversation.overview.diagnostic.unknown');
-  const signals = [
-    turn.modelVerifications?.length
-      ? t(turn.modelVerifications.length === 1
-        ? 'conversation.overview.diagnostic.verifications.one'
-        : 'conversation.overview.diagnostic.verifications.many', { count: turn.modelVerifications.length })
-      : null,
-    turn.safetyBuffering ? t('conversation.overview.diagnostic.safetyBuffer') : null,
-  ].filter(Boolean);
-  return signals.length ? `${status} · ${signals.join(' · ')}` : status;
+function formatCacheHitRate(cachedInputTokens: number, inputTokens: number): string {
+  if (!Number.isFinite(cachedInputTokens) || !Number.isFinite(inputTokens) || inputTokens <= 0) return '0%';
+  const percent = Math.round((cachedInputTokens / inputTokens) * 100);
+  return `${Math.min(100, Math.max(0, percent))}%`;
 }
 
 function ContextProgressIcon({ percent }: { percent: number }) {

@@ -258,7 +258,7 @@ export function SettingsPage({
         >
           {activeSection === 'usage' ? null : (
             <SettingsPageHeading
-              action={activeSection === 'localLlm' && localModelSaveState.message ? (
+              action={activeSection === 'localLlm' && localModelSaveState.status === 'error' && localModelSaveState.message ? (
                 <AutoSaveStatus state={localModelSaveState} />
               ) : null}
               description={settingsSectionDescriptionKeys[activeSection]

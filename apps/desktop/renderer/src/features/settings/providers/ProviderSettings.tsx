@@ -7,7 +7,7 @@ import {
   type RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
-import { Globe2, Library, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
@@ -24,7 +24,6 @@ import { ProviderModelSettingsDialog } from './ProviderModelSettingsDialog.js';
 import { ProviderProxyField } from './ProviderProxyField.js';
 import {
   normalizeProviderKind,
-  providerBaseUrlPlaceholder,
   providerProtocolLabel,
   providerProtocolMeta,
   providerProtocolOptions,
@@ -115,7 +114,7 @@ export function LocalModelSettings({
         {selectedProvider ? (
           <div className="chat-user-settings__local-provider-card">
             <div className="chat-user-settings__local-provider-head">
-              <div className="chat-user-settings__local-provider-title">
+              <div className={`chat-user-settings__local-provider-title${selectedProvider.enabled ? '' : ' is-disabled'}`}>
                 <button
                   className="chat-user-settings__provider-brand-trigger"
                   type="button"
@@ -133,10 +132,6 @@ export function LocalModelSettings({
               </div>
               <div className="chat-user-settings__local-provider-actions">
                 <label className="sd-check chat-user-settings__provider-toggle">
-                  <span className={selectedProvider.enabled ? 'is-enabled' : ''}>
-                    <i aria-hidden="true" />
-                    {selectedProvider.enabled ? t('settings.providers.serviceEnabled') : t('settings.providers.serviceDisabled')}
-                  </span>
                   <input
                     aria-label={selectedProvider.enabled ? t('settings.providers.disableService') : t('settings.providers.enableService')}
                     type="checkbox"
@@ -168,9 +163,6 @@ export function LocalModelSettings({
               <section className="settings-form-section settings-provider-connection">
                 <header className="settings-provider-section__head">
                   <div className="settings-provider-section__heading">
-                    <span className="settings-provider-section__icon">
-                      <Globe2 size={15} />
-                    </span>
                     <span>
                       <strong>{t('settings.providers.connection')}</strong>
                       <small>{t('settings.providers.connectionDescription')}</small>
@@ -213,7 +205,6 @@ export function LocalModelSettings({
                     <TextField
                       className="settings-local-control"
                       value={selectedProvider.baseUrl}
-                      placeholder={providerBaseUrlPlaceholder(selectedProvider.provider)}
                       onChange={(event) => {
                         const baseUrl = event.target.value;
                         resetModelFetchState(selectedProvider.id);
@@ -236,9 +227,6 @@ export function LocalModelSettings({
                 <div className="settings-model-list">
                   <div className="settings-model-list__head">
                     <div className="settings-model-list__heading">
-                      <span className="settings-provider-section__icon">
-                        <Library size={15} />
-                      </span>
                       <span>
                         <strong>{t('settings.providers.models')}</strong>
                         <small>{t('settings.providers.modelsDescription', { count: selectedProvider.models.length })}</small>
@@ -336,7 +324,7 @@ function ProviderRailItem({
   const name = provider.name || t('settings.providers.serviceIndex', { index: index + 1 });
   return (
     <button
-      className={`chat-user-settings__local-provider-item ${selected ? 'is-active' : ''}`}
+      className={`chat-user-settings__local-provider-item${selected ? ' is-active' : ''}${provider.enabled ? '' : ' is-disabled'}`}
       type="button"
       aria-current={selected ? 'true' : undefined}
       title={`${name} · ${providerProtocolLabel(provider.provider)} · ${t('settings.providers.modelCount', { count: provider.models.length })}`}
@@ -346,10 +334,6 @@ function ProviderRailItem({
       <span className="chat-user-settings__local-provider-item-body">
         <span className="chat-user-settings__local-provider-item-main">
           <span className="chat-user-settings__local-provider-item-name">{name}</span>
-          <span className={`chat-user-settings__local-provider-item-status ${provider.enabled ? 'is-enabled' : ''}`}>
-            <i aria-hidden="true" />
-            {provider.enabled ? t('settings.providers.enabled') : t('settings.providers.disabled')}
-          </span>
         </span>
         <span className="chat-user-settings__local-provider-item-meta">
           <span>{providerProtocolLabel(provider.provider)}</span>
@@ -417,9 +401,8 @@ function ProviderModelRow({
 const DANGER_CONFIRM_BUTTON_PROPS = { danger: true } as const;
 
 export function AutoSaveStatus({ state }: { state: SaveState }) {
-  const visible = Boolean(state.message);
   return (
-    <span className={`settings-auto-save-status settings-auto-save-status--${state.status} ${visible ? 'is-visible' : ''}`} aria-live="polite" title={visible ? state.message : undefined}>
+    <span className="settings-auto-save-status settings-auto-save-status--error is-visible" aria-live="polite" title={state.message}>
       {state.message}
     </span>
   );

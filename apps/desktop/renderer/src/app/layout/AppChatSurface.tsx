@@ -27,6 +27,7 @@ import {
   type ComponentProps,
   type Dispatch,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
   type SetStateAction,
 } from 'react';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
@@ -68,6 +69,7 @@ import type {
   ChatWorkspaceMentionRequest,
   ConversationOverviewVisibility,
 } from '../types.js';
+import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
 
 const ConversationDebugPanel = lazy(async () => {
   const module = await import('../../features/conversation-debug/ConversationDebugPanel.js');
@@ -128,7 +130,7 @@ export function AppChatSurface({
   sideActivePanel,
   sidePanelSlot,
   runtimeClient,
-  sidePanelVisible,
+  sidePanelPresent,
   terminalSessionsByPanelId,
   onActivateBottomPanel,
   onCancelActiveTurn,
@@ -224,7 +226,7 @@ export function AppChatSurface({
   sideActivePanel?: DesktopPanelTab | null;
   sidePanelSlot: DesktopPanelSlotState;
   runtimeClient: DesktopRuntimeClient;
-  sidePanelVisible: boolean;
+  sidePanelPresent: boolean;
   terminalSessionsByPanelId: Record<string, DesktopTerminalSession>;
   onActivateBottomPanel: (panelId: string) => void;
   onCancelActiveTurn: () => void;
@@ -343,7 +345,7 @@ export function AppChatSurface({
       .filter((panel) => panel.type === 'chat')
       .map((panel) => ({ panel, placement: 'bottom' as const })),
   ];
-  const activeDebugPanel = sidePanelVisible && sideActivePanel?.type === 'conversation-debug'
+  const activeDebugPanel = sidePanelPresent && sideActivePanel?.type === 'conversation-debug'
     ? { panel: sideActivePanel, placement: 'side' as const }
     : bottomPanelVisible && bottomActivePanel?.type === 'conversation-debug'
       ? { panel: bottomActivePanel, placement: 'bottom' as const }
@@ -463,15 +465,17 @@ export function AppChatSurface({
           onOpenWithApp={onOpenFileWithApp}
           onReveal={onRevealFile}
         />
-        {sidePanelVisible && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
-          <Suspense fallback={null}>
-            <WorkspacePanel
-              {...workspacePanelProps}
-              activePanel={sideActivePanel}
-              placement="side"
-              terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
-            />
-          </Suspense>
+        {sidePanelPresent && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
+          <SideWorkspacePanelSlot>
+            <Suspense fallback={null}>
+              <WorkspacePanel
+                {...workspacePanelProps}
+                activePanel={sideActivePanel}
+                placement="side"
+                terminalSession={terminalSessionsByPanelId[sideActivePanel.id] ?? null}
+              />
+            </Suspense>
+          </SideWorkspacePanelSlot>
         ) : null}
         {bottomPanelVisible && bottomActivePanel ? (
           <Suspense fallback={null}>
@@ -502,71 +506,107 @@ export function AppChatSurface({
             </BottomToolsPanel>
           </Suspense>
         ) : null}
-        {chatPanelInstances.map(({ panel, placement }) => (
-          <SideChatPanel
-            activeProjectId={activeProject?.id ?? null}
-            activeWorkspace={activeWorkspace}
-            client={runtimeClient}
-            config={config}
-            hidden={placement === 'side'
-              ? !sidePanelVisible || sideActivePanel?.id !== panel.id
-              : !bottomPanelVisible || bottomActivePanel?.id !== panel.id}
-            key={panel.id}
-            parentThread={currentThread}
-            placement={placement}
-            plugins={plugins}
-            selectedWorkspaceApp={selectedWorkspaceApp}
-            skills={skills}
-            threads={threads}
-            onAccessModeChange={onAccessModeChange}
-            onError={onSideChatError}
-            onOpenWorkspaceFile={openChatWorkspaceFile}
-            onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
-            onOpenMarkdownWebLink={onOpenMarkdownWebLink}
-            onOpenInAppBrowser={onOpenBrowser}
-            onOpenFileReview={onOpenFileReviewPanel}
-            onOpenSideChat={onOpenSideChat}
-            onReloadThreads={onReloadThreads}
-            onSelectModel={onSelectModel}
-            onSetMultiAgentEnabled={onSetMultiAgentEnabled}
-            onWorkspaceResizeStep={onWorkspaceResizeStep}
-            onWorkspaceResizeStart={onWorkspaceResizeStart}
-            workspaceMaxWidth={workspaceMaxWidth}
-            workspaceMinWidth={workspaceMinWidth}
-            workspaceWidth={workspaceWidth}
-          />
-        ))}
-        {browserPanelInstances.map((instance) => (
-          <Suspense fallback={null} key={instance.panel.id}>
-            <PersistentBrowserPanel
-              instance={instance}
-              onPanelMetadataChange={onUpdateBrowserPanel}
-              onScreenshotAttachment={requestImageAttachment}
-              onResizeStep={onWorkspaceResizeStep}
-              onResizeStart={onWorkspaceResizeStart}
-              resizeMax={workspaceMaxWidth}
-              resizeMin={workspaceMinWidth}
-              resizeValue={workspaceWidth}
-            />
-          </Suspense>
-        ))}
-        {activeDebugPanel && runtimeDeveloperFeaturesEnabled(config) ? (
-          <Suspense fallback={null}>
-            <ConversationDebugPanel
+        {chatPanelInstances.map(({ panel, placement }) => {
+          const hidden = placement === 'side'
+            ? !sidePanelPresent || sideActivePanel?.id !== panel.id
+            : !bottomPanelVisible || bottomActivePanel?.id !== panel.id;
+          const chatPanel = (
+            <SideChatPanel
+              activeProjectId={activeProject?.id ?? null}
+              activeWorkspace={activeWorkspace}
               client={runtimeClient}
-              key={activeDebugPanel.panel.id}
-              placement={activeDebugPanel.placement}
-              thread={currentThread}
-              onResizeStep={onWorkspaceResizeStep}
-              onResizeStart={onWorkspaceResizeStart}
-              resizeMax={workspaceMaxWidth}
-              resizeMin={workspaceMinWidth}
-              resizeValue={workspaceWidth}
+              config={config}
+              hidden={hidden}
+              parentThread={currentThread}
+              placement={placement}
+              plugins={plugins}
+              selectedWorkspaceApp={selectedWorkspaceApp}
+              skills={skills}
+              threads={threads}
+              onAccessModeChange={onAccessModeChange}
+              onError={onSideChatError}
+              onOpenWorkspaceFile={openChatWorkspaceFile}
+              onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
+              onOpenMarkdownWebLink={onOpenMarkdownWebLink}
+              onOpenInAppBrowser={onOpenBrowser}
+              onOpenFileReview={onOpenFileReviewPanel}
+              onOpenSideChat={onOpenSideChat}
+              onReloadThreads={onReloadThreads}
+              onSelectModel={onSelectModel}
+              onSetMultiAgentEnabled={onSetMultiAgentEnabled}
+              onWorkspaceResizeStep={onWorkspaceResizeStep}
+              onWorkspaceResizeStart={onWorkspaceResizeStart}
+              workspaceMaxWidth={workspaceMaxWidth}
+              workspaceMinWidth={workspaceMinWidth}
+              workspaceWidth={workspaceWidth}
             />
-          </Suspense>
+          );
+          return (
+            <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
+              {chatPanel}
+            </FloatingWorkspacePanelSlot>
+          );
+        })}
+        {browserPanelInstances.map((instance) => {
+          const browserPanel = (
+            <Suspense fallback={null}>
+              <PersistentBrowserPanel
+                instance={instance}
+                onPanelMetadataChange={onUpdateBrowserPanel}
+                onScreenshotAttachment={requestImageAttachment}
+                onResizeStep={onWorkspaceResizeStep}
+                onResizeStart={onWorkspaceResizeStart}
+                resizeMax={workspaceMaxWidth}
+                resizeMin={workspaceMinWidth}
+                resizeValue={workspaceWidth}
+              />
+            </Suspense>
+          );
+          return (
+            <FloatingWorkspacePanelSlot
+              hidden={!instance.active}
+              key={instance.panel.id}
+              placement={instance.placement}
+            >
+              {browserPanel}
+            </FloatingWorkspacePanelSlot>
+          );
+        })}
+        {activeDebugPanel && runtimeDeveloperFeaturesEnabled(config) ? (
+          <FloatingWorkspacePanelSlot
+            key={activeDebugPanel.panel.id}
+            placement={activeDebugPanel.placement}
+          >
+            <Suspense fallback={null}>
+              <ConversationDebugPanel
+                client={runtimeClient}
+                placement={activeDebugPanel.placement}
+                thread={currentThread}
+                onResizeStep={onWorkspaceResizeStep}
+                onResizeStart={onWorkspaceResizeStart}
+                resizeMax={workspaceMaxWidth}
+                resizeMin={workspaceMinWidth}
+                resizeValue={workspaceWidth}
+              />
+            </Suspense>
+          </FloatingWorkspacePanelSlot>
         ) : null}
       </RuntimePluginNavigationProvider>
     </WorkspaceGitCommitProvider>
+  );
+}
+
+function SideWorkspacePanelSlot({
+  children,
+  hidden = false,
+}: {
+  children: ReactNode;
+  hidden?: boolean;
+}) {
+  return (
+    <div className="desktop-workspace-panel-slot" hidden={hidden}>
+      {children}
+    </div>
   );
 }
 

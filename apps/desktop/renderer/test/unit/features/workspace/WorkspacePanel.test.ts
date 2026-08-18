@@ -65,7 +65,6 @@ describe('WorkspaceOverviewPanel', () => {
     const onOpenBrowser = vi.fn();
     const panel = captureWorkspaceOverviewPanel({
       activeProject: project,
-      latestReviewSummary: null,
       onOpenBrowser,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel,
@@ -73,7 +72,7 @@ describe('WorkspaceOverviewPanel', () => {
       onOpenTerminalPanel: () => undefined,
     });
     const actions = panel.props.children.props.children;
-    const reviewButton = actions[0].props.children;
+    const reviewButton = actions[0];
 
     reviewButton.props.onClick({ type: 'click' });
     actions[3].props.onClick();
@@ -87,7 +86,6 @@ describe('WorkspaceOverviewPanel', () => {
   it('shows conversation debug only when the developer action is provided', () => {
     const baseProps: WorkspaceOverviewProps = {
       activeProject: project,
-      latestReviewSummary: null,
       onOpenBrowser: () => undefined,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel: () => undefined,
@@ -109,7 +107,6 @@ describe('WorkspaceOverviewPanel', () => {
         id: temporaryWorkspaceProjectId({ date: '2026-07-18', threadId: 'thread_1' }),
         name: '临时目录',
       },
-      latestReviewSummary: null,
       onOpenBrowser: () => undefined,
       onOpenFilesPanel: () => undefined,
       onOpenReviewPanel: () => undefined,
@@ -119,7 +116,7 @@ describe('WorkspaceOverviewPanel', () => {
     const actions = panel.props.children.props.children;
 
     expect(actions.slice(0, 3).every((action: { props: { disabled: boolean } }) => !action.props.disabled)).toBe(true);
-    expect(actions[2].props.children[1].props.children[1].props.children).toBe('临时目录 Shell');
+    expect(actions[2].props.children[1].props.children).toBe('终端');
   });
 
 });

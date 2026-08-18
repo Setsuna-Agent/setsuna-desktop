@@ -25,6 +25,21 @@ describe('side conversations', () => {
         payload: { input: 'Implement the primary task.' },
       });
       await runtime.threadStore.appendEvent(parent.id, {
+        id: 'event_parent_developer',
+        threadId: parent.id,
+        type: 'message.created',
+        createdAt: '2026-08-18T00:00:00.500Z',
+        payload: {
+          message: {
+            id: 'msg_parent_developer',
+            role: 'developer',
+            content: 'Continue the primary task after copying this message.',
+            createdAt: '2026-08-18T00:00:00.500Z',
+            status: 'complete',
+          },
+        },
+      });
+      await runtime.threadStore.appendEvent(parent.id, {
         id: 'event_parent_user',
         threadId: parent.id,
         turnId: 'turn_parent_active',
@@ -93,6 +108,29 @@ describe('side conversations', () => {
       expect(side.messages.find((message) => message.id === 'msg_parent_assistant')).toMatchObject({
         status: 'complete',
       });
+      const snapshotStartIndex = side.messages.findIndex(
+        (message) => message.content === '<primary_conversation_snapshot>',
+      );
+      const snapshotEndIndex = side.messages.findIndex(
+        (message) => message.content.startsWith('</primary_conversation_snapshot>'),
+      );
+      expect(snapshotStartIndex).toBeGreaterThanOrEqual(0);
+      expect(side.messages.findIndex((message) => message.id === 'msg_parent_user'))
+        .toBeGreaterThan(snapshotStartIndex);
+      expect(side.messages.findIndex((message) => message.id === 'msg_parent_assistant'))
+        .toBeLessThan(snapshotEndIndex);
+      expect(snapshotEndIndex).toBeGreaterThan(snapshotStartIndex);
+      const inheritedDeveloperIndex = side.messages.findIndex(
+        (message) => message.id === 'msg_parent_developer',
+      );
+      const lastDeveloperIndex = side.messages.reduce(
+        (lastIndex, message, index) => message.role === 'developer' ? index : lastIndex,
+        -1,
+      );
+      expect(inheritedDeveloperIndex).toBeGreaterThan(snapshotStartIndex);
+      expect(lastDeveloperIndex).toBeGreaterThan(inheritedDeveloperIndex);
+      expect(side.messages[lastDeveloperIndex]?.content)
+        .toContain('are copied from the primary conversation');
       await expect(runtime.threadStore.getThread(parent.id)).resolves.toMatchObject({
         activeTurnId: 'turn_parent_active',
       });

@@ -11,8 +11,49 @@
   overflow: hidden;
 }
 
+.desktop-workspace-panel-slot {
+  display: block;
+  position: relative;
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+  min-height: 0;
+  border-left: 1px solid var(--desktop-agent-subtle-divider);
+  background: var(--desktop-agent-main-bg);
+  overflow: hidden;
+}
+
+.desktop-workspace-panel-slot[hidden] {
+  display: none;
+}
+
+/* Keep the same React/DOM root while floating panels move to the bottom grid row. */
+.desktop-floating-workspace-panel-slot {
+  display: contents;
+}
+
+.desktop-floating-workspace-panel-slot[hidden] {
+  display: none;
+}
+
+.desktop-workspace-panel-slot > .desktop-workspace-panel {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 100%;
+  height: 100%;
+  border-left: 0;
+}
+
 @media (max-width: 879px) {
   .desktop-workspace-panel {
+    grid-column: 2;
+    justify-self: end;
+    width: min(var(--desktop-agent-workspace-width), 100%);
+    box-shadow: -18px 0 42px color-mix(in srgb, #000000 8%, transparent);
+    z-index: 18;
+  }
+
+  .desktop-workspace-panel-slot {
     grid-column: 2;
     justify-self: end;
     width: min(var(--desktop-agent-workspace-width), 100%);
@@ -22,7 +63,8 @@
 }
 
 @media (max-width: 760px) {
-  .desktop-workspace-panel {
+  .desktop-workspace-panel,
+  .desktop-workspace-panel-slot {
     grid-column: 1;
   }
 }

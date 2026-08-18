@@ -14,7 +14,6 @@ describe('chat slash command items', () => {
       activeProjectSelected: false,
       activeTurnId: 'turn-1',
       canClearContext: true,
-      hasCurrentThread: false,
       sideChatAvailable: false,
     }));
 
@@ -22,13 +21,11 @@ describe('chat slash command items', () => {
       'model',
       'collaboration',
       'goal',
-      'usage',
       'side-chat',
       'review',
       'compact-context',
       'clear-context',
     ]);
-    expect(action(items, 'usage').disabled).toBe(true);
     expect(action(items, 'side-chat').disabled).toBe(true);
     expect(action(items, 'review').disabled).toBe(true);
     expect(action(items, 'compact-context').disabled).toBe(true);
@@ -61,17 +58,16 @@ describe('chat slash command items', () => {
       skills,
     }));
 
-    expect(items.slice(0, 8).map((item) => item.key)).toEqual([
+    expect(items.slice(0, 7).map((item) => item.key)).toEqual([
       'model',
       'collaboration',
       'goal',
-      'usage',
       'side-chat',
       'review',
       'compact-context',
       'clear-context',
     ]);
-    expect(items.slice(8).map((item) => item.key)).toEqual(
+    expect(items.slice(7).map((item) => item.key)).toEqual(
       skills.slice(2).map((item) => `skill:${item.id}`),
     );
   });
@@ -85,7 +81,7 @@ describe('chat slash command items', () => {
   it('keeps side conversations lightweight by hiding persistent task actions', () => {
     const items = createChatSlashCommandItems(options({ sideConversation: true }));
 
-    expect(items.map((item) => item.key)).toEqual(['model', 'usage']);
+    expect(items.map((item) => item.key)).toEqual(['model']);
   });
 });
 
@@ -99,7 +95,6 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     contextCompactPercent: 42,
     contextCompacting: false,
     goalModeEnabled: false,
-    hasCurrentThread: true,
     hasReviewIncompatibleContent: false,
     multiAgentEnabled: false,
     query: '',

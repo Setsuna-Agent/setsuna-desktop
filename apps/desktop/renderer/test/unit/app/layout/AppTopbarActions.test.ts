@@ -61,6 +61,7 @@ describe('AppWorkspaceToolbar', () => {
       bottomPanelVisible: true,
       bottomTerminalPanelActive: false,
       sidePanelSlot: { active: overview.id, panels: [overview] },
+      sidePanelPresent: true,
       sidePanelVisible: true,
       toggleBottomTerminal: vi.fn(),
       toggleSidePanel: vi.fn(),
