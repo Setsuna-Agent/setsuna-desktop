@@ -22,7 +22,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useToast } from '../../../app/providers/ToastProvider.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../model.js';
+import type { DesktopDiffSummary, DesktopReviewState } from '../model.js';
 import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
 import { localReviewChangeStats } from '../reviewChanges.js';
 import { WorkspaceGitBranchCreateControl } from './WorkspaceGitBranchCreateControl.js';
@@ -58,7 +58,7 @@ export function WorkspaceGitCommitProvider({
   activeProject?: WorkspaceProject;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
-  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onReviewRefresh?: () => void | Promise<void>;
 }>) {
   const toast = useToast();
   const { t } = useI18n();

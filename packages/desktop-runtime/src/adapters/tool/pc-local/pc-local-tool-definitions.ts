@@ -143,7 +143,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   localTool(
     'apply_patch',
     [
-      'Apply an app-server-style patch to local workspace text files. Supports *** Add File, *** Update File, and *** Delete File hunks.',
+      'Apply one cohesive app-server-style patch to one or more local workspace text files. Prefer this for related edits across multiple existing files. Supports *** Add File, *** Update File, and *** Delete File hunks.',
       'Format rules: the patch must begin with *** Begin Patch and end with *** End Patch. In *** Add File hunks, prefix every content line with +, including blank lines as +. In *** Update File hunks, use @@ and prefix context/removal/addition lines with space, -, or +.',
       'Example: *** Begin Patch\\n*** Add File: notes.txt\\n+hello\\n*** End Patch',
     ].join(' '),

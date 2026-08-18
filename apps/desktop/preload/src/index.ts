@@ -1,4 +1,5 @@
 import type {
+  DesktopReviewChangeEvent,
   DesktopRuntimeBridge,
   DesktopRuntimeEventPayload,
   DesktopTerminalEvent,
@@ -216,6 +217,35 @@ const webdavSync: SetsunaDesktopBridge['webdavSync'] = {
 const desktopReview: SetsunaDesktopBridge['desktopReview'] = {
   getState: (workspaceRoot, options) =>
     ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot, baseRef: options?.baseRef ?? null }),
+  watchChanges(workspaceRoot, callback) {
+    let cancelled = false;
+    let subscriptionId: string | null = null;
+    const queuedEvents: DesktopReviewChangeEvent[] = [];
+    const deliver = (event: DesktopReviewChangeEvent) => {
+      if (event.subscriptionId === subscriptionId) callback();
+    };
+    const listener = (_event: Electron.IpcRendererEvent, payload: DesktopReviewChangeEvent) => {
+      if (subscriptionId === null) queuedEvents.push(payload);
+      else deliver(payload);
+    };
+    ipcRenderer.on('desktop-review:changed', listener);
+    void ipcRenderer.invoke('desktop-review:subscribe-changes', { workspaceRoot }).then((id) => {
+      const resolvedSubscriptionId = String(id);
+      if (cancelled) {
+        void ipcRenderer.invoke('desktop-review:unsubscribe-changes', resolvedSubscriptionId);
+        return;
+      }
+      subscriptionId = resolvedSubscriptionId;
+      for (const event of queuedEvents.splice(0, queuedEvents.length)) deliver(event);
+    }).catch((error: unknown) => {
+      if (!cancelled) console.error(error);
+    });
+    return () => {
+      cancelled = true;
+      ipcRenderer.off('desktop-review:changed', listener);
+      if (subscriptionId) void ipcRenderer.invoke('desktop-review:unsubscribe-changes', subscriptionId);
+    };
+  },
   discardUnstaged: (workspaceRoot, filePaths) =>
     ipcRenderer.invoke('desktop-review:discard-unstaged', { workspaceRoot, filePaths }),
   stageFiles: (workspaceRoot, filePaths) =>

@@ -25,7 +25,6 @@ import type {
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
-  DesktopReviewLoadOptions,
   DesktopReviewOpenHandler,
   DesktopReviewState,
 } from '../workspace/model.js';
@@ -165,7 +164,7 @@ export function ChatWorkspace({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onReviewRefresh?: () => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;

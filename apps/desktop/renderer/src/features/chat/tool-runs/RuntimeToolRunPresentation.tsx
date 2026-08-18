@@ -81,6 +81,8 @@ export {
 } from './RuntimeToolRunStatus.js';
 
 export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
+  // Planned preview totals must not look like applied filesystem changes.
+  if (runs.some(isPreparingToolRun)) return null;
   let hasTotals = false;
   let showZero = false;
   let additions = 0;
@@ -533,7 +535,10 @@ export function fileOperationGroupSummary(runs: RuntimeToolRun[], t: Translate =
   const active = activeToolRunOrLast(runs);
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   const activeTarget = active ? fileOperationTarget(active, t) : '';
-  const fallbackTarget = activeTarget || (entries.length === 1 ? entries[0]?.path : entries.length > 1 ? t('toolRun.file.count', { count: entries.length }) : '');
+  const aggregateTarget = entries.length === 1 ? entries[0]?.path : entries.length > 1 ? t('toolRun.file.count', { count: entries.length }) : '';
+  const fallbackTarget = active && isPreparingToolRun(active)
+    ? aggregateTarget || activeTarget
+    : activeTarget || aggregateTarget;
   const changeCounts = fileOperationGroupChangeTotals(runs) ?? undefined;
   if (status === 'running' || status === 'pending_approval') {
     return { title: active ? fileOperationVerb(active, t) : t('toolRun.file.processing'), target: fallbackTarget, changeCounts };

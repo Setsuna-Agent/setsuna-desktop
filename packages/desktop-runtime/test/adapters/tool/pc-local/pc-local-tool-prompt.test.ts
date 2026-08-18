@@ -14,6 +14,7 @@ describe('pcLocalToolPrompt', () => {
       tool('update_plan'),
     ]);
     expect(mutating).toContain('apply_patch');
+    expect(mutating).toContain('two or more related existing files');
     expect(mutating).toContain('run_shell_command');
     expect(mutating).toContain('exactly one step in progress');
 

@@ -356,7 +356,7 @@ async function createWindow(): Promise<void> {
     new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
     currentMainWindow,
   );
-  registerReviewIpc(currentRuntimeHost);
+  const unregisterReviewChanges = registerReviewIpc(currentRuntimeHost, currentMainWindow);
   registerWorkspaceIpc();
   registerTerminalIpc(terminalStore);
   registerBrowserIpc(currentBrowserController, currentMainWindow);
@@ -371,6 +371,7 @@ async function createWindow(): Promise<void> {
   );
 
   currentMainWindow.on('closed', () => {
+    unregisterReviewChanges();
     unregisterNetworkProxyState();
     unregisterWebDavSyncState();
     currentWebDavSyncService.close();

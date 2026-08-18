@@ -6,7 +6,7 @@ import {
   useWorkspaceGitCommitDialog,
 } from '../../workspace/git/WorkspaceGitCommitDialog.js';
 import { WorkspaceGitBranchCreateControl } from '../../workspace/git/WorkspaceGitBranchCreateControl.js';
-import type { DesktopDiffSummary, DesktopReviewLoadOptions, DesktopReviewState } from '../../workspace/model.js';
+import type { DesktopDiffSummary, DesktopReviewState } from '../../workspace/model.js';
 
 type BranchBusyAction = 'checkout' | 'create' | null;
 
@@ -21,7 +21,7 @@ export function ConversationGitControls({
   reviewError: string | null;
   reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
-  onReviewRefresh?: (options?: DesktopReviewLoadOptions) => void | Promise<void>;
+  onReviewRefresh?: () => void | Promise<void>;
 }) {
   const { t } = useI18n();
   const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();

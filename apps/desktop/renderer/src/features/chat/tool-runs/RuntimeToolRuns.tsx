@@ -65,6 +65,7 @@ import {
   isFileOperationRun,
   isFlatInspectionRun,
   isPendingApprovalRun,
+  isPreparingToolRun,
   isRecord,
   isShellRun,
   mixedToolRunGroupIcon,
@@ -463,7 +464,7 @@ function FileMutationRunRow({
   const pendingApprovalId = isPendingApprovalRun(run) ? run.approvalId : undefined;
   const target = fileOperationTarget(run, t);
   const error = run.status === 'error' ? formatPreview(run.resultPreview ?? '') : '';
-  const totals = fileOperationChangeTotals(run);
+  const totals = isPreparingToolRun(run) ? null : fileOperationChangeTotals(run);
   const change = fileChangeFromToolRun(run);
   const summary = (
     <>
@@ -543,6 +544,7 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
   const { t } = useI18n();
   const entries = fileOperationEntries(runs, { appliedOnlyWhenCompletedMutation: true });
   const changesByPath = fileChangesByPath(runs);
+  const preparing = runs.some(isPreparingToolRun);
   if (!entries.length) return null;
   return (
     <ul className="chat-tool-run__inspection-list chat-tool-run__file-operation-list">
@@ -562,7 +564,11 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
             >
               {pathBaseName(entry.path, t)}
             </WorkspaceFileLink>
-            <ChangeCounts additions={entry.additions} deletions={entry.deletions} showZero={entry.showZeroChangeCounts} />
+            <ChangeCounts
+              additions={preparing ? undefined : entry.additions}
+              deletions={preparing ? undefined : entry.deletions}
+              showZero={preparing ? false : entry.showZeroChangeCounts}
+            />
           </>
         );
         return change?.lines.length ? (

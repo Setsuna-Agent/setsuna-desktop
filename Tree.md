@@ -35,15 +35,15 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 143 total files
-├── src/ — 2 direct / 88 total files
+apps/desktop/main/ — 0 direct / 145 total files
+├── src/ — 2 direct / 89 total files
 │   ├── browser/ — 7 direct / 10 total files
 │   │   └── cdp/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 14 direct / 14 total files
 │   ├── network-proxy/ — 7 direct / 7 total files
-│   ├── review/ — 1 direct / 1 total files
+│   ├── review/ — 2 direct / 2 total files
 │   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── terminal/ — 1 direct / 1 total files
@@ -53,9 +53,9 @@ apps/desktop/main/ — 0 direct / 143 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   ├── windows-sandbox/ — 1 direct / 1 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 55 files
-    ├── integration/ — 2 files
-    │   ├── review/ — 1 direct / 1 total files
+└── test/ — 56 files
+    ├── integration/ — 3 files
+    │   ├── review/ — 2 direct / 2 total files
     │   └── terminal/ — 1 direct / 1 total files
     ├── support/ — 3 direct / 3 total files
     └── unit/ — 1 direct / 50 total files
@@ -83,15 +83,15 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 651 total files
-├── src/ — 2 direct / 474 total files
+apps/desktop/renderer/ — 0 direct / 652 total files
+├── src/ — 2 direct / 475 total files
 │   ├── app/ — 2 direct / 39 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 14 direct / 14 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── features/ — 345 files
+│   ├── features/ — 346 files
 │   │   ├── capabilities/ — 25 direct / 35 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
@@ -121,13 +121,13 @@ apps/desktop/renderer/ — 0 direct / 651 total files
 │   │   │   ├── usage/ — 9 direct / 9 total files
 │   │   │   ├── webdav-sync/ — 7 direct / 7 total files
 │   │   │   └── windows-sandbox/ — 2 direct / 2 total files
-│   │   └── workspace/ — 35 direct / 83 total files
+│   │   └── workspace/ — 35 direct / 84 total files
 │   │       ├── assets/ — 21 direct / 21 total files
 │   │       ├── browser/ — 1 direct / 1 total files
 │   │       ├── editor/ — 3 direct / 3 total files
 │   │       ├── git/ — 2 direct / 2 total files
 │   │       ├── hooks/ — 12 direct / 12 total files
-│   │       ├── model/ — 1 direct / 1 total files
+│   │       ├── model/ — 2 direct / 2 total files
 │   │       └── styles/ — 8 direct / 8 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files

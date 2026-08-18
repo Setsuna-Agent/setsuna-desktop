@@ -25,6 +25,7 @@ import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -93,6 +94,7 @@ describe('DesktopReviewPanel interactions', () => {
           onExternalOpenFile={() => undefined}
           onOpenProjectFile={(path, line) => openedFiles.push({ path, line })}
           onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
         />
       </I18nProvider>,
     );
@@ -173,6 +175,7 @@ describe('DesktopReviewPanel interactions', () => {
           onExternalOpenFile={() => undefined}
           onOpenProjectFile={() => undefined}
           onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
         />
       </I18nProvider>,
     );
@@ -250,6 +253,7 @@ describe('DesktopReviewPanel interactions', () => {
           onExternalOpenFile={() => undefined}
           onOpenProjectFile={() => undefined}
           onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
         />
       </I18nProvider>
     );
@@ -314,6 +318,7 @@ describe('DesktopReviewPanel interactions', () => {
           onExternalOpenFile={() => undefined}
           onOpenProjectFile={() => undefined}
           onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
         />
       </I18nProvider>,
     );
@@ -348,6 +353,7 @@ describe('DesktopReviewPanel interactions', () => {
               onExternalOpenFile={() => undefined}
               onOpenProjectFile={() => undefined}
               onRefresh={() => undefined}
+              onSelectBaseRef={() => undefined}
             />
           </WorkspaceGitCommitProvider>
         </ToastProvider>
@@ -358,6 +364,51 @@ describe('DesktopReviewPanel interactions', () => {
     expect(trigger.disabled).toBe(false);
     await userEvent.click(trigger);
     expect(screen.getByRole('dialog', { name: 'Commit or push' })).toBeTruthy();
+  });
+
+  it('refreshes a branch review without changing its selected base ref', async () => {
+    const onRefresh = vi.fn();
+    window.localStorage.setItem('setsuna-desktop:review-source:project_review_interaction', 'branch');
+    render(
+      <I18nProvider initialLocale="en-US">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          latestSummary={emptySummary}
+          loading={false}
+          reviewState={{ ...reviewState, branchSummary: emptySummary }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={onRefresh}
+          onSelectBaseRef={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh review information' }));
+
+    expect(onRefresh).toHaveBeenCalledWith();
+  });
+
+  it('keeps a successful review snapshot visible after a background refresh error', () => {
+    render(
+      <I18nProvider initialLocale="en-US">
+        <DesktopReviewPanel
+          activeProject={project}
+          error="refresh failed"
+          latestSummary={emptySummary}
+          loading={false}
+          reviewState={reviewState}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.queryByText('Could not load review information')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh review information' })).toBeTruthy();
   });
 });
 

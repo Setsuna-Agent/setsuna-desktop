@@ -3,7 +3,6 @@ import type {
   DesktopDiffLine,
   DesktopDiffSummary,
   DesktopReviewState,
-  DesktopReviewStateOptions,
   DesktopTerminalEvent,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
@@ -240,8 +239,6 @@ export type WorkspaceFileFocusRequest = {
   path: string;
   version: number;
 };
-
-export type DesktopReviewLoadOptions = DesktopReviewStateOptions;
 
 export type ProjectTreeNode = {
   children: ProjectTreeNode[];

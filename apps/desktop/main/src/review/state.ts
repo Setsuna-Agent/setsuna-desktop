@@ -24,9 +24,17 @@ const MAX_UNTRACKED_FILE_BYTES = 512 * 1024;
 const MAX_COMMIT_MESSAGE_SOURCE_CHARS = 24_000;
 const REVIEW_DIFF_CONTEXT_LINES = 6;
 
+export type DesktopReviewRepositoryLocation = {
+  workspaceRoot: string;
+  gitRoot: string | null;
+  gitDirectory: string | null;
+  gitCommonDirectory: string | null;
+};
+
 export async function getDesktopReviewState(workspaceRoot: string, options: DesktopReviewStateOptions = {}): Promise<DesktopReviewState> {
-  const root = await resolveWorkspaceDirectory(workspaceRoot);
-  const gitRoot = await gitRootFor(root);
+  const repository = await resolveDesktopReviewRepository(workspaceRoot);
+  const root = repository.workspaceRoot;
+  const gitRoot = repository.gitRoot;
   if (!gitRoot) {
     return {
       isGitRepository: false,
@@ -72,6 +80,24 @@ export async function getDesktopReviewState(workspaceRoot: string, options: Desk
     stagedSummary,
     unstagedSummary,
   };
+}
+
+export async function resolveDesktopReviewRepository(value: string): Promise<DesktopReviewRepositoryLocation> {
+  const workspaceRoot = await resolveWorkspaceDirectory(value);
+  const gitRoot = await gitRootFor(workspaceRoot);
+  if (!gitRoot) return {
+    workspaceRoot,
+    gitRoot: null,
+    gitDirectory: null,
+    gitCommonDirectory: null,
+  };
+  const gitDirectory = await runGit(['rev-parse', '--absolute-git-dir'], gitRoot)
+    .then((result) => path.resolve(result))
+    .catch(() => path.join(gitRoot, '.git'));
+  const gitCommonDirectory = await runGit(['rev-parse', '--path-format=absolute', '--git-common-dir'], gitRoot)
+    .then((result) => path.resolve(result))
+    .catch(() => gitDirectory);
+  return { workspaceRoot, gitRoot, gitDirectory, gitCommonDirectory };
 }
 
 export async function stageReviewFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult> {
@@ -371,7 +397,7 @@ async function branchDiffSummary(gitRoot: string, baseRef: string): Promise<Desk
 }
 
 async function gitStatusPorcelain(gitRoot: string): Promise<string> {
-  return runGit(['status', '--short', '--untracked-files=all'], gitRoot).catch(() => '');
+  return runGit(['--no-optional-locks', 'status', '--short', '--untracked-files=all'], gitRoot).catch(() => '');
 }
 
 async function hasUnstagedChanges(gitRoot: string): Promise<boolean> {

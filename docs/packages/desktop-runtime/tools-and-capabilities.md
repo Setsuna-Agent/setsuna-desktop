@@ -140,6 +140,8 @@ Factory 当前按顺序组合：
 
 文件写入：
 
+- 相关的多文件修改优先合并为一次 `apply_patch`；单文件工具保留给新文件、完整重写或无法用补丁清晰表达的操作。
+- 流式 `tool.preview` 只表示计划中的修改。文件路径集合不变时不重复持久化浮动 diff 计数；完整差异由 `tool.started` / `tool.completed` 接管。
 - Resolve/canonical path。
 - Workspace confinement。
 - Preview。

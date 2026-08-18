@@ -24,6 +24,7 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 | Hook/helper | 职责 |
 | --- | --- |
 | `useDesktopWorkspacePanels.ts` | Side/bottom panel 选择与跨 feature 动作 |
+| `useDesktopReviewState.ts` | Workspace 级 Git/review 状态、比较基准与变更订阅；不依赖 review panel 是否打开 |
 | `useDesktopWorkspacePanelSession.ts` | Panel 对当前 thread/project 的 session |
 | `useDesktopPanelResize.ts` | Sidebar/workspace/bottom 尺寸与边界 |
 | `useProjectWorkspace.ts` | 项目目录、搜索、文件读取 |
@@ -60,7 +61,7 @@ Workspace file context menu 的“打开、复制路径、Reveal、预览”走 
 
 主要文件：
 
-- `ReviewPanel.tsx`：加载、刷新、stage/unstage/discard、选择。
+- `ReviewPanel.tsx`：review 来源、比较基准和 diff 展示交互。
 - `ReviewDiffView.tsx`：文件卡、展开、聚焦和 context menu 编排。
 - `ReviewDiffContent.tsx`：Unified/split diff 展示与虚拟滚动。
 - `reviewDiffModel.ts`：高亮、split rows、整文件变更、换行和 virtual range 纯计算。
@@ -69,6 +70,7 @@ Workspace file context menu 的“打开、复制路径、Reveal、预览”走 
 - `runtimeReviewSummary.ts`：runtime review target/summary 映射。
 
 Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git 操作；renderer 不拼 Git 命令。
+活动 workspace 会通过 preload 订阅 Main 的 Git worktree 变更；`useDesktopReviewState` 合并连续失效通知，并始终使用当前保存的比较基准重新获取状态。因此概览、Git 控件和 review panel 即使在 panel 关闭时也共享最新快照。普通刷新只重新读取状态，只有显式选择比较基准才会更新对应 preference。
 
 ## Terminal
 
