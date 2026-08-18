@@ -26,10 +26,129 @@ import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe('DesktopReviewPanel interactions', () => {
+  it('expands unsupported formats with a user-facing format notice', () => {
+    const summary: DesktopDiffSummary = {
+      additions: 0,
+      deletions: 0,
+      files: [{
+        path: 'docs/spec.docx',
+        action: 'Created',
+        additions: 0,
+        deletions: 0,
+        contentKind: 'binary',
+        truncated: false,
+        lines: [],
+      }],
+    };
+
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          findings={[]}
+          latestSummary={summary}
+          loading={false}
+          reviewState={{ ...reviewState, unstagedSummary: summary }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    expect(screen.getByText('暂不支持预览此文件格式')).toBeTruthy();
+    expect(screen.queryByText('二进制文件')).toBeNull();
+    expect(document.querySelector('diffs-container')).toBeNull();
+  });
+
+  it('shows before and after images when image changes use split view', async () => {
+    const releaseImagePreview = vi.fn().mockResolvedValue(true);
+    const createImagePreview = vi.fn().mockImplementation((
+      _workspaceRoot: string,
+      input: { side: 'before' | 'after' },
+    ) => Promise.resolve({
+      ok: true,
+      previewId: `${input.side}-${createImagePreview.mock.calls.length}`,
+      url: `setsuna-preview://review/${input.side}.png`,
+    }));
+    vi.stubGlobal('setsunaDesktop', {
+      desktopReview: { createImagePreview, releaseImagePreview },
+    });
+    const summary: DesktopDiffSummary = {
+      additions: 0,
+      deletions: 0,
+      files: [{
+        path: 'src/assets/icon.png',
+        previousPath: 'src/assets/old-icon.png',
+        action: 'Renamed',
+        additions: 0,
+        deletions: 0,
+        contentKind: 'image',
+        truncated: false,
+        lines: [],
+      }],
+    };
+
+    const renderPanel = (activeSummary: DesktopDiffSummary) => (
+      <I18nProvider initialLocale="zh-CN">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          findings={[]}
+          latestSummary={activeSummary}
+          loading={false}
+          reviewState={{ ...reviewState, unstagedSummary: activeSummary }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
+        />
+      </I18nProvider>
+    );
+    const view = render(renderPanel(summary));
+
+    const currentPreview = await screen.findByRole('img', { name: '修改后：src/assets/icon.png' });
+    expect(screen.getByRole('button', { name: /折叠 src\/assets\/icon\.png/u }).textContent)
+      .toBe('src/assets/icon.png');
+    expect(currentPreview.getAttribute('src')).toBe('setsuna-preview://review/after.png');
+
+    await userEvent.click(screen.getByRole('button', {
+      name: '当前：单列对比，点击切换为左右对比',
+    }));
+
+    const previousPreview = await screen.findByRole('img', { name: '修改前：src/assets/old-icon.png' });
+    expect(previousPreview.getAttribute('src')).toBe('setsuna-preview://review/before.png');
+    expect(screen.queryByText('修改前')).toBeNull();
+    expect(screen.queryByText('修改后')).toBeNull();
+    expect(createImagePreview).toHaveBeenCalledWith('/tmp/fixture', {
+      baseRef: 'origin/main',
+      filePath: 'src/assets/old-icon.png',
+      side: 'before',
+      source: 'unstaged',
+    });
+    expect(createImagePreview).toHaveBeenCalledWith('/tmp/fixture', {
+      baseRef: 'origin/main',
+      filePath: 'src/assets/icon.png',
+      side: 'after',
+      source: 'unstaged',
+    });
+    const refreshedSummary: DesktopDiffSummary = {
+      ...summary,
+      files: summary.files.map((file) => ({ ...file })),
+    };
+    view.rerender(renderPanel(refreshedSummary));
+    await waitFor(() => expect(createImagePreview).toHaveBeenCalledTimes(4));
+    expect(releaseImagePreview).toHaveBeenCalledTimes(2);
+    expect(document.querySelector('diffs-container')).toBeNull();
+  });
+
   it('renders annotations and opens resolved workspace lines', async () => {
     const openedFiles: Array<{ path?: string | null; line?: number }> = [];
     mockReviewScroller({

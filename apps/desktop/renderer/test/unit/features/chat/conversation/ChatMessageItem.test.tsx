@@ -1,4 +1,5 @@
 import type { RuntimeMessage, RuntimeReviewModeNotice, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
@@ -122,6 +123,7 @@ function renderAssistantMessage(
   segments: RuntimeMessage[],
   active = false,
   reviewExit?: RuntimeReviewModeNotice,
+  showThinkingInTranscript = false,
 ): string {
   const turnId = segments[0]?.turnId ?? 'turn_assistant';
   return renderToStaticMarkup(
@@ -154,6 +156,7 @@ function renderAssistantMessage(
       onWorkHistoryExpandedChange={() => undefined}
       pluginUses={[]}
       selectedForDelete={false}
+      showThinkingInTranscript={showThinkingInTranscript}
     />,
   );
 }
@@ -318,6 +321,88 @@ describe('MessageItem user messages', () => {
 });
 
 describe('MessageItem assistant tool history', () => {
+  it('nests thinking that follows a tool batch inside the tool disclosure', () => {
+    const html = renderAssistantMessage([
+      {
+        id: 'assistant_inspection_tools',
+        turnId: 'turn_nested_tool_thinking',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-18T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [
+          {
+            id: 'read_main',
+            name: 'workspace_read_file',
+            status: 'success',
+            argumentsPreview: '{"path":"src/main.tsx"}',
+          },
+          {
+            id: 'list_src',
+            name: 'workspace_list_directory',
+            status: 'success',
+            argumentsPreview: '{"path":"src"}',
+          },
+        ],
+      },
+      {
+        id: 'assistant_after_inspection_thinking',
+        turnId: 'turn_nested_tool_thinking',
+        role: 'assistant',
+        content: 'Now inspect how these files connect.',
+        streamParts: [{ type: 'reasoning', content: 'Now inspect how these files connect.' }],
+        createdAt: '2026-08-18T00:00:01.000Z',
+        status: 'complete',
+        phase: 'commentary',
+      },
+    ], true, undefined, true);
+    const document = new Window().document;
+    document.body.innerHTML = html;
+    const thinking = document.querySelector('.chat-thinking-disclosure');
+    const toolDisclosure = thinking?.closest('details.chat-tool-run');
+
+    expect(thinking).not.toBeNull();
+    expect(toolDisclosure).not.toBeNull();
+    expect(toolDisclosure?.querySelector(':scope > summary.chat-tool-run__summary')).not.toBeNull();
+  });
+
+  it('keeps active thinking visible outside the preceding tool disclosure', () => {
+    const html = renderAssistantMessage([
+      {
+        id: 'assistant_active_tools',
+        turnId: 'turn_active_tool_thinking',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-08-18T00:00:00.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [{
+          id: 'read_active_file',
+          name: 'workspace_read_file',
+          status: 'success',
+          argumentsPreview: '{"path":"src/main.tsx"}',
+        }],
+      },
+      {
+        id: 'assistant_active_thinking',
+        turnId: 'turn_active_tool_thinking',
+        role: 'assistant',
+        content: 'Still thinking about the result.',
+        streamParts: [{ type: 'reasoning', content: 'Still thinking about the result.' }],
+        createdAt: '2026-08-18T00:00:01.000Z',
+        status: 'streaming',
+        phase: 'commentary',
+      },
+    ], true, undefined, true);
+    const document = new Window().document;
+    document.body.innerHTML = html;
+    const thinking = document.querySelector('.chat-thinking-disclosure.is-active');
+
+    expect(thinking).not.toBeNull();
+    expect(thinking?.closest('details.chat-tool-run')).toBeNull();
+  });
+
   it('renders structured reasoning only inside the collapsed thinking disclosure', () => {
     const reasoning = 'after: inspect "before<think>private</think>after", then continue private analysis';
     const html = renderAssistantMessage([{
@@ -338,6 +423,7 @@ describe('MessageItem assistant tool history', () => {
     expect(html).toContain('正在思考');
     expect(html).toContain('Visible answer.');
     expect(html).not.toContain(reasoning);
+    expect(html).not.toContain('chat-assistant-loading');
   });
 
   it('renders completed structured content without falling back to mixed raw text', () => {
@@ -358,6 +444,30 @@ describe('MessageItem assistant tool history', () => {
 
     expect(html).toContain('Visible answer.');
     expect(html).not.toContain(reasoning);
+  });
+
+  it('retains completed reasoning inside the compressed work record when enabled', () => {
+    const reasoning = 'completed reasoning retained by preference';
+    const html = renderAssistantMessage([{
+      id: 'assistant_completed_reasoning',
+      turnId: 'turn_completed_reasoning',
+      role: 'assistant',
+      content: 'Visible answer.',
+      streamParts: [
+        { type: 'reasoning', content: reasoning },
+        { type: 'content', content: 'Visible answer.' },
+      ],
+      phase: 'final_answer',
+      createdAt: '2026-08-15T00:00:00.000Z',
+      status: 'complete',
+    }], false, undefined, true);
+
+    expect(html).toContain('chat-work-history');
+    expect(html).toContain('已处理');
+    expect(html).not.toContain('工作中');
+    expect(html).not.toContain('chat-thinking-disclosure');
+    expect(html).not.toContain(reasoning);
+    expect(html).toContain('Visible answer.');
   });
 
   it('shows an explicit notice for a completed hidden-only final response', () => {
@@ -488,6 +598,49 @@ describe('MessageItem assistant tool history', () => {
     expect(contentIndex).toBeGreaterThanOrEqual(0);
     expect(laterWorkIndex).toBeGreaterThan(contentIndex);
     expect(commentaryIndex).toBeGreaterThan(contentIndex);
+  });
+
+  it('collapses completed work between visible answer sections while the turn continues', () => {
+    const html = renderAssistantMessage([
+      {
+        id: 'assistant_answer_before',
+        turnId: 'turn_interleaved_work',
+        role: 'assistant',
+        content: '前一段正文。',
+        createdAt: '2026-08-11T00:00:00.000Z',
+        status: 'complete',
+        phase: 'final_answer',
+      },
+      {
+        id: 'assistant_work_between',
+        turnId: 'turn_interleaved_work',
+        role: 'assistant',
+        content: '',
+        streamParts: [{ type: 'reasoning', content: '中间思考。' }],
+        createdAt: '2026-08-11T00:00:01.000Z',
+        status: 'complete',
+        phase: 'commentary',
+        toolRuns: [{ id: 'read_between', name: 'workspace_read_file', status: 'success' }],
+      },
+      {
+        id: 'assistant_answer_after',
+        turnId: 'turn_interleaved_work',
+        role: 'assistant',
+        content: '后一段正文。',
+        createdAt: '2026-08-11T00:00:02.000Z',
+        status: 'complete',
+        phase: 'final_answer',
+      },
+    ], true, undefined, true);
+
+    expect(html).toContain('前一段正文。');
+    expect(html).toContain('后一段正文。');
+    expect(html).toContain('chat-work-history__chevron');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('工作中');
+    expect(html).not.toContain('已处理');
+    expect(html).not.toContain('中间思考。');
+    expect(html).not.toContain('已读取');
   });
 
   it('keeps the preamble visible while adjacent tools share the work panel', () => {

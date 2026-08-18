@@ -348,6 +348,18 @@ describe('file config store', () => {
     });
   });
 
+  it('persists only a boolean transcript thinking preference', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+
+    await expect(store.saveConfig({ desktopSettings: { showThinkingInTranscript: true } })).resolves.toMatchObject({
+      desktopSettings: { showThinkingInTranscript: true },
+    });
+    const invalidDesktopSettings = { showThinkingInTranscript: 'yes' } as unknown as RuntimeConfigInput['desktopSettings'];
+    await expect(store.saveConfig({ desktopSettings: invalidDesktopSettings })).resolves.toMatchObject({
+      desktopSettings: {},
+    });
+  });
+
   it('persists only supported interface languages', async () => {
     const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
 

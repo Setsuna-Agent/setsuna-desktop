@@ -823,6 +823,9 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (settings.interfaceLanguage !== 'zh-CN' && settings.interfaceLanguage !== 'en-US') {
     delete settings.interfaceLanguage;
   }
+  if (typeof settings.showThinkingInTranscript !== 'boolean') {
+    delete settings.showThinkingInTranscript;
+  }
   const npmRegistryUrl = normalizeNpmRegistryUrl(settings.npmRegistryUrl);
   if (npmRegistryUrl) settings.npmRegistryUrl = npmRegistryUrl;
   else delete settings.npmRegistryUrl;

@@ -31,6 +31,39 @@
   display: none;
 }
 
+.desktop-workspace-file-path {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.desktop-workspace-file-path__directory {
+  direction: rtl;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-workspace-file-path__separator {
+  flex: 0 0 auto;
+}
+
+.desktop-workspace-file-path__filename {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--app-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Browser/chat/debug stay mounted while their tab moves between panel slots. */
 :root .desktop-workspace-panel.desktop-workspace-panel--bottom-floating {
   grid-column: 2 / -1;

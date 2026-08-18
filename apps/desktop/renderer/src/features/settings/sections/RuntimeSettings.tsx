@@ -16,7 +16,7 @@ import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import { WorkspaceDependenciesSettings } from '../WorkspaceDependenciesSettings.js';
 import { WindowsSandboxSettings } from '../windows-sandbox/WindowsSandboxSettings.js';
-import { MemorySettingToggle } from '../components/SettingsControls.js';
+import { SettingsToggle } from '../components/SettingsControls.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -174,7 +174,7 @@ function RuntimeAdvancedSettings({
         </span>
       </summary>
       <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
-        <MemorySettingToggle
+        <SettingsToggle
           checked={runtimeDeveloperFeaturesEnabled(config)}
           description={t('settings.runtime.developerFeaturesDescription')}
           label={t('settings.runtime.developerFeatures')}
@@ -185,13 +185,24 @@ function RuntimeAdvancedSettings({
             },
           })}
         />
-        <MemorySettingToggle
+        <SettingsToggle
+          checked={config.desktopSettings?.showThinkingInTranscript === true}
+          description={t('settings.runtime.showThinkingDescription')}
+          label={t('settings.runtime.showThinking')}
+          onChange={(showThinkingInTranscript) => void onSave({
+            desktopSettings: {
+              ...(config.desktopSettings ?? {}),
+              showThinkingInTranscript,
+            },
+          })}
+        />
+        <SettingsToggle
           checked={config.sandboxWorkspaceWrite?.networkAccess === true}
           description={t('settings.runtime.sandboxNetworkDescription')}
           label={t('settings.runtime.sandboxNetwork')}
           onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
         />
-        <MemorySettingToggle
+        <SettingsToggle
           checked={config.bypassHookTrust === true}
           description={t('settings.runtime.bypassHookTrustDescription')}
           label={t('settings.runtime.bypassHookTrust')}

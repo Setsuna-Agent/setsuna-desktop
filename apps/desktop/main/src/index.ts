@@ -356,7 +356,11 @@ async function createWindow(): Promise<void> {
     new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
     currentMainWindow,
   );
-  const unregisterReviewChanges = registerReviewIpc(currentRuntimeHost, currentMainWindow);
+  const unregisterReviewChanges = registerReviewIpc(
+    currentRuntimeHost,
+    currentMainWindow,
+    currentDesktopNativeBridgeServer,
+  );
   registerWorkspaceIpc();
   registerTerminalIpc(terminalStore);
   registerBrowserIpc(currentBrowserController, currentMainWindow);

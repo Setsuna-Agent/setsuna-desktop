@@ -152,6 +152,7 @@ describe('DesktopNativeBridgeServer', () => {
       resolveSandboxNetworkEnvironment: async () => ({}),
       systemProxyFetch: async () => new Response('ok'),
       validateNetworkProxyReferences: async () => undefined,
+      maxFilePreviewContentBytes: 12,
     });
     servers.push(server);
     await server.start();
@@ -170,6 +171,28 @@ describe('DesktopNativeBridgeServer', () => {
     expect(rangeResponse.status).toBe(206);
     expect(rangeResponse.headers.get('content-range')).toBe('bytes 2-5/10');
     expect(await rangeResponse.text()).toBe('2345');
+
+    const contentPreview = server.registerContentPreview({
+      content: Buffer.from('abcdefghij'),
+      mimeType: 'image/png',
+      name: 'before.png',
+    });
+    const contentRangeResponse = await fetch(contentPreview.url, {
+      headers: { Range: 'bytes=3-6' },
+    });
+    expect(contentRangeResponse.status).toBe(206);
+    expect(contentRangeResponse.headers.get('content-type')).toBe('image/png');
+    expect(await contentRangeResponse.text()).toBe('defg');
+
+    const replacementPreview = server.registerContentPreview({
+      content: Buffer.from('klmnopqrst'),
+      mimeType: 'image/png',
+      name: 'after.png',
+    });
+    expect((await fetch(contentPreview.url)).status).toBe(404);
+    expect((await fetch(replacementPreview.url)).status).toBe(200);
+    expect(server.releaseFilePreview(replacementPreview.previewId)).toBe(true);
+    expect((await fetch(replacementPreview.url)).status).toBe(404);
   });
 });
 

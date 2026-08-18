@@ -103,10 +103,12 @@ function toolRunGroupKindClassName(kind: ToolRunGroupKind): string {
 }
 
 export function RuntimeToolRuns({
+  children,
   runs,
   onAnswerApproval,
   summaryMode = 'aggregate',
 }: {
+  children?: ReactNode;
   runs: RuntimeToolRun[];
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
@@ -117,7 +119,7 @@ export function RuntimeToolRuns({
   if (!group) return null;
   return (
     <div className="chat-tool-runs">
-      <ToolRunDisplayPanel group={group} onAnswerApproval={onAnswerApproval} />
+      <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
     </div>
   );
 }
@@ -176,16 +178,18 @@ function ToolRunDisclosure({
 
 function ToolRunDisplayPanel({
   group,
+  nestedDetails,
   onAnswerApproval,
 }: {
   group: ToolRunDisplayGroup;
+  nestedDetails?: ReactNode;
   onAnswerApproval: AnswerApprovalHandler;
 }): JSX.Element {
   const { t } = useI18n();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
-    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t);
+    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
   }
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {
@@ -193,25 +197,33 @@ function ToolRunDisplayPanel({
         { type: 'group', id: `${group.run.id}:files`, kind: 'fileMutation', runs: [group.run] },
         onAnswerApproval,
         t,
+        nestedDetails,
       );
     }
-    return <FileMutationRunRow run={group.run} onAnswerApproval={onAnswerApproval} />;
+    return <FileMutationRunRow run={group.run} nestedDetails={nestedDetails} onAnswerApproval={onAnswerApproval} />;
   }
-  if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) return <FlatToolRunRow run={group.run} />;
+  if (group.type === 'single' && isFlatInspectionRun(group.run) && !hasHookRuns(group.run)) {
+    return <FlatToolRunRow run={group.run} nestedDetails={nestedDetails} />;
+  }
   if (group.type === 'single') {
-    return toolRunPanelNode(group.run, onAnswerApproval, t);
+    return toolRunPanelNode(group.run, onAnswerApproval, t, nestedDetails);
   }
-  return toolRunGroupPanelNode(group, onAnswerApproval, t);
+  return toolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
 }
 
-function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalHandler, t: Translate): JSX.Element {
+function toolRunPanelNode(
+  run: RuntimeToolRun,
+  onAnswerApproval: AnswerApprovalHandler,
+  t: Translate,
+  nestedDetails?: ReactNode,
+): JSX.Element {
   const pendingApproval = isPendingApprovalRun(run);
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
   const fileChanges = kind === 'fileMutation' ? fileChangesFromToolRun(run) : [];
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
-  if (!toolRunHasDetails(run, pendingApprovalId, t)) return <FlatToolRunRow run={run} />;
+  if (!toolRunHasDetails(run, pendingApprovalId, t)) return <FlatToolRunRow run={run} nestedDetails={nestedDetails} />;
   return (
     <ToolRunDisclosure
       autoOpenKey={pendingApprovalDisclosureKey([run])}
@@ -230,6 +242,7 @@ function toolRunPanelNode(run: RuntimeToolRun, onAnswerApproval: AnswerApprovalH
     >
       <div className="chat-tool-run__body">
         <ToolRunDetails run={run} onAnswerApproval={onAnswerApproval} pendingApprovalId={pendingApprovalId} />
+        {nestedDetails}
       </div>
     </ToolRunDisclosure>
   );
@@ -239,6 +252,7 @@ function toolRunGroupPanelNode(
   group: Extract<ToolRunGroup, { type: 'group' }>,
   onAnswerApproval: AnswerApprovalHandler,
   t: Translate,
+  nestedDetails?: ReactNode,
 ): JSX.Element {
   const status = toolRunGroupStatus(group.runs);
   const summary = toolRunGroupSummary(group, t);
@@ -337,6 +351,7 @@ function toolRunGroupPanelNode(
             );
           })
         )}
+        {nestedDetails}
       </div>
     </ToolRunDisclosure>
   );
@@ -346,6 +361,7 @@ function mixedToolRunGroupPanelNode(
   group: Extract<ToolRunDisplayGroup, { type: 'mixed' }>,
   onAnswerApproval: AnswerApprovalHandler,
   t: Translate,
+  nestedDetails?: ReactNode,
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
   const status = toolRunGroupStatus(runs);
@@ -405,6 +421,7 @@ function mixedToolRunGroupPanelNode(
         ) : (
           visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
         )}
+        {nestedDetails}
       </div>
     </ToolRunDisclosure>
   );
@@ -450,23 +467,44 @@ function isToolRunGroup(group: ToolRunGroup | null): group is ToolRunGroup {
   return group !== null;
 }
 
-function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
+function FlatToolRunRow({
+  run,
+  nestedDetails,
+}: {
+  run: RuntimeToolRun;
+  nestedDetails?: ReactNode;
+}) {
   const { t } = useI18n();
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
+  const summaryNode = (
+    <>
+      <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
+      <span className="chat-tool-run__summary-text">
+        <span className="chat-tool-run__title">{summary.title}</span>
+        <ToolRunSummaryTarget
+          inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
+          kind={kind}
+          target={summary.target}
+        />
+      </span>
+      <ToolRunStatus status={run.status} summaryTitle={summary.title} />
+    </>
+  );
+  if (nestedDetails) {
+    return (
+      <ToolRunDisclosure
+        className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
+        summary={summaryNode}
+      >
+        <div className="chat-tool-run__body">{nestedDetails}</div>
+      </ToolRunDisclosure>
+    );
+  }
   return (
     <div className={`chat-tool-run chat-tool-run--flat ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}>
       <div className="chat-tool-run__summary">
-        <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
-        <span className="chat-tool-run__summary-text">
-          <span className="chat-tool-run__title">{summary.title}</span>
-          <ToolRunSummaryTarget
-            inspectionKind={kind === 'inspection' ? inspectionEntryKind(run) : undefined}
-            kind={kind}
-            target={summary.target}
-          />
-        </span>
-        <ToolRunStatus status={run.status} summaryTitle={summary.title} />
+        {summaryNode}
       </div>
     </div>
   );
@@ -474,9 +512,11 @@ function FlatToolRunRow({ run }: { run: RuntimeToolRun }) {
 
 function FileMutationRunRow({
   run,
+  nestedDetails,
   onAnswerApproval,
 }: {
   run: RuntimeToolRun;
+  nestedDetails?: ReactNode;
   onAnswerApproval: AnswerApprovalHandler;
 }) {
   const { t } = useI18n();
@@ -519,6 +559,28 @@ function FileMutationRunRow({
           />
           {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
           <HookRunList runs={run.hookRuns} />
+          {nestedDetails}
+        </div>
+      </ToolRunDisclosure>
+    );
+  }
+
+  if (nestedDetails) {
+    return (
+      <ToolRunDisclosure
+        autoOpenKey={pendingApprovalDisclosureKey([run])}
+        className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName('fileMutation')} chat-tool-run--${run.status}`}
+        summary={summary}
+      >
+        <div className="chat-tool-run__body">
+          <RuntimeToolApprovalControl
+            approvalId={pendingApprovalId}
+            run={run}
+            onAnswerApproval={onAnswerApproval}
+          />
+          {error ? <div className="chat-tool-run__file-error">{error}</div> : null}
+          <HookRunList runs={run.hookRuns} />
+          {nestedDetails}
         </div>
       </ToolRunDisclosure>
     );

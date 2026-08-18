@@ -6,7 +6,10 @@ import type {
   WorkspaceSearchResult,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useToast } from '../../../app/providers/ToastProvider.js';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
+import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { runtimeClientErrorMessage } from '../../../services/runtime-client/runtimeClientErrors.js';
 import type { WorkspaceFileFocusRequest } from '../model.js';
 import { useWorkspaceFileDraft } from './useWorkspaceFileDraft.js';
 
@@ -17,6 +20,8 @@ type ProjectWorkspaceOptions = {
 };
 
 export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }: ProjectWorkspaceOptions) {
+  const { t } = useI18n();
+  const toast = useToast();
   const [filePreview, setFilePreview] = useState<WorkspaceFileRead | null>(null);
   const [fileFocusRequest, setFileFocusRequest] = useState<WorkspaceFileFocusRequest | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -91,17 +96,23 @@ export function useProjectWorkspace({ activeProjectId, client, onOpenFilePanel }
       if (!confirmDiscardChanges()) return;
       const projectId = activeProjectId;
       const isLatest = filePreviewRequests.begin();
-      const file = await client.readProjectFile(projectId, filePath);
-      if (!isLatest() || activeProjectIdRef.current !== projectId) return;
-      setFilePreview(file);
-      setFileFocusRequest((current) => createFileFocusRequest(
-        file.path,
-        line,
-        current,
-      ));
-      onOpenFilePanel(file.path);
+      try {
+        const file = await client.readProjectFile(projectId, filePath);
+        if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+        setFilePreview(file);
+        setFileFocusRequest((current) => createFileFocusRequest(
+          file.path,
+          line,
+          current,
+        ));
+        onOpenFilePanel(file.path);
+      } catch (error) {
+        if (!isLatest() || activeProjectIdRef.current !== projectId) return;
+        const feedback = workspaceFileOpenFailureFeedback(filePath, error, t);
+        toast[feedback.tone](feedback.message);
+      }
     },
-    [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel],
+    [activeProjectId, client, confirmDiscardChanges, filePreview, filePreviewRequests, onOpenFilePanel, t, toast],
   );
 
   const searchProjectEntries = useCallback(
@@ -169,6 +180,24 @@ export function visibleWorkspaceFilePreview(
   activeProjectId: string | null,
 ): WorkspaceFileRead | null {
   return filePreview?.projectId === activeProjectId ? filePreview : null;
+}
+
+export function workspaceFileOpenFailureFeedback(
+  filePath: string,
+  error: unknown,
+  t: Translate,
+): { message: string; tone: 'error' | 'warning' } {
+  const errorMessage = runtimeClientErrorMessage(error);
+  if (/\bENOENT\b|\bnot found\b|no such file or directory/iu.test(errorMessage)) {
+    return {
+      message: t('workspace.files.openMissing', { path: filePath }),
+      tone: 'warning',
+    };
+  }
+  return {
+    message: t('workspace.files.openFailed', { error: errorMessage, path: filePath }),
+    tone: 'error',
+  };
 }
 
 export type ProjectWorkspaceState = ReturnType<typeof useProjectWorkspace>;

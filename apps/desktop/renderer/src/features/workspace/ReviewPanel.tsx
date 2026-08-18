@@ -228,6 +228,7 @@ export function DesktopReviewPanel({
   const hasReviewFiles = Boolean(activeSummary?.files.length);
   const reviewFileExpansionTip = t(fileExpansionRequest.expanded ? 'workspace.review.collapseAll' : 'workspace.review.expandAll');
   const pathContext: ReviewPathContext = {
+    baseRef: reviewState?.baseRef ?? null,
     source: activeSource,
     workspaceRoot: reviewState?.workspaceRoot ?? activeProject.path,
     gitRoot: reviewState?.gitRoot ?? null,

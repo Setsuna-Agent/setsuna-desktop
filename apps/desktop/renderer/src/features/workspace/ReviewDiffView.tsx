@@ -34,7 +34,7 @@ import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from './WorkspaceFileContextMenu.js';
-import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { WorkspaceFileIcon, WorkspaceFilePath } from './WorkspaceFileIcon.js';
 import {
   reviewFindingKey,
   reviewPathsMatch,
@@ -55,27 +55,6 @@ const reviewFilePathCollator = new Intl.Collator('en', {
   sensitivity: 'base',
 });
 const REVIEW_FOCUS_HIGHLIGHT_MS = 1_400;
-
-function ReviewFilePath({ path }: { path: string }) {
-  const { directory, filename } = reviewFilePathParts(path);
-  // 目录通过 RTL 从左侧省略；分隔符独立渲染，避免双向文本把末尾 "/" 移到最前面。
-  const directoryLabel = directory.slice(0, -1);
-  return (
-    <span className="desktop-review-file-card__path" title={path}>
-      {directoryLabel ? (
-        <span className="desktop-review-file-card__path-directory">
-          {directoryLabel}
-        </span>
-      ) : null}
-      {directory
-        ? <span className="desktop-review-file-card__path-separator">/</span>
-        : null}
-      <span className="desktop-review-file-card__path-filename">
-        {filename}
-      </span>
-    </span>
-  );
-}
 
 export function ReviewSummarySection({
   diffLayout,
@@ -262,6 +241,8 @@ function ReviewFileCard({
   onRevealFile: (filePath: string) => void;
 }) {
   const { t } = useI18n();
+  const imagePreview = file.contentKind === 'image';
+  const unsupportedPreview = file.contentKind === 'binary';
   const [expanded, setExpanded] = useState(fileExpansionRequest.expanded);
   const [lineContextMenu, setLineContextMenu] = useState<
     WorkspaceFileContextTarget | null
@@ -319,12 +300,12 @@ function ReviewFileCard({
   ]);
   // Keep collapsed files cheap; Pierre/Shiki only receives a patch after expansion.
   const patch = useMemo(() => {
-    if (!expanded) return '';
+    if (!expanded || imagePreview || unsupportedPreview) return '';
     // A raw patch cannot be sliced safely. Rebuild valid hunks from the retained
     // lines so truncated previews remain parseable and syntax-highlighted.
     if (file.truncated) return codeDiffLinesToPatch(file);
     return file.patch ?? codeDiffLinesToPatch(file);
-  }, [expanded, file]);
+  }, [expanded, file, imagePreview, unsupportedPreview]);
 
   useEffect(() => {
     setExpanded(fileExpansionRequest.expanded);
@@ -386,11 +367,13 @@ function ReviewFileCard({
           >
             <WorkspaceFileIcon className="desktop-review-file-card__icon" path={file.path} type="file" />
             <span className="desktop-review-file-card__file-info">
-              <ReviewFilePath path={file.path} />
-              <ReviewChangeCounts
-                additions={file.additions}
-                deletions={file.deletions}
-              />
+              <WorkspaceFilePath path={file.path} />
+              {!file.contentKind ? (
+                <ReviewChangeCounts
+                  additions={file.additions}
+                  deletions={file.deletions}
+                />
+              ) : null}
             </span>
           </button>
           <div className="desktop-review-file-card__meta">
@@ -428,7 +411,20 @@ function ReviewFileCard({
             </IconButton>
           </div>
         </header>
-        {expanded && visibleLines.length ? (
+        {imagePreview ? (
+          <ReviewImageDiffPreview
+            diffLayout={diffLayout}
+            file={file}
+            filePath={workspaceFilePath}
+            pathContext={pathContext}
+            visible={expanded}
+          />
+        ) : unsupportedPreview && expanded ? (
+          <div className="desktop-review-unsupported-preview">
+            <strong>{t('workspace.review.file.unsupportedTitle')}</strong>
+            <span>{t('workspace.review.file.unsupportedDescription')}</span>
+          </div>
+        ) : expanded && visibleLines.length ? (
           <div
             className="desktop-review-diff-shell"
             onContextMenu={openDiffLineContextMenu}
@@ -453,6 +449,10 @@ function ReviewFileCard({
               </div>
             ) : null}
           </div>
+        ) : expanded && file.truncated ? (
+          <div className="desktop-review-truncated">
+            {t('workspace.review.file.truncated')}
+          </div>
         ) : null}
       </article>
       <WorkspaceFileContextMenu
@@ -467,6 +467,162 @@ function ReviewFileCard({
       />
     </>
   );
+}
+
+type ReviewImagePreviewSide = 'before' | 'after';
+
+function ReviewImageDiffPreview({
+  diffLayout,
+  file,
+  filePath,
+  pathContext,
+  visible,
+}: {
+  diffLayout: DesktopReviewDiffLayout;
+  file: DesktopDiffFile;
+  filePath: string | null;
+  pathContext: ReviewPathContext;
+  visible: boolean;
+}) {
+  const { t } = useI18n();
+  if (!visible) return null;
+  const sides = reviewImagePreviewSides(file.action, diffLayout, pathContext.source);
+  if (!sides.length) {
+    return (
+      <div className="desktop-review-image-preview__status is-error" role="status">
+        {t('workspace.review.file.imageUnavailable')}
+      </div>
+    );
+  }
+  const split = diffLayout === 'split';
+  return (
+    <div className={`desktop-review-image-preview ${split ? 'is-split' : ''}`}>
+      {sides.map((side) => {
+        const sideFilePath = side === 'before' && file.previousPath
+          ? reviewWorkspaceFilePath(file.previousPath, pathContext)
+          : filePath;
+        const label = t(side === 'before'
+          ? 'workspace.review.file.imageBefore'
+          : 'workspace.review.file.imageAfter');
+        return (
+          <ReviewImageVersion
+            filePath={sideFilePath}
+            fileVersion={file}
+            key={`${pathContext.source}:${pathContext.baseRef ?? ''}:${side}:${sideFilePath ?? file.path}`}
+            label={label}
+            path={side === 'before' ? file.previousPath ?? file.path : file.path}
+            pathContext={pathContext}
+            side={side}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function ReviewImageVersion({
+  filePath,
+  fileVersion,
+  label,
+  path,
+  pathContext,
+  side,
+}: {
+  filePath: string | null;
+  fileVersion: DesktopDiffFile;
+  label: string;
+  path: string;
+  pathContext: ReviewPathContext;
+  side: ReviewImagePreviewSide;
+}) {
+  const { t } = useI18n();
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPreviewUrl(null);
+    setPreviewError(null);
+    if (!pathContext.workspaceRoot || !filePath) {
+      setPreviewError(t('workspace.review.file.imageUnavailable'));
+      return undefined;
+    }
+    const createPreview = window.setsunaDesktop?.desktopReview?.createImagePreview;
+    const releasePreview = window.setsunaDesktop?.desktopReview?.releaseImagePreview;
+    if (!createPreview) {
+      setPreviewError(t('workspace.review.file.imageUnavailable'));
+      return undefined;
+    }
+    let cancelled = false;
+    let previewId: string | null = null;
+    void createPreview(pathContext.workspaceRoot, {
+      baseRef: pathContext.baseRef,
+      filePath,
+      side,
+      source: pathContext.source,
+    })
+      .then((result) => {
+        if (result.ok) {
+          if (cancelled) {
+            void releasePreview?.(result.previewId).catch(() => undefined);
+            return;
+          }
+          previewId = result.previewId;
+          setPreviewUrl(result.url);
+        } else {
+          setPreviewError(t('workspace.review.file.imageUnavailable'));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewError(t('workspace.review.file.imageUnavailable'));
+      });
+    return () => {
+      cancelled = true;
+      if (previewId) void releasePreview?.(previewId).catch(() => undefined);
+    };
+  }, [
+    filePath,
+    fileVersion,
+    pathContext.baseRef,
+    pathContext.source,
+    pathContext.workspaceRoot,
+    side,
+    t,
+  ]);
+
+  return (
+    <div className="desktop-review-image-preview__version">
+      <div className="desktop-review-image-preview__canvas">
+        {previewUrl ? (
+          <img
+            alt={t('workspace.review.file.imageVersionAlt', { label, path })}
+            draggable={false}
+            src={previewUrl}
+          />
+        ) : (
+          <div className={`desktop-review-image-preview__status ${previewError ? 'is-error' : ''}`} role="status">
+            {previewError ?? t('workspace.review.file.imageLoading')}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function reviewImagePreviewSides(
+  action: string,
+  diffLayout: DesktopReviewDiffLayout,
+  source: ReviewPathContext['source'],
+): ReviewImagePreviewSide[] {
+  const beforeAvailable = source !== 'latest' && action !== 'Created';
+  const afterAvailable = action !== 'Deleted';
+  if (diffLayout === 'split') {
+    return [
+      ...(beforeAvailable ? ['before' as const] : []),
+      ...(afterAvailable ? ['after' as const] : []),
+    ];
+  }
+  if (afterAvailable) return ['after'];
+  return beforeAvailable ? ['before'] : [];
 }
 
 function ReviewUnanchoredFindingCard({

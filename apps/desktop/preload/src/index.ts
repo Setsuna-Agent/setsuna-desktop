@@ -217,6 +217,10 @@ const webdavSync: SetsunaDesktopBridge['webdavSync'] = {
 const desktopReview: SetsunaDesktopBridge['desktopReview'] = {
   getState: (workspaceRoot, options) =>
     ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot, baseRef: options?.baseRef ?? null }),
+  createImagePreview: (workspaceRoot, input) =>
+    ipcRenderer.invoke('desktop-review:create-image-preview', { workspaceRoot, preview: input }),
+  releaseImagePreview: (previewId) =>
+    ipcRenderer.invoke('desktop-review:release-image-preview', previewId),
   watchChanges(workspaceRoot, callback) {
     let cancelled = false;
     let subscriptionId: string | null = null;

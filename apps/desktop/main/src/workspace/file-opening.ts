@@ -4,12 +4,22 @@ import path from 'node:path';
 
 type OpenPath = (targetPath: string) => Promise<string>;
 type RegisterPreview = (input: { mimeType: string; name: string; targetPath: string }) => string;
-type WorkspaceFilePathAction = (targetPath: string) => void | Promise<void>;
+type WorkspacePathAction = (targetPath: string) => void | Promise<void>;
 
-type WorkspacePathKind = 'directory' | 'file';
+type WorkspacePathKind = 'directory' | 'entry' | 'file';
 
 type WorkspacePathResolution =
   | { ok: true; targetPath: string }
+  | { ok: false; error: string };
+
+export type WorkspaceFilePreview = {
+  mimeType: string;
+  name: string;
+  targetPath: string;
+};
+
+type WorkspaceFilePreviewResolution =
+  | { ok: true; preview: WorkspaceFilePreview }
   | { ok: false; error: string };
 
 export function openWorkspaceFileWithDefaultApp(
@@ -51,9 +61,9 @@ async function openWorkspacePathWithDefaultApp(
 export async function copyWorkspaceFilePath(
   workspaceRootValue: unknown,
   filePathValue: unknown,
-  copyText: WorkspaceFilePathAction,
+  copyText: WorkspacePathAction,
 ): Promise<DesktopOpenPathResult> {
-  return runWorkspaceFilePathAction(
+  return runWorkspaceEntryPathAction(
     workspaceRootValue,
     filePathValue,
     copyText,
@@ -64,9 +74,9 @@ export async function copyWorkspaceFilePath(
 export async function revealWorkspaceFileInFolder(
   workspaceRootValue: unknown,
   filePathValue: unknown,
-  showItemInFolder: WorkspaceFilePathAction,
+  showItemInFolder: WorkspacePathAction,
 ): Promise<DesktopOpenPathResult> {
-  return runWorkspaceFilePathAction(
+  return runWorkspaceEntryPathAction(
     workspaceRootValue,
     filePathValue,
     showItemInFolder,
@@ -79,23 +89,35 @@ export async function createWorkspaceFilePreviewUrl(
   filePathValue: unknown,
   registerPreview: RegisterPreview,
 ): Promise<DesktopWorkspaceFilePreviewResult> {
-  const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
+  const resolved = await resolveWorkspaceFilePreview(workspaceRootValue, filePathValue);
   if (!resolved.ok) return resolved;
-  const mimeType = workspaceFilePreviewMimeType(resolved.targetPath);
-  if (!mimeType) return { ok: false, error: 'Only PDF and image files can be opened in the built-in browser.' };
 
   try {
     return {
       ok: true,
-      url: registerPreview({
-        mimeType,
-        name: path.basename(resolved.targetPath),
-        targetPath: resolved.targetPath,
-      }),
+      url: registerPreview(resolved.preview),
     };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Failed to create workspace file preview.' };
   }
+}
+
+export async function resolveWorkspaceFilePreview(
+  workspaceRootValue: unknown,
+  filePathValue: unknown,
+): Promise<WorkspaceFilePreviewResolution> {
+  const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
+  if (!resolved.ok) return resolved;
+  const mimeType = workspaceFilePreviewMimeType(resolved.targetPath);
+  if (!mimeType) return { ok: false, error: 'Only PDF and image files can be opened in the built-in browser.' };
+  return {
+    ok: true,
+    preview: {
+      mimeType,
+      name: path.basename(resolved.targetPath),
+      targetPath: resolved.targetPath,
+    },
+  };
 }
 
 async function resolveWorkspaceFile(
@@ -105,6 +127,13 @@ async function resolveWorkspaceFile(
   return resolveWorkspacePath(workspaceRootValue, filePathValue, 'file');
 }
 
+async function resolveWorkspaceEntry(
+  workspaceRootValue: unknown,
+  entryPathValue: unknown,
+): Promise<WorkspacePathResolution> {
+  return resolveWorkspacePath(workspaceRootValue, entryPathValue, 'entry');
+}
+
 async function resolveWorkspacePath(
   workspaceRootValue: unknown,
   targetPathValue: unknown,
@@ -112,7 +141,7 @@ async function resolveWorkspacePath(
 ): Promise<WorkspacePathResolution> {
   const workspaceRoot = String(workspaceRootValue ?? '').trim();
   const targetPath = String(targetPathValue ?? '').trim();
-  const pathLabel = kind === 'directory' ? 'Directory' : 'File';
+  const pathLabel = kind === 'directory' ? 'Directory' : kind === 'file' ? 'File' : 'Entry';
   if (!workspaceRoot || !path.isAbsolute(workspaceRoot)) {
     return { ok: false, error: 'Workspace root must be an absolute path.' };
   }
@@ -129,21 +158,27 @@ async function resolveWorkspacePath(
 
     // 打开前解析符号链接，防止消息里的工作区引用跳出所选工作区。
     const targetStats = await stat(canonicalTarget);
-    const targetMatchesKind = kind === 'directory' ? targetStats.isDirectory() : targetStats.isFile();
-    if (!targetMatchesKind) return { ok: false, error: `Target is not a ${kind}.` };
+    const targetMatchesKind = kind === 'directory'
+      ? targetStats.isDirectory()
+      : kind === 'file'
+        ? targetStats.isFile()
+        : targetStats.isDirectory() || targetStats.isFile();
+    if (!targetMatchesKind) {
+      return { ok: false, error: kind === 'entry' ? 'Target is not a file or directory.' : `Target is not a ${kind}.` };
+    }
     return { ok: true, targetPath: canonicalTarget };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : `Failed to resolve workspace ${kind}.` };
   }
 }
 
-async function runWorkspaceFilePathAction(
+async function runWorkspaceEntryPathAction(
   workspaceRootValue: unknown,
   filePathValue: unknown,
-  action: WorkspaceFilePathAction,
+  action: WorkspacePathAction,
   fallbackError: string,
 ): Promise<DesktopOpenPathResult> {
-  const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
+  const resolved = await resolveWorkspaceEntry(workspaceRootValue, filePathValue);
   if (!resolved.ok) return resolved;
   try {
     await action(resolved.targetPath);

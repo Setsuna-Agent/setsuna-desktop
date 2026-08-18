@@ -35,7 +35,9 @@ export class DesktopNetworkProxyFetch {
       return this.directFetch(input, { ...init, dispatcher: this.directAgent } as unknown as RequestInit);
     }
     const route = await this.service.resolve({ scope });
-    if (route.mode === 'system') return this.systemFetch(input, init);
+    if (route.mode === 'system') {
+      return this.systemFetch(input, chromiumCompatibleRequestInit(init));
+    }
     const proxyUrl = route.mode === 'proxy' ? route.proxyUrl : undefined;
     const dispatcher = proxyUrl ? this.proxyDispatcher(proxyUrl) : this.directAgent;
     return this.directFetch(input, { ...init, dispatcher } as unknown as RequestInit);
@@ -72,4 +74,13 @@ export class DesktopNetworkProxyFetch {
 function requestUrl(input: Parameters<typeof globalThis.fetch>[0]): string {
   if (typeof input === 'string') return input;
   return input instanceof URL ? input.href : input.url;
+}
+
+function chromiumCompatibleRequestInit(init?: RequestInit): RequestInit | undefined {
+  if (!init?.headers) return init;
+  const headers = new Headers(init.headers);
+  // Electron's Chromium fetch rejects a caller-supplied Content-Length with
+  // ERR_INVALID_ARGUMENT. It derives the correct value from the request body.
+  headers.delete('content-length');
+  return { ...init, headers };
 }

@@ -184,6 +184,7 @@ export function ChatWorkspace({
     [currentThread, messages],
   );
   const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
+  const showThinkingInTranscript = config?.desktopSettings?.showThinkingInTranscript === true;
   const conversationRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const overviewRef = useRef<HTMLDivElement | null>(null);
@@ -442,6 +443,7 @@ export function ChatWorkspace({
                               onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
                               pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? []) : []}
                               selectedForDelete={selectedDeleteItemIds.has(item.id)}
+                              showThinkingInTranscript={showThinkingInTranscript}
                             />
                             {item.type === 'user' && item.id === activePlaceholderUserItemId ? (
                               <ActiveWorkPlaceholder

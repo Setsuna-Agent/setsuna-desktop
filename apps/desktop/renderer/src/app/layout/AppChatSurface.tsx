@@ -38,6 +38,10 @@ import {
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
+import {
+  WorkspaceFileContextMenu,
+  type WorkspaceFileContextTarget,
+} from '../../features/workspace/WorkspaceFileContextMenu.js';
 import { WorkspaceGitCommitProvider } from '../../features/workspace/git/WorkspaceGitCommitDialog.js';
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
@@ -57,6 +61,7 @@ import type {
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
 import { latestCompletedReview } from '../../features/workspace/review-findings.js';
+import { workspaceFileMentionEntry } from '../../features/workspace/workspaceFileMention.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
   ChatSkillSelectionRequest,
@@ -295,6 +300,9 @@ export function AppChatSurface({
     composerKey: string;
     request: ChatWorkspaceMentionRequest;
   } | null>(null);
+  const [workspaceFileContextTarget, setWorkspaceFileContextTarget] = useState<WorkspaceFileContextTarget | null>(
+    null,
+  );
   const workspaceMentionRequestIdRef = useRef(0);
   const workspaceMentionRequest = scopedWorkspaceMentionRequest?.composerKey === composerKey
     ? scopedWorkspaceMentionRequest.request
@@ -309,6 +317,12 @@ export function AppChatSurface({
   const consumeWorkspaceMentionRequest = useCallback((requestId: number) => {
     setScopedWorkspaceMentionRequest((current) => current?.request.requestId === requestId ? null : current);
   }, []);
+  const closeWorkspaceFileContextMenu = useCallback(() => {
+    setWorkspaceFileContextTarget(null);
+  }, []);
+  const addWorkspaceFileToConversation = useCallback((filePath: string) => {
+    requestWorkspaceMention(workspaceFileMentionEntry(filePath));
+  }, [requestWorkspaceMention]);
   const latestReviewSummary = useMemo(
     () => latestDesktopReviewSummaryFromMessages(currentThread?.messages ?? []),
     [currentThread?.messages],
@@ -320,7 +334,7 @@ export function AppChatSurface({
     )?.findings ?? [],
     [activeTurnId, currentThread?.messages],
   );
-  const openChatWorkspaceFile = selectedWorkspaceApp ? onExternalOpenFile : onOpenProjectFile;
+  const openChatWorkspaceFile = onOpenProjectFile;
   const chatPanelInstances = [
     ...sidePanelSlot.panels
       .filter((panel) => panel.type === 'chat')
@@ -385,6 +399,7 @@ export function AppChatSurface({
           workspaceRoot={activeWorkspace?.path}
           onOpenWorkspaceDirectory={onOpenWorkspaceDirectory}
           onOpenWorkspaceFile={openChatWorkspaceFile}
+          onOpenWorkspaceFileContextMenu={setWorkspaceFileContextTarget}
         >
           <ChatWorkspace
             activeTurnId={activeTurnId}
@@ -438,6 +453,16 @@ export function AppChatSurface({
             onWorkspaceMentionRequestConsumed={consumeWorkspaceMentionRequest}
           />
         </MarkdownNavigationProvider>
+        <WorkspaceFileContextMenu
+          selectedWorkspaceApp={selectedWorkspaceApp}
+          target={workspaceFileContextTarget}
+          workspaceApps={workspaceApps}
+          onAddToConversation={addWorkspaceFileToConversation}
+          onClose={closeWorkspaceFileContextMenu}
+          onCopyPath={onCopyFilePath}
+          onOpenWithApp={onOpenFileWithApp}
+          onReveal={onRevealFile}
+        />
         {sidePanelVisible && sideActivePanel && !isFloatingPanelType(sideActivePanel.type) ? (
           <Suspense fallback={null}>
             <WorkspacePanel

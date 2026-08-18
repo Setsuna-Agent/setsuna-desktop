@@ -1,4 +1,5 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { WorkHistoryExpandedChangeHandler } from './chat-workspace-types.js';
@@ -36,7 +37,9 @@ export function inferWorkTiming(segments: RuntimeMessage[]): {
   for (const segment of segments) {
     const segmentStartedAtMs = parseDateMs(segment.createdAt);
     const segmentCompletedAtMs = parseDateMs(segment.completedAt);
-    if (hasThinkingSegments(segment.content)) {
+    if (hasThinkingSegments(segment.content) || segment.streamParts?.some((part) => (
+      part.type === 'reasoning' && Boolean(part.content.trim())
+    ))) {
       hasWorkEvidence = true;
       if (segmentStartedAtMs !== null) startedAtMs.push(segmentStartedAtMs);
       if (segmentCompletedAtMs !== null) completedAtMs.push(segmentCompletedAtMs);
@@ -70,6 +73,7 @@ export function inferWorkTiming(segments: RuntimeMessage[]): {
 export function WorkHistoryPanel({
   active,
   children,
+  collapseWhenContentFollows = false,
   completedAtMs,
   defaultExpanded = active,
   hasDetails,
@@ -79,6 +83,7 @@ export function WorkHistoryPanel({
 }: {
   active: boolean;
   children?: ReactNode;
+  collapseWhenContentFollows?: boolean;
   completedAtMs?: number | null;
   defaultExpanded?: boolean;
   hasDetails: boolean;
@@ -89,9 +94,11 @@ export function WorkHistoryPanel({
   const { t } = useI18n();
   const wasActiveForTimingRef = useRef(active);
   const wasActiveForExpansionRef = useRef(active);
+  const hadFollowingContentRef = useRef(collapseWhenContentFollows);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
-  // 此属性只用于初始化一次面板；流式更新绝不会写入展开状态。
+  // 流式更新只允许“后续正文首次出现”和“整个 turn 完成”各触发一次自动收起，
+  // 其余时间由用户手动控制展开状态。
   const [manualExpanded, setManualExpanded] = useState(() => hasDetails && defaultExpanded);
   const expanded = hasDetails && manualExpanded;
 
@@ -107,16 +114,19 @@ export function WorkHistoryPanel({
   }, [active, completedAtMs]);
 
   useLayoutEffect(() => {
-    if (shouldCollapseCompletedWorkHistory({
+    const shouldCollapseForFollowingContent = collapseWhenContentFollows && !hadFollowingContentRef.current;
+    const shouldCollapseForCompletedTurn = shouldCollapseCompletedWorkHistory({
       defaultExpanded,
       runActive: active,
       wasActive: wasActiveForExpansionRef.current,
-    })) {
+    });
+    if (shouldCollapseForFollowingContent || shouldCollapseForCompletedTurn) {
       // Final content replaces transient progress as the primary transcript surface.
       setManualExpanded(false);
     }
+    hadFollowingContentRef.current = collapseWhenContentFollows;
     wasActiveForExpansionRef.current = active;
-  }, [active, defaultExpanded]);
+  }, [active, collapseWhenContentFollows, defaultExpanded]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -147,6 +157,7 @@ export function WorkHistoryPanel({
     <>
       <span className="chat-work-history__title">{title}</span>
       {durationLabel ? <span className="chat-work-history__duration">{durationLabel}</span> : null}
+      {hasDetails ? <ChevronDown aria-hidden="true" className="chat-work-history__chevron" size={12} /> : null}
     </>
   );
 

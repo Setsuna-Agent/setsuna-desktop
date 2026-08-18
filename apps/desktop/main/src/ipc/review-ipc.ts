@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { ipcMain, type BrowserWindow, type WebContents } from 'electron';
 import { DesktopReviewChangeMonitor } from '../review/change-monitor.js';
+import { createReviewImagePreviewUrl } from '../review/image-preview.js';
 import {
   checkoutReviewBranch,
   commitReviewChanges,
@@ -13,11 +14,16 @@ import {
   unstageReviewFiles,
 } from '../review/state.js';
 import type { RuntimeHost } from '../runtime/host.js';
+import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { isDesktopRendererSender } from './sender.js';
 
 const REVIEW_CHANGED_CHANNEL = 'desktop-review:changed';
 
-export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserWindow): () => void {
+export function registerReviewIpc(
+  runtimeHost: RuntimeHost,
+  mainWindow: BrowserWindow,
+  nativeBridge: DesktopNativeBridgeServer,
+): () => void {
   const monitor = new DesktopReviewChangeMonitor();
   const subscriptions = new Map<string, {
     dispose: () => void;
@@ -28,6 +34,8 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
   const latestSubscriptionRequestBySender = new Map<WebContents, string>();
   const channels = [
     'desktop-review:get-state',
+    'desktop-review:create-image-preview',
+    'desktop-review:release-image-preview',
     'desktop-review:subscribe-changes',
     'desktop-review:unsubscribe-changes',
     'desktop-review:discard-unstaged',
@@ -58,6 +66,20 @@ export function registerReviewIpc(runtimeHost: RuntimeHost, mainWindow: BrowserW
   ipcMain.handle('desktop-review:get-state', async (_event, input) =>
     getDesktopReviewState(String(input?.workspaceRoot ?? ''), { baseRef: typeof input?.baseRef === 'string' ? input.baseRef : null }),
   );
+  ipcMain.handle('desktop-review:create-image-preview', async (event, input) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return { ok: false, error: 'Desktop renderer is unavailable.' };
+    return createReviewImagePreviewUrl(
+      input?.workspaceRoot,
+      input?.preview,
+      (preview) => nativeBridge.registerManagedFilePreview(preview),
+      (preview) => nativeBridge.registerContentPreview(preview),
+    );
+  });
+  ipcMain.handle('desktop-review:release-image-preview', (event, rawPreviewId) => {
+    if (!isDesktopRendererSender(event.sender, mainWindow)) return false;
+    const previewId = String(rawPreviewId ?? '');
+    return /^[a-f0-9]{48}$/u.test(previewId) && nativeBridge.releaseFilePreview(previewId);
+  });
   ipcMain.handle('desktop-review:subscribe-changes', async (event, input) => {
     if (!isDesktopRendererSender(event.sender, mainWindow)) throw new Error('Desktop renderer is unavailable.');
     const subscriptionId = randomUUID();

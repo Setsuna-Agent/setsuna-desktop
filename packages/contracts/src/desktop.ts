@@ -41,6 +41,17 @@ export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
+export type DesktopReviewImagePreviewResult =
+  | { ok: true; previewId: string; url: string }
+  | { ok: false; error: string };
+
+export type DesktopReviewImagePreviewInput = {
+  baseRef?: string | null;
+  filePath: string;
+  side: 'before' | 'after';
+  source: 'unstaged' | 'staged' | 'branch' | 'latest';
+};
+
 export type DesktopWindowsSandboxState =
   | 'unsupported'
   | 'unavailable'
@@ -115,9 +126,13 @@ export type DesktopDiffLine = {
 
 export type DesktopDiffFile = {
   path: string;
+  /** Original repository path for renamed files. */
+  previousPath?: string;
   action: string;
   additions: number;
   deletions: number;
+  /** Non-text files are listed without ever decoding their bytes into text diff lines. */
+  contentKind?: 'binary' | 'image';
   truncated: boolean;
   lines: DesktopDiffLine[];
   /** Original unified patch for complete previews; omitted when truncated. */
@@ -276,6 +291,8 @@ export type SetsunaDesktopBridge = {
   };
   desktopReview: {
     getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
+    createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
+    releaseImagePreview(previewId: string): Promise<boolean>;
     watchChanges(workspaceRoot: string, callback: () => void): () => void;
     discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
     stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;

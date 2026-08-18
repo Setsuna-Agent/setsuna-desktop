@@ -10,8 +10,13 @@ const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 const BUFFER_UPLOAD_CHUNK_BYTES = 64 * 1024;
 const MAX_METADATA_BYTES = 10 * 1024 * 1024;
 const MAX_PROPFIND_BYTES = 2 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
 
 type WebDavFetch = typeof globalThis.fetch;
+type WebDavRequestInit = RequestInit & {
+  bodyFactory?: () => RequestInit['body'];
+  duplex?: 'half';
+};
 type WebDavResponseConsumer<T> = (
   response: Response,
   reportActivity: () => void,
@@ -100,9 +105,9 @@ export class WebDavClient {
         'Content-Type': options.contentType ?? 'application/octet-stream',
         ...(options.ifNoneMatch ? { 'If-None-Match': '*' } : {}),
       },
-      body: bufferUploadBody(data) as unknown as RequestInit['body'],
+      bodyFactory: () => bufferUploadBody(data) as unknown as RequestInit['body'],
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' }, async (response) => {
+    }, async (response) => {
       await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
         ? '远端备份仓库已存在。'
         : '无法写入 WebDAV 远端文件。');
@@ -123,9 +128,9 @@ export class WebDavClient {
         'Content-Type': 'application/octet-stream',
         ...(options.ifNoneMatch ? { 'If-None-Match': '*' } : {}),
       },
-      body: createReadStream(filePath) as unknown as RequestInit['body'],
+      bodyFactory: () => createReadStream(filePath) as unknown as RequestInit['body'],
       duplex: 'half',
-    } as RequestInit & { duplex: 'half' }, async (response) => {
+    }, async (response) => {
       await assertWebDavStatus(response, [200, 201, 204], options.ifNoneMatch && response.status === 412
         ? '远端备份对象已存在。'
         : '无法上传 WebDAV 备份对象。');
@@ -225,7 +230,7 @@ export class WebDavClient {
 
   private request<T>(
     parts: readonly string[],
-    init: RequestInit,
+    init: WebDavRequestInit,
     consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
     collection = false,
@@ -235,7 +240,7 @@ export class WebDavClient {
 
   private requestAbsoluteParts<T>(
     parts: readonly string[],
-    init: RequestInit,
+    init: WebDavRequestInit,
     consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
     collection = false,
@@ -247,7 +252,7 @@ export class WebDavClient {
 
   private async requestUrl<T>(
     url: URL,
-    init: RequestInit,
+    init: WebDavRequestInit,
     consume: WebDavResponseConsumer<T>,
     signal?: AbortSignal,
   ): Promise<T> {
@@ -264,23 +269,40 @@ export class WebDavClient {
     const abort = () => controller.abort(signal?.reason);
     if (signal?.aborted) abort();
     else signal?.addEventListener('abort', abort, { once: true });
+    const { bodyFactory, ...fetchInit } = init;
+    const method = (fetchInit.method ?? 'GET').toUpperCase();
+    const authorizationScope = new URL(this.location.endpoint);
+    let currentUrl = url;
+    let includeAuthorization = true;
     let headersReceived = false;
     reportActivity();
     try {
-      const response = await this.fetchImpl(url, {
-        ...init,
-        body: activityTrackedRequestBody(init.body, reportActivity),
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: {
-          Accept: '*/*',
-          Authorization: this.authorization,
-          ...init.headers,
-        },
-      });
-      headersReceived = true;
-      reportActivity();
-      return await consume(response, reportActivity);
+      for (let redirectCount = 0; ; redirectCount += 1) {
+        headersReceived = false;
+        const response = await this.fetchImpl(currentUrl, {
+          ...fetchInit,
+          body: activityTrackedRequestBody(
+            bodyFactory ? bodyFactory() : fetchInit.body,
+            reportActivity,
+          ),
+          redirect: 'manual',
+          signal: controller.signal,
+          headers: webDavRequestHeaders(
+            fetchInit.headers,
+            includeAuthorization ? this.authorization : undefined,
+          ),
+        });
+        headersReceived = true;
+        reportActivity();
+        const redirect = webDavRedirect(response, currentUrl, authorizationScope, method);
+        if (!redirect) return await consume(response, reportActivity);
+        if (redirectCount >= MAX_REDIRECTS) {
+          throw new Error('WebDAV 服务器返回了过多重定向。');
+        }
+        await response.body?.cancel().catch(() => undefined);
+        currentUrl = redirect.url;
+        includeAuthorization = redirect.includeAuthorization;
+      }
     } catch (error) {
       if (signal?.aborted) throw signal.reason ?? new Error('同步操作已取消。');
       if (controller.signal.aborted) throw new Error('WebDAV 请求超时。', { cause: error });
@@ -303,6 +325,58 @@ export class WebDavClient {
     url.pathname = `${endpointPath}/${encoded}${collection ? '/' : ''}`.replace(/\/{2,}/gu, '/');
     return url;
   }
+}
+
+function webDavRequestHeaders(
+  init: RequestInit['headers'],
+  authorization: string | undefined,
+): Headers {
+  const headers = new Headers(init);
+  if (!headers.has('accept')) headers.set('accept', '*/*');
+  if (authorization) headers.set('authorization', authorization);
+  else headers.delete('authorization');
+  return headers;
+}
+
+function webDavRedirect(
+  response: Response,
+  requestUrl: URL,
+  authorizationScope: URL,
+  method: string,
+): { url: URL; includeAuthorization: boolean } | undefined {
+  if (![301, 302, 303, 307, 308].includes(response.status)) return undefined;
+  const location = response.headers.get('location');
+  if (!location) throw new Error('WebDAV 服务器返回了没有目标地址的重定向。');
+  let url: URL;
+  try {
+    url = new URL(location, requestUrl);
+  } catch {
+    throw new Error('WebDAV 服务器返回了无效的重定向地址。');
+  }
+  if (url.username || url.password) {
+    throw new Error('WebDAV 服务器返回的重定向地址包含凭据，Setsuna 已拒绝访问。');
+  }
+  const includeAuthorization = isWithinWebDavAuthorizationScope(url, authorizationScope);
+  if (includeAuthorization) {
+    if (response.status === 303 && method !== 'GET' && method !== 'HEAD') {
+      throw new Error('WebDAV 服务器要求将写入请求重定向为读取请求，Setsuna 已拒绝访问。');
+    }
+    return { url, includeAuthorization: true };
+  }
+  if ((method !== 'GET' && method !== 'HEAD') || url.protocol !== 'https:') {
+    throw new Error('WebDAV 服务器将请求重定向到认证范围之外，Setsuna 不会自动跟随。');
+  }
+  // Cloud WebDAV providers commonly return signed download URLs on another
+  // origin. Following without Basic Auth preserves compatibility without
+  // disclosing the WebDAV credentials to the download host.
+  return { url, includeAuthorization: false };
+}
+
+function isWithinWebDavAuthorizationScope(url: URL, scope: URL): boolean {
+  if (url.origin !== scope.origin) return false;
+  const scopePath = scope.pathname.replace(/\/+$/u, '') || '/';
+  if (scopePath === '/') return true;
+  return url.pathname === scopePath || url.pathname.startsWith(`${scopePath}/`);
 }
 
 async function* bufferUploadBody(data: Buffer): AsyncGenerator<Buffer> {

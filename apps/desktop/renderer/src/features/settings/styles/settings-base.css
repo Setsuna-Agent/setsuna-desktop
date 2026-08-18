@@ -915,7 +915,7 @@
   color: var(--app-text-muted);
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-row {
+.desktop-settings-panel .chat-user-settings__toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-height: 72px;
@@ -923,17 +923,17 @@
   padding-bottom: 10px;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-label {
+.desktop-settings-panel .chat-user-settings__toggle-label {
   align-items: flex-start;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-copy {
+.desktop-settings-panel .chat-user-settings__toggle-copy {
   display: grid;
   gap: 3px;
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-copy small {
+.desktop-settings-panel .chat-user-settings__toggle-copy small {
   max-width: 560px;
   color: var(--app-text-muted);
   font-size: 12px;
@@ -964,21 +964,21 @@
   justify-self: end;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check {
+.desktop-settings-panel .chat-user-settings__toggle-row > .sd-check {
   align-self: center;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check input {
+.desktop-settings-panel .chat-user-settings__toggle-row > .sd-check input {
   width: 34px;
   height: 20px;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check input::before {
+.desktop-settings-panel .chat-user-settings__toggle-row > .sd-check input::before {
   width: 14px;
   height: 14px;
 }
 
-.desktop-settings-panel .chat-user-settings__memory-toggle-row > .sd-check input:checked::before {
+.desktop-settings-panel .chat-user-settings__toggle-row > .sd-check input:checked::before {
   transform: translateX(14px);
 }
 

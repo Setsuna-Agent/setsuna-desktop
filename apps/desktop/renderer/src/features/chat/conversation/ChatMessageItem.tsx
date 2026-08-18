@@ -52,7 +52,7 @@ import {
   inferWorkTiming,
   WorkHistoryPanel,
 } from './ChatWorkHistory.js';
-import { ActiveThinkingDisclosure } from './ActiveThinkingDisclosure.js';
+import { ChatThinkingDisclosure } from './ChatThinkingDisclosure.js';
 import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 
 export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
@@ -80,6 +80,7 @@ export function MessageItem({
   onWorkHistoryExpandedChange,
   pluginUses,
   selectedForDelete,
+  showThinkingInTranscript = false,
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
@@ -102,6 +103,7 @@ export function MessageItem({
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
+  showThinkingInTranscript?: boolean;
 }) {
   const { t } = useI18n();
   if (item.type === 'assistant') {
@@ -119,6 +121,7 @@ export function MessageItem({
         onWorkHistoryExpandedChange={onWorkHistoryExpandedChange}
         pluginUses={pluginUses}
         selectedForDelete={selectedForDelete}
+        showThinkingInTranscript={showThinkingInTranscript}
       />
     );
   }
@@ -230,6 +233,7 @@ function AssistantRunItem({
   onWorkHistoryExpandedChange,
   pluginUses,
   selectedForDelete,
+  showThinkingInTranscript,
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
@@ -243,6 +247,7 @@ function AssistantRunItem({
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
+  showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
   const status = assistantRunStatus(item);
@@ -259,7 +264,7 @@ function AssistantRunItem({
       {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} />}
+        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
@@ -325,6 +330,7 @@ function AssistantRunContent({
   onOpenFileReview,
   onWorkHistoryExpandedChange,
   pluginUses,
+  showThinkingInTranscript,
 }: {
   active: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
@@ -333,6 +339,7 @@ function AssistantRunContent({
   onOpenFileReview?: DesktopReviewOpenHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
+  showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
   // The transcript is append-only: collapsing a later write into an earlier row
@@ -342,13 +349,16 @@ function AssistantRunContent({
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
   const timelineBlocks = useMemo(
-    () => createAssistantRunTimeline(displaySegments, pluginUses),
-    [displaySegments, pluginUses],
+    () => createAssistantRunTimeline(displaySegments, pluginUses, { showThinkingInTranscript }),
+    [displaySegments, pluginUses, showThinkingInTranscript],
   );
   const toolAttachments = item.toolAttachments ?? [];
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
   const hasRenderableContent = timelineBlocks.length > 0 || toolAttachments.length > 0;
   const hasWorkBlock = timelineBlocks.some((block) => block.type === 'work');
+  const hasActiveThinking = timelineBlocks.some((block) => (
+    block.type === 'work' && block.thinkingSegments.some((segment) => segment.active)
+  ));
   const hasFinalAnswerContent = timelineBlocks.some((block) => block.type === 'content' && block.content.trim());
   const hasHiddenOnlyFinalAnswer = !hasFinalAnswerContent && displaySegments.some((segment) => (
     segment.phase === 'final_answer'
@@ -359,7 +369,7 @@ function AssistantRunContent({
   const workHistoryState = workHistoryDisplayState({ hasFinalAnswerContent, runActive: active });
   const showActiveWorkPlaceholder = active && status !== 'error' && !hasWorkBlock;
   // 工具行本身已经提供实时进度，只有模型继续处理且没有活动工具时才显示尾部等待反馈。
-  const showTrailingLoading = shouldShowAssistantTrailingLoading({
+  const showTrailingLoading = !hasActiveThinking && shouldShowAssistantTrailingLoading({
     active,
     hasRenderableContent,
     status,
@@ -373,7 +383,7 @@ function AssistantRunContent({
         blocks: timelineBlocks,
         guidanceMessages: assistantGuidanceMessages,
         messageOrderIds: item.messageIds,
-        workHistoryActive: workHistoryState.active,
+        turnActive: workHistoryState.active,
       }),
     [active, assistantGuidanceMessages, item.messageIds, timelineBlocks, workHistoryState.active],
   );
@@ -679,7 +689,7 @@ function assistantWorkHistoryNode({
   const workHistoryKey = plan.blocks[0]?.id ?? itemId;
   const panelId = `${itemId}:work-history:${workHistoryKey}`;
   return (
-    <WorkHistoryPanel active={plan.active} completedAtMs={workTiming.completedAtMs} defaultExpanded={workHistoryDefaultExpanded} hasDetails={hasWorkDetails} key={panelId} panelId={panelId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
+    <WorkHistoryPanel active={plan.active} collapseWhenContentFollows={plan.hasFollowingContent} completedAtMs={workTiming.completedAtMs} defaultExpanded={workHistoryDefaultExpanded && !plan.hasFollowingContent} hasDetails={hasWorkDetails} key={panelId} panelId={panelId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
       {workNodes}
     </WorkHistoryPanel>
   );
@@ -726,20 +736,42 @@ function assistantWorkEntriesNodes(
   handledGuidanceMessageIds: Set<string>,
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
-  entries.forEach((entry) => {
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    if (!entry) continue;
     if (entry.type === 'guidance') {
       nodes.push(<GuidanceMessageList handledMessageIds={handledGuidanceMessageIds} key={entry.id} markerMode="handled" messages={entry.messages} />);
-      return;
+      continue;
     }
-    nodes.push(...assistantWorkItemNodes(entry.item, entry.active, onAnswerApproval));
-  });
+    const nestedThinkingNodes: ReactNode[] = [];
+    if (entry.item.type === 'toolRuns' && entry.item.toolRuns.some(isDisplayableRuntimeToolRun)) {
+      let followingIndex = index + 1;
+      while (true) {
+        const thinkingEntry = entries[followingIndex];
+        if (
+          thinkingEntry?.type !== 'workItem'
+          || thinkingEntry.item.type !== 'thinking'
+          || thinkingEntry.item.segment.active
+        ) break;
+        nestedThinkingNodes.push(...assistantWorkItemNodes(thinkingEntry.item, onAnswerApproval));
+        followingIndex += 1;
+      }
+      // 活动思考保持在外层提供实时反馈；完成后才归入对应工具批次的折叠明细。
+      if (nestedThinkingNodes.length) index = followingIndex - 1;
+    }
+    nodes.push(...assistantWorkItemNodes(
+      entry.item,
+      onAnswerApproval,
+      nestedThinkingNodes.length ? nestedThinkingNodes : undefined,
+    ));
+  }
   return nodes;
 }
 
 function assistantWorkItemNodes(
   item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
-  itemActive: boolean,
   onAnswerApproval: AnswerApprovalHandler,
+  nestedDetails?: ReactNode,
 ): ReactNode[] {
   if (item.type === 'content') {
     return [
@@ -755,10 +787,11 @@ function assistantWorkItemNodes(
     return [<RuntimePluginUses key={item.id} plugins={item.plugins} />];
   }
   if (item.type === 'thinking') {
-    return itemActive && item.segment.content.trim()
+    return item.segment.content.trim()
       ? [
-          <ActiveThinkingDisclosure
+          <ChatThinkingDisclosure
             key={item.segment.id}
+            active={item.segment.active}
             content={item.segment.content}
             scrollStateKey={item.segment.id}
           />,
@@ -776,6 +809,8 @@ function assistantWorkItemNodes(
       runs={visibleToolRuns}
       summaryMode={visibleToolRuns.some(isActiveRuntimeToolRun) ? 'latest' : 'aggregate'}
       onAnswerApproval={onAnswerApproval}
-    />,
+    >
+      {nestedDetails}
+    </RuntimeToolRuns>,
   ] : [];
 }

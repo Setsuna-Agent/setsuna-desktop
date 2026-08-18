@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { BrowserWindow, WebContents } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { RuntimeHost } from '../../../src/runtime/host.js';
+import type { DesktopNativeBridgeServer } from '../../../src/runtime/native-bridge-server.js';
 
 const reviewIpcMocks = vi.hoisted(() => ({
   close: vi.fn(),
@@ -63,6 +64,7 @@ describe('review IPC subscriptions', () => {
     const unregister = registerReviewIpc(
       {} as RuntimeHost,
       { webContents: sender } as unknown as BrowserWindow,
+      {} as DesktopNativeBridgeServer,
     );
     const subscribe = ipcHandler('desktop-review:subscribe-changes');
     const unsubscribe = ipcHandler('desktop-review:unsubscribe-changes');

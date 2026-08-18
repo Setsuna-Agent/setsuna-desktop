@@ -21,6 +21,7 @@ import {
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_FILE_PREVIEWS = 256;
+const MAX_FILE_PREVIEW_CONTENT_BYTES = 64 * 1024 * 1024;
 
 export type DesktopNativeBridgeConnection = {
   token: string;
@@ -35,12 +36,21 @@ type DesktopNativeBridgeOptions = {
   resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment>;
   systemProxyFetch: DesktopSystemProxyFetch;
   validateNetworkProxyReferences(proxyServerIds: readonly string[]): Promise<void>;
+  /** Allows focused tests to exercise the byte-based eviction policy. */
+  maxFilePreviewContentBytes?: number;
 };
 
 type DesktopFilePreview = {
   mimeType: string;
   name: string;
-  targetPath: string;
+} & (
+  | { content: Buffer; targetPath?: never }
+  | { content?: never; targetPath: string }
+);
+
+export type DesktopFilePreviewRegistration = {
+  previewId: string;
+  url: string;
 };
 
 /** 为仅供 runtime 使用的原生能力提供已认证的回环桥接。 */
@@ -50,6 +60,7 @@ export class DesktopNativeBridgeServer {
   });
   private readonly token = randomBytes(32).toString('hex');
   private readonly filePreviews = new Map<string, DesktopFilePreview>();
+  private filePreviewContentBytes = 0;
   private connection: DesktopNativeBridgeConnection | null = null;
 
   constructor(private readonly options: DesktopNativeBridgeOptions) {}
@@ -66,6 +77,7 @@ export class DesktopNativeBridgeServer {
 
   async stop(): Promise<void> {
     this.filePreviews.clear();
+    this.filePreviewContentBytes = 0;
     if (!this.server.listening) {
       this.connection = null;
       return;
@@ -76,15 +88,47 @@ export class DesktopNativeBridgeServer {
   }
 
   registerFilePreview(preview: DesktopFilePreview): string {
+    return this.registerManagedFilePreview(preview).url;
+  }
+
+  registerManagedFilePreview(preview: DesktopFilePreview): DesktopFilePreviewRegistration {
     if (!this.connection) throw new Error('Desktop native bridge is not running.');
+    const contentBytes = preview.content?.byteLength ?? 0;
+    const contentBudget = this.options.maxFilePreviewContentBytes ?? MAX_FILE_PREVIEW_CONTENT_BYTES;
+    if (contentBytes > contentBudget) {
+      throw new Error('File preview exceeds the in-memory preview budget.');
+    }
     const previewToken = randomBytes(24).toString('hex');
     this.filePreviews.set(previewToken, preview);
-    while (this.filePreviews.size > MAX_FILE_PREVIEWS) {
+    this.filePreviewContentBytes += contentBytes;
+    while (
+      this.filePreviews.size > MAX_FILE_PREVIEWS
+      || this.filePreviewContentBytes > contentBudget
+    ) {
       const oldestToken = this.filePreviews.keys().next().value as string | undefined;
       if (!oldestToken) break;
-      this.filePreviews.delete(oldestToken);
+      this.deleteFilePreview(oldestToken);
     }
-    return `${this.connection.url}/v1/file-previews/${previewToken}/${encodeURIComponent(preview.name)}`;
+    return {
+      previewId: previewToken,
+      url: `${this.connection.url}/v1/file-previews/${previewToken}/${encodeURIComponent(preview.name)}`,
+    };
+  }
+
+  registerContentPreview(preview: { content: Buffer; mimeType: string; name: string }): DesktopFilePreviewRegistration {
+    return this.registerManagedFilePreview(preview);
+  }
+
+  releaseFilePreview(previewId: string): boolean {
+    return this.deleteFilePreview(previewId);
+  }
+
+  private deleteFilePreview(previewId: string): boolean {
+    const preview = this.filePreviews.get(previewId);
+    if (!preview) return false;
+    this.filePreviews.delete(previewId);
+    this.filePreviewContentBytes -= preview.content?.byteLength ?? 0;
+    return true;
   }
 
   private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -170,20 +214,20 @@ export class DesktopNativeBridgeServer {
       sendJson(response, 404, { error: 'File preview is unavailable.' });
       return;
     }
-    const fileStats = await stat(preview.targetPath);
-    if (!fileStats.isFile()) {
+    const fileSize = preview.content?.byteLength ?? await previewFileSize(preview.targetPath);
+    if (fileSize === null) {
       sendJson(response, 404, { error: 'File preview target is unavailable.' });
       return;
     }
-    const range = parseByteRange(request.headers.range, fileStats.size);
+    const range = parseByteRange(request.headers.range, fileSize);
     if (range === 'invalid') {
-      response.writeHead(416, { 'Content-Range': `bytes */${fileStats.size}` });
+      response.writeHead(416, { 'Content-Range': `bytes */${fileSize}` });
       response.end();
       return;
     }
     const start = range?.start ?? 0;
-    const end = range?.end ?? Math.max(0, fileStats.size - 1);
-    const contentLength = fileStats.size === 0 ? 0 : end - start + 1;
+    const end = range?.end ?? Math.max(0, fileSize - 1);
+    const contentLength = fileSize === 0 ? 0 : end - start + 1;
     response.writeHead(range ? 206 : 200, {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, no-store',
@@ -191,16 +235,26 @@ export class DesktopNativeBridgeServer {
       'Content-Length': contentLength,
       'Content-Type': preview.mimeType,
       'X-Content-Type-Options': 'nosniff',
-      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fileStats.size}` } : {}),
+      ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fileSize}` } : {}),
     });
-    if (request.method === 'HEAD' || fileStats.size === 0) {
+    if (request.method === 'HEAD' || fileSize === 0) {
       response.end();
+      return;
+    }
+    if (preview.content) {
+      response.end(preview.content.subarray(start, end + 1));
       return;
     }
     const stream = createReadStream(preview.targetPath, { start, end });
     stream.on('error', () => response.destroy());
     stream.pipe(response);
   }
+}
+
+async function previewFileSize(targetPath: string | undefined): Promise<number | null> {
+  if (!targetPath) return null;
+  const fileStats = await stat(targetPath).catch(() => null);
+  return fileStats?.isFile() ? fileStats.size : null;
 }
 
 function filePreviewToken(requestUrl: string | undefined): string | null {
