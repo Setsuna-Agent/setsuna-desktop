@@ -30,6 +30,8 @@ describe('workspace search policy', () => {
     expect(includeIgnoredDefaults).toContain('**/.env');
     expect(includeIgnoredDefaults).toContain('**/.git-credentials');
     expect(includeIgnoredDefaults).toContain('**/*.key');
+    expect(includeIgnoredDefaults).toContain('**/*.tfstate');
+    expect(includeIgnoredDefaults).toContain('**/*.tfstate.*');
 
     expect(isWorkspaceSearchPathExcluded(
       root,
@@ -94,6 +96,20 @@ describe('workspace search policy', () => {
       [],
       includeIgnoredDefaults,
     )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'terraform.tfstate'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, 'node_modules', 'pkg', 'terraform.tfstate.backup'),
+      [],
+      [],
+      includeIgnoredDefaults,
+    )).toBe(true);
   });
 
   it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
@@ -132,6 +148,8 @@ describe('workspace search policy', () => {
       '**/.env.*',
       '**/*.pem',
       '**/*.key',
+      '**/*.tfstate',
+      '**/*.tfstate.*',
       '**/.git-credentials',
     ]));
     expect(globs.some((glob) => glob.includes('node_modules'))).toBe(false);

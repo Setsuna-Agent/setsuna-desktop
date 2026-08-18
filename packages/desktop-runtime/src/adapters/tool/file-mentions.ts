@@ -202,11 +202,28 @@ export class WorkspaceIgnoreMatcher {
   ignores(relativePath: string): boolean {
     const target = normalizeIgnorePath(relativePath);
     if (!target.path) return false;
+    return this.isIgnored(target.path, target.directory);
+  }
+
+  private isIgnored(relativePath: string, isDirectory: boolean): boolean {
     let ignored = false;
     for (const rule of this.rules) {
-      if (rule.matches(target.path, target.directory)) ignored = !rule.negated;
+      if (!rule.matches(relativePath, isDirectory)) continue;
+      // Gitignore cannot reinclude a child while any parent directory remains
+      // excluded. A matching negation may still reinclude that parent itself.
+      if (rule.negated && this.hasIgnoredParent(relativePath)) continue;
+      ignored = !rule.negated;
     }
     return ignored;
+  }
+
+  private hasIgnoredParent(relativePath: string): boolean {
+    let separator = relativePath.indexOf('/');
+    while (separator >= 0) {
+      if (this.isIgnored(relativePath.slice(0, separator), true)) return true;
+      separator = relativePath.indexOf('/', separator + 1);
+    }
+    return false;
   }
 
   shouldSkipDirectory(relativePath: string): boolean {

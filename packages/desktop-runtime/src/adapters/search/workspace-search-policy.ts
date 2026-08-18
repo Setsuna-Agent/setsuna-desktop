@@ -50,6 +50,8 @@ export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/*.p12',
   '**/*.pfx',
   '**/*.keystore',
+  '**/*.tfstate',
+  '**/*.tfstate.*',
   '**/.npmrc',
   '**/.netrc',
   '**/.git-credentials',

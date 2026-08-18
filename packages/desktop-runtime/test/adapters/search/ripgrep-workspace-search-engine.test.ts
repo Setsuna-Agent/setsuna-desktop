@@ -229,6 +229,8 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
         writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
+        writeFile(path.join(root, 'node_modules', 'dep', 'terraform.tfstate.backup'), 'NEEDLE Terraform backup\n'),
+        writeFile(path.join(root, 'terraform.tfstate'), 'NEEDLE Terraform state\n'),
         writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
         writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
@@ -255,12 +257,14 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       await Promise.all([
         mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
         mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
+        mkdir(path.join(root, 'vault'), { recursive: true }),
       ]);
-      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\nsecrets/vault\n');
+      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\nsecrets/vault\nvault/\n!vault/token.txt\n');
       const secretPaths = [
         path.join(root, 'node_modules', 'dep', 'custom secret.txt'),
         path.join(root, 'node_modules', 'dep', 'private', 'token.txt'),
         path.join(root, 'secrets', 'vault', 'token.txt'),
+        path.join(root, 'vault', 'token.txt'),
       ];
       await Promise.all(secretPaths.map((secretPath) => writeFile(secretPath, 'NEEDLE custom credential\n')));
       const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
@@ -270,7 +274,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
         scopePath,
       })));
 
-      expect(results.map((result) => result.matches)).toEqual([[], [], []]);
+      expect(results.map((result) => result.matches)).toEqual([[], [], [], []]);
     },
   );
 });

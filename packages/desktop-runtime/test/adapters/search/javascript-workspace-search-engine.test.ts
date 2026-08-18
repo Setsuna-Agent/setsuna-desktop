@@ -81,12 +81,13 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
       mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
       mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
+      mkdir(path.join(root, 'vault'), { recursive: true }),
       mkdir(path.join(root, 'dist'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
     ]);
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
-      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n**/private/\nsecrets/vault\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n**/private/\nsecrets/vault\nvault/\n!vault/token.txt\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
       writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
       writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
@@ -96,6 +97,9 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       writeFile(path.join(root, 'node_modules', 'dep', 'custom secret.txt'), 'NEEDLE escaped credential\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'private', 'token.txt'), 'NEEDLE directory credential\n'),
       writeFile(path.join(root, 'secrets', 'vault', 'token.txt'), 'NEEDLE slash-qualified credential\n'),
+      writeFile(path.join(root, 'vault', 'token.txt'), 'NEEDLE ineffective-negation credential\n'),
+      writeFile(path.join(root, 'terraform.tfstate'), 'NEEDLE Terraform state\n'),
+      writeFile(path.join(root, 'node_modules', 'dep', 'terraform.tfstate.backup'), 'NEEDLE Terraform backup\n'),
       writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
       writeFile(path.join(root, 'Secret-artifact.dat'), 'NEEDLE root class credential\n'),
       writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
@@ -139,6 +143,23 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       'src/app.ts',
     ]);
     expect(explicitlyScopedSecretSearch.matches).toEqual([]);
+  });
+
+  it('requires ignored parent directories to be reincluded before their children', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-parent-'));
+    await writeFile(path.join(root, '.setsunaignore'), [
+      'vault/',
+      '!vault/token.txt',
+      'open-vault/',
+      '!open-vault/',
+      '!open-vault/token.txt',
+      '',
+    ].join('\n'));
+
+    const matcher = await createWorkspaceIgnoreMatcher(root, { securityOnly: true });
+
+    expect(matcher.ignores('vault/token.txt')).toBe(true);
+    expect(matcher.ignores('open-vault/token.txt')).toBe(false);
   });
 
   it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
