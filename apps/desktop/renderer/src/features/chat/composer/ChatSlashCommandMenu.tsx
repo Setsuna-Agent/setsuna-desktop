@@ -2,7 +2,6 @@ import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Progress } from 'antd';
 import {
   CheckSquare,
-  CircleGauge,
   MessageSquare,
   ShieldCheck,
   Target,
@@ -24,7 +23,7 @@ export type SlashCommandMenuItem =
       loading?: boolean;
       progressPercent?: number;
       title: string;
-      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'review' | 'side-chat' | 'usage';
+      type: 'clear-context' | 'collaboration' | 'compact-context' | 'goal' | 'review' | 'side-chat';
     }
   | {
       description?: string;
@@ -133,7 +132,6 @@ function SlashCommandIcon({ item }: { item: SlashCommandMenuItem }) {
   if (item.kind === 'model') return <Zap className="chat-command-menu__item-icon" fill="currentColor" size={15} strokeWidth={0} />;
   if (item.type === 'collaboration') return <Users className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'goal') return <Target className="chat-command-menu__item-icon" size={15} />;
-  if (item.type === 'usage') return <CircleGauge className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'review') return <ShieldCheck className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'side-chat') return <MessageSquare className="chat-command-menu__item-icon" size={15} />;
   if (item.type === 'compact-context') {

@@ -23,6 +23,10 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'chat.toggleOverview',
   'workspace.openFiles',
   'workspace.openReview',
+  'workspace.openTerminal',
+  'workspace.openSideChat',
+  'workspace.openBrowser',
+  'workspace.openConversationDebug',
 ] as const;
 
 export type KeyboardShortcutCommandId = typeof KEYBOARD_SHORTCUT_COMMAND_IDS[number];
@@ -143,6 +147,34 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.openReview',
     descriptionKey: 'shortcuts.command.openReviewDescription',
     defaultBindings: primaryBinding('KeyG', true),
+  },
+  {
+    id: 'workspace.openTerminal',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.openTerminal',
+    descriptionKey: 'shortcuts.command.openTerminalDescription',
+    defaultBindings: primaryBinding('Backquote', true),
+  },
+  {
+    id: 'workspace.openSideChat',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.openSideChat',
+    descriptionKey: 'shortcuts.command.openSideChatDescription',
+    defaultBindings: primaryBinding('KeyS', true),
+  },
+  {
+    id: 'workspace.openBrowser',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.openBrowser',
+    descriptionKey: 'shortcuts.command.openBrowserDescription',
+    defaultBindings: primaryBinding('KeyT'),
+  },
+  {
+    id: 'workspace.openConversationDebug',
+    group: 'workspace',
+    labelKey: 'shortcuts.command.openConversationDebug',
+    descriptionKey: 'shortcuts.command.openConversationDebugDescription',
+    defaultBindings: primaryBinding('KeyD', true),
   },
 ];
 

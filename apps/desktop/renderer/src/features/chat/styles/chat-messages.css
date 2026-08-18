@@ -99,6 +99,11 @@
   padding-top: var(--app-topbar-height);
 }
 
+:root[data-desktop-platform='win32'] .desktop-chat-panel--side .chat-main-conversation--with-bottom-sender,
+:root[data-desktop-platform='linux'] .desktop-chat-panel--side .chat-main-conversation--with-bottom-sender {
+  padding-top: 0;
+}
+
 .chat-messages {
   display: flex;
   flex: 1 1 auto;
@@ -170,7 +175,6 @@
 .chat-action-error,
 .chat-delete-bar__inner,
 .chat-scroll-bottom,
-.chat-sender:not(.chat-sender--starter) > .chat-usage-panel,
 .chat-sender:not(.chat-sender--starter) > .chat-send-queue,
 .chat-sender:not(.chat-sender--starter) .ant-sender,
 .chat-sender:not(.chat-sender--starter) > .chat-command-menu {
@@ -186,7 +190,6 @@
 .chat-main-conversation--overview-shifted .chat-content-frame,
 .chat-main-conversation--overview-shifted .chat-action-error,
 .chat-main-conversation--overview-shifted .chat-delete-bar__inner,
-.chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-usage-panel,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-send-queue,
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) .ant-sender {
   transform: translateX(calc(0px - var(--chat-overview-expanded-shift)));

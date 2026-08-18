@@ -12,7 +12,7 @@ import { createPortal } from 'react-dom';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
-import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
+import { ShortcutHint, ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { usePanelTabCloseTransition } from './hooks/usePanelTabCloseTransition.js';
 import { DesktopPanelIcon, desktopPanelTitle } from './PanelChrome.js';
 import { PanelPlacementIcon } from './PanelPlacementIcon.js';
@@ -26,17 +26,21 @@ import {
 export type DesktopPanelPlacement = 'side' | 'bottom';
 
 const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; icon: JSX.Element }> = [
-  { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
-  { key: 'browser', labelKey: 'workspace.panel.launcher.browser', icon: <Globe2 size={14} /> },
-  { key: 'conversation-debug', labelKey: 'workspace.panel.launcher.conversationDebug', icon: <Bug size={14} /> },
   { key: 'review', labelKey: 'workspace.panel.launcher.review', icon: <FileDiff size={14} /> },
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
   { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
+  { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
+  { key: 'browser', labelKey: 'workspace.panel.launcher.browser', icon: <Globe2 size={14} /> },
+  { key: 'conversation-debug', labelKey: 'workspace.panel.launcher.conversationDebug', icon: <Bug size={14} /> },
 ];
 
 const panelLauncherShortcutCommands: Partial<Record<DesktopPanelType, KeyboardShortcutCommandId>> = {
+  browser: 'workspace.openBrowser',
+  chat: 'workspace.openSideChat',
+  'conversation-debug': 'workspace.openConversationDebug',
   files: 'workspace.openFiles',
   review: 'workspace.openReview',
+  terminal: 'workspace.openTerminal',
 };
 
 type PanelPointerDrag = {
@@ -77,7 +81,7 @@ type PanelCrossSlotDropTarget = {
 };
 
 const PANEL_DRAG_START_DISTANCE = 4;
-const PANEL_LAUNCHER_MENU_WIDTH = 156;
+const PANEL_LAUNCHER_MENU_WIDTH = 276;
 const PANEL_LAUNCHER_VIEWPORT_INSET = 8;
 const PANEL_TAB_EXIT_ANIMATION_NAME = 'desktop-panel-tab-exit';
 
@@ -472,7 +476,8 @@ export function DesktopPanelHeader({
                       style={{ left: launcherPosition.left, top: launcherPosition.top }}
                     >
                       {launcherItems.map((item) => {
-                        const button = (
+                        const shortcutCommandId = panelLauncherShortcutCommands[item.key];
+                        return (
                           <button
                             key={item.key}
                             type="button"
@@ -482,21 +487,18 @@ export function DesktopPanelHeader({
                               onOpenPanel(item.key);
                             }}
                           >
-                            {item.icon}
-                            {t(item.labelKey)}
+                            <span className="desktop-panel-launcher-menu__item-main">
+                              {item.icon}
+                              <span>{t(item.labelKey)}</span>
+                            </span>
+                            {shortcutCommandId ? (
+                              <ShortcutHint
+                                className="desktop-panel-launcher-menu__shortcut"
+                                commandId={shortcutCommandId}
+                              />
+                            ) : null}
                           </button>
                         );
-                        const shortcutCommandId = panelLauncherShortcutCommands[item.key];
-                        return shortcutCommandId ? (
-                          <ShortcutTooltip
-                            commandId={shortcutCommandId}
-                            key={item.key}
-                            label={t(item.labelKey)}
-                            placement="bottom"
-                          >
-                            {button}
-                          </ShortcutTooltip>
-                        ) : button;
                       })}
                     </span>,
                     document.body,

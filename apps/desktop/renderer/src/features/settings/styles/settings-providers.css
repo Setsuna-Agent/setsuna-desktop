@@ -23,8 +23,10 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
+  min-height: 0;
   border-right: 1px solid var(--chat-settings-divider);
   background: color-mix(in srgb, var(--app-surface-subtle) 82%, var(--app-surface));
+  overflow: hidden;
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-rail-head {
@@ -171,27 +173,8 @@
   line-height: 18px;
 }
 
-.desktop-settings-panel .chat-user-settings__local-provider-item-status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-  color: var(--app-text-subtle);
-  font-size: 10px;
-  line-height: 14px;
-}
-
-.desktop-settings-panel .chat-user-settings__local-provider-item-status i,
-.desktop-settings-panel .chat-user-settings__provider-toggle > span i {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: currentColor;
-}
-
-.desktop-settings-panel .chat-user-settings__local-provider-item-status.is-enabled,
-.desktop-settings-panel .chat-user-settings__provider-toggle > span.is-enabled {
-  color: var(--app-success);
+.desktop-settings-panel .chat-user-settings__local-provider-item.is-disabled .chat-user-settings__local-provider-item-name {
+  color: var(--app-text-muted);
 }
 
 .desktop-settings-panel .chat-user-settings__local-provider-item-meta {
@@ -251,16 +234,6 @@
   color: var(--app-text);
 }
 
-.desktop-settings-panel .settings-provider-section__icon {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--chat-settings-divider);
-  color: var(--app-text-secondary);
-  background: var(--app-surface-subtle);
-}
-
 .desktop-settings-panel .chat-user-settings__local-provider-title-copy {
   display: grid;
   gap: 2px;
@@ -281,6 +254,10 @@
   line-height: 19px;
 }
 
+.desktop-settings-panel .chat-user-settings__local-provider-title.is-disabled .chat-user-settings__local-provider-title-copy strong {
+  color: var(--app-text-muted);
+}
+
 .desktop-settings-panel .chat-user-settings__local-provider-title-copy > span {
   color: var(--app-text-muted);
   font-size: 11px;
@@ -296,23 +273,6 @@
   gap: 8px;
   min-width: 0;
   flex-wrap: nowrap;
-}
-
-.desktop-settings-panel .chat-user-settings__provider-toggle {
-  gap: 9px;
-  min-height: 34px;
-  padding: 0 9px 0 10px;
-  border: 1px solid var(--chat-settings-divider);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-subtle);
-}
-
-.desktop-settings-panel .chat-user-settings__provider-toggle > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--app-text-muted);
-  font-size: 11px;
 }
 
 .desktop-settings-panel .chat-user-settings__delete-provider {
@@ -347,18 +307,6 @@
   opacity: 1;
   transform: translateY(0);
   visibility: visible;
-}
-
-.desktop-settings-panel .settings-auto-save-status--saving {
-  border-color: color-mix(in srgb, var(--app-text-muted) 28%, var(--chat-settings-divider));
-  background: color-mix(in srgb, var(--app-text-muted) 7%, var(--app-surface));
-  color: var(--app-text-muted);
-}
-
-.desktop-settings-panel .settings-auto-save-status--saved {
-  border-color: color-mix(in srgb, var(--app-success) 45%, var(--chat-settings-divider));
-  background: color-mix(in srgb, var(--app-success) 9%, var(--app-surface));
-  color: var(--app-success);
 }
 
 .desktop-settings-panel .settings-auto-save-status--error {
@@ -414,12 +362,6 @@
   align-items: center;
   gap: 9px;
   min-width: 0;
-}
-
-.desktop-settings-panel .settings-provider-section__icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
 }
 
 .desktop-settings-panel .settings-provider-section__heading > span:last-child,

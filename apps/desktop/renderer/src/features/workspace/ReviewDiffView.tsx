@@ -13,7 +13,7 @@ import {
 import { CodePatchView } from '../../shared/code/PierreCode.js';
 import { codeDiffLinesToPatch } from '../../shared/code/diffPatch.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { IconButton } from '../../shared/ui/primitives.js';
+import { ActionTooltip, IconButton } from '../../shared/ui/primitives.js';
 import { MarkdownNavigationProvider } from '../chat/markdown/MarkdownNavigationProvider.js';
 import { MarkdownRenderer } from '../chat/markdown/MarkdownRenderer.js';
 import { WorkspaceFileLink } from '../chat/markdown/WorkspaceFileLink.js';
@@ -329,6 +329,14 @@ function ReviewFileCard({
       y: event.clientY,
     });
   };
+  const openPanelLabel = canOpenFile
+    ? t('workspace.review.file.openPanel')
+    : t('workspace.review.file.outsideProject');
+  const openInAppLabel = !canOpenFile
+    ? t('workspace.review.file.outsideProject')
+    : workspaceApp
+      ? t('workspace.review.file.openInApp', { app: workspaceApp.label })
+      : t('workspace.review.file.noApp');
 
   return (
     <>
@@ -377,38 +385,36 @@ function ReviewFileCard({
             </span>
           </button>
           <div className="desktop-review-file-card__meta">
-            <IconButton
-              disabled={!canOpenFile}
-              label={canOpenFile
-                ? t('workspace.review.file.openPanel')
-                : t('workspace.review.file.outsideProject')}
-              variant="ghost"
-              onClick={() => {
-                if (workspaceFilePath) {
-                  onOpenProjectFile(workspaceFilePath);
-                }
-              }}
-            >
-              <PanelRightOpen size={13} />
-            </IconButton>
-            <IconButton
-              disabled={!workspaceApp || !canOpenFile}
-              label={!canOpenFile
-                ? t('workspace.review.file.outsideProject')
-                : workspaceApp
-                  ? t('workspace.review.file.openInApp', {
-                    app: workspaceApp.label,
-                  })
-                  : t('workspace.review.file.noApp')}
-              variant="ghost"
-              onClick={() => {
-                if (workspaceFilePath) {
-                  onExternalOpenFile(workspaceFilePath);
-                }
-              }}
-            >
-              <Code2 size={13} />
-            </IconButton>
+            <ActionTooltip title={openPanelLabel}>
+              <IconButton
+                disabled={!canOpenFile}
+                label={openPanelLabel}
+                title=""
+                variant="ghost"
+                onClick={() => {
+                  if (workspaceFilePath) {
+                    onOpenProjectFile(workspaceFilePath);
+                  }
+                }}
+              >
+                <PanelRightOpen size={13} />
+              </IconButton>
+            </ActionTooltip>
+            <ActionTooltip title={openInAppLabel}>
+              <IconButton
+                disabled={!workspaceApp || !canOpenFile}
+                label={openInAppLabel}
+                title=""
+                variant="ghost"
+                onClick={() => {
+                  if (workspaceFilePath) {
+                    onExternalOpenFile(workspaceFilePath);
+                  }
+                }}
+              >
+                <Code2 size={13} />
+              </IconButton>
+            </ActionTooltip>
           </div>
         </header>
         {imagePreview ? (

@@ -5,6 +5,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useEffect, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { Button } from '../../../shared/ui/primitives.js';
 import {
   compactStructuredInputValues,
   RuntimeStructuredInputField,
@@ -89,12 +90,17 @@ export function RuntimeUserInputActions({
       </div>
       <div className="chat-tool-run__user-input-note">{t('toolRun.input.secretWarning')}</div>
       <div className="chat-tool-run__actions">
-        <button type="submit" disabled={Boolean(submittingAction) || timedOut}>
+        <Button type="submit" variant="primary" disabled={Boolean(submittingAction) || timedOut}>
           {t(submittingAction === 'submit' ? 'toolRun.input.submitting' : 'toolRun.input.submit')}
-        </button>
-        <button type="button" disabled={Boolean(submittingAction) || timedOut} onClick={() => void submit('decline')}>
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={Boolean(submittingAction) || timedOut}
+          onClick={() => void submit('decline')}
+        >
           {t(submittingAction === 'decline' ? 'toolRun.input.skipping' : 'toolRun.input.skip')}
-        </button>
+        </Button>
       </div>
       {error ? <div className="chat-tool-run__action-error" role="alert">{error}</div> : null}
     </form>

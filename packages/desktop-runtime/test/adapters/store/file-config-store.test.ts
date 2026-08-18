@@ -144,7 +144,27 @@ describe('file config store', () => {
       .resolves.toMatchObject({
         schemaVersion: 6,
         providers: [{ proxyRoute: { mode: 'inherit' } }],
-      });
+    });
+  });
+
+  it('preserves a provider with an empty endpoint and model catalog', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+    const provider = (await store.getConfig()).providers[0]!;
+
+    await expect(store.saveConfig({
+      providers: [{
+        ...provider,
+        id: 'blank-provider',
+        baseUrl: '',
+        models: [],
+      }],
+    })).resolves.toMatchObject({
+      providers: [{ id: 'blank-provider', baseUrl: '', models: [] }],
+    });
+
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ id: 'blank-provider', baseUrl: '', models: [] }],
+    });
   });
 
   it('rejects a queued stale provider save after the referenced proxy is deleted', async () => {

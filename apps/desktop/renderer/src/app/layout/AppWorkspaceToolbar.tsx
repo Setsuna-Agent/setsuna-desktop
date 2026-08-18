@@ -12,7 +12,7 @@ export function AppWorkspaceToolbar({
   projectWorkspace: ProjectWorkspaceState;
   workspacePanels: DesktopWorkspacePanelsState;
 }) {
-  if (!workspacePanels.sidePanelVisible) return null;
+  if (!workspacePanels.sidePanelPresent) return null;
 
   const sidePanels = workspacePanels.sidePanelSlot.panels;
   const activePanel = sidePanels.find((panel) => panel.id === workspacePanels.sidePanelSlot.active) ?? null;

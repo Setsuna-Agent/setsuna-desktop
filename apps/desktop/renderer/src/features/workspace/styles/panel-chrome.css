@@ -47,6 +47,7 @@
   color: var(--app-text-muted);
   background: transparent;
   font-size: 13px;
+  font-weight: var(--app-font-weight);
   line-height: 20px;
   transform-origin: left center;
   animation: desktop-panel-tab-enter 180ms var(--app-sidebar-motion-easing) both;
@@ -126,7 +127,7 @@
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title--closable .chat-file-review-panel__tab-button {
-  padding-right: 24px;
+  padding-right: 30px;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__tab-button svg,
@@ -150,30 +151,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 999px;
-  color: transparent;
-  background: #9ca3af;
+  border-radius: 4px;
+  color: var(--app-text-muted);
+  background: transparent;
   font-size: 0;
   line-height: 0;
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);
-  transition: opacity 120ms ease, background 120ms ease;
+  transition: background-color 120ms ease, opacity 120ms ease;
 }
 
+.desktop-panel-chrome .chat-file-review-panel__title--active .chat-file-review-panel__tab-close,
 .desktop-panel-chrome .chat-file-review-panel__title:hover .chat-file-review-panel__tab-close,
 .desktop-panel-chrome .chat-file-review-panel__title:focus-within .chat-file-review-panel__tab-close {
   opacity: 1;
   pointer-events: auto;
 }
 
-.desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
-  background: #8f969f;
+.desktop-panel-chrome .chat-file-review-panel__tab-close:hover,
+.desktop-panel-chrome .chat-file-review-panel__tab-close:focus-visible {
+  background: color-mix(in srgb, var(--app-text) 14%, var(--app-surface));
 }
 
 .desktop-panel-chrome .chat-file-review-panel__tab-close-glyph,
@@ -189,12 +192,12 @@
 
 .desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::before,
 .desktop-panel-chrome .chat-file-review-panel__tab-close-glyph::after {
-  top: 6.2px;
-  left: 3.8px;
-  width: 6.4px;
-  height: 1.2px;
+  top: 8.5px;
+  left: 5.25px;
+  width: 7.5px;
+  height: 1px;
   border-radius: 999px;
-  background: #ffffff;
+  background: currentColor;
   content: "";
   transform-origin: center;
 }
@@ -233,6 +236,7 @@
 }
 
 .desktop-panel-chrome .chat-file-review-panel__heading-action:hover,
+.desktop-panel-chrome .chat-file-review-panel__heading-action[aria-expanded='true'],
 .desktop-panel-chrome .chat-file-review-panel__close:hover {
   color: var(--app-text);
   background: var(--desktop-agent-control-hover-bg);
@@ -250,7 +254,7 @@
   z-index: 1000;
   display: grid;
   box-sizing: border-box;
-  min-width: 156px;
+  min-width: 276px;
   padding: 6px;
   border: 1px solid var(--app-border);
   border-radius: var(--app-radius-md);
@@ -261,8 +265,8 @@
 .desktop-panel-launcher-menu--native button {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 16px;
   width: 100%;
   min-height: 30px;
   padding: 5px 9px;
@@ -279,8 +283,28 @@
   background: var(--desktop-agent-control-hover-bg);
 }
 
-.desktop-panel-launcher-menu--native > .sd-shortcut-tooltip-target {
-  width: 100%;
+.desktop-panel-launcher-menu__item-main,
+.desktop-panel-launcher-menu__shortcut {
+  display: inline-flex;
+  align-items: center;
+}
+
+.desktop-panel-launcher-menu__item-main {
+  min-width: 0;
+  gap: 8px;
+}
+
+.desktop-panel-launcher-menu__shortcut {
+  flex: 0 0 auto;
+  gap: 2px;
+  border: 0;
+  color: var(--app-text-muted);
+  background: transparent;
+  box-shadow: none;
+  font-family: var(--app-font-family);
+  font-size: 11.5px;
+  font-weight: var(--app-font-weight);
+  white-space: nowrap;
 }
 
 .desktop-panel-chrome .chat-file-review-panel__title--sortable {
@@ -337,12 +361,4 @@
 .desktop-panel-chrome .chat-file-review-panel__title--drag-preview .chat-file-review-panel__tab-close {
   opacity: 1;
   pointer-events: none;
-}
-
-:root[data-theme='dark'] .desktop-panel-chrome .chat-file-review-panel__tab-close {
-  background: #737373;
-}
-
-:root[data-theme='dark'] .desktop-panel-chrome .chat-file-review-panel__tab-close:hover {
-  background: #8a8a8a;
 }

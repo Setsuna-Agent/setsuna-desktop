@@ -24,11 +24,13 @@ vi.mock('@ant-design/x', async () => {
   const Sender = React.forwardRef(({
     footer,
     header,
+    placeholder,
   }: {
     footer?: (actions: React.ReactNode) => React.ReactNode;
     header?: React.ReactNode;
+    placeholder?: string;
   }, _ref) => (
-    <div data-component="sender">
+    <div data-component="sender" data-placeholder={placeholder}>
       {header}
       {footer?.(<button type="button" data-action="sender-default">default</button>)}
     </div>
@@ -164,7 +166,6 @@ describe('ChatComposer view state characterization', () => {
       activeModelName: 'Test model',
       clearGoalMode: vi.fn(),
       clearReviewMode: vi.fn(),
-      closeUsagePanel: vi.fn(),
       createSendOptions: vi.fn(() => ({})),
       enableGoalMode: vi.fn(),
       enableReviewMode: vi.fn(),
@@ -186,8 +187,6 @@ describe('ChatComposer view state characterization', () => {
       thinkingEffort: '',
       thinkingEnabled: false,
       thinkingMenuOpen: false,
-      toggleUsagePanel: vi.fn(),
-      usagePanelOpen: false,
     };
     composerHarness.queuedEdit = {
       cancel: vi.fn(),
@@ -233,25 +232,38 @@ describe('ChatComposer view state characterization', () => {
     expect(html).toContain('chat.composer.badge.goalNext');
   });
 
-  it('renders command overlays independently and gates usage by thread presence', () => {
+  it('renders mention and slash command overlays independently', () => {
     composerHarness.command.mentionMenuOpen = true;
     expect(renderComposer()).toContain('data-overlay="mention"');
 
     composerHarness.command.mentionMenuOpen = false;
     composerHarness.command.slashMenuOpen = true;
     expect(renderComposer()).toContain('data-overlay="slash"');
+  });
 
-    composerHarness.mode.usagePanelOpen = true;
-    expect(renderComposer()).not.toContain('chat-usage-panel');
+  it('adds the local file mention hint only for project conversations', () => {
+    expect(renderComposer()).toContain('data-placeholder="chat.composer.placeholder"');
 
-    const withThread = renderComposer({
+    const activeProject = {
+      id: 'project-1',
+      name: 'Project',
+      path: '/workspace',
+      createdAt: '2026-08-18T00:00:00.000Z',
+      updatedAt: '2026-08-18T00:00:00.000Z',
+    };
+    expect(renderComposer({ activeProject }))
+      .toContain('data-placeholder="chat.composer.projectPlaceholder"');
+    expect(renderComposer({
+      activeProject,
       currentThread: {
-        id: 'thread-1',
+        id: 'global-thread',
+        messages: [],
+        projectId: undefined,
         queuedTurnInputs: [],
       } as unknown as RuntimeThread,
-    });
-    expect(withThread).toContain('chat-usage-panel');
-    expect(withThread).toContain('chat.usage.total');
+    })).toContain('data-placeholder="chat.composer.placeholder"');
+    expect(renderComposer({ activeProject, placeholder: 'Custom placeholder' }))
+      .toContain('data-placeholder="Custom placeholder"');
   });
 });
 
@@ -282,7 +294,6 @@ function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> =
       draft=""
       queuedTurnActions={queuedTurnActions}
       skills={[]}
-      threadUsage={null}
       onAccessModeChange={vi.fn()}
       onCancelActiveTurn={vi.fn()}
       onClearContext={vi.fn()}

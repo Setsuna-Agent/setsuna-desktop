@@ -1,5 +1,4 @@
 import {
-  isTemporaryWorkspaceProjectId,
   WORKSPACE_TEXT_FILE_EDIT_MAX_BYTES,
   type WorkspaceEntry,
   type WorkspaceEntrySearchItem,
@@ -8,7 +7,7 @@ import {
   type WorkspaceProject,
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
-import { Bug, ChevronDown, ChevronRight, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -23,7 +22,7 @@ import {
 import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
-import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
+import { ShortcutHint } from '../../shared/ui/ShortcutTooltip.js';
 import { EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import {
   useWorkspaceCodeViewSurface,
@@ -354,7 +353,6 @@ export function WorkspacePanel({
     activePanel.type === 'overview' ? (
       <WorkspaceOverviewPanel
         activeProject={activeProject}
-        latestReviewSummary={latestReviewSummary}
         onOpenFilesPanel={onOpenFilesPanel}
         onOpenBrowser={onOpenBrowser}
         onOpenConversationDebug={onOpenConversationDebug}
@@ -515,7 +513,6 @@ export function WorkspacePanel({
 
 export function WorkspaceOverviewPanel({
   activeProject,
-  latestReviewSummary,
   onOpenFilesPanel,
   onOpenBrowser,
   onOpenConversationDebug,
@@ -524,7 +521,6 @@ export function WorkspaceOverviewPanel({
   onOpenTerminalPanel,
 }: {
   activeProject?: WorkspaceProject;
-  latestReviewSummary: DesktopDiffSummary | null;
   onOpenFilesPanel: () => void;
   onOpenBrowser: () => void;
   onOpenConversationDebug?: () => void;
@@ -533,25 +529,17 @@ export function WorkspaceOverviewPanel({
   onOpenTerminalPanel: () => void;
 }) {
   const { t } = useI18n();
-  const temporaryWorkspace = activeProject ? isTemporaryWorkspaceProjectId(activeProject.id) : false;
-  const reviewMeta = latestReviewSummary?.files.length
-    ? t(latestReviewSummary.files.length === 1
-      ? 'workspace.overview.reviewFiles.one'
-      : 'workspace.overview.reviewFiles.many', { count: latestReviewSummary.files.length })
-    : t('workspace.overview.reviewDescription');
   const actions: Array<{
     key: string;
     label: string;
-    meta: string;
     icon: JSX.Element;
     disabled: boolean;
     onClick: () => void;
-    shortcutCommandId?: KeyboardShortcutCommandId;
+    shortcutCommandId: KeyboardShortcutCommandId;
   }> = [
     {
       key: 'review',
       label: t('workspace.overview.review'),
-      meta: reviewMeta,
       icon: <FileDiff size={15} />,
       disabled: !activeProject || !onOpenReviewPanel,
       onClick: () => onOpenReviewPanel?.(),
@@ -560,7 +548,6 @@ export function WorkspaceOverviewPanel({
     {
       key: 'files',
       label: t('workspace.overview.files'),
-      meta: activeProject?.name ?? t('workspace.overview.noProject'),
       icon: <FolderOpen size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenFilesPanel,
@@ -569,75 +556,57 @@ export function WorkspaceOverviewPanel({
     {
       key: 'terminal',
       label: t('workspace.overview.terminal'),
-      meta: activeProject?.path
-        ? t(temporaryWorkspace ? 'workspace.overview.temporaryShell' : 'workspace.overview.projectShell')
-        : t('workspace.overview.noProject'),
       icon: <Terminal size={15} />,
       disabled: !activeProject?.path,
       onClick: onOpenTerminalPanel,
+      shortcutCommandId: 'workspace.openTerminal',
     },
     {
       key: 'side-chat',
       label: t('workspace.overview.sideChat'),
-      meta: t('workspace.overview.sideChatDescription'),
       icon: <MessageSquare size={15} />,
       disabled: false,
       onClick: onOpenSideChat,
+      shortcutCommandId: 'workspace.openSideChat',
     },
     {
       key: 'browser',
       label: t('workspace.overview.browser'),
-      meta: t('workspace.overview.browserDescription'),
       icon: <Globe2 size={15} />,
       disabled: false,
       onClick: () => onOpenBrowser(),
+      shortcutCommandId: 'workspace.openBrowser',
     },
     ...(onOpenConversationDebug ? [{
       key: 'conversation-debug',
       label: t('workspace.overview.conversationDebug'),
-      meta: t('workspace.overview.conversationDebugDescription'),
       icon: <Bug size={15} />,
       disabled: false,
       onClick: onOpenConversationDebug,
+      shortcutCommandId: 'workspace.openConversationDebug' as const,
     }] : []),
   ];
 
   return (
     <section className="desktop-workspace-overview" aria-label={t('workspace.overview.label')}>
       <div className="desktop-workspace-overview__actions">
-        {actions.map((action) => {
-          const actionButton = (
-            <button
-              className="desktop-workspace-overview__action"
-              data-workspace-overview-action={action.key}
-              disabled={action.disabled}
-              key={action.key}
-              type="button"
-              onClick={action.onClick}
-            >
-              <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
-              <span className="desktop-workspace-overview__action-body">
-                <span>{action.label}</span>
-                <em>{action.meta}</em>
-              </span>
-              <ChevronRight
-                aria-hidden="true"
-                className="desktop-workspace-overview__action-arrow"
-                size={14}
-              />
-            </button>
-          );
-          return action.shortcutCommandId ? (
-            <ShortcutTooltip
+        {actions.map((action) => (
+          <button
+            className="desktop-workspace-overview__action"
+            data-workspace-overview-action={action.key}
+            disabled={action.disabled}
+            key={action.key}
+            type="button"
+            onClick={action.onClick}
+          >
+            <span className="desktop-workspace-overview__action-icon">{action.icon}</span>
+            <span className="desktop-workspace-overview__action-label">{action.label}</span>
+            <ShortcutHint
+              className="desktop-workspace-overview__action-shortcut"
               commandId={action.shortcutCommandId}
-              key={action.key}
-              label={action.label}
-              placement="bottom"
-            >
-              {actionButton}
-            </ShortcutTooltip>
-          ) : actionButton;
-        })}
+            />
+          </button>
+        ))}
       </div>
     </section>
   );

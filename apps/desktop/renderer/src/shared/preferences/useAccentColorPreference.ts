@@ -3,7 +3,7 @@ import { readBrowserStorageValue, writeBrowserStorageValue } from './browserStor
 
 export const accentColorOptions = [
   { value: 'neutral', label: '默认', lightSwatch: '#15171a', darkSwatch: '#f4f4f5' },
-  { value: 'blue', label: '蓝色', lightSwatch: '#2563eb', darkSwatch: '#60a5fa' },
+  { value: 'blue', label: '蓝色', lightSwatch: '#4b9afe', darkSwatch: '#4b9afe' },
   { value: 'purple', label: '紫色', lightSwatch: '#7c3aed', darkSwatch: '#c084fc' },
   { value: 'green', label: '绿色', lightSwatch: 'var(--app-green)', darkSwatch: 'var(--app-green)' },
   { value: 'orange', label: '橙色', lightSwatch: 'var(--app-orange)', darkSwatch: 'var(--app-orange)' },

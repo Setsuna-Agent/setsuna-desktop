@@ -85,7 +85,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 653 total files
+apps/desktop/renderer/ — 0 direct / 654 total files
 ├── src/ — 2 direct / 475 total files
 │   ├── app/ — 2 direct / 39 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -145,14 +145,14 @@ apps/desktop/renderer/ — 0 direct / 653 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 178 files
-    └── unit/ — 178 files
+└── test/ — 179 files
+    └── unit/ — 179 files
         ├── app/ — 1 direct / 14 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 5 direct / 5 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 138 files
+        ├── features/ — 139 files
         │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 2 direct / 71 total files
@@ -166,7 +166,7 @@ apps/desktop/renderer/ — 0 direct / 653 total files
         │   │   └── tool-runs/ — 7 direct / 7 total files
         │   ├── conversation-debug/ — 7 direct / 7 total files
         │   ├── runtime-activity/ — 3 direct / 3 total files
-        │   ├── settings/ — 13 direct / 21 total files
+        │   ├── settings/ — 14 direct / 22 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   ├── usage/ — 5 direct / 5 total files
         │   │   └── windows-sandbox/ — 1 direct / 1 total files

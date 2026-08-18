@@ -1,20 +1,37 @@
 .chat-loading-text {
-  animation: chat-loading-text-breathe 1.8s ease-in-out infinite;
+  background-image: linear-gradient(
+    90deg,
+    currentColor 0%,
+    currentColor 44%,
+    color-mix(in srgb, currentColor 52%, #ffffff) 50%,
+    currentColor 56%,
+    currentColor 100%
+  );
+  background-position: 100% 0;
+  background-repeat: no-repeat;
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* 每轮先用 1.6s 扫过，再停留 3.5s，避免连续扫光显得忙乱。 */
+  animation: chat-loading-text-shimmer 5.1s linear infinite;
 }
 
-@keyframes chat-loading-text-breathe {
-  0%,
-  100% {
-    opacity: 0.58;
+@keyframes chat-loading-text-shimmer {
+  0% {
+    background-position: 100% 0;
   }
 
-  50% {
-    opacity: 1;
+  31.3725%,
+  100% {
+    background-position: 0 0;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .chat-loading-text {
     animation: none;
+    background: none;
+    -webkit-text-fill-color: currentColor;
   }
 }

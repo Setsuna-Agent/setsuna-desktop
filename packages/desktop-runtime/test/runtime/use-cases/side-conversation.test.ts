@@ -93,6 +93,20 @@ describe('side conversations', () => {
       expect(side.messages.find((message) => message.id === 'msg_parent_assistant')).toMatchObject({
         status: 'complete',
       });
+      const snapshotStartIndex = side.messages.findIndex(
+        (message) => message.content === '<primary_conversation_snapshot>',
+      );
+      const snapshotEndIndex = side.messages.findIndex(
+        (message) => message.content.startsWith('</primary_conversation_snapshot>'),
+      );
+      expect(snapshotStartIndex).toBeGreaterThanOrEqual(0);
+      expect(side.messages.findIndex((message) => message.id === 'msg_parent_user'))
+        .toBeGreaterThan(snapshotStartIndex);
+      expect(side.messages.findIndex((message) => message.id === 'msg_parent_assistant'))
+        .toBeLessThan(snapshotEndIndex);
+      expect(snapshotEndIndex).toBeGreaterThan(snapshotStartIndex);
+      expect(side.messages.find((message) => message.role === 'developer')?.content)
+        .toContain('are copied from the primary conversation');
       await expect(runtime.threadStore.getThread(parent.id)).resolves.toMatchObject({
         activeTurnId: 'turn_parent_active',
       });

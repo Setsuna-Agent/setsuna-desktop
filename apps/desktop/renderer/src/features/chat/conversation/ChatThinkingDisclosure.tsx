@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { useState, type ReactNode, type SyntheticEvent } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
+import { LoadingText } from './LoadingText.js';
 import { useStreamingScrollPin } from './useStreamingScrollPin.js';
 
 export function ChatThinkingDisclosure({
@@ -24,11 +25,15 @@ export function ChatThinkingDisclosure({
   return (
     <details className={`chat-thinking-disclosure ${active ? 'is-active' : ''}`} onToggle={handleToggle}>
       <summary className="chat-thinking-disclosure__summary">
-        <span className={`chat-thinking-disclosure__status ${active ? 'chat-loading-text' : ''}`}>
+        <span className="chat-thinking-disclosure__status">
           <span className="chat-thinking-disclosure__icon" aria-hidden="true">
             <ThinkIcon />
           </span>
-          <span className="chat-thinking-disclosure__label">{label}</span>
+          {active ? (
+            <LoadingText className="chat-thinking-disclosure__label">{label}</LoadingText>
+          ) : (
+            <span className="chat-thinking-disclosure__label">{label}</span>
+          )}
         </span>
         <ChevronDown aria-hidden="true" className="chat-thinking-disclosure__chevron" size={12} />
       </summary>

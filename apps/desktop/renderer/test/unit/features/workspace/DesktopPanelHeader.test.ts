@@ -89,7 +89,7 @@ describe('DesktopPanelHeader launcher menu positioning', () => {
 
   it('keeps the menu inside the viewport', () => {
     expect(panelLauncherMenuPosition({ bottom: 42, left: 4 }, 744)).toEqual({ left: 8, top: 48 });
-    expect(panelLauncherMenuPosition({ bottom: 42, left: 700 }, 744)).toEqual({ left: 580, top: 48 });
+    expect(panelLauncherMenuPosition({ bottom: 42, left: 700 }, 744)).toEqual({ left: 460, top: 48 });
   });
 
   it('converts visual coordinates back to zoomed body coordinates', () => {

@@ -1,6 +1,7 @@
 .app-shell {
   --app-sidebar-motion-duration: 220ms;
   --app-sidebar-motion-easing: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --app-workspace-motion-duration: 280ms;
 
   display: grid;
   grid-template-rows: var(--app-topbar-height) minmax(0, 1fr);
@@ -373,6 +374,19 @@
   gap: var(--app-topbar-item-gap);
 }
 
+/* Windows 标题栏混用了图标按钮和文字菜单，使用同一项间距保持视觉节奏。 */
+:root[data-desktop-platform='win32'] .app-topbar__brand {
+  gap: 6px;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__nav {
+  gap: 6px;
+}
+
+:root[data-desktop-platform='win32'] .app-topbar__nav .app-shell-icon-control > svg {
+  transform: translateY(1px);
+}
+
 :root[data-desktop-platform='win32'] .app-topbar__menu,
 :root[data-desktop-platform='linux'] .app-topbar__menu,
 :root[data-desktop-platform='win32'] .app-topbar__status,
@@ -700,21 +714,16 @@
   box-shadow: var(--app-focus-ring);
 }
 
-/* Windows 与 macOS 一样把分层收在侧栏内部，避免阴影污染主内容区。 */
+/* Windows 主区使用同一条轮廓连接顶边与侧边，圆角处不叠加阴影。 */
 :root[data-desktop-platform='win32'] .app-workbench:has(> .app-sidebar)::before {
   position: absolute;
   z-index: 21;
-  inset: 0 auto 0 0;
-  width: var(--app-sidebar-width);
-  background: linear-gradient(
-    to right,
-    transparent calc(100% - 8px),
-    var(--desktop-agent-sidebar-separator-color) 100%
-  );
-  box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+  inset: 0 0 0 var(--app-sidebar-width);
+  border-top: 1px solid var(--desktop-agent-sidebar-edge);
+  border-left: 1px solid var(--desktop-agent-sidebar-edge);
+  border-top-left-radius: var(--app-radius-lg);
   content: '';
   pointer-events: none;
-  transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
 }
 
 :root[data-desktop-platform='win32'] .app-workbench__main-title,
@@ -729,8 +738,9 @@
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench:has(> .app-sidebar)::before {
-  width: 0;
-  opacity: 0;
+  left: 0;
+  border-left: 0;
+  border-top-left-radius: 0;
 }
 
 :root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench__main-title,
@@ -749,7 +759,6 @@ body.desktop-terminal-resizing .app-workbench {
 body.desktop-agent-sidebar-resizing .app-topbar,
 body.desktop-agent-workspace-resizing .app-topbar,
 body.desktop-agent-sidebar-resizing .app-topbar::before,
-body.desktop-agent-sidebar-resizing .app-workbench::before,
 body.desktop-agent-sidebar-resizing .app-workbench::after {
   transition: none;
 }
@@ -932,4 +941,46 @@ body.desktop-terminal-resizing {
 :root[data-desktop-platform='win32'] .desktop-agent-page--settings-open .app-topbar,
 :root[data-desktop-platform='linux'] .desktop-agent-page--settings-open .app-topbar {
   grid-template-columns: var(--app-topbar-sidebar-width, var(--desktop-settings-nav-width)) minmax(0, 1fr) var(--app-titlebar-control-width);
+}
+
+/* The grid track is the sole source of workspace motion. Its clipping slot keeps
+   panel contents at full width while the shared boundary opens or closes. */
+.desktop-agent-page--workspace-opening .app-workbench,
+.desktop-agent-page--workspace-closing .app-workbench {
+  transition-duration: var(--app-workspace-motion-duration), 180ms;
+}
+
+.desktop-agent-page--workspace-opening .app-topbar,
+.desktop-agent-page--workspace-closing .app-topbar {
+  transition-duration: var(--app-workspace-motion-duration);
+}
+
+.desktop-agent-page--workspace-opening .desktop-workspace-panel-slot,
+.desktop-agent-page--workspace-closing .desktop-workspace-panel-slot,
+.desktop-agent-page--workspace-opening .app-workbench__workspace-toolbar,
+.desktop-agent-page--workspace-closing .app-workbench__workspace-toolbar,
+.desktop-agent-page--workspace-opening .app-topbar__workspace,
+.desktop-agent-page--workspace-closing .app-topbar__workspace {
+  pointer-events: none;
+}
+
+.desktop-agent-page--workspace-opening .desktop-workspace-panel-slot > .desktop-workspace-panel,
+.desktop-agent-page--workspace-closing .desktop-workspace-panel-slot > .desktop-workspace-panel {
+  width: min(var(--desktop-agent-workspace-visual-width), 100vw);
+}
+
+.desktop-agent-page--workspace-opening .app-workbench__workspace-toolbar,
+.desktop-agent-page--workspace-closing .app-workbench__workspace-toolbar,
+.desktop-agent-page--workspace-opening .app-topbar__workspace,
+.desktop-agent-page--workspace-closing .app-topbar__workspace {
+  overflow: hidden;
+}
+
+.desktop-agent-page--workspace-opening .app-workbench__workspace-toolbar > *,
+.desktop-agent-page--workspace-closing .app-workbench__workspace-toolbar > *,
+.desktop-agent-page--workspace-opening .app-topbar__workspace > *,
+.desktop-agent-page--workspace-closing .app-topbar__workspace > * {
+  flex: 0 0 min(var(--desktop-agent-workspace-visual-width), 100vw);
+  width: min(var(--desktop-agent-workspace-visual-width), 100vw);
+  margin-left: auto;
 }

@@ -8,7 +8,6 @@ import type {
   RuntimeSkillSummary,
   RuntimeThread,
   RuntimeThreadGoalPatch,
-  RuntimeUsageResponse,
   WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
@@ -108,7 +107,6 @@ export function ChatComposer({
   workspaceMentionRequest,
   skills,
   sideConversation = false,
-  threadUsage,
   starter = false,
   placeholder,
   onCancelActiveTurn,
@@ -146,7 +144,6 @@ export function ChatComposer({
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
   sideConversation?: boolean;
-  threadUsage: RuntimeUsageResponse | null;
   starter?: boolean;
   placeholder?: string;
   onCancelActiveTurn: () => void;
@@ -189,6 +186,9 @@ export function ChatComposer({
     });
   }, []);
   const queuedTurnInputs = currentThread?.queuedTurnInputs ?? EMPTY_QUEUED_TURN_INPUTS;
+  const projectConversation = currentThread
+    ? Boolean(currentThread.projectId)
+    : Boolean(activeProject);
   const deleteQueuedTurnInput = queuedTurnActions.deleteQueuedTurnInput;
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerEditor = useCallback(() => senderRef.current, []);
@@ -283,7 +283,6 @@ export function ChatComposer({
     contextCompactPercent,
     contextCompacting,
     goalModeEnabled: modeController.goalModeEnabled,
-    hasCurrentThread: Boolean(currentThread),
     hasReviewIncompatibleContent: Boolean(attachmentItems.length || selectedSkills.length),
     multiAgentEnabled,
     query: commandController.slashQuery,
@@ -300,7 +299,6 @@ export function ChatComposer({
     contextCompactPercent,
     contextCompacting,
     currentGoal,
-    currentThread,
     attachmentItems.length,
     modeController.activeModelName,
     modeController.goalModeEnabled,
@@ -530,10 +528,6 @@ export function ChatComposer({
       commandController.focusComposer();
       return;
     }
-    if (item.kind === 'action' && item.type === 'usage' && !item.disabled) {
-      modeController.toggleUsagePanel();
-      return;
-    }
     if (item.kind === 'action' && item.type === 'review' && !item.disabled) {
       modeController.enableReviewMode();
       commandController.focusComposer();
@@ -656,11 +650,6 @@ export function ChatComposer({
           onHover: commandController.setActiveSlashIndex,
           onSelect: selectSlashEntry,
         }}
-        usagePanel={{
-          open: modeController.usagePanelOpen && Boolean(currentThread),
-          threadUsage,
-          onClose: modeController.closeUsagePanel,
-        }}
       />
       <ChatSendQueue
         disabled={submitting || queuedTurnEdit.editing}
@@ -686,7 +675,9 @@ export function ChatComposer({
         disabled={submitting || queuedTurnEdit.retrieving}
         slotConfig={initialSlotConfigRef.current}
         loading={Boolean(activeTurnId)}
-        placeholder={placeholder ?? t('chat.composer.placeholder')}
+        placeholder={placeholder ?? t(projectConversation
+          ? 'chat.composer.projectPlaceholder'
+          : 'chat.composer.placeholder')}
         autoSize={{ minRows: 2, maxRows: 6 }}
         suffix={false}
         onBlur={commandController.handleComposerBlur}

@@ -267,13 +267,13 @@
 
 /* 强调色预设仅用于主要操作、链接、焦点环和显式强调。 */
 :root[data-accent-color='blue'] {
-  --app-primary: #3f6fa8;
-  --app-primary-hover: #345f91;
+  --app-primary: #4b9afe;
+  --app-primary-hover: color-mix(in srgb, var(--app-primary) 86%, #000000);
   --app-primary-text: #ffffff;
-  --app-focus: rgb(63 111 168 / 24%);
+  --app-focus: color-mix(in srgb, var(--app-primary) 24%, transparent);
   --chat-send-bg: var(--app-primary);
   --chat-send-bg-hover: var(--app-primary-hover);
-  --chat-send-bg-active: #2d527d;
+  --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 74%, #000000);
 }
 
 :root[data-accent-color='purple'] {
@@ -307,11 +307,9 @@
 }
 
 :root[data-theme='dark'][data-accent-color='blue'] {
-  --app-primary: #82add5;
-  --app-primary-hover: #a3c5e3;
-  --app-primary-text: #0b1220;
-  --app-focus: rgb(130 173 213 / 28%);
-  --chat-send-bg-active: #c5dcef;
+  --app-primary-hover: color-mix(in srgb, var(--app-primary) 76%, #ffffff);
+  --app-focus: color-mix(in srgb, var(--app-primary) 28%, transparent);
+  --chat-send-bg-active: color-mix(in srgb, var(--app-primary) 52%, #ffffff);
 }
 
 :root[data-theme='dark'][data-accent-color='purple'] {

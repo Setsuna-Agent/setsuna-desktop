@@ -7,11 +7,15 @@ import { deleteRuntimeThread } from './thread-operations.js';
 
 const SIDE_CONVERSATION_POLICY = [
   'You are in a temporary side conversation forked from a primary conversation.',
-  'Treat all earlier messages as reference context only; do not continue or redirect the primary task.',
+  'Messages enclosed by <primary_conversation_snapshot> are copied from the primary conversation and are available as reference context.',
+  'Use that snapshot to answer questions about what the primary conversation said, asked, decided, or did; do not claim it is unavailable when the answer is present there.',
+  'Messages after <side_conversation_boundary> belong to this side conversation. Do not continue or redirect the primary task.',
   'Answer the user’s side question directly. Prefer explanation and read-only inspection unless the user explicitly asks for a scoped change here.',
   'Do not create sub-agents or persistent goals from this side conversation.',
   'Work in this side conversation does not change the primary conversation.',
 ].join(' ');
+
+const PRIMARY_SNAPSHOT_START = '<primary_conversation_snapshot>';
 
 /**
  * Creates a point-in-time, model-visible fork of a primary thread. The copied
@@ -45,6 +49,8 @@ export async function createRuntimeSideConversation(
 
   try {
     await runtime.attachmentStore.retainForThread(child.id, attachments);
+    await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
+    await appendModelMessage(runtime, child.id, 'user', PRIMARY_SNAPSHOT_START);
     await copyRuntimeMessagesToThread(runtime, child.id, inheritedMessages);
     if (parent.activeTurnId) {
       await appendSideEvent(runtime, child.id, {
@@ -58,10 +64,11 @@ export async function createRuntimeSideConversation(
         },
       });
     }
-    await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
     await appendModelMessage(runtime, child.id, 'user', [
+      '</primary_conversation_snapshot>',
       '<side_conversation_boundary>',
-      'The primary conversation ends above. Respond only to the new side-conversation messages that follow.',
+      'The messages enclosed above are the point-in-time snapshot copied from the primary conversation.',
+      'The side conversation begins after this boundary. Respond to its new messages without continuing the primary task.',
       parent.activeTurnId
         ? 'The primary conversation was still running at snapshot time, so its latest response may be incomplete.'
         : 'The primary conversation was idle at snapshot time.',

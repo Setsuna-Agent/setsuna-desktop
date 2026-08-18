@@ -20,24 +20,21 @@ const defaultProviderFallbackNames: ProviderFallbackNames = {
   model: '新模型',
   provider: '模型服务',
 };
-export const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string; placeholder: string }> = [
+export const providerProtocolOptions: Array<{ value: ProviderConfigState['provider']; label: string; meta: string }> = [
   {
     value: 'openai-compatible',
     label: 'OpenAI-compatible',
     meta: 'OpenAI-compatible · AI SDK',
-    placeholder: 'http://127.0.0.1:11434/v1',
   },
   {
     value: 'openai-responses',
     label: 'OpenAI Responses',
     meta: 'OpenAI Responses · /responses',
-    placeholder: 'https://api.openai.com/v1',
   },
   {
     value: 'anthropic',
     label: 'Anthropic Messages',
     meta: 'Anthropic · /v1/messages',
-    placeholder: 'https://api.anthropic.com',
   },
 ];
 
@@ -122,8 +119,7 @@ export function normalizeProviderModels(
   provider: ProviderConfigState['provider'],
   fallbackName = defaultProviderFallbackNames.model,
 ): ProviderModelConfig[] {
-  const normalized = (models.length ? models : [defaultProviderModel('', true, provider, fallbackName)])
-    .map((model, index) => normalizeProviderModel(model, index === 0, provider, fallbackName));
+  const normalized = models.map((model, index) => normalizeProviderModel(model, index === 0, provider, fallbackName));
   const activeModelId = normalized.find((model) => model.enabled)?.id ?? normalized[0]?.id;
   return normalized.map((model) => ({ ...model, enabled: model.id === activeModelId }));
 }
@@ -151,17 +147,17 @@ export function normalizeProviderModel(
   };
 }
 
-export function defaultProviderConfig(name = '新模型服务', modelName = '新模型'): ProviderConfigState {
+export function defaultProviderConfig(name = '新模型服务'): ProviderConfigState {
   return {
     id: uniqueLocalId('provider'),
     name,
     provider: DEFAULT_PROVIDER_KIND,
-    baseUrl: 'http://127.0.0.1:11434/v1',
+    baseUrl: '',
     enabled: true,
     apiKeySet: false,
     apiKeyPreview: '',
     proxyRoute: { mode: 'inherit' },
-    models: [defaultProviderModel('', true, DEFAULT_PROVIDER_KIND, modelName)],
+    models: [],
   };
 }
 
@@ -218,10 +214,6 @@ export function providerProtocolLabel(provider: ProviderConfigState['provider'])
 
 export function providerProtocolMeta(provider: ProviderConfigState['provider']): string {
   return providerProtocolOption(provider).meta;
-}
-
-export function providerBaseUrlPlaceholder(provider: ProviderConfigState['provider']): string {
-  return providerProtocolOption(provider).placeholder;
 }
 
 function providerProtocolOption(provider: ProviderConfigState['provider']) {

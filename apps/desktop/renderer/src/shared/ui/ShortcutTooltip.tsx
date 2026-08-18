@@ -58,3 +58,28 @@ export function ShortcutTooltipContent({
     </span>
   );
 }
+
+export function ShortcutHint({
+  className,
+  commandId,
+}: {
+  className?: string;
+  commandId: KeyboardShortcutCommandId;
+}) {
+  const { bindingsFor, platform } = useKeyboardShortcuts();
+  const binding = bindingsFor(commandId)[0];
+  if (!binding) return null;
+
+  return (
+    <kbd
+      aria-label={formatKeyboardShortcutBinding(binding, platform, true)}
+      className={[className, platform === 'darwin' ? 'is-mac' : ''].filter(Boolean).join(' ')}
+    >
+      {platform === 'darwin'
+        ? formatKeyboardShortcutBindingParts(binding, platform).map((part, index) => (
+            <span key={`${part}:${index}`}>{part}</span>
+          ))
+        : formatKeyboardShortcutBinding(binding, platform)}
+    </kbd>
+  );
+}

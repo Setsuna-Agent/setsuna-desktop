@@ -51,6 +51,14 @@ export const keyboardShortcutZhCN = {
   'shortcuts.command.openFilesDescription': '打开或聚焦当前项目的文件面板。',
   'shortcuts.command.openReview': '打开变更审查',
   'shortcuts.command.openReviewDescription': '打开或聚焦当前项目的 Review 面板。',
+  'shortcuts.command.openTerminal': '打开侧栏终端',
+  'shortcuts.command.openTerminalDescription': '在右侧工作区打开一个终端标签页。',
+  'shortcuts.command.openSideChat': '打开侧边对话',
+  'shortcuts.command.openSideChatDescription': '在右侧工作区打开一个独立对话。',
+  'shortcuts.command.openBrowser': '打开浏览器',
+  'shortcuts.command.openBrowserDescription': '在右侧工作区打开一个浏览器标签页。',
+  'shortcuts.command.openConversationDebug': '打开对话调试',
+  'shortcuts.command.openConversationDebugDescription': '打开当前对话的运行流程调试面板。',
 } as const;
 
 export const keyboardShortcutEnUS = {
@@ -106,4 +114,12 @@ export const keyboardShortcutEnUS = {
   'shortcuts.command.openFilesDescription': 'Open or focus the file panel for the current project.',
   'shortcuts.command.openReview': 'Open review changes',
   'shortcuts.command.openReviewDescription': 'Open or focus the Review panel for the current project.',
+  'shortcuts.command.openTerminal': 'Open side terminal',
+  'shortcuts.command.openTerminalDescription': 'Open a terminal tab in the right workspace.',
+  'shortcuts.command.openSideChat': 'Open side chat',
+  'shortcuts.command.openSideChatDescription': 'Open an independent chat in the right workspace.',
+  'shortcuts.command.openBrowser': 'Open browser',
+  'shortcuts.command.openBrowserDescription': 'Open a browser tab in the right workspace.',
+  'shortcuts.command.openConversationDebug': 'Open conversation debug',
+  'shortcuts.command.openConversationDebugDescription': 'Open the runtime flow debugger for the current conversation.',
 } as const;

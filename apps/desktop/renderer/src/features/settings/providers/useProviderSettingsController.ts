@@ -74,10 +74,10 @@ export function useProviderSettingsController({
   onSaveStateChange: (state: SaveState) => void;
   t: Translate;
 }) {
-  const createDefaultProvider = useCallback(() => defaultProviderConfig(
-    t('settings.providers.newService'),
-    t('settings.providers.newModel'),
-  ), [t]);
+  const createDefaultProvider = useCallback(
+    () => defaultProviderConfig(t('settings.providers.newService')),
+    [t],
+  );
   const providerFallbackNames = useMemo(() => ({
     model: t('settings.providers.newModel'),
     provider: t('settings.providers.newService'),
@@ -181,9 +181,9 @@ export function useProviderSettingsController({
     setEditingModel({
       mode: 'create',
       providerId,
-      model: defaultProviderModel('', !provider?.models.length, provider?.provider, t('settings.providers.newModel')),
+      model: defaultProviderModel('', !provider?.models.length, provider?.provider, ''),
     });
-  }, [providers, t]);
+  }, [providers]);
 
   const removeModel = useCallback((providerId: string, modelId: string) => {
     setEditingModel((current) => (

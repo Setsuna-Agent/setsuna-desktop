@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
+import { AppTooltip } from '../../../../../src/shared/ui/primitives.js';
 import type {
   ConversationOverviewState,
 } from '../../../../../src/features/chat/conversation/chatConversationOverview.js';
@@ -148,6 +149,49 @@ describe('ConversationOverviewPanel', () => {
     expect(html).toContain('aria-label="计划推进中，已完成 1/2"');
     expect(html).toContain('chat-conversation-overview-panel__plan-popover');
     expect(html).toContain('Apply focused change');
+  });
+
+  it('shows total usage, an integer cache hit rate, and call count', () => {
+    const props = {
+      ...baseProps,
+      compact: false,
+      threadUsage: {
+        records: [],
+        summary: {
+          inputTokens: 800_000,
+          cachedInputTokens: 756_000,
+          outputTokens: 50_000,
+          totalTokens: 850_000,
+          recordCount: 1,
+          byDay: [],
+          byProvider: [],
+          byModel: [],
+        },
+      },
+    };
+    const html = renderOverviewPanel(props);
+
+    expect(html).toContain('850.0K · 95% · 1 次');
+    expect(html).not.toContain('已完成');
+    expect(html).not.toContain('title="850.0K · 95% · 1 次"');
+
+    const panel = captureOverviewPanel(props);
+    const usageRow = panel.props.children[1].props.children[3];
+    const usageTooltip = usageRow.props.children[2];
+    expect(usageTooltip.type).toBe(AppTooltip);
+    expect(usageTooltip.props.children.props.title).toBeUndefined();
+
+    const tooltipHtml = renderToStaticMarkup(createElement(
+      I18nProvider,
+      { initialLocale: 'zh-CN' },
+      usageTooltip.props.title,
+    ));
+    expect(tooltipHtml).toContain('总 Token');
+    expect(tooltipHtml).toContain('缓存命中率');
+    expect(tooltipHtml).toContain('调用次数');
+    expect(tooltipHtml).toContain('850.0K');
+    expect(tooltipHtml).toContain('95%');
+    expect(tooltipHtml).toContain('1 次');
   });
 
 });

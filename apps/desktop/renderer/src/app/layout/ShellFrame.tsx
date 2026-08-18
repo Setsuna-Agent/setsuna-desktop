@@ -73,6 +73,11 @@ export function ShellFrame({
   const customFrame = usesCustomFrameLayout();
   const windowMaximized = useWindowMaximizedState();
   const sidebarToggleAction = showSidebarToggle ? onToggleSidebar : undefined;
+  const titlebarNewChatAction = !customFrame || (sidebarCollapsed && showSidebarToggle)
+    ? menuActions?.onNewChat
+    : undefined;
+  const showTitlebarNavigation = !customFrame
+    || Boolean(sidebarToggleAction || navigationActions || titlebarNewChatAction);
   const topbarMenuActions = useMemo(
     () => ({ ...menuActions, onToggleSidebar: sidebarToggleAction }),
     [menuActions, sidebarToggleAction],
@@ -92,13 +97,15 @@ export function ShellFrame({
     <div ref={rootRef} className={rootClassName} style={style}>
       <header className="app-topbar">
         <div className="app-topbar__brand">
-          <TitlebarNavigation
-            actions={navigationActions}
-            sidebarCollapsed={sidebarCollapsed}
-            showSidebarToggle={showSidebarToggle}
-            onNewChat={menuActions?.onNewChat}
-            onToggleSidebar={sidebarToggleAction}
-          />
+          {showTitlebarNavigation ? (
+            <TitlebarNavigation
+              actions={navigationActions}
+              sidebarCollapsed={sidebarCollapsed}
+              showSidebarToggle={showSidebarToggle}
+              onNewChat={titlebarNewChatAction}
+              onToggleSidebar={sidebarToggleAction}
+            />
+          ) : null}
           {customFrame ? <WindowTopbarMenu actions={topbarMenuActions} /> : null}
           {customFrame && status ? <div className="app-topbar__status">{status}</div> : null}
         </div>
