@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { createContext, Script } from 'node:vm';
 import type {
   WorkspaceSearchEngine,
   WorkspaceTextSearchMatch,
@@ -18,6 +19,7 @@ import {
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
+const MAX_REGEX_FILE_MATCH_MS = 100;
 
 /** Development fallback for machines where a prepared rg is intentionally unavailable. */
 export class JavaScriptWorkspaceSearchEngine implements WorkspaceSearchEngine {
@@ -43,12 +45,9 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   throwIfAborted(request.signal);
   const matcher = createLineMatcher(request);
-  // Include-ignored searches bypass ordinary ignore sources but keep the
-  // security-specific ones; sensitive globs are still enforced through
-  // workspaceSearchDefaultExcludeGlobs below.
-  const ignoreMatcher = await createWorkspaceIgnoreMatcher(scope.root, {
-    securityOnly: Boolean(request.includeIgnored),
-  });
+  const ignoreMatcher = request.includeIgnored
+    ? null
+    : await createWorkspaceIgnoreMatcher(scope.root);
   throwIfAborted(request.signal);
   const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
   const matches: WorkspaceTextSearchMatch[] = [];
@@ -59,7 +58,7 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
     throwIfAborted(request.signal);
     if (isWorkspaceSearchPathExcluded(scope.root, filePath, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) return true;
     const relativePath = workspaceRelativeSearchPath(scope.root, filePath);
-    if (ignoreMatcher.ignores(relativePath)) return true;
+    if (ignoreMatcher?.ignores(relativePath)) return true;
     const fileStat = await stat(filePath).catch(() => null);
     throwIfAborted(request.signal);
     if (!fileStat?.isFile() || fileStat.size > MAX_WORKSPACE_SEARCH_FILE_BYTES) return true;
@@ -68,9 +67,10 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
     if (!content || isProbablyBinary(content)) return true;
     scannedFiles += 1;
     const lines = content.toString('utf8').split(/\r?\n/u);
+    const columns = matcher(lines);
     for (let index = 0; index < lines.length; index += 1) {
-      const column = matcher(lines[index]);
-      if (column === null) continue;
+      const column = columns[index];
+      if (column === -1) continue;
       if (matches.length >= request.maxResults) {
         truncated = true;
         return false;
@@ -95,7 +95,7 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
         const entryPath = path.join(directory, entry.name);
         const relativePath = workspaceRelativeSearchPath(scope.root, entryPath);
         if (entry.isDirectory()) {
-          if (!ignoreMatcher.shouldSkipDirectory(`${relativePath}/`)
+          if (!ignoreMatcher?.shouldSkipDirectory(`${relativePath}/`)
             && !isWorkspaceSearchPathExcluded(scope.root, entryPath, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
             stack.push(entryPath);
           }
@@ -110,7 +110,7 @@ async function runJavaScriptSearch(request: WorkspaceTextSearchRequest): Promise
   return response(request.query, matches, truncated, scannedFiles);
 }
 
-function createLineMatcher(request: WorkspaceTextSearchRequest): (line: string) => number | null {
+function createLineMatcher(request: WorkspaceTextSearchRequest): (lines: string[]) => number[] {
   if (request.regex) {
     let expression: RegExp;
     try {
@@ -118,13 +118,26 @@ function createLineMatcher(request: WorkspaceTextSearchRequest): (line: string) 
     } catch (error) {
       throw new Error(`Invalid regular expression: ${error instanceof Error ? error.message : String(error)}`);
     }
-    return (line) => expression.exec(line)?.index ?? null;
+    const context = createContext({ expression, lines: [] as string[] });
+    const script = new Script('lines.map((line) => expression.exec(line)?.index ?? -1)');
+    return (lines) => {
+      context.lines = lines;
+      try {
+        // The VM timeout gives V8 an interruptible boundary around regexp backtracking.
+        return script.runInContext(context, { timeout: MAX_REGEX_FILE_MATCH_MS }) as number[];
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error
+          && error.code === 'ERR_SCRIPT_EXECUTION_TIMEOUT') {
+          throw new Error(`Regular expression exceeded ${MAX_REGEX_FILE_MATCH_MS}ms while scanning one file.`);
+        }
+        throw error;
+      }
+    };
   }
   const needle = request.caseSensitive ? request.query : request.query.toLowerCase();
-  return (line) => {
-    const index = (request.caseSensitive ? line : line.toLowerCase()).indexOf(needle);
-    return index === -1 ? null : index;
-  };
+  return (lines) => lines.map((line) => (
+    request.caseSensitive ? line : line.toLowerCase()
+  ).indexOf(needle));
 }
 
 function searchMatch(

@@ -27,79 +27,24 @@ export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/release-artifacts/**',
 ] as const;
 
-/**
- * Listed VCS metadata, credential, and secret paths are never searchable, even
- * when an include-ignored search opts generated directories back in. VCS config
- * can embed credentials (for example remote URLs with tokens), and well-known
- * credential file names stay protected even when the ignore files that usually
- * hide them are lifted. This list is deliberately conservative; arbitrarily
- * named secrets still need .qwenignore/.setsunaignore protection.
- */
-export const SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
-  '**/.git',
-  '**/.git/**',
-  '**/.hg',
-  '**/.hg/**',
-  '**/.svn',
-  '**/.svn/**',
-  '**/.env',
-  '**/.env.*',
-  '**/.envrc',
-  '**/*.pem',
-  '**/*.key',
-  '**/*.p12',
-  '**/*.pfx',
-  '**/*.keystore',
-  '**/*.tfstate',
-  '**/*.tfstate.*',
-  '**/.npmrc',
-  '**/.netrc',
-  '**/.git-credentials',
-  '**/.pypirc',
-  '**/.ssh',
-  '**/.ssh/**',
-  '**/.aws/credentials',
-  '**/.docker/config.json',
-  '**/credentials.json',
-  '**/*credentials*.json',
-  '**/service-account*.json',
-  '**/*service-account*.json',
-] as const;
-
-export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
-  ...GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
-  ...SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
-] as const;
-
-/** Ordinary plus security-specific ignore sources consulted by default searches. */
+/** Workspace ignore sources consulted by default searches. */
 export const WORKSPACE_IGNORE_FILE_NAMES = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'] as const;
 
-/**
- * Security-specific ignore sources. They protect arbitrarily named credential
- * files and stay active even for include-ignored searches.
- */
-export const WORKSPACE_SECURITY_IGNORE_FILE_NAMES = ['.qwenignore', '.setsunaignore'] as const;
-
-/**
- * Windows paths are case-insensitive by default. macOS security-only matching
- * is also conservative because its default volumes are case-insensitive, while
- * ordinary ignore rules retain their native case semantics on case-sensitive volumes.
- */
-export function workspaceIgnoreRulesCaseInsensitive(options: { securityOnly?: boolean } = {}): boolean {
-  return process.platform === 'win32' || (process.platform === 'darwin' && Boolean(options.securityOnly));
+/** Keep explicit ignore-file matching aligned with Windows path semantics. */
+export function workspaceIgnoreRulesCaseInsensitive(): boolean {
+  return process.platform === 'win32';
 }
 
 /**
  * Resolves the effective default exclusion layer for one search request.
- * Include-ignored searches lift generated-directory globs and ignore-file
- * rules, but sensitive file globs always stay in force.
+ * Include-ignored searches lift the traversal defaults as well as ignore files.
  */
 export function workspaceSearchDefaultExcludeGlobs(
   options: { includeIgnored?: boolean } = {},
 ): readonly string[] {
   return options.includeIgnored
-    ? SENSITIVE_WORKSPACE_SEARCH_EXCLUDE_GLOBS
-    : DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS;
+    ? []
+    : GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS;
 }
 
 export async function resolveWorkspaceSearchScope(root: string, scopePath?: string) {
@@ -116,9 +61,8 @@ export async function workspaceSearchIgnoreFiles(
   options: { includeIgnored?: boolean } = {},
 ): Promise<string[]> {
   // Root files are explicit so non-Git project folders get the same policy as repositories.
-  // Include-ignored searches keep only security-specific ignore sources; ordinary ignore
-  // files commonly re-exclude generated directories the search opts back into.
-  const fileNames = options.includeIgnored ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : WORKSPACE_IGNORE_FILE_NAMES;
+  if (options.includeIgnored) return [];
+  const fileNames = WORKSPACE_IGNORE_FILE_NAMES;
   const candidates = [...fileNames].map((name) => path.join(root, name));
   const available = await Promise.all(candidates.map(async (candidate) => {
     try {
@@ -134,7 +78,7 @@ export function ripgrepExcludeGlobs(
   root: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
-  defaultExcludeGlobs: readonly string[] = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
+  defaultExcludeGlobs: readonly string[] = GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): string[] {
   const globs: string[] = [...defaultExcludeGlobs];
   for (const excludedRoot of excludeRoots) {
@@ -161,7 +105,7 @@ export function isWorkspaceSearchPathExcluded(
   filePath: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
-  defaultExcludeGlobs: readonly string[] = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
+  defaultExcludeGlobs: readonly string[] = GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): boolean {
   const absolutePath = path.resolve(filePath);
   if (!isPathWithin(root, absolutePath)) return true;

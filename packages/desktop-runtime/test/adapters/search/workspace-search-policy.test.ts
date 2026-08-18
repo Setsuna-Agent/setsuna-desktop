@@ -10,152 +10,44 @@ import {
 } from '../../../src/adapters/search/workspace-search-policy.js';
 
 describe('workspace search policy', () => {
-  it('keeps hidden source paths but excludes secrets and generated directories', () => {
+  it('keeps hidden and ordinary files but excludes generated directories by default', () => {
     const root = path.resolve('/workspace');
 
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.github', 'workflow.yml'))).toBe(false);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.env'))).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'app', '.env.local'))).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.env'))).toBe(false);
+    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'certs', 'private.key'))).toBe(false);
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'node_modules', 'pkg', 'index.js'))).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'certs', 'private.key'))).toBe(true);
   });
 
-  it('include-ignored searches keep VCS and sensitive files excluded but lift generated directories', () => {
+  it('include-ignored searches lift all default traversal exclusions', () => {
     const root = path.resolve('/workspace');
     const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
 
-    expect(includeIgnoredDefaults).not.toContain('**/node_modules/**');
-    expect(includeIgnoredDefaults).toContain('**/.git');
-    expect(includeIgnoredDefaults).toContain('**/.git/**');
-    expect(includeIgnoredDefaults).toContain('**/.env');
-    expect(includeIgnoredDefaults).toContain('**/.git-credentials');
-    expect(includeIgnoredDefaults).toContain('**/*.key');
-    expect(includeIgnoredDefaults).toContain('**/*.tfstate');
-    expect(includeIgnoredDefaults).toContain('**/*.tfstate.*');
-
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'node_modules', 'pkg', 'index.js'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(false);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, '.git'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, '.git', 'config'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
+    expect(includeIgnoredDefaults).toEqual([]);
+    for (const relativePath of [
+      'node_modules/pkg/index.js',
+      '.git/config',
+      '.env',
+      'terraform.tfstate',
+    ]) {
+      expect(isWorkspaceSearchPathExcluded(
+        root,
+        path.join(root, relativePath),
+        [],
+        [],
+        includeIgnoredDefaults,
+      )).toBe(false);
+    }
     expect(isWorkspaceSearchPathExcluded(
       root,
       path.join(root, '.env'),
       [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'node_modules', 'pkg', '.envrc'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, '.git-credentials'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'certs', 'private.key'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'node_modules', 'pkg', '.npmrc'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'node_modules', 'pkg', 'credentials.json'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'terraform.tfstate'),
-      [],
-      [],
-      includeIgnoredDefaults,
-    )).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(
-      root,
-      path.join(root, 'node_modules', 'pkg', 'terraform.tfstate.backup'),
-      [],
-      [],
+      ['**/.env'],
       includeIgnoredDefaults,
     )).toBe(true);
   });
 
-  it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
-    'matches built-in sensitive paths case-insensitively on case-insensitive desktop platforms',
-    () => {
-      const root = path.resolve('/workspace');
-      const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
-
-      expect(isWorkspaceSearchPathExcluded(
-        root,
-        path.join(root, 'node_modules', 'pkg', '.ENVRC'),
-        [],
-        [],
-        includeIgnoredDefaults,
-      )).toBe(true);
-      expect(isWorkspaceSearchPathExcluded(
-        root,
-        path.join(root, '.GIT', 'config'),
-        [],
-        [],
-        includeIgnoredDefaults,
-      )).toBe(true);
-    },
-  );
-
-  it('ripgrep globs for include-ignored searches drop generated paths but keep VCS and secrets', () => {
-    const root = path.resolve('/workspace');
-
-    const globs = ripgrepExcludeGlobs(root, [], [], workspaceSearchDefaultExcludeGlobs({ includeIgnored: true }));
-
-    expect(globs).not.toContain('**/node_modules/**');
-    expect(globs).toEqual(expect.arrayContaining([
-      '**/.git',
-      '**/.git/**',
-      '**/.env',
-      '**/.env.*',
-      '**/*.pem',
-      '**/*.key',
-      '**/*.tfstate',
-      '**/*.tfstate.*',
-      '**/.git-credentials',
-    ]));
-    expect(globs.some((glob) => glob.includes('node_modules'))).toBe(false);
-  });
-
-  it('include-ignored searches consult only security-specific ignore files', async () => {
+  it('include-ignored searches disable workspace ignore files', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-policy-ignore-files-'));
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
@@ -170,7 +62,7 @@ describe('workspace search policy', () => {
     expect(defaultFiles.map((file) => path.basename(file)).sort()).toEqual(
       ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'],
     );
-    expect(includeIgnoredFiles.map((file) => path.basename(file)).sort()).toEqual(['.qwenignore', '.setsunaignore']);
+    expect(includeIgnoredFiles).toEqual([]);
   });
 
   it('normalizes relative denied roots that use Windows separators', () => {

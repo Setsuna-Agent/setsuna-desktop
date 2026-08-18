@@ -1,9 +1,6 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
-import {
-  workspaceIgnoreRulesCaseInsensitive,
-  WORKSPACE_SECURITY_IGNORE_FILE_NAMES,
-} from '../search/workspace-search-policy.js';
+import { workspaceIgnoreRulesCaseInsensitive } from '../search/workspace-search-policy.js';
 import { isNodeError } from '../../shared/node-errors.js';
 
 export type FileMentionEntry = {
@@ -52,10 +49,6 @@ const DEFAULT_IGNORE_PATTERNS = [
   'target/',
   'node_modules/',
   '.DS_Store',
-  '.env',
-  '.env.*',
-  '*.pem',
-  '*.key',
 ];
 
 export async function buildFileMentionIndex(
@@ -102,33 +95,20 @@ export function findFileMentionSuggestions(
     .map((item) => item.file);
 }
 
-export async function createWorkspaceIgnoreMatcher(
-  root: string,
-  options: { securityOnly?: boolean } = {},
-): Promise<WorkspaceIgnoreMatcher> {
-  // Security-only matchers serve include-ignored searches: they skip built-in
-  // generated/secret patterns and ordinary ignore files, keeping only the
-  // security-specific sources that protect arbitrarily named credential files.
-  const caseInsensitive = workspaceIgnoreRulesCaseInsensitive(options);
-  const rules = options.securityOnly
-    ? []
-    : DEFAULT_IGNORE_PATTERNS.map((line) => parseIgnoreLine(line, caseInsensitive)).filter(isIgnoreRule);
-  const fileNames = options.securityOnly ? WORKSPACE_SECURITY_IGNORE_FILE_NAMES : IGNORE_FILES;
-  for (const fileName of fileNames) {
-    const ignoreFilePath = path.join(root, fileName);
+export async function createWorkspaceIgnoreMatcher(root: string): Promise<WorkspaceIgnoreMatcher> {
+  const caseInsensitive = workspaceIgnoreRulesCaseInsensitive();
+  const rules = DEFAULT_IGNORE_PATTERNS
+    .map((line) => parseIgnoreLine(line, caseInsensitive))
+    .filter(isIgnoreRule);
+  for (const fileName of IGNORE_FILES) {
     try {
-      const content = (await readFile(ignoreFilePath, 'utf8')).replace(/^\uFEFF/u, '');
+      const content = (await readFile(path.join(root, fileName), 'utf8')).replace(/^\uFEFF/u, '');
       rules.push(...content
         .split(/\r?\n/)
         .map((line) => parseIgnoreLine(line, caseInsensitive))
         .filter(isIgnoreRule));
-    } catch (error) {
-      if (isNodeError(error) && error.code === 'ENOENT') continue;
-      if (WORKSPACE_SECURITY_IGNORE_FILE_NAMES.some((name) => name === fileName)) {
-        throw new Error(`Unable to read security ignore file: ${ignoreFilePath}`, { cause: error });
-      }
-      // Ordinary ignore files are optional for the file index. Security-specific
-      // sources above fail closed because silently skipping them can expose secrets.
+    } catch {
+      // Ignore files are optional and never define a filesystem permission boundary.
     }
   }
   return new WorkspaceIgnoreMatcher(rules);

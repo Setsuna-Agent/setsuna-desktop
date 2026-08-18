@@ -82,11 +82,7 @@ export function buildRipgrepArguments(input: {
   if (!request.caseSensitive) args.push('--ignore-case');
   if (!request.regex) args.push('--fixed-strings');
   if (request.contextLines) args.push('--context', String(request.contextLines));
-  // Ignore files are pre-filtered by workspaceSearchIgnoreFiles: include-ignored
-  // searches keep only security-specific sources so protected credential files
-  // stay excluded while generated paths are opted back in.
-  if (workspaceIgnoreRulesCaseInsensitive({ securityOnly: Boolean(request.includeIgnored) })
-    && input.ignoreFiles?.length) {
+  if (workspaceIgnoreRulesCaseInsensitive() && input.ignoreFiles?.length) {
     args.push('--ignore-file-case-insensitive');
   }
   for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
@@ -107,9 +103,9 @@ async function runRipgrepSearch(
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   if (request.signal?.aborted) throw abortReason(request.signal);
   const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root, { includeIgnored: request.includeIgnored });
-  const ignoreMatcher = await createWorkspaceIgnoreMatcher(scope.root, {
-    securityOnly: Boolean(request.includeIgnored),
-  });
+  const ignoreMatcher = request.includeIgnored
+    ? null
+    : await createWorkspaceIgnoreMatcher(scope.root);
   if (request.signal?.aborted) throw abortReason(request.signal);
   const args = buildRipgrepArguments({ request, root: scope.root, scopePath: scope.scopePath, ignoreFiles });
   const spawnProcess = options.spawnProcess ?? spawn;
@@ -126,7 +122,7 @@ function collectRipgrepResult(
   child: RipgrepChildProcess,
   root: string,
   request: WorkspaceTextSearchRequest,
-  ignoreMatcher: WorkspaceIgnoreMatcher,
+  ignoreMatcher: WorkspaceIgnoreMatcher | null,
 ): Promise<WorkspaceTextSearchResponse> {
   return new Promise((resolve, reject) => {
     const matches: RipgrepMatch[] = [];
@@ -169,7 +165,7 @@ function collectRipgrepResult(
           }
           const relativePath = workspaceRelativeSearchPath(root, event.path);
           if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)
-            || ignoreMatcher.ignores(relativePath)) {
+            || ignoreMatcher?.ignores(relativePath)) {
             continue;
           }
           const fileLines = linesByPath.get(relativePath) ?? new Map<number, string>();

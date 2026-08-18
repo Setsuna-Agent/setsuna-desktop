@@ -37,7 +37,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   ),
   localTool(
     'find_files',
-    'Find workspace files by file name or path, respecting ignore files and common generated/sensitive paths.',
+    'Find workspace files by file name or path, respecting ignore files and common generated paths.',
     {
       query: {
         type: 'string',
@@ -58,7 +58,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
   ),
   localTool(
     'search_text',
-    'Search text in workspace files with the runtime-managed ripgrep engine, respecting ignore files and common generated/sensitive paths. Issue independent search_text calls together in one response so the runtime can execute them in parallel.',
+    'Search text in workspace files with the runtime-managed ripgrep engine, respecting ignore files and common generated paths by default. Issue independent search_text calls together in one response so the runtime can execute them in parallel.',
     {
       query: {
         type: 'string',
@@ -90,7 +90,7 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
       },
       include_ignored: {
         type: 'boolean',
-        description: 'Also search generated and dependency paths that are excluded by default, such as node_modules, dist, build, and files matched by ordinary workspace ignore files. Defaults to false. Known sensitive paths and rules from .setsunaignore or .qwenignore remain excluded.',
+        description: 'Also search paths excluded by default traversal rules or workspace ignore files, such as node_modules, dist, and build. Defaults to false.',
       },
     },
     ['query'],

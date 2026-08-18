@@ -6,7 +6,7 @@ import { JavaScriptWorkspaceSearchEngine } from '../../../src/adapters/search/ja
 import { createWorkspaceIgnoreMatcher } from '../../../src/adapters/tool/file-mentions.js';
 
 describe('JavaScriptWorkspaceSearchEngine', () => {
-  it('applies ignore, hidden-file, sensitive-file, unicode, and symlink policy consistently', async () => {
+  it('applies ignore, hidden-file, unicode, and symlink policy consistently', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-'));
     const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.txt`);
     await Promise.all([
@@ -39,6 +39,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
 
     expect(result.engine).toBe('javascript');
     expect(result.matches.map((match) => match.path).sort()).toEqual([
+      '.env',
       '.github/workflow.yml',
       'rg-only-ignore.txt',
       'src/你好.ts',
@@ -74,34 +75,36 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(result.truncated).toBe(true);
   });
 
-  it('include-ignored searches reach generated directories but never credential, security-ignored, or VCS files', async () => {
+  it('bounds pathological regular expression evaluation per file', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-regex-timeout-'));
+    await writeFile(path.join(root, 'input.txt'), `${'a'.repeat(40)}!\n`);
+
+    const search = new JavaScriptWorkspaceSearchEngine().search({
+      root,
+      query: '^(a+)+$',
+      regex: true,
+      caseSensitive: true,
+      contextLines: 0,
+      maxResults: 20,
+    });
+
+    await expect(search).rejects.toThrow('Regular expression exceeded 100ms');
+  });
+
+  it('include-ignored searches lift traversal defaults and workspace ignore files', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-include-ignored-'));
     await Promise.all([
       mkdir(path.join(root, '.git'), { recursive: true }),
       mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
-      mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
-      mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
-      mkdir(path.join(root, 'vault'), { recursive: true }),
       mkdir(path.join(root, 'dist'), { recursive: true }),
       mkdir(path.join(root, 'src'), { recursive: true }),
     ]);
     await Promise.all([
       writeFile(path.join(root, '.gitignore'), 'dist/\n'),
-      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n**/[Ss]ecret-artifact.dat\ncustom\\ secret.txt\n**/private/\nsecrets/vault\nvault/\n!vault/token.txt\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
       writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
-      writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
-      writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
-      writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
-      writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
-      writeFile(path.join(root, 'node_modules', 'dep', 'secret-artifact.dat'), 'NEEDLE nested class credential\n'),
-      writeFile(path.join(root, 'node_modules', 'dep', 'custom secret.txt'), 'NEEDLE escaped credential\n'),
-      writeFile(path.join(root, 'node_modules', 'dep', 'private', 'token.txt'), 'NEEDLE directory credential\n'),
-      writeFile(path.join(root, 'secrets', 'vault', 'token.txt'), 'NEEDLE slash-qualified credential\n'),
-      writeFile(path.join(root, 'vault', 'token.txt'), 'NEEDLE ineffective-negation credential\n'),
-      writeFile(path.join(root, 'terraform.tfstate'), 'NEEDLE Terraform state\n'),
-      writeFile(path.join(root, 'node_modules', 'dep', 'terraform.tfstate.backup'), 'NEEDLE Terraform backup\n'),
-      writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
-      writeFile(path.join(root, 'Secret-artifact.dat'), 'NEEDLE root class credential\n'),
+      writeFile(path.join(root, '.git', 'config'), 'NEEDLE git metadata\n'),
+      writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE custom ignored\n'),
       writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
       writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
       writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
@@ -125,7 +128,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       maxResults: 20,
       includeIgnored: true,
     });
-    const explicitlyScopedSecretSearch = await engine.search({
+    const explicitlyScopedIgnoredSearch = await engine.search({
       root,
       query: 'NEEDLE',
       regex: true,
@@ -133,16 +136,19 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       contextLines: 0,
       maxResults: 20,
       includeIgnored: true,
-      scopePath: path.join(root, 'secrets', 'vault', 'token.txt'),
+      scopePath: path.join(root, 'custom-ignored.txt'),
     });
 
-    expect(defaultSearch.matches.map((match) => match.path)).toEqual(['src/app.ts']);
+    expect(defaultSearch.matches.map((match) => match.path).sort()).toEqual(['.env', 'src/app.ts']);
     expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
+      '.env',
+      '.git/config',
+      'custom-ignored.txt',
       'dist/bundle.js',
       'node_modules/dep/index.js',
       'src/app.ts',
     ]);
-    expect(explicitlyScopedSecretSearch.matches).toEqual([]);
+    expect(explicitlyScopedIgnoredSearch.matches).toHaveLength(1);
   });
 
   it('requires ignored parent directories to be reincluded before their children', async () => {
@@ -156,20 +162,20 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       '',
     ].join('\n'));
 
-    const matcher = await createWorkspaceIgnoreMatcher(root, { securityOnly: true });
+    const matcher = await createWorkspaceIgnoreMatcher(root);
 
     expect(matcher.ignores('vault/token.txt')).toBe(true);
     expect(matcher.ignores('open-vault/token.txt')).toBe(false);
   });
 
-  it.runIf(process.platform === 'win32' || process.platform === 'darwin')(
-    'matches security ignore rules case-insensitively on case-insensitive desktop platforms',
+  it.runIf(process.platform === 'win32')(
+    'matches workspace ignore rules case-insensitively on Windows',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-case-'));
-      await mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true });
+      await mkdir(path.join(root, 'src'), { recursive: true });
       await Promise.all([
-        writeFile(path.join(root, '.setsunaignore'), 'vendor-secret.txt\n'),
-        writeFile(path.join(root, 'node_modules', 'dep', 'Vendor-Secret.txt'), 'NEEDLE credential\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'ignored.txt\n'),
+        writeFile(path.join(root, 'src', 'Ignored.txt'), 'NEEDLE ignored\n'),
       ]);
 
       const result = await new JavaScriptWorkspaceSearchEngine().search({
@@ -179,14 +185,13 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
         caseSensitive: true,
         contextLines: 0,
         maxResults: 20,
-        includeIgnored: true,
       });
 
       expect(result.matches).toEqual([]);
     },
   );
 
-  it('parses UTF-8 BOMs and significant spaces in security ignore patterns', async () => {
+  it('parses UTF-8 BOMs and significant spaces in workspace ignore patterns', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-ignore-spaces-'));
     await writeFile(path.join(root, '.setsunaignore'), [
       '\uFEFF leading-secret.txt',
@@ -195,7 +200,7 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
       '',
     ].join('\n'));
 
-    const matcher = await createWorkspaceIgnoreMatcher(root, { securityOnly: true });
+    const matcher = await createWorkspaceIgnoreMatcher(root);
 
     expect(matcher.ignores(' leading-secret.txt')).toBe(true);
     expect(matcher.ignores('leading-secret.txt')).toBe(false);
@@ -204,11 +209,4 @@ describe('JavaScriptWorkspaceSearchEngine', () => {
     expect(matcher.ignores('ordinary-trailing-spaces.txt')).toBe(true);
   });
 
-  it('fails closed when a security ignore source exists but cannot be read', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-js-search-unreadable-ignore-'));
-    await mkdir(path.join(root, '.setsunaignore'));
-
-    await expect(createWorkspaceIgnoreMatcher(root, { securityOnly: true }))
-      .rejects.toThrow('Unable to read security ignore file');
-  });
 });

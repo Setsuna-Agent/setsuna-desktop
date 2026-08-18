@@ -46,7 +46,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       '--ignore-file',
       path.join(root, '.setsunaignore'),
       '--glob',
-      '!**/.env',
+      '!**/node_modules/**',
       '--glob',
       '!/blocked/**',
     ]));
@@ -54,27 +54,19 @@ describe('RipgrepWorkspaceSearchEngine', () => {
     expect(args).not.toContain('--follow');
   });
 
-  it('keeps security ignore files and sensitive globs while lifting generated globs for include-ignored searches', () => {
+  it('disables ignore files and traversal defaults for include-ignored searches', () => {
     const root = path.resolve('/workspace');
     const args = buildRipgrepArguments({
       root,
       scopePath: root,
-      // Callers pre-filter ignore files via workspaceSearchIgnoreFiles; only
-      // security-specific sources arrive for include-ignored requests.
-      ignoreFiles: [path.join(root, '.setsunaignore')],
+      ignoreFiles: [],
       request: request(root, { includeIgnored: true }),
     });
 
-    expect(args).toEqual(expect.arrayContaining(['--ignore-file', path.join(root, '.setsunaignore')]));
-    expect(args.includes('--ignore-file-case-insensitive'))
-      .toBe(process.platform === 'win32' || process.platform === 'darwin');
+    expect(args).not.toContain('--ignore-file');
+    expect(args).not.toContain('--ignore-file-case-insensitive');
     expect(args).not.toContain('!**/node_modules/**');
     expect(args).not.toContain('!**/dist/**');
-    expect(args).toContain('!**/.git/**');
-    expect(args).toContain('!**/.env');
-    expect(args).toContain('!**/*.key');
-    expect(args).toContain('!**/.npmrc');
-    expect(args).toContain('!**/credentials.json');
   });
 
   it('parses UTF-8 byte offsets into character columns', () => {
@@ -148,7 +140,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
   });
 
   it.runIf(existsSync(preparedRipgrepPath))(
-    'searches with the real pinned sidecar while honoring ignore, hidden, secret, symlink, and global-cap rules',
+    'searches with the real pinned sidecar while honoring ignore, hidden, symlink, and global-cap rules',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-integration-'));
       const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.txt`);
@@ -159,13 +151,12 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
         writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
-        writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
-        writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
         writeFile(path.join(root, '.github', 'workflow.yml'), 'name: NEEDLE hidden source\n'),
         writeFile(path.join(root, 'ignored.txt'), 'NEEDLE ignored\n'),
         writeFile(path.join(root, 'rg-only-ignore.txt'), 'NEEDLE must remain searchable\n'),
-        writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE ignored custom\n'),
+        writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE ignored custom\n'),
         writeFile(path.join(root, 'src', '你好.ts'), 'NEEDLE one\nNEEDLE two\n'),
         writeFile(outside, 'NEEDLE outside\n'),
       ]);
@@ -177,6 +168,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
 
       expect(all.engine).toBe('ripgrep');
       expect([...new Set(all.matches.map((match) => match.path))].sort()).toEqual([
+        '.env',
         '.github/workflow.yml',
         'rg-only-ignore.txt',
         'src/你好.ts',
@@ -212,7 +204,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
   );
 
   it.runIf(existsSync(preparedRipgrepPath))(
-    'include-ignored searches reach generated directories but never credential, security-ignored, or VCS files',
+    'include-ignored searches lift traversal defaults and workspace ignore files',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-include-ignored-'));
       await Promise.all([
@@ -223,15 +215,10 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       ]);
       await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'dist/\n'),
-        writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
-        writeFile(path.join(root, '.git-credentials'), 'https://user:NEEDLE@example.com\n'),
-        writeFile(path.join(root, 'credentials.json'), 'NEEDLE root credential\n'),
-        writeFile(path.join(root, '.git', 'config'), '[remote "origin"]\nurl = https://token:NEEDLE@github.com/x/y.git\n'),
-        writeFile(path.join(root, 'node_modules', 'dep', 'credentials.json'), 'NEEDLE nested credential\n'),
-        writeFile(path.join(root, 'node_modules', 'dep', 'terraform.tfstate.backup'), 'NEEDLE Terraform backup\n'),
-        writeFile(path.join(root, 'terraform.tfstate'), 'NEEDLE Terraform state\n'),
-        writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE custom credential\n'),
+        writeFile(path.join(root, '.git', 'config'), 'NEEDLE git metadata\n'),
+        writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE custom ignored\n'),
         writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
         writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
         writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
@@ -241,8 +228,11 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       const defaultSearch = await engine.search(request(root, { regex: false }));
       const includeIgnoredSearch = await engine.search(request(root, { regex: false, includeIgnored: true }));
 
-      expect(defaultSearch.matches.map((match) => match.path)).toEqual(['src/app.ts']);
+      expect(defaultSearch.matches.map((match) => match.path).sort()).toEqual(['.env', 'src/app.ts']);
       expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
+        '.env',
+        '.git/config',
+        'custom-ignored.txt',
         'dist/bundle.js',
         'node_modules/dep/index.js',
         'src/app.ts',
@@ -251,30 +241,22 @@ describe('RipgrepWorkspaceSearchEngine', () => {
   );
 
   it.runIf(existsSync(preparedRipgrepPath))(
-    'rechecks security ignore rules when the scope explicitly names a file',
+    'include-ignored explicit file scopes bypass workspace ignore files',
     async () => {
-      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-secret-'));
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-ignored-'));
+      const ignoredPath = path.join(root, 'custom-ignored.txt');
       await Promise.all([
-        mkdir(path.join(root, 'node_modules', 'dep', 'private'), { recursive: true }),
-        mkdir(path.join(root, 'secrets', 'vault'), { recursive: true }),
-        mkdir(path.join(root, 'vault'), { recursive: true }),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
+        writeFile(ignoredPath, 'NEEDLE ignored\n'),
       ]);
-      await writeFile(path.join(root, '.setsunaignore'), 'custom\\ secret.txt\n**/private/\nsecrets/vault\nvault/\n!vault/token.txt\n');
-      const secretPaths = [
-        path.join(root, 'node_modules', 'dep', 'custom secret.txt'),
-        path.join(root, 'node_modules', 'dep', 'private', 'token.txt'),
-        path.join(root, 'secrets', 'vault', 'token.txt'),
-        path.join(root, 'vault', 'token.txt'),
-      ];
-      await Promise.all(secretPaths.map((secretPath) => writeFile(secretPath, 'NEEDLE custom credential\n')));
       const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
 
-      const results = await Promise.all(secretPaths.map((scopePath) => engine.search({
+      const result = await engine.search({
         ...request(root, { regex: false, includeIgnored: true }),
-        scopePath,
-      })));
+        scopePath: ignoredPath,
+      });
 
-      expect(results.map((result) => result.matches)).toEqual([[], [], [], []]);
+      expect(result.matches).toHaveLength(1);
     },
   );
 });
