@@ -22,9 +22,30 @@ import { useChatTurnActions } from './useChatTurnActions.js';
 type SideChatOptions = {
   activeProjectId: string | null;
   client: DesktopRuntimeClient;
+  parentThread: RuntimeThread | null;
   reloadThreads: () => Promise<unknown>;
   setError: Dispatch<SetStateAction<string | null>>;
 };
+
+type SideConversationCreationClient = Pick<
+  DesktopRuntimeClient,
+  'createSideConversation' | 'deleteThread'
+>;
+
+/**
+ * The panel owner can disappear while the runtime is creating its snapshot.
+ * A stale result must be deleted before control returns to the send pipeline.
+ */
+export async function createSideConversationForOwner(
+  client: SideConversationCreationClient,
+  parentThreadId: string,
+  isCurrentOwner: () => boolean,
+): Promise<RuntimeThread> {
+  const thread = await client.createSideConversation(parentThreadId);
+  if (isCurrentOwner()) return thread;
+  await client.deleteThread(thread.id).catch(() => undefined);
+  throw new Error('Side conversation owner changed before creation completed.');
+}
 
 /**
  * 维护右侧对话自己的线程快照和 SSE 订阅，避免它与主对话共享草稿或活动 turn。
@@ -32,6 +53,7 @@ type SideChatOptions = {
 export function useSideChat({
   activeProjectId,
   client,
+  parentThread,
   reloadThreads,
   setError,
 }: SideChatOptions) {
@@ -43,6 +65,7 @@ export function useSideChat({
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
   const currentThreadRef = useRef<RuntimeThread | null>(currentThread);
+  const parentThreadId = parentThread?.id ?? null;
   const threadId = currentThread?.id ?? null;
   const {
     claimForThread: claimComposerForThread,
@@ -52,9 +75,10 @@ export function useSideChat({
     setDraft,
   } = useChatComposerSession(chatComposerTargetIdentity(
     threadId,
-    threadId ? null : activeProjectId,
+    threadId ? null : parentThreadId ? `side:${parentThreadId}` : 'side:unavailable',
   ));
-  const contextRequests = useIdentityRequestGuard(threadId ?? `new-side-thread:${activeProjectId ?? 'global'}`);
+  const contextRequests = useIdentityRequestGuard(threadId ?? `new-side-thread:${parentThreadId ?? 'unavailable'}`);
+  const creationRequests = useIdentityRequestGuard(`side-conversation-owner:${parentThreadId ?? 'unavailable'}`);
   const reviewRequests = useIdentityRequestGuard(composerKey);
   const threadIdRef = useRef(threadId);
   threadIdRef.current = threadId;
@@ -81,13 +105,23 @@ export function useSideChat({
   );
 
   useEffect(() => {
-    // 侧边对话沿用打开时的项目上下文；主区切换项目后从空白侧边对话重新开始。
+    const staleThreadId = currentThreadRef.current?.id;
+    if (staleThreadId) void client.deleteThread(staleThreadId).catch(() => undefined);
+    // Side context is bound to one primary thread; changing the primary starts
+    // a fresh snapshot and disposes the previous transient fork.
     setCurrentThread(null);
     resetComposer();
     setActiveTurnId(null);
     setThreadUsage(null);
     terminalTurnIdsRef.current.clear();
-  }, [activeProjectId, resetComposer]);
+  }, [client, parentThreadId, resetComposer]);
+
+  useEffect(() => () => {
+    // setCurrentThread updates this ref synchronously, so cleanup also sees a
+    // thread accepted immediately before React has committed the next render.
+    const staleThreadId = currentThreadRef.current?.id;
+    if (staleThreadId) void client.deleteThread(staleThreadId).catch(() => undefined);
+  }, [client]);
 
   useEffect(() => {
     if (!threadId) return undefined;
@@ -183,12 +217,18 @@ export function useSideChat({
     };
   }, [client, effectiveActiveTurnId, reloadThreads, setError, threadId]);
 
+  const createSideConversation = useCallback(async () => {
+    if (!parentThreadId) throw new Error(t('chat.sideChat.openMainFirst'));
+    return createSideConversationForOwner(client, parentThreadId, creationRequests.begin());
+  }, [client, creationRequests, parentThreadId, t]);
+
   const actions = useChatTurnActions({
     activeProjectId,
     activeTurnId: effectiveActiveTurnId,
     claimComposerForThread,
     client,
     composerKey,
+    createThread: createSideConversation,
     currentThread,
     draft,
     reloadThreads,

@@ -24,6 +24,7 @@ import {
 } from './http-utils.js';
 import { publishThreadEventsSince } from './sse.js';
 import type { RuntimeFactory } from './types.js';
+import { createRuntimeSideConversation } from '../runtime/use-cases/side-conversation.js';
 
 export async function handleRuntimeThreadRequest(
   runtime: RuntimeFactory,
@@ -54,6 +55,16 @@ export async function handleRuntimeThreadRequest(
       ...input,
       memoryMode: input.memoryMode ?? newThreadMemoryMode(config),
     });
+    sendJson(response, 201, thread);
+    return true;
+  }
+
+  const sideConversationMatch = url.pathname.match(
+    /^\/v1\/threads\/([^/]+)\/side-conversations$/u,
+  );
+  if (sideConversationMatch && request.method === 'POST') {
+    const parentThreadId = decodeRuntimeId(sideConversationMatch[1], 'Thread id');
+    const thread = await createRuntimeSideConversation(runtime, parentThreadId);
     sendJson(response, 201, thread);
     return true;
   }

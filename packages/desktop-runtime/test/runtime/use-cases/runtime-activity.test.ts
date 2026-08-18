@@ -9,8 +9,8 @@ import { listRuntimeActivities } from '../../../src/runtime/use-cases/runtime-ac
 describe('runtime activity use case', () => {
   it('projects active turns and enriches persisted services with their owner', async () => {
     const summaries: RuntimeThreadSummary[] = [
-      threadSummary('thread_active', 'Build release', true, 'project_1'),
-      threadSummary('thread_service', 'Dev server', false),
+      { ...threadSummary('thread_active', 'Build release', true, 'project_1'), kind: 'side' },
+      { ...threadSummary('thread_service', 'Dev server', false), kind: 'side' },
     ];
     const service: RuntimeBackgroundShellProcess = {
       id: 'process_1',
@@ -50,7 +50,10 @@ describe('runtime activity use case', () => {
 
     const result = await listRuntimeActivities(source);
 
-    expect(source.threadStore.listThreads).toHaveBeenCalledWith({ includeArchived: true });
+    expect(source.threadStore.listThreads).toHaveBeenCalledWith({
+      includeArchived: true,
+      includeSide: true,
+    });
     expect(source.threadStore.getTurnActivity).toHaveBeenCalledWith('thread_active', 'turn_active');
     expect(source.threadStore.getThread).not.toHaveBeenCalled();
     expect(result.tasks).toEqual([expect.objectContaining({
@@ -61,12 +64,14 @@ describe('runtime activity use case', () => {
       state: 'running',
       taskKind: 'goal',
       threadId: 'thread_active',
+      threadKind: 'side',
       threadTitle: 'Build release',
       turnId: 'turn_active',
     })]);
     expect(result.backgroundServices).toEqual([{
       ...service,
       archived: false,
+      threadKind: 'side',
       threadTitle: 'Dev server',
     }]);
     expect(Date.parse(result.capturedAt)).not.toBeNaN();

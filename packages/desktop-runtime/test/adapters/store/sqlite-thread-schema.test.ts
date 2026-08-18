@@ -4,7 +4,7 @@ import { ensureSqliteThreadSchema } from '../../../src/adapters/store/sqlite-thr
 const { DatabaseSync } = process.getBuiltinModule('node:sqlite') as typeof import('node:sqlite');
 
 describe('SQLite thread schema', () => {
-  it('migrates a v1 thread table to the retained-event and message-index schema', () => {
+  it('migrates a v1 thread table through the retained-event and side-thread schemas', () => {
     const database = new DatabaseSync(':memory:');
     try {
       database.exec(`
@@ -19,11 +19,12 @@ describe('SQLite thread schema', () => {
 
       ensureSqliteThreadSchema(database);
 
-      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 2 });
+      expect(database.prepare('PRAGMA user_version').get()).toMatchObject({ user_version: 3 });
       const columns = database.prepare('PRAGMA table_info(threads)').all()
         .map((row) => (row as { name: string }).name);
       expect(columns).toEqual(expect.arrayContaining([
         'events_archived_through_seq',
+        'kind',
         'message_index_seq',
       ]));
       expect(database.prepare(`

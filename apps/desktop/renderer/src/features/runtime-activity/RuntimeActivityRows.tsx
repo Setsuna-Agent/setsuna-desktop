@@ -18,6 +18,7 @@ import {
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import {
   formatRuntimeActivityDuration,
+  runtimeActivityCanOpenThread,
   runtimeServiceActivityKey,
   runtimeServiceCanOpenThread,
   runtimeTaskActivityKey,
@@ -49,6 +50,7 @@ export function RuntimeActiveTaskRows({
       <div className="runtime-activity-table__body">
         {tasks.map((task) => {
           const key = runtimeTaskActivityKey(task);
+          const canOpenThread = runtimeActivityCanOpenThread(task);
           const stopping = stoppingKeys.has(key);
           const title = task.threadTitle || t('runtimeActivity.unnamedTask');
           const projectLabel = task.projectId
@@ -66,7 +68,7 @@ export function RuntimeActiveTaskRows({
             <div
               className="runtime-activity-row"
               key={key}
-              onDoubleClick={() => void onOpenThread(task.threadId)}
+              onDoubleClick={canOpenThread ? () => void onOpenThread(task.threadId) : undefined}
             >
               <span className="runtime-activity-row__identity">
                 <span className="runtime-activity-row__icon" aria-hidden="true">

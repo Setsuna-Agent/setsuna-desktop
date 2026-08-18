@@ -30,6 +30,7 @@ export function useChatTurnActions({
   claimComposerForThread,
   client,
   composerKey,
+  createThread,
   currentThread,
   draft,
   expandProject,
@@ -45,6 +46,7 @@ export function useChatTurnActions({
   claimComposerForThread: (threadId: string) => void;
   client: DesktopRuntimeClient;
   composerKey: string;
+  createThread?: () => Promise<RuntimeThread>;
   currentThread: RuntimeThread | null;
   draft: string;
   expandProject?: (projectId: string) => void;
@@ -81,7 +83,9 @@ export function useChatTurnActions({
         let thread = currentThread;
         if (!thread) {
           // 首条消息事件会先投影出本地 fallback；runtime 随后用当前模型生成正式标题。
-          thread = await client.createThread({ projectId: activeProjectId ?? undefined });
+          thread = createThread
+            ? await createThread()
+            : await client.createThread({ projectId: activeProjectId ?? undefined });
           claimCreatedChatThreadForSend({
             activeProjectId,
             claimComposerForThread,
@@ -90,7 +94,15 @@ export function useChatTurnActions({
             setCurrentThread,
             thread,
           });
-          await reloadThreads();
+          if (createThread) {
+            // Do not yield between accepting ownership of a side thread and
+            // dispatching its first turn. Its panel may unmount during a refresh.
+            void reloadThreads().catch(() => undefined);
+          } else {
+            // Primary creation keeps the established ordering so an older empty
+            // summary cannot race a turn/SSE refresh and overwrite newer state.
+            await reloadThreads();
+          }
         }
         const threadId = thread.id;
         submissionThreadId = threadId;
@@ -164,7 +176,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {

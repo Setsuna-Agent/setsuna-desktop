@@ -1,14 +1,20 @@
-import type { RuntimeThread } from '@setsuna-desktop/contracts';
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+
+import type { DesktopRuntimeClient, RuntimeThread } from '@setsuna-desktop/contracts';
+import { cleanup, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   claimCreatedChatThreadForSend,
   shouldQueueComposerTurn,
+  useChatTurnActions,
 } from '../../../../../src/features/chat/hooks/useChatTurnActions.js';
 import {
   findChatTurnSubmission,
   reconcileChatTurnSubmission,
 } from '../../../../../src/features/chat/hooks/chatTurnSubmission.js';
 import { createIdentityRequestGuard } from '../../../../../src/shared/hooks/useIdentityRequestGuard.js';
+
+afterEach(cleanup);
 
 describe('first-turn composer claim', () => {
   it('claims the created thread before publishing it to React', () => {
@@ -59,6 +65,64 @@ describe('composer turn routing', () => {
     expect(shouldQueueComposerTurn(null, { goalMode: true })).toBe(true);
     expect(shouldQueueComposerTurn('turn_active', {})).toBe(true);
     expect(shouldQueueComposerTurn(null, {})).toBe(false);
+  });
+});
+
+describe('new thread refresh ordering', () => {
+  it('waits for the primary thread list refresh before dispatching the first turn', async () => {
+    const refresh = deferred<void>();
+    const events: string[] = [];
+    const client = {
+      createThread: async () => {
+        events.push('create');
+        return thread({ id: 'thread_primary' });
+      },
+      sendTurn: async () => {
+        events.push('send');
+        return { accepted: true as const, turnId: 'turn_primary' };
+      },
+    } as unknown as DesktopRuntimeClient;
+    const { result } = renderNewThreadActions({
+      client,
+      reloadThreads: () => {
+        events.push('reload');
+        return refresh.promise;
+      },
+    });
+
+    const submission = result.current.sendInput('Start primary thread');
+    await vi.waitFor(() => expect(events).toEqual(['create', 'reload']));
+    refresh.resolve();
+
+    await expect(submission).resolves.toBe(true);
+    expect(events).toEqual(['create', 'reload', 'send']);
+  });
+
+  it('does not wait for a side thread list refresh before dispatching its first turn', async () => {
+    const refresh = deferred<void>();
+    const events: string[] = [];
+    const client = {
+      sendTurn: async () => {
+        events.push('send');
+        return { accepted: true as const, turnId: 'turn_side' };
+      },
+    } as unknown as DesktopRuntimeClient;
+    const { result } = renderNewThreadActions({
+      client,
+      createThread: async () => {
+        events.push('create');
+        return thread({ id: 'thread_side', kind: 'side' });
+      },
+      reloadThreads: () => {
+        events.push('reload');
+        return refresh.promise;
+      },
+    });
+
+    const submission = result.current.sendInput('Ask side question');
+    await vi.waitFor(() => expect(events).toEqual(['create', 'reload', 'send']));
+    await expect(submission).resolves.toBe(true);
+    refresh.resolve();
   });
 });
 
@@ -137,6 +201,33 @@ function thread(overrides: Partial<RuntimeThread>): RuntimeThread {
     lastSeq: 0,
     ...overrides,
   };
+}
+
+function renderNewThreadActions({
+  client,
+  createThread,
+  reloadThreads,
+}: {
+  client: DesktopRuntimeClient;
+  createThread?: () => Promise<RuntimeThread>;
+  reloadThreads: () => Promise<unknown>;
+}) {
+  return renderHook(() => useChatTurnActions({
+    activeProjectId: null,
+    activeTurnId: null,
+    claimComposerForThread: vi.fn(),
+    client,
+    composerKey: 'new-thread:global',
+    createThread,
+    currentThread: null,
+    draft: '',
+    reloadThreads,
+    setActiveTurnId: vi.fn(),
+    setCurrentThread: vi.fn(),
+    setDraft: vi.fn(),
+    setError: vi.fn(),
+    terminalTurnIdsRef: { current: new Set<string>() },
+  }));
 }
 
 function deferred<T>() {

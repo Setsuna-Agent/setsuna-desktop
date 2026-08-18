@@ -13,6 +13,15 @@ import type {
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 
+export type ThreadStoreCreateInput = CreateThreadInput & {
+  kind?: NonNullable<RuntimeThreadSummary['kind']>;
+};
+
+export type ThreadStoreQuery = ThreadQuery & {
+  /** Internal recovery paths include transient side conversations; user-facing lists do not. */
+  includeSide?: boolean;
+};
+
 export type RuntimeEventReplay = {
   events: RuntimeEvent[];
   latestSeq: number;
@@ -29,12 +38,12 @@ export type RuntimeTurnActivityProjection = {
 };
 
 export type ThreadStore = {
-  listThreads(query?: ThreadQuery): Promise<RuntimeThreadSummary[]>;
+  listThreads(query?: ThreadStoreQuery): Promise<RuntimeThreadSummary[]>;
   getThread(threadId: string): Promise<RuntimeThread | null>;
   getTurnActivity(threadId: string, turnId: string): Promise<RuntimeTurnActivityProjection | null>;
   getThreadPage(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeThread | null>;
   listMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
-  createThread(input?: CreateThreadInput): Promise<RuntimeThread>;
+  createThread(input?: ThreadStoreCreateInput): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   updateThreadMemoryMode(threadId: string, mode: RuntimeThreadMemoryMode, reason?: string): Promise<RuntimeThread>;

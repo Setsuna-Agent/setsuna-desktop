@@ -726,8 +726,10 @@ export type RuntimeToolRun = {
   hookRuns?: RuntimeHookRun[];
 };
 
+export type RuntimeThreadKind = 'regular' | 'side';
 export type RuntimeThreadSummary = {
   id: string;
+  kind?: RuntimeThreadKind;
   activeTurnId?: string | null;
   forkedFromId?: string;
   parentThreadId?: string;

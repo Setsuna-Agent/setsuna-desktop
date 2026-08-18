@@ -31,9 +31,15 @@ export function runtimeServiceActivityKey(
 }
 
 export function runtimeServiceCanOpenThread(
-  service: Pick<RuntimeBackgroundServiceActivity, 'threadTitle'>,
+  service: Pick<RuntimeBackgroundServiceActivity, 'threadKind' | 'threadTitle'>,
 ): boolean {
-  return service.threadTitle !== null;
+  return service.threadTitle !== null && runtimeActivityCanOpenThread(service);
+}
+
+export function runtimeActivityCanOpenThread(
+  activity: Pick<RuntimeActiveTask, 'threadKind'>,
+): boolean {
+  return activity.threadKind !== 'side';
 }
 
 export function formatRuntimeActivityDuration(

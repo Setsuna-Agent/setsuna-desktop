@@ -94,6 +94,7 @@ type RuntimeToolCallExecutorOptions = {
   toolHost?: ToolHost;
   collaborationCoordinator(): RuntimeCollaborationCoordinator;
   goalCoordinator(): RuntimeGoalCoordinator;
+  threadStore: Pick<ThreadStore, 'getThread'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
 };
@@ -210,6 +211,14 @@ export class RuntimeToolCallExecutor {
     try {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
+      if (
+        (isCollaborationToolName(toolCall.name) || isGoalToolName(toolCall.name))
+        && (await this.options.threadStore.getThread(context.threadId))?.kind === 'side'
+      ) {
+        content = `Tool ${toolCall.name} is unavailable in a side conversation.`;
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+      }
       if (isCollaborationToolName(toolCall.name)) {
         if (!collaborationToolsEnabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;

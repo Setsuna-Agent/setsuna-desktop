@@ -81,6 +81,12 @@ describe('chat slash command items', () => {
 
     expect(items.map((item) => item.key)).toEqual(['review']);
   });
+
+  it('keeps side conversations lightweight by hiding persistent task actions', () => {
+    const items = createChatSlashCommandItems(options({ sideConversation: true }));
+
+    expect(items.map((item) => item.key)).toEqual(['model', 'usage']);
+  });
 });
 
 function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSlashCommandItemsOptions {

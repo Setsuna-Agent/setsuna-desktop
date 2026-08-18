@@ -24,6 +24,7 @@ export type ChatSlashCommandItemsOptions = {
   query: string;
   selectedSkills: RuntimeSkillSummary[];
   sideChatAvailable: boolean;
+  sideConversation?: boolean;
   skills: RuntimeSkillSummary[];
   t: Translate;
 };
@@ -43,6 +44,7 @@ export function createChatSlashCommandItems({
   query,
   selectedSkills,
   sideChatAvailable,
+  sideConversation = false,
   skills,
   t,
 }: ChatSlashCommandItemsOptions): SlashCommandMenuItem[] {
@@ -141,12 +143,14 @@ export function createChatSlashCommandItems({
     },
   ];
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleActions = actions.filter((action) => (
-    !normalizedQuery
-    || `${action.key} ${action.title} ${action.description ?? ''}`
-      .toLowerCase()
-      .includes(normalizedQuery)
-  ));
+  const visibleActions = actions
+    .filter((action) => !sideConversation || !SIDE_CONVERSATION_HIDDEN_ACTIONS.has(action.key))
+    .filter((action) => (
+      !normalizedQuery
+      || `${action.key} ${action.title} ${action.description ?? ''}`
+        .toLowerCase()
+        .includes(normalizedQuery)
+    ));
   const selectedSkillIds = new Set(selectedSkills.map((skill) => skill.id));
   const visibleSkills = skills
     .filter((skill) => skill.enabled && !selectedSkillIds.has(skill.id))
@@ -165,3 +169,12 @@ export function createChatSlashCommandItems({
 
   return [...visibleActions, ...visibleSkills];
 }
+
+const SIDE_CONVERSATION_HIDDEN_ACTIONS = new Set([
+  'collaboration',
+  'goal',
+  'side-chat',
+  'review',
+  'compact-context',
+  'clear-context',
+]);

@@ -1,9 +1,9 @@
 import type { DatabaseSync } from 'node:sqlite';
 
-export const SQLITE_THREAD_SCHEMA_VERSION = 2;
+export const SQLITE_THREAD_SCHEMA_VERSION = 3;
 
 export function ensureSqliteThreadSchema(database: DatabaseSync): void {
-  const version = schemaVersion(database);
+  let version = schemaVersion(database);
   if (version > SQLITE_THREAD_SCHEMA_VERSION) {
     throw new Error(
       `SQLite thread store schema ${version} is newer than supported schema ${SQLITE_THREAD_SCHEMA_VERSION}.`,
@@ -51,6 +51,15 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
       ) WITHOUT ROWID;
       PRAGMA user_version = 2;
     `));
+    version = 2;
+  }
+  if (version === 2) {
+    withTransaction(database, () => database.exec(`
+      ALTER TABLE threads
+      ADD COLUMN kind TEXT NOT NULL DEFAULT 'regular'
+        CHECK (kind IN ('regular', 'side'));
+      PRAGMA user_version = 3;
+    `));
     return;
   }
   if (version !== 0) throw new Error(`Unsupported SQLite thread store schema: ${version}`);
@@ -58,6 +67,7 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
   withTransaction(database, () => database.exec(`
     CREATE TABLE threads (
       id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL DEFAULT 'regular' CHECK (kind IN ('regular', 'side')),
       active_turn_id TEXT,
       forked_from_id TEXT,
       parent_thread_id TEXT,
@@ -136,7 +146,7 @@ export function ensureSqliteThreadSchema(database: DatabaseSync): void {
       lease_expires_at INTEGER NOT NULL
     );
 
-    PRAGMA user_version = 2;
+    PRAGMA user_version = 3;
   `));
 }
 

@@ -7,7 +7,7 @@ import {
 type ThreadMessages = Pick<RuntimeThread, 'messages'>;
 
 type GeneratedImageReferenceReader = {
-  listThreads(query?: { includeArchived?: boolean }): Promise<readonly { id: string }[]>;
+  listThreads(query?: { includeArchived?: boolean; includeSide?: boolean }): Promise<readonly { id: string }[]>;
   getThread(threadId: string): Promise<ThreadMessages | null>;
 };
 
@@ -38,7 +38,7 @@ export async function managedGeneratedImageAssetIdsFromStore(
   const remaining = candidates ? new Set(candidates) : null;
   if (remaining?.size === 0) return assetIds;
 
-  const threads = await store.listThreads({ includeArchived: true });
+  const threads = await store.listThreads({ includeArchived: true, includeSide: true });
   for (const thread of threads) {
     const snapshot = await store.getThread(thread.id);
     for (const assetId of managedGeneratedImageAssetIds(snapshot)) {

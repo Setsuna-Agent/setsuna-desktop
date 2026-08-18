@@ -15,7 +15,7 @@ export async function listRuntimeActivities(
   runtime: RuntimeActivitySource,
 ): Promise<RuntimeActivityList> {
   const [threadSummaries, backgroundProcesses, approvalList] = await Promise.all([
-    runtime.threadStore.listThreads({ includeArchived: true }),
+    runtime.threadStore.listThreads({ includeArchived: true, includeSide: true }),
     runtime.backgroundShellProcesses.listAllBackgroundShellProcesses(),
     runtime.approvalGate.listApprovals(),
   ]);
@@ -40,6 +40,7 @@ export async function listRuntimeActivities(
       state: taskStates.get(taskKey(thread.id, turnId)) ?? 'running',
       taskKind: projection?.taskKind ?? 'regular',
       threadId: thread.id,
+      threadKind: thread.kind ?? 'regular',
       threadTitle: thread.title,
       turnId,
       updatedAt: projection?.updatedAt ?? thread.updatedAt,
@@ -53,6 +54,7 @@ export async function listRuntimeActivities(
         ...process,
         archived: owner?.archived ?? false,
         ...(owner?.projectId ? { projectId: owner.projectId } : {}),
+        threadKind: owner?.kind ?? 'regular',
         threadTitle: owner?.title ?? null,
       };
     }),

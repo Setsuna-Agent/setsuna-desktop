@@ -3,6 +3,7 @@ import { translate } from '../../../../src/shared/i18n/I18nProvider.js';
 import {
   formatRuntimeActivityDuration,
   resolveRuntimeActivityLoadView,
+  runtimeActivityCanOpenThread,
   runtimeServiceCanOpenThread,
   singleLineActivityCommand,
 } from '../../../../src/features/runtime-activity/runtimeActivityModel.js';
@@ -28,9 +29,21 @@ describe('runtime activity model', () => {
     expect(singleLineActivityCommand('  \n ', 'fallback')).toBe('fallback');
   });
 
-  it('only opens a background service when its source thread still exists', () => {
-    expect(runtimeServiceCanOpenThread({ threadTitle: 'Dev server' })).toBe(true);
-    expect(runtimeServiceCanOpenThread({ threadTitle: null })).toBe(false);
+  it('keeps side activities visible without routing them into the primary chat', () => {
+    expect(runtimeActivityCanOpenThread({ threadKind: 'regular' })).toBe(true);
+    expect(runtimeActivityCanOpenThread({ threadKind: 'side' })).toBe(false);
+    expect(runtimeServiceCanOpenThread({
+      threadKind: 'regular',
+      threadTitle: 'Dev server',
+    })).toBe(true);
+    expect(runtimeServiceCanOpenThread({
+      threadKind: 'regular',
+      threadTitle: null,
+    })).toBe(false);
+    expect(runtimeServiceCanOpenThread({
+      threadKind: 'side',
+      threadTitle: 'Side service',
+    })).toBe(false);
   });
 });
 

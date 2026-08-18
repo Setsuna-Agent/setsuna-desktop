@@ -3,6 +3,7 @@ import http from 'node:http';
 import { URL } from 'node:url';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
 import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
+import { cleanupRuntimeSideConversations } from '../runtime/use-cases/side-conversation.js';
 import { managedGeneratedImageAssetIdsFromStore } from '../utils/generated-image-assets.js';
 import { APP_SERVER_DEFAULT_CONNECTION_ID, createAppServerCommandExecManager } from './app-server/command-exec.js';
 import { createAppServerConnectionRegistry } from './app-server/connections.js';
@@ -36,10 +37,11 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   try {
     await runtime.mcpStore.migrateLegacySecrets();
     await runtime.threadStore.recover();
-    const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true });
+    const recoveredThreads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
     const recoveredGeneratedImageAssetIds = await managedGeneratedImageAssetIdsFromStore(runtime.threadStore);
     await runtime.generatedImageStore.recover([...recoveredGeneratedImageAssetIds]);
     await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
+    await cleanupRuntimeSideConversations(runtime);
     // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
     await settleStaleRuntimeTurns(runtime);
     // 持久 Goal 在 runtime 重启后必须显式恢复，避免打开应用即静默继续自治执行。

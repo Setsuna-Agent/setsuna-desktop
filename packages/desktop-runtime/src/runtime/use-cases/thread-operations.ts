@@ -66,7 +66,7 @@ export async function deleteRuntimeThread(
       { label: 'dynamic tools', run: () => runtime.agentLoop.clearAppServerDynamicTools(threadId) },
       { label: 'MCP connections', run: () => runtime.mcpConnections.releaseThread(threadId) },
       { label: 'attachments', run: () => runtime.attachmentStore.releaseThread(threadId) },
-      ...(!thread.projectId
+      ...(!thread.projectId || thread.kind === 'side'
         ? [{
           label: 'temporary workspace',
           run: () => runtime.workspaceProjects.removeTemporaryWorkspace({
