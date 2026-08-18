@@ -314,6 +314,35 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(secondPath, 'utf8')).resolves.toBe('ALPHA\n\nOMEGA\n');
   });
 
+  it('preserves bare blank context before trailing context lines', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const matchingPath = path.join(projectDir, 'matching.txt');
+    const missingBlankPath = path.join(projectDir, 'missing-blank.txt');
+    await Promise.all([
+      writeFile(matchingPath, 'old\n\ntail\n', 'utf8'),
+      writeFile(missingBlankPath, 'old\ntail\n', 'utf8'),
+    ]);
+    const updatePatch = (fileName: string) => [
+      '*** Begin Patch',
+      `*** Update File: ${fileName}`,
+      '@@',
+      '-old',
+      '+new',
+      '',
+      ' tail',
+      '*** End Patch',
+    ].join('\n');
+
+    await host.runTool('apply_patch', { patch: updatePatch('matching.txt') }, context);
+    await expect(host.runTool('apply_patch', {
+      patch: updatePatch('missing-blank.txt'),
+    }, context)).rejects.toThrow('未找到匹配的旧内容');
+
+    await expect(readFile(matchingPath, 'utf8')).resolves.toBe('new\n\ntail\n');
+    await expect(readFile(missingBlankPath, 'utf8')).resolves.toBe('old\ntail\n');
+  });
+
   it('rejects update hunks without additions or removals', async () => {
     const { host, projectDir } = await createHost();
     const context = { threadId: 'thread_1', turnId: 'turn_1' };

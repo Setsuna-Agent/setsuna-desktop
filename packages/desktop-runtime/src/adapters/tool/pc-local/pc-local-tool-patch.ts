@@ -128,8 +128,8 @@ export function parseApplyPatch(patch: unknown): ParseApplyPatchResult {
         }
 
         // Codex permits bare blank separators between hunks and file sections.
-        // Keep a bare blank as context only when another change follows in this hunk.
-        if (hunkLine === '' && !hasFollowingChangeLineInChunk(lines, index, endIndex)) {
+        // A later context or change line keeps the blank inside the current hunk.
+        if (hunkLine === '' && !hasFollowingHunkBodyLine(lines, index, endIndex)) {
           index += 1;
           continue;
         }
@@ -193,13 +193,13 @@ function chunkHasChanges(chunk: ApplyPatchUpdateChunk): boolean {
     || chunk.newLines.length !== chunk.contextLineIndices.length;
 }
 
-function hasFollowingChangeLineInChunk(lines: readonly string[], currentIndex: number, endIndex: number): boolean {
+function hasFollowingHunkBodyLine(lines: readonly string[], currentIndex: number, endIndex: number): boolean {
   for (let index = currentIndex + 1; index < endIndex; index += 1) {
     const line = lines[index];
     if (line === '@@' || line.startsWith('@@ ') || line === '*** End of File' || isApplyPatchFileHeader(line)) {
       return false;
     }
-    if (line.startsWith('+') || line.startsWith('-')) return true;
+    if (line.startsWith(' ') || line.startsWith('+') || line.startsWith('-')) return true;
   }
   return false;
 }
