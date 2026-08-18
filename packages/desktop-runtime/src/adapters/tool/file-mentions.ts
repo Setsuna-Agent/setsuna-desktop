@@ -1,5 +1,6 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { workspaceIgnoreRulesCaseInsensitive } from '../search/workspace-search-policy.js';
 import { isNodeError } from '../../shared/node-errors.js';
 
 export type FileMentionEntry = {
@@ -48,10 +49,6 @@ const DEFAULT_IGNORE_PATTERNS = [
   'target/',
   'node_modules/',
   '.DS_Store',
-  '.env',
-  '.env.*',
-  '*.pem',
-  '*.key',
 ];
 
 export async function buildFileMentionIndex(
@@ -99,13 +96,19 @@ export function findFileMentionSuggestions(
 }
 
 export async function createWorkspaceIgnoreMatcher(root: string): Promise<WorkspaceIgnoreMatcher> {
-  const rules = DEFAULT_IGNORE_PATTERNS.map(parseIgnoreLine).filter(isIgnoreRule);
+  const caseInsensitive = workspaceIgnoreRulesCaseInsensitive();
+  const rules = DEFAULT_IGNORE_PATTERNS
+    .map((line) => parseIgnoreLine(line, caseInsensitive))
+    .filter(isIgnoreRule);
   for (const fileName of IGNORE_FILES) {
     try {
-      const content = await readFile(path.join(root, fileName), 'utf8');
-      rules.push(...content.split(/\r?\n/).map(parseIgnoreLine).filter(isIgnoreRule));
+      const content = (await readFile(path.join(root, fileName), 'utf8')).replace(/^\uFEFF/u, '');
+      rules.push(...content
+        .split(/\r?\n/)
+        .map((line) => parseIgnoreLine(line, caseInsensitive))
+        .filter(isIgnoreRule));
     } catch {
-      // 忽略规则文件是可选的，缺失时不应影响工作区索引。
+      // Ignore files are optional and never define a filesystem permission boundary.
     }
   }
   return new WorkspaceIgnoreMatcher(rules);
@@ -179,11 +182,28 @@ export class WorkspaceIgnoreMatcher {
   ignores(relativePath: string): boolean {
     const target = normalizeIgnorePath(relativePath);
     if (!target.path) return false;
+    return this.isIgnored(target.path, target.directory);
+  }
+
+  private isIgnored(relativePath: string, isDirectory: boolean): boolean {
     let ignored = false;
     for (const rule of this.rules) {
-      if (rule.matches(target.path, target.directory)) ignored = !rule.negated;
+      if (!rule.matches(relativePath, isDirectory)) continue;
+      // Gitignore cannot reinclude a child while any parent directory remains
+      // excluded. A matching negation may still reinclude that parent itself.
+      if (rule.negated && this.hasIgnoredParent(relativePath)) continue;
+      ignored = !rule.negated;
     }
     return ignored;
+  }
+
+  private hasIgnoredParent(relativePath: string): boolean {
+    let separator = relativePath.indexOf('/');
+    while (separator >= 0) {
+      if (this.isIgnored(relativePath.slice(0, separator), true)) return true;
+      separator = relativePath.indexOf('/', separator + 1);
+    }
+    return false;
   }
 
   shouldSkipDirectory(relativePath: string): boolean {
@@ -194,17 +214,32 @@ export class WorkspaceIgnoreMatcher {
   }
 }
 
-function parseIgnoreLine(line: unknown): IgnoreRule | null {
-  let raw = String(line || '').trim();
+function parseIgnoreLine(line: unknown, caseInsensitive = false): IgnoreRule | null {
+  // Gitignore keeps leading spaces and escaped trailing spaces significant.
+  // Only ordinary, unescaped trailing spaces are discarded.
+  let raw = trimUnescapedTrailingSpaces(String(line || ''));
   if (!raw || raw.startsWith('#')) return null;
   const escapedLeading = raw.startsWith('\\#') || raw.startsWith('\\!');
   if (escapedLeading) raw = raw.slice(1);
 
   const negated = !escapedLeading && raw.startsWith('!');
-  if (negated) raw = raw.slice(1).trim();
+  if (negated) raw = raw.slice(1);
   if (!raw) return null;
 
-  return new IgnoreRule(raw, negated);
+  return new IgnoreRule(raw, negated, caseInsensitive);
+}
+
+function trimUnescapedTrailingSpaces(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === ' ') {
+    let backslashes = 0;
+    for (let index = end - 2; index >= 0 && value[index] === '\\'; index -= 1) {
+      backslashes += 1;
+    }
+    if (backslashes % 2 === 1) break;
+    end -= 1;
+  }
+  return value.slice(0, end);
 }
 
 class IgnoreRule {
@@ -215,31 +250,40 @@ class IgnoreRule {
   readonly pattern: string;
   readonly hasSlash: boolean;
   readonly regex: RegExp;
+  readonly descendantRegex: RegExp | null;
 
-  constructor(pattern: string, negated: boolean) {
+  constructor(pattern: string, negated: boolean, caseInsensitive = false) {
     this.original = pattern;
     this.negated = negated;
     this.directoryOnly = pattern.endsWith('/');
     this.anchored = pattern.startsWith('/');
-    this.pattern = slashPath(pattern)
+    // Ignore files use backslash as an escape character, not as a Windows separator.
+    this.pattern = pattern
       .replace(/^\/+/, '')
       .replace(/\/+$/, '');
     this.hasSlash = this.pattern.includes('/');
-    this.regex = globToRegExp(this.pattern);
+    this.regex = globToRegExp(this.pattern, caseInsensitive);
+    // Slash-qualified rules can name directories even without a trailing slash;
+    // gitignore semantics then exclude every descendant of the matched directory.
+    this.descendantRegex = this.anchored || this.hasSlash
+      ? globToRegExp(`${this.pattern}/**`, caseInsensitive)
+      : null;
   }
 
   matches(relativePath: string, isDirectory: boolean): boolean {
     const target = relativePath.replace(/^\.?\//, '').replace(/\/+$/, '');
     if (!target) return false;
     if (this.directoryOnly) return this.matchesDirectory(target, isDirectory);
-    if (this.anchored || this.hasSlash) return this.regex.test(target);
+    if (this.anchored || this.hasSlash) {
+      return this.regex.test(target) || Boolean(this.descendantRegex?.test(target));
+    }
     return target.split('/').some((segment) => this.regex.test(segment));
   }
 
   matchesDirectory(target: string, isDirectory: boolean): boolean {
     if (!isDirectory && !target.includes('/')) return false;
     if (this.anchored || this.hasSlash) {
-      return this.regex.test(target) || target.startsWith(`${this.pattern}/`);
+      return this.regex.test(target) || Boolean(this.descendantRegex?.test(target));
     }
     return target.split('/').some((segment) => this.regex.test(segment));
   }
@@ -270,14 +314,68 @@ function scoreFile(file: FileMentionEntry, query: string): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function globToRegExp(pattern: unknown): RegExp {
+function globToRegExp(pattern: unknown, caseInsensitive = false): RegExp {
+  const text = String(pattern || '');
   let source = '';
-  for (const char of String(pattern || '')) {
-    if (char === '*') source += '[^/]*';
-    else if (char === '?') source += '[^/]';
-    else source += escapeRegExp(char);
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === '*') {
+      if (text[index + 1] === '*') {
+        if (text[index + 2] === '/') {
+          source += '(?:[^/]+/)*';
+          index += 2;
+        } else {
+          source += '.*';
+          index += 1;
+        }
+      } else {
+        source += '[^/]*';
+      }
+      continue;
+    }
+    if (char === '?') {
+      source += '[^/]';
+      continue;
+    }
+    if (char === '\\' && index + 1 < text.length) {
+      source += escapeRegExp(text[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (char === '[') {
+      const characterClass = parseGlobCharacterClass(text, index);
+      if (characterClass) {
+        source += characterClass.source;
+        index = characterClass.end;
+        continue;
+      }
+    }
+    source += escapeRegExp(char);
   }
-  return new RegExp(`^${source}$`);
+  return new RegExp(`^${source}$`, caseInsensitive ? 'i' : '');
+}
+
+function parseGlobCharacterClass(text: string, start: number): { end: number; source: string } | null {
+  let end = start + 1;
+  if (text[end] === '!' || text[end] === '^') end += 1;
+  if (text[end] === ']') end += 1;
+  while (end < text.length && (text[end] !== ']' || text[end - 1] === '\\')) end += 1;
+  if (end >= text.length) return null;
+
+  let body = text.slice(start + 1, end);
+  const negated = body.startsWith('!') || body.startsWith('^');
+  if (negated) body = body.slice(1);
+  if (!body) return null;
+  if (body.startsWith(']')) body = `\\${body}`;
+
+  // A glob character class never crosses a path separator, including negated classes.
+  const source = negated ? `[^/${body}]` : `(?=[^/])[${body}]`;
+  try {
+    new RegExp(source);
+  } catch {
+    return null;
+  }
+  return { end, source };
 }
 
 function normalizeIgnorePath(value: unknown): { directory: boolean; path: string } {

@@ -1,21 +1,68 @@
-import { mkdtemp, realpath } from 'node:fs/promises';
+import { mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   isWorkspaceSearchPathExcluded,
   ripgrepExcludeGlobs,
+  workspaceSearchDefaultExcludeGlobs,
+  workspaceSearchIgnoreFiles,
 } from '../../../src/adapters/search/workspace-search-policy.js';
 
 describe('workspace search policy', () => {
-  it('keeps hidden source paths but excludes secrets and generated directories', () => {
+  it('keeps hidden and ordinary files but excludes generated directories by default', () => {
     const root = path.resolve('/workspace');
 
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.github', 'workflow.yml'))).toBe(false);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.env'))).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'app', '.env.local'))).toBe(true);
+    expect(isWorkspaceSearchPathExcluded(root, path.join(root, '.env'))).toBe(false);
+    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'certs', 'private.key'))).toBe(false);
     expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'node_modules', 'pkg', 'index.js'))).toBe(true);
-    expect(isWorkspaceSearchPathExcluded(root, path.join(root, 'certs', 'private.key'))).toBe(true);
+  });
+
+  it('include-ignored searches lift all default traversal exclusions', () => {
+    const root = path.resolve('/workspace');
+    const includeIgnoredDefaults = workspaceSearchDefaultExcludeGlobs({ includeIgnored: true });
+
+    expect(includeIgnoredDefaults).toEqual([]);
+    for (const relativePath of [
+      'node_modules/pkg/index.js',
+      '.git/config',
+      '.env',
+      'terraform.tfstate',
+    ]) {
+      expect(isWorkspaceSearchPathExcluded(
+        root,
+        path.join(root, relativePath),
+        [],
+        [],
+        includeIgnoredDefaults,
+      )).toBe(false);
+    }
+    expect(isWorkspaceSearchPathExcluded(
+      root,
+      path.join(root, '.env'),
+      [],
+      ['**/.env'],
+      includeIgnoredDefaults,
+    )).toBe(true);
+  });
+
+  it('include-ignored searches disable workspace ignore files', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-policy-ignore-files-'));
+    await Promise.all([
+      writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+      writeFile(path.join(root, '.ignore'), 'coverage/\n'),
+      writeFile(path.join(root, '.qwenignore'), 'vendor-secret.txt\n'),
+      writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
+    ]);
+
+    const defaultFiles = await workspaceSearchIgnoreFiles(root);
+    const includeIgnoredFiles = await workspaceSearchIgnoreFiles(root, { includeIgnored: true });
+
+    expect(defaultFiles.map((file) => path.basename(file)).sort()).toEqual(
+      ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'],
+    );
+    expect(includeIgnoredFiles).toEqual([]);
   });
 
   it('normalizes relative denied roots that use Windows separators', () => {

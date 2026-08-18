@@ -57,7 +57,7 @@ const MAX_TURN_FILE_STATES_PER_PROJECT = 64;
 const TURN_FILE_STATE_TTL_MS = 30 * 60 * 1_000;
 const FILE_MUTATION_TOOL_NAMES = new Set(['apply_patch', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
 const FILE_PATH_ARGUMENT_TOOLS = new Set(['read_file', 'write_file', 'append_file', 'delete_file', 'edit', 'edit_file']);
-const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
+const COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   {
     name: 'request_permissions',
     description: 'Request additional sandbox permissions for later tool calls in this turn or session.',
@@ -87,7 +87,7 @@ const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
                 read: { type: 'array', items: { type: 'string' }, description: 'Absolute or workspace-relative paths to grant read access.' },
                 entries: {
                   type: 'array',
-                  description: 'Codex canonical filesystem permission entries.',
+                  description: 'Canonical filesystem permission entries.',
                   items: {
                     type: 'object',
                     additionalProperties: true,
@@ -112,17 +112,17 @@ const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   },
   {
     name: 'exec_command',
-    description: 'Run a shell command in the active local project using Codex-compatible arguments.',
+    description: 'Run a shell command in the active local project.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        shell: { type: 'string', description: 'Optional shell path. Accepted for Codex compatibility; execution uses the platform shell.' },
+        shell: { type: 'string', description: 'Optional shell path accepted for caller compatibility; execution uses the platform shell.' },
         cmd: { type: 'string', description: 'The shell command to run.' },
         cwd: { type: 'string', description: 'Optional working directory, absolute or relative to the project root.' },
         yield_time_ms: { type: 'integer', description: 'Milliseconds to wait before returning while the command keeps running.', minimum: 0, maximum: 30000 },
         timeout_ms: { type: 'integer', description: 'Optional timeout in milliseconds.', minimum: 1, maximum: 600000 },
-        max_output_tokens: { type: 'integer', description: 'Accepted for Codex compatibility; output truncation is handled by the runtime.' },
+        max_output_tokens: { type: 'integer', description: 'Optional output token hint; output truncation is handled by the runtime.' },
         persist: { type: 'boolean', description: 'Keep a still-running dev server or watcher available after the current turn completes.' },
         persist_ttl_ms: { type: 'integer', description: 'Optional lifetime for a persisted process in milliseconds.', minimum: 1000, maximum: MAX_PERSISTENT_SHELL_TTL_MS },
         sandbox_permissions: { type: 'string', enum: ['use_default', 'with_additional_permissions', 'require_escalated'], description: 'Per-command sandbox override. Use with_additional_permissions only together with a non-empty additional_permissions request; otherwise omit this field or use use_default. require_escalated asks for unsandboxed execution.' },
@@ -149,14 +149,14 @@ const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
           },
         },
         justification: { type: 'string', description: 'User-facing approval reason for require_escalated.' },
-        prefix_rule: { type: 'array', items: { type: 'string' }, description: 'Reusable approval prefix accepted for Codex compatibility.' },
+        prefix_rule: { type: 'array', items: { type: 'string' }, description: 'Reusable approval prefix accepted for caller compatibility.' },
       },
       required: ['cmd'],
     },
   },
   {
     name: 'write_stdin',
-    description: 'Write characters to an existing Codex-compatible shell session. Empty input polls the session.',
+    description: 'Write characters to an existing shell session. Empty input polls the session.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -164,7 +164,7 @@ const CODEX_COMPAT_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
         session_id: { type: ['string', 'number'], description: 'Session identifier returned by exec_command.' },
         chars: { type: 'string', description: 'Characters to write to stdin. Empty string polls for output.' },
         yield_time_ms: { type: 'integer', description: 'Milliseconds to wait for output after polling.', minimum: 0, maximum: 30000 },
-        max_output_tokens: { type: 'integer', description: 'Accepted for Codex compatibility; output truncation is handled by the runtime.' },
+        max_output_tokens: { type: 'integer', description: 'Optional output token hint; output truncation is handled by the runtime.' },
       },
       required: ['session_id'],
     },
@@ -231,7 +231,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const names = new Set(localTools.map((tool) => tool.name));
     return [
       ...localTools,
-      ...CODEX_COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)),
+      ...COMPAT_TOOL_DEFINITIONS.filter((tool) => !names.has(tool.name) && toolEnabledForContext(tool.name, context)),
     ];
   }
 

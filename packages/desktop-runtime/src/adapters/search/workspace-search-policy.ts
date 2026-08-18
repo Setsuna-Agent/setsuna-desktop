@@ -4,11 +4,8 @@ import path from 'node:path';
 
 export const MAX_WORKSPACE_SEARCH_FILE_BYTES = 1024 * 1024;
 
-/** Hidden source files stay searchable; generated, VCS, credential, and secret files do not. */
-export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
-  '**/.git/**',
-  '**/.hg/**',
-  '**/.svn/**',
+/** Generated, dependency, and cache directories stay out of searches by default. */
+export const GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/.next/**',
   '**/.nuxt/**',
   '**/.output/**',
@@ -28,11 +25,27 @@ export const DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS = [
   '**/target/**',
   '**/node_modules/**',
   '**/release-artifacts/**',
-  '**/.env',
-  '**/.env.*',
-  '**/*.pem',
-  '**/*.key',
 ] as const;
+
+/** Workspace ignore sources consulted by default searches. */
+export const WORKSPACE_IGNORE_FILE_NAMES = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'] as const;
+
+/** Keep explicit ignore-file matching aligned with Windows path semantics. */
+export function workspaceIgnoreRulesCaseInsensitive(): boolean {
+  return process.platform === 'win32';
+}
+
+/**
+ * Resolves the effective default exclusion layer for one search request.
+ * Include-ignored searches lift the traversal defaults as well as ignore files.
+ */
+export function workspaceSearchDefaultExcludeGlobs(
+  options: { includeIgnored?: boolean } = {},
+): readonly string[] {
+  return options.includeIgnored
+    ? []
+    : GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS;
+}
 
 export async function resolveWorkspaceSearchScope(root: string, scopePath?: string) {
   const resolvedRoot = await realpath(path.resolve(root));
@@ -43,9 +56,14 @@ export async function resolveWorkspaceSearchScope(root: string, scopePath?: stri
   return { root: resolvedRoot, scopePath: resolvedScope, scopeStat };
 }
 
-export async function workspaceSearchIgnoreFiles(root: string): Promise<string[]> {
+export async function workspaceSearchIgnoreFiles(
+  root: string,
+  options: { includeIgnored?: boolean } = {},
+): Promise<string[]> {
   // Root files are explicit so non-Git project folders get the same policy as repositories.
-  const candidates = ['.gitignore', '.ignore', '.qwenignore', '.setsunaignore'].map((name) => path.join(root, name));
+  if (options.includeIgnored) return [];
+  const fileNames = WORKSPACE_IGNORE_FILE_NAMES;
+  const candidates = [...fileNames].map((name) => path.join(root, name));
   const available = await Promise.all(candidates.map(async (candidate) => {
     try {
       return (await stat(candidate)).isFile() ? candidate : null;
@@ -60,8 +78,9 @@ export function ripgrepExcludeGlobs(
   root: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
+  defaultExcludeGlobs: readonly string[] = GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): string[] {
-  const globs: string[] = [...DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS];
+  const globs: string[] = [...defaultExcludeGlobs];
   for (const excludedRoot of excludeRoots) {
     const relative = relativePolicyPath(root, excludedRoot);
     if (relative === null) continue;
@@ -86,11 +105,12 @@ export function isWorkspaceSearchPathExcluded(
   filePath: string,
   excludeRoots: readonly string[] = [],
   excludeGlobs: readonly string[] = [],
+  defaultExcludeGlobs: readonly string[] = GENERATED_WORKSPACE_SEARCH_EXCLUDE_GLOBS,
 ): boolean {
   const absolutePath = path.resolve(filePath);
   if (!isPathWithin(root, absolutePath)) return true;
   const relativePath = slashPath(path.relative(root, absolutePath));
-  const defaultExcluded = DEFAULT_WORKSPACE_SEARCH_EXCLUDE_GLOBS.some((glob) => globMatchesPath(glob, relativePath));
+  const defaultExcluded = defaultExcludeGlobs.some((glob) => globMatchesPath(glob, relativePath));
   if (defaultExcluded) return true;
   if (excludeRoots.some((excludedRoot) => isPathWithin(resolvePolicyRoot(root, excludedRoot), absolutePath))) return true;
   return excludeGlobs.some((glob) => {
@@ -138,8 +158,9 @@ function relativePolicyGlob(root: string, value: string): string | null {
 }
 
 function stripWorkspaceGlobRoot(normalizedRoot: string, raw: string): string | null {
-  const comparableRoot = process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot;
-  const comparableRaw = process.platform === 'win32' ? raw.toLowerCase() : raw;
+  const caseInsensitive = workspacePathComparisonCaseInsensitive();
+  const comparableRoot = caseInsensitive ? normalizedRoot.toLowerCase() : normalizedRoot;
+  const comparableRaw = caseInsensitive ? raw.toLowerCase() : raw;
   if (comparableRaw === comparableRoot) return '**';
   if (!comparableRaw.startsWith(`${comparableRoot}/`)) return null;
   return raw.slice(normalizedRoot.length + 1);
@@ -165,11 +186,19 @@ function isAbsoluteGlob(value: string): boolean {
 function globMatchesPath(glob: string, relativePath: string): boolean {
   try {
     const normalizedGlob = glob.replace(/^\//u, '');
-    return new RegExp(`^${globToRegExpSource(normalizedGlob)}$`, process.platform === 'win32' ? 'i' : '').test(relativePath);
+    return new RegExp(
+      `^${globToRegExpSource(normalizedGlob)}$`,
+      workspacePathComparisonCaseInsensitive() ? 'i' : '',
+    ).test(relativePath);
   } catch {
     // Invalid deny patterns fail closed.
     return true;
   }
+}
+
+/** Fail conservatively on desktop platforms whose default filesystems ignore case. */
+function workspacePathComparisonCaseInsensitive(): boolean {
+  return process.platform === 'win32' || process.platform === 'darwin';
 }
 
 function globToRegExpSource(glob: string): string {

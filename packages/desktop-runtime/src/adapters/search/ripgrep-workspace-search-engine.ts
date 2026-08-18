@@ -14,8 +14,11 @@ import {
   resolveWorkspaceSearchScope,
   ripgrepExcludeGlobs,
   workspaceRelativeSearchPath,
+  workspaceSearchDefaultExcludeGlobs,
   workspaceSearchIgnoreFiles,
+  workspaceIgnoreRulesCaseInsensitive,
 } from './workspace-search-policy.js';
+import { createWorkspaceIgnoreMatcher, type WorkspaceIgnoreMatcher } from '../tool/file-mentions.js';
 import { WorkspaceSearchSupersessionCoordinator } from './workspace-search-supersession.js';
 
 const DEFAULT_SEARCH_TIMEOUT_MS = 30_000;
@@ -79,8 +82,12 @@ export function buildRipgrepArguments(input: {
   if (!request.caseSensitive) args.push('--ignore-case');
   if (!request.regex) args.push('--fixed-strings');
   if (request.contextLines) args.push('--context', String(request.contextLines));
+  if (workspaceIgnoreRulesCaseInsensitive() && input.ignoreFiles?.length) {
+    args.push('--ignore-file-case-insensitive');
+  }
   for (const ignoreFile of input.ignoreFiles ?? []) args.push('--ignore-file', ignoreFile);
-  for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs)) {
+  const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
+  for (const glob of ripgrepExcludeGlobs(root, request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)) {
     args.push('--glob', `!${glob}`);
   }
   const relativeScope = path.relative(root, scopePath);
@@ -95,7 +102,10 @@ async function runRipgrepSearch(
   if (request.signal?.aborted) throw abortReason(request.signal);
   const scope = await resolveWorkspaceSearchScope(request.root, request.scopePath);
   if (request.signal?.aborted) throw abortReason(request.signal);
-  const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root);
+  const ignoreFiles = await workspaceSearchIgnoreFiles(scope.root, { includeIgnored: request.includeIgnored });
+  const ignoreMatcher = request.includeIgnored
+    ? null
+    : await createWorkspaceIgnoreMatcher(scope.root);
   if (request.signal?.aborted) throw abortReason(request.signal);
   const args = buildRipgrepArguments({ request, root: scope.root, scopePath: scope.scopePath, ignoreFiles });
   const spawnProcess = options.spawnProcess ?? spawn;
@@ -105,17 +115,19 @@ async function runRipgrepSearch(
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
   });
-  return collectRipgrepResult(child, scope.root, request);
+  return collectRipgrepResult(child, scope.root, request, ignoreMatcher);
 }
 
 function collectRipgrepResult(
   child: RipgrepChildProcess,
   root: string,
   request: WorkspaceTextSearchRequest,
+  ignoreMatcher: WorkspaceIgnoreMatcher | null,
 ): Promise<WorkspaceTextSearchResponse> {
   return new Promise((resolve, reject) => {
     const matches: RipgrepMatch[] = [];
     const linesByPath = new Map<string, Map<number, string>>();
+    const defaultExcludeGlobs = workspaceSearchDefaultExcludeGlobs(request);
     let stdoutBuffer = '';
     let stderr = '';
     let scannedFiles: number | undefined;
@@ -152,7 +164,8 @@ function collectRipgrepResult(
             continue;
           }
           const relativePath = workspaceRelativeSearchPath(root, event.path);
-          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs)) {
+          if (isWorkspaceSearchPathExcluded(root, path.join(root, relativePath), request.excludeRoots, request.excludeGlobs, defaultExcludeGlobs)
+            || ignoreMatcher?.ignores(relativePath)) {
             continue;
           }
           const fileLines = linesByPath.get(relativePath) ?? new Map<number, string>();

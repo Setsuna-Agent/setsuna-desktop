@@ -8,7 +8,13 @@ import type {
   RuntimeReviewFinding,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
@@ -269,6 +275,59 @@ describe('DesktopReviewPanel interactions', () => {
         behavior: 'auto',
       });
     });
+  });
+
+  it('yields navigation to user scroll intent instead of fighting it', async () => {
+    const finding: RuntimeReviewFinding = {
+      priority: 'P2',
+      title: '远端评论',
+      body: 'Navigation target far below the viewport.',
+      path: 'src/a.ts',
+      startLine: 28,
+    };
+    const summary: DesktopDiffSummary = {
+      additions: 1,
+      deletions: 0,
+      files: [diffFile('src/a.ts', 28)],
+    };
+    const { virtualizerScrollTo } = mockReviewScroller({
+      deferFindingLayout: true,
+      diffs: [{ path: 'src/a.ts', top: 1_200 }],
+      findings: [{ path: 'src/a.ts', line: 28, top: 1_500 }],
+      linePositions: { 28: { top: 300, height: 20 } },
+    });
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          findings={[finding]}
+          focusRequest={{
+            finding,
+            line: 28,
+            path: 'src/a.ts',
+            version: 1,
+          }}
+          latestSummary={summary}
+          loading={false}
+          reviewState={{ ...reviewState, unstagedSummary: summary }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    // The user takes over scrolling before the alignment loop converges. The
+    // pending navigation session must be dropped, not resumed on later frames.
+    const scrollRoot = document.querySelector(
+      '.desktop-review-panel__sections',
+    );
+    expect(scrollRoot).toBeTruthy();
+    fireEvent.wheel(scrollRoot as Element, { deltaY: -240 });
+
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(virtualizerScrollTo).not.toHaveBeenCalled();
   });
 
   it('opens the shared Git dialog from the review action', async () => {

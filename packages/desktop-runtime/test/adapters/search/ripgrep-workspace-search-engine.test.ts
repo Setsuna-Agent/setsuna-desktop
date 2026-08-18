@@ -46,12 +46,27 @@ describe('RipgrepWorkspaceSearchEngine', () => {
       '--ignore-file',
       path.join(root, '.setsunaignore'),
       '--glob',
-      '!**/.env',
+      '!**/node_modules/**',
       '--glob',
       '!/blocked/**',
     ]));
     expect(args.slice(-4)).toEqual(['--regexp', 'needle', '--', 'src']);
     expect(args).not.toContain('--follow');
+  });
+
+  it('disables ignore files and traversal defaults for include-ignored searches', () => {
+    const root = path.resolve('/workspace');
+    const args = buildRipgrepArguments({
+      root,
+      scopePath: root,
+      ignoreFiles: [],
+      request: request(root, { includeIgnored: true }),
+    });
+
+    expect(args).not.toContain('--ignore-file');
+    expect(args).not.toContain('--ignore-file-case-insensitive');
+    expect(args).not.toContain('!**/node_modules/**');
+    expect(args).not.toContain('!**/dist/**');
   });
 
   it('parses UTF-8 byte offsets into character columns', () => {
@@ -125,21 +140,23 @@ describe('RipgrepWorkspaceSearchEngine', () => {
   });
 
   it.runIf(existsSync(preparedRipgrepPath))(
-    'searches with the real pinned sidecar while honoring ignore, hidden, secret, symlink, and global-cap rules',
+    'searches with the real pinned sidecar while honoring ignore, hidden, symlink, and global-cap rules',
     async () => {
       const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-integration-'));
       const outside = path.join(path.dirname(root), `${path.basename(root)}-outside.txt`);
       await Promise.all([
         mkdir(path.join(root, '.github'), { recursive: true }),
         mkdir(path.join(root, 'src'), { recursive: true }),
+      ]);
+      await Promise.all([
         writeFile(path.join(root, '.gitignore'), 'ignored.txt\n'),
         writeFile(path.join(root, '.rgignore'), 'rg-only-ignore.txt\n'),
-        writeFile(path.join(root, '.setsunaignore'), 'custom-secret.txt\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
         writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
         writeFile(path.join(root, '.github', 'workflow.yml'), 'name: NEEDLE hidden source\n'),
         writeFile(path.join(root, 'ignored.txt'), 'NEEDLE ignored\n'),
         writeFile(path.join(root, 'rg-only-ignore.txt'), 'NEEDLE must remain searchable\n'),
-        writeFile(path.join(root, 'custom-secret.txt'), 'NEEDLE ignored custom\n'),
+        writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE ignored custom\n'),
         writeFile(path.join(root, 'src', '你好.ts'), 'NEEDLE one\nNEEDLE two\n'),
         writeFile(outside, 'NEEDLE outside\n'),
       ]);
@@ -151,6 +168,7 @@ describe('RipgrepWorkspaceSearchEngine', () => {
 
       expect(all.engine).toBe('ripgrep');
       expect([...new Set(all.matches.map((match) => match.path))].sort()).toEqual([
+        '.env',
         '.github/workflow.yml',
         'rg-only-ignore.txt',
         'src/你好.ts',
@@ -182,6 +200,63 @@ describe('RipgrepWorkspaceSearchEngine', () => {
 
       expect(result.matches.map((match) => match.path)).toEqual(['blocked1/allowed.txt']);
       expect(result.scannedFiles).toBe(1);
+    },
+  );
+
+  it.runIf(existsSync(preparedRipgrepPath))(
+    'include-ignored searches lift traversal defaults and workspace ignore files',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-include-ignored-'));
+      await Promise.all([
+        mkdir(path.join(root, '.git'), { recursive: true }),
+        mkdir(path.join(root, 'node_modules', 'dep'), { recursive: true }),
+        mkdir(path.join(root, 'dist'), { recursive: true }),
+        mkdir(path.join(root, 'src'), { recursive: true }),
+      ]);
+      await Promise.all([
+        writeFile(path.join(root, '.gitignore'), 'dist/\n'),
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
+        writeFile(path.join(root, '.env'), 'NEEDLE=secret\n'),
+        writeFile(path.join(root, '.git', 'config'), 'NEEDLE git metadata\n'),
+        writeFile(path.join(root, 'custom-ignored.txt'), 'NEEDLE custom ignored\n'),
+        writeFile(path.join(root, 'src', 'app.ts'), 'NEEDLE source\n'),
+        writeFile(path.join(root, 'node_modules', 'dep', 'index.js'), 'NEEDLE dependency\n'),
+        writeFile(path.join(root, 'dist', 'bundle.js'), 'NEEDLE generated\n'),
+      ]);
+      const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
+
+      const defaultSearch = await engine.search(request(root, { regex: false }));
+      const includeIgnoredSearch = await engine.search(request(root, { regex: false, includeIgnored: true }));
+
+      expect(defaultSearch.matches.map((match) => match.path).sort()).toEqual(['.env', 'src/app.ts']);
+      expect(includeIgnoredSearch.matches.map((match) => match.path).sort()).toEqual([
+        '.env',
+        '.git/config',
+        'custom-ignored.txt',
+        'dist/bundle.js',
+        'node_modules/dep/index.js',
+        'src/app.ts',
+      ]);
+    },
+  );
+
+  it.runIf(existsSync(preparedRipgrepPath))(
+    'include-ignored explicit file scopes bypass workspace ignore files',
+    async () => {
+      const root = await mkdtemp(path.join(tmpdir(), 'setsuna-rg-explicit-ignored-'));
+      const ignoredPath = path.join(root, 'custom-ignored.txt');
+      await Promise.all([
+        writeFile(path.join(root, '.setsunaignore'), 'custom-ignored.txt\n'),
+        writeFile(ignoredPath, 'NEEDLE ignored\n'),
+      ]);
+      const engine = new RipgrepWorkspaceSearchEngine({ executablePath: preparedRipgrepPath });
+
+      const result = await engine.search({
+        ...request(root, { regex: false, includeIgnored: true }),
+        scopePath: ignoredPath,
+      });
+
+      expect(result.matches).toHaveLength(1);
     },
   );
 });

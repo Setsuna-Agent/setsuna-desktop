@@ -55,6 +55,28 @@ describe('pc local file tools and previews', () => {
     await expect(readFile(path.join(projectDir, 'src', 'generated.txt'), 'utf8')).resolves.toBe('generated\n');
   });
 
+  it('treats precise edit replacement text literally', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'src', 'literal-replacement.ts');
+    const replacement = 'return new RegExp(`^${source}$`);';
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, 'prefix\nTARGET\nsuffix\n', 'utf8');
+
+    const edited = await host.runTool('edit', {
+      file_path: 'src/literal-replacement.ts',
+      old_string: 'TARGET',
+      new_string: replacement,
+    }, context);
+
+    expect(JSON.parse(edited.preview ?? '{}')).toMatchObject({
+      diff: { additions: 1, deletions: 1 },
+    });
+    await expect(readFile(filePath, 'utf8'))
+      .resolves.toBe(`prefix\n${replacement}\nsuffix\n`);
+  });
+
   it('keeps built-in Git output scoped and relative to a selected repository subdirectory', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-pc-git-paths-'));
     const repositoryRoot = path.join(root, 'repo');
@@ -238,7 +260,7 @@ describe('pc local file tools and previews', () => {
       patch: [
         '*** Begin Patch',
         '*** Update File: src/index.css',
-        '@@',
+        '@@   ',
         '-body { color: red; }',
         '+body { color: blue; }',
         '*** End Patch',
@@ -253,6 +275,214 @@ describe('pc local file tools and previews', () => {
     });
     await expect(readFile(path.join(projectDir, 'src', 'index.css'), 'utf8'))
       .resolves.toBe('body { color: blue; }\n');
+  });
+
+  it('ignores bare separator blanks while preserving blank hunk context', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const firstPath = path.join(projectDir, 'first.txt');
+    const secondPath = path.join(projectDir, 'second.txt');
+
+    await writeFile(firstPath, 'one\ntwo\n', 'utf8');
+    await writeFile(secondPath, 'alpha\n\nomega\n', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: first.txt',
+        '@@',
+        '-one',
+        '+ONE',
+        '',
+        '@@',
+        '-two',
+        '+TWO',
+        '',
+        '*** Update File: second.txt',
+        '@@',
+        '-alpha',
+        '+ALPHA',
+        '',
+        '-omega',
+        '+OMEGA',
+        '',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(firstPath, 'utf8')).resolves.toBe('ONE\nTWO\n');
+    await expect(readFile(secondPath, 'utf8')).resolves.toBe('ALPHA\n\nOMEGA\n');
+  });
+
+  it('preserves bare blank context before trailing context lines', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const matchingPath = path.join(projectDir, 'matching.txt');
+    const missingBlankPath = path.join(projectDir, 'missing-blank.txt');
+    await Promise.all([
+      writeFile(matchingPath, 'old\n\ntail\n', 'utf8'),
+      writeFile(missingBlankPath, 'old\ntail\n', 'utf8'),
+    ]);
+    const updatePatch = (fileName: string) => [
+      '*** Begin Patch',
+      `*** Update File: ${fileName}`,
+      '@@',
+      '-old',
+      '+new',
+      '',
+      ' tail',
+      '*** End Patch',
+    ].join('\n');
+
+    await host.runTool('apply_patch', { patch: updatePatch('matching.txt') }, context);
+    await expect(host.runTool('apply_patch', {
+      patch: updatePatch('missing-blank.txt'),
+    }, context)).rejects.toThrow('未找到匹配的旧内容');
+
+    await expect(readFile(matchingPath, 'utf8')).resolves.toBe('new\n\ntail\n');
+    await expect(readFile(missingBlankPath, 'utf8')).resolves.toBe('old\ntail\n');
+  });
+
+  it('rejects update hunks without additions or removals', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'unchanged.txt');
+
+    await writeFile(filePath, 'unchanged', 'utf8');
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: unchanged.txt',
+        '@@',
+        ' unchanged',
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow('hunk 不包含变更行');
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('unchanged');
+  });
+
+  it('allows Add File patches to create empty files', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'empty.txt');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Add File: empty.txt',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('');
+  });
+
+  it('preserves file bytes in move-only patches', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const sourcePath = path.join(projectDir, 'source.txt');
+    const destinationPath = path.join(projectDir, 'destination.txt');
+
+    await writeFile(sourcePath, 'alpha', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: source.txt',
+        '*** Move to: destination.txt',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(destinationPath, 'utf8')).resolves.toBe('alpha');
+    await expect(readFile(sourcePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('uses Codex @@ context to target repeated patch content', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'src', 'repeated.ts');
+
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, [
+      'function first() {',
+      "  return 'same';",
+      '}',
+      '',
+      'function second() {',
+      "  return 'same';",
+      '}',
+      '',
+    ].join('\n'), 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: src/repeated.ts',
+        '@@ function second() {',
+        "-  return 'same';",
+        "+  return 'second';",
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe([
+      'function first() {',
+      "  return 'same';",
+      '}',
+      '',
+      'function second() {',
+      "  return 'second';",
+      '}',
+      '',
+    ].join('\n'));
+  });
+
+  it('preserves append-only patch order and terminates a non-empty result', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'ordered-appends.txt');
+
+    await writeFile(filePath, 'existing', 'utf8');
+
+    await host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: ordered-appends.txt',
+        '@@',
+        '+first',
+        '@@',
+        '+second',
+        '*** End Patch',
+      ].join('\n'),
+    }, context);
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe('existing\nfirst\nsecond\n');
+  });
+
+  it('requires End of File hunks to match the file ending', async () => {
+    const { host, projectDir } = await createHost();
+    const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const filePath = path.join(projectDir, 'strict-eof.txt');
+    const original = 'target\nmiddle\nending\n';
+
+    await writeFile(filePath, original, 'utf8');
+
+    await expect(host.runTool('apply_patch', {
+      patch: [
+        '*** Begin Patch',
+        '*** Update File: strict-eof.txt',
+        '@@',
+        '-target',
+        '+changed',
+        '*** End of File',
+        '*** End Patch',
+      ].join('\n'),
+    }, context)).rejects.toThrow('未找到匹配的旧内容');
+
+    await expect(readFile(filePath, 'utf8')).resolves.toBe(original);
   });
 
   it('accepts multi-file apply_patch calls', async () => {

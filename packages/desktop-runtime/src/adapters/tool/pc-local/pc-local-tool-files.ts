@@ -214,17 +214,20 @@ export async function searchText(
     caseSensitive: Boolean(args?.case_sensitive),
     contextLines,
     maxResults,
+    includeIgnored: Boolean(args?.include_ignored),
     excludeRoots: appliesSandboxDenyRules ? state.sandboxWorkspaceWrite?.deniedRoots : [],
     excludeGlobs: appliesSandboxDenyRules ? state.sandboxWorkspaceWrite?.deniedGlobPatterns : [],
     signal,
   });
+  const includeIgnored = Boolean(args?.include_ignored);
   const matcherLabel = `${regex ? 'regex ' : ''}${JSON.stringify(query)}`;
+  const ignoredNote = includeIgnored ? ' (including ignored paths)' : '';
   const details = response.scannedFiles === undefined
     ? `Engine: ${response.engine}.`
     : `Scanned ${response.scannedFiles} file${response.scannedFiles === 1 ? '' : 's'} using ${response.engine}.`;
   return okResult(
     truncateText([
-      `Text search for ${matcherLabel} under ${formatPath(scopePath, state.root)}: ${response.matches.length} match${response.matches.length === 1 ? '' : 'es'}`,
+      `Text search for ${matcherLabel}${ignoredNote} under ${formatPath(scopePath, state.root)}: ${response.matches.length} match${response.matches.length === 1 ? '' : 'es'}`,
       response.matches.map(formatSearchMatch).join('\n') || '(no matches)',
       response.truncated ? `Showing first ${maxResults} matches.` : '',
       details,
@@ -483,7 +486,7 @@ export async function calculateApplyPatch(
       continue;
     }
 
-    const update = applyPatchHunks(previousContent, operation.hunks, formatPath(filePath, state.root));
+    const update = applyPatchHunks(previousContent, operation.chunks, formatPath(filePath, state.root));
     if (!update.ok) return update;
     if (!moveToPath && update.content === previousContent) return { ok: false, error: `补丁没有改变文件：${formatPath(filePath, state.root)}` };
     if (moveToPath) {
@@ -663,9 +666,10 @@ export async function calculateEditFile(
     };
   }
 
+  const matchIndex = previousContent.indexOf(oldString);
   const nextContent = replaceAll
     ? previousContent.split(oldString).join(newString)
-    : previousContent.replace(oldString, newString);
+    : `${previousContent.slice(0, matchIndex)}${newString}${previousContent.slice(matchIndex + oldString.length)}`;
   const diff = buildFileDiff({
     filePath,
     root: state.root,

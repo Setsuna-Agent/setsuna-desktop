@@ -21,6 +21,12 @@ export type WorkspaceTextSearchRequest = {
   caseSensitive: boolean;
   contextLines: number;
   maxResults: number;
+  /**
+   * Opt back into content that the ignore policy normally hides, such as
+   * dependency and build output directories (e.g. node_modules) and paths
+   * excluded by workspace ignore files.
+   */
+  includeIgnored?: boolean;
   excludeRoots?: readonly string[];
   excludeGlobs?: readonly string[];
   signal?: AbortSignal;
