@@ -195,6 +195,7 @@ Windows runner 可能同时暴露同一目录的 8.3 短路径和长路径，并
 - 不要混用 `fs/promises.realpath()` 与普通 `realpathSync()` 的结果。普通同步实现不会可靠展开 Windows 8.3 短路径；需要同步解析时使用 `realpathSync.native()`，与异步原生解析保持一致。
 - workspace root、candidate、deny root 和绝对 glob 的固定前缀必须采用同一套 canonicalization。只有在比较边界才统一分隔符和大小写，文件系统读写仍使用平台原生路径。
 - 规则包含 glob 时，只 canonicalize 第一个通配符前实际存在的固定前缀，再拼回 glob 后缀；不要把 `*`、`?` 或字符组传给 `realpath`。
+- 测试如果验证两个路径指向同一目录，必须用同一种 `realpath` 实现 canonicalize 实际值和期望值后再比较。除非路径的字符串表示本身就是对外契约，否则禁止直接断言原始路径字符串相等。
 - canonicalization 的测试必须关闭无关的默认排除层，确保断言确实由目标 deny root/glob 命中，不能让 `.env` 等默认规则代替被测路径逻辑。
 
 这类改动至少运行对应路径策略测试、`pnpm typecheck` 和 `pnpm test:release`。最终结论以 Release workflow 的 Windows x64 gate 为准；本地 macOS/Linux 通过不能替代 Windows 路径验证。
