@@ -24,7 +24,12 @@ export function selectInitialThreadSummary(
     const persistedThread = threads.find((thread) => thread.id === persistedThreadId);
     if (persistedThread) return persistedThread;
   }
-  return threads.find((thread) => !thread.projectId) ?? threads[0];
+  // 侧栏列表按创建时间稳定排序，因此启动兜底要显式选最近活跃的全局对话，而不是列表第一项。
+  const globalThreads = threads.filter((thread) => !thread.projectId);
+  const candidates = globalThreads.length ? globalThreads : threads;
+  return candidates.reduce<RuntimeThreadSummary | undefined>((latest, thread) => (
+    !latest || thread.updatedAt.localeCompare(latest.updatedAt) > 0 ? thread : latest
+  ), undefined);
 }
 
 /**

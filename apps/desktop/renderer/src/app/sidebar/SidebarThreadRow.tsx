@@ -66,15 +66,19 @@ export function SidebarThreadRow({
   const meta = (
     <span className="desktop-agent-session__meta">
       {isRunning ? (
-        <span className="desktop-agent-session__running" aria-label={t('sidebar.chatRunning')} title={t('sidebar.chatRunning')}>
-          <LoaderCircle className="is-spinning" size={13} />
-        </span>
+        <ActionTooltip title={t('sidebar.chatRunning')}>
+          {/* 进行中的对话不允许归档，hover 时同样保持 loading 指示。 */}
+          <span className="desktop-agent-session__running" aria-label={t('sidebar.chatRunning')} role="status">
+            <LoaderCircle className="is-spinning" size={13} />
+          </span>
+        </ActionTooltip>
       ) : null}
       <ActionTooltip title={t('sidebar.archiveChat')}>
         <button
           className="desktop-agent-session__archive-button"
           type="button"
           aria-label={t('sidebar.archiveChat')}
+          disabled={isRunning}
           onClick={handleArchiveClick}
           onKeyDown={(event) => event.stopPropagation()}
         >

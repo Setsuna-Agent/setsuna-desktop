@@ -54,6 +54,27 @@ describe('SidebarThreadList', () => {
     expect(nextSidebarVisibleCount(5, 11, 5, 22)).toBe(16);
     expect(nextSidebarVisibleCount(20, 20, 20, 22)).toBe(22);
   });
+
+  it('renders conversations newest-first by creation time regardless of input order', () => {
+    const html = renderToStaticMarkup(createElement(SidebarThreadList, {
+      menuThreadId: null,
+      runningThreadId: null,
+      selectedThreadId: null,
+      threads: [
+        createThreadWithTime(1, '2026-07-01T00:00:00.000Z'),
+        createThreadWithTime(3, '2026-07-09T00:00:00.000Z'),
+        createThreadWithTime(2, '2026-07-05T00:00:00.000Z'),
+      ],
+      variant: 'global',
+      onArchive: () => undefined,
+      onRename: () => undefined,
+      onSelect: () => undefined,
+      onToggleMenu: () => undefined,
+    }));
+
+    expect(html.indexOf('conversation-3')).toBeLessThan(html.indexOf('conversation-2'));
+    expect(html.indexOf('conversation-2')).toBeLessThan(html.indexOf('conversation-1'));
+  });
 });
 
 function renderThreadList(
@@ -84,4 +105,8 @@ function createThread(index: number): RuntimeThreadSummary {
     messageCount: 0,
     lastMessagePreview: '',
   };
+}
+
+function createThreadWithTime(index: number, createdAt: string): RuntimeThreadSummary {
+  return { ...createThread(index), createdAt, updatedAt: createdAt };
 }

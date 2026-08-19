@@ -150,7 +150,7 @@ describe('RuntimeToolRuns compact summaries', () => {
       toolRun('write_cancelled', 'write_file', { file_path: 'src/generated.ts', content: 'partial' }, 'cancelled'),
     ]);
 
-    expect(preparing).toContain('正在生成修改预览（尚未写入）');
+    expect(preparing).toContain('正在生成修改预览');
     expect(preparing).not.toContain('正在写入');
     expect(preparing).not.toContain('+1-0');
     expect(cancelled).toContain('已取消文件操作');
@@ -166,7 +166,7 @@ describe('RuntimeToolRuns compact summaries', () => {
       argumentsPreview: '{',
     }]);
 
-    expect(renderedTextFromHtml(html)).toContain('正在生成修改预览（尚未写入）');
+    expect(renderedTextFromHtml(html)).toContain('正在生成修改预览');
     expect(html).not.toContain('chat-change-counts');
   });
 
@@ -240,7 +240,7 @@ describe('RuntimeToolRuns compact summaries', () => {
       }),
     }]);
 
-    expect(renderedTextFromHtml(html)).toBe('正在生成修改预览（尚未写入）');
+    expect(renderedTextFromHtml(html)).toBe('正在生成修改预览');
     expect(html).not.toContain('workspace-tool');
     expect(html).not.toContain('chat-change-counts');
   });
