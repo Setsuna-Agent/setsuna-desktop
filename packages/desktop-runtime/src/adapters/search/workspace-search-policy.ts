@@ -142,7 +142,7 @@ function resolvePolicyRoot(root: string, value: string): string {
   const portableValue = path.isAbsolute(value) ? value : value.replace(/[\\/]+/gu, path.sep);
   const resolved = path.isAbsolute(portableValue) ? path.resolve(portableValue) : path.resolve(root, portableValue);
   try {
-    return realpathSync(resolved);
+    return canonicalPathSync(resolved);
   } catch {
     return resolved;
   }
@@ -172,11 +172,16 @@ function canonicalGlob(raw: string): string {
   const fixedRoot = fixedPrefix.endsWith('/') ? fixedPrefix.slice(0, -1) : slashPath(path.dirname(fixedPrefix));
   if (!fixedRoot) return raw;
   try {
-    const canonicalRoot = slashPath(realpathSync(fixedRoot));
+    const canonicalRoot = slashPath(canonicalPathSync(fixedRoot));
     return `${canonicalRoot}${raw.slice(fixedRoot.length)}`;
   } catch {
     return raw;
   }
+}
+
+function canonicalPathSync(value: string): string {
+  // Match fs/promises realpath so Windows 8.3 aliases compare against the same canonical root.
+  return realpathSync.native(value);
 }
 
 function isAbsoluteGlob(value: string): boolean {

@@ -108,6 +108,7 @@ describe('workspace search policy', () => {
       deniedFile,
       [],
       [path.join(lexicalRoot, '**', '*.env')],
+      [],
     )).toBe(true);
   });
 });
