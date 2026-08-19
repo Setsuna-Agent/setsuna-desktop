@@ -23,6 +23,9 @@ export function obviousHighRiskShellReason(command: unknown): string {
   const hasWord = (value: string) => words.includes(value);
 
   if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
+  const catastrophicReason = catastrophicShellCommandReason(text);
+  if (catastrophicReason) return catastrophicReason;
+  if (windowsDeleteCommandTails(text).length) return '命令可能通过 Windows Shell 删除文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
   if (hasWord('mv') || hasWord('cp') || hasWord('touch') || hasWord('truncate')) return '命令可能修改工作区文件。';
   if (hasWord('chmod') || hasWord('chown') || hasWord('chgrp')) return '命令可能修改文件权限或归属。';
@@ -55,6 +58,77 @@ export function obviousHighRiskShellReason(command: unknown): string {
   return '';
 }
 
+/**
+ * Refuse operations whose literal target is a volume root or raw disk. This
+ * guard is enforced again immediately before execution and stdin writes, so a
+ * persisted allow rule, full-access profile, or model risk label cannot bypass it.
+ */
+export function catastrophicShellCommandReason(command: unknown): string {
+  const text = String(command || '');
+  if (hasWindowsDiskDestructiveCommand(text)) {
+    return '命令会格式化、清空或重新初始化磁盘。';
+  }
+  if (/\\\\\.\\physicaldrive\d+\b/iu.test(text) || /\\\\\?\\volume\{[^}]+\}/iu.test(text)) {
+    return '命令会直接访问 Windows 磁盘或卷设备。';
+  }
+  for (const tail of windowsDeleteCommandTails(text)) {
+    if (!isBroadWindowsDelete(tail)) continue;
+    if (hasWindowsRootTarget(tail)) return '命令会递归删除 Windows 卷根目录。';
+  }
+  if (hasPosixRootDelete(text)) return '命令会递归删除文件系统根目录。';
+  return '';
+}
+
+const WINDOWS_DELETE_COMMAND = /(?:^|[;&|{(]\s*|(?:-command|\/command|\/c|\/r)\s+["']?)(remove-item|clear-content|ri|rm|del|erase|rd|rmdir)\b/giu;
+const WINDOWS_ROOT_TARGET = /(?:^|[\s"'=,(])(?:[a-z]:[\\/](?:[.*?]+)?|\\\\\?\\[a-z]:\\(?:[.*?]+)?|\\\\[^\\/\s"']+[\\/][^\\/\s"']+[\\/](?:[.*?]+)?|(?:%|\$\{?env:)(?:systemdrive|homedrive)(?:%|\})?[\\/](?:[.*?]+)?)(?=$|[\s"'`,;|&)])/iu;
+
+function windowsDeleteCommandTails(command: unknown): string[] {
+  const text = String(command || '');
+  const tails: string[] = [];
+  for (const match of text.matchAll(WINDOWS_DELETE_COMMAND)) {
+    const commandName = match[1];
+    if (!commandName || match.index === undefined) continue;
+    const commandOffset = match[0].toLowerCase().lastIndexOf(commandName.toLowerCase());
+    tails.push(text.slice(match.index + commandOffset).split(/[;&|\r\n]/u, 1)[0] || '');
+  }
+  return tails;
+}
+
+function isBroadWindowsDelete(commandTail: string): boolean {
+  const commandName = commandTail.match(/^\s*([a-z-]+)/iu)?.[1]?.toLowerCase() || '';
+  if (commandName === 'clear-content') return /[*?]/u.test(commandTail);
+  if (commandName === 'del' || commandName === 'erase') return /\/(?:f|s|q)\b/iu.test(commandTail);
+  if (commandName === 'rd' || commandName === 'rmdir') return /\/s\b/iu.test(commandTail) || /-(?:recurse|force)\b/iu.test(commandTail);
+  return /-(?:recurse|force)\b/iu.test(commandTail) || /(?:^|\s)-[a-z]*[rf][a-z]*\b/iu.test(commandTail);
+}
+
+function hasWindowsRootTarget(commandTail: string): boolean {
+  return WINDOWS_ROOT_TARGET.test(commandTail);
+}
+
+function hasWindowsDiskDestructiveCommand(command: string): boolean {
+  for (const segment of splitShellCommandSegments(command)) {
+    const words = parseShellCommandSegment(segment).words;
+    const commandName = shellCommandName(words[0]);
+    if (['diskpart', 'clear-disk', 'format-volume', 'initialize-disk', 'remove-partition'].includes(commandName)) {
+      return true;
+    }
+    if (commandName === 'format' && words.slice(1).some((word) => /^(?:[a-z]:|%systemdrive%|%homedrive%)$/iu.test(word))) {
+      return true;
+    }
+    if (commandName === 'cipher' && words.slice(1).some((word) => /^\/w(?::|$)/iu.test(word))) {
+      return true;
+    }
+  }
+  return /(?:^|[;&|{(]\s*|(?:-command|\/command|\/c|\/r)\s+["']?)(?:diskpart(?:\.exe)?|clear-disk|format-volume|initialize-disk|remove-partition)\b/iu.test(command)
+    || /(?:^|[;&|{(]\s*|(?:-command|\/command|\/c|\/r)\s+["']?)format(?:\.com)?\s+(?:[a-z]:|(?:%|\$\{?env:)(?:systemdrive|homedrive))/iu.test(command)
+    || /(?:^|[;&|{(]\s*|(?:-command|\/command|\/c|\/r)\s+["']?)cipher(?:\.exe)?\s+\/w(?::|\s)/iu.test(command);
+}
+
+function hasPosixRootDelete(command: string): boolean {
+  return /(?:^|[;&|{(]\s*)rm\s+(?=[^;&|\r\n]*-[a-z]*r)(?=[^;&|\r\n]*-[a-z]*f)[^;&|\r\n]*\s\/(?:[.*?]+)?(?=$|[\s"'`;|&)])/iu.test(command);
+}
+
 export function _usesShellApplyPatch(text: string): boolean {
   return /(?:^|[;&|]\s*)(?:apply_patch|applypatch)\b/.test(text)
     || /\b(?:apply_patch|applypatch)\s*<</.test(text)
@@ -69,7 +143,7 @@ export function shellWritePathCandidates(command: unknown): string[] {
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.outputRedirects);
-    const commandName = path.basename(words[0] || '');
+    const commandName = shellCommandName(words[0]);
     if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
       const pathArguments = shellPositionalPathArguments(words);
       // cp 只写入最后一个目标参数；源路径只需要读取权限。
@@ -89,7 +163,7 @@ export function shellPathCandidates(command: unknown): string[] {
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.inputRedirects);
-    const commandName = path.basename(words[0] || '');
+    const commandName = shellCommandName(words[0]);
     if (SHELL_READ_COMMANDS_WITH_PATH_ARGS.has(commandName) || SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
       candidates.push(...shellPositionalPathArguments(words));
       continue;
@@ -214,7 +288,8 @@ function parseShellCommandSegment(command: unknown): ParsedShellCommandSegment {
       continue;
     }
     if (char === '\\') {
-      escaped = true;
+      if (isEscapedShellCharacter(text[index + 1], quote)) escaped = true;
+      else current += char;
       continue;
     }
     if (quote) {
@@ -258,6 +333,18 @@ function shellPositionalPathArguments(words: readonly string[]): string[] {
     candidates.push(word);
   }
   return candidates;
+}
+
+function shellCommandName(value: unknown): string {
+  const basename = path.posix.basename(String(value || '').replaceAll('\\', '/')).toLowerCase();
+  return basename.endsWith('.exe') ? basename.slice(0, -4) : basename;
+}
+
+function isEscapedShellCharacter(value: string | undefined, quote: string): boolean {
+  if (!value) return false;
+  if (quote === "'") return false;
+  if (quote === '"') return /["\\$`\n]/u.test(value);
+  return /[\s"'\\$`;&|<>]/u.test(value);
 }
 
 function shellCopyDestinationArguments(

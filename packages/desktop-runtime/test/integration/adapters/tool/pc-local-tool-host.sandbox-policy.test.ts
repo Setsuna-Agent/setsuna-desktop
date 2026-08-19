@@ -8,6 +8,30 @@ import { ToolExecutionError } from '../../../../src/ports/tool-host.js';
 import { restrictedShellExecutionUnavailable, expectRestrictedShellUnavailable, createHost, StaticPolicyAmendmentStore, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local shell sandbox policy', () => {
+  it('hard-blocks catastrophic disk commands even with full filesystem access', async () => {
+    const { host, projectId } = await createHost();
+    const context = {
+      threadId: 'thread_disk_guard',
+      turnId: 'turn_disk_guard',
+      projectId,
+      permissionProfile: 'danger-full-access' as const,
+    };
+
+    for (const command of [
+      'format C:',
+      String.raw`powershell -Command "Remove-Item C:\* -Force -Recurse"`,
+    ]) {
+      await expect(host.runTool('run_shell_command', {
+        command,
+        risk_level: 'low',
+        yield_time_ms: 0,
+      }, context)).rejects.toMatchObject({
+        failureKind: 'policy_blocked',
+        message: expect.stringMatching(/磁盘|卷根目录/u),
+      });
+    }
+  });
+
   it('uses persisted exec policy amendments as local shell allow rules', async () => {
     const { host } = await createHost({
       policyAmendmentStore: new StaticPolicyAmendmentStore({

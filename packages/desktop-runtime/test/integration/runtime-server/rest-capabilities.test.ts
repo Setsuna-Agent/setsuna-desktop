@@ -191,7 +191,7 @@ describe('runtime server REST skills and capabilities', () => {
               id: 'guard-dangerous-shell',
               name: '阻止危险 Shell 命令',
               eventName: 'PreToolUse',
-              matcher: 'run_shell_command|exec_command',
+              matcher: 'run_shell_command|exec_command|write_shell_process',
             })],
             capabilities: { skills: 0, mcpServers: 0, hooks: 1, resources: 0 },
           }),
