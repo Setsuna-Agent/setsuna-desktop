@@ -23,7 +23,8 @@ export function obviousHighRiskShellReason(command: unknown): string {
   const hasWord = (value: string) => words.includes(value);
 
   if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
-  if (hasWindowsForceDeleteCommand(text)) return '命令可能通过 Windows Shell 强制删除文件。';
+  const dangerousReason = codexDangerousShellReason(text);
+  if (dangerousReason) return dangerousReason;
   if (hasParsedDeletionCommand(text)) return '命令可能删除文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
   if (hasWord('mv') || hasWord('cp') || hasWord('touch') || hasWord('truncate')) return '命令可能修改工作区文件。';
@@ -85,6 +86,57 @@ function hasWindowsForceDeleteCommand(command: string): boolean {
     }
     return false;
   });
+}
+
+/**
+ * Mirrors the narrow destructive-command denylist used by Codex when approval
+ * prompts are disabled. Broader mutation heuristics still only request approval.
+ */
+export function codexDangerousShellReason(command: unknown): string {
+  const text = String(command || '');
+  if (hasWindowsForceDeleteCommand(text)) {
+    return '命令可能通过 Windows Shell 强制删除文件。';
+  }
+  return hasForcedRmCommand(text)
+    ? '命令会使用 rm 强制删除文件。'
+    : '';
+}
+
+function hasForcedRmCommand(command: string, depth = 0): boolean {
+  if (depth > 8) return false;
+  for (const segment of splitShellCommandSegments(command)) {
+    const words = parseShellCommandSegment(segment).words;
+    if (hasForcedRmWords(words, depth)) return true;
+  }
+  return false;
+}
+
+function hasForcedRmWords(words: readonly string[], depth: number): boolean {
+  const commandName = shellCommandName(words[0]);
+  if (commandName === 'rm') {
+    for (const argument of words.slice(1)) {
+      if (argument === '--') break;
+      if (argument === '--force') return true;
+      if (/^-[^-]*f/u.test(argument)) return true;
+    }
+    return false;
+  }
+  if (commandName === 'sudo') return hasForcedRmWords(words.slice(1), depth + 1);
+  if (commandName === 'env') {
+    const nested = words.slice(1).filter((word) => (
+      word !== '-i'
+      && word !== '--ignore-environment'
+      && word !== '--'
+      && !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)
+    ));
+    return hasForcedRmWords(nested, depth + 1);
+  }
+  if (['bash', 'dash', 'ksh', 'sh', 'zsh'].includes(commandName)) {
+    const scriptIndex = words.findIndex((word, index) => index > 0 && /^-[a-z]*c[a-z]*$/iu.test(word));
+    const script = scriptIndex >= 0 ? words[scriptIndex + 1] : '';
+    return script ? hasForcedRmCommand(script, depth + 1) : false;
+  }
+  return false;
 }
 
 function hasParsedDeletionCommand(command: string): boolean {

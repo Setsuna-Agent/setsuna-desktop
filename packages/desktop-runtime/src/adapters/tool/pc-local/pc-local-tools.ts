@@ -87,6 +87,7 @@ import {
   listBackgroundShellProcesses,
 } from './pc-local-tool-background-shell-processes.js';
 import {
+  codexDangerousShellReason,
   createShellSandboxExecutionPlan,
   loadShellPolicyRules,
   normalizeShellCommandForRisk,
@@ -308,24 +309,32 @@ export function shellCommandRisk(
   state: PcLocalToolState | null = null,
 ) {
   const normalized = normalizeShellCommandForRisk(command);
-  if (!normalized) return { needsConfirmation: false, reason: '' };
+  if (!normalized) return { needsConfirmation: false, reason: '', rejectWhenApprovalDisabled: false };
   const policy = shellPolicyDecision(command, state);
-  if (policy.action === 'allow') return { needsConfirmation: false, reason: policy.reason };
-  if (policy.action === 'ask') return { needsConfirmation: true, reason: policy.reason };
-  if (policy.action === 'deny') return { needsConfirmation: true, reason: policy.reason };
+  if (policy.action === 'allow') {
+    return { needsConfirmation: false, reason: policy.reason, rejectWhenApprovalDisabled: false };
+  }
+  const rejectWhenApprovalDisabled = Boolean(codexDangerousShellReason(normalized));
+  if (policy.action === 'ask') {
+    return { needsConfirmation: true, reason: policy.reason, rejectWhenApprovalDisabled };
+  }
+  if (policy.action === 'deny') {
+    return { needsConfirmation: true, reason: policy.reason, rejectWhenApprovalDisabled };
+  }
   const declaredRisk = String(riskLevel || '').trim().toLowerCase();
   const declaredReason = String(riskReason || '').trim();
   const fallbackReason = obviousHighRiskShellReason(normalized);
 
-  if (fallbackReason) return { needsConfirmation: true, reason: fallbackReason };
+  if (fallbackReason) return { needsConfirmation: true, reason: fallbackReason, rejectWhenApprovalDisabled };
   if (declaredRisk === 'high') {
     return {
       needsConfirmation: true,
       reason: declaredReason || '模型将该命令标记为高风险。',
+      rejectWhenApprovalDisabled,
     };
   }
-  if (declaredRisk === 'low') return { needsConfirmation: false, reason: '' };
-  return { needsConfirmation: true, reason: '命令未声明风险等级。' };
+  if (declaredRisk === 'low') return { needsConfirmation: false, reason: '', rejectWhenApprovalDisabled };
+  return { needsConfirmation: true, reason: '命令未声明风险等级。', rejectWhenApprovalDisabled };
 }
 
 export function summarizeToolCall(

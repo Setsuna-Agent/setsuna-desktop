@@ -284,6 +284,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       return {
         reason: risk.reason || `High-risk shell command: ${shortSingleLine(normalized.args.command)}`,
         argumentsPreview: previewArguments(normalized.args),
+        rejectWhenApprovalDisabled: risk.rejectWhenApprovalDisabled,
       };
     }
     if (normalized.name === 'write_shell_process') {

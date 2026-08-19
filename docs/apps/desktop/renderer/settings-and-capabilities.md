@@ -57,7 +57,10 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 - “请求批准”：`strict + user + workspace-write`，所有需要确认的操作由用户决定。
 - “替我审批”：`on-request + automatic + workspace-write`，只把 policy 检出的交互审批交给独立审查模型。
-- “完全访问”：`full + user + danger-full-access`，不运行审批审查。
+- “完全访问”：`full + user + danger-full-access`，不运行 OS sandbox 或审批审查。对强制删除命令的
+  处理与 Codex 的 `DangerFullAccess + Never` 一致：命中窄范围危险命令规则时直接拒绝而不是弹窗，
+  其余命令不受风险提示规则限制。Windows Shell 即使处于完全访问，也会将 `TEMP` / `TMP` / `TMPDIR` 指向系统临时
+  目录下的独立会话目录，并在进程结束后清理；临时文件不应回落到当前项目工作区。
 
 `TaskModelSettings.tsx` 中的 `taskModels.approvalReview` 可为审批审查选择独立 provider/model；未配置或引用失效时跟随当前对话模型。自动审查的等待、允许、拒绝和人工降级状态由 tool run 投影展示，renderer 不持有未截断工具参数，也不能回答标记为 `automatic` 的审批请求。
 
