@@ -112,7 +112,9 @@ describe('createShellSessionTempDirectory', () => {
       tempRoot: systemTempRoot,
     });
 
-    expect(path.dirname(commandTempRoot)).toBe(await realpath(systemTempRoot));
+    // Windows may expose one directory through both its 8.3 alias and long name.
+    // Compare canonical identities instead of requiring a specific spelling.
+    expect(await realpath(path.dirname(commandTempRoot))).toBe(await realpath(systemTempRoot));
     expect(path.basename(commandTempRoot)).toMatch(/^setsuna-shell-/u);
   });
 });
