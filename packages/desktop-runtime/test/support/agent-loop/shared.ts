@@ -353,7 +353,11 @@ export class CancellableModelClient implements ModelClient {
 export class ApprovalToolHost implements ToolHost {
   calls: Array<{ name: string; input: unknown }> = [];
 
-  constructor(private readonly options: { approvalKeys?: string[]; persistentApprovalKeys?: string[] } = {}) {}
+  constructor(private readonly options: {
+    approvalKeys?: string[];
+    persistentApprovalKeys?: string[];
+    rejectWhenApprovalDisabled?: boolean;
+  } = {}) {}
 
   async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
     return [
@@ -372,6 +376,7 @@ export class ApprovalToolHost implements ToolHost {
         argumentsPreview: JSON.stringify(input),
         approvalKeys: this.options.approvalKeys,
         persistentApprovalKeys: this.options.persistentApprovalKeys,
+        rejectWhenApprovalDisabled: this.options.rejectWhenApprovalDisabled,
       }
       : null;
   }

@@ -584,6 +584,37 @@ describe('agent loop tool policy and file mutations', () => {
       expect(toolHost.calls).toEqual([{ name: 'dangerous_tool', input: { value: 42 } }]);
       expect(events.some((event) => event.type === 'approval.requested')).toBe(false);
     });
+
+  it('rejects Codex-dangerous commands instead of prompting under full policy', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Full approval dangerous command loop' });
+      const modelClient = new ApprovalToolModelClient();
+      const toolHost = new ApprovalToolHost({ rejectWhenApprovalDisabled: true });
+      const approvalGate = new InMemoryApprovalGate(systemClock, ids);
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost,
+        approvalGate,
+        configStore: new FullApprovalConfigStore(),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'reject the dangerous command without prompting' });
+      const events = await threadStore.listEvents(thread.id, 0);
+
+      await expect(approvalGate.listApprovals()).resolves.toEqual({ approvals: [] });
+      expect(toolHost.calls).toEqual([]);
+      expect(events.some((event) =>
+        event.type === 'tool.completed'
+        && event.payload.toolName === 'dangerous_tool'
+        && event.payload.status === 'rejected'
+        && event.payload.content.includes('changes local state')
+      )).toBe(true);
+    });
   
   it('runs unsandboxed exec without prompting under full access', async () => {
       const ids = new RandomIdGenerator();

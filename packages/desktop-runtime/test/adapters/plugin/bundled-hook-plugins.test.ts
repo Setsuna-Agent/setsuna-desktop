@@ -12,6 +12,12 @@ describe('bundled Hook plugins', () => {
     expect(runHook('guard-dangerous-shell', {
       tool_input: { command: 'git status --short' },
     }).status).toBe(0);
+    expect(runHook('guard-dangerous-shell', {
+      tool_input: { command: String.raw`powershell -Command "Remove-Item C:\ -Force -Recurse"` },
+    }).status).toBe(2);
+    expect(runHook('guard-dangerous-shell', {
+      tool_input: { command: 'Remove-Item C:\\repo\\old.txt; Get-ChildItem C:\\' },
+    }).status).toBe(0);
   });
 
   it('protects sensitive files and generated directories', () => {

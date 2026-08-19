@@ -1,10 +1,20 @@
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyShellEnvironmentPatch } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
 import { classifyShellSessionFailure } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
-import { shellEnvironment } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-session-runtime.js';
+import { createShellSandboxExecutionPlan } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-policy.js';
+import {
+  createShellSessionTempDirectory,
+  shellEnvironment,
+} from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-session-runtime.js';
 
-afterEach(() => {
+const temporaryRoots: string[] = [];
+
+afterEach(async () => {
   vi.unstubAllEnvs();
+  await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
 
 describe('classifyShellSessionFailure', () => {
@@ -84,6 +94,26 @@ describe('shellEnvironment', () => {
     expect(shellEnvironment({
       CURL_CA_BUNDLE: 'C:\\another\\override.pem',
     }).CURL_CA_BUNDLE).toBe('C:\\another\\override.pem');
+  });
+});
+
+describe('createShellSessionTempDirectory', () => {
+  it('gives Windows full-access commands an isolated directory under the OS temp root', async () => {
+    const systemTempRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-system-temp-'));
+    temporaryRoots.push(systemTempRoot);
+    const plan = createShellSandboxExecutionPlan({
+      root: systemTempRoot,
+      osSandbox: true,
+      permissionProfile: 'danger-full-access',
+    });
+
+    const commandTempRoot = await createShellSessionTempDirectory(plan, {
+      platform: 'win32',
+      tempRoot: systemTempRoot,
+    });
+
+    expect(path.dirname(commandTempRoot)).toBe(await realpath(systemTempRoot));
+    expect(path.basename(commandTempRoot)).toMatch(/^setsuna-shell-/u);
   });
 });
 

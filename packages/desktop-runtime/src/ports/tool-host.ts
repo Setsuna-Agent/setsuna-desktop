@@ -118,6 +118,8 @@ export type ToolApprovalRequirement = {
   argumentsPreview?: string;
   approvalKeys?: string[];
   persistentApprovalKeys?: string[];
+  /** Narrow destructive commands are rejected when prompts are disabled. */
+  rejectWhenApprovalDisabled?: boolean;
 };
 
 export type ToolHost = {

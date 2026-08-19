@@ -15,10 +15,11 @@ process.stdin.on('end', () => {
     /:\s*\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/,
   ];
   const windowsPatterns = [
-    /\bRemove-Item\b[\s\S]*\b-Recurse\b[\s\S]*\b-Force\b/i,
+    /\b(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b(?=[^;&|\r\n]*-Force(?::(?:\$?true|1))?\b)/i,
     /\bformat\s+[a-z]:/i,
     /\bClear-Disk\b/i,
-    /\bdel\s+\/s\s+\/q\s+[a-z]:\\/i,
+    /\b(?:del|erase)\b(?=[^;&|\r\n]*\/f\b)/i,
+    /\b(?:rd|rmdir)\b(?=[^;&|\r\n]*\/s\b)(?=[^;&|\r\n]*\/q\b)/i,
     /\bgit\s+(?:reset\s+--hard|clean\s+-fdx?)\b/i,
   ];
   // 命令可以显式进入 Git Bash、WSL、PowerShell 或其他 shell，不能只按宿主系统检查一种语法。

@@ -23,6 +23,9 @@ export function obviousHighRiskShellReason(command: unknown): string {
   const hasWord = (value: string) => words.includes(value);
 
   if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
+  const dangerousReason = approvalDisabledDestructiveCommandReason(text);
+  if (dangerousReason) return dangerousReason;
+  if (hasParsedDeletionCommand(text)) return '命令可能删除文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
   if (hasWord('mv') || hasWord('cp') || hasWord('touch') || hasWord('truncate')) return '命令可能修改工作区文件。';
   if (hasWord('chmod') || hasWord('chown') || hasWord('chgrp')) return '命令可能修改文件权限或归属。';
@@ -55,6 +58,95 @@ export function obviousHighRiskShellReason(command: unknown): string {
   return '';
 }
 
+const WINDOWS_DELETE_COMMAND = /(?:^|[;&|{(]\s*|(?:-command|\/command|\/c|\/r)\s+["']?)(remove-item|ri|rm|del|erase|rd|rmdir)\b/giu;
+
+function windowsDeleteCommandTails(command: unknown): string[] {
+  const text = String(command || '');
+  const tails: string[] = [];
+  for (const match of text.matchAll(WINDOWS_DELETE_COMMAND)) {
+    const commandName = match[1];
+    if (!commandName || match.index === undefined) continue;
+    const commandOffset = match[0].toLowerCase().lastIndexOf(commandName.toLowerCase());
+    tails.push(text.slice(match.index + commandOffset).split(/[;&|\r\n]/u, 1)[0] || '');
+  }
+  return tails;
+}
+
+function hasWindowsForceDeleteCommand(command: string): boolean {
+  return windowsDeleteCommandTails(command).some((commandTail) => {
+    const commandName = commandTail.match(/^\s*([a-z-]+)/iu)?.[1]?.toLowerCase() || '';
+    const hasPowerShellForce = /(?:^|\s)-force(?::(?:\$?true|1))?(?=$|[\s"')\]},])/iu.test(commandTail);
+    if (hasPowerShellForce) return true;
+    if (commandName === 'del' || commandName === 'erase') {
+      return /(?:^|\s)\/f(?=$|[\s"')\]},])/iu.test(commandTail);
+    }
+    if (commandName === 'rd' || commandName === 'rmdir') {
+      return /(?:^|\s)\/s(?=$|[\s"')\]},])/iu.test(commandTail)
+        && /(?:^|\s)\/q(?=$|[\s"')\]},])/iu.test(commandTail);
+    }
+    return false;
+  });
+}
+
+/**
+ * Identifies the narrow destructive-command denylist used when approval prompts
+ * are disabled. Broader mutation heuristics still only request approval.
+ */
+export function approvalDisabledDestructiveCommandReason(command: unknown): string {
+  const text = String(command || '');
+  if (hasWindowsForceDeleteCommand(text)) {
+    return '命令可能通过 Windows Shell 强制删除文件。';
+  }
+  return hasForcedRmCommand(text)
+    ? '命令会使用 rm 强制删除文件。'
+    : '';
+}
+
+function hasForcedRmCommand(command: string, depth = 0): boolean {
+  if (depth > 8) return false;
+  for (const segment of splitShellCommandSegments(command)) {
+    const words = parseShellCommandSegment(segment).words;
+    if (hasForcedRmWords(words, depth)) return true;
+  }
+  return false;
+}
+
+function hasForcedRmWords(words: readonly string[], depth: number): boolean {
+  const commandName = shellCommandName(words[0]);
+  if (commandName === 'rm') {
+    for (const argument of words.slice(1)) {
+      if (argument === '--') break;
+      if (argument === '--force') return true;
+      if (/^-[^-]*f/u.test(argument)) return true;
+    }
+    return false;
+  }
+  if (commandName === 'sudo') return hasForcedRmWords(words.slice(1), depth + 1);
+  if (commandName === 'env') {
+    const nested = words.slice(1).filter((word) => (
+      word !== '-i'
+      && word !== '--ignore-environment'
+      && word !== '--'
+      && !/^[A-Za-z_][A-Za-z0-9_]*=/u.test(word)
+    ));
+    return hasForcedRmWords(nested, depth + 1);
+  }
+  if (['bash', 'dash', 'ksh', 'sh', 'zsh'].includes(commandName)) {
+    const scriptIndex = words.findIndex((word, index) => index > 0 && /^-[a-z]*c[a-z]*$/iu.test(word));
+    const script = scriptIndex >= 0 ? words[scriptIndex + 1] : '';
+    return script ? hasForcedRmCommand(script, depth + 1) : false;
+  }
+  return false;
+}
+
+function hasParsedDeletionCommand(command: string): boolean {
+  for (const segment of splitShellCommandSegments(command)) {
+    const words = parseShellCommandSegment(segment).words;
+    if (['rm', 'rmdir', 'unlink'].includes(shellCommandName(words[0]))) return true;
+  }
+  return false;
+}
+
 export function _usesShellApplyPatch(text: string): boolean {
   return /(?:^|[;&|]\s*)(?:apply_patch|applypatch)\b/.test(text)
     || /\b(?:apply_patch|applypatch)\s*<</.test(text)
@@ -69,7 +161,7 @@ export function shellWritePathCandidates(command: unknown): string[] {
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.outputRedirects);
-    const commandName = path.basename(words[0] || '');
+    const commandName = shellCommandName(words[0]);
     if (SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
       const pathArguments = shellPositionalPathArguments(words);
       // cp 只写入最后一个目标参数；源路径只需要读取权限。
@@ -89,7 +181,7 @@ export function shellPathCandidates(command: unknown): string[] {
     const parsed = parseShellCommandSegment(segment);
     const words = parsed.words;
     candidates.push(...parsed.inputRedirects);
-    const commandName = path.basename(words[0] || '');
+    const commandName = shellCommandName(words[0]);
     if (SHELL_READ_COMMANDS_WITH_PATH_ARGS.has(commandName) || SHELL_MUTATION_COMMANDS_WITH_PATH_ARGS.has(commandName)) {
       candidates.push(...shellPositionalPathArguments(words));
       continue;
@@ -182,7 +274,8 @@ function parseShellCommandSegment(command: unknown): ParsedShellCommandSegment {
         continue;
       }
       if (char === '\\') {
-        redirectEscaped = true;
+        if (backslashEscapesNext(redirectTarget, text[index + 1], redirectQuote)) redirectEscaped = true;
+        else redirectTarget += char;
         redirectTargetStarted = true;
         continue;
       }
@@ -214,7 +307,8 @@ function parseShellCommandSegment(command: unknown): ParsedShellCommandSegment {
       continue;
     }
     if (char === '\\') {
-      escaped = true;
+      if (backslashEscapesNext(current, text[index + 1], quote)) escaped = true;
+      else current += char;
       continue;
     }
     if (quote) {
@@ -258,6 +352,21 @@ function shellPositionalPathArguments(words: readonly string[]): string[] {
     candidates.push(word);
   }
   return candidates;
+}
+
+function shellCommandName(value: unknown): string {
+  const basename = path.posix.basename(String(value || '').replaceAll('\\', '/')).toLowerCase();
+  return basename.endsWith('.exe') ? basename.slice(0, -4) : basename;
+}
+
+function backslashEscapesNext(current: string, value: string | undefined, quote: string): boolean {
+  if (!value) return false;
+  if (quote === "'") return false;
+  if (quote === '"') return /["\\$`\n]/u.test(value);
+  if (/^[A-Za-z]:/u.test(current) || current.startsWith('\\')) return false;
+  if (!current && value === '\\') return false;
+  if (/^(?:%[^%]+%|\$\{?env:[^}]+\}?)/iu.test(current)) return false;
+  return true;
 }
 
 function shellCopyDestinationArguments(

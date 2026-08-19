@@ -409,8 +409,18 @@ export class ToolApprovalCoordinator {
     ) {
       return { action: 'skip' };
     }
-    // 权限配置定义实际文件边界，但完整审批策略本身绝不能触发交互提示。
-    if (approvalPolicy === 'full' && !strictAutoReview) return { action: 'skip' };
+    // Full policy never prompts. Reject only the narrow destructive-command
+    // denylist; ordinary approval hints are skipped.
+    if (approvalPolicy === 'full' && !strictAutoReview) {
+      const hostRequirement = await this.options.toolHost.approvalForTool?.(
+        toolCall.name,
+        parsedArguments,
+        context,
+      );
+      return hostRequirement?.rejectWhenApprovalDisabled
+        ? { action: 'reject', reason: hostRequirement.reason }
+        : { action: 'skip' };
+    }
     if (!this.options.approvalGate) {
       return requestsSandboxBypass || needsUpfrontSandboxBypass
         ? {

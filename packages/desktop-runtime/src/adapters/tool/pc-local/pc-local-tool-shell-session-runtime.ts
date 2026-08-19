@@ -40,15 +40,20 @@ export function isExpiredShellSession(session: ShellSession): boolean {
 
 export async function createShellSessionTempDirectory(
   sandboxPlan: SandboxExecutionPlan,
+  options: {
+    platform?: NodeJS.Platform | string;
+    tempRoot?: string;
+  } = {},
 ): Promise<string> {
+  const platform = options.platform ?? process.platform;
   const needsTemporaryDirectory = (
     sandboxPlan.provider === 'macos-seatbelt' && sandboxPlan.permissionProfile === 'workspace-write'
-  ) || sandboxPlan.provider === 'windows-native';
+  ) || sandboxPlan.provider === 'windows-native' || platform === 'win32';
   if (!needsTemporaryDirectory) return '';
   const candidates = [...new Set([
     sandboxPlan.provider === 'windows-native' ? windowsNativeSandboxTempRoot() : '',
-    tmpdir(),
-    process.platform === 'win32' ? '' : '/tmp',
+    options.tempRoot ?? tmpdir(),
+    platform === 'win32' ? '' : '/tmp',
   ])]
     .filter((candidate) => candidate && path.isAbsolute(candidate));
   for (const candidate of candidates) {
