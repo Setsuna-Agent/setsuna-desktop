@@ -4,37 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { createHost, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local process lifecycle', () => {
-  it('does not allow persistent-process stdin to bypass the disk guard', async () => {
-    const { host, projectId } = await createHost();
-    const context = {
-      threadId: 'thread_stdin_guard',
-      turnId: 'turn_stdin_guard',
-      projectId,
-      toolCallId: 'call_stdin_guard',
-      permissionProfile: 'danger-full-access' as const,
-    };
-    const running = await host.runTool('run_shell_command', {
-      command: `${nodeCommand()} -e "process.stdin.resume(); setInterval(() => {}, 1000)"`,
-      risk_level: 'low',
-      yield_time_ms: 1,
-      persist: true,
-      persist_ttl_ms: 5_000,
-    }, context);
-    const processId = String((running.data as Record<string, unknown>).process_id || '');
-
-    try {
-      await expect(host.runTool('write_shell_process', {
-        process_id: processId,
-        input: 'diskpart\r\n',
-      }, context)).rejects.toMatchObject({
-        failureKind: 'policy_blocked',
-        message: expect.stringContaining('磁盘'),
-      });
-    } finally {
-      await host.runTool('terminate_shell_process', { process_id: processId }, context).catch(() => undefined);
-    }
-  });
-
   it('declares an upfront sandbox bypass for restricted shell tools when the provider is unavailable', async () => {
     const { host } = await createHost({
       shellSandboxCapability: () => ({

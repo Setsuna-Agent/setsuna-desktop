@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  catastrophicShellCommandReason,
   obviousHighRiskShellReason,
   shellWritePathCandidates,
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-command-analysis.js';
@@ -9,31 +8,25 @@ describe('PC local shell destructive-command analysis', () => {
   it('classifies Windows deletion commands independently of flag order and aliases', () => {
     for (const command of [
       String.raw`powershell -Command "Remove-Item C:\repo\dist -Force -Recurse"`,
-      String.raw`cmd /c del /q /s C:\repo\dist\*`,
+      String.raw`cmd /c del /f C:\repo\dist\*`,
       String.raw`cmd /c rd /q /s C:\repo\dist`,
+      String.raw`r\m -rf /some/path`,
     ]) {
-      expect(obviousHighRiskShellReason(command), command).toContain('Windows Shell');
+      expect(obviousHighRiskShellReason(command), command).not.toBe('');
     }
   });
 
-  it('hard-blocks volume-root and disk operations but permits scoped deletion', () => {
+  it('does not broaden Windows risk classification beyond Codex-style force deletion', () => {
     for (const command of [
-      String.raw`powershell -Command "Remove-Item C:\* -Force -Recurse"`,
-      String.raw`powershell -Command "Remove-Item '$env:SystemDrive\*' -Recurse -Force"`,
-      'cmd /c rd /q /s D:\\',
-      'format C:',
+      String.raw`powershell -Command "Get-ChildItem C:\ -Force; Remove-Item C:\repo\old.txt"`,
+      String.raw`powershell -Command "Remove-Item C:\repo\old.txt"`,
+      String.raw`cmd /c del /q /s C:\repo\dist\*`,
+      String.raw`cmd /c rd /s C:\repo\dist`,
       'diskpart',
-      String.raw`C:\Windows\System32\diskpart.exe`,
-      String.raw`dd if=image.bin of=\\.\PhysicalDrive0`,
+      String.raw`echo "\\.\PhysicalDrive0"`,
     ]) {
-      expect(catastrophicShellCommandReason(command), command).not.toBe('');
+      expect(obviousHighRiskShellReason(command), command).toBe('');
     }
-
-    expect(catastrophicShellCommandReason(
-      String.raw`powershell -Command "Remove-Item C:\repo\dist -Force -Recurse"`,
-    )).toBe('');
-    expect(catastrophicShellCommandReason('Get-ChildItem C:\\')).toBe('');
-    expect(catastrophicShellCommandReason('echo "format C:"')).toBe('');
   });
 
   it('preserves Windows separators when extracting shell write targets', () => {

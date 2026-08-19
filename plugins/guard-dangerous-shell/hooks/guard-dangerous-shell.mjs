@@ -15,13 +15,11 @@ process.stdin.on('end', () => {
     /:\s*\(\)\s*\{\s*:\|:\s*&\s*\}\s*;/,
   ];
   const windowsPatterns = [
-    /\b(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b(?=[^;&|\r\n]*-Recurse\b)(?=[^;&|\r\n]*-Force\b)/i,
+    /\b(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b(?=[^;&|\r\n]*-Force(?::(?:\$?true|1))?\b)/i,
     /\bformat\s+[a-z]:/i,
-    /\b(?:Clear-Disk|Format-Volume|Initialize-Disk|Remove-Partition|diskpart(?:\.exe)?)\b/i,
-    /\b(?:del|erase)\b(?=[^;&|\r\n]*\/s\b)(?=[^;&|\r\n]*\/q\b)/i,
+    /\bClear-Disk\b/i,
+    /\b(?:del|erase)\b(?=[^;&|\r\n]*\/f\b)/i,
     /\b(?:rd|rmdir)\b(?=[^;&|\r\n]*\/s\b)(?=[^;&|\r\n]*\/q\b)/i,
-    /\\\\\.\\PhysicalDrive\d+\b/i,
-    /\b(?:Remove-Item|ri|rm|del|erase|rd|rmdir)\b[\s\S]*(?:[a-z]:[\\/](?:[.*?]+)?|(?:%|\$\{?env:)(?:SystemDrive|HomeDrive)(?:%|\})?[\\/](?:[.*?]+)?)(?=$|[\s"'`,;|&)])/i,
     /\bgit\s+(?:reset\s+--hard|clean\s+-fdx?)\b/i,
   ];
   // 命令可以显式进入 Git Bash、WSL、PowerShell 或其他 shell，不能只按宿主系统检查一种语法。

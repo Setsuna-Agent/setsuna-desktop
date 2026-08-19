@@ -93,7 +93,6 @@ type ShellWorkspaceWriteRootOptions = {
 
 export {
   _usesShellApplyPatch,
-  catastrophicShellCommandReason,
   normalizeShellCommandForRisk,
   obviousHighRiskShellReason,
 } from './pc-local-tool-shell-command-analysis.js';

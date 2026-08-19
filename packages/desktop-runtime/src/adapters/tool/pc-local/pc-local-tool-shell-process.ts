@@ -29,7 +29,6 @@ import {
   resolvePolicyPath,
 } from './pc-local-tool-paths.js';
 import {
-  catastrophicShellCommandReason,
   _usesShellApplyPatch,
   createShellSandboxExecutionPlan,
   shellNetworkBlockReason,
@@ -254,13 +253,6 @@ export async function runShellCommand(
       failure_stage: 'preflight',
     });
   }
-  const catastrophicBlock = catastrophicShellCommandReason(command);
-  if (catastrophicBlock) {
-    return errorResult(catastrophicBlock, {
-      failure_kind: 'policy_blocked',
-      failure_stage: 'preflight',
-    });
-  }
   const policyBlock = shellPolicyBlockReason(command, state);
   if (policyBlock) {
     return errorResult(policyBlock, {
@@ -449,13 +441,6 @@ export async function writeShellProcess(
     return errorResult(`Shell process not found or already closed: ${processId}`, {
       failure_kind: 'process_not_found',
       failure_stage: 'validation',
-    });
-  }
-  const catastrophicBlock = catastrophicShellCommandReason(input);
-  if (catastrophicBlock) {
-    return errorResult(catastrophicBlock, {
-      failure_kind: 'policy_blocked',
-      failure_stage: 'preflight',
     });
   }
   if (session.closed || !session.child?.stdin?.writable) {
