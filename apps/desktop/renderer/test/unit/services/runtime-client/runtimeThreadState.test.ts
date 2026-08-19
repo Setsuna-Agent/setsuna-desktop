@@ -276,13 +276,23 @@ describe('selectInitialThreadSummary', () => {
     expect(selectInitialThreadSummary(threads, 'missing')?.id).toBe('global_1');
   });
 
-  it('falls back to the first thread when no global thread exists', () => {
+  it('prefers the most recently active global thread when the list is creation-sorted', () => {
     const threads = [
-      threadSummary('project_1', { projectId: 'project_a' }),
-      threadSummary('project_2', { projectId: 'project_b' }),
+      threadSummary('global_old', { updatedAt: '2026-06-01T00:00:00.000Z' }),
+      threadSummary('project_recent', { projectId: 'project_a', updatedAt: '2026-06-30T00:00:00.000Z' }),
+      threadSummary('global_recent', { updatedAt: '2026-06-29T00:00:00.000Z' }),
     ];
 
-    expect(selectInitialThreadSummary(threads, null)?.id).toBe('project_1');
+    expect(selectInitialThreadSummary(threads, null)?.id).toBe('global_recent');
+  });
+
+  it('falls back to the most recently active thread when no global thread exists', () => {
+    const threads = [
+      threadSummary('project_1', { projectId: 'project_a', updatedAt: '2026-06-01T00:00:00.000Z' }),
+      threadSummary('project_2', { projectId: 'project_b', updatedAt: '2026-06-02T00:00:00.000Z' }),
+    ];
+
+    expect(selectInitialThreadSummary(threads, null)?.id).toBe('project_2');
   });
 });
 

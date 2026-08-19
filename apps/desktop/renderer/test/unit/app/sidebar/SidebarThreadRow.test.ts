@@ -23,6 +23,18 @@ describe('SidebarThreadRow', () => {
     expect(html).toContain('aria-label="对话进行中"');
   });
 
+  it('disables the archive action while the thread is running', () => {
+    const html = renderRow({ ...thread, activeTurnId: 'turn_goal_1' });
+
+    expect(html).toContain('aria-label="归档对话" disabled');
+  });
+
+  it('keeps the archive action enabled when idle', () => {
+    const html = renderRow(thread);
+
+    expect(html).not.toContain('disabled');
+  });
+
 });
 
 function renderRow(value: RuntimeThreadSummary, running = false): string {

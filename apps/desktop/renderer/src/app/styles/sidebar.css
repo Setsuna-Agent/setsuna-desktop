@@ -531,13 +531,9 @@
   padding-right: calc(var(--desktop-agent-row-action-size) + 8px);
 }
 
-.desktop-agent-session:hover .desktop-agent-session__running,
-.desktop-agent-session:focus-within .desktop-agent-session__running {
-  opacity: 0;
-}
-
-.desktop-agent-session:hover .desktop-agent-session__archive-button,
-.desktop-agent-session:focus-within .desktop-agent-session__archive-button,
+/* 进行中的行禁用归档：hover/focus 时保持 loading 指示，而不是替换成归档按钮。 */
+.desktop-agent-session:not(.is-running):hover .desktop-agent-session__archive-button,
+.desktop-agent-session:not(.is-running):focus-within .desktop-agent-session__archive-button,
 .desktop-agent-session__archive-button:focus-visible {
   opacity: 1;
   pointer-events: auto;

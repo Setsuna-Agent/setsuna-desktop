@@ -120,9 +120,12 @@ export class RuntimeMemoryCoordinator {
       const key = memorySourceKey(output.threadId, output.turnId);
       if (key) extractedKeys.add(key);
     }
-    const candidates = summaries
-      .filter((summary) => memoryStartupThreadEligible(summary, config, now))
-      .slice(0, memoryMaxRolloutsPerStartup(config));
+    const candidates = memoryStartupExtractionCandidates(
+      summaries,
+      config,
+      now,
+      memoryMaxRolloutsPerStartup(config),
+    );
 
     let claimed = 0;
     let extracted = 0;
@@ -704,6 +707,23 @@ function memoryStartupThreadEligible(thread: RuntimeThreadSummary, config: Runti
   if (ageMs < 0) return false;
   return ageMs >= memoryMinRolloutIdleHours(config) * HOURS_TO_MS
     && ageMs <= memoryMaxRolloutAgeDays(config) * DAYS_TO_MS;
+}
+
+/**
+ * 启动抽取候选：先按资格过滤，再按最近活跃排序后截断。
+ * listThreads 的全局顺序按创建时间稳定排序（服务侧栏），不能在此直接截断；
+ * 否则较早创建但最近活跃的线程会被新建线程长期挡在截断范围外。
+ */
+export function memoryStartupExtractionCandidates(
+  summaries: readonly RuntimeThreadSummary[],
+  config: RuntimeConfigState | null | undefined,
+  now: Date,
+  limit: number,
+): RuntimeThreadSummary[] {
+  return summaries
+    .filter((summary) => memoryStartupThreadEligible(summary, config, now))
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id))
+    .slice(0, limit);
 }
 
 function clampInteger(value: unknown, fallback: number, min: number, max: number): number {

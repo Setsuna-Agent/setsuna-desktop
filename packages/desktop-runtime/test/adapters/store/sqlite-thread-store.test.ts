@@ -622,6 +622,28 @@ describe('sqlite thread store', () => {
     expect(inspected.prepare('SELECT COUNT(*) AS count FROM threads').get()).toMatchObject({ count: 0 });
     inspected.close();
   });
+
+  it('lists threads by creation time so concurrent activity cannot reorder the sidebar', async () => {
+    let timestampMs = Date.parse('2026-01-01T00:00:00.000Z');
+    const clock = { now: () => new Date(timestampMs) };
+    const dataDir = await temporaryDirectory();
+    const store = new SqliteThreadStore(dataDir, clock, new RandomIdGenerator());
+    await store.recover();
+    const older = await store.createThread({ title: 'Older chat' });
+    timestampMs += 60_000;
+    const newer = await store.createThread({ title: 'Newer chat' });
+
+    // Late activity bumps the older thread's updatedAt but must not move it above the newer one.
+    timestampMs += 60_000;
+    await store.appendEvent(
+      older.id,
+      messageCreatedEvent(older.id, 'msg_late_activity', 'late activity in the older chat'),
+    );
+
+    await expect(store.listThreads().then((list) => list.map((thread) => thread.id)))
+      .resolves.toEqual([newer.id, older.id]);
+    await store.close();
+  });
 });
 
 function messageCreatedEvent(

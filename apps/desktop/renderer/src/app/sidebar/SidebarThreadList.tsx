@@ -52,6 +52,9 @@ export function SidebarThreadList({
   const batchSize = variant === 'project'
     ? PROJECT_CONVERSATION_BATCH_SIZE
     : GLOBAL_CONVERSATION_BATCH_SIZE;
+  // 侧栏按创建时间倒序展示；显式重排，避免依赖 listThreads 的全局顺序保持不变。
+  // 稳定排序：创建时间相同时保留上游顺序（store 已按 id 做 tie-break）。
+  const orderedThreads = [...threads].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const minimumVisibleCount = minimumSidebarVisibleCount(
     threads,
     batchSize,
@@ -60,8 +63,8 @@ export function SidebarThreadList({
   const [expansion, setExpansion] = useState({ variant, visibleCount: batchSize });
   const expandedVisibleCount = expansion.variant === variant ? expansion.visibleCount : batchSize;
   const visibleCount = Math.max(expandedVisibleCount, minimumVisibleCount);
-  const visibleThreads = threads.slice(0, visibleCount);
-  const remainingCount = threads.length - visibleThreads.length;
+  const visibleThreads = orderedThreads.slice(0, visibleCount);
+  const remainingCount = orderedThreads.length - visibleThreads.length;
 
   return (
     <div className={variant === 'project' ? 'desktop-agent-session-list' : 'app-sidebar__list'}>
