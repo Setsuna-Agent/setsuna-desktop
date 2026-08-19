@@ -409,8 +409,8 @@ export class ToolApprovalCoordinator {
     ) {
       return { action: 'skip' };
     }
-    // Full policy never prompts. Match Codex's Never policy by rejecting only
-    // the narrow destructive-command denylist; ordinary approval hints are skipped.
+    // Full policy never prompts. Reject only the narrow destructive-command
+    // denylist; ordinary approval hints are skipped.
     if (approvalPolicy === 'full' && !strictAutoReview) {
       const hostRequirement = await this.options.toolHost.approvalForTool?.(
         toolCall.name,

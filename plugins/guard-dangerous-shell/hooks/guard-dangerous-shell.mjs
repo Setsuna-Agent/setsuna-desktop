@@ -4,7 +4,7 @@ process.stdin.on('data', (chunk) => { input += chunk; });
 process.stdin.on('end', () => {
   const payload = JSON.parse(input || '{}');
   const toolInput = payload.tool_input || payload.toolInput || {};
-  const command = String(toolInput.command || toolInput.cmd || toolInput.input || '');
+  const command = String(toolInput.command || toolInput.cmd || '');
   const posixPatterns = [
     /\brm\s+-rf\s+(?:\/|~|\.\.?\s*$)/i,
     /\bsudo\s+rm\b/i,

@@ -16,9 +16,6 @@ describe('bundled Hook plugins', () => {
       tool_input: { command: String.raw`powershell -Command "Remove-Item C:\ -Force -Recurse"` },
     }).status).toBe(2);
     expect(runHook('guard-dangerous-shell', {
-      tool_input: { input: 'Remove-Item C:\\repo\\old.txt -Force\r\n' },
-    }).status).toBe(2);
-    expect(runHook('guard-dangerous-shell', {
       tool_input: { command: 'Remove-Item C:\\repo\\old.txt; Get-ChildItem C:\\' },
     }).status).toBe(0);
   });

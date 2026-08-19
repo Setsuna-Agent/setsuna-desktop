@@ -87,7 +87,7 @@ import {
   listBackgroundShellProcesses,
 } from './pc-local-tool-background-shell-processes.js';
 import {
-  codexDangerousShellReason,
+  approvalDisabledDestructiveCommandReason,
   createShellSandboxExecutionPlan,
   loadShellPolicyRules,
   normalizeShellCommandForRisk,
@@ -314,7 +314,7 @@ export function shellCommandRisk(
   if (policy.action === 'allow') {
     return { needsConfirmation: false, reason: policy.reason, rejectWhenApprovalDisabled: false };
   }
-  const rejectWhenApprovalDisabled = Boolean(codexDangerousShellReason(normalized));
+  const rejectWhenApprovalDisabled = Boolean(approvalDisabledDestructiveCommandReason(command));
   if (policy.action === 'ask') {
     return { needsConfirmation: true, reason: policy.reason, rejectWhenApprovalDisabled };
   }

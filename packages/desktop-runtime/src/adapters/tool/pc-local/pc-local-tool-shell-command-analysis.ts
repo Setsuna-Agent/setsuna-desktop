@@ -23,7 +23,7 @@ export function obviousHighRiskShellReason(command: unknown): string {
   const hasWord = (value: string) => words.includes(value);
 
   if (_usesShellApplyPatch(text)) return '命令会通过 apply_patch 修改工作区文件。';
-  const dangerousReason = codexDangerousShellReason(text);
+  const dangerousReason = approvalDisabledDestructiveCommandReason(text);
   if (dangerousReason) return dangerousReason;
   if (hasParsedDeletionCommand(text)) return '命令可能删除文件。';
   if (hasWord('rm') || hasWord('rmdir') || hasWord('unlink')) return '命令可能删除文件。';
@@ -89,10 +89,10 @@ function hasWindowsForceDeleteCommand(command: string): boolean {
 }
 
 /**
- * Mirrors the narrow destructive-command denylist used by Codex when approval
- * prompts are disabled. Broader mutation heuristics still only request approval.
+ * Identifies the narrow destructive-command denylist used when approval prompts
+ * are disabled. Broader mutation heuristics still only request approval.
  */
-export function codexDangerousShellReason(command: unknown): string {
+export function approvalDisabledDestructiveCommandReason(command: unknown): string {
   const text = String(command || '');
   if (hasWindowsForceDeleteCommand(text)) {
     return '命令可能通过 Windows Shell 强制删除文件。';

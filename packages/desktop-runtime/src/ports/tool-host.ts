@@ -118,7 +118,7 @@ export type ToolApprovalRequirement = {
   argumentsPreview?: string;
   approvalKeys?: string[];
   persistentApprovalKeys?: string[];
-  /** Codex-style destructive commands are rejected when prompts are disabled. */
+  /** Narrow destructive commands are rejected when prompts are disabled. */
   rejectWhenApprovalDisabled?: boolean;
 };
 

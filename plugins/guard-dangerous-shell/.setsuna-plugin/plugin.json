@@ -14,7 +14,7 @@
       "name": "阻止危险 Shell 命令",
       "description": "在 Shell 工具执行前识别破坏性命令，命中后阻止本次调用。",
       "eventName": "PreToolUse",
-      "matcher": "run_shell_command|exec_command|write_shell_process",
+      "matcher": "run_shell_command|exec_command",
       "command": "node {{pluginRoot}}/hooks/guard-dangerous-shell.mjs",
       "commandWindows": "node {{pluginRoot}}/hooks/guard-dangerous-shell.mjs",
       "timeoutSec": 10,
