@@ -4,11 +4,7 @@
   --desktop-agent-text-start: 40px;
   --desktop-agent-icon-size: 16px;
   --desktop-agent-leading-center: calc(var(--desktop-agent-text-start) - var(--desktop-agent-icon-size));
-  --desktop-agent-leading-gap: calc(
-    var(--desktop-agent-text-start)
-    - var(--desktop-agent-leading-center)
-    - var(--desktop-agent-icon-size) / 2
-  );
+  --desktop-agent-leading-gap: calc(var(--desktop-agent-text-start) - var(--desktop-agent-leading-center) - var(--desktop-agent-icon-size) / 2);
   --desktop-agent-mac-close-center: 23px;
   --desktop-agent-row-action-inset: 6px;
   --desktop-agent-row-action-size: 22px;
@@ -20,9 +16,7 @@
 /* macOS 原生关闭按钮位于 x=16、宽 14px，视觉圆心固定在 23px。
    页面内容使用 CSS zoom，因此侧栏前导中心必须乘缩放倒数才能始终与它重合。 */
 :root[data-desktop-platform='darwin'] .desktop-agent-sidebar {
-  --desktop-agent-leading-center: calc(
-    var(--desktop-agent-mac-close-center) * var(--app-page-scale-inverse)
-  );
+  --desktop-agent-leading-center: calc(var(--desktop-agent-mac-close-center) * var(--app-page-scale-inverse));
 }
 
 .desktop-agent-sidebar :where(input, textarea, [contenteditable='true']) {
@@ -39,6 +33,10 @@
   background: transparent;
 }
 
+:root[data-desktop-platform='darwin'] .desktop-agent-sidebar__top-actions {
+  padding-top: 4px;
+}
+
 .desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target,
 .chat-sidebar-user > .sd-shortcut-tooltip-target {
   display: flex;
@@ -51,11 +49,7 @@
   gap: var(--desktop-agent-leading-gap);
   width: 100%;
   height: 30px;
-  padding: 0 8px 0 calc(
-    var(--desktop-agent-leading-center)
-    - var(--desktop-agent-row-start)
-    - var(--desktop-agent-icon-size) / 2
-  );
+  padding: 0 8px 0 calc(var(--desktop-agent-leading-center) - var(--desktop-agent-row-start) - var(--desktop-agent-icon-size) / 2);
   border: 0;
   border-radius: var(--app-radius-md);
   color: var(--app-sidebar-text);
@@ -179,7 +173,10 @@
   width: 12px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
 }
 
 .desktop-agent-sidebar__section-toggle.is-collapsed {
@@ -283,12 +280,7 @@
   gap: var(--desktop-agent-leading-gap);
   width: 100%;
   height: 38px;
-  padding: 0 9px 0 calc(
-    var(--desktop-agent-leading-center)
-    - var(--desktop-agent-row-start)
-    - 1px
-    - var(--desktop-agent-icon-size) / 2
-  );
+  padding: 0 9px 0 calc(var(--desktop-agent-leading-center) - var(--desktop-agent-row-start) - 1px - var(--desktop-agent-icon-size) / 2);
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
   color: var(--app-sidebar-text);
@@ -419,15 +411,15 @@
   color: color-mix(in srgb, var(--app-sidebar-text-secondary) 88%, transparent);
   background: transparent;
   text-align: left;
-  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
 }
 
 .app-sidebar__list > .desktop-agent-session {
-  padding-left: calc(
-    var(--desktop-agent-content-start)
-    - var(--desktop-agent-row-start)
-    - 1px
-  );
+  padding-left: calc(var(--desktop-agent-content-start) - var(--desktop-agent-row-start) - 1px);
 }
 
 .app-sidebar__list > .desktop-agent-thread-list__show-more,
@@ -527,7 +519,10 @@
   box-shadow: none;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 160ms ease, background 160ms ease, color 160ms ease;
+  transition:
+    opacity 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
 }
 
 .desktop-agent-session:hover .desktop-agent-session__title,
@@ -560,19 +555,16 @@
   width: 100%;
   min-width: 0;
   height: var(--desktop-agent-row-height);
-  padding: 0 var(--desktop-agent-row-action-inset) 0 calc(
-    var(--desktop-agent-leading-center)
-    - var(--desktop-agent-row-start)
-    - 1px
-    - var(--desktop-agent-icon-size) / 2
-  );
+  padding: 0 var(--desktop-agent-row-action-inset) 0 calc(var(--desktop-agent-leading-center) - var(--desktop-agent-row-start) - 1px - var(--desktop-agent-icon-size) / 2);
   border: 1px solid transparent;
   border-radius: var(--app-radius-md);
   color: color-mix(in srgb, var(--app-sidebar-text) 84%, var(--app-sidebar-text-secondary));
   background: transparent;
   cursor: pointer;
   text-align: left;
-  transition: background 140ms ease, border-color 140ms ease;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
 .desktop-agent-project:hover {
