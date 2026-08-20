@@ -2,7 +2,7 @@ import { type ModelRequest } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { AnthropicMessagesModelClient } from '../../../src/adapters/model/anthropic-messages-model-client.js';
 import { providerEndpointFingerprint } from '../../../src/adapters/model/provider-replay-context.js';
-import { model, request, expectHeaders, expectBody, provider, fakeFetch, collect } from './provider-adapters.support.js';
+import { model, request, expectHeaders, expectBody, provider, fakeFetch, collect, modelStepSnapshot } from './provider-adapters.support.js';
 import type { CapturedRequest } from './provider-adapters.support.js';
 
 describe('Anthropic Messages provider', () => {
@@ -42,6 +42,7 @@ describe('Anthropic Messages provider', () => {
     const body = expectBody(captured);
     expect(headers['x-api-key']).toBe('secret');
     expect(headers['anthropic-version']).toBe('2023-06-01');
+    expect(body.cache_control).toBeUndefined();
     expect(body.system).toEqual([{ type: 'text', text: 'System prompt' }]);
     expect(events.find((event) => event.type === 'item_delta')).toEqual({
       type: 'item_delta',
@@ -71,6 +72,51 @@ describe('Anthropic Messages provider', () => {
     expect(expectBody(captured).max_tokens).toBe(8192);
   });
 
+  it('preserves instruction boundaries and caches the stable prefix through environment context', async () => {
+    const captured: CapturedRequest = {};
+    const messages: ModelRequest['messages'] = [
+      { id: 'base', role: 'system', content: 'Base instructions', createdAt: '2026-06-25T00:00:00.000Z' },
+      { id: 'tool-policy', role: 'developer', content: 'Tool policy', createdAt: '2026-06-25T00:00:00.000Z' },
+      { id: 'environment', role: 'developer', content: 'Environment context', createdAt: '2026-06-25T00:00:00.000Z' },
+      { id: 'permissions', role: 'developer', content: 'Runtime permissions', createdAt: '2026-06-25T00:00:00.000Z' },
+      { id: 'skill-catalog', role: 'developer', content: 'Skill catalog', createdAt: '2026-06-25T00:00:00.000Z' },
+      { id: 'user', role: 'user', content: 'Hello', createdAt: '2026-06-25T00:00:01.000Z' },
+    ];
+    const stepSnapshot = {
+      ...modelStepSnapshot([]),
+      messageIds: messages.map((message) => message.id),
+      promptManifest: [
+        promptManifestEntry('base', 'system', 'product'),
+        promptManifestEntry('tool-policy', 'developer', 'tool_policy'),
+        promptManifestEntry('environment', 'developer', 'environment'),
+        promptManifestEntry('permissions', 'developer', 'permissions'),
+        promptManifestEntry('skill-catalog', 'developer', 'skill'),
+      ],
+    } satisfies NonNullable<ModelRequest['stepSnapshot']>;
+
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
+      ),
+      { messages, stepSnapshot },
+    );
+
+    const body = expectBody(captured);
+    expect(body.cache_control).toEqual({ type: 'ephemeral' });
+    expect(body.system).toEqual([
+      { type: 'text', text: 'Base instructions' },
+      { type: 'text', text: '\n\nTool policy' },
+      {
+        type: 'text',
+        text: '\n\nEnvironment context',
+        cache_control: { type: 'ephemeral' },
+      },
+      { type: 'text', text: '\n\nRuntime permissions' },
+      { type: 'text', text: '\n\nSkill catalog' },
+    ]);
+  });
+
   it('caps Anthropic thinking budget against the request max_tokens override', async () => {
     const captured: CapturedRequest = {};
     const thinkingModel = {
@@ -85,10 +131,16 @@ describe('Anthropic Messages provider', () => {
         provider('anthropic', 'https://api.anthropic.test', thinkingModel),
         fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', captured),
       ),
-      { thinking: true, reasoningEffort: 'high', maxOutputTokens: 2048 },
+      {
+        thinking: true,
+        reasoningEffort: 'high',
+        maxOutputTokens: 2048,
+        stepSnapshot: modelStepSnapshot([]),
+      },
     );
 
     expect(expectBody(captured)).toMatchObject({
+      cache_control: { type: 'ephemeral' },
       max_tokens: 2048,
       thinking: { type: 'enabled', budget_tokens: 2047 },
     });
@@ -590,3 +642,21 @@ describe('Anthropic Messages provider', () => {
     expect(events.some((event) => event.type === 'tool_calls')).toBe(false);
   });
 });
+
+function promptManifestEntry(
+  id: string,
+  role: 'system' | 'developer',
+  source: 'product' | 'tool_policy' | 'environment' | 'permissions' | 'skill',
+): NonNullable<NonNullable<ModelRequest['stepSnapshot']>['promptManifest']>[number] {
+  return {
+    id,
+    role,
+    source,
+    trust: source === 'skill' ? 'user' : 'runtime',
+    lifecycle: source === 'environment' || source === 'permissions' || source === 'skill'
+      ? 'turn'
+      : 'runtime',
+    estimatedTokens: 1,
+    contentHash: `sha256:${id}`,
+  };
+}

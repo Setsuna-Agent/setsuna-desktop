@@ -91,7 +91,10 @@ describe('OpenAI Responses compaction', () => {
       fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
     ), { messages });
     expect(expectBody(anthropicCaptured)).toMatchObject({
-      system: [{ type: 'text', text: 'System prompt\n\nDeveloper policy' }],
+      system: [
+        { type: 'text', text: 'System prompt' },
+        { type: 'text', text: '\n\nDeveloper policy' },
+      ],
       messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
     });
 
