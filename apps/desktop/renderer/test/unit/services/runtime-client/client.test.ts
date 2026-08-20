@@ -278,6 +278,10 @@ describe('desktop runtime client advanced thread methods', () => {
     });
     const client = createDesktopRuntimeClient();
     const target = { type: 'baseBranch' as const, branch: 'main' };
+    const reviewInput = {
+      modelSelection: { providerId: 'provider-selected', modelId: 'model-selected' },
+      target,
+    };
 
     await client.deleteThread('thread / 1');
     await expect(client.setThreadGoal('thread / 1', {
@@ -290,7 +294,7 @@ describe('desktop runtime client advanced thread methods', () => {
       cleared: true,
       thread: { id: 'thread / 1', lastSeq: 2, goal: undefined },
     });
-    await expect(client.startReview('thread / 1', target)).resolves.toEqual({
+    await expect(client.startReview('thread / 1', reviewInput)).resolves.toEqual({
       accepted: true,
       turnId: 'turn_review',
     });
@@ -312,7 +316,7 @@ describe('desktop runtime client advanced thread methods', () => {
       {
         path: '/v1/threads/thread%20%2F%201/reviews',
         method: 'POST',
-        body: { target },
+        body: reviewInput,
       },
     ]);
   });

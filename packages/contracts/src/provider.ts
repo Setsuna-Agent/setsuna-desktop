@@ -104,11 +104,19 @@ export type RuntimeModelRequestToolRuntime = {
   waitsForRuntimeCancellation: boolean;
 };
 
+/** Model selected for future conversation turns; each started turn snapshots this identity. */
+export type RuntimeThreadModelBinding = {
+  providerId: string;
+  modelId: string;
+  modelCode: string;
+};
+
 export type RuntimeModelRequestStepSnapshot = {
   threadId: string;
   turnId: string;
   threadLastSeq: number;
   projectId?: string;
+  modelBinding?: RuntimeThreadModelBinding;
   conversationMessageIds: string[];
   messageIds: string[];
   inputMessageIds?: string[];

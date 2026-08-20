@@ -2,6 +2,7 @@ import {
   runtimeDeveloperFeaturesEnabled,
   type AnswerRuntimeApprovalInput,
   type DesktopRuntimeClient,
+  type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
   type RuntimePluginSummary,
   type RuntimeReviewFinding,
@@ -32,6 +33,7 @@ import {
 } from 'react';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
+import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
 import {
   RuntimePluginNavigationProvider,
   type OpenRuntimePluginHandler,
@@ -247,7 +249,7 @@ export function AppChatSurface({
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onExternalOpenFile: (filePath?: string | null, line?: number) => void;
   onOpenFileWithApp: (appId: string, filePath: string, line?: number) => void;
-  onSelectModel: (providerId: string, modelId: string) => void;
+  onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenBottomPanel: (panel: DesktopPanelType) => void;
   onOpenBrowser: (url?: string) => void;
@@ -276,7 +278,10 @@ export function AppChatSurface({
   onRevealFile: (filePath: string) => void;
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
+  onStartThreadReview: (
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onSkillSelectionRequestConsumed: (requestId: number) => void;

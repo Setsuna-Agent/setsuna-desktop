@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
+import { createOpenAiCaptureServer } from '../../support/runtime-server/shared.js';
 
 describe('runtime server AppServer catalog and thread listing', () => {
   let harness: RuntimeServerTestHarness;
+  let captureServers: Array<{ close(): Promise<void> }>;
 
   beforeEach(async () => {
+    captureServers = [];
     harness = await createRuntimeServerTestHarness();
   });
 
   afterEach(async () => {
-    await harness.close();
+    try {
+      await harness.close();
+    } finally {
+      await Promise.all(captureServers.map((server) => server.close()));
+    }
   });
 
   it('accepts AppServer app-server JSON-RPC shaped requests for the SWE path', async () => {
@@ -125,6 +132,10 @@ describe('runtime server AppServer catalog and thread listing', () => {
         ]),
       })]);
       const resumedWithTurns = await harness.appServerRpc('thread/resume', { threadId: startedThread.thread.id });
+      expect(resumedWithTurns).toMatchObject({
+        model: 'local-runtime-smoke',
+        modelProvider: 'local-test',
+      });
       expect(resumedWithTurns.thread.turns).toEqual([expect.objectContaining({
         id: startedTurn.turn.id,
         items: expect.arrayContaining([
@@ -143,6 +154,10 @@ describe('runtime server AppServer catalog and thread listing', () => {
         name: 'Forked AppServer RPC thread',
         forkedFromId: startedThread.thread.id,
         status: { type: 'idle' },
+      });
+      expect(forked).toMatchObject({
+        model: 'local-runtime-smoke',
+        modelProvider: 'local-test',
       });
       expect(forked.thread.turns).toEqual([expect.objectContaining({
         id: startedTurn.turn.id,
@@ -171,6 +186,70 @@ describe('runtime server AppServer catalog and thread listing', () => {
       await expect(harness.appServerRpc('thread/loaded/list', { cursor: firstPage.nextCursor, limit: 1 })).resolves.toEqual({
         data: [expectedIds[1]],
         nextCursor: null,
+      });
+    });
+
+  it('switches and persists the model requested by AppServer turn/start', async () => {
+      const providerA = await createOpenAiCaptureServer('Model A response.');
+      const providerB = await createOpenAiCaptureServer('Model B response.');
+      captureServers.push(providerA, providerB);
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'app-provider-a',
+          providers: [
+            appServerTestProvider('app-provider-a', 'app-model-a', providerA.baseUrl),
+            appServerTestProvider('app-provider-b', 'app-model-b', providerB.baseUrl),
+          ],
+        }),
+      });
+      const startedThread = await harness.appServerRpc('thread/start', {
+        name: 'AppServer model switching',
+        cwd: process.cwd(),
+      });
+
+      const first = await harness.appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Use model A.' }],
+        model: 'app-model-a-code',
+      });
+      await expect(providerA.nextBody).resolves.toMatchObject({ model: 'app-model-a-code' });
+      await harness.waitForThread(
+        startedThread.thread.id,
+        (thread) => thread.turns?.some((turn) => turn.id === first.turn.id && turn.status === 'completed') === true,
+      );
+
+      const second = await harness.appServerRpc('turn/start', {
+        threadId: startedThread.thread.id,
+        input: [{ type: 'text', text: 'Switch to model B.' }],
+        model: 'app-model-b-code',
+      });
+      await expect(providerB.nextBody).resolves.toMatchObject({ model: 'app-model-b-code' });
+      const switched = await harness.waitForThread(
+        startedThread.thread.id,
+        (thread) => thread.turns?.some((turn) => turn.id === second.turn.id && turn.status === 'completed') === true,
+      );
+
+      expect(switched.modelBinding).toEqual({
+        providerId: 'app-provider-b',
+        modelId: 'app-model-b',
+        modelCode: 'app-model-b-code',
+      });
+      expect(switched.turns).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: first.turn.id,
+          modelBinding: expect.objectContaining({ providerId: 'app-provider-a' }),
+        }),
+        expect.objectContaining({
+          id: second.turn.id,
+          modelBinding: expect.objectContaining({ providerId: 'app-provider-b' }),
+        }),
+      ]));
+      await expect(harness.appServerRpc('thread/resume', {
+        threadId: startedThread.thread.id,
+      })).resolves.toMatchObject({
+        model: 'app-model-b-code',
+        modelProvider: 'app-provider-b',
       });
     });
   
@@ -461,3 +540,23 @@ describe('runtime server AppServer catalog and thread listing', () => {
       });
     });
 });
+
+function appServerTestProvider(id: string, modelId: string, baseUrl: string) {
+  return {
+    id,
+    name: id,
+    provider: 'openai-compatible',
+    baseUrl,
+    apiKey: `sk-${id}`,
+    enabled: true,
+    models: [{
+      id: modelId,
+      name: modelId,
+      code: `${modelId}-code`,
+      enabled: true,
+      maxOutputTokens: 1_000,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    }],
+  };
+}

@@ -2,6 +2,7 @@ import { Sender } from '@ant-design/x';
 import type { SlotConfigType } from '@ant-design/x/es/sender';
 import type {
   DesktopRuntimeClient,
+  RuntimeConfiguredModelReference,
   RuntimeConfigState,
   RuntimeQueuedTurnInput,
   RuntimeReviewTarget,
@@ -55,6 +56,10 @@ import { useChatComposerModeController } from './composer/useChatComposerModeCon
 import { useQueuedTurnComposerEdit } from './composer/useQueuedTurnComposerEdit.js';
 import type { ChatContextTokenUsage } from './conversation/chatContextUsage.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
+import {
+  chatThreadModelSelection,
+  type ChatModelSelectionHandler,
+} from './chatModelSelection.js';
 
 const EMPTY_SLOT_CONFIG: SlotConfigType[] = [];
 const EMPTY_QUEUED_TURN_INPUTS: RuntimeQueuedTurnInput[] = [];
@@ -154,19 +159,26 @@ export function ChatComposer({
   onUpdateThreadGoal?: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
   onFocusRequestConsumed?: (requestId: number) => void;
-  onSelectModel: (providerId: string, modelId: string) => void;
+  onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onOpenSideChat?: () => void;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
+  onStartThreadReview: (
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed?: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
+  const [pendingModelSelection, setPendingModelSelection] = useState<{
+    reference: RuntimeConfiguredModelReference;
+    threadId: string | null;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const senderRef = useRef<ComponentRef<typeof Sender>>(null);
@@ -175,6 +187,7 @@ export function ChatComposer({
   const consumedImageAttachmentRequestIdRef = useRef<number | null>(null);
   const consumedSkillSelectionRequestIdRef = useRef<number | null>(null);
   const consumedWorkspaceMentionRequestIdRef = useRef<number | null>(null);
+  const modelSelectionRequestRef = useRef(0);
   const mountedRef = useRef(true);
   const initialSlotConfigRef = useRef<SlotConfigType[]>(draft ? [createTextSlot(draft)] : EMPTY_SLOT_CONFIG);
   const addSelectedSkills = useCallback((nextSkills: RuntimeSkillSummary[]) => {
@@ -196,14 +209,44 @@ export function ChatComposer({
   const currentGoal = currentThread?.goal?.status === 'complete'
     ? null
     : currentThread?.goal ?? null;
+  const persistedThreadModel = useMemo(
+    () => chatThreadModelSelection(config, currentThread),
+    [config, currentThread],
+  );
+  const persistedReference = persistedThreadModel.reference;
+  const pendingMatchesPersisted = Boolean(
+    pendingModelSelection
+    && pendingModelSelection.threadId === (currentThread?.id ?? null)
+    && pendingModelSelection.reference.providerId === persistedReference?.providerId
+    && pendingModelSelection.reference.modelId === persistedReference.modelId
+    // A matching configured model proves that the persisted modelCode is still the same.
+    && (!currentThread?.modelBinding || persistedThreadModel.model),
+  );
+  const pendingReference = pendingModelSelection
+    && pendingModelSelection.threadId === (currentThread?.id ?? null)
+    && !pendingMatchesPersisted
+    ? pendingModelSelection.reference
+    : undefined;
+  const selectedThreadModel = useMemo(
+    () => pendingReference
+      ? chatThreadModelSelection(config, currentThread, pendingReference)
+      : persistedThreadModel,
+    [config, currentThread, pendingReference, persistedThreadModel],
+  );
+  const turnModelSelection = pendingReference
+    ?? (currentThread?.modelBinding ? undefined : selectedThreadModel.reference ?? undefined);
+  useEffect(() => {
+    if (pendingMatchesPersisted) setPendingModelSelection(null);
+  }, [pendingMatchesPersisted]);
   const activeGoalTurnStartedAt = useMemo(
     () => goalActiveTurnStartedAt(currentThread, activeTurnId, currentGoal?.id),
     [activeTurnId, currentGoal?.id, currentThread?.messages, currentThread?.turns],
   );
   const modeController = useChatComposerModeController({
     activeGoal: currentGoal,
-    config,
     currentThreadId: currentThread?.id,
+    model: selectedThreadModel.model,
+    provider: selectedThreadModel.provider,
     onClearThreadGoal,
   });
   const clipboardHandlers = useChatComposerClipboard({
@@ -212,6 +255,21 @@ export function ChatComposer({
     onSkillsRestored: addSelectedSkills,
     skills,
   });
+
+  const selectModel = useCallback((providerId: string, modelId: string) => {
+    const requestId = modelSelectionRequestRef.current + 1;
+    modelSelectionRequestRef.current = requestId;
+    const reference = { providerId, modelId };
+    setPendingModelSelection({ reference, threadId: currentThread?.id ?? null });
+    try {
+      const result = onSelectModel(providerId, modelId, currentThread?.id);
+      void Promise.resolve(result).catch(() => {
+        if (modelSelectionRequestRef.current === requestId) setPendingModelSelection(null);
+      });
+    } catch {
+      if (modelSelectionRequestRef.current === requestId) setPendingModelSelection(null);
+    }
+  }, [currentThread?.id, onSelectModel]);
   const {
     addExistingImage,
     addFiles: addAttachmentFiles,
@@ -561,7 +619,10 @@ export function ChatComposer({
       setSubmitting(true);
       let sent = false;
       try {
-        await onStartThreadReview({ type: 'custom', instructions });
+        await onStartThreadReview(
+          { type: 'custom', instructions },
+          turnModelSelection,
+        );
         sent = true;
       } catch {
         if (mountedRef.current) {
@@ -584,6 +645,7 @@ export function ChatComposer({
         : selectedSkills.map((skill) => skill.id),
       selectedSkillReferences: skillReferences,
     });
+    sendOptions.modelSelection = turnModelSelection;
     const submittedAttachments = sendOptions.attachments ?? [];
     beginAttachmentSend(submittedAttachments);
     setSubmitting(true);
@@ -726,6 +788,9 @@ export function ChatComposer({
               reviewModeEnabled: modeController.reviewModeEnabled,
             }}
             modelOpenSignal={modeController.modelOpenSignal}
+            model={selectedThreadModel.model}
+            modelFallbackCode={selectedThreadModel.fallbackModelCode}
+            modelProvider={selectedThreadModel.provider}
             primaryAction={{
               attachmentOnlyReady,
               attachmentsBusy,
@@ -746,7 +811,7 @@ export function ChatComposer({
               onMenuOpenChange: modeController.setThinkingMenuOpen,
             }}
             onAccessModeChange={onAccessModeChange}
-            onSelectModel={onSelectModel}
+            onSelectModel={selectModel}
           />
         )}
       />

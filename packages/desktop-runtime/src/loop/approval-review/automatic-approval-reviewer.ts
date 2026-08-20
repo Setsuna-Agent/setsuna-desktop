@@ -13,6 +13,7 @@ import type {
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
+import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
 import { abortReason } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
 import {
@@ -72,10 +73,17 @@ export class AutomaticApprovalReviewer implements ApprovalReviewer {
       );
     }
 
+    const turnModel = resolveRuntimeTurnModel(config, thread);
     const modelRequest = runtimeTaskModelRequest(
       config,
       'approvalReview',
       'local-runtime-smoke',
+      turnModel
+        ? {
+            providerId: turnModel.binding.providerId,
+            model: turnModel.binding.modelCode,
+          }
+        : undefined,
     );
     const prompt = buildApprovalReviewPrompt(
       input,

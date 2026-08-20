@@ -63,12 +63,16 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
 
   if (event.type === 'thread.created') {
     next.title = event.payload.title;
+    next.modelBinding = event.payload.modelBinding ? { ...event.payload.modelBinding } : next.modelBinding;
     return next;
   }
 
   if (event.type === 'thread.updated') {
     next.title = event.payload.title ?? next.title;
     next.archived = event.payload.archived ?? next.archived;
+    if (event.payload.modelBinding) {
+      next.modelBinding = { ...event.payload.modelBinding };
+    }
     return next;
   }
 
@@ -173,6 +177,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
         attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
         skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
         skillReferences: cloneRuntimeSkillReferences(event.payload.input.skillReferences),
+        modelSelection: event.payload.input.modelSelection ? { ...event.payload.input.modelSelection } : undefined,
       },
     ];
     return next;
@@ -187,6 +192,7 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
             attachments: event.payload.input.attachments?.map((attachment) => ({ ...attachment })),
             skillIds: event.payload.input.skillIds ? [...event.payload.input.skillIds] : undefined,
             skillReferences: cloneRuntimeSkillReferences(event.payload.input.skillReferences),
+            modelSelection: event.payload.input.modelSelection ? { ...event.payload.input.modelSelection } : undefined,
           }
         : input
     ));
@@ -208,12 +214,16 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'turn.started') {
+    if (!next.modelBinding && event.payload.modelBinding) {
+      next.modelBinding = { ...event.payload.modelBinding };
+    }
     const existingTurn = next.turns?.find((item) => item.id === event.turnId);
     const alreadyTerminal = Boolean(existingTurn && isTerminalTurnStatus(existingTurn.status));
     if (!alreadyTerminal) next.activeTurnId = event.turnId ?? next.activeTurnId ?? null;
     const turn = draft.mutableTurn(event.turnId, event.createdAt);
     if (turn) {
       turn.input = event.payload.input;
+      turn.modelBinding = event.payload.modelBinding ? { ...event.payload.modelBinding } : turn.modelBinding;
       turn.taskKind = event.payload.taskKind;
       if (!alreadyTerminal) turn.status = 'in_progress';
       turn.startedAt = turn.startedAt ?? event.createdAt;

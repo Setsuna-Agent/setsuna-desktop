@@ -761,7 +761,7 @@ function sweModelCatalogItem(
   };
 }
 
-function sweModelCatalogId(provider: ProviderConfigState, model: ProviderConfigState['models'][number]): string {
+export function sweModelCatalogId(provider: ProviderConfigState, model: ProviderConfigState['models'][number]): string {
   return `${provider.id}:${model.id}`;
 }
 

@@ -1,5 +1,6 @@
 import type {
   DesktopRuntimeClient,
+  RuntimeConfiguredModelReference,
   RuntimeConfigState,
   RuntimeMessage,
   RuntimePluginSummary,
@@ -30,6 +31,7 @@ import type {
 } from '../workspace/model.js';
 import { ChatComposer } from './ChatComposer.js';
 import { ChatModelSetupNotice } from './ChatModelSetupNotice.js';
+import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import { runtimePluginUsesByTurn } from './artifacts/runtimePluginUsage.js';
 import {
   ActiveWorkPlaceholder,
@@ -160,13 +162,16 @@ export function ChatWorkspace({
   onOpenThread: (threadId: string) => void | Promise<void>;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenModelSettings?: () => void;
-  onSelectModel: (providerId: string, modelId: string) => void;
+  onSelectModel: ChatModelSelectionHandler;
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onReviewRefresh?: () => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
-  onStartThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
+  onStartThreadReview: (
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
@@ -189,7 +194,10 @@ export function ChatWorkspace({
   const contentRef = useRef<HTMLDivElement | null>(null);
   const overviewRef = useRef<HTMLDivElement | null>(null);
   const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
-  const contextUsage = useMemo(() => contextTokenUsageFromThread(historyThread, activeModelContextWindowTokens(config)), [config, historyThread]);
+  const contextUsage = useMemo(() => contextTokenUsageFromThread(
+    historyThread,
+    activeModelContextWindowTokens(config, historyThread),
+  ), [config, historyThread]);
   const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
   const pluginUsesByTurnId = useMemo(
     () => runtimePluginUsesByTurn(historyThread, skills, plugins),

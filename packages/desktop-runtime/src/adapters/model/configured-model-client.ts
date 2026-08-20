@@ -39,8 +39,11 @@ export class ConfiguredModelClient implements ModelClient {
 
   async *stream(request: ModelRequest) {
     const provider = await configuredProviderForRequest(this.configStore, request.providerId);
-    const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
+    const requestProvider = provider ? providerForRequestModel(provider, request.model, Boolean(request.providerId)) : null;
     if (!shouldUseConfiguredProvider(requestProvider)) {
+      if (request.providerId && request.model !== 'local-runtime-smoke') {
+        throw new Error(`Configured provider is unavailable: ${request.providerId}`);
+      }
       yield* this.fallback.stream(request);
       return;
     }
@@ -73,8 +76,11 @@ export class ConfiguredModelClient implements ModelClient {
 
   async compactConversation(request: ModelCompactionRequest): Promise<ModelCompactionResult> {
     const provider = await configuredProviderForRequest(this.configStore, request.providerId);
-    const requestProvider = provider ? providerForRequestModel(provider, request.model) : null;
+    const requestProvider = provider ? providerForRequestModel(provider, request.model, Boolean(request.providerId)) : null;
     if (!shouldUseConfiguredProvider(requestProvider)) {
+      if (request.providerId && request.model !== 'local-runtime-smoke') {
+        throw new Error(`Configured provider is unavailable: ${request.providerId}`);
+      }
       if (this.fallback.compactConversation) return this.fallback.compactConversation(request);
       throw new Error('Remote context compaction is not supported by the fallback model client.');
     }
@@ -142,14 +148,23 @@ async function configuredProviderForRequest(
   if (providerId && configStore.getProviderConfig) {
     const selected = await configStore.getProviderConfig(providerId);
     if (selected?.enabled) return selected;
+    throw new Error(`Configured provider is unavailable: ${providerId}`);
   }
+  if (providerId) throw new Error(`Configured provider cannot be resolved: ${providerId}`);
   return configStore.getActiveProviderConfig();
 }
 
-function providerForRequestModel(provider: RuntimeProviderConfig, requestedModel: string): RuntimeProviderConfig {
+function providerForRequestModel(
+  provider: RuntimeProviderConfig,
+  requestedModel: string,
+  strict: boolean,
+): RuntimeProviderConfig {
   const modelCode = requestedModel.trim();
   if (!modelCode) return provider;
   const model = provider.models.find((item) => item.code === modelCode);
+  if (!model && strict) {
+    throw new Error(`Configured model is unavailable on provider ${provider.id}: ${modelCode}`);
+  }
   if (!model || model.id === provider.activeModel?.id) return provider;
   return { ...provider, activeModel: model };
 }

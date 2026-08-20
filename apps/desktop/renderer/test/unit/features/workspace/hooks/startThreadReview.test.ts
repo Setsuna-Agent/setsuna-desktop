@@ -22,6 +22,7 @@ describe('startThreadReview', () => {
       client,
       currentThread: null,
       language: 'zh-CN',
+      modelSelection: { providerId: 'provider-new', modelId: 'model-new' },
       onThreadCreated: async (created) => {
         calls.push(`select:${created.id}`);
       },
@@ -30,6 +31,11 @@ describe('startThreadReview', () => {
 
     expect(started).toEqual({ accepted: true, turnId: 'turn_review' });
     expect(calls).toEqual(['create:project_a', 'select:thread_new', 'review:thread_new']);
+    expect(client.startReview).toHaveBeenCalledWith('thread_new', {
+      language: 'zh-CN',
+      modelSelection: { providerId: 'provider-new', modelId: 'model-new' },
+      target: { type: 'uncommittedChanges' },
+    });
   });
 
   it('starts review in the existing thread without creating another one', async () => {
@@ -51,7 +57,10 @@ describe('startThreadReview', () => {
 
     expect(client.createThread).not.toHaveBeenCalled();
     expect(onThreadCreated).not.toHaveBeenCalled();
-    expect(client.startReview).toHaveBeenCalledWith('thread_existing', { type: 'uncommittedChanges' }, 'en-US');
+    expect(client.startReview).toHaveBeenCalledWith('thread_existing', {
+      language: 'en-US',
+      target: { type: 'uncommittedChanges' },
+    });
   });
 });
 

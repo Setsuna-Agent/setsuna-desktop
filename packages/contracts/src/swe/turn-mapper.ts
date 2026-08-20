@@ -176,6 +176,7 @@ export function sweTurnStepSnapshot(createdAt: string, snapshot: RuntimeModelReq
 export function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelRequestStepSnapshot): RuntimeModelRequestStepSnapshot {
   return {
     ...snapshot,
+    modelBinding: snapshot.modelBinding ? { ...snapshot.modelBinding } : undefined,
     advertisedToolNames: snapshot.advertisedToolNames ? [...snapshot.advertisedToolNames] : undefined,
     contextWindow: snapshot.contextWindow
       ? {

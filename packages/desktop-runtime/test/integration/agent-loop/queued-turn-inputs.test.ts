@@ -1,4 +1,8 @@
-import type { ModelRequest, ModelStreamEvent } from '@setsuna-desktop/contracts';
+import type {
+  ModelRequest,
+  ModelStreamEvent,
+  RuntimeConfigState,
+} from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -9,14 +13,90 @@ import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
 import {
+  ContextWindowConfigStore,
   mkDataDir,
   stepSnapshotSkillRegistry,
+  TestConfigStore,
   waitForModelRequestCount,
   waitForTestState,
 } from '../../support/agent-loop/shared.js';
 import { SteerableModelClient } from '../../support/agent-loop/steering-mailbox.js';
 
 describe('agent loop queued turn inputs', () => {
+  it('preserves the requested model when startTurn is redirected into the durable queue', async () => {
+    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop(true);
+    const modelSelection = { providerId: 'test', modelId: 'local-runtime-smoke' };
+    await loop.startTurn(threadId, {
+      input: 'Initial prompt',
+      modelSelection,
+    });
+    await waitForModelRequestCount(modelClient, 1);
+
+    await expect(loop.startTurn(threadId, {
+      input: 'Queued through the normal send route',
+      modelSelection,
+    })).resolves.toMatchObject({ disposition: 'queued' });
+
+    expect((await threadStore.getThread(threadId))?.queuedTurnInputs?.[0]).toMatchObject({
+      input: 'Queued through the normal send route',
+      modelSelection,
+    });
+
+    modelClient.releaseFirstResponse();
+    await waitForQueueDrain(threadStore, threadId, 2);
+  });
+
+  it('validates and snapshots queued attachments against the next turn model', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Queued model capability' });
+    const modelClient = new SteerableModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      configStore: new TestConfigStore(queuedModelConfig()),
+      ids,
+    });
+    await loop.startTurn(thread.id, {
+      input: 'Keep model A active.',
+      modelSelection: { providerId: 'provider-a', modelId: 'model-a' },
+    });
+    await waitForModelRequestCount(modelClient, 1);
+    await threadStore.updateThread(thread.id, {
+      modelBinding: {
+        providerId: 'provider-b',
+        modelId: 'model-b',
+        modelCode: 'model-b-code',
+      },
+    });
+
+    await expect(loop.queueTurnInput(thread.id, {
+      input: 'Inspect this image with model B.',
+      attachments: [inlineAttachment('attachment_model_b', 'model-b.png')],
+    })).resolves.toMatchObject({ disposition: 'queued' });
+    expect((await threadStore.getThread(thread.id))?.queuedTurnInputs?.[0]).toMatchObject({
+      modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+    });
+
+    modelClient.releaseFirstResponse();
+    await waitForQueueDrain(threadStore, thread.id, 2);
+    expect(modelClient.requests[0]).toMatchObject({
+      providerId: 'provider-a',
+      model: 'model-a-code',
+    });
+    expect(modelClient.requests[1]).toMatchObject({
+      providerId: 'provider-b',
+      model: 'model-b-code',
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          attachments: [expect.objectContaining({ id: 'attachment_model_b' })],
+        }),
+      ]),
+    });
+  });
+
   it('persists active-turn input and automatically sends queued items in FIFO order', async () => {
     const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
     const started = await loop.startTurn(threadId, {
@@ -565,7 +645,7 @@ describe('agent loop queued turn inputs', () => {
   });
 });
 
-async function createBlockedLoop() {
+async function createBlockedLoop(withModelConfig = false) {
   const ids = new RandomIdGenerator();
   const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
   const thread = await threadStore.createThread({ title: 'Queued input test' });
@@ -575,6 +655,7 @@ async function createBlockedLoop() {
     modelClient,
     eventBus: new InMemoryEventBus(),
     clock: systemClock,
+    ...(withModelConfig ? { configStore: new ContextWindowConfigStore(256_000) } : {}),
     ids,
     skillRegistry: stepSnapshotSkillRegistry(),
   });
@@ -681,4 +762,63 @@ class QueuedGoalModelClient implements ModelClient {
   releaseFirstResponse(): void {
     this.releaseFirst();
   }
+}
+
+function queuedModelConfig(): RuntimeConfigState {
+  return {
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp',
+    storagePath: '/tmp/memories',
+    activeProviderId: 'provider-a',
+    providers: [
+      {
+        id: 'provider-a',
+        name: 'Provider A',
+        provider: 'openai-compatible',
+        baseUrl: 'https://provider-a.test/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'model-a',
+          name: 'Model A',
+          code: 'model-a-code',
+          enabled: true,
+          maxOutputTokens: 1_000,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+          supportsImages: false,
+        }],
+      },
+      {
+        id: 'provider-b',
+        name: 'Provider B',
+        provider: 'openai-compatible',
+        baseUrl: 'https://provider-b.test/v1',
+        enabled: true,
+        apiKeySet: true,
+        apiKeyPreview: '***',
+        models: [{
+          id: 'model-b',
+          name: 'Model B',
+          code: 'model-b-code',
+          enabled: true,
+          maxOutputTokens: 1_000,
+          thinkingEnabled: false,
+          thinkingEfforts: [],
+          supportsImages: true,
+        }],
+      },
+    ],
+    globalPrompt: '',
+    memory: {
+      useMemories: false,
+      generateMemories: false,
+      disableOnExternalContext: true,
+    },
+    memoryEnabled: false,
+    setsunaStyle: 'developer',
+    approvalPolicy: 'on-request',
+    permissionProfile: 'workspace-write',
+  };
 }

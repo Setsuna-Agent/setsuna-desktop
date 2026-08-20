@@ -183,6 +183,7 @@ export function goalExecutionState(
 ): Pick<RuntimeThreadGoal, 'execution'> {
   const execution: RuntimeThreadGoalExecutionOptions = {
     attachments: input.attachments?.map((attachment) => ({ ...attachment })),
+    modelSelection: input.modelSelection ? { ...input.modelSelection } : undefined,
     sourceMessageId,
     skillIds: input.skillIds ? [...input.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(input.skillReferences),

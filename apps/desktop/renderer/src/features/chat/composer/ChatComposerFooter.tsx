@@ -1,4 +1,8 @@
-import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import type {
+  ProviderConfigState,
+  ProviderModelConfig,
+  RuntimeConfigState,
+} from '@setsuna-desktop/contracts';
 import { Button, Dropdown } from 'antd';
 import {
   ArrowUp,
@@ -76,7 +80,10 @@ export function ChatComposerFooter({
   editingControl,
   hasActiveTurn,
   modeBadges,
+  model,
   modelOpenSignal,
+  modelFallbackCode,
+  modelProvider,
   primaryAction,
   senderActions,
   thinkingControl,
@@ -91,7 +98,10 @@ export function ChatComposerFooter({
   editingControl: ChatComposerFooterEditingControl;
   hasActiveTurn: boolean;
   modeBadges: ChatComposerFooterModeBadges;
+  model: ProviderModelConfig | null;
   modelOpenSignal: number;
+  modelFallbackCode?: string;
+  modelProvider: ProviderConfigState | null;
   primaryAction: ChatComposerFooterPrimaryAction;
   senderActions: ReactNode;
   thinkingControl: ChatComposerFooterThinkingControl;
@@ -174,7 +184,10 @@ export function ChatComposerFooter({
           config={config}
           contextCompacting={contextCompacting}
           contextUsage={contextUsage}
+          fallbackModelCode={modelFallbackCode}
+          model={model}
           openSignal={modelOpenSignal}
+          provider={modelProvider}
           onSelect={onSelectModel}
         />
         <span className="chat-sender-divider" aria-hidden="true" />

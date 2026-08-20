@@ -10,6 +10,7 @@ import type {
   RuntimeModelVerification,
   RuntimeSafetyBuffering,
   RuntimeStreamItem,
+  RuntimeThreadModelBinding,
 } from './provider.js';
 import type {
   RuntimeGitInfo,
@@ -97,8 +98,12 @@ export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
 };
 
 export type RuntimeEvent =
-  | RuntimeEventBase<'thread.created', { title: string }>
-  | RuntimeEventBase<'thread.updated', { title?: string; archived?: boolean }>
+  | RuntimeEventBase<'thread.created', { title: string; modelBinding?: RuntimeThreadModelBinding }>
+  | RuntimeEventBase<'thread.updated', {
+      title?: string;
+      archived?: boolean;
+      modelBinding?: RuntimeThreadModelBinding;
+    }>
   | RuntimeEventBase<'thread.deleted', Record<string, never>>
   | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
   | RuntimeEventBase<'thread.memory_mode_updated', { mode: RuntimeThreadMemoryMode; reason?: string }>
@@ -135,7 +140,7 @@ export type RuntimeEvent =
   | RuntimeEventBase<'turn.input_queued', { input: RuntimeQueuedTurnInput }>
   | RuntimeEventBase<'turn.input_updated', { input: RuntimeQueuedTurnInput }>
   | RuntimeEventBase<'turn.input_deleted', { inputId: string }>
-  | RuntimeEventBase<'turn.started', { input: string; taskKind?: RuntimeTaskKind }>
+  | RuntimeEventBase<'turn.started', { input: string; taskKind?: RuntimeTaskKind; modelBinding?: RuntimeThreadModelBinding }>
   | RuntimeEventBase<'turn.step_snapshot', { snapshot: RuntimeModelRequestStepSnapshot }>
   | RuntimeEventBase<'mailbox.delivered', RuntimeMailboxDelivery>
   | RuntimeEventBase<'message.created', { message: RuntimeMessage; queuedInputId?: string }>

@@ -1,5 +1,6 @@
 import type {
-  RuntimeConfigState,
+  ProviderConfigState,
+  ProviderModelConfig,
   RuntimeMessageAttachment,
   RuntimeSkillReference,
   RuntimeThreadGoal,
@@ -39,18 +40,20 @@ type ModelThinkingSelectionState = {
 
 export function useChatComposerModeController({
   activeGoal,
-  config,
   currentThreadId,
+  model,
+  provider,
   onClearThreadGoal,
 }: {
   activeGoal: RuntimeThreadGoal | null;
-  config: RuntimeConfigState | null;
   currentThreadId?: string | null;
+  model: ProviderModelConfig | null;
+  provider: ProviderConfigState | null;
   onClearThreadGoal: () => void | Promise<unknown>;
 }) {
   const modelCapabilities = useMemo(
-    () => createChatComposerModelCapabilities(config),
-    [config],
+    () => createChatComposerModelCapabilities(provider, model),
+    [model, provider],
   );
   const [localModes, setLocalModes] = useState(emptyChatComposerLocalModes);
   const [modelOpenSignal, setModelOpenSignal] = useState(0);

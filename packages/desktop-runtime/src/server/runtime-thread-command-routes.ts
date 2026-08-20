@@ -8,6 +8,8 @@ import {
   startRuntimeReview,
 } from '../runtime/use-cases/thread-operations.js';
 import { decodeRuntimeId, readBody, sendJson } from './http-utils.js';
+import { resolveRuntimeModelSelectionInput } from './runtime-model-selection-input.js';
+import { runtimeThreadResponse } from './runtime-thread-response.js';
 import type { RuntimeFactory } from './types.js';
 
 /**
@@ -33,20 +35,43 @@ export async function handleRuntimeThreadCommandRequest(
     const patch = runtimeThreadGoalPatchFromInput(
       await readBody<unknown>(request),
     );
-    sendJson(response, 200, await setRuntimeThreadGoal(runtime, threadId, patch));
+    const result = await setRuntimeThreadGoal(runtime, threadId, patch);
+    sendJson(response, 200, {
+      ...result,
+      thread: await runtimeThreadResponse(runtime, result.thread),
+    });
     return true;
   }
   if (goalMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(goalMatch[1], 'Thread id');
-    sendJson(response, 200, await clearRuntimeThreadGoal(runtime, threadId));
+    const result = await clearRuntimeThreadGoal(runtime, threadId);
+    sendJson(response, 200, {
+      ...result,
+      thread: await runtimeThreadResponse(runtime, result.thread),
+    });
     return true;
   }
 
   const reviewMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/reviews$/u);
   if (reviewMatch && request.method === 'POST') {
     const threadId = decodeRuntimeId(reviewMatch[1], 'Thread id');
-    const input = await readBody<{ language?: unknown; target?: unknown }>(request);
-    const started = await startRuntimeReview(runtime, threadId, input.target, input.language);
+    const input = await readBody<{
+      language?: unknown;
+      modelSelection?: unknown;
+      model_selection?: unknown;
+      target?: unknown;
+    }>(request);
+    const modelSelection = await resolveRuntimeModelSelectionInput(
+      runtime.configStore,
+      input.modelSelection ?? input.model_selection,
+    );
+    const started = await startRuntimeReview(
+      runtime,
+      threadId,
+      input.target,
+      input.language,
+      modelSelection?.reference,
+    );
     sendJson(response, 200, started.response);
     return true;
   }

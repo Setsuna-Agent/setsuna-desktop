@@ -7,14 +7,21 @@ import type {
   RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadMemoryMode,
+  RuntimeThreadModelBinding,
   RuntimeThreadSummary,
   RuntimeTaskKind,
   ThreadPatch,
   ThreadQuery,
 } from '@setsuna-desktop/contracts';
 
+export type ThreadStorePatch = Omit<ThreadPatch, 'modelSelection'> & {
+  /** Validated model identity resolved by the runtime boundary. */
+  modelBinding?: RuntimeThreadModelBinding;
+};
+
 export type ThreadStoreCreateInput = CreateThreadInput & {
   kind?: NonNullable<RuntimeThreadSummary['kind']>;
+  modelBinding?: RuntimeThreadModelBinding;
 };
 
 export type ThreadStoreQuery = ThreadQuery & {
@@ -45,7 +52,7 @@ export type ThreadStore = {
   listMessages(threadId: string, query?: RuntimeMessagePageQuery): Promise<RuntimeMessagePage>;
   createThread(input?: ThreadStoreCreateInput): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
-  updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
+  updateThread(threadId: string, patch: ThreadStorePatch): Promise<RuntimeThread>;
   updateThreadMemoryMode(threadId: string, mode: RuntimeThreadMemoryMode, reason?: string): Promise<RuntimeThread>;
   updateMessage(threadId: string, messageId: string, patch: MessagePatch): Promise<RuntimeThread>;
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;

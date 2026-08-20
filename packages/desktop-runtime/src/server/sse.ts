@@ -5,6 +5,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
+import { runtimeThreadResponse } from './runtime-thread-response.js';
 import type { RuntimeFactory } from './types.js';
 
 const MAX_PENDING_EVENTS = 512;
@@ -119,8 +120,9 @@ export async function handleSse({
       const replay = await runtime.threadStore.replayEvents(threadId, sinceSeq);
       if (closed) return;
       if (replay.requiresResync) {
-        const thread = await runtime.threadStore.getThread(threadId);
-        if (!thread) throw new Error(`Thread not found: ${threadId}`);
+        const storedThread = await runtime.threadStore.getThread(threadId);
+        if (!storedThread) throw new Error(`Thread not found: ${threadId}`);
+        const thread = await runtimeThreadResponse(runtime, storedThread);
         const resync: RuntimeEventResync = {
           reason: 'retention_gap',
           requestedSinceSeq: sinceSeq,

@@ -1,3 +1,4 @@
+import type { ProviderConfigState } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -165,6 +166,38 @@ describe('agent loop memory extraction', () => {
       expect(modelClient.requests[1]?.providerId).toBe('memory-provider');
       await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
     });
+
+  it('keeps passive memory extraction on the bound conversation model when the global default changes', async () => {
+      const ids = new RandomIdGenerator();
+      const dataDir = await mkDataDir();
+      const threadStore = createTestThreadStore(dataDir, systemClock, ids);
+      const memoryStore = new FileMemoryStore(dataDir, systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Bound memory extraction', projectId: 'project_1' });
+      const modelClient = new PassiveMemoryModelClient();
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        memoryStore,
+        configStore: new SwitchingMemoryConfigStore({
+          useMemories: true,
+          generateMemories: true,
+          disableOnExternalContext: false,
+        }),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'Keep background work on this conversation model.' });
+
+      expect(modelClient.requests.map((request) => ({
+        model: request.model,
+        providerId: request.providerId,
+      }))).toEqual([
+        { model: 'chat-model-a', providerId: 'chat-provider-a' },
+        { model: 'chat-model-a', providerId: 'chat-provider-a' },
+      ]);
+    });
   
   it('prefers Codex stage-1 fields from passive memory extraction output', async () => {
       const ids = new RandomIdGenerator();
@@ -244,6 +277,44 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
       },
     };
   }
+}
+
+class SwitchingMemoryConfigStore extends MemorySettingsConfigStore {
+  private reads = 0;
+
+  async getConfig() {
+    const config = await super.getConfig();
+    const activeProviderId = this.reads++ === 0 ? 'chat-provider-a' : 'chat-provider-b';
+    return {
+      ...config,
+      activeProviderId,
+      providers: [
+        conversationProvider('chat-provider-a', 'chat-model-a'),
+        conversationProvider('chat-provider-b', 'chat-model-b'),
+      ],
+    };
+  }
+}
+
+function conversationProvider(id: string, modelCode: string): ProviderConfigState {
+  return {
+    id,
+    name: id,
+    provider: id.endsWith('-a') ? 'anthropic' : 'openai-responses',
+    baseUrl: `https://${id}.example.test`,
+    enabled: true,
+    apiKeySet: true,
+    apiKeyPreview: '***',
+    models: [{
+      id: modelCode,
+      name: modelCode,
+      code: modelCode,
+      enabled: true,
+      maxOutputTokens: 8_192,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    }],
+  };
 }
   
   it('runs phase-2 consolidation with a locked-down internal memory agent', async () => {

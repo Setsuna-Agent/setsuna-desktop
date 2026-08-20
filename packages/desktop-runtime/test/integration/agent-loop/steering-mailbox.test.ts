@@ -232,16 +232,19 @@ describe('agent loop turn steering and mailbox input', () => {
       await waitForTurnCompleted(threadStore, thread.id, started.turnId!);
       const saved = await threadStore.getThread(thread.id);
       const compactRequest = modelClient.requests
-        .filter((request) => request.model === 'context-compaction')
+        .filter((request) => request.toolChoice === 'none')
         .at(-1);
       const followUpRequest = modelClient.requests.at(-1);
       const savedSteer = saved?.messages.find((message) => message.clientId === 'client-oversized-steer');
   
-      expect(modelClient.requests.map((request) => request.model)).toEqual([
-        'context-compaction',
-        'local-runtime-smoke',
-        'context-compaction',
-        'local-runtime-smoke',
+      expect(modelClient.requests.map((request) => ({
+        model: request.model,
+        toolChoice: request.toolChoice,
+      }))).toEqual([
+        { model: 'local-runtime-smoke', toolChoice: 'none' },
+        { model: 'local-runtime-smoke', toolChoice: 'auto' },
+        { model: 'local-runtime-smoke', toolChoice: 'none' },
+        { model: 'local-runtime-smoke', toolChoice: 'auto' },
       ]);
       expect(compactRequest?.messages.map((message) => message.content).join('\n')).toContain(oversizedSteer.slice(0, 200));
       expect(savedSteer).toMatchObject({

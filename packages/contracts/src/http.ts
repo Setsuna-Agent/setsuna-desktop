@@ -13,8 +13,10 @@ import type {
   RuntimeAvailableModelsResponse,
   RuntimeConfigInput,
   RuntimeConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
+  RuntimeInterfaceLanguage,
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeDebugTraceList } from './debug-traces.js';
@@ -81,7 +83,6 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from './threads.js';
-import type { RuntimeInterfaceLanguage } from './config.js';
 import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
   RuntimeWorkspaceDependenciesStatus,
@@ -111,6 +112,12 @@ export type RuntimeRequestInput = {
   path: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+};
+
+export type RuntimeReviewStartInput = {
+  language?: RuntimeInterfaceLanguage;
+  modelSelection?: RuntimeConfiguredModelReference;
+  target: RuntimeReviewTarget;
 };
 
 /** Goal command responses include a sequenced snapshot so REST cannot regress newer SSE state. */
@@ -155,7 +162,7 @@ export type DesktopRuntimeClient = {
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;
   cancelTurn(threadId: string, turnId: string): Promise<void>;
-  startReview(threadId: string, target: RuntimeReviewTarget, language?: RuntimeInterfaceLanguage): Promise<SendTurnResponse>;
+  startReview(threadId: string, input: RuntimeReviewStartInput): Promise<SendTurnResponse>;
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,

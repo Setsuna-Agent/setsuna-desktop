@@ -186,7 +186,7 @@ export class StepSnapshotConfigStore implements ConfigStore {
 
   async getConfig() {
     this.getConfigCalls += 1;
-    const refreshed = this.getConfigCalls > 2;
+    const refreshed = this.getConfigCalls > 3;
     return {
       configPath: '/tmp/config.json',
       dataPath: '/tmp',

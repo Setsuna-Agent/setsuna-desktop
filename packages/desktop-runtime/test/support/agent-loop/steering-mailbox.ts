@@ -9,11 +9,10 @@ import type {
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolDefinition,
-  ThreadPatch,
   ThreadQuery
 } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../../../src/ports/model-client.js';
-import type { ThreadStore } from '../../../src/ports/thread-store.js';
+import type { ThreadStore, ThreadStorePatch } from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
 
 
@@ -150,7 +149,7 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
     return this.inner.deleteThread(threadId);
   }
 
-  updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
+  updateThread(threadId: string, patch: ThreadStorePatch): Promise<RuntimeThread> {
     return this.inner.updateThread(threadId, patch);
   }
 
@@ -229,7 +228,7 @@ export class OversizedSteerCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'context-compaction') {
+    if (request.toolChoice === 'none' && request.thinking === false) {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -243,7 +242,7 @@ export class OversizedSteerCompactionModelClient implements ModelClient {
       yield { type: 'done', finishReason: 'stop' };
       return;
     }
-    const localRequestCount = this.requests.filter((item) => item.model === 'local-runtime-smoke').length;
+    const localRequestCount = this.requests.filter((item) => item.toolChoice !== 'none').length;
     if (localRequestCount === 1) {
       yield { type: 'text_delta', text: 'initial answer' };
       await this.firstResponseReleased;

@@ -1,6 +1,8 @@
 import {
   isRuntimeInputMessageAttachment,
   type DesktopRuntimeClient,
+  type RuntimeConfiguredModelReference,
+  type RuntimeConfigState,
   type RuntimeMessageAttachment,
   type RuntimeSkillReference,
   type RuntimeThread,
@@ -14,10 +16,12 @@ import {
   reconcileChatTurnSubmission,
 } from './chatTurnSubmission.js';
 import { useQueuedTurnInputActions } from './useQueuedTurnInputActions.js';
+import { chatThreadModelSelection } from '../chatModelSelection.js';
 
 type ChatTurnSendOptions = {
   attachments?: RuntimeMessageAttachment[];
   goalMode?: boolean;
+  modelSelection?: RuntimeConfiguredModelReference;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
@@ -29,6 +33,7 @@ export function useChatTurnActions({
   activeTurnId,
   claimComposerForThread,
   client,
+  config = null,
   composerKey,
   createThread,
   currentThread,
@@ -45,6 +50,7 @@ export function useChatTurnActions({
   activeTurnId: string | null;
   claimComposerForThread: (threadId: string) => void;
   client: DesktopRuntimeClient;
+  config?: RuntimeConfigState | null;
   composerKey: string;
   createThread?: () => Promise<RuntimeThread>;
   currentThread: RuntimeThread | null;
@@ -78,6 +84,7 @@ export function useChatTurnActions({
       const clientId = createChatTurnClientId();
       let submissionDispatched = false;
       let submissionThreadId: string | null = null;
+      let createdThread = false;
       if (isCurrentRequest()) setError(null);
       try {
         let thread = currentThread;
@@ -86,6 +93,7 @@ export function useChatTurnActions({
           thread = createThread
             ? await createThread()
             : await client.createThread({ projectId: activeProjectId ?? undefined });
+          createdThread = true;
           claimCreatedChatThreadForSend({
             activeProjectId,
             claimComposerForThread,
@@ -105,12 +113,22 @@ export function useChatTurnActions({
           }
         }
         const threadId = thread.id;
+        const modelSelection = options.modelSelection
+          ?? (!thread.modelBinding ? chatThreadModelSelection(config, thread).reference : null)
+          ?? undefined;
+        if (createdThread && thread.modelBinding && modelSelection) {
+          // Side conversations inherit the parent's binding at creation. Persist the model shown
+          // in the empty side composer before starting its first turn.
+          thread = await client.updateThread(threadId, { modelSelection });
+          if (isCurrentRequest()) setCurrentThread(thread);
+        }
         submissionThreadId = threadId;
         if (isCurrentRequest()) setDraft('');
         const startTurn = () => client.sendTurn(threadId, {
           attachments,
           clientId,
           input,
+          modelSelection,
           skillIds: options.skillIds,
           skillReferences: options.skillReferences,
           thinking: options.thinking === true,
@@ -127,6 +145,7 @@ export function useChatTurnActions({
               kind: options.goalMode
                 ? 'goal'
                 : 'message',
+              modelSelection,
               skillIds: options.skillIds,
               skillReferences: options.skillReferences,
               thinking: options.thinking,
@@ -176,7 +195,7 @@ export function useChatTurnActions({
         return false;
       }
     },
-    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
+    [actionRequests, activeProjectId, activeTurnId, claimComposerForThread, client, config, createThread, currentThread, draft, expandProject, reloadThreads, setActiveTurnId, setCurrentThread, setDraft, setError, terminalTurnIdsRef],
   );
 
   const cancelActiveTurn = useCallback(async () => {

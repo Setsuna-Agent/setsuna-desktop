@@ -35,13 +35,13 @@ export type DeliverMailboxResponse = {
 type RuntimeTurnInputCoordinatorOptions = {
   clock: Clock;
   ids: IdGenerator;
-  inputGuard: Pick<RuntimeModelInputGuard, 'assertAttachmentsSupported'>;
+  inputGuard: Pick<RuntimeModelInputGuard, 'assertThreadAttachmentsSupported'>;
   claimAttachments(threadId: string, attachments: NonNullable<RuntimeMessage['attachments']>): Promise<NonNullable<RuntimeMessage['attachments']>>;
   normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']>;
   threadStore: ThreadStore;
   turnTasks: RuntimeTurnTaskRegistry;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
-  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): { done: Promise<void> };
+  createMailboxTriggeredRun(threadId: string, thread: RuntimeThread, turnId: string, content: string): Promise<{ done: Promise<void> }>;
   publishMessage(
     threadId: string,
     turnId: string,
@@ -89,8 +89,6 @@ export class RuntimeTurnInputCoordinator {
     const text = input.input.trim();
     const attachments = this.options.normalizeAttachments(input.attachments);
     if (!text && !attachments.length) throw new Error('input must not be empty');
-    await this.options.inputGuard.assertAttachmentsSupported(attachments);
-
     const active = this.options.turnTasks.activeForThread(threadId);
     if (!active || active.controller.signal.aborted) throw new Error('no active turn to steer');
     if (!turnTaskAcceptsInteractiveInput(active)) throw new Error(`cannot steer a ${active.taskKind} turn`);
@@ -102,6 +100,7 @@ export class RuntimeTurnInputCoordinator {
     try {
       const thread = await this.options.threadStore.getThread(threadId);
       if (!thread) throw new Error(`Thread not found: ${threadId}`);
+      await this.options.inputGuard.assertThreadAttachmentsSupported(attachments, thread);
       if (active.controller.signal.aborted) throw new Error('no active turn to steer');
       const claimedAttachments = await this.options.claimAttachments(threadId, attachments);
       const skillIds = [...new Set((input.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))];
@@ -188,7 +187,7 @@ export class RuntimeTurnInputCoordinator {
         createdAt: this.options.clock.now().toISOString(),
         payload: delivery,
       });
-      const run = this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
+      const run = await this.options.createMailboxTriggeredRun(threadId, thread, turnId, content);
       void run.done.catch(() => undefined);
       return { accepted: true, turnId };
     }

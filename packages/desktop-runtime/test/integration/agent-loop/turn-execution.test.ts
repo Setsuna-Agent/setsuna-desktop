@@ -472,6 +472,124 @@ describe('agent loop turn execution', () => {
       expect(toolHost.runContexts[0].environment).toBe(firstSnapshotEnvironment);
     });
 
+  it('pins active turn steps while applying a thread model switch to the next turn', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Pinned model' });
+      const modelClient = new ToolCallingModelClient();
+      const modelA = {
+        id: 'model-a',
+        name: 'Model A',
+        code: 'model-a-code',
+        enabled: true,
+        maxOutputTokens: 4096,
+        thinkingEnabled: false,
+        thinkingEfforts: [],
+      };
+      const modelB = { ...modelA, id: 'model-b', name: 'Model B', code: 'model-b-code' };
+      const baseConfig: RuntimeConfigState = {
+        configPath: '/tmp/config.json',
+        dataPath: '/tmp',
+        storagePath: '/tmp/memories',
+        activeProviderId: 'provider-a',
+        providers: [
+          {
+            id: 'provider-a',
+            name: 'Provider A',
+            provider: 'anthropic',
+            baseUrl: 'https://a.example.test',
+            enabled: true,
+            apiKeySet: true,
+            apiKeyPreview: '***',
+            models: [modelA],
+          },
+          {
+            id: 'provider-b',
+            name: 'Provider B',
+            provider: 'openai-responses',
+            baseUrl: 'https://b.example.test',
+            enabled: true,
+            apiKeySet: true,
+            apiKeyPreview: '***',
+            models: [modelB],
+          },
+        ],
+        globalPrompt: '',
+        memory: { useMemories: false, generateMemories: false, disableOnExternalContext: true },
+        memoryEnabled: false,
+        setsunaStyle: 'developer',
+        approvalPolicy: 'on-request',
+        permissionProfile: 'workspace-write',
+      };
+      let configReads = 0;
+      const configStore = {
+        getConfig: async () => ({
+          ...baseConfig,
+          activeProviderId: configReads++ === 0 ? 'provider-a' : 'provider-b',
+        }),
+        saveConfig: async () => baseConfig,
+        getActiveProviderConfig: async () => null,
+      };
+      const bindingA = {
+        providerId: 'provider-a',
+        modelId: 'model-a',
+        modelCode: 'model-a-code',
+      };
+      const bindingB = {
+        providerId: 'provider-b',
+        modelId: 'model-b',
+        modelCode: 'model-b-code',
+      };
+      const toolHost = new CapturingToolHost();
+      const runTool = toolHost.runTool.bind(toolHost);
+      toolHost.runTool = async (name, input, context) => {
+        await threadStore.updateThread(thread.id, { modelBinding: bindingB });
+        return runTool(name, input, context);
+      };
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        configStore,
+        toolHost,
+      });
+
+      await loop.sendTurn(thread.id, {
+        input: 'read README without changing models',
+        modelSelection: { providerId: 'provider-a', modelId: 'model-a' },
+      });
+
+      const saved = await threadStore.getThread(thread.id);
+      expect(configReads).toBeGreaterThan(1);
+      expect(modelClient.requests).toHaveLength(2);
+      expect(modelClient.requests.map((request) => ({
+        model: request.model,
+        providerId: request.providerId,
+      }))).toEqual([
+        { model: 'model-a-code', providerId: 'provider-a' },
+        { model: 'model-a-code', providerId: 'provider-a' },
+      ]);
+      expect(saved?.modelBinding).toEqual({
+        ...bindingB,
+      });
+      expect(saved?.turns?.[0]?.stepSnapshots?.map((step) => step.snapshot.modelBinding)).toEqual([
+        bindingA,
+        bindingA,
+      ]);
+      await loop.sendTurn(thread.id, {
+        input: 'use the model selected during the previous turn',
+      });
+      expect(modelClient.requests).toHaveLength(3);
+      expect(modelClient.requests[2]).toMatchObject({
+        model: 'model-b-code',
+        providerId: 'provider-b',
+      });
+      const switched = await threadStore.getThread(thread.id);
+      expect(switched?.turns?.[1]?.modelBinding).toEqual(bindingB);
+    });
+
   it('uses the committed step event only as a transient developer trace anchor', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);

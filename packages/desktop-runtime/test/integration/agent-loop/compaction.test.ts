@@ -365,9 +365,15 @@ describe('agent loop context compaction', () => {
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
       const compactedEvent = events.find((event) => event.type === 'thread.context_compacted' && event.turnId);
-      const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+      const mainRequest = modelClient.requests.find((request) => request.stepSnapshot);
   
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => ({
+        model: request.model,
+        toolChoice: request.toolChoice,
+      }))).toEqual([
+        { model: 'local-runtime-smoke', toolChoice: 'none' },
+        { model: 'local-runtime-smoke', toolChoice: 'auto' },
+      ]);
       expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(true);
       expect(compactedEvent?.turnId).toBeTruthy();
       const savedCompactionSummary = saved?.messages.find((message) => message.contextCompaction);
@@ -425,7 +431,7 @@ describe('agent loop context compaction', () => {
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
       const compactingEvent = events.find((event) => event.type === 'thread.context_compacting' && event.turnId);
-      const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+      const mainRequest = modelClient.requests.find((request) => request.stepSnapshot);
   
       expect(modelClient.requests.map((request) => request.model)).toEqual(['background-summary-model', 'local-runtime-smoke']);
       expect(modelClient.requests[0]).toMatchObject({
@@ -489,14 +495,15 @@ describe('agent loop context compaction', () => {
       await loop.sendTurn(thread.id, { input: 'continue after remote compaction' });
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
-      const mainRequest = modelClient.requests.find((request) => request.model === 'local-runtime-smoke');
+      const mainRequest = modelClient.requests.find((request) => request.stepSnapshot);
   
       expect(modelClient.compactRequests).toHaveLength(1);
       expect(modelClient.compactRequests[0]).toMatchObject({
-        model: 'context-compaction',
+        model: 'local-runtime-smoke',
+        providerId: 'test',
       });
       expect(modelClient.compactRequests[0].messages.map((message) => message.content).join('\n')).toContain(smallWindowHistory.slice(0, 200));
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['context-compaction', 'local-runtime-smoke']);
+      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
       expect(saved?.messages.find((message) => message.contextCompaction)?.contextCompaction).toMatchObject({
         source: 'remote',
         triggerScopes: ['total', 'latest_input'],
@@ -572,13 +579,11 @@ describe('agent loop context compaction', () => {
       await loop.sendTurn(thread.id, { input: 'read the huge generated report' });
       const saved = await threadStore.getThread(thread.id);
       const events = await threadStore.listEvents(thread.id, 0);
-      const mainRequests = modelClient.requests.filter((request) => request.model === 'local-runtime-smoke');
+      const mainRequests = modelClient.requests.filter((request) => request.stepSnapshot);
       const followUpRequest = mainRequests.at(-1)!;
   
       expect(modelClient.requests.map((request) => request.model)).toEqual([
-        ...Array.from({ length: toolCallBatches }, () => 'local-runtime-smoke'),
-        'context-compaction',
-        'local-runtime-smoke',
+        ...Array.from({ length: toolCallBatches + 2 }, () => 'local-runtime-smoke'),
       ]);
       expect(toolHost.calls).toHaveLength(toolCallBatches);
       expect(events.some((event) => event.type === 'thread.context_compacted' && event.turnId)).toBe(true);

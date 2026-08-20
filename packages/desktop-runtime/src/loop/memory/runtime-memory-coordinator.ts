@@ -26,6 +26,7 @@ import {
 } from '../context/prompt-utils.js';
 import { throwIfAborted } from '../core/runtime-turn-errors.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
+import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
 import { addRuntimeUsage } from '../core/runtime-usage.js';
 import { RuntimeBackgroundTaskQueue } from '../lifecycle/runtime-background-task-queue.js';
 import {
@@ -346,10 +347,17 @@ export class RuntimeMemoryCoordinator {
       () => memoryStore.preparePhase2Workspace().then(() => undefined),
       { threadId: thread.id, turnId: sourceTurnId },
     );
+    const conversationModel = resolveRuntimeTurnModel(config, thread);
     const extractionModel = runtimeTaskModelRequest(
       config,
       'memoryExtraction',
       PASSIVE_MEMORY_MODEL,
+      conversationModel
+        ? {
+            providerId: conversationModel.binding.providerId,
+            model: conversationModel.binding.modelCode,
+          }
+        : undefined,
     );
     let text = '';
     let usage: RuntimeUsage | undefined;

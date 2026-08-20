@@ -1,4 +1,8 @@
-import type { RuntimeReviewTarget, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeConfiguredModelReference,
+  RuntimeReviewTarget,
+  WorkspaceProject,
+} from '@setsuna-desktop/contracts';
 import {
   lazy,
   Suspense,
@@ -93,7 +97,10 @@ export function AppRouteContent({
   setActiveView: Dispatch<SetStateAction<MainView>>;
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
-  startCurrentThreadReview: (target: RuntimeReviewTarget) => Promise<unknown>;
+  startCurrentThreadReview: (
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => Promise<unknown>;
   updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
@@ -345,7 +352,7 @@ export function AppRouteContent({
       onEditUserMessage={(messageId, content) => chatActions.editUserMessage(messageId, content)}
       onExternalOpenFile={(filePath, line) => void workspacePanels.openFileInWorkspaceApp(filePath, line)}
       onOpenFileWithApp={(appId, filePath, line) => void workspacePanels.openFileWithWorkspaceApp(appId, filePath, line)}
-      onSelectModel={(providerId, modelId) => void runtime.selectProviderModel(providerId, modelId)}
+      onSelectModel={runtime.selectConversationModel}
       onSearchProjectEntries={projectWorkspace.searchProjectEntries}
       onOpenBottomPanel={(panelType) => {
         if (panelType === 'files') projectWorkspace.setFilePreview(null);

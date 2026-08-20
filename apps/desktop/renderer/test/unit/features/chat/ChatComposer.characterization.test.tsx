@@ -1,11 +1,14 @@
+// @vitest-environment happy-dom
+
 import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
   RuntimeMessageAttachment,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyChatComposerFocusRequest,
   ChatComposer,
@@ -24,15 +27,18 @@ vi.mock('@ant-design/x', async () => {
   const Sender = React.forwardRef(({
     footer,
     header,
+    onSubmit,
     placeholder,
   }: {
     footer?: (actions: React.ReactNode) => React.ReactNode;
     header?: React.ReactNode;
+    onSubmit?: (value?: string) => unknown;
     placeholder?: string;
   }, _ref) => (
     <div data-component="sender" data-placeholder={placeholder}>
       {header}
       {footer?.(<button type="button" data-action="sender-default">default</button>)}
+      <button type="button" data-testid="sender-submit" onClick={() => void onSubmit?.()}>submit</button>
     </div>
   ));
   Sender.displayName = 'MockSender';
@@ -66,7 +72,17 @@ vi.mock('../../../../src/features/chat/composer/ChatCommandMenus.js', () => ({
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatModelPicker.js', () => ({
-  ChatModelPicker: () => <div data-component="model-picker" />,
+  ChatModelPicker: ({ onSelect }: {
+    onSelect: (providerId: string, modelId: string) => void;
+  }) => (
+    <button
+      type="button"
+      data-component="model-picker"
+      onClick={() => onSelect('provider-b', 'model-b')}
+    >
+      select model b
+    </button>
+  ),
 }));
 
 vi.mock('../../../../src/features/chat/composer/ChatSendQueue.js', () => ({
@@ -94,6 +110,8 @@ vi.mock('../../../../src/features/chat/composer/useQueuedTurnComposerEdit.js', (
 }));
 
 describe('ChatComposer view state characterization', () => {
+  afterEach(cleanup);
+
   it('consumes an explicit focus request only after focusing an available editor', () => {
     const focus = vi.fn();
     const consume = vi.fn();
@@ -265,6 +283,57 @@ describe('ChatComposer view state characterization', () => {
     expect(renderComposer({ activeProject, placeholder: 'Custom placeholder' }))
       .toContain('data-placeholder="Custom placeholder"');
   });
+
+  it('carries the composer model selection into a first-turn review', async () => {
+    composerHarness.mode.reviewModeEnabled = true;
+    const onStartThreadReview = vi.fn(async () => undefined);
+
+    render(composerElement({
+      config: modelConfig(),
+      draft: 'Review the selected model boundary.',
+      onStartThreadReview,
+    }));
+    fireEvent.click(screen.getByTestId('sender-submit'));
+
+    await waitFor(() => expect(onStartThreadReview).toHaveBeenCalledWith(
+      { type: 'custom', instructions: 'Review the selected model boundary.' },
+      { providerId: 'provider-a', modelId: 'model-a' },
+    ));
+  });
+
+  it('shows and sends a newly selected thread model before persistence completes', async () => {
+    const onSelectModel = vi.fn(async () => undefined);
+    const onSend = vi.fn(async () => true);
+    const currentThread = {
+      id: 'thread-a',
+      messages: [],
+      queuedTurnInputs: [],
+      modelBinding: {
+        providerId: 'provider-a',
+        modelId: 'model-a',
+        modelCode: 'model-a-code',
+      },
+    } as unknown as RuntimeThread;
+
+    render(composerElement({
+      config: modelConfig(),
+      currentThread,
+      draft: 'Use the newly selected model.',
+      onSelectModel,
+      onSend,
+    }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'select model b' }));
+    expect(onSelectModel).toHaveBeenCalledWith('provider-b', 'model-b', 'thread-a');
+
+    fireEvent.click(screen.getByTestId('sender-submit'));
+    await waitFor(() => expect(onSend).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({
+        modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+      }),
+    ));
+  });
 });
 
 function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}): string {
@@ -276,7 +345,20 @@ function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> =
     updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
   };
 
-  return renderToStaticMarkup(
+  return renderToStaticMarkup(composerElement(overrides, queuedTurnActions));
+}
+
+function composerElement(
+  overrides: Partial<Parameters<typeof ChatComposer>[0]> = {},
+  queuedTurnActions = {
+    deleteQueuedTurnInput: vi.fn(async () => true),
+    releaseQueuedTurnInputEdit: vi.fn(async () => true),
+    retrieveQueuedTurnInput: vi.fn(async () => null),
+    sendQueuedTurnInputNow: vi.fn(async () => true),
+    updateQueuedTurnInput: vi.fn(async () => 'updated' as const),
+  },
+) {
+  return (
     <ChatComposer
       activeTurnId={null}
       canClearContext={false}
@@ -312,8 +394,54 @@ function renderComposer(overrides: Partial<Parameters<typeof ChatComposer>[0]> =
       onSetMultiAgentEnabled={vi.fn()}
       onStartThreadReview={vi.fn()}
       {...overrides}
-    />,
+    />
   );
+}
+
+function modelConfig(): RuntimeConfigState {
+  return {
+    configPath: '/tmp/config.json',
+    dataPath: '/tmp/data',
+    storagePath: '/tmp/storage',
+    activeProviderId: 'provider-a',
+    providers: [
+      modelProvider('provider-a', 'model-a', 'model-a-code', 'anthropic', true),
+      modelProvider('provider-b', 'model-b', 'model-b-code', 'openai-responses', false),
+    ],
+    globalPrompt: '',
+    memory: { useMemories: false, generateMemories: false, disableOnExternalContext: true },
+    memoryEnabled: false,
+    setsunaStyle: 'developer',
+    approvalPolicy: 'on-request',
+    permissionProfile: 'workspace-write',
+  };
+}
+
+function modelProvider(
+  id: string,
+  modelId: string,
+  code: string,
+  provider: 'anthropic' | 'openai-responses',
+  selected: boolean,
+): RuntimeConfigState['providers'][number] {
+  return {
+    id,
+    name: id,
+    provider,
+    baseUrl: `https://${id}.example.test`,
+    enabled: true,
+    apiKeySet: true,
+    apiKeyPreview: '***',
+    models: [{
+      id: modelId,
+      name: modelId,
+      code,
+      enabled: selected,
+      maxOutputTokens: 4_096,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    }],
+  };
 }
 
 function readyAttachment(): RuntimeMessageAttachment {

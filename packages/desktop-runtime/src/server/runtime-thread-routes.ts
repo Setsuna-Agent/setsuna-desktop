@@ -13,6 +13,8 @@ import type {
 import { runtimeDeveloperFeaturesEnabled } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
+import type { ThreadStorePatch } from '../ports/thread-store.js';
+import { createRuntimeSideConversation } from '../runtime/use-cases/side-conversation.js';
 import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
@@ -23,8 +25,9 @@ import {
   threadScope,
 } from './http-utils.js';
 import { publishThreadEventsSince } from './sse.js';
+import { resolveRuntimeModelSelectionInput } from './runtime-model-selection-input.js';
+import { runtimeThreadResponse } from './runtime-thread-response.js';
 import type { RuntimeFactory } from './types.js';
-import { createRuntimeSideConversation } from '../runtime/use-cases/side-conversation.js';
 
 export async function handleRuntimeThreadRequest(
   runtime: RuntimeFactory,
@@ -55,7 +58,7 @@ export async function handleRuntimeThreadRequest(
       ...input,
       memoryMode: input.memoryMode ?? newThreadMemoryMode(config),
     });
-    sendJson(response, 201, thread);
+    sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
     return true;
   }
 
@@ -65,7 +68,7 @@ export async function handleRuntimeThreadRequest(
   if (sideConversationMatch && request.method === 'POST') {
     const parentThreadId = decodeRuntimeId(sideConversationMatch[1], 'Thread id');
     const thread = await createRuntimeSideConversation(runtime, parentThreadId);
-    sendJson(response, 201, thread);
+    sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
     return true;
   }
 
@@ -141,17 +144,43 @@ export async function handleRuntimeThreadRequest(
       sendJson(response, 404, { error: 'Thread not found' });
       return true;
     }
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    // A paginated snapshot cannot authoritatively infer legacy model ownership. Resolve it from
+    // the complete event projection once, then attach that binding to the client-facing page.
+    const completeThread = messageLimit !== undefined
+      && !thread.modelBinding
+      && (thread.messagePage?.nextBefore ?? null) !== null
+      ? await runtime.threadStore.getThread(threadId) ?? thread
+      : thread;
+    const projectedThread = await runtimeThreadResponse(runtime, thread, completeThread);
+    sendJson(response, 200, withActiveTurn(runtime, projectedThread));
     return true;
   }
   if (threadMatch && request.method === 'PATCH') {
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
-    const patch = await readBody<ThreadPatch>(request);
+    const input = await readBody<ThreadPatch>(request);
+    const modelSelection = await resolveRuntimeModelSelectionInput(
+      runtime.configStore,
+      input.modelSelection,
+    );
+    const patch: ThreadStorePatch = {
+      title: input.title,
+      archived: input.archived,
+      ...(modelSelection ? { modelBinding: modelSelection.binding } : {}),
+    };
     const thread = await runtime.agentLoop.withThreadMutation(
       threadId,
-      () => runtime.threadStore.updateThread(threadId, patch),
+      async () => {
+        const beforeSeq = (await runtime.threadStore.getThread(threadId))?.lastSeq ?? 0;
+        const updated = await runtime.threadStore.updateThread(threadId, patch);
+        await publishThreadEventsSince(runtime, threadId, beforeSeq);
+        return updated;
+      },
     );
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    sendJson(
+      response,
+      200,
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+    );
     return true;
   }
 
@@ -169,7 +198,11 @@ export async function handleRuntimeThreadRequest(
         'user_request',
       ),
     );
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    sendJson(
+      response,
+      200,
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+    );
     return true;
   }
 
@@ -197,7 +230,11 @@ export async function handleRuntimeThreadRequest(
       await publishThreadEventsSince(runtime, threadId, beforeSeq);
       return updated;
     });
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    sendJson(
+      response,
+      200,
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+    );
     return true;
   }
 
@@ -228,7 +265,11 @@ export async function handleRuntimeThreadRequest(
       await publishThreadEventsSince(runtime, threadId, beforeSeq);
       return updated;
     });
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    sendJson(
+      response,
+      200,
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+    );
     return true;
   }
 
@@ -269,7 +310,11 @@ export async function handleRuntimeThreadRequest(
   if (clearContextMatch && request.method === 'DELETE') {
     const threadId = decodeRuntimeId(clearContextMatch[1], 'Thread id');
     const thread = await runtime.agentLoop.clearThreadContext(threadId);
-    sendJson(response, 200, withActiveTurn(runtime, thread));
+    sendJson(
+      response,
+      200,
+      withActiveTurn(runtime, await runtimeThreadResponse(runtime, thread)),
+    );
     return true;
   }
 
@@ -278,12 +323,13 @@ export async function handleRuntimeThreadRequest(
   );
   if (compactContextMatch && request.method === 'POST') {
     const threadId = decodeRuntimeId(compactContextMatch[1], 'Thread id');
+    const thread = await runtime.agentLoop.compactThreadContext(threadId, true);
     sendJson(
       response,
       200,
       withActiveTurn(
         runtime,
-        await runtime.agentLoop.compactThreadContext(threadId, true),
+        await runtimeThreadResponse(runtime, thread),
       ),
     );
     return true;

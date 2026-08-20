@@ -9,18 +9,25 @@ import type {
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
 import type { Clock } from '../../ports/clock.js';
+import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { runtimeReviewPolicyMessage } from '../context/runtime-review-profile.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
 import type { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
+import {
+  effectiveRuntimeThreadModelBinding,
+  resolveRuntimeTurnModel,
+  type RuntimeResolvedTurnModel,
+} from './runtime-thread-model.js';
 
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeReviewTurnInput = {
   displayText: string;
   language?: RuntimeInterfaceLanguage;
+  modelSelection?: SendTurnInput['modelSelection'];
   prompt: string;
 };
 
@@ -47,6 +54,7 @@ export type RuntimeTurnExecutionInput = {
   skillIds: string[];
   skillReferences?: RuntimeMessage['skillReferences'];
   text: string;
+  turnModel?: RuntimeResolvedTurnModel;
   thinkingOptions?: RuntimeTurnThinkingOptions;
   thread: RuntimeThread;
   threadId: string;
@@ -55,7 +63,8 @@ export type RuntimeTurnExecutionInput = {
 
 type RuntimeTurnRunFactoryOptions = {
   clock: Clock;
-  eventWriter: Pick<RuntimeEventWriter, 'flushThread'>;
+  configStore?: ConfigStore;
+  eventWriter: Pick<RuntimeEventWriter, 'append' | 'flushThread'>;
   ids: IdGenerator;
   inputGuard: Pick<RuntimeModelInputGuard, 'assertAttachmentsSupported'>;
   claimAttachments(threadId: string, attachments: NonNullable<RuntimeMessage['attachments']>): Promise<NonNullable<RuntimeMessage['attachments']>>;
@@ -68,7 +77,24 @@ type RuntimeTurnRunFactoryOptions = {
 
 /** 为受支持的轮次入口提供工厂，具体执行仍由 AgentLoop 负责。 */
 export class RuntimeTurnRunFactory {
+  private readonly inferredBindingWrites = new Map<string, Promise<void>>();
+
   constructor(private readonly options: RuntimeTurnRunFactoryOptions) {}
+
+  /** Persists a legacy history inference before a mutation can erase its provider evidence. */
+  async persistInferredThreadModelBinding(threadId: string): Promise<void> {
+    const existing = this.inferredBindingWrites.get(threadId);
+    if (existing) return existing;
+    const write = this.writeInferredThreadModelBinding(threadId);
+    this.inferredBindingWrites.set(threadId, write);
+    try {
+      await write;
+    } finally {
+      if (this.inferredBindingWrites.get(threadId) === write) {
+        this.inferredBindingWrites.delete(threadId);
+      }
+    }
+  }
 
   async createRegular(
     threadId: string,
@@ -78,10 +104,11 @@ export class RuntimeTurnRunFactory {
     const text = input.input.trim();
     let attachments = this.options.normalizeAttachments(input.attachments);
     if (!text && !attachments.length) throw new Error('Turn input is required.');
-    await this.options.inputGuard.assertAttachmentsSupported(attachments);
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
 
     const thread = await this.requireThread(threadId);
+    const turnModel = await this.resolveTurnModel(thread, input.modelSelection);
+    await this.options.inputGuard.assertAttachmentsSupported(attachments, turnModel?.model);
     attachments = await this.options.claimAttachments(threadId, attachments);
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run({
@@ -95,6 +122,7 @@ export class RuntimeTurnRunFactory {
       skillIds: input.skillIds ?? [],
       skillReferences: input.skillReferences,
       text,
+      turnModel,
       thinkingOptions: turnThinkingOptions(input),
       thread,
       threadId,
@@ -108,7 +136,8 @@ export class RuntimeTurnRunFactory {
     return { turnId, done: run.done };
   }
 
-  createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string): { turnId: string; done: Promise<void> } {
+  async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string): Promise<{ turnId: string; done: Promise<void> }> {
+    const turnModel = await this.resolveTurnModel(thread);
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
@@ -119,6 +148,7 @@ export class RuntimeTurnRunFactory {
       signal: task.controller.signal,
       skillIds: [],
       text: `Mailbox message received: ${content.slice(0, 160)}`,
+      turnModel,
       thread,
       threadId,
       turnId,
@@ -138,6 +168,7 @@ export class RuntimeTurnRunFactory {
     if (!prompt) throw new Error('review prompt is required');
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
     const thread = await this.requireThread(threadId);
+    const turnModel = await this.resolveTurnModel(thread, input.modelSelection);
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run({
       turnId,
@@ -149,6 +180,7 @@ export class RuntimeTurnRunFactory {
       signal: task.controller.signal,
       skillIds: [],
       text: displayText,
+      turnModel,
       thread,
       threadId,
       turnId,
@@ -180,6 +212,7 @@ export class RuntimeTurnRunFactory {
     execution: { turnId?: string } = {},
   ): Promise<{ turnId: string; done: Promise<void> }> {
     const thread = await this.requireThread(threadId);
+    const turnModel = await this.resolveTurnModel(thread, goal.execution?.modelSelection);
     const sourceMessage = goal.execution?.sourceMessageId
       ? thread.messages.find((message) => message.id === goal.execution?.sourceMessageId)
       : undefined;
@@ -199,6 +232,7 @@ export class RuntimeTurnRunFactory {
       signal: task.controller.signal,
       skillIds: goal.execution?.skillIds ?? [],
       text: 'Continue the active goal.',
+      turnModel,
       thinkingOptions: turnThinkingOptions(goal.execution ?? {}),
       thread,
       threadId,
@@ -233,7 +267,11 @@ export class RuntimeTurnRunFactory {
     const text = typeof input.content === 'string' ? input.content.trim() : originalMessage.content.trim();
     const skillIds = input.skillIds ?? originalMessage.skillIds ?? [];
     if (!text) throw new Error('Message content is required.');
-    await this.options.inputGuard.assertAttachmentsSupported(this.options.normalizeAttachments(originalMessage.attachments));
+    const turnModel = await this.resolveTurnModel(originalThread);
+    await this.options.inputGuard.assertAttachmentsSupported(
+      this.options.normalizeAttachments(originalMessage.attachments),
+      turnModel?.model,
+    );
     if (
       text !== originalMessage.content
       || input.skillIds !== undefined
@@ -267,6 +305,7 @@ export class RuntimeTurnRunFactory {
       skillIds: userMessage.skillIds ?? [],
       skillReferences: userMessage.skillReferences,
       text,
+      turnModel,
       thinkingOptions: turnThinkingOptions(input),
       thread,
       threadId,
@@ -284,6 +323,32 @@ export class RuntimeTurnRunFactory {
     const thread = await this.options.threadStore.getThread(threadId);
     if (!thread) throw new Error(`Thread not found: ${threadId}`);
     return thread;
+  }
+
+  private async writeInferredThreadModelBinding(threadId: string): Promise<void> {
+    const thread = await this.options.threadStore.getThread(threadId);
+    if (!thread || thread.modelBinding) return;
+    if (!thread.messages.some((message) => (
+      message.role === 'assistant' && Boolean(message.providerMetadata?.source)
+    ))) return;
+    const config = await this.options.configStore?.getConfig().catch(() => null);
+    const modelBinding = effectiveRuntimeThreadModelBinding(config, thread);
+    if (!modelBinding) return;
+    await this.options.eventWriter.append(threadId, {
+      id: this.options.ids.id('event'),
+      threadId,
+      type: 'thread.updated',
+      createdAt: this.options.clock.now().toISOString(),
+      payload: { modelBinding },
+    });
+  }
+
+  private async resolveTurnModel(
+    thread: RuntimeThread,
+    requested?: SendTurnInput['modelSelection'],
+  ): Promise<RuntimeResolvedTurnModel | undefined> {
+    const config = await this.options.configStore?.getConfig().catch(() => null);
+    return resolveRuntimeTurnModel(config, thread, requested);
   }
 }
 

@@ -1,5 +1,6 @@
 import type {
   AnswerRuntimeApprovalInput,
+  RuntimeConfiguredModelReference,
   DesktopRuntimeClient,
   RuntimeEvent,
   RuntimeReviewTarget,
@@ -499,6 +500,7 @@ export function useRuntimeThreadState({
     scope?: {
       claimComposerForThread: (threadId: string) => void;
       isCurrentRequest: () => boolean;
+      modelSelection?: RuntimeConfiguredModelReference;
     },
   ) => {
     const isCurrentRequest = scope?.isCurrentRequest ?? (() => true);
@@ -507,6 +509,7 @@ export function useRuntimeThreadState({
       client,
       currentThread,
       language: locale,
+      modelSelection: scope?.modelSelection,
       onThreadCreated: async (thread) => {
         if (isCurrentRequest()) {
           scope?.claimComposerForThread(thread.id);

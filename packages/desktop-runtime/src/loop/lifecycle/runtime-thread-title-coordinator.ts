@@ -12,7 +12,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
-import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
+import { runtimeTaskModelRequest, type RuntimeTaskModelRequest } from '../core/runtime-task-model.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
 import {
   generateThreadTitle,
@@ -41,12 +41,14 @@ export class RuntimeThreadTitleCoordinator {
 
   start({
     attachments,
+    conversationModel,
     signal,
     taskKind,
     thread,
     userContent,
   }: {
     attachments: NonNullable<RuntimeMessage['attachments']>;
+    conversationModel?: RuntimeTaskModelRequest;
     signal: AbortSignal;
     taskKind: RuntimeTaskKind;
     thread: RuntimeThread;
@@ -61,7 +63,7 @@ export class RuntimeThreadTitleCoordinator {
           this.options.configStore.getActiveProviderConfig(),
         ])
         .then(([config, activeProvider]) => {
-          const selection = threadTitleModelSelection(config, activeProvider);
+          const selection = threadTitleModelSelection(config, activeProvider, conversationModel);
           if (!selection) return null;
           return generateThreadTitle({
             attachmentCount: attachments.length,
@@ -115,17 +117,25 @@ export class RuntimeThreadTitleCoordinator {
 function threadTitleModelSelection(
   config: RuntimeConfigState,
   activeProvider: RuntimeProviderConfig | null,
+  conversationModel?: RuntimeTaskModelRequest,
 ): { model: string; providerId?: string } | null {
   const fallbackModel = activeProvider?.enabled ? activeProvider.activeModel?.code.trim() : '';
-  const request = runtimeTaskModelRequest(config, 'threadTitle', fallbackModel || '');
+  const request = runtimeTaskModelRequest(
+    config,
+    'threadTitle',
+    fallbackModel || '',
+    conversationModel,
+  );
   const model = request.model.trim();
   if (!model) return null;
 
   if (request.providerId) {
     const reference = config.taskModels?.threadTitle;
     const provider = config.providers.find((item) => item.enabled && item.id === request.providerId);
-    const configuredModel = reference && provider && reference.providerId === provider.id
-      ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === model)
+    const configuredModel = provider
+      ? reference && reference.providerId === provider.id
+        ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === model)
+        : provider.models.find((item) => item.code.trim() === model)
       : undefined;
     const usable = Boolean(
       provider
