@@ -23,6 +23,7 @@ export function cloneMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    toolResultRef: message.toolResultRef ? { ...message.toolResultRef } : undefined,
     streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillIds: message.skillIds ? [...message.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
@@ -98,6 +99,9 @@ export function cloneStepSnapshot(snapshot: NonNullable<RuntimeThreadTurn['stepS
       : undefined,
     featureKeys: [...snapshot.featureKeys],
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
+    loadedDeferredToolNames: snapshot.loadedDeferredToolNames
+      ? [...snapshot.loadedDeferredToolNames]
+      : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
     messageIds: [...snapshot.messageIds],
     promptManifest: snapshot.promptManifest ? snapshot.promptManifest.map((entry) => ({ ...entry })) : undefined,

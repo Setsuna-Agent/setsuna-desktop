@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { BrowserToolHost, normalizeBrowserToolUrl } from '../../../src/adapters/tool/browser-tool-host.js';
-import { RuntimeToolRouter } from '../../../src/loop/tools/tool-router.js';
+import {
+  READ_TOOL_RESULT_TOOL_NAME,
+  RuntimeToolRouter,
+  TOOL_SEARCH_TOOL_NAME,
+} from '../../../src/loop/tools/tool-router.js';
 import type { BrowserControlPort } from '../../../src/ports/browser-control.js';
 
 describe('BrowserToolHost', () => {
@@ -101,8 +105,13 @@ describe('BrowserToolHost', () => {
       orchestrator: null,
       toolHost: host,
     });
-    expect(router.advertisedToolNames()).toContain('browser_screenshot');
-    expect(router.advertisedToolNames()).toContain('browser_tabs');
+    expect(router.advertisedToolNames()).toEqual([TOOL_SEARCH_TOOL_NAME, READ_TOOL_RESULT_TOOL_NAME]);
+    expect(router.deferredCatalogSize()).toBe(10);
+    // browser 工具经 tool_search 激活后才进入 tools 后缀。
+    const searchResult = await router.runToolSearch('browser snapshot', undefined);
+    expect(searchResult).toContain('browser_snapshot');
+    expect(router.loadedDeferredToolNames()).toContain('browser_tabs');
+    expect(router.loadedDeferredToolNames()).toContain('browser_screenshot');
     const systemPrompt = await router.systemPrompt();
     expect(systemPrompt).toContain('Call browser_screenshot directly');
     expect(systemPrompt).toContain('Prefer nodes marked clickable=true');

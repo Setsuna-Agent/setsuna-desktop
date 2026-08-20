@@ -56,6 +56,13 @@ export async function copyRuntimeMessagesToThread(
     await Promise.allSettled(uncommittedAssetIds.map((assetId) => runtime.generatedImageStore.delete(assetId)));
     throw error;
   }
+  // 消息与结果授权必须一起成功；调用方会在失败时删除尚未完成的 fork/side thread。
+  // 吞掉 retain 错误会留下一个永久无法 read_tool_result 的悬空引用。
+  const resultIds = cloned.messages.flatMap((message) =>
+    message.toolResultRef ? [message.toolResultRef.resultId] : []);
+  if (resultIds.length) {
+    await runtime.toolResultStore.retainForThread(threadId, resultIds);
+  }
 }
 
 async function cloneForkMessages(
@@ -101,6 +108,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    toolResultRef: message.toolResultRef ? { ...message.toolResultRef } : undefined,
     streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,

@@ -28,6 +28,7 @@ import {
 import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
+import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import {
   CONTEXT_COMPACTION_MAX_TOKENS,
   estimateRuntimeMessageTokens,
@@ -46,7 +47,7 @@ import { RuntimePromptContextAssembler } from '../context/runtime-prompt-context
 import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
-import { RuntimeToolRouter } from '../tools/tool-router.js';
+import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
 import { goalContinuationContextMessages } from '../lifecycle/runtime-goal-prompts.js';
 import { isCollaborationToolName } from '../lifecycle/collaboration-coordinator.js';
 import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
@@ -93,6 +94,7 @@ type RuntimeSamplingContextBuilderOptions = {
     | 'toolOrchestratorFor'
   >;
   toolHost?: ToolHost;
+  toolResultStore?: ToolResultStore;
 };
 
 /**
@@ -103,6 +105,8 @@ type RuntimeSamplingContextBuilderOptions = {
  */
 export class RuntimeSamplingContextBuilder {
   private readonly promptContexts: RuntimePromptContextAssembler;
+  /** turnId → 已激活 deferred 工具名;跨 sampling step 保持,turn 结束清理。 */
+  private readonly deferredActivations = new Map<string, Set<string>>();
 
   constructor(private readonly options: RuntimeSamplingContextBuilderOptions) {
     this.promptContexts = new RuntimePromptContextAssembler({
@@ -112,6 +116,11 @@ export class RuntimeSamplingContextBuilder {
       skillRegistry: options.skillRegistry,
       toolHost: options.toolHost,
     });
+  }
+
+  /** turn 结束时清理 deferred 激活状态,避免跨 turn 泄漏。 */
+  cleanupTurn(turnId: string): void {
+    this.deferredActivations.delete(turnId);
   }
 
   async build({
@@ -226,6 +235,10 @@ export class RuntimeSamplingContextBuilder {
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
           ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isReviewReadOnlyTool(tool.name) } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
+          toolResultStore: this.options.toolResultStore,
+          // deferred 激活按 turn 保持,新的 sampling step 恢复上一 step 的加载集合。
+          loadedDeferredToolNames: this.deferredActivationNames(turnId),
+          onDeferredActivated: (names) => this.recordDeferredActivation(turnId, names),
         })
       : null;
     const availableTools = toolAccess === 'none'
@@ -236,6 +249,7 @@ export class RuntimeSamplingContextBuilder {
           dynamicTools,
           stepGoal,
           goalCompletionPending,
+          toolRouter?.loadedDeferredToolNames(),
         );
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
     const scopedTools = sideConversation
@@ -244,7 +258,9 @@ export class RuntimeSamplingContextBuilder {
         ))
       : availableTools;
     const tools = toolAccess === 'read-only'
-      ? scopedTools?.filter((tool) => isReviewReadOnlyTool(tool.name))
+      ? scopedTools?.filter((tool) => (
+          isReviewReadOnlyTool(tool.name) || RUNTIME_PROVIDED_TOOL_NAMES.has(tool.name)
+        ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
     const toolRuntimes = await samplingToolRuntimes(
@@ -275,6 +291,8 @@ export class RuntimeSamplingContextBuilder {
       toolContext,
       toolRouter,
       tools: tools ?? [],
+      // 权限与工具安全规则基于完整允许目录,不随 tool_search 结果变化。
+      catalogTools: toolRouter?.catalogToolDefinitions ?? tools ?? [],
     });
     const fragments = promptContext.fragments;
     const transientPrompt = compileRuntimePrompt({ fragments, conversationMessages: [], createdAt: this.options.clock.now().toISOString() });
@@ -330,6 +348,13 @@ export class RuntimeSamplingContextBuilder {
       toolNames: advertisedToolNames,
       advertisedToolNames,
       toolRuntimes,
+      ...(toolRouter?.deferredCatalogSize() !== undefined && toolRouter.deferredCatalogSize() > 0
+        ? { deferredToolCatalogSize: toolRouter.deferredCatalogSize() }
+        : {}),
+      ...(toolRouter?.loadedDeferredToolNames().length
+        ? { loadedDeferredToolNames: toolRouter.loadedDeferredToolNames() }
+        : {}),
+      ...toolResultTokenTelemetry(modelRequestMessages(messages)),
       ...(toolChoice ? { toolChoice } : {}),
       toolEnvironment: environment,
       selectedSkills: promptContext.selectedSkills,
@@ -383,6 +408,39 @@ export class RuntimeSamplingContextBuilder {
       .filter(Boolean)
       .sort();
   }
+
+  private deferredActivationNames(turnId: string): string[] {
+    return [...(this.deferredActivations.get(turnId) ?? [])];
+  }
+
+  private recordDeferredActivation(turnId: string, names: string[]): void {
+    if (!names.length) return;
+    const existing = this.deferredActivations.get(turnId) ?? new Set<string>();
+    for (const name of names) existing.add(name);
+    this.deferredActivations.set(turnId, existing);
+  }
+}
+
+/**
+ * 汇总本次请求 tool 消息中被截断结果的可视/原始 token 遥测,便于判断
+ * 上下文成本下降来自工具定义减少还是结果裁剪。
+ */
+function toolResultTokenTelemetry(messages: RuntimeMessage[]): {
+  toolResultOriginalTokens?: number;
+  toolResultVisibleTokens?: number;
+} {
+  let original = 0;
+  let visible = 0;
+  for (const message of messages) {
+    const ref = message.toolResultRef;
+    if (!ref) continue;
+    original += ref.originalEstimatedTokens;
+    visible += ref.visibleTokens;
+  }
+  return {
+    ...(original > 0 ? { toolResultOriginalTokens: original } : {}),
+    ...(visible > 0 ? { toolResultVisibleTokens: visible } : {}),
+  };
 }
 
 function goalExecutionForTurn({

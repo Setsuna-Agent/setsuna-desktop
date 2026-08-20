@@ -12,6 +12,15 @@ export class BrowserScreenshotModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     if (this.requests.length === 1) {
+      // browser 工具是 deferred 的：先经 tool_search 激活。
+      yield {
+        type: 'tool_calls',
+        toolCalls: [{ id: 'call_tool_search', name: 'tool_search', arguments: JSON.stringify({ query: 'browser screenshot' }) }],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
       yield {
         type: 'tool_calls',
         toolCalls: [{ id: 'call_browser_screenshot', name: 'browser_screenshot', arguments: '{}' }],

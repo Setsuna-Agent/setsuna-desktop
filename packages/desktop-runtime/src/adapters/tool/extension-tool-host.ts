@@ -33,7 +33,8 @@ export class ExtensionToolHost implements ToolHost {
     const tool = await this.tool(name, context);
     if (!tool) return null;
     return {
-      exposure: 'direct' as const,
+      // 插件原生工具按需经 tool_search 激活,避免每次请求都携带全部插件工具定义。
+      exposure: 'deferred' as const,
       plugin: { ...tool.plugin },
       supportsParallel: tool.execution.supportsParallel,
       waitsForRuntimeCancellation: true,

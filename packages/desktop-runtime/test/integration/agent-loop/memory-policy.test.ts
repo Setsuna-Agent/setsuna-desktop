@@ -214,7 +214,10 @@ describe('agent loop memory policy', () => {
       await loop.sendTurn(thread.id, { input: '请记住，当前仓库的样式需要尽可能使用 UnoCSS。' });
   
       const preview = await memoryStore.previewMemories();
-      expect(modelClient.requests.map((request) => request.model)).toEqual(['local-runtime-smoke', 'local-runtime-smoke']);
+      // tool_search 激活 remember_memory → 保存 active memory → 最终回答,无被动抽取。
+      expect(modelClient.requests.map((request) => request.model)).toEqual([
+        'local-runtime-smoke', 'local-runtime-smoke', 'local-runtime-smoke',
+      ]);
       expect(preview.total).toBe(1);
       expect(preview.items).toMatchObject([
         {
@@ -310,7 +313,7 @@ describe('agent loop memory policy', () => {
       expect(modelClient.requests).toHaveLength(1);
       expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('concise verification notes');
       const toolNames = (modelClient.requests[0].tools ?? []).map((tool) => tool.name);
-      expect(toolNames).toEqual(['recall_memory', 'create_goal']);
+      expect(toolNames).toEqual(['recall_memory', 'tool_search', 'read_tool_result', 'create_goal']);
       await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
     });
   

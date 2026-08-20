@@ -24,6 +24,7 @@ import { FileMcpStore } from '../adapters/store/file-mcp-store.js';
 import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { FilePersistentToolApprovalStore } from '../adapters/store/file-persistent-tool-approval-store.js';
 import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
+import { FileToolResultStore } from '../adapters/store/file-tool-result-store.js';
 import { FileUsageStore } from '../adapters/store/file-usage-store.js';
 import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
@@ -85,6 +86,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
+  const toolResultStore = new FileToolResultStore(runtimeDataDir);
   const eventWriter = new RuntimeEventWriter(
     persistedThreadStore,
     eventBus,
@@ -229,6 +231,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     projectInstructions,
     projectWorkflow,
     eventWriter,
+    toolResultStore,
   });
   return {
     agentLoop,
@@ -259,6 +262,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     projectWorkflow,
     skillRegistry,
     toolHost,
+    toolResultStore,
     threadStore,
     usageStore,
     workspaceDependencies,

@@ -386,6 +386,7 @@ export async function dispatchAppServerRpcRequest(
       await copyRuntimeMessagesToThread(runtime, thread.id, messages);
     } catch (error) {
       await runtime.attachmentStore.releaseThread(thread.id).catch(() => undefined);
+      await runtime.toolResultStore.releaseThread(thread.id).catch(() => undefined);
       await runtime.threadStore.deleteThread(thread.id).catch(() => undefined);
       throw error;
     }

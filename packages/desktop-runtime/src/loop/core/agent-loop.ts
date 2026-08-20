@@ -21,28 +21,7 @@ import type {
   StartTurnResponse,
   SteerTurnInput,
 } from '@setsuna-desktop/contracts';
-import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
-import type { ApprovalGate } from '../../ports/approval-gate.js';
-import type { AttachmentStore } from '../../ports/attachment-store.js';
-import type { Clock } from '../../ports/clock.js';
-import type { ConfigStore } from '../../ports/config-store.js';
-import type { EventBus } from '../../ports/event-bus.js';
-import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
-import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
-import type { IdGenerator } from '../../ports/id-generator.js';
-import type { McpStore } from '../../ports/mcp-store.js';
-import type { MemoryStore } from '../../ports/memory-store.js';
-import type { ModelClient } from '../../ports/model-client.js';
-import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
-import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
-import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
-import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
-import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
-import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
-import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { ToolHost } from '../../ports/tool-host.js';
-import type { UsageStore } from '../../ports/usage-store.js';
 import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
@@ -60,6 +39,7 @@ import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
 import { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeUserShellRunner } from '../tools/runtime-user-shell-runner.js';
+import type { AgentLoopOptions } from './agent-loop-options.js';
 import { RuntimeAgentTurnRunner } from './runtime-agent-turn-runner.js';
 import { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeModelSampler } from './runtime-model-sampler.js';
@@ -68,31 +48,7 @@ import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builde
 import { TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeTurnRunFactory, type RuntimeReviewTurnInput } from './runtime-turn-run-factory.js';
 
-export type AgentLoopOptions = {
-  attachmentStore?: AttachmentStore;
-  threadStore: ThreadStore;
-  modelClient: ModelClient;
-  eventBus: EventBus;
-  clock: Clock;
-  ids: IdGenerator;
-  imageStore?: GeneratedImageStore;
-  approvalGate?: ApprovalGate;
-  appServerNotificationBus?: AppServerNotificationBus;
-  configStore?: ConfigStore;
-  debugTrace?: RuntimeDebugTraceSink;
-  skillRegistry?: SkillRegistry;
-  toolHost?: ToolHost;
-  usageStore?: UsageStore;
-  memoryStore?: MemoryStore;
-  mcpStore?: Pick<McpStore, 'listServerInputs'>;
-  policyAmendmentStore?: PolicyAmendmentStore;
-  persistentToolApprovalStore?: PersistentToolApprovalStore;
-  projectInstructions?: ProjectInstructionLoader;
-  projectWorkflow?: ProjectWorkflowResolver;
-  environmentResolver?: RuntimeEnvironmentResolver;
-  eventWriter?: RuntimeEventWriter;
-  extensionManager?: Pick<ExtensionRuntime, 'dispatch'>;
-};
+export type { AgentLoopOptions } from './agent-loop-options.js';
 export type { DeliverMailboxInput, DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 export class AgentLoop {
   private readonly turnTasks = new RuntimeTurnTaskRegistry();
@@ -169,6 +125,7 @@ export class AgentLoop {
       persistentToolApprovalStore: options.persistentToolApprovalStore,
       extensions: options.extensionManager,
       toolHost: options.toolHost,
+      toolResultStore: options.toolResultStore,
       collaborationCoordinator: () => this.collaborationCoordinator,
       goalCoordinator: () => this.goals,
       threadStore: options.threadStore,
@@ -210,6 +167,7 @@ export class AgentLoop {
       threadStore: options.threadStore,
       toolExecutor: this.toolExecutor,
       toolHost: options.toolHost,
+      toolResultStore: options.toolResultStore,
     });
     this.modelSampler = new RuntimeModelSampler({
       clock: options.clock,

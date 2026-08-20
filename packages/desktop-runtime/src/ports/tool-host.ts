@@ -98,7 +98,15 @@ export type ToolExternalContext = {
 };
 
 export type ToolRuntimeProfile = {
-  exposure?: 'direct' | 'hidden';
+  /**
+   * direct: 定义随每次请求稳定下发;deferred: 只进入本地索引,经 tool_search
+   * 命中后才追加到后续请求的 tools 后缀;hidden: 模型完全不可见。
+   */
+  exposure?: 'direct' | 'deferred' | 'hidden';
+  /** 该工具结果进入模型上下文的 token 上限;缺省时按工具类型回退(10k/8k/4k)。 */
+  modelOutputTokenLimit?: number;
+  /** 追加进 tool_search 索引的同义词,便于模型用非工具名检索到它。 */
+  searchAliases?: string[];
   /** 插件提供的原生工具必须在执行开始前声明归属，供事件持久化和 UI 实时展示。 */
   plugin?: RuntimePluginReference;
   supportsParallel?: boolean;

@@ -112,6 +112,11 @@ describe('AppServer dispatcher thread deletion', () => {
           calls.push(`attachments:${threadId}`);
         },
       },
+      toolResultStore: {
+        async releaseThread(threadId: string) {
+          calls.push(`tool-results:${threadId}`);
+        },
+      },
       workspaceProjects: {
         async removeTemporaryWorkspace(input: { threadId: string; createdAt: string }) {
           calls.push(`workspace:${input.threadId}:${input.createdAt}`);
@@ -137,6 +142,7 @@ describe('AppServer dispatcher thread deletion', () => {
       'tools:thread_1',
       'mcp:thread_1',
       'attachments:thread_1',
+      'tool-results:thread_1',
       'workspace:thread_1:2026-07-07T00:00:00.000Z',
       'barrier:end',
     ]);
@@ -169,6 +175,11 @@ describe('AppServer dispatcher thread deletion', () => {
           cleanups.push('attachments');
         },
       },
+      toolResultStore: {
+        releaseThread: async () => {
+          cleanups.push('tool-results');
+        },
+      },
       workspaceProjects: {
         removeTemporaryWorkspace: async () => {
           cleanups.push('workspace');
@@ -186,7 +197,7 @@ describe('AppServer dispatcher thread deletion', () => {
         {} as any,
         {} as any,
       )).resolves.toEqual({});
-      expect(cleanups).toEqual(['tools', 'mcp', 'attachments', 'workspace']);
+      expect(cleanups).toEqual(['tools', 'mcp', 'attachments', 'tool-results', 'workspace']);
       expect(warning).toHaveBeenCalledWith(
         expect.stringContaining('dynamic tools cleanup failed'),
         expect.objectContaining({ message: 'dynamic tools are locked' }),
@@ -218,6 +229,7 @@ describe('AppServer dispatcher thread deletion', () => {
       },
       eventBus: { publish: () => calls.push('publish') },
       attachmentStore: { releaseThread: async () => { calls.push('attachments'); } },
+      toolResultStore: { releaseThread: async () => { calls.push('tool-results'); } },
       workspaceProjects: { removeTemporaryWorkspace: async () => { calls.push('workspace'); } },
     };
 

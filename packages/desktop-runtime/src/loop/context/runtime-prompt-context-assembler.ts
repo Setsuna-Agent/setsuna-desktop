@@ -60,6 +60,7 @@ export class RuntimePromptContextAssembler {
     toolContext,
     toolRouter,
     tools,
+    catalogTools,
   }: {
     config: RuntimeConfigState | null | undefined;
     hookContextMessages: RuntimeMessage[];
@@ -70,8 +71,11 @@ export class RuntimePromptContextAssembler {
     toolContext: RuntimeToolExecutionContext;
     toolRouter: RuntimeToolRouter | null;
     tools: RuntimeToolDefinition[];
+    /** 完整允许目录(含 deferred),用于不随搜索变化的权限提示。 */
+    catalogTools?: RuntimeToolDefinition[];
   }): Promise<RuntimePromptContext> {
     const environment = toolContext.environment;
+    const permissionToolNames = catalogTools ?? tools;
     const [skillContext, memoryMessages, projectInstructions, projectWorkflow, toolPrompt, toolExternalContext] = await Promise.all([
       this.skillContext(
         skillIds,
@@ -96,7 +100,7 @@ export class RuntimePromptContextAssembler {
         baseInstructionFragment(),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
         environmentFragment(environment),
-        permissionsFragment(config, toolContext, tools),
+        permissionsFragment(config, toolContext, permissionToolNames),
         ...personalizationFragments(config),
         ...(projectWorkflow ? [projectWorkflowFragment(projectWorkflow)] : []),
         ...projectInstructions.map(projectInstructionFragment),

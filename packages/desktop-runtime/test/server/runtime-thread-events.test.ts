@@ -35,6 +35,61 @@ describe('runtime thread event copying', () => {
     expect(deleteAsset).not.toHaveBeenCalled();
   });
 
+  it('copies tool-result references and grants the fork independent read authorization', async () => {
+    const appendEvent = vi.fn(async (_threadId: string, _event: unknown) => undefined);
+    const retainForThread = vi.fn(async () => undefined);
+    const runtime = {
+      eventWriter: { flushThread: vi.fn(async () => undefined) },
+      generatedImageStore: {
+        clone: vi.fn(async () => ({ assetId: 'generated_clone' })),
+        delete: vi.fn(async () => undefined),
+      },
+      threadStore: { appendEvent },
+      toolResultStore: { retainForThread },
+    } as unknown as RuntimeFactory;
+    const source = sourceMessage();
+    source.toolResultRef = {
+      resultId: 'tool_result_source',
+      originalEstimatedTokens: 20_000,
+      visibleTokens: 8_000,
+      visibleTokenLimit: 8_000,
+    };
+
+    await copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]);
+
+    expect(retainForThread).toHaveBeenCalledWith('thread_fork', ['tool_result_source']);
+    const copiedEvent = appendEvent.mock.calls[0]?.[1] as { payload: { message: RuntimeMessage } };
+    source.toolResultRef.visibleTokens = 1;
+    expect(copiedEvent.payload.message.toolResultRef).toMatchObject({
+      resultId: 'tool_result_source',
+      visibleTokens: 8_000,
+    });
+  });
+
+  it('fails a fork copy when inherited tool-result authorization cannot be retained', async () => {
+    const runtime = {
+      eventWriter: { flushThread: vi.fn(async () => undefined) },
+      generatedImageStore: {
+        clone: vi.fn(async () => ({ assetId: 'generated_clone' })),
+        delete: vi.fn(async () => undefined),
+      },
+      threadStore: { appendEvent: vi.fn(async () => undefined) },
+      toolResultStore: {
+        retainForThread: vi.fn(async () => { throw new Error('retain failed'); }),
+      },
+    } as unknown as RuntimeFactory;
+    const source = sourceMessage();
+    source.toolResultRef = {
+      resultId: 'tool_result_source',
+      originalEstimatedTokens: 20_000,
+      visibleTokens: 8_000,
+      visibleTokenLimit: 8_000,
+    };
+
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]))
+      .rejects.toThrow('retain failed');
+  });
+
   it('rolls back cloned assets when the fork message cannot be committed', async () => {
     const deleteAsset = vi.fn(async () => undefined);
     const runtime = {

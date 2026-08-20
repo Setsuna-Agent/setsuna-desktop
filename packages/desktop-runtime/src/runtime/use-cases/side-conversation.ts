@@ -80,6 +80,7 @@ export async function createRuntimeSideConversation(
     await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
   } catch (error) {
     await runtime.attachmentStore.releaseThread(child.id).catch(() => undefined);
+    await runtime.toolResultStore.releaseThread(child.id).catch(() => undefined);
     await runtime.threadStore.deleteThread(child.id).catch(() => undefined);
     throw error;
   }

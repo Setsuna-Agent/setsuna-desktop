@@ -283,6 +283,7 @@ describe('thread event model-state projection', () => {
       inputMessageIds: ['msg_user'],
       toolNames: ['read_file'],
       advertisedToolNames: ['read_file'],
+      loadedDeferredToolNames: ['mcp__search__web'],
       toolRuntimes: [{
         name: 'read_file',
         source: 'host' as const,
@@ -342,6 +343,10 @@ describe('thread event model-state projection', () => {
       createdAt: '2026-06-26T00:00:01.000Z',
       snapshot,
     }]);
+    snapshot.loadedDeferredToolNames.push('mutated_after_projection');
+    expect(projected.turns?.[0]?.stepSnapshots?.[0]?.snapshot.loadedDeferredToolNames)
+      .toEqual(['mcp__search__web']);
+    snapshot.loadedDeferredToolNames.pop();
 
     const renamed = applyRuntimeEventToThread(projected, {
       id: 'event_step_2',

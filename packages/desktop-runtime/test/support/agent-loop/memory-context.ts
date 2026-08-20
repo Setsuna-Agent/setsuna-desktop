@@ -34,6 +34,21 @@ export class RememberMemoryToolModelClient implements ModelClient {
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
     if (this.requests.length === 1) {
+      // remember_memory 是 deferred 的：先经 tool_search 激活。
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          {
+            id: 'call_search_memory',
+            name: 'tool_search',
+            arguments: JSON.stringify({ query: 'remember memory' }),
+          },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    if (this.requests.length === 2) {
       yield {
         type: 'tool_calls',
         toolCalls: [

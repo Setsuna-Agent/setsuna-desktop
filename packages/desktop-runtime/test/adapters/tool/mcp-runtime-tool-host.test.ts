@@ -2,16 +2,20 @@ import { mkdtemp } from 'node:fs/promises';
 import { createServer, type IncomingMessage } from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { SdkMcpConnectionManager } from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
 import { FileMcpStore } from '../../../src/adapters/store/file-mcp-store.js';
 import { InMemorySecretStore } from '../../support/in-memory-secret-store.js';
 import { McpRuntimeToolHost } from '../../../src/adapters/tool/mcp-runtime-tool-host.js';
-import { RuntimeToolRouter } from '../../../src/loop/tools/tool-router.js';
+import {
+  READ_TOOL_RESULT_TOOL_NAME,
+  RuntimeToolRouter,
+  TOOL_SEARCH_TOOL_NAME,
+} from '../../../src/loop/tools/tool-router.js';
 import type { McpClientRuntime } from '../../../src/ports/mcp-client-runtime.js';
 
 describe('mcp runtime tool host', () => {
-  it('advertises MCP tools directly so providers can discover them', async () => {
+  it('keeps MCP tools deferred until tool_search activates them', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'search_mcp',
@@ -36,14 +40,17 @@ describe('mcp runtime tool host', () => {
       toolHost: host,
     });
 
-    expect(router.advertisedToolNames()).toEqual(expect.arrayContaining([
-      'mcp__search_mcp__fetchWebContent',
-      'mcp__search_mcp__search',
-    ]));
-    await expect(router.systemPrompt()).resolves.toContain('Matching MCP tools are advertised in the current step');
+    // MCP 工具不进首次请求,只有 tool_search / read_tool_result 直接暴露。
+    expect(router.advertisedToolNames()).toEqual([TOOL_SEARCH_TOOL_NAME, READ_TOOL_RESULT_TOOL_NAME]);
+    // 6 个工具 + 3 个 MCP resource 工具。
+    expect(router.deferredCatalogSize()).toBe(9);
+    const searchResult = await router.runToolSearch('search the web', undefined);
+    expect(searchResult).toContain('mcp__search_mcp__search');
+    expect(router.loadedDeferredToolNames()).toContain('mcp__search_mcp__search');
+    await expect(router.systemPrompt()).resolves.toContain('MCP tools are deferred');
   });
 
-  it('advertises large MCP inventories without a model-driven discovery step', async () => {
+  it('keeps large MCP inventories searchable without advertising every tool', async () => {
     const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
     await store.upsertServer({
       key: 'large',
@@ -60,11 +67,62 @@ describe('mcp runtime tool host', () => {
       toolHost: host,
     });
 
-    expect(router.advertisedToolNames()).toEqual(expect.arrayContaining([
-      'mcp__large__lookup_1',
-      'mcp__large__lookup_20',
-    ]));
-    await expect(router.systemPrompt()).resolves.toContain('call them directly');
+    expect(router.advertisedToolNames()).toEqual([TOOL_SEARCH_TOOL_NAME, READ_TOOL_RESULT_TOOL_NAME]);
+    // 20 个工具 + 3 个 MCP resource 工具。
+    expect(router.deferredCatalogSize()).toBe(23);
+    const searchResult = await router.runToolSearch('lookup', undefined);
+    expect(searchResult).toContain('mcp__large__lookup_1');
+    // 单轮最多激活 8 个具体工具,不把整个 inventory 灌进 tools 后缀。
+    expect(router.loadedDeferredToolNames().length).toBe(8);
+    await expect(router.systemPrompt()).resolves.toContain('tool_search');
+  });
+
+  it('injects instructions only for MCP servers owning tools advertised in this step', async () => {
+    const store = new FileMcpStore(await mkdtemp(path.join(tmpdir(), 'setsuna-mcp-runtime-host-test-')), new InMemorySecretStore());
+    await store.upsertServer({
+      key: 'alpha',
+      label: 'Alpha MCP',
+      transport: 'streamableHttp',
+      url: 'https://alpha.example/mcp',
+      tools: [{ name: 'lookup_alpha', description: 'Look up alpha records' }],
+    });
+    await store.upsertServer({
+      key: 'beta',
+      label: 'Beta MCP',
+      transport: 'streamableHttp',
+      url: 'https://beta.example/mcp',
+      tools: [{ name: 'lookup_beta', description: 'Look up beta records' }],
+    });
+    const snapshot = vi.fn(async (server: Parameters<McpClientRuntime['snapshot']>[0]) => ({
+      serverKey: server.key,
+      state: 'ready' as const,
+      tools: server.tools ?? [],
+      resources: [],
+      resourceTemplates: [],
+      instructions: `${server.key} server instructions`,
+      updatedAt: new Date(0).toISOString(),
+    }));
+    const client = { ...storedInventoryMcpClient(), snapshot } as McpClientRuntime;
+    const host = new McpRuntimeToolHost(store, client);
+    const searchRouter = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context: runtimeToolContext(),
+      orchestrator: null,
+      toolHost: host,
+    });
+    await searchRouter.runToolSearch('mcp__alpha__lookup_alpha', 1);
+
+    const nextStepRouter = await RuntimeToolRouter.create({
+      approvalPolicy: 'on-request',
+      context: runtimeToolContext(),
+      orchestrator: null,
+      toolHost: host,
+      loadedDeferredToolNames: searchRouter.loadedDeferredToolNames(),
+    });
+    await expect(nextStepRouter.externalContext()).resolves.toEqual([
+      expect.objectContaining({ id: 'mcp_alpha', content: 'alpha server instructions' }),
+    ]);
+    expect(snapshot.mock.calls.map(([server]) => server.key)).toEqual(['alpha']);
   });
 
   it('exposes enabled stored MCP tools and calls the backing server', async () => {
