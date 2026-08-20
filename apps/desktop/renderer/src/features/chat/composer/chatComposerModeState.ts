@@ -1,4 +1,4 @@
-import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import type { ProviderConfigState, ProviderModelConfig } from '@setsuna-desktop/contracts';
 import { chatModelOptionKey } from './chatModelOptions.js';
 
 export type ChatComposerSendIntent = 'message' | 'goal' | 'review';
@@ -35,10 +35,9 @@ export const emptyChatThinkingSelection: ChatThinkingSelection = {
 };
 
 export function createChatComposerModelCapabilities(
-  config: RuntimeConfigState | null,
+  provider: ProviderConfigState | null,
+  model: ProviderModelConfig | null,
 ): ChatComposerModelCapabilities {
-  const provider = activeProviderFromConfig(config);
-  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
   const efforts = normalizeThinkingEfforts(model?.thinkingEfforts);
   const configuredDefault = typeof model?.defaultThinkingEffort === 'string'
     ? model.defaultThinkingEffort.trim()
@@ -119,18 +118,6 @@ export function normalizeChatThinkingSelection(
       : '';
   if (selection.enabled === enabled && selection.effort === effort) return selection;
   return { effort, enabled };
-}
-
-function activeProviderFromConfig(
-  config: RuntimeConfigState | null,
-): RuntimeConfigState['providers'][number] | undefined {
-  if (!config) return undefined;
-  return config.providers.find((provider) => (
-    provider.id === config.activeProviderId
-    && provider.enabled
-  ))
-    ?? config.providers.find((provider) => provider.enabled)
-    ?? config.providers[0];
 }
 
 function normalizeThinkingEfforts(value: unknown): string[] {

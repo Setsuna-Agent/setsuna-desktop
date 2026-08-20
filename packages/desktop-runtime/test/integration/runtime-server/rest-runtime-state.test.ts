@@ -253,6 +253,88 @@ describe('runtime server REST runtime state', () => {
       expect(typeof cancelled.cancelled).toBe('boolean');
     });
 
+  it('persists a changed model selection on an existing conversation', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'provider-a',
+          providers: [
+            configuredProvider('provider-a', 'model-a'),
+            configuredProvider('provider-b', 'model-b'),
+          ],
+        }),
+      });
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Switchable model' }),
+      });
+      const threadPath = `/v1/threads/${encodeURIComponent(thread.id)}`;
+
+      const selectedA = await harness.runtimeFetch(threadPath, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          modelSelection: { providerId: 'provider-a', modelId: 'model-a' },
+        }),
+      });
+      expect(selectedA.modelBinding).toEqual({
+        providerId: 'provider-a',
+        modelId: 'model-a',
+        modelCode: 'model-a-code',
+      });
+
+      const selectedB = await harness.runtimeFetch(threadPath, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+        }),
+      });
+      expect(selectedB.modelBinding).toEqual({
+        providerId: 'provider-b',
+        modelId: 'model-b',
+        modelCode: 'model-b-code',
+      });
+      await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({
+        modelBinding: selectedB.modelBinding,
+      });
+    });
+
+  it('returns invalid_model_selection for unavailable turn-like REST inputs', async () => {
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Invalid model inputs' }),
+      });
+      const requests = [
+        { path: 'turns', body: { input: 'Send now.' } },
+        { path: 'queued-turn-inputs', body: { input: 'Send later.' } },
+        {
+          path: 'reviews',
+          body: { target: { type: 'custom', instructions: 'Review this change.' } },
+        },
+      ];
+
+      for (const item of requests) {
+        const response = await fetch(
+          `${harness.baseUrl}/v1/threads/${encodeURIComponent(thread.id)}/${item.path}`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${harness.token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ...item.body,
+              modelSelection: { providerId: 'missing-provider', modelId: 'missing-model' },
+            }),
+          },
+        );
+
+        expect(response.status, item.path).toBe(400);
+        await expect(response.json()).resolves.toMatchObject({
+          code: 'invalid_model_selection',
+        });
+      }
+    });
+
   it('rejects removed Plan mode turn inputs', async () => {
       const thread = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',
@@ -320,6 +402,26 @@ describe('runtime server REST runtime state', () => {
       });
     });
 });
+
+function configuredProvider(id: string, modelId: string) {
+  return {
+    id,
+    name: id,
+    provider: 'openai-compatible',
+    baseUrl: `https://${id}.example.test`,
+    apiKey: `sk-${id}`,
+    enabled: true,
+    models: [{
+      id: modelId,
+      name: modelId,
+      code: `${modelId}-code`,
+      enabled: true,
+      maxOutputTokens: 1_000,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    }],
+  };
+}
 
 async function waitForWebDavPreparation(
   harness: RuntimeServerTestHarness,

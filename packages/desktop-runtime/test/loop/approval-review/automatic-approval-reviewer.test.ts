@@ -277,6 +277,47 @@ describe('automatic approval reviewer', () => {
     });
   });
 
+  it('keeps automatic approval on the active turn model snapshot', async () => {
+    const config = configFixture();
+    config.taskModels = {};
+    const thread = threadFixture();
+    thread.modelBinding = {
+      providerId: 'review-provider',
+      modelId: 'approval-review-model',
+      modelCode: 'approval-review-model-code',
+    };
+    thread.activeTurnId = 'turn_1';
+    thread.turns = [{
+      id: 'turn_1',
+      items: [],
+      status: 'in_progress',
+      modelBinding: {
+        providerId: 'chat-provider',
+        modelId: 'chat-model',
+        modelCode: 'chat-model-code',
+      },
+    }];
+    const modelClient = new ReviewModelClient(() => JSON.stringify({
+      outcome: 'allow',
+      riskLevel: 'low',
+      userAuthorization: 'high',
+      rationale: 'The action is authorized.',
+    }), false);
+
+    const result = await createReviewer(modelClient, undefined, config, thread).review(
+      reviewInput({ cmd: 'pwd' }),
+    );
+
+    expect(modelClient.requests[0]).toMatchObject({
+      providerId: 'chat-provider',
+      model: 'chat-model-code',
+    });
+    expect(result.assessment).toMatchObject({
+      providerId: 'chat-provider',
+      model: 'chat-model-code',
+    });
+  });
+
   it('fails safely after two invalid structured responses', async () => {
     const modelClient = new ReviewModelClient(() => 'not-json');
     const reviewer = createReviewer(modelClient);

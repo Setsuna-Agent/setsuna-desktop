@@ -11,7 +11,7 @@ import type {
   RuntimeUserInputRequest,
 } from './approvals.js';
 import type { RuntimeInputMessageAttachment, RuntimeMessageAttachment } from './attachments.js';
-import type { RuntimeApprovalReviewer } from './config.js';
+import type { RuntimeApprovalReviewer, RuntimeConfiguredModelReference } from './config.js';
 import type { RuntimeHookSource } from './hooks.js';
 import type { RuntimeMemoryCitation } from './memory.js';
 import type {
@@ -23,6 +23,7 @@ import type {
 import type { RuntimePluginReference } from './plugin-reference.js';
 import type {
   RuntimeModelRequestStepSnapshot,
+  RuntimeThreadModelBinding,
   RuntimeModelVerification,
   RuntimeSafetyBuffering,
   RuntimeStreamItem,
@@ -479,7 +480,6 @@ export type RuntimeThreadTurnStepSnapshot = {
   createdAt: string;
   snapshot: RuntimeModelRequestStepSnapshot;
 };
-
 export type RuntimeThreadTurn = {
   id: string;
   completedAt?: string;
@@ -487,6 +487,7 @@ export type RuntimeThreadTurn = {
   error?: string;
   input?: string;
   items: RuntimeStreamItem[];
+  modelBinding?: RuntimeThreadModelBinding;
   modelVerifications?: RuntimeModelVerification[];
   safetyBuffering?: RuntimeSafetyBuffering;
   startedAt?: string;
@@ -495,7 +496,6 @@ export type RuntimeThreadTurn = {
   taskKind?: RuntimeThreadTurnTaskKind;
   tokenCounts?: RuntimeThreadTurnTokenCount[];
 };
-
 export type RuntimeThreadContextCompactionState = {
   status: 'running' | 'completed';
   turnId?: string;
@@ -509,7 +509,6 @@ export type RuntimeThreadContextCompactionState = {
   tokensUntilCompaction?: number;
   usedTokens?: number;
 };
-
 export type RuntimeThreadGoalStatus = 'active' | 'paused' | 'blocked' | 'usageLimited' | 'budgetLimited' | 'complete';
 
 export type RuntimeThreadGoalStopReasonCode =
@@ -534,10 +533,10 @@ export type RuntimeThreadGoalSafetyState = {
   /** Bounded recent evidence used to detect short repeating work cycles. */
   recentProgressFingerprints?: string[];
 };
-
 export type RuntimeThreadGoalExecutionOptions = {
   /** 创建 Goal 时绑定的输入资源和执行选项，后续自动续轮会保持同一语义。 */
   attachments?: RuntimeInputMessageAttachment[];
+  modelSelection?: RuntimeConfiguredModelReference;
   /** 首轮 Goal 对应的可见用户消息，用于避免重复向模型附加同一批附件。 */
   sourceMessageId?: string;
   skillIds?: string[];
@@ -545,7 +544,6 @@ export type RuntimeThreadGoalExecutionOptions = {
   thinking?: boolean;
   thinkingEffort?: string;
 };
-
 export type RuntimeThreadGoal = {
   version: 1;
   id: string;
@@ -564,7 +562,6 @@ export type RuntimeThreadGoal = {
   safety?: RuntimeThreadGoalSafetyState;
   execution?: RuntimeThreadGoalExecutionOptions;
 };
-
 export type RuntimeGoalExitKind =
   | 'blocked'
   | 'usageLimited'
@@ -603,6 +600,7 @@ export function cloneRuntimeThreadGoal(goal: RuntimeThreadGoal): RuntimeThreadGo
     execution: goal.execution ? {
       ...goal.execution,
       attachments: goal.execution.attachments?.map((attachment) => ({ ...attachment })),
+      modelSelection: goal.execution.modelSelection ? { ...goal.execution.modelSelection } : undefined,
       skillIds: goal.execution.skillIds ? [...goal.execution.skillIds] : undefined,
       skillReferences: cloneRuntimeSkillReferences(goal.execution.skillReferences),
     } : undefined,
@@ -637,6 +635,7 @@ export type RuntimeQueuedTurnInput = {
   input: string;
   clientId?: string;
   attachments?: RuntimeInputMessageAttachment[];
+  modelSelection?: RuntimeConfiguredModelReference;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
@@ -746,11 +745,11 @@ export type RuntimeThreadSummary = {
   /** Present only on search results when an older message matched the query. */
   searchMatchPreview?: string;
 };
-
 export type RuntimeThread = RuntimeThreadSummary & {
   activeTurnId?: string | null;
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
+  modelBinding?: RuntimeThreadModelBinding;
   /** Present only on paged REST snapshots; persisted runtime snapshots omit it. */
   messagePage?: RuntimeThreadMessagePageInfo;
   pendingHookRuns?: RuntimeHookRun[];
@@ -759,7 +758,6 @@ export type RuntimeThread = RuntimeThreadSummary & {
   messages: RuntimeMessage[];
   lastSeq: number;
 };
-
 export type RuntimeThreadMessagePageInfo = {
   nextBefore: number | null;
   total: number;
@@ -798,8 +796,8 @@ export type CreateThreadInput = {
 export type ThreadPatch = {
   title?: string;
   archived?: boolean;
+  modelSelection?: RuntimeConfiguredModelReference; // Future turns only; active turns keep their snapshot.
 };
-
 export type ThreadMemoryModePatch = {
   mode: RuntimeThreadMemoryMode;
 };
@@ -808,6 +806,7 @@ export type SendTurnInput = {
   input: string;
   clientId?: string;
   attachments?: RuntimeInputMessageAttachment[];
+  modelSelection?: RuntimeConfiguredModelReference;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;
@@ -830,6 +829,7 @@ export type QueueTurnInput = Omit<SteerTurnInput, 'expectedTurnId'> & {
    * 旧客户端省略时按普通消息处理；runtime 持久化后始终写入显式类型。
    */
   kind?: RuntimeQueuedTurnInputKind;
+  modelSelection?: RuntimeConfiguredModelReference;
 };
 
 /**

@@ -10,6 +10,7 @@ export function runtimeTaskModelRequest(
   config: RuntimeConfigState | null | undefined,
   taskId: RuntimeTaskModelId,
   fallbackModel: string,
+  fallbackRequest?: RuntimeTaskModelRequest,
 ): RuntimeTaskModelRequest {
   const reference = config?.taskModels?.[taskId];
   if (reference) {
@@ -25,11 +26,11 @@ export function runtimeTaskModelRequest(
         providerId: provider.id,
       };
     }
-    return { model: fallbackModel };
+    return fallbackRequest ?? { model: fallbackModel };
   }
 
   const legacyModel = legacyTaskModel(config, taskId);
-  return { model: legacyModel || fallbackModel };
+  return legacyModel ? { model: legacyModel } : fallbackRequest ?? { model: fallbackModel };
 }
 
 function legacyTaskModel(

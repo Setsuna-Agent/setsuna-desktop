@@ -436,6 +436,32 @@ describe('configured model routing and options', () => {
     });
   });
 
+  it('never falls back to the active model for an explicitly pinned provider/model', async () => {
+    const pinnedProvider = provider('anthropic', 'https://pinned.example.test');
+    const client = new ConfiguredModelClient(
+      {
+        getConfig: async () => {
+          throw new Error('not used');
+        },
+        saveConfig: async () => {
+          throw new Error('not used');
+        },
+        getActiveProviderConfig: async () => provider('openai-compatible', 'https://active.example.test/v1'),
+        getProviderConfig: async (providerId) => providerId === pinnedProvider.id ? pinnedProvider : null,
+      },
+      fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', {}),
+    );
+
+    await expect(collect(client, {
+      providerId: pinnedProvider.id,
+      model: 'model-that-does-not-exist',
+    })).rejects.toThrow('Configured model is unavailable');
+    await expect(collect(client, {
+      providerId: 'missing-provider',
+      model: model.code,
+    })).rejects.toThrow('Configured provider is unavailable');
+  });
+
   it('uses configured default thinking effort only when the turn enables thinking', async () => {
     const captured: CapturedRequest = {};
     const thinkingModel = {

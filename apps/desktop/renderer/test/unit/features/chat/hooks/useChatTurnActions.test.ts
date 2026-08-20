@@ -66,6 +66,71 @@ describe('composer turn routing', () => {
     expect(shouldQueueComposerTurn('turn_active', {})).toBe(true);
     expect(shouldQueueComposerTurn(null, {})).toBe(false);
   });
+
+  it('sends an optimistic model choice even while the thread snapshot still has the old model', async () => {
+    const sendTurn = vi.fn(async () => ({ accepted: true as const, turnId: 'turn_2' }));
+    const currentThread = thread({
+      modelBinding: {
+        providerId: 'provider-a',
+        modelId: 'model-a',
+        modelCode: 'model-a-code',
+      },
+    });
+    const client = { sendTurn } as unknown as DesktopRuntimeClient;
+    const { result } = renderHook(() => useChatTurnActions({
+      activeProjectId: null,
+      activeTurnId: null,
+      claimComposerForThread: vi.fn(),
+      client,
+      composerKey: 'thread:thread_1',
+      currentThread,
+      draft: '',
+      reloadThreads: vi.fn(async () => undefined),
+      setActiveTurnId: vi.fn(),
+      setCurrentThread: vi.fn(),
+      setDraft: vi.fn(),
+      setError: vi.fn(),
+      terminalTurnIdsRef: { current: new Set<string>() },
+    }));
+
+    await expect(result.current.sendInput('Use model B', {
+      modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+    })).resolves.toBe(true);
+    expect(sendTurn).toHaveBeenCalledWith('thread_1', expect.objectContaining({
+      modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+    }));
+  });
+
+  it('does not reinterpret an existing binding as an explicit model switch', async () => {
+    const sendTurn = vi.fn(async () => ({ accepted: true as const, turnId: 'turn_2' }));
+    const client = { sendTurn } as unknown as DesktopRuntimeClient;
+    const { result } = renderHook(() => useChatTurnActions({
+      activeProjectId: null,
+      activeTurnId: null,
+      claimComposerForThread: vi.fn(),
+      client,
+      composerKey: 'thread:thread_1',
+      currentThread: thread({
+        modelBinding: {
+          providerId: 'provider-a',
+          modelId: 'model-a',
+          modelCode: 'historical-model-a-code',
+        },
+      }),
+      draft: '',
+      reloadThreads: vi.fn(async () => undefined),
+      setActiveTurnId: vi.fn(),
+      setCurrentThread: vi.fn(),
+      setDraft: vi.fn(),
+      setError: vi.fn(),
+      terminalTurnIdsRef: { current: new Set<string>() },
+    }));
+
+    await expect(result.current.sendInput('Keep the validated binding')).resolves.toBe(true);
+    expect(sendTurn).toHaveBeenCalledWith('thread_1', expect.objectContaining({
+      modelSelection: undefined,
+    }));
+  });
 });
 
 describe('new thread refresh ordering', () => {
@@ -123,6 +188,52 @@ describe('new thread refresh ordering', () => {
     await vi.waitFor(() => expect(events).toEqual(['create', 'reload', 'send']));
     await expect(submission).resolves.toBe(true);
     refresh.resolve();
+  });
+
+  it('persists the empty side composer selection before its first turn', async () => {
+    const events: string[] = [];
+    const selectedThread = thread({
+      id: 'thread_side',
+      kind: 'side',
+      modelBinding: {
+        providerId: 'provider-b',
+        modelId: 'model-b',
+        modelCode: 'model-b-code',
+      },
+    });
+    const client = {
+      updateThread: async () => {
+        events.push('update');
+        return selectedThread;
+      },
+      sendTurn: async () => {
+        events.push('send');
+        return { accepted: true as const, turnId: 'turn_side' };
+      },
+    } as unknown as DesktopRuntimeClient;
+    const { result } = renderNewThreadActions({
+      client,
+      createThread: async () => {
+        events.push('create');
+        return thread({
+          id: 'thread_side',
+          kind: 'side',
+          modelBinding: {
+            providerId: 'provider-a',
+            modelId: 'model-a',
+            modelCode: 'model-a-code',
+          },
+        });
+      },
+      reloadThreads: async () => {
+        events.push('reload');
+      },
+    });
+
+    await expect(result.current.sendInput('Ask side question', {
+      modelSelection: { providerId: 'provider-b', modelId: 'model-b' },
+    })).resolves.toBe(true);
+    expect(events).toEqual(['create', 'reload', 'update', 'send']);
   });
 });
 

@@ -53,6 +53,7 @@ import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import { runtimeTaskModelRequest } from './runtime-task-model.js';
+import type { RuntimeResolvedTurnModel } from './runtime-thread-model.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
@@ -124,6 +125,7 @@ export class RuntimeSamplingContextBuilder {
     threadId,
     taskKind,
     turnId,
+    turnModel,
     toolAccess = 'all',
   }: {
     conversationMessages: RuntimeMessage[];
@@ -136,13 +138,14 @@ export class RuntimeSamplingContextBuilder {
     threadId: string;
     taskKind: RuntimeTaskKind;
     turnId: string;
+    turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
     const normalizedConversation = normalizeModelConversationHistory(conversationMessages);
     const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
-    const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind);
+    const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind, turnModel);
     const developerFeaturesEnabled = runtimeDeveloperFeaturesEnabled(stepRuntimeConfig);
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     if (developerFeaturesEnabled) {
@@ -184,6 +187,12 @@ export class RuntimeSamplingContextBuilder {
       skillIds,
       thinkingOptions,
       turnId,
+      modelSelection: turnModel
+        ? {
+            providerId: turnModel.binding.providerId,
+            modelId: turnModel.binding.modelId,
+          }
+        : undefined,
     });
     const toolContext: RuntimeToolExecutionContext = {
       environment,
@@ -248,7 +257,7 @@ export class RuntimeSamplingContextBuilder {
     );
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);
     const persistentContextBudget = taskKind === 'review'
-      ? contextCompactionBudgetForConfig(stepRuntimeConfig)
+      ? contextCompactionBudgetForConfig(stepRuntimeConfig, turnModel?.model)
       : contextBudget;
     const promptContext = await this.promptContexts.build({
       config: stepRuntimeConfig,
@@ -275,6 +284,12 @@ export class RuntimeSamplingContextBuilder {
       + reservedOutputTokens;
     const persistentConversationMessages = await this.options.contextCompactor.compactMessagesBeforeModelRequest({
       contextBudget: persistentContextBudget,
+      conversationModel: turnModel
+        ? {
+            providerId: turnModel.binding.providerId,
+            model: turnModel.binding.modelCode,
+          }
+        : samplingModel.request,
       force: false,
       messages: orderedConversationMessages,
       reservedTokens,
@@ -308,6 +323,7 @@ export class RuntimeSamplingContextBuilder {
       turnId,
       threadLastSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
       ...(thread.projectId ? { projectId: thread.projectId } : {}),
+      ...(turnModel ? { modelBinding: { ...turnModel.binding } } : {}),
       conversationMessageIds: compactedConversationMessages.map((message) => message.id),
       messageIds: messages.map((message) => message.id),
       inputMessageIds: samplingInputMessageIds(messages, turnId),
@@ -371,11 +387,13 @@ export class RuntimeSamplingContextBuilder {
 
 function goalExecutionForTurn({
   messages,
+  modelSelection,
   skillIds,
   thinkingOptions,
   turnId,
 }: {
   messages: RuntimeMessage[];
+  modelSelection?: RuntimeThreadGoalExecutionOptions['modelSelection'];
   skillIds: string[];
   thinkingOptions: Pick<ModelRequest, 'thinking' | 'reasoningEffort'> | undefined;
   turnId: string;
@@ -391,6 +409,7 @@ function goalExecutionForTurn({
     attachments: sourceMessage.attachments
       ?.filter(isRuntimeInputMessageAttachment)
       .map((attachment) => ({ ...attachment })),
+    modelSelection: modelSelection ? { ...modelSelection } : undefined,
     sourceMessageId: sourceMessage.id,
     skillIds: skillIds.length ? [...skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(sourceMessage.skillReferences),
@@ -446,26 +465,49 @@ function activeModelForConfig(config: RuntimeConfigState | null | undefined): Ru
 function samplingModelForTask(
   config: RuntimeConfigState | null | undefined,
   taskKind: RuntimeTaskKind,
+  turnModel?: RuntimeResolvedTurnModel,
 ): {
   model: RuntimeConfigState['providers'][number]['models'][number] | undefined;
   request: Pick<ModelRequest, 'model' | 'providerId'>;
 } {
   const activeModel = activeModelForConfig(config);
   if (taskKind !== 'review') {
+    if (turnModel) {
+      return {
+        model: turnModel.model,
+        request: {
+          providerId: turnModel.binding.providerId,
+          model: turnModel.binding.modelCode,
+        },
+      };
+    }
     return {
       model: activeModel,
       request: { model: 'local-runtime-smoke' },
     };
   }
 
-  const request = runtimeTaskModelRequest(config, 'review', 'local-runtime-smoke');
+  const request = runtimeTaskModelRequest(
+    config,
+    'review',
+    'local-runtime-smoke',
+    turnModel
+      ? {
+          providerId: turnModel.binding.providerId,
+          model: turnModel.binding.modelCode,
+        }
+      : undefined,
+  );
   const reference = config?.taskModels?.review;
   const provider = request.providerId && reference
     ? config?.providers.find((item) => item.id === request.providerId && item.enabled)
     : undefined;
-  const model = provider && reference
-    ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === request.model)
-    : undefined;
+  const model = turnModel && request.providerId === turnModel.binding.providerId
+    && request.model === turnModel.binding.modelCode
+    ? turnModel.model
+    : provider && reference
+      ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === request.model)
+      : undefined;
   return { model: model ?? activeModel, request };
 }
 

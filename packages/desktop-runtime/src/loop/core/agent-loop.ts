@@ -93,7 +93,6 @@ export type AgentLoopOptions = {
   eventWriter?: RuntimeEventWriter;
   extensionManager?: Pick<ExtensionRuntime, 'dispatch'>;
 };
-
 export type { DeliverMailboxInput, DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 export class AgentLoop {
   private readonly turnTasks = new RuntimeTurnTaskRegistry();
@@ -267,8 +266,8 @@ export class AgentLoop {
       threadStore: options.threadStore,
       turnTasks: this.turnTasks,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-      createMailboxTriggeredRun: (threadId, thread, turnId, content) => {
-        const run = this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content);
+      createMailboxTriggeredRun: async (threadId, thread, turnId, content) => {
+        const run = await this.turnRuns.createMailboxTriggered(threadId, thread, turnId, content);
         this.observeRun(threadId, run.turnId, 'regular', run.done);
         return run;
       },
@@ -300,6 +299,7 @@ export class AgentLoop {
     });
     this.turnRuns = new RuntimeTurnRunFactory({
       clock: options.clock,
+      configStore: options.configStore,
       eventWriter: this.eventWriter,
       ids: options.ids,
       inputGuard: this.inputGuard,
@@ -434,7 +434,6 @@ export class AgentLoop {
   /**
    * 启动一轮异步对话。线程忙碌或队列被编辑时只持久化输入并返回 queued 成功态；
    * 真正启动的轮次仍在后台执行。
-   *
    * @param threadId 目标线程 ID。
    * @param input 用户输入、附件、skill 选择和客户端消息 ID。
    */
@@ -450,6 +449,7 @@ export class AgentLoop {
           clientId: input.clientId,
           input: input.input,
           kind: 'message',
+          modelSelection: input.modelSelection,
           skillIds: input.skillIds,
           skillReferences: input.skillReferences,
           thinking: input.thinking,
@@ -830,6 +830,7 @@ export class AgentLoop {
     pending.add(admission);
     this.threadMutationAdmissions.set(threadId, pending);
     try {
+      await this.turnRuns.persistInferredThreadModelBinding(threadId);
       return await operation();
     } finally {
       pending.delete(admission);

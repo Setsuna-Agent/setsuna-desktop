@@ -84,6 +84,7 @@ import {
   appServerSkillsExtraRootsSetResponse,
   appServerSkillsListResponse,
 } from './skills-protocol.js';
+import { appServerTurnModelSelection } from './turn-model-selection.js';
 
 export async function dispatchAppServerRpcRequest(
   runtime: RuntimeFactory,
@@ -377,6 +378,7 @@ export async function dispatchAppServerRpcRequest(
       title: stringInput(input.name) || source.title,
       projectId: source.projectId,
       forkedFromId: source.id,
+      modelBinding: source.modelBinding ? { ...source.modelBinding } : undefined,
     });
     const attachments = messages.flatMap((message) => message.attachments ?? []);
     try {
@@ -624,6 +626,12 @@ export async function dispatchAppServerRpcRequest(
     const thinking = appServerTurnThinkingInput(input);
     if (hasAppServerDynamicToolsInput(input)) requireExperimentalAppServerApi(connectionRegistry, connectionId, 'dynamicTools');
     const dynamicTools = appServerDynamicToolsInput(input.dynamicTools ?? input.dynamic_tools);
+    const modelSelection = await appServerTurnModelSelection(
+      runtime,
+      threadId,
+      input.model,
+      input.modelProvider ?? input.model_provider,
+    );
     if (dynamicTools !== undefined) {
       await requireRuntimeThread(runtime, threadId);
       runtime.agentLoop.registerAppServerDynamicTools(threadId, dynamicTools, connectionId ?? 'default');
@@ -631,6 +639,7 @@ export async function dispatchAppServerRpcRequest(
     const started = await runtime.agentLoop.startTurn(threadId, {
       input: text,
       clientId: sweClientUserMessageId(input),
+      ...(modelSelection ? { modelSelection } : {}),
       ...thinking,
     });
     if ('queuedInputId' in started && !started.turnId) {

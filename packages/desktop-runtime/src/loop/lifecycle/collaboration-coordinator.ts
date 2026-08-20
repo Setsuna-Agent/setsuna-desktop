@@ -191,6 +191,7 @@ export class RuntimeCollaborationCoordinator {
       projectId: parent.projectId,
       parentThreadId: context.threadId,
       memoryMode: parent.memoryMode,
+      modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,
     });
     let children = this.childrenByParentThread.get(context.threadId);
     if (!children) {

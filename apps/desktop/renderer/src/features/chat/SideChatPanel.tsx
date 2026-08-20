@@ -19,6 +19,7 @@ import type {
 } from '../workspace/model.js';
 import { WorkspaceResizeHandle } from '../workspace/WorkspaceResizeHandle.js';
 import { ChatWorkspace } from './ChatWorkspace.js';
+import type { ChatModelSelectionHandler } from './chatModelSelection.js';
 import { useSideChat } from './hooks/useSideChat.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
 import {
@@ -75,7 +76,7 @@ export function SideChatPanel({
   onOpenWorkspaceFile: (filePath: string, line?: number) => void;
   onOpenSideChat: () => void;
   onReloadThreads: () => Promise<unknown>;
-  onSelectModel: (providerId: string, modelId: string) => void;
+  onSelectModel: ChatModelSelectionHandler;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onWorkspaceResizeStep: (delta: number) => void;
   onWorkspaceResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -87,6 +88,7 @@ export function SideChatPanel({
   const sideChat = useSideChat({
     activeProjectId,
     client,
+    config,
     parentThread,
     reloadThreads: onReloadThreads,
     setError: onError,

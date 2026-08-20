@@ -13,7 +13,10 @@ import {
   type SetStateAction,
 } from 'react';
 import { createDesktopRuntimeClient } from './client.js';
-import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
+import {
+  reportRuntimeBackgroundFailure,
+  runtimeClientErrorMessage,
+} from './runtimeClientErrors.js';
 import {
   discardRuntimeErrorFromOtherThread,
   runtimeErrorForThread,
@@ -108,6 +111,27 @@ export function useRuntimeClientState({
   useEffect(() => {
     setRuntimeError((current) => discardRuntimeErrorFromOtherThread(current, currentThreadId));
   }, [currentThreadId]);
+
+  const selectConversationModel = useCallback(async (
+    providerId: string,
+    modelId: string,
+    threadId?: string,
+  ) => {
+    setError(null);
+    try {
+      await Promise.all([
+        configState.selectProviderModel(providerId, modelId),
+        threadId
+          ? client.updateThread(threadId, {
+              modelSelection: { providerId, modelId },
+            }).then(() => undefined)
+          : Promise.resolve(),
+      ]);
+    } catch (unknownError) {
+      setError(runtimeClientErrorMessage(unknownError));
+      throw unknownError;
+    }
+  }, [client, configState.selectProviderModel, setError]);
 
   const {
     applyBootstrapUsage,
@@ -207,6 +231,7 @@ export function useRuntimeClientState({
     projects,
     refresh,
     refreshCapabilities,
+    selectConversationModel,
     setError,
     setProjects,
   };

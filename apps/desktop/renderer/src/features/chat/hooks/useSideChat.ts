@@ -1,6 +1,8 @@
 import type {
   AnswerRuntimeApprovalInput,
   DesktopRuntimeClient,
+  RuntimeConfiguredModelReference,
+  RuntimeConfigState,
   RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
@@ -22,6 +24,7 @@ import { useChatTurnActions } from './useChatTurnActions.js';
 type SideChatOptions = {
   activeProjectId: string | null;
   client: DesktopRuntimeClient;
+  config: RuntimeConfigState | null;
   parentThread: RuntimeThread | null;
   reloadThreads: () => Promise<unknown>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -53,6 +56,7 @@ export async function createSideConversationForOwner(
 export function useSideChat({
   activeProjectId,
   client,
+  config,
   parentThread,
   reloadThreads,
   setError,
@@ -227,6 +231,7 @@ export function useSideChat({
     activeTurnId: effectiveActiveTurnId,
     claimComposerForThread,
     client,
+    config,
     composerKey,
     createThread: createSideConversation,
     currentThread,
@@ -303,7 +308,10 @@ export function useSideChat({
     }
   }, [client, threadId]);
 
-  const startReview = useCallback(async (target: RuntimeReviewTarget) => {
+  const startReview = useCallback(async (
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => {
     const isCurrentRequest = reviewRequests.begin();
     if (isCurrentRequest()) setError(null);
     try {
@@ -312,6 +320,7 @@ export function useSideChat({
         client,
         currentThread,
         language: locale,
+        modelSelection,
         onThreadCreated: async (thread) => {
           if (isCurrentRequest()) {
             claimComposerForThread(thread.id);

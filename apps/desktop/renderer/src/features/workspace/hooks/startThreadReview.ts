@@ -1,5 +1,6 @@
 import type {
   DesktopRuntimeClient,
+  RuntimeConfiguredModelReference,
   RuntimeInterfaceLanguage,
   RuntimeReviewTarget,
   RuntimeThread,
@@ -16,6 +17,7 @@ type StartThreadReviewOptions = {
   client: ThreadReviewClient;
   currentThread: RuntimeThread | null;
   language: RuntimeInterfaceLanguage;
+  modelSelection?: RuntimeConfiguredModelReference;
   onThreadCreated: (thread: RuntimeThread) => void | Promise<unknown>;
   t?: Translate;
   target: RuntimeReviewTarget;
@@ -30,6 +32,7 @@ export async function startThreadReview({
   client,
   currentThread,
   language,
+  modelSelection,
   onThreadCreated,
   t = defaultTranslate,
   target,
@@ -41,5 +44,9 @@ export async function startThreadReview({
     await onThreadCreated(thread);
   }
 
-  return client.startReview(thread.id, target, language);
+  return client.startReview(thread.id, {
+    language,
+    ...(modelSelection ? { modelSelection } : {}),
+    target,
+  });
 }

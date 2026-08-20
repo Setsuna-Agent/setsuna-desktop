@@ -128,6 +128,7 @@ async function createHarness() {
     ids,
     inputGuard: {
       assertAttachmentsSupported: async () => undefined,
+      resolveNextTurnModel: async () => undefined,
     },
     threadStore,
     turnTasks: {

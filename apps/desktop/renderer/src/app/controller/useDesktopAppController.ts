@@ -1,4 +1,8 @@
-import { runtimeDeveloperFeaturesEnabled, type RuntimeReviewTarget } from '@setsuna-desktop/contracts';
+import {
+  runtimeDeveloperFeaturesEnabled,
+  type RuntimeConfiguredModelReference,
+  type RuntimeReviewTarget,
+} from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -195,6 +199,7 @@ export function useDesktopAppController() {
     activeTurnId,
     claimComposerForThread: claimConversationSessionForThread,
     client,
+    config: runtime.config,
     composerKey,
     currentThread,
     draft,
@@ -220,12 +225,16 @@ export function useDesktopAppController() {
     setSkillSelectionRequest((current) => (current?.requestId === requestId ? null : current));
   }, []);
 
-  const startCurrentThreadReview = useCallback((target: RuntimeReviewTarget) => {
+  const startCurrentThreadReview = useCallback((
+    target: RuntimeReviewTarget,
+    modelSelection?: RuntimeConfiguredModelReference,
+  ) => {
     const isCurrentRequest = reviewRequests.begin();
     runtime.setError(null);
     return runtime.startCurrentThreadReview(target, {
       claimComposerForThread: claimConversationSessionForThread,
       isCurrentRequest,
+      modelSelection,
     }).catch((unknownError: unknown) => {
       if (isCurrentRequest()) {
         runtime.setError(unknownError instanceof Error ? unknownError.message : String(unknownError));

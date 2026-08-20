@@ -1,5 +1,6 @@
 import {
   isRuntimeStoredMessageAttachment,
+  type RuntimeConfiguredModelReference,
   type RuntimeMessageAttachment,
   type RuntimeSkillReference,
 } from '@setsuna-desktop/contracts';
@@ -7,6 +8,7 @@ import {
 export type ChatComposerSendOptions = {
   attachments?: RuntimeMessageAttachment[];
   goalMode?: boolean;
+  modelSelection?: RuntimeConfiguredModelReference;
   skillIds?: string[];
   skillReferences?: RuntimeSkillReference[];
   thinking?: boolean;

@@ -1,4 +1,5 @@
 import type {
+  RuntimeConfiguredModelReference,
   RuntimeInterfaceLanguage,
   RuntimeReviewTarget,
   RuntimeThread,
@@ -229,9 +230,13 @@ export async function startRuntimeReview(
   threadId: string,
   target: unknown,
   language?: unknown,
+  modelSelection?: RuntimeConfiguredModelReference,
 ): Promise<RuntimeReviewStartResult> {
   await requireRuntimeThread(runtime, threadId);
-  const review = runtimeReviewRequestFromTarget(target, language);
+  const review = {
+    ...runtimeReviewRequestFromTarget(target, language),
+    ...(modelSelection ? { modelSelection } : {}),
+  };
   try {
     return {
       response: await runtime.agentLoop.startReview(threadId, review),

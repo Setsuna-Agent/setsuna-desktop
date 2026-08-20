@@ -4,11 +4,15 @@ import {
   type RuntimeMessagePageQuery,
   type RuntimeEvent,
   type RuntimeThreadMemoryMode,
-  type ThreadPatch,
 } from '@setsuna-desktop/contracts';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import type { GeneratedImageStore } from '../ports/generated-image-store.js';
-import type { ThreadStore, ThreadStoreCreateInput, ThreadStoreQuery } from '../ports/thread-store.js';
+import type {
+  ThreadStore,
+  ThreadStoreCreateInput,
+  ThreadStorePatch,
+  ThreadStoreQuery,
+} from '../ports/thread-store.js';
 import {
   managedGeneratedImageAssetIds,
   managedGeneratedImageAssetIdsFromStore,
@@ -59,7 +63,7 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     return this.afterPendingEventsWithImageCleanup(threadId, () => this.inner.deleteThread(threadId));
   }
 
-  updateThread(threadId: string, patch: ThreadPatch) {
+  updateThread(threadId: string, patch: ThreadStorePatch) {
     return this.afterPendingEvents(threadId, () => this.inner.updateThread(threadId, patch));
   }
 

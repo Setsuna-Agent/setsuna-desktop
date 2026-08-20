@@ -11,6 +11,7 @@ import { runtimeThreadToSweTurns } from '@setsuna-desktop/contracts';
 import { randomRuntimeId } from '../runtime-ids.js';
 import { toUnixSeconds } from '../time-utils.js';
 import type { RuntimeFactory, RuntimeServerOptions } from '../types.js';
+import { effectiveRuntimeThreadModelBinding } from '../../loop/core/runtime-thread-model.js';
 import { activeModelCode, activeModelProvider, appServerApprovalPolicy, sweSandboxPolicy } from './config-protocol.js';
 import { AppServerRpcError } from './errors.js';
 import { hasOwn, numericInput, recordInput, requiredRawString, requiredString, stringInput } from './input.js';
@@ -62,10 +63,11 @@ export function sweThreadSessionResponse(
   options: RuntimeServerOptions,
   includeTurns = false,
 ) {
+  const modelBinding = effectiveRuntimeThreadModelBinding(config, thread);
   return {
     thread: sweThreadFromRuntimeThread(thread, cwd, options, includeTurns),
-    model: activeModelCode(config),
-    modelProvider: activeModelProvider(config),
+    model: modelBinding?.modelCode ?? activeModelCode(config),
+    modelProvider: modelBinding?.providerId ?? activeModelProvider(config),
     serviceTier: null,
     cwd,
     instructionSources: [],

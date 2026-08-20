@@ -3,6 +3,7 @@ import {
   runtimeDeveloperFeaturesEnabled,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
+  type ModelRequest,
   type RuntimeCompactionDebugPayload,
   type RuntimeConfigState,
   type RuntimeEvent,
@@ -93,7 +94,7 @@ type RuntimeCompactionDebugContext = {
 export class RuntimeContextCompactor {
   constructor(private readonly options: RuntimeContextCompactorOptions) {}
 
-  async compactMessagesBeforeModelRequest({ contextBudget, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { contextBudget?: RuntimeContextCompactionBudget; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
+  async compactMessagesBeforeModelRequest({ contextBudget, conversationModel, force, messages, reservedTokens = 0, runtimeConfig, signal, thread, threadId, turnId }: { contextBudget?: RuntimeContextCompactionBudget; conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>; force: boolean; messages: RuntimeMessage[]; reservedTokens?: number; runtimeConfig: RuntimeConfigState | null | undefined; signal: AbortSignal; thread: RuntimeThread; threadId: string; turnId: string }): Promise<RuntimeMessage[]> {
     // 自动压缩必须先持久化再发模型请求，保证 UI、存储历史和实际 prompt window 一致。
     const budget = reserveRuntimeContextCompactionBudget(
       contextBudget ?? contextCompactionBudgetForConfig(runtimeConfig),
@@ -131,6 +132,7 @@ export class RuntimeContextCompactor {
       signal,
       debugContext,
       runtimeConfig,
+      conversationModel,
     );
     const result = materializeRuntimeContextCompaction({
       candidate,
@@ -190,14 +192,21 @@ export class RuntimeContextCompactor {
     signal?: AbortSignal,
     debugContext?: RuntimeCompactionDebugContext,
     runtimeConfig?: RuntimeConfigState | null,
+    conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>,
   ): Promise<GeneratedContextCompactionSummary> {
     const portableSummary = await this.generatePortableContextCompactionSummary(
       candidate,
       signal,
       debugContext,
       runtimeConfig,
+      conversationModel,
     );
-    const nativeArtifact = await this.generateNativeContextCompaction(candidate, signal, debugContext);
+    const nativeArtifact = await this.generateNativeContextCompaction(
+      candidate,
+      signal,
+      debugContext,
+      conversationModel,
+    );
     const usages = [portableSummary.usage, nativeArtifact.usage]
       .filter((usage): usage is RuntimeUsage => Boolean(usage));
     return {
@@ -218,6 +227,7 @@ export class RuntimeContextCompactor {
     signal?: AbortSignal,
     debugContext?: RuntimeCompactionDebugContext,
     runtimeConfig?: RuntimeConfigState | null,
+    conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>,
   ): Promise<{ text: string; usage?: RuntimeUsage }> {
     this.traceCompaction(debugContext, 'context.compaction.portable', {
       olderMessageCount: candidate.olderMessages.length,
@@ -230,6 +240,7 @@ export class RuntimeContextCompactor {
         runtimeConfig,
         'contextCompaction',
         'context-compaction',
+        conversationModel,
       );
       let usage: RuntimeUsage | undefined;
       for await (const item of this.options.modelClient.stream({
@@ -315,6 +326,7 @@ export class RuntimeContextCompactor {
     candidate: RuntimeContextCompactionCandidate,
     signal?: AbortSignal,
     debugContext?: RuntimeCompactionDebugContext,
+    conversationModel?: Pick<ModelRequest, 'model' | 'providerId'>,
   ): Promise<NativeContextCompactionArtifact> {
     if (!this.options.modelClient.compactConversation) {
       this.traceCompaction(debugContext, 'context.compaction.native', {
@@ -333,7 +345,7 @@ export class RuntimeContextCompactor {
       const result = await this.options.modelClient.compactConversation({
         // Provider-native compaction stays on the current conversation model because
         // its opaque metadata is only replayable by that provider/model pair.
-        model: 'context-compaction',
+        ...(conversationModel ?? { model: 'context-compaction' }),
         // Native compact must see the real model window, including exact provider envelopes.
         messages: candidate.olderMessages,
         signal,

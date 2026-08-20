@@ -63,6 +63,7 @@ export function cloneJsonValue<T>(value: T): T {
 export function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
   return {
     ...turn,
+    modelBinding: turn.modelBinding ? { ...turn.modelBinding } : undefined,
     items: turn.items.map(cloneStreamItem),
     modelVerifications: turn.modelVerifications?.map((verification) => ({ ...verification, warnings: verification.warnings ? [...verification.warnings] : undefined })),
     safetyBuffering: turn.safetyBuffering
@@ -86,6 +87,7 @@ export function cloneThreadTurn(turn: RuntimeThreadTurn): RuntimeThreadTurn {
 export function cloneStepSnapshot(snapshot: NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot']): NonNullable<RuntimeThreadTurn['stepSnapshots']>[number]['snapshot'] {
   return {
     ...snapshot,
+    modelBinding: snapshot.modelBinding ? { ...snapshot.modelBinding } : undefined,
     conversationMessageIds: [...snapshot.conversationMessageIds],
     advertisedToolNames: snapshot.advertisedToolNames ? [...snapshot.advertisedToolNames] : undefined,
     contextWindow: snapshot.contextWindow

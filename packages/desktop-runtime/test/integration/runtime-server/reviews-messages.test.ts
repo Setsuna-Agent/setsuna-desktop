@@ -132,9 +132,19 @@ describe('runtime server reviews and message mutations', () => {
         '[P1] Keep the review boundary narrow — packages/desktop-runtime/src/server/runtime-rest-routes.ts:1',
         'Only expose the scoped review route and preserve <think>literal examples</think>.',
       ].join('\n');
-      const capture = await createOpenAiCaptureServer(reviewResponse);
+      const defaultCapture = await createOpenAiCaptureServer('Wrong provider.');
+      const selectedCapture = await createOpenAiCaptureServer(reviewResponse);
       try {
-        await harness.configureOpenAiProvider('rest-review-provider', capture.baseUrl);
+        await harness.runtimeFetch('/v1/config', {
+          method: 'PUT',
+          body: JSON.stringify({
+            activeProviderId: 'default-review-provider',
+            providers: [
+              reviewProvider('default-review-provider', defaultCapture.baseUrl),
+              reviewProvider('selected-review-provider', selectedCapture.baseUrl),
+            ],
+          }),
+        });
         const thread = await harness.runtimeFetch('/v1/threads', {
           method: 'POST',
           body: JSON.stringify({ title: 'REST review' }),
@@ -145,6 +155,10 @@ describe('runtime server reviews and message mutations', () => {
             method: 'POST',
             body: JSON.stringify({
               language: 'zh-CN',
+              modelSelection: {
+                providerId: 'selected-review-provider',
+                modelId: 'selected-review-provider-model',
+              },
               target: {
                 type: 'custom',
                 instructions: 'Review the runtime boundary only.',
@@ -153,7 +167,7 @@ describe('runtime server reviews and message mutations', () => {
           },
         );
         const body = await withTimeout(
-          capture.nextBody,
+          selectedCapture.nextBody,
           harness.providerCaptureTimeoutMs,
           'Timed out waiting for REST review provider request',
         );
@@ -162,6 +176,7 @@ describe('runtime server reviews and message mutations', () => {
           accepted: true,
           turnId: expect.any(String),
         });
+        expect(body).toMatchObject({ model: 'selected-review-provider-model' });
         expect(JSON.stringify(body)).toContain('Review the runtime boundary only.');
         const updated = await harness.waitForThread(
           thread.id,
@@ -186,8 +201,13 @@ describe('runtime server reviews and message mutations', () => {
             title: 'Keep the review boundary narrow',
           }],
         });
+        expect(updated.modelBinding).toEqual({
+          providerId: 'selected-review-provider',
+          modelId: 'selected-review-provider-model',
+          modelCode: 'selected-review-provider-model',
+        });
       } finally {
-        await capture.close();
+        await Promise.all([defaultCapture.close(), selectedCapture.close()]);
       }
     });
   
@@ -249,3 +269,23 @@ describe('runtime server reviews and message mutations', () => {
       expect(rerun.messages.some((message) => message.id === assistantMessage.id)).toBe(false);
     });
 });
+
+function reviewProvider(id: string, baseUrl: string) {
+  return {
+    id,
+    name: id,
+    provider: 'openai-compatible',
+    baseUrl,
+    apiKey: `sk-${id}`,
+    enabled: true,
+    models: [{
+      id: `${id}-model`,
+      name: `${id} model`,
+      code: `${id}-model`,
+      enabled: true,
+      maxOutputTokens: 1_000,
+      thinkingEnabled: false,
+      thinkingEfforts: [],
+    }],
+  };
+}

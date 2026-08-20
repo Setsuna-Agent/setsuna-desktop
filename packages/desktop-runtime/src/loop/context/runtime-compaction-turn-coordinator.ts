@@ -4,6 +4,7 @@ import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { isAbortError } from '../core/runtime-turn-errors.js';
+import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
@@ -73,6 +74,7 @@ export class RuntimeCompactionTurnCoordinator {
     turnId: string;
   }): Promise<RuntimeThread> {
     const runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    const turnModel = resolveRuntimeTurnModel(runtimeConfig, thread);
     const trigger = compactHookTrigger(force);
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
@@ -80,7 +82,11 @@ export class RuntimeCompactionTurnCoordinator {
       turnId,
       type: 'turn.started',
       createdAt: this.options.clock.now().toISOString(),
-      payload: { input: force ? '/compact' : '/compact auto', taskKind: 'compact' },
+      payload: {
+        input: force ? '/compact' : '/compact auto',
+        taskKind: 'compact',
+        ...(turnModel ? { modelBinding: { ...turnModel.binding } } : {}),
+      },
     });
     const preCompact = await this.options.hooks.runCompactHooks({
       eventName: 'PreCompact',
@@ -102,6 +108,12 @@ export class RuntimeCompactionTurnCoordinator {
         signal,
         undefined,
         runtimeConfig,
+        turnModel
+          ? {
+              providerId: turnModel.binding.providerId,
+              model: turnModel.binding.modelCode,
+            }
+          : undefined,
       );
       const result = materializeRuntimeContextCompaction({
         candidate,

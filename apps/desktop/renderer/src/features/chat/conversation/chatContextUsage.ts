@@ -5,6 +5,7 @@ import {
   type RuntimeMessage,
   type RuntimeThread,
 } from '@setsuna-desktop/contracts';
+import { chatThreadModelSelection } from '../chatModelSelection.js';
 
 const DEFAULT_CONTEXT_TOKENS_K = 256;
 const DEFAULT_CONTEXT_TOKENS = DEFAULT_CONTEXT_TOKENS_K * 1000;
@@ -47,13 +48,11 @@ export function contextTokenUsageFromThread(thread: RuntimeThread | null, config
   };
 }
 
-export function activeModelContextWindowTokens(config: RuntimeConfigState | null): number | undefined {
-  if (!config) return undefined;
-  const provider = config.providers.find((item) => item.id === config.activeProviderId && item.enabled)
-    ?? config.providers.find((item) => item.enabled)
-    ?? config.providers[0];
-  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
-  return positiveTokenLimit(model?.contextWindowTokens);
+export function activeModelContextWindowTokens(
+  config: RuntimeConfigState | null,
+  thread: RuntimeThread | null = null,
+): number | undefined {
+  return positiveTokenLimit(chatThreadModelSelection(config, thread).model?.contextWindowTokens);
 }
 
 export function latestContextCompactionNotice(thread: RuntimeThread | null): RuntimeContextCompactionNotice | undefined {

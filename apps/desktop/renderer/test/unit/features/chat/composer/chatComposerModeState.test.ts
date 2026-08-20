@@ -1,7 +1,6 @@
 import type {
   ProviderConfigState,
   ProviderModelConfig,
-  RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
 import {
@@ -15,28 +14,26 @@ import {
 } from '../../../../../src/features/chat/composer/chatComposerModeState.js';
 
 describe('chat composer mode state', () => {
-  it('resolves capabilities from the active enabled provider and selected model', () => {
-    const capabilities = createChatComposerModelCapabilities(config([
-      provider({
-        id: 'fallback',
-        models: [model({ id: 'fallback-model', name: 'Fallback' })],
-      }),
-      provider({
-        id: 'active',
-        models: [
-          model({ id: 'plain', name: 'Plain', enabled: false }),
-          model({
-            id: 'reasoner',
-            name: 'Reasoner',
-            enabled: true,
-            supportsImages: true,
-            thinkingEnabled: true,
-            thinkingEfforts: [' high ', 'low', 'high'],
-            defaultThinkingEffort: 'low',
-          }),
-        ],
-      }),
-    ], 'active'));
+  it('resolves capabilities from the validated provider and model', () => {
+    const selectedProvider = provider({
+      id: 'active',
+      models: [
+        model({ id: 'plain', name: 'Plain', enabled: false }),
+        model({
+          id: 'reasoner',
+          name: 'Reasoner',
+          enabled: true,
+          supportsImages: true,
+          thinkingEnabled: true,
+          thinkingEfforts: [' high ', 'low', 'high'],
+          defaultThinkingEffort: 'low',
+        }),
+      ],
+    });
+    const capabilities = createChatComposerModelCapabilities(
+      selectedProvider,
+      selectedProvider.models[1] ?? null,
+    );
 
     expect(capabilities).toEqual({
       preferenceKey: 'active:reasoner',
@@ -50,21 +47,25 @@ describe('chat composer mode state', () => {
     });
   });
 
-  it('falls back to the first enabled provider when the configured provider is disabled', () => {
-    const capabilities = createChatComposerModelCapabilities(config([
+  it('does not rediscover capabilities when the validated bound model is unavailable', () => {
+    const capabilities = createChatComposerModelCapabilities(
       provider({
-        id: 'disabled',
-        enabled: false,
-        models: [model({ name: 'Disabled model', supportsImages: true })],
+        id: 'bound-provider',
+        models: [model({ supportsImages: true, thinkingEnabled: true })],
       }),
-      provider({
-        id: 'enabled',
-        models: [model({ name: 'Enabled model' })],
-      }),
-    ], 'disabled'));
+      null,
+    );
 
-    expect(capabilities.name).toBe('Enabled model');
-    expect(capabilities.supportsImageInput).toBe(false);
+    expect(capabilities).toEqual({
+      preferenceKey: null,
+      name: null,
+      supportsImageInput: false,
+      thinking: {
+        defaultEffort: '',
+        efforts: [],
+        supported: false,
+      },
+    });
   });
 
   it('enables local Goal idempotently', () => {
@@ -118,29 +119,6 @@ describe('chat composer mode state', () => {
     });
   });
 });
-
-function config(
-  providers: ProviderConfigState[],
-  activeProviderId = providers[0]?.id,
-): RuntimeConfigState {
-  return {
-    configPath: '/tmp/config.json',
-    dataPath: '/tmp/setsuna',
-    storagePath: '',
-    activeProviderId,
-    providers,
-    globalPrompt: '',
-    memory: {
-      useMemories: false,
-      generateMemories: false,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: false,
-    setsunaStyle: 'developer',
-    approvalPolicy: 'on-request',
-    permissionProfile: 'workspace-write',
-  };
-}
 
 function provider(overrides: Partial<ProviderConfigState>): ProviderConfigState {
   return {

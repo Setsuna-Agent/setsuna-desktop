@@ -8,6 +8,7 @@ import type {
   RuntimeMessage,
   RuntimeQueuedTurnInput,
   RuntimeTaskKind,
+  RuntimeThreadModelBinding,
   SendTurnInput,
   SendTurnResponse,
 } from '@setsuna-desktop/contracts';
@@ -36,7 +37,10 @@ type QueuedTurnEditClaim = {
 type RuntimeQueuedTurnCoordinatorOptions = {
   clock: Clock;
   ids: IdGenerator;
-  inputGuard: Pick<RuntimeModelInputGuard, 'assertAttachmentsSupported'>;
+  inputGuard: Pick<
+    RuntimeModelInputGuard,
+    'assertAttachmentsSupported' | 'resolveNextTurnModel'
+  >;
   threadStore: ThreadStore;
   turnTasks: Pick<RuntimeTurnTaskRegistry, 'activeForThread'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -118,7 +122,14 @@ export class RuntimeQueuedTurnCoordinator {
         await this.options.validateGoalInput(threadId, text);
       }
 
-      await this.options.inputGuard.assertAttachmentsSupported(attachments);
+      const nextTurnModel = await this.options.inputGuard.resolveNextTurnModel(
+        thread,
+        input.modelSelection,
+      );
+      await this.options.inputGuard.assertAttachmentsSupported(
+        attachments,
+        nextTurnModel?.model,
+      );
       attachments = (await this.options.claimAttachments(threadId, attachments))
         .filter(isRuntimeInputMessageAttachment);
       const createdAt = this.options.clock.now().toISOString();
@@ -129,6 +140,7 @@ export class RuntimeQueuedTurnCoordinator {
         input: text,
         clientId: input.clientId,
         attachments,
+        modelSelection: nextTurnModel ? modelReference(nextTurnModel.binding) : undefined,
         skillIds,
         skillReferences: normalizeRuntimeSkillReferences({
           content: text,
@@ -246,10 +258,21 @@ export class RuntimeQueuedTurnCoordinator {
       const text = patch.input.trim();
       const kind = normalizeRuntimeQueuedTurnInputKind(queuedInput.kind);
       let attachments = queuedInput.attachments?.map((attachment) => ({ ...attachment })) ?? [];
+      let modelSelection = queuedInput.modelSelection
+        ? { ...queuedInput.modelSelection }
+        : undefined;
       if (patch.attachments !== undefined) {
         attachments = this.options.normalizeAttachments(patch.attachments)
           .filter(isRuntimeInputMessageAttachment);
-        await this.options.inputGuard.assertAttachmentsSupported(attachments);
+        const nextTurnModel = await this.options.inputGuard.resolveNextTurnModel(
+          await this.requireThread(threadId),
+          modelSelection,
+        );
+        await this.options.inputGuard.assertAttachmentsSupported(
+          attachments,
+          nextTurnModel?.model,
+        );
+        modelSelection = nextTurnModel ? modelReference(nextTurnModel.binding) : undefined;
       }
       assertQueuedInputContent(kind, text, attachments);
       if (kind === 'goal') {
@@ -275,6 +298,7 @@ export class RuntimeQueuedTurnCoordinator {
             ...cloneQueuedInput(queuedInput),
             input: text,
             attachments,
+            modelSelection,
             skillReferences,
             updatedAt,
           },
@@ -517,6 +541,7 @@ function queuedInputAsTurnInput(input: RuntimeQueuedTurnInput): SendTurnInput {
     input: input.input,
     clientId: input.clientId,
     attachments: input.attachments,
+    modelSelection: input.modelSelection ? { ...input.modelSelection } : undefined,
     skillIds: input.skillIds,
     skillReferences: input.skillReferences,
     thinking: input.thinking,
@@ -529,8 +554,18 @@ function cloneQueuedInput(input: RuntimeQueuedTurnInput): RuntimeQueuedTurnInput
     ...input,
     kind: normalizeRuntimeQueuedTurnInputKind(input.kind),
     attachments: input.attachments?.map((attachment) => ({ ...attachment })),
+    modelSelection: input.modelSelection ? { ...input.modelSelection } : undefined,
     skillIds: input.skillIds ? [...input.skillIds] : undefined,
     skillReferences: cloneRuntimeSkillReferences(input.skillReferences),
+  };
+}
+
+function modelReference(
+  binding: RuntimeThreadModelBinding,
+): NonNullable<RuntimeQueuedTurnInput['modelSelection']> {
+  return {
+    providerId: binding.providerId,
+    modelId: binding.modelId,
   };
 }
 

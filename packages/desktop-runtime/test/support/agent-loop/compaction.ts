@@ -82,7 +82,7 @@ export class AutoCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'context-compaction') {
+    if (isPortableCompactionRequest(request)) {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -138,7 +138,7 @@ export class RemoteCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'context-compaction' || request.model === 'background-summary-model') {
+    if (isPortableCompactionRequest(request)) {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -175,7 +175,7 @@ export class LongToolChainCompactionModelClient implements ModelClient {
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
     this.requests.push(request);
-    if (request.model === 'context-compaction') {
+    if (isPortableCompactionRequest(request)) {
       yield {
         type: 'text_delta',
         text: JSON.stringify({
@@ -189,7 +189,7 @@ export class LongToolChainCompactionModelClient implements ModelClient {
       yield { type: 'done', finishReason: 'stop' };
       return;
     }
-    const mainRequestCount = this.requests.filter((item) => item.model === 'local-runtime-smoke').length;
+    const mainRequestCount = this.requests.filter((item) => !isPortableCompactionRequest(item)).length;
     if (mainRequestCount <= this.toolCallBatches) {
       yield {
         type: 'tool_calls',
@@ -205,6 +205,10 @@ export class LongToolChainCompactionModelClient implements ModelClient {
     yield { type: 'text_delta', text: 'Final answer after summarized tool result.' };
     yield { type: 'done', finishReason: 'stop' };
   }
+}
+
+function isPortableCompactionRequest(request: ModelRequest): boolean {
+  return request.toolChoice === 'none' && request.thinking === false;
 }
 
 export class LateLargeToolResultHost extends CapturingToolHost {

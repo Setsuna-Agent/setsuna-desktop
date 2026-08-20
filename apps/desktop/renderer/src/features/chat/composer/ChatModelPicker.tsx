@@ -1,10 +1,15 @@
-import type { ProviderConfigState, RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { Button, Input, Progress, Tooltip } from 'antd';
+import type {
+  ProviderConfigState,
+  ProviderModelConfig,
+  RuntimeConfigState,
+} from '@setsuna-desktop/contracts';
+import { Button, Input, Progress } from 'antd';
 import { Check, Image as ImageIcon, Sparkles, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { resolveModelBrand } from '../../../shared/branding/providerBranding.js';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { formatTokenCount, type ChatContextTokenUsage } from '../conversation/chatContextUsage.js';
 import { useOutsideClose } from './chatComposerControlUtils.js';
 import {
@@ -20,25 +25,34 @@ export function ChatModelPicker({
   contextCompacting = false,
   contextUsage,
   disabled,
+  fallbackModelCode,
+  model,
   openSignal,
   onSelect,
+  provider,
 }: {
   config: RuntimeConfigState | null;
   contextCompacting?: boolean;
   contextUsage?: ChatContextTokenUsage;
   disabled?: boolean;
+  fallbackModelCode?: string;
+  model: ProviderModelConfig | null;
   openSignal?: number;
   onSelect: (providerId: string, modelId: string) => void;
+  provider: ProviderConfigState | null;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLSpanElement>(null);
+  const handledOpenSignalRef = useRef(0);
   const options = useMemo(() => chatModelOptions(config), [config]);
-  const activeProvider = activeProviderFromConfig(config);
-  const activeModel = activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0] ?? null;
-  const activeKey = activeProvider && activeModel ? chatModelOptionKey(activeProvider.id, activeModel.id) : '';
+  const activeProvider = provider;
+  const activeModel = model;
+  const selectedKey = activeProvider && activeModel
+    ? chatModelOptionKey(activeProvider.id, activeModel.id)
+    : '';
   const normalizedQuery = query.trim().toLowerCase();
   const visibleOptions = useMemo(
     () => (normalizedQuery ? options.filter((option) => chatModelSearchText(option).includes(normalizedQuery)) : options),
@@ -60,24 +74,34 @@ export function ChatModelPicker({
 
   const selectModel = useCallback(
     (option: ChatModelOption) => {
+      if (disabled || !config) {
+        closePicker();
+        return;
+      }
       onSelect(option.provider.id, option.model.id);
       closePicker();
     },
-    [closePicker, onSelect],
+    [closePicker, config, disabled, onSelect],
   );
 
   useOutsideClose(rootRef, open, closePicker);
 
   useEffect(() => {
-    if (!openSignal || disabled || !config) return;
+    if (!openSignal || handledOpenSignalRef.current === openSignal) return;
+    handledOpenSignalRef.current = openSignal;
+    if (disabled || !config) return;
     setOpen(true);
   }, [config, disabled, openSignal]);
 
   useEffect(() => {
+    if (disabled || !config) closePicker();
+  }, [closePicker, config, disabled]);
+
+  useEffect(() => {
     if (!open) return;
-    const selectedIndex = visibleOptions.findIndex((option) => option.key === activeKey);
+    const selectedIndex = visibleOptions.findIndex((option) => option.key === selectedKey);
     setActiveIndex(selectedIndex >= 0 ? selectedIndex : 0);
-  }, [activeKey, open, visibleOptions]);
+  }, [open, selectedKey, visibleOptions]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -110,7 +134,11 @@ export function ChatModelPicker({
   return (
     <span ref={rootRef} className="chat-model-picker">
       {open ? (
-        <div className="chat-command-menu chat-skill-command-menu chat-model-command-menu" role="listbox" aria-label={t('chat.model.dialog')}>
+        <div
+          className="chat-command-menu chat-skill-command-menu chat-model-command-menu"
+          role="listbox"
+          aria-label={t('chat.model.dialog')}
+        >
           <div className="chat-skill-command-menu__header chat-model-command-menu__header">
             <Input
               allowClear
@@ -126,7 +154,7 @@ export function ChatModelPicker({
             <div ref={floatingCursorRef} className="chat-command-menu__cursor" aria-hidden="true" />
             {visibleOptions.length ? (
               visibleOptions.map((option, index) => {
-                const selected = option.key === activeKey;
+                const selected = option.key === selectedKey;
                 const focused = index === activeIndex;
                 return (
                   <button
@@ -168,10 +196,9 @@ export function ChatModelPicker({
           </div>
         </div>
       ) : null}
-      <Tooltip
+      <AppTooltip
         title={modelSelectorTitle}
         placement="top"
-        mouseEnterDelay={0.2}
         open={open ? false : undefined}
       >
         <Button
@@ -179,7 +206,10 @@ export function ChatModelPicker({
           size="small"
           className="chat-model-selector"
           disabled={disabled || !config}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            if (disabled || !config) return;
+            setOpen((value) => !value);
+          }}
         >
           <span className="chat-model-selector__mark">
             {activeProvider && activeModel ? (
@@ -192,7 +222,7 @@ export function ChatModelPicker({
               <Zap className="chat-model-selector__placeholder-icon" fill="currentColor" size={13} strokeWidth={0} />
             )}
           </span>
-          <span className="chat-model-selector__name">{activeModel?.name ?? t('chat.model.noneSelected')}</span>
+          <span className="chat-model-selector__name">{activeModel?.name ?? fallbackModelCode ?? t('chat.model.noneSelected')}</span>
           {modelUsage.visible ? (
             <Progress
               aria-label={t('chat.model.contextUsage', { usage: modelUsage.percentLabel })}
@@ -206,17 +236,9 @@ export function ChatModelPicker({
             />
           ) : null}
         </Button>
-      </Tooltip>
+      </AppTooltip>
     </span>
   );
-}
-
-function activeProviderFromConfig(config: RuntimeConfigState | null): ProviderConfigState | null {
-  if (!config) return null;
-  return config.providers.find((provider) => provider.id === config.activeProviderId && provider.enabled)
-    ?? config.providers.find((provider) => provider.enabled)
-    ?? config.providers[0]
-    ?? null;
 }
 
 function modelContextUsage(usage: ChatContextTokenUsage | undefined, t: Translate): {

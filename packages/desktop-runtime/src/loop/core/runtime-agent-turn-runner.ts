@@ -85,6 +85,7 @@ export class RuntimeAgentTurnRunner {
     thinkingOptions = {},
     thread,
     threadId,
+    turnModel,
     turnId,
   }: RuntimeTurnExecutionInput): Promise<void> {
     const createdAt = this.options.clock.now().toISOString();
@@ -122,7 +123,11 @@ export class RuntimeAgentTurnRunner {
       turnId,
       type: 'turn.started',
       createdAt,
-      payload: { input: text, taskKind },
+      payload: {
+        input: text,
+        taskKind,
+        ...(turnModel ? { modelBinding: { ...turnModel.binding } } : {}),
+      },
     });
     if (publishUserMessage) {
       await this.options.publishMessage(threadId, turnId, userMessage, {
@@ -175,6 +180,12 @@ export class RuntimeAgentTurnRunner {
       // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
       const threadTitleGeneration = this.options.threadTitles.start({
         attachments,
+        conversationModel: turnModel
+          ? {
+              providerId: turnModel.binding.providerId,
+              model: turnModel.binding.modelCode,
+            }
+          : undefined,
         signal,
         taskKind,
         thread,
@@ -236,6 +247,7 @@ export class RuntimeAgentTurnRunner {
           threadId,
           taskKind,
           turnId,
+          turnModel,
           toolAccess: taskKind === 'review' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;

@@ -23,6 +23,7 @@ import {
   runtimeEventStreamFormat,
 } from './sse.js';
 import type { RuntimeFactory } from './types.js';
+import { resolveRuntimeModelSelectionInput } from './runtime-model-selection-input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 
 type RuntimeTurnInputBody = {
@@ -32,6 +33,8 @@ type RuntimeTurnInputBody = {
   collaboration_mode?: unknown;
   expectedTurnId?: unknown;
   input?: unknown;
+  modelSelection?: unknown;
+  model_selection?: unknown;
   planDecision?: unknown;
   plan_decision?: unknown;
   skillIds?: unknown;
@@ -56,10 +59,15 @@ export async function handleRuntimeTurnRequest(
       : [];
     assertSupportedCollaborationMode(input.collaborationMode ?? input.collaboration_mode);
     assertPlanDecisionRemoved(input.planDecision ?? input.plan_decision);
+    const modelSelection = await resolveRuntimeModelSelectionInput(
+      runtime.configStore,
+      input.modelSelection ?? input.model_selection,
+    );
     sendJson(response, 202, await runtime.agentLoop.startTurn(threadId, {
       attachments,
       clientId: stringInput(input.clientId),
       input: typeof input.input === 'string' ? input.input : '',
+      modelSelection: modelSelection?.reference,
       skillIds: runtimeStringList(input.skillIds),
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,
@@ -103,11 +111,16 @@ export async function handleRuntimeTurnRequest(
     const attachments: QueueTurnInput['attachments'] = Array.isArray(input.attachments)
       ? input.attachments.filter(isRuntimeMessageAttachment)
       : [];
+    const modelSelection = await resolveRuntimeModelSelectionInput(
+      runtime.configStore,
+      input.modelSelection ?? input.model_selection,
+    );
     sendJson(response, 202, await runtime.agentLoop.queueTurnInput(threadId, {
       attachments,
       clientId: stringInput(input.clientId),
       input: typeof input.input === 'string' ? input.input : '',
       kind: queuedTurnInputKind(input.kind),
+      modelSelection: modelSelection?.reference,
       skillIds: runtimeStringList(input.skillIds),
       skillReferences: runtimeSkillReferenceList(input.skillReferences),
       thinking: typeof input.thinking === 'boolean' ? input.thinking : undefined,

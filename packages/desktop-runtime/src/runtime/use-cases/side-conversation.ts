@@ -44,6 +44,7 @@ export async function createRuntimeSideConversation(
     projectId: parent.projectId,
     forkedFromId: parent.id,
     memoryMode: 'disabled',
+    modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,
   });
   const attachments = inheritedMessages.flatMap((message) => message.attachments ?? []);
 

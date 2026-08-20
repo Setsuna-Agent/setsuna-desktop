@@ -29,7 +29,6 @@ import type {
   RuntimeHookListResponse,
   RuntimeImageGenerationTestInput,
   RuntimeImageGenerationTestResult,
-  RuntimeInterfaceLanguage,
   RuntimeVisionRecognitionTestInput,
   RuntimeVisionRecognitionTestResult,
   RuntimeMcpResourceReadResult,
@@ -51,7 +50,7 @@ import type {
   RuntimePluginMarketplaceList,
   RuntimePluginRemoveResult,
   RuntimeRequestInput,
-  RuntimeReviewTarget,
+  RuntimeReviewStartInput,
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
@@ -278,11 +277,11 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
         method: 'POST',
       });
     },
-    startReview(threadId: string, target: RuntimeReviewTarget, language?: RuntimeInterfaceLanguage) {
+    startReview(threadId: string, input: RuntimeReviewStartInput) {
       return request<SendTurnResponse>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/reviews`,
         method: 'POST',
-        body: { target, ...(language ? { language } : {}) },
+        body: input,
       });
     },
     subscribeEvents(threadId, sinceSeq, onBatch) {

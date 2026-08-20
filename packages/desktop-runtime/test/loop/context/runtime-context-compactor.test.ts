@@ -103,6 +103,22 @@ describe('RuntimeContextCompactor', () => {
     expect(modelClient.compactRequest).not.toHaveProperty('providerId');
   });
 
+  it('keeps both compaction paths on the bound conversation model when no task model overrides it', async () => {
+    const modelClient = new NativeCompactionModelClient(nativeCompactionMetadata('encrypted-compaction'));
+    const conversationModel = { providerId: 'chat-provider', model: 'chat-model' };
+
+    await createCompactor(modelClient).generateContextCompactionSummary(
+      compactionCandidate(),
+      undefined,
+      undefined,
+      undefined,
+      conversationModel,
+    );
+
+    expect(modelClient.summaryRequest).toMatchObject(conversationModel);
+    expect(modelClient.compactRequest).toMatchObject(conversationModel);
+  });
+
   it('publishes portable and native compaction usage as separate model calls', async () => {
     const portableUsage: RuntimeUsage = {
       providerId: 'background-provider',

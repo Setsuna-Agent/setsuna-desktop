@@ -7,7 +7,6 @@ import type {
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
-  ThreadPatch,
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
@@ -16,7 +15,7 @@ import path from 'node:path';
 import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { ThreadStore, ThreadStoreCreateInput, ThreadStoreQuery } from '../../ports/thread-store.js';
+import type { ThreadStore, ThreadStoreCreateInput, ThreadStorePatch, ThreadStoreQuery } from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
@@ -259,7 +258,7 @@ export class SqliteThreadStore implements ThreadStore {
       threadId,
       type: 'thread.created',
       createdAt: now,
-      payload: { title: initial.title },
+      payload: { title: initial.title, modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined },
       seq: 1,
     } satisfies RuntimeEvent;
     const thread = applyRuntimeEventToThread(initial, event);
@@ -286,7 +285,7 @@ export class SqliteThreadStore implements ThreadStore {
     });
   }
 
-  async updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread> {
+  async updateThread(threadId: string, patch: ThreadStorePatch): Promise<RuntimeThread> {
     return this.enqueueThreadMutation(threadId, {
       id: this.ids.id('event'),
       threadId,
@@ -295,6 +294,7 @@ export class SqliteThreadStore implements ThreadStore {
       payload: {
         title: patch.title?.trim() || undefined,
         archived: patch.archived,
+        modelBinding: patch.modelBinding ? { ...patch.modelBinding } : undefined,
       },
     });
   }
