@@ -8,14 +8,16 @@ import { streamText } from 'ai';
 import type { RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
-  toAiSdkInstructions,
   toAiSdkMessages,
   toAiSdkToolChoice,
   toAiSdkTools,
 } from './ai-sdk-prompt.js';
 import { bridgeAiSdkStream } from './ai-sdk-stream-bridge.js';
 import { AnthropicNativeMetadataCollector } from './anthropic-native-metadata.js';
-import { anthropicAiSdkPromptOptions } from './anthropic-provider-messages.js';
+import {
+  anthropicAiSdkInstructions,
+  anthropicAiSdkPromptOptions,
+} from './anthropic-provider-messages.js';
 import { requireFetch, type FetchImpl } from './provider-http.js';
 import { providerReplayContext } from './provider-replay-context.js';
 import { aiSdkOutputForRequest } from './provider-response-format.js';
@@ -52,9 +54,15 @@ export class AnthropicMessagesModelClient implements ModelClient {
       requestedModel,
     );
     const output = aiSdkOutputForRequest(request);
+    // stepSnapshot is attached only to reusable agent-loop sampling requests;
+    // one-shot tasks should not pay for cache writes they cannot reuse.
+    const cacheConversationPrompt = Boolean(request.stepSnapshot);
     const result = streamText({
       model: anthropic(requestedModel),
-      instructions: toAiSdkInstructions(request.messages),
+      instructions: anthropicAiSdkInstructions(
+        request.messages,
+        anthropicSystemCacheBreakpointMessageId(request),
+      ),
       messages: toAiSdkMessages(
         request.messages,
         anthropicAiSdkPromptOptions(replayContext),
@@ -65,7 +73,18 @@ export class AnthropicMessagesModelClient implements ModelClient {
       // maxOutputTokens as visible output and adds the budget itself.
       maxOutputTokens: anthropicVisibleOutputTokens(configuredMaxOutputTokens, thinking),
       ...(output ? { output } : {}),
-      ...(thinking ? { providerOptions: { anthropic: { thinking: toAiSdkThinking(thinking) } } } : {}),
+      ...(cacheConversationPrompt || thinking
+        ? {
+            providerOptions: {
+              anthropic: {
+                ...(cacheConversationPrompt
+                  ? { cacheControl: { type: 'ephemeral' as const } }
+                  : {}),
+                ...(thinking ? { thinking: toAiSdkThinking(thinking) } : {}),
+              },
+            },
+          }
+        : {}),
       abortSignal: request.signal,
       maxRetries: 0,
       include: { rawChunks: true },
@@ -83,6 +102,14 @@ export class AnthropicMessagesModelClient implements ModelClient {
       beforeTerminalEvents: () => collector.terminalEvents(),
     });
   }
+}
+
+function anthropicSystemCacheBreakpointMessageId(request: ModelRequest): string | undefined {
+  // Use prompt provenance instead of a fragment id so the provider boundary
+  // remains valid if the assembler renames its environment message.
+  return request.stepSnapshot?.promptManifest
+    ?.find((entry) => entry.source === 'environment')
+    ?.id;
 }
 
 function normalizeAnthropicBaseUrl(baseUrl: string): string {

@@ -3,7 +3,7 @@ import type {
   RuntimeMessage,
   RuntimeProviderReplayDebugPayload,
 } from '@setsuna-desktop/contracts';
-import type { AssistantContent, ModelMessage } from 'ai';
+import type { AssistantContent, ModelMessage, SystemModelMessage } from 'ai';
 import {
   providerMetadataMatchesSemanticMessage,
   runtimeJsonValuesEqual,
@@ -22,6 +22,32 @@ import {
 } from './provider-replay-context.js';
 
 type AiSdkAssistantPart = Exclude<AssistantContent, string>[number];
+
+export function anthropicAiSdkInstructions(
+  messages: RuntimeMessage[],
+  cacheBreakpointMessageId?: string,
+): SystemModelMessage[] | undefined {
+  const instructionMessages = messages.filter((message) => (
+    message.visibility !== 'transcript'
+    && (message.role === 'system' || message.role === 'developer')
+    && message.content.trim()
+  ));
+  if (!instructionMessages.length) return undefined;
+
+  return instructionMessages.map((message, index) => ({
+    role: 'system',
+    // Preserve the exact text produced by the previous joined-string path while
+    // keeping provider-visible block boundaries available for cache control.
+    content: `${index ? '\n\n' : ''}${message.content.trim()}`,
+    ...(message.id === cacheBreakpointMessageId
+      ? {
+          providerOptions: {
+            anthropic: { cacheControl: { type: 'ephemeral' } },
+          },
+        }
+      : {}),
+  }));
+}
 
 export function anthropicAiSdkPromptOptions(
   replayContext: ProviderReplayContext,
