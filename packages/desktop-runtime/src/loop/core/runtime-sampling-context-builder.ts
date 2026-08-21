@@ -250,6 +250,7 @@ export class RuntimeSamplingContextBuilder {
           stepGoal,
           goalCompletionPending,
           toolRouter?.loadedDeferredToolNames(),
+          toolRouter?.catalogToolDefinitions,
         );
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
     const scopedTools = sideConversation

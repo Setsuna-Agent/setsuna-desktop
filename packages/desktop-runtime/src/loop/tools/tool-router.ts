@@ -135,6 +135,7 @@ export type RuntimeToolRouterOptions = {
  */
 export class RuntimeToolRouter {
   private readonly catalogTools: RuntimeToolDefinition[];
+  private readonly catalogToolNames: ReadonlySet<string>;
   private readonly directTools: RuntimeToolDefinition[];
   private readonly deferredEntries: DeferredToolSearchEntry[];
   private readonly searchIndex: DeferredToolSearchIndex;
@@ -152,6 +153,7 @@ export class RuntimeToolRouter {
     profiles: Map<string, ToolRuntimeProfile>,
   ) {
     this.catalogTools = catalogTools;
+    this.catalogToolNames = new Set(catalogTools.map((tool) => tool.name));
     this.directTools = directTools;
     this.deferredEntries = deferredEntries;
     this.searchIndex = new DeferredToolSearchIndex(deferredEntries);
@@ -222,6 +224,11 @@ export class RuntimeToolRouter {
     return this.directTools.some((tool) => tool.name === name)
       || this.advertisedDeferredToolNames.has(name)
       || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
+  }
+
+  /** host catalog 与 runtime 自带工具始终阻止同名动态工具接管。 */
+  reservesDynamicToolName(name: string): boolean {
+    return this.catalogToolNames.has(name) || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
   }
 
   advertisedToolNames(): string[] {

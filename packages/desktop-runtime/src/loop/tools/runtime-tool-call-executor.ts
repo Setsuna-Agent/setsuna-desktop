@@ -311,9 +311,9 @@ export class RuntimeToolCallExecutor {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
-    // 如果本地 ToolHost 中存在同名的面向模型工具，则由本地 runtime 负责执行；
-    // 动态工具只会追加到尚未占用的名称上。
-    if (toolRouter?.hasTool(name)) return null;
+    // 完整 host catalog（包括尚未激活的 deferred 工具）和 runtime 自带工具
+    // 始终保留名称所有权，避免执行目标随 sampling step 改变。
+    if (toolRouter?.reservesDynamicToolName(name)) return null;
     return { registration, tool };
   }
 

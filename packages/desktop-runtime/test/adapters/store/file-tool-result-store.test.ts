@@ -162,6 +162,28 @@ describe('file tool result store', () => {
     await expect(store.read('thread_child', 'tool_result_fork', 0, 100)).resolves.toBeNull();
   });
 
+  it('fails retention atomically when any requested result is missing', async () => {
+    const dataDir = await createTestTempDirectory('tool-result-store-retain-missing-');
+    const store = new FileToolResultStore(dataDir);
+    await store.save({
+      resultId: 'tool_result_existing',
+      threadId: 'thread_parent',
+      toolCallId: 'call_1',
+      toolName: 'read_file',
+      fullText: SAMPLE(1),
+      originalEstimatedTokens: 25,
+      visibleTokenLimit: 10_000,
+      locallyTruncated: false,
+    });
+
+    await expect(store.retainForThread('thread_child', [
+      'tool_result_existing',
+      'tool_result_missing',
+    ])).rejects.toThrow('Cannot retain missing tool result: tool_result_missing');
+    await expect(store.read('thread_child', 'tool_result_existing', 0, 100)).resolves.toBeNull();
+    await expect(store.read('thread_parent', 'tool_result_existing', 0, 100)).resolves.not.toBeNull();
+  });
+
   it('does not delete a fork-owned result when the parent quota evicts its reference', async () => {
     const dataDir = await createTestTempDirectory('tool-result-store-shared-quota-');
     const store = new FileToolResultStore(dataDir, 1_024, 2_048);

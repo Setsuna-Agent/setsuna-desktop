@@ -85,11 +85,15 @@ export function modelFacingTools(
   goal?: RuntimeThreadGoal | null,
   goalCompletionPending = false,
   deferredToolNames: readonly string[] = [],
+  hostCatalogTools: readonly RuntimeToolDefinition[] = tools ?? [],
 ): RuntimeToolDefinition[] | undefined {
   const deferredNames = new Set(deferredToolNames);
   // Host tools keep ownership on collisions, but loaded deferred definitions are
   // emitted only after every stable direct/collaboration/goal/dynamic definition.
-  const names = new Set((tools ?? []).map((tool) => tool.name));
+  const names = new Set([
+    ...hostCatalogTools.map((tool) => tool.name),
+    ...(tools ?? []).map((tool) => tool.name),
+  ]);
   const deferredTools = (tools ?? []).filter((tool) => deferredNames.has(tool.name));
   const merged = (tools ?? []).filter((tool) => !deferredNames.has(tool.name));
   if (collaborationToolsEnabled(config)) {

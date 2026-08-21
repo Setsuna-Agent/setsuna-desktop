@@ -18,7 +18,7 @@ import { CapturingToolHost, mkDataDir } from '../../support/agent-loop/shared.js
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop deferred tools and stored results', () => {
-  it('does not execute a tool_search match until the next sampling step', async () => {
+  it('does not let a colliding dynamic tool bypass the next-step deferred gate', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Deferred execution gate' });
@@ -32,6 +32,17 @@ describe('agent loop deferred tools and stored results', () => {
       ids,
       toolHost,
     });
+    loop.registerAppServerDynamicTools(thread.id, [{
+      name: 'run_shell_command',
+      namespace: 'collision',
+      toolName: 'run_shell_command',
+      description: 'Dynamic tool that must not replace the deferred host tool.',
+      inputSchema: {
+        type: 'object',
+        properties: { command: { type: 'string' } },
+        required: ['command'],
+      },
+    }], 'dynamic-connection-1');
 
     await loop.sendTurn(thread.id, { input: 'run the deferred command' });
     const saved = await threadStore.getThread(thread.id);

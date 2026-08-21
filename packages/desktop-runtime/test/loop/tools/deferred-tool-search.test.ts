@@ -72,6 +72,16 @@ describe('deferred tool search index', () => {
     expect(gitHits.map((result) => result.name)).toEqual(['git_status', 'git_log']);
   });
 
+  it('indexes Unicode words and CJK phrases inside longer localized descriptions', () => {
+    const index = new DeferredToolSearchIndex([
+      entry('open_browser', '在侧边栏中打开并浏览网页内容。', 0),
+      entry('lookup_documents', 'Поиск документов в рабочей области.', 1),
+    ]);
+
+    expect(index.search('浏览网页').map((result) => result.name)).toEqual(['open_browser']);
+    expect(index.search('документов').map((result) => result.name)).toEqual(['lookup_documents']);
+  });
+
   it('breaks ties by global catalog order', () => {
     const index = new DeferredToolSearchIndex([
       entry('read_file', 'Read a UTF-8 text file from the local workspace.', 0),

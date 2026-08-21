@@ -140,9 +140,14 @@ export class FileToolResultStore implements ToolResultStore {
       if (!ids.length) return;
       const index = await this.readIndex();
       const recordsById = new Map(index.results.map((record) => [record.resultId, record]));
-      for (const id of ids) {
+      // Validate the complete set before mutating any record, so a failed fork
+      // cannot partially acquire result ownership.
+      const records = ids.map((id) => {
         const record = recordsById.get(id);
-        if (!record) continue;
+        if (!record) throw new Error(`Cannot retain missing tool result: ${id}`);
+        return record;
+      });
+      for (const record of records) {
         if (!record.threadIds.includes(safeThreadId)) record.threadIds.push(safeThreadId);
       }
       await this.writeIndex(index);

@@ -22,6 +22,8 @@ export type DeferredToolSearchResult = {
 
 const BM25_K1 = 1.5;
 const BM25_B = 0.75;
+const SEARCH_TOKEN_RUNS = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+|[\p{L}\p{M}\p{N}]+/gu;
+const CJK_TOKEN_RUN = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]+$/u;
 
 /** 默认、最大返回的具体工具数量。 */
 export const TOOL_SEARCH_MAX_RESULTS = 8;
@@ -160,5 +162,16 @@ function schemaSearchTerms(schema: Record<string, unknown>, depth = 0): string[]
 }
 
 function tokenize(text: string): string[] {
-  return text.toLowerCase().split(/[^a-z0-9]+/u).filter(Boolean);
+  const runs = text.normalize('NFKC').toLowerCase().match(SEARCH_TOKEN_RUNS) ?? [];
+  return runs.flatMap((run) => CJK_TOKEN_RUN.test(run) ? cjkSearchTokens(run) : [run]);
+}
+
+/** CJK 没有稳定空格边界；保留整段并追加 bigram，支持在较长本地化描述中命中短语。 */
+function cjkSearchTokens(run: string): string[] {
+  const characters = [...run];
+  if (characters.length < 3) return [run];
+  return [
+    run,
+    ...characters.slice(0, -1).map((character, index) => `${character}${characters[index + 1]}`),
+  ];
 }
