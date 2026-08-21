@@ -85,7 +85,7 @@ apps/desktop/preload/ — 0 direct / 1 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 689 total files
+apps/desktop/renderer/ — 0 direct / 691 total files
 ├── src/ — 2 direct / 505 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 8 direct / 8 total files
@@ -147,20 +147,20 @@ apps/desktop/renderer/ — 0 direct / 689 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 184 files
-    └── unit/ — 184 files
+└── test/ — 186 files
+    └── unit/ — 186 files
         ├── app/ — 1 direct / 15 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 6 direct / 6 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
-        ├── features/ — 143 files
+        ├── features/ — 145 files
         │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 3 direct / 74 total files
+        │   ├── chat/ — 3 direct / 76 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 22 direct / 22 total files
-        │   │   ├── conversation/ — 23 direct / 23 total files
+        │   │   ├── conversation/ — 25 direct / 25 total files
         │   │   ├── hooks/ — 5 direct / 5 total files
         │   │   ├── markdown/ — 6 direct / 6 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
@@ -208,8 +208,8 @@ packages/contracts/ — 4 direct / 78 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 563 total files
-├── src/ — 2 direct / 326 total files
+packages/desktop-runtime/ — 4 direct / 564 total files
+├── src/ — 2 direct / 327 total files
 │   ├── adapters/ — 137 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
@@ -231,9 +231,9 @@ packages/desktop-runtime/ — 4 direct / 563 total files
 │   │   └── workspace/ — 10 direct / 10 total files
 │   ├── extensions/ — 9 direct / 9 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 69 files
+│   ├── loop/ — 70 files
 │   │   ├── approval-review/ — 5 direct / 5 total files
-│   │   ├── context/ — 14 direct / 14 total files
+│   │   ├── context/ — 15 direct / 15 total files
 │   │   ├── core/ — 16 direct / 16 total files
 │   │   ├── lifecycle/ — 17 direct / 17 total files
 │   │   ├── memory/ — 5 direct / 5 total files

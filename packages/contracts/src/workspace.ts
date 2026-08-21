@@ -142,7 +142,16 @@ export function isProbablyBinaryFileContent(content: Uint8Array): boolean {
   if (!content.length) return false;
   const sample = content.subarray(0, Math.min(content.length, BINARY_SAMPLE_BYTES));
   if (hasKnownBinarySignature(sample) || sample.includes(0)) return true;
-  if (new TextDecoder().decode(sample).includes('\uFFFD')) return true;
+  try {
+    // A bounded prefix may end halfway through a valid multi-byte character.
+    // Streaming mode keeps that trailing sequence pending while fatal mode still
+    // rejects malformed UTF-8 anywhere else in the sample.
+    new TextDecoder('utf-8', { fatal: true }).decode(sample, {
+      stream: sample.byteLength < content.byteLength,
+    });
+  } catch {
+    return true;
+  }
 
   let controlBytes = 0;
   for (const byte of sample) {

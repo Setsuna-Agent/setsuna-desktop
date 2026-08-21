@@ -78,15 +78,6 @@ export async function openRuntimeArtifactWithDefaultApp(
   return result.ok ? null : result.error ?? t('chat.artifact.openFailed');
 }
 
-export function runtimeArtifactSupportsBrowserPreview(artifact: RuntimeArtifact): boolean {
-  const mimeType = artifact.mimeType.trim().toLowerCase();
-  const extension = fileExtension(artifact.name || artifact.path);
-  return mimeType === 'application/pdf'
-    || mimeType.startsWith('image/')
-    || extension === 'pdf'
-    || imageExtensions.has(extension);
-}
-
 export async function openRuntimeArtifactInBrowser(
   artifact: RuntimeArtifact,
   createPreview: WorkspaceArtifactPreviewCreator,

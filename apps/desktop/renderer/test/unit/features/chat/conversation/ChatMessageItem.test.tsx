@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimeReviewModeNotice, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeCollaborationTask, RuntimeMessage, RuntimeReviewModeNotice, RuntimeSkillReference, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Window } from 'happy-dom';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -130,6 +130,7 @@ function renderAssistantMessage(
   active = false,
   reviewExit?: RuntimeReviewModeNotice,
   showThinkingInTranscript = false,
+  collaborationTasks?: RuntimeCollaborationTask[],
 ): string {
   const turnId = segments[0]?.turnId ?? 'turn_assistant';
   return renderToStaticMarkup(
@@ -137,6 +138,7 @@ function renderAssistantMessage(
       activeAssistantItemId={active ? 'assistant_item' : null}
       activeTurnId={active ? turnId : null}
       assistantItemIdByTurnId={new Map()}
+      collaborationTasks={collaborationTasks}
       deleteMode={false}
       editingDraft=""
       editingMessageId={null}
@@ -418,6 +420,85 @@ describe('MessageItem assistant tool history', () => {
 
     expect(thinking).not.toBeNull();
     expect(thinking?.closest('details.chat-tool-run')).toBeNull();
+  });
+
+  it('keeps subagent task cards in flow and visible when the single work history collapses', () => {
+    const collaborationTasks: RuntimeCollaborationTask[] = [{
+      id: 'task_runtime',
+      childThreadId: 'child_runtime',
+      title: 'Runtime explorer',
+      objective: 'Inspect the runtime architecture.',
+      identity: { displayName: 'runtime-explorer', avatarSeed: 'runtime-seed' },
+      status: 'running',
+      createdAt: '2026-08-21T00:00:00.000Z',
+      updatedAt: '2026-08-21T00:00:01.000Z',
+    }];
+    const toolSegment: RuntimeMessage = {
+      id: 'assistant_collaboration_tools',
+      turnId: 'turn_collaboration_tools',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-08-21T00:00:00.000Z',
+      status: 'complete',
+      phase: 'commentary',
+      toolRuns: [
+        {
+          id: 'read_before_spawn',
+          name: 'workspace_read_file',
+          status: 'success',
+          argumentsPreview: '{"path":"packages/contracts/README.md"}',
+        },
+        {
+          id: 'spawn_runtime',
+          name: 'spawn_agent',
+          status: 'success',
+          data: { childThreadId: 'child_runtime' },
+        },
+        {
+          id: 'read_after_spawn',
+          name: 'workspace_read_file',
+          status: 'success',
+          argumentsPreview: '{"path":"packages/desktop-runtime/README.md"}',
+        },
+      ],
+    };
+    const finalSegment: RuntimeMessage = {
+      id: 'assistant_collaboration_answer',
+      turnId: 'turn_collaboration_tools',
+      role: 'assistant',
+      content: '继续检查其余模块。',
+      createdAt: '2026-08-21T00:00:01.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    };
+    const expandedHtml = renderAssistantMessage([toolSegment], true, undefined, false, collaborationTasks);
+    const expandedDocument = new Window().document;
+    expandedDocument.body.innerHTML = expandedHtml;
+    const expandedHistory = expandedDocument.querySelector('.chat-work-history');
+    const expandedBodyChildren = [...(expandedHistory?.querySelector('.chat-work-history__body')?.children ?? [])];
+    const expandedCard = expandedHistory?.querySelector('.subagent-task-card') ?? null;
+    const expandedCardIndex = expandedCard ? expandedBodyChildren.indexOf(expandedCard) : -1;
+    const toolRunIndexes = expandedBodyChildren
+      .map((element, index) => element.classList.contains('chat-tool-runs') ? index : -1)
+      .filter((index) => index >= 0);
+
+    expect(expandedDocument.querySelectorAll('.chat-work-history')).toHaveLength(1);
+    expect(expandedHistory?.querySelector('.chat-work-history__summary')?.getAttribute('aria-expanded')).toBe('true');
+    expect(toolRunIndexes).toHaveLength(2);
+    expect(toolRunIndexes[0]).toBeLessThan(expandedCardIndex);
+    expect(expandedCardIndex).toBeLessThan(toolRunIndexes[1]!);
+
+    const html = renderAssistantMessage([toolSegment, finalSegment], false, undefined, false, collaborationTasks);
+    const document = new Window().document;
+    document.body.innerHTML = html;
+    const card = document.querySelector('.subagent-task-card');
+    const workHistory = document.querySelector('.chat-work-history');
+
+    expect(document.querySelectorAll('.chat-work-history')).toHaveLength(1);
+    expect(workHistory?.querySelector('.chat-work-history__summary')?.getAttribute('aria-expanded')).toBe('false');
+    expect(card).not.toBeNull();
+    expect(card?.closest('details.chat-tool-run')).toBeNull();
+    expect(workHistory?.querySelectorAll('.chat-tool-runs')).toHaveLength(0);
   });
 
   it('renders structured reasoning only inside the collapsed thinking disclosure', () => {

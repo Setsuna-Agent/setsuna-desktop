@@ -45,6 +45,10 @@ describe('agent loop collaboration tools', () => {
         'close_agent',
         'create_goal',
       ]);
+      expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_collaboration_mode')).toMatchObject({
+        role: 'developer',
+        content: expect.stringContaining('Proactive collaboration is active'),
+      });
       expect(child).toMatchObject({ parentThreadId: parent.id, projectId: 'project_1' });
       expect(parentEvents.filter((event) => event.type === 'item.completed').map((event) => event.payload.item.kind)).toEqual(expect.arrayContaining([
         'collab_tool_call',
@@ -69,6 +73,7 @@ describe('agent loop collaboration tools', () => {
       )));
       expect(childRequests).toHaveLength(2);
       expect(childRequests.every((request) => (request.tools ?? []).length === 0)).toBe(true);
+      expect(childRequests.every((request) => request.messages.every((message) => message.id !== 'desktop_collaboration_mode'))).toBe(true);
       expect(child?.messages.some((message) => message.role === 'assistant' && message.content.includes('Child resumed with mailbox.'))).toBe(true);
       const waitResultMessage = modelClient.requests
         .flatMap((request) => request.messages)

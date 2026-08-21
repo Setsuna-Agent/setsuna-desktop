@@ -213,6 +213,55 @@ describe('RuntimePromptContextAssembler', () => {
     });
   });
 
+  it('injects proactive collaboration policy only when spawn_agent is advertised', async () => {
+    const assembler = new RuntimePromptContextAssembler({
+      memory: { contextMessages: async () => [] },
+    });
+    const thread = { id: 'thread_1', projectId: 'project_1' } as RuntimeThread;
+    const toolContext = {
+      environment: {
+        id: 'project_1',
+        cwd: '/workspace',
+        workspaceRoot: '/workspace',
+        workspaceRoots: ['/workspace'],
+      },
+      threadId: 'thread_1',
+      projectId: 'project_1',
+      turnId: 'turn_1',
+      permissionProfile: 'workspace-write' as const,
+      sandboxWorkspaceWrite: {},
+      signal: new AbortController().signal,
+    };
+
+    const enabled = await assembler.build({
+      config: null,
+      hookContextMessages: [],
+      skillIds: [],
+      thread,
+      toolContext,
+      toolRouter: null,
+      tools: [{ name: 'spawn_agent', description: 'Spawn child', inputSchema: { type: 'object' } }],
+    });
+    const unavailable = await assembler.build({
+      config: null,
+      hookContextMessages: [],
+      skillIds: [],
+      thread,
+      toolContext,
+      toolRouter: null,
+      tools: [],
+    });
+
+    expect(enabled.fragments.find((fragment) => fragment.id === 'desktop_collaboration_mode')).toMatchObject({
+      role: 'developer',
+      source: 'tool_policy',
+      trust: 'runtime',
+      lifecycle: 'turn',
+      content: expect.stringContaining('Proactive collaboration is active'),
+    });
+    expect(unavailable.fragments.some((fragment) => fragment.id === 'desktop_collaboration_mode')).toBe(false);
+  });
+
   it('marks delegated collaboration context as external rather than user-authorized', async () => {
     const assembler = new RuntimePromptContextAssembler({
       memory: { contextMessages: async () => [] },
