@@ -187,6 +187,9 @@ export function cloneRuntimeModelRequestStepSnapshot(snapshot: RuntimeModelReque
     conversationMessageIds: [...snapshot.conversationMessageIds],
     featureKeys: [...snapshot.featureKeys],
     inputMessageIds: snapshot.inputMessageIds ? [...snapshot.inputMessageIds] : undefined,
+    loadedDeferredToolNames: snapshot.loadedDeferredToolNames
+      ? [...snapshot.loadedDeferredToolNames]
+      : undefined,
     mcpServerKeys: [...snapshot.mcpServerKeys],
     messageIds: [...snapshot.messageIds],
     promptManifest: snapshot.promptManifest ? snapshot.promptManifest.map((entry) => ({ ...entry })) : undefined,

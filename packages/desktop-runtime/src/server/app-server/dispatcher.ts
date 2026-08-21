@@ -383,9 +383,10 @@ export async function dispatchAppServerRpcRequest(
     const attachments = messages.flatMap((message) => message.attachments ?? []);
     try {
       await runtime.attachmentStore.retainForThread(thread.id, attachments);
-      await copyRuntimeMessagesToThread(runtime, thread.id, messages);
+      await copyRuntimeMessagesToThread(runtime, source.id, thread.id, messages);
     } catch (error) {
       await runtime.attachmentStore.releaseThread(thread.id).catch(() => undefined);
+      await runtime.toolResultStore.releaseThread(thread.id).catch(() => undefined);
       await runtime.threadStore.deleteThread(thread.id).catch(() => undefined);
       throw error;
     }

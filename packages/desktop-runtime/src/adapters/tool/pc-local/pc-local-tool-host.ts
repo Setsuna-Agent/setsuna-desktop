@@ -13,6 +13,7 @@ import {
   type ToolExecutionPreview,
   type ToolExecutionResult,
   type ToolHost,
+  type ToolRuntimeProfile,
   type ToolTurnCleanupOutcome,
 } from '../../../ports/tool-host.js';
 import type { ShellToolchain, WorkspaceDependencyManager } from '../../../ports/workspace-dependency-manager.js';
@@ -21,6 +22,7 @@ import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engi
 import { recordInput } from '../../../shared/unknown.js';
 import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspace-search-engine.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
+import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../../loop/tools/tool-output-budget.js';
 import { pcLocalToolPrompt } from './pc-local-tool-prompt.js';
 import * as pcTools from './pc-local-tools.js';
 
@@ -50,6 +52,20 @@ type PcLocalToolHostOptions = {
 
 const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
+/** Shell、后台进程和 Git 工具走 deferred 暴露,经 tool_search 激活。 */
+const DEFERRED_PC_TOOL_NAMES = new Set([
+  'exec_command',
+  'run_shell_command',
+  'write_stdin',
+  'write_shell_process',
+  'read_shell_process',
+  'list_shell_processes',
+  'terminate_shell_process',
+  'git_status',
+  'git_log',
+  'git_show',
+  'read_diff',
+]);
 const MAX_PERSISTENT_SHELL_TTL_MS = 6 * 60 * 60 * 1_000;
 const MAX_PROJECT_TOOL_STATES = 32;
 const PROJECT_TOOL_STATE_TTL_MS = 30 * 60 * 1_000;
@@ -251,13 +267,24 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     return pcLocalToolPrompt(request?.tools, { workspaceDependencies });
   }
 
-  toolRuntimeProfile(name: string, context: ToolExecutionContext) {
-    if (this.normalizeToolName(name) !== 'run_shell_command') return null;
-    if (context.permissionProfile === 'danger-full-access') return null;
-    const capability = this.options.shellSandboxCapability?.() ?? pcTools.shellSandboxCapability();
-    return capability.supported
-      ? null
-      : { requiresSandboxBypassApproval: true };
+  toolRuntimeProfile(name: string, context: ToolExecutionContext): ToolRuntimeProfile | null {
+    const profile: ToolRuntimeProfile = {};
+    if (DEFERRED_PC_TOOL_NAMES.has(name)) {
+      profile.exposure = 'deferred';
+      profile.modelOutputTokenLimit = TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS;
+      const normalized = this.normalizeToolName(name);
+      if (normalized === 'run_shell_command') {
+        profile.searchAliases = ['shell', 'terminal', 'command line', 'bash'];
+      }
+      if (name.startsWith('git_') || name === 'read_diff') {
+        profile.searchAliases = ['git', 'version control', 'commit history', 'diff'];
+      }
+    }
+    if (this.normalizeToolName(name) === 'run_shell_command' && context.permissionProfile !== 'danger-full-access') {
+      const capability = this.options.shellSandboxCapability?.() ?? pcTools.shellSandboxCapability();
+      if (!capability.supported) profile.requiresSandboxBypassApproval = true;
+    }
+    return Object.keys(profile).length ? profile : null;
   }
 
   /**

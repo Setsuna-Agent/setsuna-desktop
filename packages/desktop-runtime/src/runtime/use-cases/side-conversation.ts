@@ -52,7 +52,7 @@ export async function createRuntimeSideConversation(
     await runtime.attachmentStore.retainForThread(child.id, attachments);
     await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
     await appendModelMessage(runtime, child.id, 'user', PRIMARY_SNAPSHOT_START);
-    await copyRuntimeMessagesToThread(runtime, child.id, inheritedMessages);
+    await copyRuntimeMessagesToThread(runtime, parent.id, child.id, inheritedMessages);
     if (parent.activeTurnId) {
       await appendSideEvent(runtime, child.id, {
         id: randomRuntimeId('event_side_cancel'),
@@ -80,6 +80,7 @@ export async function createRuntimeSideConversation(
     await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
   } catch (error) {
     await runtime.attachmentStore.releaseThread(child.id).catch(() => undefined);
+    await runtime.toolResultStore.releaseThread(child.id).catch(() => undefined);
     await runtime.threadStore.deleteThread(child.id).catch(() => undefined);
     throw error;
   }

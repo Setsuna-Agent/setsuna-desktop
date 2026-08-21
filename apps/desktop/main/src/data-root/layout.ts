@@ -19,6 +19,7 @@ export function desktopDataLayout(dataRoot: string) {
     legacyDataImportReceiptPath: path.join(runtimeRoot, LEGACY_DATA_IMPORT_RECEIPT_FILE_NAME),
     generatedImagesRoot: path.join(runtimeRoot, 'generated-images'),
     memoriesRoot: path.join(runtimeRoot, 'memories'),
+    toolResultsRoot: path.join(runtimeRoot, 'tool-results'),
     runtimeConfigPath: path.join(runtimeRoot, 'config.json'),
     runtimeDatabasePath: path.join(runtimeRoot, 'threads.sqlite'),
     credentialVaultPath: path.join(root, 'secure-credentials.json'),

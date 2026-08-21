@@ -13,25 +13,44 @@ import type { RuntimeContainer } from '../runtime-factory.js';
 /**
  * Copies an immutable message snapshot into a new thread while giving generated
  * image assets independent ownership. Callers own attachment retention and
- * deletion rollback for the destination thread.
+ * rollback cleanup for the destination thread and its retained results.
  */
 export async function copyRuntimeMessagesToThread(
   runtime: RuntimeContainer,
-  threadId: string,
+  sourceThreadId: string,
+  destinationThreadId: string,
   messages: RuntimeMessage[],
 ): Promise<void> {
   const cloned = await cloneForkMessages(runtime, messages);
   const committedAssetIds = new Set<string>();
   let appendAttempted = false;
   try {
-    await runtime.eventWriter.flushThread(threadId);
+    const resultIds = cloned.messages.flatMap((message) =>
+      message.toolResultRef ? [message.toolResultRef.resultId] : []);
+    if (resultIds.length) {
+      // Retain before appending so quota eviction cannot race the copied messages.
+      // Unavailable results are an expected degraded state: the bounded message
+      // content remains useful, but the child must not inherit a dangling reference.
+      const retention = await runtime.toolResultStore.retainForThread({
+        sourceThreadId,
+        destinationThreadId,
+        resultIds,
+      });
+      const retainedResultIds = new Set(retention.retainedResultIds);
+      for (const message of cloned.messages) {
+        if (message.toolResultRef && !retainedResultIds.has(message.toolResultRef.resultId)) {
+          delete message.toolResultRef;
+        }
+      }
+    }
+    await runtime.eventWriter.flushThread(destinationThreadId);
     let index = 0;
     for (const message of cloned.messages) {
       index += 1;
       appendAttempted = true;
-      await runtime.threadStore.appendEvent(threadId, {
+      await runtime.threadStore.appendEvent(destinationThreadId, {
         id: `event_fork_${message.id}_${index}`,
-        threadId,
+        threadId: destinationThreadId,
         turnId: message.turnId,
         type: 'message.created',
         createdAt: new Date().toISOString(),
@@ -44,7 +63,7 @@ export async function copyRuntimeMessagesToThread(
   } catch (error) {
     if (appendAttempted) {
       try {
-        const snapshot = await runtime.threadStore.getThread(threadId);
+        const snapshot = await runtime.threadStore.getThread(destinationThreadId);
         for (const assetId of managedGeneratedImageAssetIds(snapshot)) committedAssetIds.add(assetId);
       } catch {
         // The append may already be durable. Keep every uncertain clone so
@@ -101,6 +120,7 @@ function cloneRuntimeMessage(message: RuntimeMessage): RuntimeMessage {
   return {
     ...message,
     attachments: message.attachments?.map((attachment) => ({ ...attachment })),
+    toolResultRef: message.toolResultRef ? { ...message.toolResultRef } : undefined,
     streamParts: message.streamParts?.map((part) => ({ ...part })),
     skillReferences: cloneRuntimeSkillReferences(message.skillReferences),
     contextCompaction: message.contextCompaction ? { ...message.contextCompaction } : undefined,

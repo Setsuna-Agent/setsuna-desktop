@@ -143,6 +143,13 @@ async function collectLocalSnapshotSources(
       labelPrefix: '生成图片',
       signal: input.signal,
     });
+    await appendDirectorySources(sources, {
+      category: 'conversations',
+      root: layout.toolResultsRoot,
+      logicalRoot: 'runtime/tool-results',
+      labelPrefix: '工具结果',
+      signal: input.signal,
+    });
   }
   if (categories.has('memories')) {
     await appendDirectorySources(sources, {
@@ -342,6 +349,7 @@ export function categoryTargetPaths(
       `${layout.runtimeDatabasePath}-shm`,
       path.join(layout.runtimeRoot, 'attachments'),
       layout.generatedImagesRoot,
+      layout.toolResultsRoot,
     );
   }
   if (selected.has('conversations') || selected.has('memories')) {

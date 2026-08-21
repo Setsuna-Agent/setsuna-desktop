@@ -29,7 +29,7 @@ describe('extension tool host', () => {
       inputSchema: { type: 'object' },
     }]);
     await expect(host.toolRuntimeProfile('extension__demo__echo', context)).resolves.toMatchObject({
-      exposure: 'direct',
+      exposure: 'deferred',
       plugin: { id: 'demo', name: 'Demo' },
       supportsParallel: false,
       waitsForRuntimeCancellation: true,

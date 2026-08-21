@@ -28,6 +28,7 @@ import type {
   RuntimeSafetyBuffering,
   RuntimeStreamItem,
   RuntimeToolCall,
+  RuntimeToolResultRef,
 } from './provider.js';
 import { reviewMarkdownLinksByLabelStart } from './review/markdown-link-scanner.js';
 import type { RuntimeUsage } from './usage.js';
@@ -99,6 +100,8 @@ export type RuntimeMessage = {
   inputKind?: RuntimeMessageInputKind;
   promptSource?: RuntimeMessagePromptSource;
   content: string;
+  /** 超限工具结果的本地引用；content 只保留有界首尾摘要，可用 read_tool_result 分页恢复。 */
+  toolResultRef?: RuntimeToolResultRef;
   /** Ordered structured stream channels; absent only for historical tag-based messages. */
   streamParts?: RuntimeMessageStreamPart[];
   /** 该条用户输入显式选择的 Skill；用于历史消息恢复结构化引用样式。 */
@@ -180,10 +183,7 @@ export type RuntimeReviewResult = {
 };
 
 /** Parse the stable review profile output into data shared by runtime and UI. */
-export function parseRuntimeReviewResult(
-  review: string,
-  options: { legacyThinkTags?: boolean } = {},
-): RuntimeReviewResult {
+export function parseRuntimeReviewResult(review: string, options: { legacyThinkTags?: boolean } = {}): RuntimeReviewResult {
   const normalized = (
     options.legacyThinkTags === false ? review : visibleTextOutsideThinkTags(review)
   ).trim();
@@ -421,9 +421,7 @@ function isAsciiDigit(value: string | undefined): boolean {
 }
 
 /** Reparse persisted raw text so historical notices benefit from parser fixes. */
-export function normalizeRuntimeReviewNotice(
-  notice: RuntimeReviewModeNotice,
-): RuntimeReviewModeNotice {
+export function normalizeRuntimeReviewNotice(notice: RuntimeReviewModeNotice): RuntimeReviewModeNotice {
   if (notice.kind !== 'exited') return notice;
   const parsed = parseRuntimeReviewResult(notice.review, {
     legacyThinkTags: notice.reasoningSeparated !== true,

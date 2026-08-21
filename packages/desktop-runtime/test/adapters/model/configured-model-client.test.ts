@@ -62,6 +62,73 @@ describe('configured model routing and options', () => {
     });
   });
 
+  it('preserves direct and loaded-deferred tool order across provider adapters', async () => {
+    const tools = [
+      {
+        name: 'workspace_read_file',
+        description: 'Read a file',
+        inputSchema: { type: 'object', properties: { path: { type: 'string' } } },
+      },
+      {
+        name: 'tool_search',
+        description: 'Search tools',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      },
+      {
+        name: 'read_tool_result',
+        description: 'Read stored output',
+        inputSchema: { type: 'object', properties: { result_id: { type: 'string' } } },
+      },
+      {
+        name: 'mcp__search__web',
+        description: 'Loaded deferred web search',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      },
+    ];
+    const expectedNames = tools.map((tool) => tool.name);
+
+    const compatibleCaptured: CapturedRequest = {};
+    await collect(
+      new AiSdkOpenAiCompatibleModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', compatibleCaptured),
+      ),
+      { tools, toolChoice: 'auto' },
+    );
+
+    const chatCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiChatModelClient(
+        provider('openai-compatible', 'https://llm.example/v1'),
+        fakeFetch('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n', chatCaptured),
+      ),
+      { tools, toolChoice: 'auto' },
+    );
+
+    const responsesCaptured: CapturedRequest = {};
+    await collect(
+      new OpenAiResponsesModelClient(
+        provider('openai-responses', 'https://api.openai.test/v1'),
+        fakeFetch('event: response.completed\ndata: {"type":"response.completed","response":{"status":"completed"}}\n\n', responsesCaptured),
+      ),
+      { tools, toolChoice: 'auto' },
+    );
+
+    const anthropicCaptured: CapturedRequest = {};
+    await collect(
+      new AnthropicMessagesModelClient(
+        provider('anthropic', 'https://api.anthropic.test'),
+        fakeFetch('event: message_stop\ndata: {"type":"message_stop"}\n\n', anthropicCaptured),
+      ),
+      { tools, toolChoice: 'auto' },
+    );
+
+    expect(serializedToolNames(compatibleCaptured)).toEqual(expectedNames);
+    expect(serializedToolNames(chatCaptured)).toEqual(expectedNames);
+    expect(serializedToolNames(responsesCaptured)).toEqual(expectedNames);
+    expect(serializedToolNames(anthropicCaptured)).toEqual(expectedNames);
+  });
+
   it('uses OpenAI compatible providers without an API key', async () => {
     const captured: CapturedRequest = {};
     const client = new ConfiguredModelClient(
@@ -678,3 +745,17 @@ describe('configured model routing and options', () => {
     )).toEqual({ reasoning_effort: 'high' });
   });
 });
+
+function serializedToolNames(captured: CapturedRequest): string[] {
+  const tools = expectBody(captured).tools;
+  if (!Array.isArray(tools)) return [];
+  return tools.flatMap((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const tool = value as Record<string, unknown>;
+    if (typeof tool.name === 'string') return [tool.name];
+    const fn = tool.function;
+    if (!fn || typeof fn !== 'object' || Array.isArray(fn)) return [];
+    const name = (fn as Record<string, unknown>).name;
+    return typeof name === 'string' ? [name] : [];
+  });
+}

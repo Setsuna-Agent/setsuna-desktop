@@ -206,9 +206,9 @@ packages/contracts/ — 4 direct / 77 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 554 total files
-├── src/ — 2 direct / 321 total files
-│   ├── adapters/ — 136 files
+packages/desktop-runtime/ — 4 direct / 563 total files
+├── src/ — 2 direct / 326 total files
+│   ├── adapters/ — 137 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -223,20 +223,20 @@ packages/desktop-runtime/ — 4 direct / 554 total files
 │   │   │   └── windows-native/ — 1 direct / 1 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 4 direct / 4 total files
-│   │   ├── store/ — 28 direct / 28 total files
+│   │   ├── store/ — 29 direct / 29 total files
 │   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
 │   ├── extensions/ — 9 direct / 9 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 66 files
+│   ├── loop/ — 69 files
 │   │   ├── approval-review/ — 5 direct / 5 total files
 │   │   ├── context/ — 14 direct / 14 total files
-│   │   ├── core/ — 15 direct / 15 total files
+│   │   ├── core/ — 16 direct / 16 total files
 │   │   ├── lifecycle/ — 17 direct / 17 total files
 │   │   ├── memory/ — 5 direct / 5 total files
-│   │   └── tools/ — 10 direct / 10 total files
-│   ├── ports/ — 34 direct / 34 total files
+│   │   └── tools/ — 12 direct / 12 total files
+│   ├── ports/ — 35 direct / 35 total files
 │   ├── runtime/ — 3 direct / 11 total files
 │   │   └── use-cases/ — 8 direct / 8 total files
 │   ├── security/ — 5 direct / 5 total files
@@ -244,8 +244,8 @@ packages/desktop-runtime/ — 4 direct / 554 total files
 │   │   └── app-server/ — 22 direct / 22 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 229 files
-    ├── adapters/ — 67 files
+└── test/ — 233 files
+    ├── adapters/ — 68 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
@@ -258,7 +258,7 @@ packages/desktop-runtime/ — 4 direct / 554 total files
     │   │   └── windows-native/ — 1 direct / 1 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
-    │   ├── store/ — 14 direct / 14 total files
+    │   ├── store/ — 15 direct / 15 total files
     │   ├── tool/ — 11 direct / 16 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 6 direct / 6 total files
@@ -268,20 +268,20 @@ packages/desktop-runtime/ — 4 direct / 554 total files
     │   ├── legacy-thread-store/ — 3 files
     │   │   └── threads/ — 3 direct / 3 total files
     │   └── mcp/ — 2 direct / 2 total files
-    ├── integration/ — 46 files
+    ├── integration/ — 47 files
     │   ├── adapters/ — 8 files
     │   │   ├── skill/ — 1 direct / 1 total files
     │   │   ├── store/ — 1 direct / 1 total files
     │   │   └── tool/ — 6 direct / 6 total files
-    │   ├── agent-loop/ — 23 direct / 23 total files
+    │   ├── agent-loop/ — 24 direct / 24 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 34 files
+    ├── loop/ — 36 files
     │   ├── approval-review/ — 1 direct / 1 total files
     │   ├── context/ — 12 direct / 12 total files
     │   ├── core/ — 6 direct / 6 total files
     │   ├── lifecycle/ — 9 direct / 9 total files
     │   ├── memory/ — 3 direct / 3 total files
-    │   └── tools/ — 3 direct / 3 total files
+    │   └── tools/ — 5 direct / 5 total files
     ├── runtime/ — 2 direct / 7 total files
     │   └── use-cases/ — 5 direct / 5 total files
     ├── security/ — 3 direct / 3 total files

@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../../../src/loop/tools/tool-output-budget.js';
 import { createHost, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local process lifecycle', () => {
@@ -19,16 +20,26 @@ describe('pc local process lifecycle', () => {
     };
 
     expect(host.toolRuntimeProfile('exec_command', restrictedContext)).toEqual({
+      exposure: 'deferred',
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('run_shell_command', restrictedContext)).toEqual({
+      exposure: 'deferred',
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
       requiresSandboxBypassApproval: true,
     });
     expect(host.toolRuntimeProfile('read_file', restrictedContext)).toBeNull();
     expect(host.toolRuntimeProfile('exec_command', {
       ...restrictedContext,
       permissionProfile: 'danger-full-access',
-    })).toBeNull();
+    })).toEqual({
+      exposure: 'deferred',
+      modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
+      searchAliases: ['shell', 'terminal', 'command line', 'bash'],
+    });
   });
 
   it('cleans non-persisted shell processes for a turn', async () => {

@@ -26,6 +26,7 @@ import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-ap
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost, ToolOutputDelta } from '../../ports/tool-host.js';
+import type { ToolResultStore } from '../../ports/tool-result-store.js';
 import {
   appServerDynamicToolContent,
   appServerDynamicToolErrorMessage,
@@ -50,7 +51,13 @@ import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
-import { RuntimeToolRouter } from './tool-router.js';
+import { boundToolOutput, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from './tool-output-budget.js';
+import {
+  READ_TOOL_RESULT_TOOL_NAME,
+  RUNTIME_PROVIDED_TOOL_NAMES,
+  RuntimeToolRouter,
+  TOOL_SEARCH_TOOL_NAME,
+} from './tool-router.js';
 
 const APP_SERVER_DYNAMIC_TOOL_TIMEOUT_MS = 120_000;
 const TOOL_PREVIEW_ARGUMENT_GROWTH_THRESHOLD = 1_024;
@@ -92,6 +99,7 @@ type RuntimeToolCallExecutorOptions = {
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   toolHost?: ToolHost;
+  toolResultStore?: ToolResultStore;
   collaborationCoordinator(): RuntimeCollaborationCoordinator;
   goalCoordinator(): RuntimeGoalCoordinator;
   threadStore: Pick<ThreadStore, 'getThread'>;
@@ -223,30 +231,41 @@ export class RuntimeToolCallExecutor {
         if (!collaborationToolsEnabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
         }
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }
       if (isGoalToolName(toolCall.name)) {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }
       const dynamicTool = this.appServerDynamicToolForCall(context.threadId, toolCall.name, toolRouter);
       if (dynamicTool) {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }
       const memoryBlock = await this.options.memory.toolBlockForCall(toolCall, context.threadId, runtimeConfig);
       if (memoryBlock) {
         content = memoryBlock;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+      }
+      // tool_search / read_tool_result 由 router 直接实现,不经过宿主工具审批链。
+      if (RUNTIME_PROVIDED_TOOL_NAMES.has(toolCall.name)) {
+        if (!toolRouter) {
+          content = `Tool ${toolCall.name} failed: no tool host is available.`;
+          await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
+          return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
+        }
+        content = await this.runRuntimeProvidedTool(toolCall, parsedArguments, context, toolRouter);
+        await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'success', content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }
       if (!toolRouter) {
         content = `Tool ${toolCall.name} failed: no tool host is available.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
-        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
+        return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
       }
       const execution = await toolRouter.runToolCall(toolCall, parsedArguments, {
         checkApproval: options.skipApproval !== true,
@@ -266,16 +285,35 @@ export class RuntimeToolCallExecutor {
       content = `Tool ${toolCall.name} failed: ${error instanceof Error ? error.message : String(error)}`;
       await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
     }
-    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments);
+    return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, attachments, toolRouter);
+  }
+
+  /**
+   * 执行 runtime 直接提供的工具(tool_search / read_tool_result)。
+   *
+   * @param toolCall 对应的模型工具调用。
+   * @param parsedArguments 已解析的工具参数。
+   * @param context 当前工具执行上下文。
+   * @param toolRouter 当前 sampling step 捕获的工具路由器。
+   */
+  private async runRuntimeProvidedTool(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext, toolRouter: RuntimeToolRouter): Promise<string> {
+    if (toolCall.name === TOOL_SEARCH_TOOL_NAME) {
+      const args = normalizeToolSearchArgs(parsedArguments);
+      return toolRouter.runToolSearch(args.query, args.maxResults);
+    }
+    if (toolCall.name === READ_TOOL_RESULT_TOOL_NAME) {
+      return toolRouter.runReadToolResult(parsedArguments, context.threadId);
+    }
+    throw new Error(`Unknown runtime tool: ${toolCall.name}`);
   }
 
   private appServerDynamicToolForCall(threadId: string, name: string, toolRouter: RuntimeToolRouter | null): AppServerDynamicToolLookup | null {
     const registration = this.appServerDynamicToolsByThread.get(threadId);
     const tool = registration?.toolsByName.get(name);
     if (!registration || !tool) return null;
-    // 如果本地 ToolHost 中存在同名的面向模型工具，则由本地 runtime 负责执行；
-    // 动态工具只会追加到尚未占用的名称上。
-    if (toolRouter?.hasTool(name)) return null;
+    // 完整 host catalog（包括尚未激活的 deferred 工具）和 runtime 自带工具
+    // 始终保留名称所有权，避免执行目标随 sampling step 改变。
+    if (toolRouter?.reservesDynamicToolName(name)) return null;
     return { registration, tool };
   }
 
@@ -398,13 +436,19 @@ export class RuntimeToolCallExecutor {
   }
 
   /**
-   * 将工具执行结果写成 role=tool 的消息，供下一轮模型继续读取。
+   * 将工具执行结果写成 role=tool 的消息,供下一轮模型继续读取。
+   *
+   * 这里是工具结果进入模型上下文的统一边界:所有普通、动态、Goal、协作和错误
+   * 结果都经过限额处理(PostToolUse hook / extension 已在 orchestrator 内先执行,
+   * 因此截断发生在安全过滤之后)。超限结果只在此处落盘,保存的是最终允许暴露
+   * 给模型的完整文本,不保存原始 CDP 帧。
    *
    * @param threadId 目标线程 ID。
    * @param turnId 当前 turn ID。
    * @param toolCall 对应的模型工具调用。
    * @param content 工具返回给模型的文本内容。
    * @param attachments 工具返回给模型的图片等附件。
+   * @param toolRouter 当前 sampling step 的工具路由器,用于查询该工具的输出上限。
    */
   private async publishToolMessage(
     threadId: string,
@@ -412,20 +456,77 @@ export class RuntimeToolCallExecutor {
     toolCall: RuntimeToolCall,
     content: string,
     attachments?: RuntimeMessage['attachments'],
+    toolRouter: RuntimeToolRouter | null = null,
   ): Promise<RuntimeMessage> {
+    const bounded = await this.boundToolMessageContent(threadId, toolCall, content, toolRouter);
     const message: RuntimeMessage = {
       id: this.options.ids.id('msg'),
       turnId,
       role: 'tool',
       toolCallId: toolCall.id,
       toolName: toolCall.name,
-      content,
+      content: bounded.content,
+      ...(bounded.toolResultRef ? { toolResultRef: bounded.toolResultRef } : {}),
       ...(attachments?.length ? { attachments: attachments.map((attachment) => ({ ...attachment })) } : {}),
       createdAt: this.options.clock.now().toISOString(),
       status: 'complete',
     };
     await this.options.publishMessage(threadId, turnId, message);
     return message;
+  }
+
+  /**
+   * 对工具结果应用模型可见 token 上限;超限时写入本地结果存储并返回引用。
+   * 未超限结果保持现有行为(不落盘)。保存失败时降级为只做有界截断,不让
+   * 存储故障阻断工具消息发布。
+   */
+  private async boundToolMessageContent(
+    threadId: string,
+    toolCall: RuntimeToolCall,
+    content: string,
+    toolRouter: RuntimeToolRouter | null,
+  ): Promise<{ content: string; toolResultRef?: NonNullable<RuntimeMessage['toolResultRef']> }> {
+    const tokenLimit = toolRouter
+      ? await toolRouter.modelOutputTokenLimitFor(toolCall.name)
+      : TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS;
+    const bounded = boundToolOutput({ content, tokenLimit });
+    if (!bounded.truncated) return { content };
+    if (!this.options.toolResultStore) return { content: bounded.content };
+
+    const resultId = this.options.ids.id('tool_result');
+    let locallyTruncated = false;
+    try {
+      const saved = await this.options.toolResultStore.save({
+        resultId,
+        threadId,
+        toolCallId: toolCall.id,
+        toolName: toolCall.name,
+        fullText: content,
+        originalEstimatedTokens: bounded.originalEstimatedTokens,
+        visibleTokenLimit: tokenLimit,
+        locallyTruncated: false,
+      });
+      locallyTruncated = saved.locallyTruncated;
+    } catch (error) {
+      console.warn(`[desktop-runtime] Failed to store truncated tool result ${resultId}.`, error);
+      return { content: bounded.content };
+    }
+    const final = boundToolOutput({
+      content,
+      tokenLimit,
+      resultId,
+      ...(locallyTruncated ? { locallyTruncated: true } : {}),
+    });
+    return {
+      content: final.content,
+      toolResultRef: {
+        resultId,
+        originalEstimatedTokens: final.originalEstimatedTokens,
+        visibleTokens: final.visibleTokens,
+        visibleTokenLimit: tokenLimit,
+        ...(locallyTruncated ? { locallyTruncated: true } : {}),
+      },
+    };
   }
 
   /**
@@ -730,4 +831,17 @@ function parsePreviewJson(value: string | undefined): unknown {
   } catch {
     return null;
   }
+}
+
+function normalizeToolSearchArgs(value: unknown): { query: string; maxResults: number | undefined } {
+  const input = isPlainRecord(value) ? value : {};
+  const query = typeof input.query === 'string' ? input.query.trim() : '';
+  const maxResults = typeof input.max_results === 'number' && Number.isInteger(input.max_results)
+    ? Math.max(1, Math.min(8, input.max_results))
+    : undefined;
+  return { query, maxResults };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

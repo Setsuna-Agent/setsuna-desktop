@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import type { ToolResultStore } from '../../../src/ports/tool-result-store.js';
 import {
   APPLY_PATCH_TOOL,
   RUN_SHELL_COMMAND_TOOL,
@@ -294,6 +295,55 @@ describe('agent loop tool hook results', () => {
           { kind: 'context', text: 'ask the user to review the diff' },
         ],
       }]);
+    });
+
+  it('stores the final model-visible result only after PostToolUse processing', async () => {
+      const ids = new RandomIdGenerator();
+      const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+      const thread = await threadStore.createThread({ title: 'Hook post storage', projectId: 'project_1' });
+      const modelClient = new ToolCallingModelClient();
+      const save = vi.fn<ToolResultStore['save']>(async () => ({ locallyTruncated: false }));
+      const toolResultStore: ToolResultStore = {
+        save,
+        read: async () => null,
+        retainForThread: async () => ({ retainedResultIds: [], unavailableResultIds: [] }),
+        releaseThread: async () => undefined,
+        recover: async () => undefined,
+      };
+      const loop = new AgentLoop({
+        threadStore,
+        modelClient,
+        eventBus: new InMemoryEventBus(),
+        clock: systemClock,
+        ids,
+        toolHost: new CapturingToolHost(),
+        toolResultStore,
+        configStore: new HooksConfigStore({
+          PostToolUse: [{
+            matcher: 'workspace_read_file',
+            hooks: [{
+              type: 'command',
+              command: nodeEvalHook("process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'post-hook-context '.repeat(4000) } }));"),
+              timeoutSec: 5,
+            }],
+          }],
+        }),
+      });
+
+      await loop.sendTurn(thread.id, { input: 'read README' });
+
+      expect(save).toHaveBeenCalledTimes(1);
+      const stored = save.mock.calls[0]?.[0];
+      expect(stored?.fullText).toContain('file contents from tool');
+      expect(stored?.fullText).toContain('<hook_additional_context>');
+      expect(stored?.fullText).toContain('post-hook-context');
+      const toolMessage = modelClient.requests[1].messages.find((message) => message.role === 'tool');
+      expect(toolMessage?.content).toContain('Warning: tool output was truncated.');
+      expect(toolMessage?.toolResultRef?.resultId).toBe(stored?.resultId);
+      expect(modelClient.requests[1].stepSnapshot).toMatchObject({
+        toolResultOriginalTokens: stored?.originalEstimatedTokens,
+        toolResultVisibleTokens: toolMessage?.toolResultRef?.visibleTokens,
+      });
     });
   
   it('marks PostToolUse continue false hooks as stopped and returns feedback', async () => {

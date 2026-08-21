@@ -7,8 +7,85 @@ import {
   cleanupRuntimeSideConversations,
   createRuntimeSideConversation,
 } from '../../../src/runtime/use-cases/side-conversation.js';
+import { copyRuntimeMessagesToThread } from '../../../src/runtime/use-cases/thread-copy.js';
+import { deleteRuntimeThread } from '../../../src/runtime/use-cases/thread-operations.js';
 
 describe('side conversations', () => {
+  it('retains and releases stored tool results through a real fork lifecycle', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-thread-fork-test-'));
+    const runtime = createRuntimeFactory({ dataDir });
+    try {
+      await runtime.threadStore.recover();
+      const parent = await runtime.threadStore.createThread({ title: 'Fork parent' });
+      await runtime.toolResultStore.save({
+        resultId: 'tool_result_fork_lifecycle',
+        threadId: parent.id,
+        toolCallId: 'call_fork_lifecycle',
+        toolName: 'workspace_read_file',
+        fullText: 'fork lifecycle output',
+        originalEstimatedTokens: 20_000,
+        visibleTokenLimit: 10_000,
+        locallyTruncated: false,
+      });
+      await runtime.threadStore.appendEvent(parent.id, {
+        id: 'event_fork_source',
+        threadId: parent.id,
+        type: 'message.created',
+        createdAt: '2026-08-18T00:00:00.000Z',
+        payload: {
+          message: {
+            id: 'msg_fork_source',
+            role: 'tool',
+            toolCallId: 'call_fork_lifecycle',
+            toolName: 'workspace_read_file',
+            content: 'bounded fork output',
+            toolResultRef: {
+              resultId: 'tool_result_fork_lifecycle',
+              originalEstimatedTokens: 20_000,
+              visibleTokens: 10_000,
+              visibleTokenLimit: 10_000,
+            },
+            createdAt: '2026-08-18T00:00:00.000Z',
+            status: 'complete',
+          },
+        },
+      });
+      const source = await runtime.threadStore.getThread(parent.id);
+      const fork = await runtime.threadStore.createThread({
+        title: 'Fork child',
+        forkedFromId: parent.id,
+      });
+      await copyRuntimeMessagesToThread(runtime, parent.id, fork.id, source?.messages ?? []);
+
+      await expect(runtime.toolResultStore.read(
+        fork.id,
+        'tool_result_fork_lifecycle',
+        0,
+        1_000,
+      )).resolves.toMatchObject({ content: 'fork lifecycle output' });
+
+      await deleteRuntimeThread(runtime, fork.id);
+      await expect(runtime.toolResultStore.read(
+        fork.id,
+        'tool_result_fork_lifecycle',
+        0,
+        1_000,
+      )).resolves.toBeNull();
+      await expect(runtime.toolResultStore.read(
+        parent.id,
+        'tool_result_fork_lifecycle',
+        0,
+        1_000,
+      )).resolves.toMatchObject({ content: 'fork lifecycle output' });
+    } finally {
+      await runtime.extensionManager.shutdown();
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
   it('captures hidden model context without interrupting or listing the primary turn', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-side-conversation-test-'));
     const runtime = createRuntimeFactory({ dataDir });
@@ -73,6 +150,41 @@ describe('side conversations', () => {
           },
         },
       });
+      await runtime.toolResultStore.save({
+        resultId: 'tool_result_parent_snapshot',
+        threadId: parent.id,
+        toolCallId: 'call_parent_snapshot',
+        toolName: 'workspace_read_file',
+        fullText: 'full inherited tool output',
+        originalEstimatedTokens: 20_000,
+        visibleTokenLimit: 10_000,
+        locallyTruncated: false,
+      });
+      await runtime.threadStore.appendEvent(parent.id, {
+        id: 'event_parent_tool_result',
+        threadId: parent.id,
+        turnId: 'turn_parent_active',
+        type: 'message.created',
+        createdAt: '2026-08-18T00:00:02.500Z',
+        payload: {
+          message: {
+            id: 'msg_parent_tool_result',
+            turnId: 'turn_parent_active',
+            role: 'tool',
+            toolCallId: 'call_parent_snapshot',
+            toolName: 'workspace_read_file',
+            content: 'bounded inherited tool output',
+            toolResultRef: {
+              resultId: 'tool_result_parent_snapshot',
+              originalEstimatedTokens: 20_000,
+              visibleTokens: 10_000,
+              visibleTokenLimit: 10_000,
+            },
+            createdAt: '2026-08-18T00:00:02.500Z',
+            status: 'complete',
+          },
+        },
+      });
       await runtime.threadStore.appendEvent(parent.id, {
         id: 'event_parent_transcript_only',
         threadId: parent.id,
@@ -108,6 +220,12 @@ describe('side conversations', () => {
       expect(side.messages.find((message) => message.id === 'msg_parent_assistant')).toMatchObject({
         status: 'complete',
       });
+      await expect(runtime.toolResultStore.read(
+        side.id,
+        'tool_result_parent_snapshot',
+        0,
+        1_000,
+      )).resolves.toMatchObject({ content: 'full inherited tool output' });
       const snapshotStartIndex = side.messages.findIndex(
         (message) => message.content === '<primary_conversation_snapshot>',
       );
@@ -150,6 +268,18 @@ describe('side conversations', () => {
       await cleanupRuntimeSideConversations(runtime);
       await expect(runtime.threadStore.getThread(side.id)).resolves.toBeNull();
       await expect(runtime.threadStore.getThread(parent.id)).resolves.not.toBeNull();
+      await expect(runtime.toolResultStore.read(
+        side.id,
+        'tool_result_parent_snapshot',
+        0,
+        1_000,
+      )).resolves.toBeNull();
+      await expect(runtime.toolResultStore.read(
+        parent.id,
+        'tool_result_parent_snapshot',
+        0,
+        1_000,
+      )).resolves.toMatchObject({ content: 'full inherited tool output' });
       await expect(access(sideEnvironment.workspaceRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await runtime.extensionManager.shutdown();

@@ -46,6 +46,20 @@ export type RuntimeToolCallDelta = {
 };
 
 /**
+ * 指向本地工具结果存储的引用。通用命名为 result_id；Shell/Git/MCP 输出并非
+ * 快照，browser_snapshot 的 result_id 则对应 observation 快照。
+ */
+export type RuntimeToolResultRef = {
+  resultId: string;
+  originalEstimatedTokens: number;
+  /** 截断后实际进入模型上下文的估算 token 数。 */
+  visibleTokens: number;
+  visibleTokenLimit: number;
+  /** 本地存储本身也发生裁剪(单结果硬上限或线程配额)。 */
+  locallyTruncated?: boolean;
+};
+
+/**
  * RuntimeEnvironment 引入前创建的持久化快照可能只包含 id 和 cwd。
  * 此处保留可选字段，使旧事件日志仍可读取；实时 runtime 执行则使用完整的
  * RuntimeEnvironment 契约。
@@ -99,7 +113,11 @@ export type RuntimeModelRequestContextWindow = {
 export type RuntimeModelRequestToolRuntime = {
   name: string;
   source: 'host' | 'dynamic' | 'collaboration' | 'goal';
-  exposure: 'direct';
+  /**
+   * direct: 定义随每次请求稳定下发；deferred: 通过 tool_search 命中后才追加到
+   * 后续请求的 tools 后缀。旧快照只有 'direct'。
+   */
+  exposure: 'direct' | 'deferred';
   supportsParallel: boolean;
   waitsForRuntimeCancellation: boolean;
 };
@@ -134,6 +152,14 @@ export type RuntimeModelRequestStepSnapshot = {
   mcpServerCount: number;
   permissionProfile: RuntimePermissionProfile;
   sandboxWorkspaceWrite?: RuntimeSandboxWorkspaceWrite;
+  /** deferred 工具目录大小;未启用 tool_search 时省略。 */
+  deferredToolCatalogSize?: number;
+  /** 本 turn 已通过 tool_search 激活并追加到 tools 后缀的 deferred 工具名。 */
+  loadedDeferredToolNames?: string[];
+  /** 本次请求 tool 消息中可见(截断后)输出 token 之和。 */
+  toolResultVisibleTokens?: number;
+  /** 本次请求 tool 消息中原始输出 token 之和(仅统计被截断的结果)。 */
+  toolResultOriginalTokens?: number;
   contextWindow?: RuntimeModelRequestContextWindow;
   promptManifest?: RuntimePromptManifestEntry[];
   featureKeys: string[];

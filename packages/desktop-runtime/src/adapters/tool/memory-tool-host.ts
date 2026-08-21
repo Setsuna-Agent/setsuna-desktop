@@ -120,6 +120,14 @@ export class MemoryToolHost implements ToolHost {
     return tools;
   }
 
+  /**
+   * recall_memory 是高频主入口,保持 direct;remember 与 memory 文件类低频工具
+   * 走 deferred 暴露,经 tool_search 激活。
+   */
+  toolRuntimeProfile(name: string): { exposure: 'deferred' } | null {
+    return name === 'recall_memory' ? null : { exposure: 'deferred' };
+  }
+
   private async toolVisibility(): Promise<{ canRead: boolean; canWrite: boolean }> {
     if (!this.configStore) return { canRead: true, canWrite: true };
     const config = await this.configStore.getConfig().catch(() => null);

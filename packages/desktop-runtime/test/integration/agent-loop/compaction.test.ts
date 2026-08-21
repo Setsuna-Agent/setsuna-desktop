@@ -560,7 +560,7 @@ describe('agent loop context compaction', () => {
       expect(mainRequest?.messages.map((message) => message.content).join('\n')).not.toContain(smallWindowHistory.slice(0, 200));
     });
   
-  it('automatically compacts oversized tool results during a long tool chain', async () => {
+  it('bounds oversized tool results during a long tool chain without context compaction', async () => {
       const toolCallBatches = 5;
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -582,20 +582,22 @@ describe('agent loop context compaction', () => {
       const mainRequests = modelClient.requests.filter((request) => request.stepSnapshot);
       const followUpRequest = mainRequests.at(-1)!;
   
+      // 输出预算在源头裁剪超大工具结果,上下文不再溢出,因此不触发 mid-turn 压缩。
       expect(modelClient.requests.map((request) => request.model)).toEqual([
-        ...Array.from({ length: toolCallBatches + 2 }, () => 'local-runtime-smoke'),
+        ...Array.from({ length: toolCallBatches + 1 }, () => 'local-runtime-smoke'),
       ]);
       expect(toolHost.calls).toHaveLength(toolCallBatches);
-      expect(events.some((event) => event.type === 'thread.context_compacted' && event.turnId)).toBe(true);
-      expect(saved?.messages.find((message) => message.role === 'tool')?.visibility).toBe('transcript');
-      expect(saved?.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
-      expect(followUpRequest.messages.some((message) => message.contextCompaction?.triggerScopes?.includes('total'))).toBe(true);
-      expect(followUpRequest.stepSnapshot?.contextWindow).toMatchObject({
-        compactionHash: expect.stringMatching(/^sha256:/),
-        compactionSummaryMessageIds: [expect.any(String)],
-      });
-      expect(followUpRequest.messages.map((message) => message.content).join('\n')).toContain('Summarized oversized tool output.');
-      expect(followUpRequest.messages.map((message) => message.content).join('\n')).not.toContain(toolHost.largeContent.slice(0, 200));
+      expect(events.some((event) => event.type === 'thread.context_compacted' && event.turnId)).toBe(false);
+      expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(false);
+      // 超大结果以截断信封进入模型上下文:头部保留、中部省略、完整文本不落盘。
+      const truncatedToolMessage = followUpRequest.messages.find((message) =>
+        message.role === 'tool' && message.content.includes('Warning: tool output was truncated.'));
+      expect(truncatedToolMessage).toBeTruthy();
+      expect(truncatedToolMessage?.content).toContain('original_estimated_tokens:');
+      expect(followUpRequest.messages.map((message) => message.content).join('\n')).toContain('BEGIN_HUGE_TOOL_OUTPUT');
+      expect(followUpRequest.messages.map((message) => message.content).join('\n')).not.toContain(toolHost.largeContent);
+      const savedToolMessages = saved?.messages.filter((message) => message.role === 'tool') ?? [];
+      expect(savedToolMessages.at(-1)?.content).toContain('Warning: tool output was truncated.');
       expect(saved?.messages.at(-1)?.content).toContain('Final answer after summarized tool result.');
     });
   
