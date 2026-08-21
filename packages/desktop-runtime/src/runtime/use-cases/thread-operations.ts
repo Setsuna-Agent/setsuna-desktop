@@ -39,12 +39,26 @@ export async function requireRuntimeThread(
 /**
  * Owns destructive thread deletion after protocol parsing. Both REST and
  * app-server must cross the same deletion barrier and run the same teardown.
+ *
+ * 父线程删除前必须先级联删除所有直属 child（含其运行中的 turn），
+ * 保证不留下孤儿协作线程；v1 最大深度为 1，递归仅作防御。
  */
 export async function deleteRuntimeThread(
   runtime: RuntimeContainer,
   threadId: string,
 ): Promise<void> {
   await runtime.agentLoop.withThreadDeletionBarrier(threadId, async () => {
+    // The parent barrier prevents a running parent turn from spawning another child between this
+    // snapshot and the parent commit. Child deletion uses its own barrier recursively.
+    const children = await runtime.threadStore.listThreads({
+      includeArchived: true,
+      includeSide: true,
+      parentThreadId: threadId,
+    });
+    for (const child of children) {
+      await deleteRuntimeThread(runtime, child.id);
+    }
+
     // Cancellation and terminal cleanup may advance lastSeq while waiting for
     // the deletion barrier, so the final event boundary must use a fresh read.
     const thread = await requireRuntimeThread(runtime, threadId);

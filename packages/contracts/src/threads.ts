@@ -22,6 +22,7 @@ import type {
 } from './message-metadata.js';
 import type { RuntimePluginReference } from './plugin-reference.js';
 import type {
+  RuntimeCollaborationTask,
   RuntimeModelRequestStepSnapshot,
   RuntimeThreadModelBinding,
   RuntimeModelVerification,
@@ -90,7 +91,6 @@ export function normalizeRuntimeSkillReferences({
   }
   return normalized;
 }
-
 export type RuntimeMessage = {
   id: string;
   clientId?: string;
@@ -463,7 +463,7 @@ export type RuntimeMailboxDeliveryRecord = {
   triggerTurn?: boolean;
 };
 
-export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell';
+export type RuntimeThreadTurnTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';
 
 export type RuntimeThreadTurnStatus = 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
@@ -610,10 +610,10 @@ export type RuntimeThreadGoalPatch = {
   status?: RuntimeThreadGoalStatus;
 };
 
-export type RuntimeMessageInputKind = 'message' | 'goal' | 'review';
+export type RuntimeMessageInputKind = 'message' | 'goal' | 'review' | 'subagent_task';
 
 /** Review 通过专用启动接口执行，不进入普通消息队列。 */
-export type RuntimeQueuedTurnInputKind = Exclude<RuntimeMessageInputKind, 'review'>;
+export type RuntimeQueuedTurnInputKind = Exclude<RuntimeMessageInputKind, 'review' | 'subagent_task'>;
 
 export function normalizeRuntimeQueuedTurnInputKind(value: unknown): RuntimeQueuedTurnInputKind {
   // 已持久化的旧版 plan 队列项在升级后按普通消息继续执行，避免遗留队列卡住。
@@ -724,6 +724,7 @@ export type RuntimeToolRun = {
 };
 
 export type RuntimeThreadKind = 'regular' | 'side';
+
 export type RuntimeThreadSummary = {
   id: string;
   kind?: RuntimeThreadKind;
@@ -745,6 +746,7 @@ export type RuntimeThreadSummary = {
 };
 export type RuntimeThread = RuntimeThreadSummary & {
   activeTurnId?: string | null;
+  collaborationTasks?: RuntimeCollaborationTask[];
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   modelBinding?: RuntimeThreadModelBinding;

@@ -2,6 +2,7 @@ import {
   runtimeDeveloperFeaturesEnabled,
   type AnswerRuntimeApprovalInput,
   type DesktopRuntimeClient,
+  type RuntimeCollaborationTask,
   type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
   type RuntimePluginSummary,
@@ -33,6 +34,7 @@ import {
 } from 'react';
 import { ChatWorkspace } from '../../features/chat/ChatWorkspace.js';
 import { SideChatPanel } from '../../features/chat/SideChatPanel.js';
+import { SubagentConversationPanel } from '../../features/chat/SubagentConversationPanel.js';
 import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSelection.js';
 import {
   RuntimePluginNavigationProvider,
@@ -128,7 +130,6 @@ export function AppChatSurface({
   workspaceApps,
   skills,
   threadUsage,
-  threads,
   sideActivePanel,
   sidePanelSlot,
   runtimeClient,
@@ -146,7 +147,7 @@ export function AppChatSurface({
   onUpdateThreadGoal,
   onDeleteMessages,
   onDiscardFileChanges,
-  onCloseBottomPanel,
+  onClosePanel,
   onCloseBottomSlot,
   onCopyFilePath,
   onDraftChange,
@@ -162,7 +163,7 @@ export function AppChatSurface({
   onOpenPlugin,
   onOpenFilesPanel,
   onOpenModelSettings,
-  onOpenThread,
+  onOpenSubagent,
   onOpenFileReviewPanel,
   onOpenSideChat,
   onOpenSideTerminalPanel,
@@ -242,7 +243,7 @@ export function AppChatSurface({
   onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
-  onCloseBottomPanel: (panelId: string) => void;
+  onClosePanel: (placement: DesktopPanelSlot, panelId: string) => void;
   onCloseBottomSlot: () => void;
   onCopyFilePath: (filePath: string) => void;
   onDraftChange: (value: string) => void;
@@ -258,7 +259,7 @@ export function AppChatSurface({
   onOpenPlugin: OpenRuntimePluginHandler;
   onOpenFilesPanel: () => void;
   onOpenModelSettings: () => void;
-  onOpenThread: (threadId: string) => void | Promise<void>;
+  onOpenSubagent?: (task: RuntimeCollaborationTask) => void;
   onOpenFileReviewPanel?: DesktopReviewOpenHandler;
   onOpenSideChat: () => void;
   onOpenSideTerminalPanel: () => void;
@@ -350,6 +351,14 @@ export function AppChatSurface({
       .filter((panel) => panel.type === 'chat')
       .map((panel) => ({ panel, placement: 'bottom' as const })),
   ];
+  const subagentPanelInstances = [
+    ...sidePanelSlot.panels
+      .filter((panel) => panel.type === 'subagent' && panel.subagent)
+      .map((panel) => ({ panel, placement: 'side' as const })),
+    ...bottomPanelSlot.panels
+      .filter((panel) => panel.type === 'subagent' && panel.subagent)
+      .map((panel) => ({ panel, placement: 'bottom' as const })),
+  ];
   const activeDebugPanel = sidePanelPresent && sideActivePanel?.type === 'conversation-debug'
     ? { panel: sideActivePanel, placement: 'side' as const }
     : bottomPanelVisible && bottomActivePanel?.type === 'conversation-debug'
@@ -430,7 +439,6 @@ export function AppChatSurface({
             workspaceMentionRequest={workspaceMentionRequest}
             skills={skills}
             threadUsage={threadUsage}
-            threads={threads}
             onCancelActiveTurn={onCancelActiveTurn}
             onAccessModeChange={onAccessModeChange}
             onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}
@@ -445,7 +453,7 @@ export function AppChatSurface({
             onDraftChange={onDraftChange}
             onEditUserMessage={onEditUserMessage}
             onOpenSideChat={onOpenSideChat}
-            onOpenThread={onOpenThread}
+            onOpenSubagent={onOpenSubagent}
             onOpenFileReview={onOpenFileReviewPanel}
             onOpenModelSettings={onOpenModelSettings}
             onSearchProjectEntries={onSearchProjectEntries}
@@ -489,7 +497,7 @@ export function AppChatSurface({
               availablePanelTypes={panelLauncherTypes}
               panels={bottomPanelSlot.panels}
               onActivatePanel={onActivateBottomPanel}
-              onClosePanel={onCloseBottomPanel}
+              onClosePanel={(panelId) => onClosePanel('bottom', panelId)}
               onCloseSlot={onCloseBottomSlot}
               onMovePanel={onMoveBottomPanel}
               onOpenPanel={onOpenBottomPanel}
@@ -527,7 +535,6 @@ export function AppChatSurface({
               plugins={plugins}
               selectedWorkspaceApp={selectedWorkspaceApp}
               skills={skills}
-              threads={threads}
               onAccessModeChange={onAccessModeChange}
               onError={onSideChatError}
               onOpenWorkspaceFile={openChatWorkspaceFile}
@@ -549,6 +556,41 @@ export function AppChatSurface({
           return (
             <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
               {chatPanel}
+            </FloatingWorkspacePanelSlot>
+          );
+        })}
+        {subagentPanelInstances.map(({ panel, placement }) => {
+          const hidden = placement === 'side'
+            ? !sidePanelPresent || sideActivePanel?.id !== panel.id
+            : !bottomPanelVisible || bottomActivePanel?.id !== panel.id;
+          const subagent = panel.subagent;
+          const subagentPanel = subagent ? (
+            <SubagentConversationPanel
+              childThreadId={subagent.threadId}
+              client={runtimeClient}
+              config={config}
+              hidden={hidden}
+              initialTask={initialSubagentTask(currentThread, subagent.threadId)}
+              parentThreadId={subagent.parentThreadId}
+              placement={placement}
+              plugins={plugins}
+              skills={skills}
+              workspaceRoot={activeWorkspace?.path}
+              onClose={() => onClosePanel(placement, panel.id)}
+              onError={onSideChatError}
+              onOpenFileReview={onOpenFileReviewPanel}
+              onOpenMarkdownWebLink={onOpenMarkdownWebLink}
+              onOpenInAppBrowser={onOpenBrowser}
+              onResizeStep={onWorkspaceResizeStep}
+              onResizeStart={onWorkspaceResizeStart}
+              workspaceMaxWidth={workspaceMaxWidth}
+              workspaceMinWidth={workspaceMinWidth}
+              workspaceWidth={workspaceWidth}
+            />
+          ) : null;
+          return (
+            <FloatingWorkspacePanelSlot hidden={hidden} key={panel.id} placement={placement}>
+              {subagentPanel}
             </FloatingWorkspacePanelSlot>
           );
         })}
@@ -639,5 +681,23 @@ function PersistentBrowserPanel({
 }
 
 function isFloatingPanelType(type: DesktopPanelType): boolean {
-  return type === 'browser' || type === 'chat' || type === 'conversation-debug';
+  return type === 'browser' || type === 'chat' || type === 'subagent' || type === 'conversation-debug';
+}
+
+function initialSubagentTask(
+  currentThread: RuntimeThread | null,
+  childThreadId: string,
+): RuntimeCollaborationTask {
+  const task = currentThread?.collaborationTasks
+    ?.find((candidate) => candidate.childThreadId === childThreadId);
+  return task ?? {
+    id: `task:${childThreadId}`,
+    childThreadId,
+    title: '',
+    objective: '',
+    identity: { displayName: '', avatarSeed: childThreadId },
+    status: 'running',
+    createdAt: '',
+    updatedAt: '',
+  };
 }

@@ -298,7 +298,12 @@ function runtimeContextFragments(messages: RuntimeMessage[]): RuntimePromptFragm
       id: message.id,
       role: message.role === 'system' || message.role === 'tool' ? 'developer' : message.role,
       source: message.promptSource ?? 'runtime_context',
-      trust: message.role === 'user' || message.role === 'assistant' ? 'user' : 'trusted_local',
+      // 父 agent 委派的 collaboration 内容不是用户本人授权，按外部输入标记信任边界。
+      trust: message.promptSource === 'collaboration'
+        ? 'external'
+        : message.role === 'user' || message.role === 'assistant'
+          ? 'user'
+          : 'trusted_local',
       lifecycle: 'turn',
       content: message.content,
       ...(message.turnId ? { turnId: message.turnId } : {}),

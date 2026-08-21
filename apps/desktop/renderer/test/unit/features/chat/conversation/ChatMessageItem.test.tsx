@@ -35,6 +35,7 @@ function renderUserMessage(
   content = 'Inspect the queue.',
   options: {
     item?: Partial<Extract<ChatDisplayItem, { type: 'user' }>>;
+    readOnly?: boolean;
     skillReferences?: RuntimeSkillReference[];
     skills?: RuntimeSkillSummary[];
   } = {},
@@ -49,9 +50,18 @@ function renderUserMessage(
     createdAt: '2026-07-27T00:00:00.000Z',
     status: 'complete',
   };
+  const mutationHandlers = options.readOnly
+    ? {}
+    : {
+        onStartEdit: () => undefined,
+        onStartDelete: () => undefined,
+        onSubmitEdit: () => undefined,
+        onToggleDelete: () => undefined,
+      };
   return renderToStaticMarkup(
     <SkillReferenceCatalogProvider skills={options.skills ?? []}>
       <MessageItem
+        {...mutationHandlers}
         activeAssistantItemId={null}
         activeTurnId={null}
         assistantItemIdByTurnId={new Map()}
@@ -64,10 +74,6 @@ function renderUserMessage(
         onAnswerApproval={async () => undefined}
         onCancelEdit={() => undefined}
         onEditDraftChange={() => undefined}
-        onStartEdit={() => undefined}
-        onStartDelete={() => undefined}
-        onSubmitEdit={() => undefined}
-        onToggleDelete={() => undefined}
         onWorkHistoryExpandedChange={() => undefined}
         pluginUses={[]}
         selectedForDelete={false}
@@ -181,6 +187,17 @@ describe('MessageItem user messages', () => {
     expect(reviewHtml).toContain('审查');
     expect(reviewHtml).toContain('请审查当前项目中尚未提交的代码更改');
     expect(reviewHtml).not.toContain('aria-label="编辑"');
+  });
+
+  it('omits edit and delete actions when mutation handlers are not provided', () => {
+    const readOnlyHtml = renderUserMessage('message', false, 'Delegated prompt', {
+      readOnly: true,
+    });
+
+    expect(readOnlyHtml).toContain('Delegated prompt');
+    expect(readOnlyHtml).toContain('aria-label="复制"');
+    expect(readOnlyHtml).not.toContain('aria-label="编辑"');
+    expect(readOnlyHtml).not.toContain('aria-label="删除"');
   });
 
   it('omits the message timestamp while editing', () => {

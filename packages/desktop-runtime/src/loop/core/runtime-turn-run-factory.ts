@@ -36,6 +36,7 @@ export type RuntimeTurnExecutionOptions = {
   includeUserMessageInModel?: boolean;
   inputKind?: RuntimeMessage['inputKind'];
   modelInput?: string;
+  promptSource?: RuntimeMessage['promptSource'];
   publishUserMessage?: boolean;
   queuedInputId?: string;
   review?: {
@@ -138,11 +139,12 @@ export class RuntimeTurnRunFactory {
 
   async createMailboxTriggered(threadId: string, thread: RuntimeThread, turnId: string, content: string): Promise<{ turnId: string; done: Promise<void> }> {
     const turnModel = await this.resolveTurnModel(thread);
+    const taskKind = isCollaborationChildThread(thread) ? 'subagent' : 'regular';
     const run = this.options.turnTasks.run({
       turnId,
       threadId,
-      taskKind: 'regular',
-      acceptingSteers: true,
+      taskKind,
+      acceptingSteers: taskKind === 'regular',
     }, (task) => this.options.runTurn({
       attachments: [],
       signal: task.controller.signal,
@@ -155,7 +157,47 @@ export class RuntimeTurnRunFactory {
       options: {
         includeUserMessageInModel: true,
         publishUserMessage: false,
-        taskKind: 'regular',
+        ...(taskKind === 'subagent'
+          ? { inputKind: 'subagent_task' as const, promptSource: 'collaboration' as const }
+          : {}),
+        taskKind,
+      },
+    }));
+    return { turnId, done: run.done };
+  }
+
+  /**
+   * 创建子代理 turn：调用者不是用户而是父线程的协作协调器，因此输入被标记为
+   * subagent_task / collaboration，审批自动审查不能把它当作真实用户授权。
+   */
+  async createSubagent(
+    threadId: string,
+    input: { prompt: string; title?: string },
+  ): Promise<{ turnId: string; done: Promise<void> }> {
+    const text = input.prompt.trim();
+    if (!text) throw new Error('Subagent prompt is required.');
+    await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
+    const thread = await this.requireThread(threadId);
+    const turnModel = await this.resolveTurnModel(thread);
+    const turnId = this.options.ids.id('turn');
+    const run = this.options.turnTasks.run({
+      turnId,
+      threadId,
+      taskKind: 'subagent',
+      acceptingSteers: false,
+    }, (task) => this.options.runTurn({
+      attachments: [],
+      signal: task.controller.signal,
+      skillIds: [],
+      text,
+      turnModel,
+      thread,
+      threadId,
+      turnId,
+      options: {
+        inputKind: 'subagent_task',
+        promptSource: 'collaboration',
+        taskKind: 'subagent',
       },
     }));
     return { turnId, done: run.done };
@@ -350,6 +392,10 @@ export class RuntimeTurnRunFactory {
     const config = await this.options.configStore?.getConfig().catch(() => null);
     return resolveRuntimeTurnModel(config, thread, requested);
   }
+}
+
+function isCollaborationChildThread(thread: RuntimeThread): boolean {
+  return thread.kind !== 'side' && Boolean(thread.parentThreadId);
 }
 
 function turnThinkingOptions(input: { thinking?: boolean; thinkingEffort?: string }): RuntimeTurnThinkingOptions {

@@ -104,6 +104,7 @@ export class RuntimeAgentTurnRunner {
       turnId,
       role: 'user',
       inputKind: options.inputKind,
+      promptSource: options.promptSource,
       content: text,
       skillIds: selectedSkillIds.length ? selectedSkillIds : undefined,
       skillReferences: selectedSkillReferences.length ? selectedSkillReferences : undefined,
@@ -248,7 +249,7 @@ export class RuntimeAgentTurnRunner {
           taskKind,
           turnId,
           turnModel,
-          toolAccess: taskKind === 'review' ? 'read-only' : 'all',
+          toolAccess: taskKind === 'review' || taskKind === 'subagent' ? 'read-only' : 'all',
         });
         cleanupEnvironment = stepContext.toolContext.environment;
         conversationMessages = stepContext.conversationMessages;

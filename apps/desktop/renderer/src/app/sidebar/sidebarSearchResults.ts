@@ -1,4 +1,5 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
 
 export type SidebarSearchResult = {
   isBusy: boolean;
@@ -22,6 +23,7 @@ export function buildSidebarSearchResults({
 }): SidebarSearchResult[] {
   const keyword = query.trim().toLowerCase();
   return threads
+    .filter(isPrimaryConversationThread)
     .map((thread) => {
       const title = compactSearchText(thread.title);
       const messageText = compactSearchText(thread.searchMatchPreview ?? thread.lastMessagePreview);

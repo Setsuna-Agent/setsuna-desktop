@@ -323,7 +323,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         onConversationOverviewRenderedChange={setConversationOverviewRendered}
         onFocusComposerRequestConsumed={consumeFocusComposerRequest}
         onOpenModelSettings={openModelSettings}
-        onSelectThread={navigation.selectThread}
         onSkillSelectionRequestConsumed={clearSkillSelectionRequest}
         onTerminalResizeStart={handleTerminalResizeStart}
         onTerminalResizeStep={handleTerminalResizeStep}

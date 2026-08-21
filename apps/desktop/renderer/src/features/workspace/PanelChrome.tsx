@@ -1,4 +1,4 @@
-import { Bug, Code2, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal } from 'lucide-react';
+import { Bug, Code2, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import { BrowserFavicon } from './BrowserFavicon.js';
@@ -39,6 +39,7 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
   }
   if (panelType === 'overview') return <PanelRight size={14} />;
   if (panelType === 'chat') return <MessageSquare size={14} />;
+  if (panelType === 'subagent') return <Users size={14} />;
   if (panelType === 'conversation-debug') return <Bug size={14} />;
   if (panelType === 'browser') {
     return <BrowserFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;

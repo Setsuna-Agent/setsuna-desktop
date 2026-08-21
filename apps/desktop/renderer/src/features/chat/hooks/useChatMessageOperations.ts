@@ -10,8 +10,9 @@ type ChatMessageOperationsOptions = {
   composerKey: string;
   currentThreadId?: string;
   displayItems: ChatDisplayItem[];
-  onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
-  onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
+  onDeleteMessages?: (messageIds: string[]) => void | Promise<void>;
+  onEditUserMessage?: (messageId: string, content: string) => void | Promise<void>;
+  readOnly?: boolean;
 };
 
 export function useChatMessageOperations({
@@ -21,6 +22,7 @@ export function useChatMessageOperations({
   displayItems,
   onDeleteMessages,
   onEditUserMessage,
+  readOnly = false,
 }: ChatMessageOperationsOptions) {
   const { t } = useI18n();
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -40,7 +42,7 @@ export function useChatMessageOperations({
     setDeletingMessages(false);
     setSelectedDeleteItemIds(new Set());
     setActionError(null);
-  }, [composerKey, currentThreadId]);
+  }, [composerKey, currentThreadId, readOnly]);
 
   const selectableDeleteItems = useMemo(
     () => displayItems
@@ -96,16 +98,17 @@ export function useChatMessageOperations({
   }, [selectableDeleteItems]);
 
   const startDeleteSelection = useCallback((itemId: string) => {
-    if (activeTurnId) return;
+    if (readOnly || activeTurnId) return;
     setActionError(null);
     setEditingMessageId(null);
     setEditingDraft('');
     setEditingSubmitting(false);
     setDeleteMode(true);
     setSelectedDeleteItemIds(new Set(deleteGroupItemIds(itemId)));
-  }, [activeTurnId, deleteGroupItemIds]);
+  }, [activeTurnId, deleteGroupItemIds, readOnly]);
 
   const toggleDeleteSelection = useCallback((itemId: string, checked: boolean) => {
+    if (readOnly) return;
     const groupIds = deleteGroupItemIds(itemId);
     setSelectedDeleteItemIds((current) => {
       const next = new Set(current);
@@ -115,13 +118,14 @@ export function useChatMessageOperations({
       });
       return next;
     });
-  }, [deleteGroupItemIds]);
+  }, [deleteGroupItemIds, readOnly]);
 
   const toggleAllDeleteSelection = useCallback((checked: boolean) => {
+    if (readOnly) return;
     setSelectedDeleteItemIds(checked
       ? new Set(selectableDeleteItems.map((item) => item.id))
       : new Set());
-  }, [selectableDeleteItems]);
+  }, [readOnly, selectableDeleteItems]);
 
   const cancelDeleteSelection = useCallback(() => {
     setDeleteMode(false);
@@ -131,6 +135,7 @@ export function useChatMessageOperations({
   }, []);
 
   const confirmDeleteSelection = useCallback(async () => {
+    if (readOnly || !onDeleteMessages) return;
     const isCurrentOperation = operationRequests.begin();
     if (!selectedDeleteMessageIds.length) {
       setActionError(t('chat.delete.selectFirst'));
@@ -149,16 +154,17 @@ export function useChatMessageOperations({
     } finally {
       commitChatWorkspaceOperation(isCurrentOperation, () => setDeletingMessages(false));
     }
-  }, [cancelDeleteSelection, onDeleteMessages, operationRequests, selectedDeleteMessageIds, t]);
+  }, [cancelDeleteSelection, onDeleteMessages, operationRequests, readOnly, selectedDeleteMessageIds, t]);
 
   const startEditingMessage = useCallback((message: RuntimeMessage) => {
+    if (readOnly) return;
     setActionError(null);
     setDeleteMode(false);
     setDeletingMessages(false);
     setSelectedDeleteItemIds(new Set());
     setEditingMessageId(message.id);
     setEditingDraft(message.content);
-  }, []);
+  }, [readOnly]);
 
   const cancelEditingMessage = useCallback(() => {
     setEditingMessageId(null);
@@ -167,6 +173,7 @@ export function useChatMessageOperations({
   }, []);
 
   const submitEditingMessage = useCallback(async (messageId: string) => {
+    if (readOnly || !onEditUserMessage) return;
     const content = editingDraft.trim();
     if (!content) return;
     const isCurrentOperation = operationRequests.begin();
@@ -182,7 +189,7 @@ export function useChatMessageOperations({
     } finally {
       commitChatWorkspaceOperation(isCurrentOperation, () => setEditingSubmitting(false));
     }
-  }, [cancelEditingMessage, editingDraft, onEditUserMessage, operationRequests]);
+  }, [cancelEditingMessage, editingDraft, onEditUserMessage, operationRequests, readOnly]);
 
   return {
     actionError,

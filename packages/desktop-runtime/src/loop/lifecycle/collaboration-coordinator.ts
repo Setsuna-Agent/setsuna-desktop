@@ -1,6 +1,10 @@
 import type {
+  RuntimeAgentIdentity,
   RuntimeCollabToolCall,
+  RuntimeCollaborationTask,
+  RuntimeCollaborationTaskStatus,
   RuntimeConfigState,
+  RuntimeEvent,
   RuntimeMessage,
   RuntimeThread,
   RuntimeToolDefinition,
@@ -26,6 +30,12 @@ export type CollaborationExecutionResult = {
   preview: string;
 };
 
+export type RuntimeSubagentTurnInput = {
+  name?: string;
+  prompt: string;
+  title?: string;
+};
+
 export type RuntimeCollaborationCoordinatorOptions = {
   clock: Clock;
   ids: IdGenerator;
@@ -40,10 +50,15 @@ export type RuntimeCollaborationCoordinatorOptions = {
     toAgentId: string;
     triggerTurn: boolean;
   }): Promise<{ queued?: boolean; turnId: string | null }>;
-  startTurn(threadId: string, input: string): Promise<{ turnId: string }>;
+  startTurn(threadId: string, input: RuntimeSubagentTurnInput): Promise<{ turnId: string }>;
+  /** 把任务账本事件追加到父线程事件流（先落盘后发布）。 */
+  appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>): Promise<void>;
 };
 
 const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'wait', 'close_agent']);
+
+/** 第一版最多三个并行活跃 child；deep-nested spawn 由“调用者必须是根线程”校验禁止。 */
+export const MAX_ACTIVE_COLLABORATION_CHILDREN = 3;
 
 export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   {
@@ -54,6 +69,7 @@ export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
       properties: {
         prompt: { type: 'string', description: 'Task prompt for the child agent.' },
         title: { type: 'string', description: 'Optional child thread title.' },
+        name: { type: 'string', description: 'Optional short display name for the child agent.' },
       },
       required: ['prompt'],
     },
@@ -116,9 +132,39 @@ export function isCollaborationToolName(name: string): boolean {
   return COLLABORATION_TOOL_NAMES.has(name);
 }
 
-/** 管理协作工具语义，事件渲染仍由 AgentLoop 负责。 */
+export function isCollaborationChildLifecycleEvent(event: RuntimeEvent): boolean {
+  if (event.type === 'turn.started'
+    || event.type === 'turn.completed'
+    || event.type === 'turn.cancelled') {
+    return event.payload.taskKind === 'subagent';
+  }
+  return event.type === 'approval.requested'
+    || event.type === 'approval.resolved'
+    || event.type === 'runtime.error';
+}
+
+type TrackedCollaborationTask = {
+  activeTurnId?: string;
+  childThreadId: string;
+  lastStatus: RuntimeCollaborationTaskStatus;
+  parentThreadId: string;
+  taskId: string;
+};
+
+const TERMINAL_TASK_STATUSES: ReadonlySet<RuntimeCollaborationTaskStatus> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+]);
+
+/**
+ * 管理协作工具语义：任务账本事件追加到父线程事件流，child turn 生命周期事件
+ * 由 AgentLoop 在持久化后转发到这里，统一投影成父线程上的任务状态。
+ */
 export class RuntimeCollaborationCoordinator {
   private readonly childrenByParentThread = new Map<string, Set<string>>();
+  private readonly trackedTasksByChild = new Map<string, TrackedCollaborationTask>();
 
   constructor(private readonly options: RuntimeCollaborationCoordinatorOptions) {}
 
@@ -161,7 +207,10 @@ export class RuntimeCollaborationCoordinator {
     return [{
       id: this.options.ids.id('msg_collaboration_results'),
       turnId: parentTurnId,
-      role: 'assistant',
+      // Child findings are delegated input, not a parent assistant response. Keeping this as
+      // user-role context also avoids an unsupported assistant prefill on provider continuations.
+      role: 'user',
+      promptSource: 'collaboration',
       visibility: 'model',
       status: 'complete',
       createdAt: this.options.clock.now().toISOString(),
@@ -179,6 +228,87 @@ export class RuntimeCollaborationCoordinator {
     throw new Error(`Unknown collaboration tool: ${name}`);
   }
 
+  /**
+   * AgentLoop 在 child 事件持久化后转发到这里；旧 turn 的迟到事件不能覆盖
+   * resume 后的新状态，因此所有非 turn.started 事件都按 activeTurnId 过滤。
+   */
+  async observeChildEvent(event: RuntimeEvent): Promise<void> {
+    const tracked = await this.trackedTaskForChild(event.threadId);
+    if (!tracked) return;
+    if (event.type === 'turn.started') {
+      if (tracked.activeTurnId === event.turnId) return;
+      tracked.activeTurnId = event.turnId;
+      await this.emitTaskStatus(tracked, 'running', { activeTurnId: event.turnId });
+      return;
+    }
+    // 终态只允许由一个新的 turn.started 复活；旧 turn 的迟到终态事件必须忽略。
+    if (TERMINAL_TASK_STATUSES.has(tracked.lastStatus)) return;
+    if (event.type === 'approval.requested') {
+      if (tracked.activeTurnId && event.turnId && event.turnId !== tracked.activeTurnId) return;
+      if (event.turnId) tracked.activeTurnId = event.turnId;
+      await this.emitTaskStatus(tracked, 'waiting_approval', { activeTurnId: event.turnId });
+      return;
+    }
+    if (event.type === 'approval.resolved') {
+      if (event.turnId && tracked.activeTurnId && event.turnId !== tracked.activeTurnId) return;
+      await this.emitTaskStatus(tracked, 'running', { activeTurnId: event.turnId });
+      return;
+    }
+    if (event.type === 'turn.completed') {
+      if (event.turnId && tracked.activeTurnId && event.turnId !== tracked.activeTurnId) return;
+      const activeTurnIdBeforePreview = tracked.activeTurnId;
+      const resultPreview = await this.childResultPreview(tracked.childThreadId);
+      // Preview reads may clone a large thread and yield long enough for resume_agent to start a
+      // new turn. The old completion must not overwrite that new turn's running projection.
+      if (tracked.activeTurnId !== activeTurnIdBeforePreview) return;
+      await this.emitTaskStatus(tracked, 'completed', {
+        activeTurnId: event.turnId,
+        resultPreview,
+      });
+      return;
+    }
+    if (event.type === 'turn.cancelled') {
+      if (event.turnId && tracked.activeTurnId && event.turnId !== tracked.activeTurnId) return;
+      await this.emitTaskStatus(tracked, 'cancelled', {
+        activeTurnId: event.turnId,
+        error: event.payload.reason,
+      });
+      return;
+    }
+    if (event.type === 'runtime.error') {
+      if (event.turnId && tracked.activeTurnId && event.turnId !== tracked.activeTurnId) return;
+      await this.emitTaskStatus(tracked, 'failed', {
+        activeTurnId: event.turnId,
+        error: event.payload.message,
+      });
+      return;
+    }
+  }
+
+  /**
+   * 应用重启后，把“账本上仍非终态、但 child 已无活动 turn”的任务修正为 interrupted。
+   * 在 settleStaleRuntimeTurns 之后调用，此时 child 的 activeTurnId 已是终态真源。
+   */
+  async reconcileInterruptedTasks(): Promise<void> {
+    const summaries = await this.options.threadStore.listThreads({ includeArchived: true, includeSide: true });
+    for (const summary of summaries) {
+      const thread = await this.options.threadStore.getThread(summary.id);
+      const tasks = thread?.collaborationTasks ?? [];
+      for (const task of tasks) {
+        const tracked = this.rememberTrackedTask(thread!.id, task);
+        if (TERMINAL_TASK_STATUSES.has(task.status)) continue;
+        const child = await this.options.threadStore.getThread(task.childThreadId);
+        const childActive = this.options.activeTask(task.childThreadId);
+        if (child && (childActive || child.activeTurnId)) continue;
+        await this.emitTaskStatus(
+          tracked,
+          'interrupted',
+          { activeTurnId: task.activeTurnId },
+        );
+      }
+    }
+  }
+
   private async spawnAgent(
     input: Record<string, unknown>,
     context: RuntimeToolExecutionContext,
@@ -186,6 +316,16 @@ export class RuntimeCollaborationCoordinator {
     const prompt = requiredString(input, ['prompt', 'task', 'input'], 'prompt');
     const parent = await this.options.threadStore.getThread(context.threadId);
     if (!parent) throw new Error(`Thread not found: ${context.threadId}`);
+    assertSpawnCallerIsRootThread(parent, context.threadId);
+
+    const existingTasks = parent.collaborationTasks ?? [];
+    const activeChildCount = this.activeCollaborationChildCount(existingTasks);
+    if (activeChildCount >= MAX_ACTIVE_COLLABORATION_CHILDREN) {
+      throw new Error(
+        `This thread already has ${activeChildCount} active collaboration children; the maximum is ${MAX_ACTIVE_COLLABORATION_CHILDREN}.`,
+      );
+    }
+
     const child = await this.options.threadStore.createThread({
       title: collaborationTitle(input, prompt),
       projectId: parent.projectId,
@@ -193,26 +333,61 @@ export class RuntimeCollaborationCoordinator {
       memoryMode: parent.memoryMode,
       modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,
     });
-    let children = this.childrenByParentThread.get(context.threadId);
-    if (!children) {
-      children = new Set<string>();
-      this.childrenByParentThread.set(context.threadId, children);
-    }
-    children.add(child.id);
+    const identity: RuntimeAgentIdentity = {
+      displayName: collaborationDisplayName(input, existingTasks),
+      avatarSeed: avatarSeedForThread(child.id),
+    };
+    const task: RuntimeCollaborationTask = {
+      id: this.options.ids.id('task'),
+      childThreadId: child.id,
+      title: child.title,
+      objective: prompt,
+      identity,
+      status: 'queued',
+      createdAt: this.options.clock.now().toISOString(),
+      updatedAt: this.options.clock.now().toISOString(),
+    };
+    // 先落盘账本（queued），再启动 child turn，保证父线程事件顺序：created 在 running 之前。
+    await this.options.appendEvent(context.threadId, {
+      id: this.options.ids.id('event'),
+      threadId: context.threadId,
+      type: 'collaboration.task_created',
+      createdAt: task.createdAt,
+      payload: { task },
+    });
+
+    const children = this.rememberPendingChild(context.threadId, child.id);
+    const tracked: TrackedCollaborationTask = {
+      childThreadId: child.id,
+      lastStatus: 'queued',
+      parentThreadId: context.threadId,
+      taskId: task.id,
+    };
+    this.trackedTasksByChild.set(child.id, tracked);
     let started: { turnId: string };
     try {
-      started = await this.options.startTurn(child.id, prompt);
+      started = await this.options.startTurn(child.id, { name: identity.displayName, prompt, title: child.title });
     } catch (error) {
       children.delete(child.id);
       if (!children.size) this.childrenByParentThread.delete(context.threadId);
+      this.trackedTasksByChild.delete(child.id);
+      await this.emitTaskStatus(tracked, 'failed', { error: errorMessage(error) });
       throw error;
     }
+    tracked.activeTurnId = started.turnId;
+    tracked.lastStatus = 'running';
+    // 显式落盘 running，避免 child 的 turn.started 观察事件与 spawn 返回之间出现空窗。
+    await this.emitTaskStatus(tracked, 'running', { activeTurnId: started.turnId });
     const data = {
       tool: 'spawn_agent',
       senderThreadId: context.threadId,
+      childThreadId: child.id,
       newThreadId: child.id,
+      taskId: task.id,
       turnId: started.turnId,
-      prompt,
+      title: task.title,
+      objective: prompt,
+      identity,
       status: 'running',
     };
     return {
@@ -220,12 +395,13 @@ export class RuntimeCollaborationCoordinator {
         tool: 'spawn_agent',
         senderThreadId: context.threadId,
         newThreadId: child.id,
+        taskId: task.id,
         prompt,
         agentStatus: 'running',
       },
       content: JSON.stringify(data),
       data,
-      preview: `Spawned child agent ${child.id}.`,
+      preview: `Spawned child agent ${identity.displayName}.`,
     };
   }
 
@@ -236,7 +412,27 @@ export class RuntimeCollaborationCoordinator {
   ): Promise<CollaborationExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
     const content = requiredString(input, ['content', 'prompt', 'input'], 'content');
+    await this.requireDirectChild(receiverThreadId, context);
     const resume = name === 'resume_agent';
+    const parent = resume ? await this.options.threadStore.getThread(context.threadId) : null;
+    if (resume && !parent) throw new Error(`Thread not found: ${context.threadId}`);
+    const matchingTask = parent?.collaborationTasks?.find((task) => task.childThreadId === receiverThreadId);
+    const tracked = matchingTask
+      ? this.rememberTrackedTask(context.threadId, matchingTask)
+      : this.trackedTasksByChild.get(receiverThreadId);
+    const receiverActive = Boolean(this.options.activeTask(receiverThreadId));
+    if (resume && parent && !receiverActive) {
+      const currentActiveCount = this.activeCollaborationChildCount(parent.collaborationTasks ?? []);
+      const targetAlreadyCounted = Boolean(
+        matchingTask && !TERMINAL_TASK_STATUSES.has(matchingTask.status),
+      );
+      const resultingActiveCount = currentActiveCount + (targetAlreadyCounted ? 0 : 1);
+      if (resultingActiveCount > MAX_ACTIVE_COLLABORATION_CHILDREN) {
+        throw new Error(
+          `Resuming this child would create ${resultingActiveCount} active collaboration children; the maximum is ${MAX_ACTIVE_COLLABORATION_CHILDREN}.`,
+        );
+      }
+    }
     const delivered = await this.options.deliverMailbox(receiverThreadId, {
       content,
       deliveryMode: resume ? 'trigger_turn' : 'queue_only',
@@ -245,6 +441,14 @@ export class RuntimeCollaborationCoordinator {
       toAgentId: receiverThreadId,
       triggerTurn: resume,
     });
+    if (resume && delivered.turnId) {
+      this.rememberPendingChild(context.threadId, receiverThreadId);
+      const resumedTask = tracked ?? await this.trackedTaskForChild(receiverThreadId);
+      if (resumedTask && resumedTask.activeTurnId !== delivered.turnId) {
+        resumedTask.activeTurnId = delivered.turnId;
+        await this.emitTaskStatus(resumedTask, 'running', { activeTurnId: delivered.turnId });
+      }
+    }
     const data = {
       tool: name,
       senderThreadId: context.threadId,
@@ -272,10 +476,19 @@ export class RuntimeCollaborationCoordinator {
     context: RuntimeToolExecutionContext,
   ): Promise<CollaborationExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
+    // 等待自己的当前 turn 用于自检，属于协作工具既有语义；其余目标必须是直属 child。
+    if (receiverThreadId !== context.threadId) {
+      await this.requireDirectChild(receiverThreadId, context);
+    }
     const wait = await this.waitForThread(receiverThreadId, context, collaborationTimeoutMs(input));
     const thread = await this.options.threadStore.getThread(receiverThreadId);
     const activeTurnId = this.options.activeTask(receiverThreadId)?.turnId ?? null;
     const output = wait.status === 'running' ? '' : childAgentOutput(thread);
+    if (receiverThreadId !== context.threadId && wait.status !== 'running') {
+      // The terminal result is now present in this tool response, so forced convergence must not
+      // append the same child output again after the parent has already produced its answer.
+      this.removePendingChild(context.threadId, receiverThreadId);
+    }
     const data = {
       tool: 'wait',
       senderThreadId: context.threadId,
@@ -305,11 +518,10 @@ export class RuntimeCollaborationCoordinator {
   ): Promise<CollaborationExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
     const reason = optionalString(input, ['reason']);
+    await this.requireDirectChild(receiverThreadId, context);
     const active = this.options.activeTask(receiverThreadId);
     const cancelled = active ? await this.options.cancelTurn(receiverThreadId, active.turnId) : false;
-    const children = this.childrenByParentThread.get(context.threadId);
-    children?.delete(receiverThreadId);
-    if (children && !children.size) this.childrenByParentThread.delete(context.threadId);
+    this.removePendingChild(context.threadId, receiverThreadId);
     const data = {
       tool: 'close_agent',
       senderThreadId: context.threadId,
@@ -331,6 +543,100 @@ export class RuntimeCollaborationCoordinator {
     };
   }
 
+  /** 校验协作工具目标确实是调用者的直属 child（kind 不参与判断，parentThreadId 即权威）。 */
+  private async requireDirectChild(
+    receiverThreadId: string,
+    context: RuntimeToolExecutionContext,
+  ): Promise<RuntimeThread> {
+    const receiver = await this.options.threadStore.getThread(receiverThreadId);
+    if (!receiver) throw new Error(`Thread not found: ${receiverThreadId}`);
+    if (receiver.parentThreadId !== context.threadId) {
+      throw new Error(`Thread ${receiverThreadId} is not a direct child of thread ${context.threadId}.`);
+    }
+    return receiver;
+  }
+
+  private activeCollaborationChildCount(tasks: RuntimeCollaborationTask[]): number {
+    return tasks.filter((task) => (
+      !TERMINAL_TASK_STATUSES.has(task.status)
+      || Boolean(this.options.activeTask(task.childThreadId))
+    )).length;
+  }
+
+  private rememberPendingChild(parentThreadId: string, childThreadId: string): Set<string> {
+    let children = this.childrenByParentThread.get(parentThreadId);
+    if (!children) {
+      children = new Set<string>();
+      this.childrenByParentThread.set(parentThreadId, children);
+    }
+    children.add(childThreadId);
+    return children;
+  }
+
+  private removePendingChild(parentThreadId: string, childThreadId: string): void {
+    const children = this.childrenByParentThread.get(parentThreadId);
+    children?.delete(childThreadId);
+    if (children && !children.size) this.childrenByParentThread.delete(parentThreadId);
+  }
+
+  private rememberTrackedTask(
+    parentThreadId: string,
+    task: RuntimeCollaborationTask,
+  ): TrackedCollaborationTask {
+    const existing = this.trackedTasksByChild.get(task.childThreadId);
+    if (existing) return existing;
+    const tracked: TrackedCollaborationTask = {
+      activeTurnId: task.activeTurnId,
+      childThreadId: task.childThreadId,
+      lastStatus: task.status,
+      parentThreadId,
+      taskId: task.id,
+    };
+    this.trackedTasksByChild.set(task.childThreadId, tracked);
+    return tracked;
+  }
+
+  /** 重启后首次收到 child 事件时，从父线程持久账本恢复内存跟踪。 */
+  private async trackedTaskForChild(childThreadId: string): Promise<TrackedCollaborationTask | null> {
+    const existing = this.trackedTasksByChild.get(childThreadId);
+    if (existing) return existing;
+    const child = await this.options.threadStore.getThread(childThreadId);
+    if (!child?.parentThreadId || child.kind === 'side') return null;
+    const parent = await this.options.threadStore.getThread(child.parentThreadId);
+    const task = parent?.collaborationTasks?.find((candidate) => candidate.childThreadId === childThreadId);
+    return task ? this.rememberTrackedTask(child.parentThreadId, task) : null;
+  }
+
+  private async emitTaskStatus(
+    tracked: TrackedCollaborationTask,
+    status: RuntimeCollaborationTaskStatus,
+    patch: { activeTurnId?: string | undefined; error?: string; resultPreview?: string } = {},
+  ): Promise<void> {
+    if (TERMINAL_TASK_STATUSES.has(tracked.lastStatus) && TERMINAL_TASK_STATUSES.has(status)) return;
+    tracked.lastStatus = status;
+    const payload: RuntimeEvent['payload'] & { status: RuntimeCollaborationTaskStatus; taskId: string } = {
+      taskId: tracked.taskId,
+      status,
+      ...(patch.activeTurnId ? { activeTurnId: patch.activeTurnId } : {}),
+      ...(patch.resultPreview !== undefined ? { resultPreview: patch.resultPreview } : {}),
+      ...(patch.error ? { error: patch.error } : {}),
+    };
+    await this.options.appendEvent(tracked.parentThreadId, {
+      id: this.options.ids.id('event'),
+      threadId: tracked.parentThreadId,
+      type: 'collaboration.task_status_changed',
+      createdAt: this.options.clock.now().toISOString(),
+      payload,
+    });
+  }
+
+  private async childResultPreview(childThreadId: string): Promise<string | undefined> {
+    const child = await this.options.threadStore.getThread(childThreadId);
+    const output = child ? childAgentOutput(child) : '';
+    if (output) return clipPreview(output, 240);
+    return child?.lastMessagePreview ? clipPreview(child.lastMessagePreview, 240) : undefined;
+  }
+
   private async waitForThread(
     threadId: string,
     context: RuntimeToolExecutionContext,
@@ -348,6 +654,16 @@ export class RuntimeCollaborationCoordinator {
     if (wait === 'failed') return { status: 'failed', timedOut: false };
     if (wait === 'timeout') return { status: 'running', timedOut: true };
     return { status: this.options.activeTask(threadId) ? 'running' : 'idle', timedOut: false };
+  }
+}
+
+function assertSpawnCallerIsRootThread(parent: RuntimeThread, threadId: string): void {
+  // 第一版禁止 child 再 spawn child：只有根对话（非 side、无 parentThreadId）才能派生子代理。
+  if (parent.parentThreadId) {
+    throw new Error(`Thread ${threadId} is a collaboration child and cannot spawn its own agents.`);
+  }
+  if (parent.kind === 'side') {
+    throw new Error(`Side conversations cannot spawn collaboration agents.`);
   }
 }
 
@@ -402,10 +718,49 @@ function collaborationTitle(record: Record<string, unknown>, prompt: string): st
   return compact ? `Subagent: ${compact}` : 'Subagent';
 }
 
+/** 短展示名：优先工具参数 name，其次按同父线程现有任务数生成 Agent N，并做去重。 */
+function collaborationDisplayName(
+  record: Record<string, unknown>,
+  existingTasks: RuntimeCollaborationTask[],
+): string {
+  const requested = optionalString(record, ['name']).slice(0, 24);
+  const existingNames = new Set(existingTasks.map((task) => task.identity.displayName));
+  if (requested) {
+    if (!existingNames.has(requested)) return requested;
+    let suffix = 2;
+    while (existingNames.has(`${requested} ${suffix}`)) suffix += 1;
+    return `${requested} ${suffix}`;
+  }
+  const fallbackIndex = existingTasks.length + 1;
+  return existingNames.has(`Agent ${fallbackIndex}`)
+    ? `Agent ${fallbackIndex + 1}`
+    : `Agent ${fallbackIndex}`;
+}
+
+function avatarSeedForThread(childThreadId: string): string {
+  // 确定性哈希：同一 child 重启后头像稳定，且不依赖外部服务。
+  let hash = 2166136261;
+  for (let index = 0; index < childThreadId.length; index += 1) {
+    hash ^= childThreadId.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function clipPreview(value: string, maxChars: number): string {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  return `${chars.slice(0, maxChars).join('')}…`;
+}
+
 function collaborationTimeoutMs(record: Record<string, unknown>): number {
   const value = record.timeout_ms ?? record.timeoutMs;
   if (typeof value !== 'number' || !Number.isFinite(value)) return 30_000;
   return Math.max(0, Math.min(30_000, Math.floor(value)));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function waitForTask(

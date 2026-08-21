@@ -26,6 +26,7 @@ export type DesktopPanelType =
   | 'overview'
   | 'browser'
   | 'chat'
+  | 'subagent'
   | 'conversation-debug'
   | 'files'
   | 'file'
@@ -42,6 +43,10 @@ export type DesktopPanelTab = {
   type: DesktopPanelType;
   title?: string;
   filePath?: string;
+  subagent?: {
+    threadId: string;
+    parentThreadId: string;
+  };
 };
 export type DesktopPanelTabPatch = Partial<Pick<DesktopPanelTab, 'browser' | 'title'>>;
 export type DesktopPanelDropPlacement = 'before' | 'after';
@@ -64,6 +69,12 @@ export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {
 };
 export const createWorkspaceOverviewPanel = (): DesktopPanelTab => ({ id: WORKSPACE_OVERVIEW_PANEL_ID, type: 'overview', title: '汇总目录' });
 export const createSideChatPanel = (id = SIDE_CHAT_PANEL_ID, title = '侧边对话'): DesktopPanelTab => ({ id, type: 'chat', title });
+export const createSubagentPanel = (threadId: string, parentThreadId: string, title?: string): DesktopPanelTab => ({
+  id: `subagent:${threadId}`,
+  type: 'subagent',
+  title: title ?? '子代理',
+  subagent: { threadId, parentThreadId },
+});
 export const createConversationDebugPanel = (): DesktopPanelTab => ({
   id: CONVERSATION_DEBUG_PANEL_ID,
   type: 'conversation-debug',

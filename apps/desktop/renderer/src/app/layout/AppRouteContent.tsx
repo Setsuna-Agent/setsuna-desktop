@@ -67,7 +67,6 @@ export function AppRouteContent({
   onOpenPlugin,
   onOpenModelSettings,
   onSelectedCapabilitiesPluginIdChange,
-  onSelectThread,
   onSkillSelectionRequestConsumed,
   onTerminalResizeStep,
   onTerminalResizeStart,
@@ -109,7 +108,6 @@ export function AppRouteContent({
   onOpenPlugin: (pluginId: string) => void;
   onOpenModelSettings: () => void;
   onSelectedCapabilitiesPluginIdChange: (pluginId: string | null) => void;
-  onSelectThread: (threadId: string) => void | Promise<void>;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onTerminalResizeStep: (delta: number) => void;
   onTerminalResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -345,7 +343,7 @@ export function AppRouteContent({
       onUpdateThreadGoal={(patch) => runtime.updateCurrentThreadGoal(patch)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}
-      onCloseBottomPanel={(panelId) => workspacePanels.closeDesktopPanelItem('bottom', panelId)}
+      onClosePanel={(placement, panelId) => workspacePanels.closeDesktopPanelItem(placement, panelId)}
       onCloseBottomSlot={() => workspacePanels.closeDesktopPanelSlot('bottom')}
       onCopyFilePath={(filePath) => void workspacePanels.copyWorkspaceFilePath(filePath)}
       onDraftChange={setDraft}
@@ -367,7 +365,11 @@ export function AppRouteContent({
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');
       }}
-      onOpenThread={onSelectThread}
+      onOpenSubagent={(task) => {
+        const parentThreadId = runtime.currentThread?.id;
+        if (!parentThreadId) return;
+        workspacePanels.openSubagentPanel(parentThreadId, task);
+      }}
       onOpenFileReviewPanel={openFileReviewPanel}
       onOpenSideChat={() => workspacePanels.openDesktopPanel('side', 'chat')}
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}
