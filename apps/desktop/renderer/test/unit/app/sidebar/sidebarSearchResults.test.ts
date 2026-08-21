@@ -25,6 +25,21 @@ describe('buildSidebarSearchResults', () => {
       sourceLabel: 'Setsuna',
     });
   });
+
+  it('excludes side conversations and collaboration child threads from search results', () => {
+    const results = buildSidebarSearchResults({
+      projectFallback: 'Project',
+      projectNameById: new Map(),
+      query: 'needle',
+      threads: [
+        summary({ id: 'primary', title: 'Needle planning' }),
+        summary({ id: 'child', parentThreadId: 'primary', title: 'Needle scout' }),
+        summary({ id: 'side', kind: 'side', parentThreadId: 'primary', title: 'Needle side chat' }),
+      ],
+    });
+
+    expect(results.map((result) => result.thread.id)).toEqual(['primary']);
+  });
 });
 
 function summary(overrides: Partial<RuntimeThreadSummary>): RuntimeThreadSummary {

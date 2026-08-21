@@ -60,6 +60,15 @@ describe('agent loop collaboration tools', () => {
         'queue_only',
         'trigger_turn',
       ]);
+      expect(childEvents.filter((event) => event.type === 'turn.started').map((event) => event.payload.taskKind)).toEqual([
+        'subagent',
+        'subagent',
+      ]);
+      const childRequests = modelClient.requests.filter((request) => request.messages.some((message) => (
+        message.content === 'Inspect auth as child' || message.content.includes('<mailbox_message')
+      )));
+      expect(childRequests).toHaveLength(2);
+      expect(childRequests.every((request) => (request.tools ?? []).length === 0)).toBe(true);
       expect(child?.messages.some((message) => message.role === 'assistant' && message.content.includes('Child resumed with mailbox.'))).toBe(true);
       const waitResultMessage = modelClient.requests
         .flatMap((request) => request.messages)
@@ -105,7 +114,11 @@ describe('agent loop collaboration tools', () => {
       const completed = await threadStore.getThread(parent.id);
   
       expect(modelClient.parentRequests).toHaveLength(3);
-      expect(modelClient.parentRequests[2].messages.some((message) => message.content.includes('<collaboration_results>') && message.content.includes('Detailed child research.'))).toBe(true);
+      const collaborationResult = modelClient.parentRequests[2].messages.find((message) => (
+        message.content.includes('<collaboration_results>')
+        && message.content.includes('Detailed child research.')
+      ));
+      expect(collaborationResult).toMatchObject({ role: 'user', promptSource: 'collaboration' });
       expect(completed?.messages.at(-1)?.content).toBe('Parent incorporated the child research.');
     });
 });

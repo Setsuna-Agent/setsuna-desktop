@@ -26,7 +26,10 @@ import { createAutomaticApprovalReviewer } from '../approval-review/automatic-ap
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import { runtimeEnvironmentResolver } from '../context/runtime-environment-resolver.js';
-import { RuntimeCollaborationCoordinator } from '../lifecycle/collaboration-coordinator.js';
+import {
+  isCollaborationChildLifecycleEvent,
+  RuntimeCollaborationCoordinator,
+} from '../lifecycle/collaboration-coordinator.js';
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
@@ -105,13 +108,14 @@ export class AgentLoop {
       cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
       deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
       startTurn: async (threadId, input) => {
-        const started = await this.startTurn(threadId, { input });
+        const started = await this.startSubagentTurn(threadId, input);
         if ('queuedInputId' in started && !started.turnId) {
           throw new Error(`Collaboration turn was queued instead of started: ${started.queuedInputId}`);
         }
         if (!started.turnId) throw new Error('Collaboration turn did not return a turn id.');
         return { turnId: started.turnId };
       },
+      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
@@ -421,6 +425,30 @@ export class AgentLoop {
       void run.done.catch(() => undefined);
       return { accepted: true, turnId: run.turnId };
     });
+  }
+
+  /**
+   * 启动子代理 turn：调用者是父线程的协作协调器，不是用户，因此走独立入口
+   * （taskKind subagent + collaboration prompt source），不能复用普通 startTurn。
+   */
+  async startSubagentTurn(
+    threadId: string,
+    input: { prompt: string; title?: string },
+  ): Promise<StartTurnResponse> {
+    return this.withThreadMutation(threadId, async () => {
+      const run = await this.turnRuns.createSubagent(threadId, input);
+      this.observeRun(threadId, run.turnId, 'subagent', run.done);
+      void run.done.catch(() => undefined);
+      return { accepted: true, turnId: run.turnId };
+    });
+  }
+
+  /**
+   * 重启后把账本上仍非终态、但 child 已无活动 turn 的协作任务修正为 interrupted。
+   * 必须在 settleStaleRuntimeTurns 之后调用。
+   */
+  reconcileCollaborationTasks(): Promise<void> {
+    return this.collaborationCoordinator.reconcileInterruptedTasks();
   }
 
   /**
@@ -751,7 +779,16 @@ export class AgentLoop {
     threadId: string,
     event: Parameters<ThreadStore['appendEvent']>[1],
   ) {
-    return this.eventWriter.append(threadId, event);
+    const saved = this.eventWriter.append(threadId, event);
+    // 仅转发协作协调器实际处理的 child 生命周期，避免普通消息和工具事件为判断
+    // “是否 child”反复读取、克隆整条线程快照。
+    void saved.then((savedEvent) => {
+      if (savedEvent && isCollaborationChildLifecycleEvent(savedEvent)) {
+        return this.collaborationCoordinator.observeChildEvent(savedEvent);
+      }
+      return undefined;
+    }).catch(() => undefined);
+    return saved;
   }
 
   private assertAcceptingWork(): void {

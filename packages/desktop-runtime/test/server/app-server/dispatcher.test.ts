@@ -36,6 +36,9 @@ describe('AppServer dispatcher rollback', () => {
         },
       },
       threadStore: {
+        async listThreads() {
+          return [];
+        },
         async getThread(threadId: string) {
           calls.push(`get:${threadId}`);
           return current;
@@ -91,6 +94,10 @@ describe('AppServer dispatcher thread deletion', () => {
         },
       },
       threadStore: {
+        async listThreads() {
+          calls.push('list:thread_1');
+          return [];
+        },
         async getThread(threadId: string) {
           calls.push(`get:${threadId}`);
           return thread;
@@ -136,6 +143,7 @@ describe('AppServer dispatcher thread deletion', () => {
     expect(publishedSeq).toBe(10);
     expect(calls).toEqual([
       'barrier:start',
+      'list:thread_1',
       'get:thread_1',
       'delete:thread_1',
       'publish:thread.deleted',
@@ -166,6 +174,9 @@ describe('AppServer dispatcher thread deletion', () => {
         },
       },
       threadStore: {
+        async listThreads() {
+          return [];
+        },
         getThread: async () => thread,
         deleteThread: async () => undefined,
       },
@@ -221,6 +232,9 @@ describe('AppServer dispatcher thread deletion', () => {
       },
       mcpConnections: { releaseThread: async () => { calls.push('mcp'); } },
       threadStore: {
+        async listThreads() {
+          return [];
+        },
         getThread: async () => thread,
         deleteThread: async () => {
           calls.push('delete');
@@ -259,6 +273,9 @@ describe('AppServer dispatcher direct thread mutation', () => {
         },
       },
       threadStore: {
+        async listThreads() {
+          return [];
+        },
         async getThread(threadId: string) {
           calls.push(`get:${threadId}`);
           return thread;

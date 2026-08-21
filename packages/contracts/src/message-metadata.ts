@@ -5,7 +5,7 @@ export type RuntimeMessageRole = 'system' | 'developer' | 'user' | 'assistant' |
 /** Matches the Codex App Server / Responses wire values for assistant presentation. */
 export type RuntimeAssistantMessagePhase = 'commentary' | 'final_answer';
 
-export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context';
+export type RuntimeMessagePromptSource = 'hook' | 'plan' | 'review' | 'goal' | 'runtime_context' | 'collaboration';
 
 export type RuntimeJsonPrimitive = string | number | boolean | null;
 

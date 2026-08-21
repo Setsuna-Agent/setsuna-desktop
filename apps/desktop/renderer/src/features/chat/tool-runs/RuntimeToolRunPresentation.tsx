@@ -5,6 +5,7 @@ import {
 import { FileText, Search, TerminalSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
+import { collaborationGroupSummary } from './runtimeCollaborationRuns.js';
 import type {
   ToolRunDisplayGroup,
   ToolRunGroup,
@@ -27,6 +28,12 @@ import {
   isAutomaticApprovalReviewPending,
   isPendingRuntimeToolApproval,
 } from './runtimeToolRunState.js';
+import {
+  activeToolRunOrLast,
+  toolRunGroupKind,
+  toolRunGroupingKey,
+  toolRunGroupStatus,
+} from './runtimeToolRunGrouping.js';
 import {
   shellCommand,
 } from './RuntimeShellToolRun.js';
@@ -79,6 +86,12 @@ export {
   toolRunIcon,
   toolRunKindIcon,
 } from './RuntimeToolRunStatus.js';
+export {
+  activeToolRunOrLast,
+  toolRunGroupKind,
+  toolRunGroupingKey,
+  toolRunGroupStatus,
+} from './runtimeToolRunGrouping.js';
 
 export function fileOperationGroupChangeTotals(runs: RuntimeToolRun[]): { additions: number; deletions: number; showZero: boolean } | null {
   let hasTotals = false;
@@ -229,6 +242,7 @@ export function mixedToolRunBucketSummary(
 ): string {
   const status = toolRunGroupStatus(runs);
   if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
+  if (kind === 'collaboration') return collaborationGroupSummary(runs, t);
   if (kind === 'inspection') {
     const parts = inspectionSummaryParts(inspectionEntries(runs), t);
     return parts.length ? parts.join(t('toolRun.joiner')) : inspectionGroupSummary(runs, t).title;
@@ -250,6 +264,7 @@ export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaul
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   const status = toolRunGroupStatus(runs);
   if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
+  if (kind === 'collaboration') return collaborationGroupSummary(runs, t);
   if (kind === 'shell') return shellCountSummary(runs, status, t);
   if (kind === 'inspection') return inspectionGroupSummary(runs, t).title;
   if (kind === 'search') return searchCountSummary(runs, status, t);
@@ -299,36 +314,6 @@ export function pendingApprovalDisclosureKey(runs: RuntimeToolRun[]): string | u
 
 export function isFlatInspectionRun(run: RuntimeToolRun): boolean {
   return toolRunGroupKind(run) === 'inspection' && run.status !== 'pending_approval';
-}
-
-export function toolRunGroupingKey(run: RuntimeToolRun): string {
-  const kind = toolRunGroupKind(run);
-  return kind === 'generic' ? `${kind}:${run.name}` : kind;
-}
-
-export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
-  if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
-  if (isFileOperationRun(run)) return 'fileMutation';
-  if (run.name === 'workspace_search_text' || run.name === 'search_text') return 'search';
-  if (run.name.includes('shell') || run.name === 'run_shell_command' || run.name === 'read_shell_process' || run.name === 'exec_command' || run.name === 'write_stdin') return 'shell';
-  return 'generic';
-}
-
-export function toolRunGroupStatus(runs: RuntimeToolRun[]): RuntimeToolRun['status'] {
-  if (runs.some((run) => run.status === 'error')) return 'error';
-  if (runs.some((run) => run.status === 'pending_approval')) return 'pending_approval';
-  if (runs.some((run) => run.status === 'running')) return 'running';
-  if (runs.some((run) => run.status === 'cancelled')) return 'cancelled';
-  if (runs.some((run) => run.status === 'rejected')) return 'rejected';
-  return 'success';
-}
-
-export function activeToolRunOrLast(runs: RuntimeToolRun[]): RuntimeToolRun | undefined {
-  for (let index = runs.length - 1; index >= 0; index -= 1) {
-    const run = runs[index];
-    if (run && (run.status === 'running' || run.status === 'pending_approval')) return run;
-  }
-  return runs.at(-1);
 }
 
 export function toolRunGroupSummary(

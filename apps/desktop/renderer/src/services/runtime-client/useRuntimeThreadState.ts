@@ -19,6 +19,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
+import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
@@ -163,13 +164,14 @@ export function useRuntimeThreadState({
     projects,
     visibleThreads,
   }: RuntimeThreadBootstrap) => {
-    setThreads(visibleThreads);
-    setArchivedThreads(allThreads.filter((thread) => thread.archived));
+    const primaryThreads = visibleThreads.filter(isPrimaryConversationThread);
+    setThreads(primaryThreads);
+    setArchivedThreads(allThreads.filter((thread) => thread.archived && isPrimaryConversationThread(thread)));
     if (initializedSelectionRef.current) return;
 
     initializedSelectionRef.current = true;
     const initialThread = selectInitialThreadSummary(
-      visibleThreads,
+      primaryThreads,
       readPersistedActiveThreadId(),
     );
     if (initialThread) {
@@ -200,7 +202,7 @@ export function useRuntimeThreadState({
       threadListRefreshTimerRef.current = null;
       void client
         .listThreads()
-        .then((list) => setThreads(list.threads))
+        .then((list) => setThreads(list.threads.filter(isPrimaryConversationThread)))
         .catch((unknownError) => {
           reportRuntimeBackgroundFailure('thread list refresh', unknownError);
         });
@@ -215,8 +217,8 @@ export function useRuntimeThreadState({
       try {
         const all = await client.listThreads({ includeArchived: true });
         if (cancelled) return;
-        setThreads(all.threads.filter((thread) => !thread.archived));
-        setArchivedThreads(all.threads.filter((thread) => thread.archived));
+        setThreads(all.threads.filter((thread) => !thread.archived && isPrimaryConversationThread(thread)));
+        setArchivedThreads(all.threads.filter((thread) => thread.archived && isPrimaryConversationThread(thread)));
         const stillRunning = all.threads.some((thread) => Boolean(thread.activeTurnId));
         if (stillRunning || effectiveActiveTurnId) {
           timeoutId = window.setTimeout(pollThreadSummaries, 1000);
@@ -399,9 +401,10 @@ export function useRuntimeThreadState({
       client.listThreads(),
       client.listThreads({ includeArchived: true }),
     ]);
-    setThreads(list.threads);
-    setArchivedThreads(allList.threads.filter((thread) => thread.archived));
-    return list.threads;
+    const primaryThreads = list.threads.filter(isPrimaryConversationThread);
+    setThreads(primaryThreads);
+    setArchivedThreads(allList.threads.filter((thread) => thread.archived && isPrimaryConversationThread(thread)));
+    return primaryThreads;
   }, [client]);
 
   const clearCurrentThreadContext = useCallback(async () => {

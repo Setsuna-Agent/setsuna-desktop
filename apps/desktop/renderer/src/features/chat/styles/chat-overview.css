@@ -795,10 +795,10 @@
 
 .chat-conversation-overview-panel__agents > button {
   display: grid;
-  grid-template-columns: 8px minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  min-height: 28px;
+  gap: 7px;
+  min-height: 30px;
   padding: 0 6px;
   border: 0;
   border-radius: 7px;
@@ -810,17 +810,6 @@
 
 .chat-conversation-overview-panel__agents > button:hover {
   background: color-mix(in srgb, var(--app-surface) 90%, var(--app-text) 10%);
-}
-
-.chat-conversation-overview-panel__agents > button > span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--app-muted);
-}
-
-.chat-conversation-overview-panel__agents > button > span.is-running {
-  background: var(--app-success);
 }
 
 .chat-conversation-overview-panel__agents strong {

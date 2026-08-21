@@ -1,10 +1,11 @@
 import { Bubble } from '@ant-design/x';
 import {
   normalizeRuntimeReviewNotice,
+  type RuntimeCollaborationTask,
   type RuntimeMessage,
   type RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
-import { BookOpen, MessageSquare, ShieldCheck, Target } from 'lucide-react';
+import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
@@ -62,6 +63,7 @@ export function MessageItem({
   activeAssistantItemId,
   activeTurnId,
   assistantItemIdByTurnId,
+  collaborationTasks,
   deleteMode,
   editingDraft,
   editingMessageId,
@@ -85,6 +87,7 @@ export function MessageItem({
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   assistantItemIdByTurnId: Map<string, string>;
+  collaborationTasks?: RuntimeCollaborationTask[];
   deleteMode: boolean;
   editingDraft: string;
   editingMessageId: string | null;
@@ -96,10 +99,10 @@ export function MessageItem({
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onEditDraftChange: (value: string) => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
-  onStartEdit: (message: RuntimeMessage) => void;
-  onStartDelete: (itemId: string) => void;
-  onSubmitEdit: (messageId: string) => void;
-  onToggleDelete: (itemId: string, checked: boolean) => void;
+  onStartEdit?: (message: RuntimeMessage) => void;
+  onStartDelete?: (itemId: string) => void;
+  onSubmitEdit?: (messageId: string) => void;
+  onToggleDelete?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
@@ -111,6 +114,7 @@ export function MessageItem({
       <AssistantRunItem
         activeTurnId={activeTurnId}
         activeAssistantItemId={activeAssistantItemId}
+        collaborationTasks={collaborationTasks}
         deleteMode={deleteMode}
         item={item}
         onAnswerApproval={onAnswerApproval}
@@ -138,7 +142,7 @@ export function MessageItem({
   }
   const { message } = item;
   const streaming = message.status === 'streaming';
-  const editing = editingMessageId === message.id;
+  const editing = Boolean(onSubmitEdit && editingMessageId === message.id);
   const steered = item.steered;
   const assistantItemId = message.turnId ? assistantItemIdByTurnId.get(message.turnId) : undefined;
   const workHistoryExpanded = assistantItemId
@@ -151,17 +155,17 @@ export function MessageItem({
   // this fallback for a failed/unhandled steer that has no completed assistant response to own it.
   const showExtractedGuidance = Boolean(!steered && message.turnId && message.turnId !== activeTurnId && !item.guidanceProcessed && fallbackGuidanceMessages.length && !workHistoryExpanded);
   if (editing) {
-    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit(message.id)} />;
+    return <UserMessageEditor disabled={Boolean(activeTurnId) || editingSubmitting} submitting={editingSubmitting} value={editingDraft} onCancel={onCancelEdit} onChange={onEditDraftChange} onSubmit={() => onSubmitEdit?.(message.id)} />;
   }
   const hasAttachments = Boolean(message.attachments?.length);
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--user', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+      {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectMessage')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <div className="chat-user-turn">
         <Bubble
           className={`chat-user-bubble ${hasAttachments ? 'chat-user-bubble--with-attachments' : ''}`}
           content={<UserMessageContent message={message} streaming={streaming} />}
-          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered ? undefined : () => onStartDelete(item.id)} onEdit={steered || message.inputKind === 'goal' || message.inputKind === 'review' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
+          footer={<ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} align="end" message={message} onDelete={steered || !onStartDelete ? undefined : () => onStartDelete(item.id)} onEdit={steered || !onStartEdit || message.inputKind === 'goal' || message.inputKind === 'review' || message.inputKind === 'subagent_task' ? undefined : () => onStartEdit(message)} timePosition={steered ? 'none' : 'before-actions'} />}
           placement="end"
           variant="filled"
         />
@@ -180,7 +184,8 @@ function UserMessageContent({
   streaming: boolean;
 }) {
   const hasSemanticKind = message.inputKind === 'goal'
-    || message.inputKind === 'review';
+    || message.inputKind === 'review'
+    || message.inputKind === 'subagent_task';
   return (
     <div className="chat-user-message-content">
       {message.attachments?.length ? (
@@ -207,11 +212,13 @@ function UserMessageContent({
 
 function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
   const { t } = useI18n();
-  if (kind !== 'goal' && kind !== 'review') return null;
+  if (kind !== 'goal' && kind !== 'review' && kind !== 'subagent_task') return null;
   const label = t(kind === 'goal'
     ? 'chat.message.kind.goal'
-    : 'chat.message.kind.review');
-  const Icon = kind === 'goal' ? Target : ShieldCheck;
+    : kind === 'review'
+      ? 'chat.message.kind.review'
+      : 'chat.message.kind.subagentTask');
+  const Icon = kind === 'goal' ? Target : kind === 'review' ? ShieldCheck : Users;
   return (
     <span className={`chat-user-message-kind chat-user-message-kind--${kind}`} aria-label={label}>
       <Icon size={13} strokeWidth={1.9} aria-hidden="true" />
@@ -223,6 +230,7 @@ function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
 function AssistantRunItem({
   activeAssistantItemId,
   activeTurnId,
+  collaborationTasks,
   deleteMode,
   item,
   onAnswerApproval,
@@ -237,13 +245,14 @@ function AssistantRunItem({
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
+  collaborationTasks?: RuntimeCollaborationTask[];
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onOpenFileReview?: DesktopReviewOpenHandler;
-  onStartDelete: (itemId: string) => void;
-  onToggleDelete: (itemId: string, checked: boolean) => void;
+  onStartDelete?: (itemId: string) => void;
+  onToggleDelete?: (itemId: string, checked: boolean) => void;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   pluginUses: RuntimePluginUse[];
   selectedForDelete: boolean;
@@ -261,11 +270,11 @@ function AssistantRunItem({
   } as RuntimeMessage;
   return (
     <article className={['chat-bubble-item', 'chat-bubble-item--assistant', streaming ? 'chat-bubble-item--active' : '', deleteMode ? 'chat-bubble-item--selecting' : '', selectedForDelete ? 'is-selected-for-delete' : ''].filter(Boolean).join(' ')}>
-      {deleteMode ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
+      {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
-        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={() => onStartDelete(item.id)} timePosition="after-actions" />}
+        content={<AssistantRunContent active={active} collaborationTasks={collaborationTasks} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
         variant="borderless"
@@ -324,6 +333,7 @@ function ReviewModeMarker({
 
 function AssistantRunContent({
   active,
+  collaborationTasks,
   item,
   onAnswerApproval,
   onDiscardFileChanges,
@@ -333,6 +343,7 @@ function AssistantRunContent({
   showThinkingInTranscript,
 }: {
   active: boolean;
+  collaborationTasks?: RuntimeCollaborationTask[];
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
@@ -423,6 +434,7 @@ function AssistantRunContent({
       ) : leadingGuidance}
       {renderAssistantTimelinePlan({
         active,
+        collaborationTasks,
         handledGuidanceMessageIds: guidanceMessageIds,
         itemId: chatDisplayItemRenderKey(item),
         onAnswerApproval,
@@ -550,6 +562,7 @@ function GuidanceProcessedMarker() {
 
 function renderAssistantTimelinePlan({
   active,
+  collaborationTasks,
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
@@ -560,6 +573,7 @@ function renderAssistantTimelinePlan({
   hideFinalContent = false,
 }: {
   active: boolean;
+  collaborationTasks?: RuntimeCollaborationTask[];
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
@@ -575,6 +589,7 @@ function renderAssistantTimelinePlan({
     if (node.type === 'workHistory') {
       nodes.push(
         assistantWorkHistoryNode({
+          collaborationTasks,
           handledGuidanceMessageIds,
           itemId,
           onAnswerApproval,
@@ -664,6 +679,7 @@ function ReviewSummaryCard({
 }
 
 function assistantWorkHistoryNode({
+  collaborationTasks,
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
@@ -671,6 +687,7 @@ function assistantWorkHistoryNode({
   plan,
   workHistoryDefaultExpanded,
 }: {
+  collaborationTasks?: RuntimeCollaborationTask[];
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
@@ -682,6 +699,7 @@ function assistantWorkHistoryNode({
     plan.entries,
     onAnswerApproval,
     handledGuidanceMessageIds,
+    collaborationTasks,
   );
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const hasWorkDetails = workNodes.length > 0;
@@ -734,6 +752,7 @@ function assistantWorkEntriesNodes(
   entries: AssistantWorkHistoryPlanEntry[],
   onAnswerApproval: AnswerApprovalHandler,
   handledGuidanceMessageIds: Set<string>,
+  collaborationTasks?: RuntimeCollaborationTask[],
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   for (let index = 0; index < entries.length; index += 1) {
@@ -753,7 +772,7 @@ function assistantWorkEntriesNodes(
           || thinkingEntry.item.type !== 'thinking'
           || thinkingEntry.item.segment.active
         ) break;
-        nestedThinkingNodes.push(...assistantWorkItemNodes(thinkingEntry.item, onAnswerApproval));
+        nestedThinkingNodes.push(...assistantWorkItemNodes(thinkingEntry.item, onAnswerApproval, undefined, collaborationTasks));
         followingIndex += 1;
       }
       // 活动思考保持在外层提供实时反馈；完成后才归入对应工具批次的折叠明细。
@@ -763,6 +782,7 @@ function assistantWorkEntriesNodes(
       entry.item,
       onAnswerApproval,
       nestedThinkingNodes.length ? nestedThinkingNodes : undefined,
+      collaborationTasks,
     ));
   }
   return nodes;
@@ -772,6 +792,7 @@ function assistantWorkItemNodes(
   item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
   onAnswerApproval: AnswerApprovalHandler,
   nestedDetails?: ReactNode,
+  collaborationTasks?: RuntimeCollaborationTask[],
 ): ReactNode[] {
   if (item.type === 'content') {
     return [
@@ -808,6 +829,7 @@ function assistantWorkItemNodes(
       key={item.segment.id}
       runs={visibleToolRuns}
       summaryMode={visibleToolRuns.some(isActiveRuntimeToolRun) ? 'latest' : 'aggregate'}
+      collaborationTasks={collaborationTasks}
       onAnswerApproval={onAnswerApproval}
     >
       {nestedDetails}

@@ -1,4 +1,5 @@
 import type {
+  RuntimeCollaborationTask,
   RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
@@ -67,7 +68,6 @@ import {
   isFlatInspectionRun,
   isPendingApprovalRun,
   isPreparingToolRun,
-  isRecord,
   isShellRun,
   mixedToolRunGroupIcon,
   mixedToolRunGroupSummary,
@@ -75,7 +75,6 @@ import {
   pathBaseName,
   pendingApprovalDisclosureKey,
   ShellTerminalResult,
-  stringField,
   toolRunDisplayStableKey,
   toolRunGroupIcon,
   toolRunGroupId,
@@ -90,6 +89,12 @@ import {
   ToolRunSummaryTarget
 } from './RuntimeToolRunPresentation.js';
 import { RuntimeUserInputActions } from './RuntimeUserInputActions.js';
+import {
+  execPolicyApprovalSummary,
+  networkApprovalSummary,
+  permissionApprovalSummary,
+} from './runtimeApprovalSummaries.js';
+import { SubagentToolRunCard } from './runtimeCollaborationRuns.js';
 
 export type { ToolRunGroup, ToolRunGroupKind, ToolRunSummaryMode } from './runtime-tool-run-types.js';
 
@@ -107,11 +112,13 @@ export function RuntimeToolRuns({
   runs,
   onAnswerApproval,
   summaryMode = 'aggregate',
+  collaborationTasks,
 }: {
   children?: ReactNode;
   runs: RuntimeToolRun[];
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
+  collaborationTasks?: RuntimeCollaborationTask[];
 }) {
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
@@ -119,7 +126,7 @@ export function RuntimeToolRuns({
   if (!group) return null;
   return (
     <div className="chat-tool-runs">
-      <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
+      <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} collaborationTasks={collaborationTasks} />
     </div>
   );
 }
@@ -180,16 +187,27 @@ function ToolRunDisplayPanel({
   group,
   nestedDetails,
   onAnswerApproval,
+  collaborationTasks,
 }: {
   group: ToolRunDisplayGroup;
   nestedDetails?: ReactNode;
   onAnswerApproval: AnswerApprovalHandler;
+  collaborationTasks?: RuntimeCollaborationTask[];
 }): JSX.Element {
   const { t } = useI18n();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
-    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
+    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails, collaborationTasks);
+  }
+  if (group.type === 'single' && toolRunGroupKind(group.run) === 'collaboration') {
+    return (
+      <SubagentToolRunCard
+        key={`collaboration:${group.run.id}`}
+        run={group.run}
+        collaborationTasks={collaborationTasks}
+      />
+    );
   }
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {
@@ -362,6 +380,7 @@ function mixedToolRunGroupPanelNode(
   onAnswerApproval: AnswerApprovalHandler,
   t: Translate,
   nestedDetails?: ReactNode,
+  collaborationTasks?: RuntimeCollaborationTask[],
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
   const status = toolRunGroupStatus(runs);
@@ -419,7 +438,7 @@ function mixedToolRunGroupPanelNode(
             />
           </>
         ) : (
-          visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
+          visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval, collaborationTasks))
         )}
         {nestedDetails}
       </div>
@@ -430,6 +449,7 @@ function mixedToolRunGroupPanelNode(
 function renderMixedToolRunChildGroup(
   group: ToolRunGroup,
   onAnswerApproval: AnswerApprovalHandler,
+  collaborationTasks?: RuntimeCollaborationTask[],
 ): JSX.Element | null {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
@@ -441,11 +461,21 @@ function renderMixedToolRunChildGroup(
       </div>
     );
   }
+  if (kind === 'collaboration' && group.type === 'single') {
+    return (
+      <SubagentToolRunCard
+        key={`collaboration:${group.run.id}`}
+        run={group.run}
+        collaborationTasks={collaborationTasks}
+      />
+    );
+  }
   return (
     <ToolRunDisplayPanel
       key={toolRunDisplayStableKey(group)}
       group={group}
       onAnswerApproval={onAnswerApproval}
+      collaborationTasks={collaborationTasks}
     />
   );
 }
@@ -794,68 +824,6 @@ function displayedGenericToolRunDiagnostic(run: RuntimeToolRun, t: Translate): s
     return '';
   }
   return diagnostic;
-}
-
-function execPolicyApprovalSummary(run: RuntimeToolRun): string {
-  const prefix = run.proposedExecPolicyAmendment?.filter(Boolean) ?? [];
-  return prefix.length ? `allow prefix: ${prefix.join(' ')}` : '';
-}
-
-function networkApprovalSummary(run: RuntimeToolRun): string {
-  const context = run.networkApprovalContext;
-  if (!context) return '';
-  const allowAmendments = run.proposedNetworkPolicyAmendments
-    ?.filter((item) => item.action === 'allow' && item.host)
-    .map((item) => item.host);
-  const denyAmendments = run.proposedNetworkPolicyAmendments
-    ?.filter((item) => item.action === 'deny' && item.host)
-    .map((item) => item.host);
-  return [
-    `target: ${context.target}`,
-    `protocol: ${context.protocol}`,
-    allowAmendments?.length ? `policy allow: ${[...new Set(allowAmendments)].join(', ')}` : '',
-    denyAmendments?.length ? `policy deny: ${[...new Set(denyAmendments)].join(', ')}` : '',
-  ].filter(Boolean).join('\n');
-}
-
-function permissionApprovalSummary(run: RuntimeToolRun): string {
-  const context = run.permissionApprovalContext;
-  if (!context) return '';
-  const granted = isRecord(context.grantedPermissions) ? context.grantedPermissions : {};
-  const network = isRecord(granted.network) && granted.network.enabled === true;
-  const readRoots = permissionFileRoots(granted.file_system ?? granted.fileSystem, 'read');
-  const writeRoots = permissionWriteRoots(granted.file_system ?? granted.fileSystem);
-  const lines = [
-    context.cwd ? `cwd: ${context.cwd}` : '',
-    network ? 'network: enabled' : '',
-    readRoots.length ? `read: ${readRoots.slice(0, 5).join(', ')}${readRoots.length > 5 ? ` +${readRoots.length - 5}` : ''}` : '',
-    writeRoots.length ? `write: ${writeRoots.slice(0, 5).join(', ')}${writeRoots.length > 5 ? ` +${writeRoots.length - 5}` : ''}` : '',
-  ].filter(Boolean);
-  return lines.join('\n');
-}
-
-function permissionWriteRoots(value: unknown): string[] {
-  return permissionFileRoots(value, 'write');
-}
-
-function permissionFileRoots(value: unknown, access: 'read' | 'write'): string[] {
-  const fileSystem = isRecord(value) ? value : {};
-  const roots = new Set<string>();
-  const legacyRoots = access === 'write' ? fileSystem.write : fileSystem.read;
-  if (Array.isArray(legacyRoots)) {
-    for (const item of legacyRoots) {
-      const root = stringField(item);
-      if (root) roots.add(root);
-    }
-  }
-  if (Array.isArray(fileSystem.entries)) {
-    for (const item of fileSystem.entries) {
-      if (!isRecord(item) || item.access !== access) continue;
-      const pathValue = isRecord(item.path) ? stringField(item.path.path) : stringField(item.path);
-      if (pathValue) roots.add(pathValue);
-    }
-  }
-  return [...roots];
 }
 
 function ToolPreview({ code = false, label, value }: { code?: boolean; label: string; value: string }) {

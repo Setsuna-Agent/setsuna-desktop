@@ -1,4 +1,7 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeCollaborationTask,
+  WorkspaceProject,
+} from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
@@ -18,6 +21,7 @@ import {
   createFilesPanel,
   createReviewPanel,
   createSideChatPanel as createSideChatPanelTab,
+  createSubagentPanel,
   createWorkspaceOverviewPanel,
   fileWorkspacePanelTargetSlot,
   findDesktopPanelLocationByType,
@@ -386,6 +390,25 @@ export function useDesktopWorkspacePanels({
     addPanelToDesktopSlot(fileWorkspacePanelTargetSlot('side', sidePanelSlot, bottomPanelSlot), panel);
   }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
 
+  /**
+   * 打开子代理只读面板。面板 id 固定为 subagent:<childThreadId>，因此正文卡片和
+   * 环境面板反复点击只会激活同一个 tab；关闭面板不影响 child 线程本身。
+   */
+  const openSubagentPanel = useCallback((parentThreadId: string, task: RuntimeCollaborationTask) => {
+    closeWorkspaceMenus();
+    const panel = createSubagentPanel(task.childThreadId, parentThreadId, task.identity.displayName);
+    if (sidePanelSlot.panels.some((item) => item.id === panel.id)) {
+      setSidePanelExpanded(true);
+      setSidePanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      return;
+    }
+    if (bottomPanelSlot.panels.some((item) => item.id === panel.id)) {
+      setBottomPanelSlot((current) => activatePanelInSlotState(current, panel.id));
+      return;
+    }
+    addPanelToDesktopSlot('side', panel);
+  }, [addPanelToDesktopSlot, bottomPanelSlot.panels, closeWorkspaceMenus, setBottomPanelSlot, setSidePanelExpanded, setSidePanelSlot, sidePanelSlot.panels]);
+
   const activateDesktopPanel = useCallback((slot: DesktopPanelSlot, panelId: string) => {
     const updater = (current: DesktopPanelSlotState) => activatePanelInSlotState(current, panelId);
     if (slot === 'side') {
@@ -632,6 +655,7 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      openSubagentPanel,
       openWorkspaceDirectory,
       openSelectedWorkspaceApp,
       panelLauncherTypes,
@@ -683,6 +707,7 @@ export function useDesktopWorkspacePanels({
       openFileInWorkspaceApp,
       openFileWithWorkspaceApp,
       openFilePanel,
+      openSubagentPanel,
       openWorkspaceDirectory,
       openSelectedWorkspaceApp,
       panelLauncherTypes,

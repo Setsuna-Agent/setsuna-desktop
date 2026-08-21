@@ -100,37 +100,28 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
-  it('shows child collaboration tasks without treating forks as tasks', () => {
+  it('shows collaboration tasks from the parent thread ledger', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
-      threads: [
-        {
-          id: 'child_1',
-          parentThreadId: 'thread_1',
+      currentThread: {
+        ...baseProps.currentThread,
+        collaborationTasks: [{
+          id: 'task_1',
+          childThreadId: 'child_1',
           title: 'Child agent',
+          objective: 'Inspect the repository.',
+          identity: { displayName: 'Scout', avatarSeed: 'seed_1' },
+          status: 'running',
           createdAt: '2026-07-01T00:00:00.000Z',
           updatedAt: '2026-07-01T00:00:00.000Z',
-          archived: false,
-          messageCount: 1,
-          lastMessagePreview: 'working',
-        },
-        {
-          id: 'fork_1',
-          forkedFromId: 'thread_1',
-          title: 'Forked conversation',
-          createdAt: '2026-07-01T00:00:00.000Z',
-          updatedAt: '2026-07-01T00:00:00.000Z',
-          archived: false,
-          messageCount: 0,
-          lastMessagePreview: '',
-        },
-      ],
+        }],
+      },
     });
 
     expect(html).toContain('aria-label="1 个协作任务"');
-    expect(html).toContain('Child agent');
-    expect(html).not.toContain('Forked conversation');
+    expect(html).toContain('Scout');
+    expect(html).toContain('运行中');
   });
 
   it('renders active plan progress with its detail popover', () => {
@@ -293,5 +284,4 @@ const baseProps = {
   onOpenThread: () => undefined,
   onReviewRefresh: () => undefined,
   threadUsage: null,
-  threads: [],
 };

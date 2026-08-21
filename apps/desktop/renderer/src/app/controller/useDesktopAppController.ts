@@ -24,6 +24,7 @@ import { useRuntimeClientState } from '../../services/runtime-client/useRuntimeC
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
+import { registerSubagentPanelOpener } from '../../features/chat/subagents/collaborationTaskView.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesktopNetworkProxy } from './useDesktopNetworkProxy.js';
@@ -193,6 +194,19 @@ export function useDesktopAppController() {
     claimComposerForThread(threadId);
     claimWorkspacePanelsForThread(threadId);
   }, [claimComposerForThread, claimWorkspacePanelsForThread]);
+
+  const currentThreadIdRef = useRef<string | null>(currentThread?.id ?? null);
+  currentThreadIdRef.current = currentThread?.id ?? null;
+  const { openSubagentPanel } = workspacePanels;
+  useEffect(() => {
+    // 正文中的子代理任务卡片不贯穿多层 props，统一通过注册器打开右侧只读面板。
+    registerSubagentPanelOpener((task) => {
+      const parentThreadId = currentThreadIdRef.current;
+      if (!parentThreadId) return;
+      openSubagentPanel(parentThreadId, task);
+    });
+    return () => registerSubagentPanelOpener(null);
+  }, [openSubagentPanel]);
 
   const chatActions = useChatTurnActions({
     activeProjectId,

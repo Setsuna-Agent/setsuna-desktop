@@ -12,6 +12,7 @@ import type {
   RuntimeStreamItem,
   RuntimeThreadModelBinding,
 } from './provider.js';
+import type { RuntimeCollaborationTask, RuntimeCollaborationTaskStatus } from './provider.js';
 import type {
   RuntimeGitInfo,
   RuntimeHookRun,
@@ -24,7 +25,7 @@ import type {
 } from './threads.js';
 import type { RuntimeUsage } from './usage.js';
 
-export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell';
+export type RuntimeTaskKind = 'regular' | 'compact' | 'review' | 'goal' | 'user_shell' | 'subagent';
 
 export type RuntimeMailboxDelivery = {
   id: string;
@@ -79,6 +80,8 @@ export const RUNTIME_EVENT_TYPES = [
   'hook.completed',
   'approval.requested',
   'approval.resolved',
+  'collaboration.task_created',
+  'collaboration.task_status_changed',
   'turn.completed',
   'turn.cancelled',
   'runtime.warning',
@@ -197,6 +200,17 @@ export type RuntimeEvent =
         message?: string;
         source?: RuntimeApprovalResolutionSource;
         assessment?: RuntimeApprovalReviewAssessment;
+      }
+    >
+  | RuntimeEventBase<'collaboration.task_created', { task: RuntimeCollaborationTask }>
+  | RuntimeEventBase<
+      'collaboration.task_status_changed',
+      {
+        taskId: string;
+        status: RuntimeCollaborationTaskStatus;
+        activeTurnId?: string;
+        resultPreview?: string;
+        error?: string;
       }
     >
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>

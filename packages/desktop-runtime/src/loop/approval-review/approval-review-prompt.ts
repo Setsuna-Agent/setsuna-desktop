@@ -201,7 +201,12 @@ function trustedUserEvidenceSource(
 ): 'user_message' | 'request_user_input' | null {
   // Compaction summaries use the user role for provider compatibility, but
   // their content is model-generated from mixed-trust history.
-  if (message.role === 'user' && !message.contextCompaction) return 'user_message';
+  if (message.role === 'user' && !message.contextCompaction) {
+    // Subagent task assignments are delegated by the parent agent, not real
+    // user authorization. They must never count as trusted user evidence.
+    if (message.promptSource === 'collaboration' || message.inputKind === 'subagent_task') return null;
+    return 'user_message';
+  }
   if (
     message.role === 'tool'
     && message.toolName === 'request_user_input'

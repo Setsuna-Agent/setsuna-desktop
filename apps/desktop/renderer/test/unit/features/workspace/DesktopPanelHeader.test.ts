@@ -37,6 +37,26 @@ describe('DesktopPanelHeader browser tabs', () => {
     expect(html).toContain('aria-label="添加面板"');
   });
 
+  it('uses the collaboration icon for subagent tabs', () => {
+    const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
+      activePanel: 'subagent',
+      activePanelId: 'subagent:child-1',
+      onClose: () => undefined,
+      onClosePanel: () => undefined,
+      onSelectPanel: () => undefined,
+      panels: [{
+        id: 'subagent:child-1',
+        type: 'subagent',
+        title: 'contracts-investigator',
+        subagent: { parentThreadId: 'parent-1', threadId: 'child-1' },
+      }],
+      placement: 'side',
+    }));
+
+    expect(html).toContain('lucide-users');
+    expect(html).not.toContain('lucide-folder-open');
+  });
+
   it('uses selected layout controls while the side and bottom panels are open', () => {
     const { getByRole } = render(createElement(DesktopPanelHeader, {
       activePanel: 'terminal',

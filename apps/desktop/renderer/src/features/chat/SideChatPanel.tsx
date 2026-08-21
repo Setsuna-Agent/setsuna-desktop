@@ -5,7 +5,6 @@ import type {
   RuntimePluginSummary,
   RuntimeSkillSummary,
   RuntimeThread,
-  RuntimeThreadSummary,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -38,7 +37,6 @@ export function SideChatPanel({
   plugins,
   selectedWorkspaceApp,
   skills,
-  threads,
   onAccessModeChange,
   onError,
   onOpenInAppBrowser,
@@ -66,7 +64,6 @@ export function SideChatPanel({
   plugins: RuntimePluginSummary[];
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   skills: RuntimeSkillSummary[];
-  threads: RuntimeThreadSummary[];
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onError: Dispatch<SetStateAction<string | null>>;
   onOpenInAppBrowser: (url: string) => void;
@@ -190,7 +187,6 @@ export function SideChatPanel({
           skillSelectionRequest={null}
           skills={skills}
           threadUsage={sideChat.threadUsage}
-          threads={threads}
           variant="side"
           onAnswerApproval={sideChat.answerApproval}
           onAccessModeChange={onAccessModeChange}
@@ -204,7 +200,6 @@ export function SideChatPanel({
           onEditUserMessage={sideChat.actions.editUserMessage}
           onOpenSideChat={onOpenSideChat}
           onOpenFileReview={openSideWorkspaceReview}
-          onOpenThread={() => undefined}
           onSearchProjectEntries={searchSideWorkspaceEntries}
           onSelectModel={onSelectModel}
           onSend={(value, options) => sideChat.actions.sendInput(value, options)}

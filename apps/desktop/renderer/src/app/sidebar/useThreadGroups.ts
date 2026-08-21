@@ -1,11 +1,14 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { useMemo } from 'react';
+import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
 
 export function useThreadGroups(threads: RuntimeThreadSummary[]) {
   return useMemo(() => {
-    const globalThreads = threads.filter((thread) => !thread.projectId);
+    // 子代理 child 线程不属于主对话，永远不进入侧栏分组。
+    const primaryThreads = threads.filter(isPrimaryConversationThread);
+    const globalThreads = primaryThreads.filter((thread) => !thread.projectId);
     const threadsByProjectId = new Map<string, RuntimeThreadSummary[]>();
-    for (const thread of threads) {
+    for (const thread of primaryThreads) {
       if (!thread.projectId) continue;
       const list = threadsByProjectId.get(thread.projectId) ?? [];
       list.push(thread);
