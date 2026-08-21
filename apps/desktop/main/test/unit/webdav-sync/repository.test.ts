@@ -280,7 +280,7 @@ describe('EncryptedWebDavRepository', () => {
     ))).toEqual([]);
   });
 
-  it('rejects manifest paths that cannot round-trip across supported platforms', async () => {
+  it('accepts tool-result files and rejects paths that cannot round-trip across platforms', async () => {
     const server = new MemoryWebDavServer('/dav');
     const client = new WebDavClient(
       normalizeWebDavLocation({ endpoint: 'https://dav.test/dav', remoteRoot: '/Backups' }),
@@ -301,6 +301,19 @@ describe('EncryptedWebDavRepository', () => {
       sourceDataRoot: '/Users/alice/Setsuna',
       categories: ['user_skills'] as const,
     };
+    expect(() => repository.validateSnapshotManifest({
+      ...manifest,
+      categories: ['conversations'],
+      items: ['index.json', 'files/tool_result_saved'].map((relativePath, index) => ({
+        category: 'conversations' as const,
+        kind: 'file' as const,
+        logicalPath: `runtime/tool-results/${relativePath}`,
+        label: relativePath,
+        objectName: `${String(index + 1).padStart(6, '0')}.enc`,
+        sha256: '0'.repeat(64),
+        size: 0,
+      })),
+    })).not.toThrow();
     for (const logicalPath of [
       'runtime/user-skills/docs\\guide.md',
       'runtime/user-skills/CON/readme.md',

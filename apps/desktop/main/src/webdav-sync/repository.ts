@@ -642,7 +642,8 @@ function allowedFilePath(category: DesktopWebDavSyncCategoryId, logicalPath: str
   if (category === 'conversations') {
     return logicalPath === 'runtime/threads.sqlite'
       || logicalPath.startsWith('runtime/attachments/')
-      || logicalPath.startsWith('runtime/generated-images/');
+      || logicalPath.startsWith('runtime/generated-images/')
+      || logicalPath.startsWith('runtime/tool-results/');
   }
   if (category === 'memories') return logicalPath.startsWith('runtime/memories/');
   if (category === 'preferences') return logicalPath === 'runtime/config.json';

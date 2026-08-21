@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  categoryTargetPaths,
   createSqliteSnapshot,
   inventorySnapshotSources,
   prepareLocalSnapshotSources,
@@ -102,7 +103,7 @@ describe('WebDAV portable snapshot data', () => {
       .toMatchObject({ executable: true });
   });
 
-  it('creates a consistent SQLite copy and rejects symlinks in managed directories', async () => {
+  it('copies conversation storage consistently and rejects symlinks in managed directories', async () => {
     const root = await createDataRoot();
     const firstStaging = path.join(root, '.webdav-sync-work', 'conversation');
     const sources = await prepareLocalSnapshotSources({
@@ -111,7 +112,16 @@ describe('WebDAV portable snapshot data', () => {
       categories: ['conversations'],
     });
     const databaseSource = sources.find((source) => source.logicalPath === 'runtime/threads.sqlite');
+    const toolResultIndex = sources.find((source) => source.logicalPath === 'runtime/tool-results/index.json');
+    const toolResultPayload = sources.find((source) => (
+      source.logicalPath === 'runtime/tool-results/files/tool_result_saved'
+    ));
     expect(databaseSource?.sourcePath).not.toBe(path.join(root, 'runtime', 'threads.sqlite'));
+    expect(toolResultIndex?.sourcePath).not.toBe(path.join(root, 'runtime', 'tool-results', 'index.json'));
+    expect(await readFile(toolResultIndex!.sourcePath!, 'utf8')).toContain('tool_result_saved');
+    expect(await readFile(toolResultPayload!.sourcePath!, 'utf8')).toBe('complete tool output');
+    expect(categoryTargetPaths(root, ['conversations']))
+      .toContain(path.join(root, 'runtime', 'tool-results'));
     const snapshot = new DatabaseSync(databaseSource!.sourcePath!, { readOnly: true });
     try {
       expect(snapshot.prepare('SELECT value FROM sample').get()).toEqual({ value: 'saved' });
@@ -203,7 +213,7 @@ describe('WebDAV portable snapshot data', () => {
       'usage',
     ]);
     expect(byCategory.get('conversations')).toEqual(expect.objectContaining({
-      itemCount: 2,
+      itemCount: 4,
       totalBytes: expect.any(Number),
     }));
     expect(byCategory.get('preferences')).toEqual(expect.objectContaining({
@@ -262,8 +272,18 @@ async function createDataRoot(): Promise<string> {
   temporaryRoots.push(root);
   const runtimeRoot = path.join(root, 'runtime');
   await mkdir(path.join(runtimeRoot, 'attachments'), { recursive: true });
+  await mkdir(path.join(runtimeRoot, 'tool-results', 'files'), { recursive: true });
   await mkdir(path.join(runtimeRoot, 'user-skills', 'demo'), { recursive: true });
   await writeFile(path.join(runtimeRoot, 'attachments', 'note.txt'), 'attachment', 'utf8');
+  await writeFile(path.join(runtimeRoot, 'tool-results', 'index.json'), JSON.stringify({
+    version: 1,
+    results: [{ resultId: 'tool_result_saved', threadIds: ['thread_saved'] }],
+  }), 'utf8');
+  await writeFile(
+    path.join(runtimeRoot, 'tool-results', 'files', 'tool_result_saved'),
+    'complete tool output',
+    'utf8',
+  );
   await writeFile(path.join(runtimeRoot, 'user-skills', 'demo', 'SKILL.md'), '# Demo', 'utf8');
   await writeFile(path.join(runtimeRoot, 'skills.json'), JSON.stringify({
     version: 1,

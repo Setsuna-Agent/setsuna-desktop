@@ -19,7 +19,7 @@ describe('runtime thread event copying', () => {
     } as unknown as RuntimeFactory;
 
     const source = sourceMessage();
-    await copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]);
+    await copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [source]);
 
     expect(clone).toHaveBeenCalledWith('generated_source');
     const copiedEvent = appendEvent.mock.calls[0]?.[1] as { payload: { message: RuntimeMessage } };
@@ -37,7 +37,10 @@ describe('runtime thread event copying', () => {
 
   it('copies tool-result references and grants the fork independent read authorization', async () => {
     const appendEvent = vi.fn(async (_threadId: string, _event: unknown) => undefined);
-    const retainForThread = vi.fn(async () => undefined);
+    const retainForThread = vi.fn(async () => ({
+      retainedResultIds: ['tool_result_source'],
+      unavailableResultIds: [],
+    }));
     const runtime = {
       eventWriter: { flushThread: vi.fn(async () => undefined) },
       generatedImageStore: {
@@ -55,15 +58,60 @@ describe('runtime thread event copying', () => {
       visibleTokenLimit: 8_000,
     };
 
-    await copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]);
+    await copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [source]);
 
-    expect(retainForThread).toHaveBeenCalledWith('thread_fork', ['tool_result_source']);
+    expect(retainForThread).toHaveBeenCalledWith({
+      sourceThreadId: 'thread_source',
+      destinationThreadId: 'thread_fork',
+      resultIds: ['tool_result_source'],
+    });
     const copiedEvent = appendEvent.mock.calls[0]?.[1] as { payload: { message: RuntimeMessage } };
     source.toolResultRef.visibleTokens = 1;
     expect(copiedEvent.payload.message.toolResultRef).toMatchObject({
       resultId: 'tool_result_source',
       visibleTokens: 8_000,
     });
+  });
+
+  it('keeps bounded content but drops result references evicted from the source thread', async () => {
+    const copiedMessages: RuntimeMessage[] = [];
+    const callOrder: string[] = [];
+    const runtime = {
+      eventWriter: { flushThread: vi.fn(async () => undefined) },
+      generatedImageStore: {
+        clone: vi.fn(async () => ({ assetId: 'generated_clone' })),
+        delete: vi.fn(async () => undefined),
+      },
+      threadStore: {
+        appendEvent: vi.fn(async (_threadId: string, event: { payload: { message: RuntimeMessage } }) => {
+          callOrder.push('append');
+          copiedMessages.push(event.payload.message);
+        }),
+      },
+      toolResultStore: {
+        retainForThread: vi.fn(async () => {
+          callOrder.push('retain');
+          return {
+            retainedResultIds: ['tool_result_available'],
+            unavailableResultIds: ['tool_result_evicted'],
+          };
+        }),
+      },
+    } as unknown as RuntimeFactory;
+    const available = toolResultMessage('msg_available', 'tool_result_available', 'available summary');
+    const evicted = toolResultMessage('msg_evicted', 'tool_result_evicted', 'evicted summary');
+
+    await copyRuntimeMessagesToThread(
+      runtime,
+      'thread_source',
+      'thread_fork',
+      [available, evicted],
+    );
+
+    expect(callOrder).toEqual(['retain', 'append', 'append']);
+    expect(copiedMessages[0]?.toolResultRef?.resultId).toBe('tool_result_available');
+    expect(copiedMessages[1]).toMatchObject({ content: 'evicted summary' });
+    expect(copiedMessages[1]?.toolResultRef).toBeUndefined();
   });
 
   it('fails a fork copy when inherited tool-result authorization cannot be retained', async () => {
@@ -86,7 +134,7 @@ describe('runtime thread event copying', () => {
       visibleTokenLimit: 8_000,
     };
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [source]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [source]))
       .rejects.toThrow('retain failed');
   });
 
@@ -104,7 +152,7 @@ describe('runtime thread event copying', () => {
       },
     } as unknown as RuntimeFactory;
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [sourceMessage()]))
       .rejects.toThrow('commit failed');
     expect(deleteAsset).toHaveBeenCalledWith('generated_clone');
     expect(deleteAsset).not.toHaveBeenCalledWith('generated_source');
@@ -122,7 +170,7 @@ describe('runtime thread event copying', () => {
       threadStore: { appendEvent },
     } as unknown as RuntimeFactory;
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [sourceMessage()]))
       .rejects.toThrow('flush failed');
     expect(deleteAsset).toHaveBeenCalledWith('generated_clone');
     expect(appendEvent).not.toHaveBeenCalled();
@@ -152,7 +200,7 @@ describe('runtime thread event copying', () => {
     const secondGenerated = second.attachments?.[0];
     if (secondGenerated?.source === 'generated') secondGenerated.assetId = 'generated_second';
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [first, second]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [first, second]))
       .rejects.toThrow('second append failed');
     expect(deleteAsset).toHaveBeenCalledWith('generated_second_clone');
     expect(deleteAsset).not.toHaveBeenCalledWith('generated_source_clone');
@@ -176,7 +224,7 @@ describe('runtime thread event copying', () => {
       },
     } as unknown as RuntimeFactory;
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [sourceMessage()]))
       .rejects.toThrow('snapshot write failed');
     expect(deleteAsset).not.toHaveBeenCalledWith('generated_clone');
   });
@@ -195,7 +243,7 @@ describe('runtime thread event copying', () => {
       },
     } as unknown as RuntimeFactory;
 
-    await expect(copyRuntimeMessagesToThread(runtime, 'thread_fork', [sourceMessage()]))
+    await expect(copyRuntimeMessagesToThread(runtime, 'thread_source', 'thread_fork', [sourceMessage()]))
       .rejects.toThrow('append result is uncertain');
     expect(deleteAsset).not.toHaveBeenCalled();
   });
@@ -296,5 +344,23 @@ function sourceMessage(): RuntimeMessage {
         modelVisible: false,
       },
     ],
+  };
+}
+
+function toolResultMessage(id: string, resultId: string, content: string): RuntimeMessage {
+  return {
+    id,
+    role: 'tool',
+    toolCallId: `call_${id}`,
+    toolName: 'read_file',
+    content,
+    toolResultRef: {
+      resultId,
+      originalEstimatedTokens: 20_000,
+      visibleTokens: 8_000,
+      visibleTokenLimit: 8_000,
+    },
+    createdAt: '2026-07-17T00:00:00.000Z',
+    status: 'complete',
   };
 }

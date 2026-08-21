@@ -152,7 +152,14 @@ describe('file tool result store', () => {
       locallyTruncated: false,
     });
 
-    await store.retainForThread('thread_child', ['tool_result_fork']);
+    await expect(store.retainForThread({
+      sourceThreadId: 'thread_parent',
+      destinationThreadId: 'thread_child',
+      resultIds: ['tool_result_fork'],
+    })).resolves.toEqual({
+      retainedResultIds: ['tool_result_fork'],
+      unavailableResultIds: [],
+    });
     await expect(store.read('thread_child', 'tool_result_fork', 0, 100)).resolves.not.toBeNull();
 
     // 父线程释放后,子线程引用仍保留结果。
@@ -162,7 +169,7 @@ describe('file tool result store', () => {
     await expect(store.read('thread_child', 'tool_result_fork', 0, 100)).resolves.toBeNull();
   });
 
-  it('fails retention atomically when any requested result is missing', async () => {
+  it('retains available results and reports missing references', async () => {
     const dataDir = await createTestTempDirectory('tool-result-store-retain-missing-');
     const store = new FileToolResultStore(dataDir);
     await store.save({
@@ -176,15 +183,19 @@ describe('file tool result store', () => {
       locallyTruncated: false,
     });
 
-    await expect(store.retainForThread('thread_child', [
-      'tool_result_existing',
-      'tool_result_missing',
-    ])).rejects.toThrow('Cannot retain missing tool result: tool_result_missing');
-    await expect(store.read('thread_child', 'tool_result_existing', 0, 100)).resolves.toBeNull();
+    await expect(store.retainForThread({
+      sourceThreadId: 'thread_parent',
+      destinationThreadId: 'thread_child',
+      resultIds: ['tool_result_existing', 'tool_result_missing'],
+    })).resolves.toEqual({
+      retainedResultIds: ['tool_result_existing'],
+      unavailableResultIds: ['tool_result_missing'],
+    });
+    await expect(store.read('thread_child', 'tool_result_existing', 0, 100)).resolves.not.toBeNull();
     await expect(store.read('thread_parent', 'tool_result_existing', 0, 100)).resolves.not.toBeNull();
   });
 
-  it('does not delete a fork-owned result when the parent quota evicts its reference', async () => {
+  it('keeps fork ownership after parent eviction without letting the parent regrant access', async () => {
     const dataDir = await createTestTempDirectory('tool-result-store-shared-quota-');
     const store = new FileToolResultStore(dataDir, 1_024, 2_048);
     await store.save({
@@ -197,7 +208,11 @@ describe('file tool result store', () => {
       visibleTokenLimit: 10_000,
       locallyTruncated: false,
     });
-    await store.retainForThread('thread_child', ['tool_result_01_shared']);
+    await store.retainForThread({
+      sourceThreadId: 'thread_parent',
+      destinationThreadId: 'thread_child',
+      resultIds: ['tool_result_01_shared'],
+    });
     for (const index of [2, 3]) {
       await store.save({
         resultId: `tool_result_0${index}`,
@@ -215,6 +230,15 @@ describe('file tool result store', () => {
     await expect(store.read('thread_child', 'tool_result_01_shared', 0, 16)).resolves.toMatchObject({
       content: 'a'.repeat(16),
     });
+    await expect(store.retainForThread({
+      sourceThreadId: 'thread_parent',
+      destinationThreadId: 'thread_second_child',
+      resultIds: ['tool_result_01_shared'],
+    })).resolves.toEqual({
+      retainedResultIds: [],
+      unavailableResultIds: ['tool_result_01_shared'],
+    });
+    await expect(store.read('thread_second_child', 'tool_result_01_shared', 0, 16)).resolves.toBeNull();
   });
 
   it('recovers orphan results and files after startup', async () => {

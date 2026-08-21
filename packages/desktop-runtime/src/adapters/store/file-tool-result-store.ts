@@ -7,6 +7,8 @@ import {
   utf8CharStart,
 } from '../../loop/tools/tool-output-budget.js';
 import {
+  type RetainStoredToolResultsInput,
+  type RetainStoredToolResultsResult,
   type StoredToolResultInput,
   type StoredToolResultPage,
   type StoredToolResultRecord,
@@ -133,24 +135,35 @@ export class FileToolResultStore implements ToolResultStore {
     };
   }
 
-  retainForThread(threadId: string, resultIds: string[]): Promise<void> {
+  retainForThread(input: RetainStoredToolResultsInput): Promise<RetainStoredToolResultsResult> {
     return this.enqueueMutation(async () => {
-      const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
-      const ids = [...new Set(resultIds.map((id) => assertSafeRuntimeId(id, 'Tool result id')))];
-      if (!ids.length) return;
+      const sourceThreadId = assertSafeRuntimeId(input.sourceThreadId, 'Source thread id');
+      const destinationThreadId = assertSafeRuntimeId(input.destinationThreadId, 'Destination thread id');
+      const ids = [...new Set(input.resultIds.map((id) => assertSafeRuntimeId(id, 'Tool result id')))];
+      if (!ids.length) return { retainedResultIds: [], unavailableResultIds: [] };
       const index = await this.readIndex();
       const recordsById = new Map(index.results.map((record) => [record.resultId, record]));
-      // Validate the complete set before mutating any record, so a failed fork
-      // cannot partially acquire result ownership.
-      const records = ids.map((id) => {
+      const unavailableResultIds: string[] = [];
+      const records = ids.flatMap((id) => {
         const record = recordsById.get(id);
-        if (!record) throw new Error(`Cannot retain missing tool result: ${id}`);
-        return record;
+        if (!record?.threadIds.includes(sourceThreadId)) {
+          unavailableResultIds.push(id);
+          return [];
+        }
+        return [record];
       });
+      let changed = false;
       for (const record of records) {
-        if (!record.threadIds.includes(safeThreadId)) record.threadIds.push(safeThreadId);
+        if (!record.threadIds.includes(destinationThreadId)) {
+          record.threadIds.push(destinationThreadId);
+          changed = true;
+        }
       }
-      await this.writeIndex(index);
+      if (changed) await this.writeIndex(index);
+      return {
+        retainedResultIds: records.map((record) => record.resultId),
+        unavailableResultIds,
+      };
     });
   }
 

@@ -306,7 +306,7 @@ describe('agent loop tool hook results', () => {
       const toolResultStore: ToolResultStore = {
         save,
         read: async () => null,
-        retainForThread: async () => undefined,
+        retainForThread: async () => ({ retainedResultIds: [], unavailableResultIds: [] }),
         releaseThread: async () => undefined,
         recover: async () => undefined,
       };

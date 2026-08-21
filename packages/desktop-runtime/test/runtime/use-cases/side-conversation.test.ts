@@ -55,7 +55,7 @@ describe('side conversations', () => {
         title: 'Fork child',
         forkedFromId: parent.id,
       });
-      await copyRuntimeMessagesToThread(runtime, fork.id, source?.messages ?? []);
+      await copyRuntimeMessagesToThread(runtime, parent.id, fork.id, source?.messages ?? []);
 
       await expect(runtime.toolResultStore.read(
         fork.id,

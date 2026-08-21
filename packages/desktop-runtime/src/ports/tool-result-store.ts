@@ -40,6 +40,17 @@ export type StoredToolResultRecord = {
   createdAt: string;
 };
 
+export type RetainStoredToolResultsInput = {
+  sourceThreadId: string;
+  destinationThreadId: string;
+  resultIds: string[];
+};
+
+export type RetainStoredToolResultsResult = {
+  retainedResultIds: string[];
+  unavailableResultIds: string[];
+};
+
 export type ToolResultStore = {
   save(input: StoredToolResultInput): Promise<{ locallyTruncated: boolean }>;
   /**
@@ -47,8 +58,11 @@ export type ToolResultStore = {
    * 线程无权访问、结果不存在或范围无效时返回 null。
    */
   read(threadId: string, resultId: string, offset: number, limit: number): Promise<StoredToolResultPage | null>;
-  /** fork/side conversation 复制消息后,让子线程继承结果引用,避免悬空引用。 */
-  retainForThread(threadId: string, resultIds: string[]): Promise<void>;
+  /**
+   * fork/side conversation 只继承源线程仍可访问的结果。正常配额淘汰通过
+   * unavailableResultIds 返回；索引读写等真实存储错误仍抛出。
+   */
+  retainForThread(input: RetainStoredToolResultsInput): Promise<RetainStoredToolResultsResult>;
   releaseThread(threadId: string): Promise<void>;
   /** 启动恢复:清理已删除线程的孤儿结果。 */
   recover(validThreadIds: string[]): Promise<void>;
