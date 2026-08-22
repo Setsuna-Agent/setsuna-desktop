@@ -90,13 +90,16 @@ describe('openWorkspaceFileWithDefaultApp', () => {
     expect(copyText).toHaveBeenCalledTimes(2);
   });
 
-  it('creates previews only for PDF and image files inside the workspace', async () => {
+  it('creates browser previews for any file inside the workspace', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-preview-workspace-file-'));
     const pdfPath = path.join(workspaceRoot, 'report.pdf');
-    const documentPath = path.join(workspaceRoot, 'notes.docx');
+    const htmlPath = path.join(workspaceRoot, 'index.html');
+    const unknownPath = path.join(workspaceRoot, 'artifact.custom');
     await writeFile(pdfPath, '%PDF-test');
-    await writeFile(documentPath, 'document');
+    await writeFile(htmlPath, '<!doctype html><title>Preview</title>');
+    await writeFile(unknownPath, 'custom');
     const registerPreview = vi.fn(() => 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf');
+    const canonicalWorkspaceRoot = await realpath(workspaceRoot);
 
     await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'report.pdf', registerPreview)).resolves.toEqual({
       ok: true,
@@ -106,10 +109,24 @@ describe('openWorkspaceFileWithDefaultApp', () => {
       mimeType: 'application/pdf',
       name: 'report.pdf',
       targetPath: await realpath(pdfPath),
+      workspaceRoot: canonicalWorkspaceRoot,
     });
-    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'notes.docx', registerPreview)).resolves.toEqual({
-      ok: false,
-      error: 'Only PDF and image files can be opened in the built-in browser.',
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'index.html', registerPreview)).resolves.toEqual({
+      ok: true,
+      url: 'http://127.0.0.1:1234/v1/file-previews/token/report.pdf',
+    });
+    expect(registerPreview).toHaveBeenLastCalledWith({
+      mimeType: 'text/html',
+      name: 'index.html',
+      targetPath: await realpath(htmlPath),
+      workspaceRoot: canonicalWorkspaceRoot,
+    });
+    await expect(createWorkspaceFilePreviewUrl(workspaceRoot, 'artifact.custom', registerPreview)).resolves.toMatchObject({ ok: true });
+    expect(registerPreview).toHaveBeenLastCalledWith({
+      mimeType: 'application/octet-stream',
+      name: 'artifact.custom',
+      targetPath: await realpath(unknownPath),
+      workspaceRoot: canonicalWorkspaceRoot,
     });
     expect(workspaceFilePreviewMimeType(path.join('images', 'preview.WEBP'))).toBe('image/webp');
   });

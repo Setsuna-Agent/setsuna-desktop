@@ -63,7 +63,7 @@ export const MAX_ACTIVE_COLLABORATION_CHILDREN = 3;
 export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   {
     name: 'spawn_agent',
-    description: 'Start a child agent thread for a focused subtask and return its thread and turn identifiers.',
+    description: `Start one of up to ${MAX_ACTIVE_COLLABORATION_CHILDREN} active child agent threads for a concrete, bounded, read-only subtask that can run independently alongside useful parent work. Only the root thread can call this tool; returns the child thread and turn identifiers.`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -100,7 +100,7 @@ export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
   },
   {
     name: 'wait',
-    description: 'Wait briefly for another agent thread. When it finishes, the tool returns the complete assistant output in `output`; when still running, continue useful work or wait again and do not finalize the parent task.',
+    description: 'Wait briefly for a child agent only when its result blocks the parent\'s next step. When it finishes, the tool returns the complete assistant output in `output`; when still running, continue useful non-overlapping work and avoid repeated polling.',
     inputSchema: {
       type: 'object',
       properties: {

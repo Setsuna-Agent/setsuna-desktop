@@ -79,6 +79,7 @@ export function WorkHistoryPanel({
   hasDetails,
   onExpandedChange,
   panelId,
+  persistentChildren,
   startedAtMs,
 }: {
   active: boolean;
@@ -89,12 +90,15 @@ export function WorkHistoryPanel({
   hasDetails: boolean;
   onExpandedChange?: WorkHistoryExpandedChangeHandler;
   panelId?: string;
+  /** 折叠时仍需保留的时间线节点，例如持续更新的子代理任务卡片。 */
+  persistentChildren?: ReactNode;
   startedAtMs?: number | null;
 }) {
   const { t } = useI18n();
   const wasActiveForTimingRef = useRef(active);
   const wasActiveForExpansionRef = useRef(active);
   const hadFollowingContentRef = useRef(collapseWhenContentFollows);
+  const hasEverHadDetailsRef = useRef(hasDetails);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [capturedCompletedAtMs, setCapturedCompletedAtMs] = useState<number | null>(() => completedAtMs ?? null);
   // 流式更新只允许“后续正文首次出现”和“整个 turn 完成”各触发一次自动收起，
@@ -123,10 +127,15 @@ export function WorkHistoryPanel({
     if (shouldCollapseForFollowingContent || shouldCollapseForCompletedTurn) {
       // Final content replaces transient progress as the primary transcript surface.
       setManualExpanded(false);
+    } else if (hasDetails && !hasEverHadDetailsRef.current && defaultExpanded) {
+      // A panel can mount with only persistent subagent cards. Expand once when ordinary
+      // work details first arrive, without overriding a later manual collapse.
+      setManualExpanded(true);
     }
+    if (hasDetails) hasEverHadDetailsRef.current = true;
     hadFollowingContentRef.current = collapseWhenContentFollows;
     wasActiveForExpansionRef.current = active;
-  }, [active, collapseWhenContentFollows, defaultExpanded]);
+  }, [active, collapseWhenContentFollows, defaultExpanded, hasDetails]);
 
   useEffect(() => {
     if (!active) return undefined;
@@ -160,6 +169,7 @@ export function WorkHistoryPanel({
       {hasDetails ? <ChevronDown aria-hidden="true" className="chat-work-history__chevron" size={12} /> : null}
     </>
   );
+  const visibleBody = expanded && hasDetails ? children : persistentChildren;
 
   return (
     <div className={`chat-work-history ${expanded ? 'is-expanded' : ''} ${hasDetails ? 'is-toggleable' : ''}`}>
@@ -170,7 +180,7 @@ export function WorkHistoryPanel({
       ) : (
         <div className="chat-work-history__summary">{summaryContent}</div>
       )}
-      {expanded && hasDetails ? <div className="chat-work-history__body">{children}</div> : null}
+      {visibleBody ? <div className="chat-work-history__body">{visibleBody}</div> : null}
     </div>
   );
 }

@@ -280,7 +280,9 @@ function appendWorkItems(items: AssistantWorkItem[], nextItems: AssistantWorkIte
     if (previousItem?.type === 'toolRuns' && nextItem.type === 'toolRuns') {
       items[items.length - 1] = {
         type: 'toolRuns',
-        id: `${previousItem.id}+${nextItem.id}`,
+        // Consecutive tool segments share one rendered disclosure. Keep the first id so
+        // streaming appends do not remount that disclosure and lose its local state.
+        id: previousItem.id,
         segment: previousItem.segment,
         toolRuns: [...previousItem.toolRuns, ...nextItem.toolRuns],
       };

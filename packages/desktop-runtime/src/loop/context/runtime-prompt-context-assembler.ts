@@ -25,6 +25,7 @@ import {
   neutralizeSkillTags,
 } from './prompt-utils.js';
 import { RUNTIME_BASE_INSTRUCTIONS } from './runtime-base-instructions.js';
+import { RUNTIME_PROACTIVE_COLLABORATION_PROMPT } from './runtime-collaboration-prompt.js';
 import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import { runtimeProjectWorkflowPrompt } from './runtime-project-workflow-prompt.js';
@@ -99,6 +100,7 @@ export class RuntimePromptContextAssembler {
       fragments: [
         baseInstructionFragment(),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
+        ...(tools.some((tool) => tool.name === 'spawn_agent') ? [collaborationModeFragment()] : []),
         environmentFragment(environment),
         permissionsFragment(config, toolContext, permissionToolNames),
         ...personalizationFragments(config),
@@ -258,6 +260,17 @@ function toolPolicyFragment(content: string): RuntimePromptFragment {
     trust: 'runtime',
     lifecycle: 'runtime',
     content,
+  };
+}
+
+function collaborationModeFragment(): RuntimePromptFragment {
+  return {
+    id: 'desktop_collaboration_mode',
+    role: 'developer',
+    source: 'tool_policy',
+    trust: 'runtime',
+    lifecycle: 'turn',
+    content: RUNTIME_PROACTIVE_COLLABORATION_PROMPT,
   };
 }
 

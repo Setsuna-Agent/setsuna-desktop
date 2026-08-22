@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -135,26 +135,7 @@ describe('DesktopNativeBridgeServer', () => {
     const previewRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-native-preview-'));
     const targetPath = path.join(previewRoot, 'report.pdf');
     await writeFile(targetPath, Buffer.from('0123456789'));
-    const server = new DesktopNativeBridgeServer({
-      credentialVault: {
-        status: async () => ({ available: true, backend: 'test' }),
-        get: async () => undefined,
-        set: async () => undefined,
-        delete: async () => undefined,
-      },
-      deleteNetworkProxy: async () => ({
-        configPath: '/test/network-proxies.json',
-        routing: defaultDesktopNetworkProxyRouting(),
-        servers: [],
-      }),
-      openExternal: async () => undefined,
-      resolveNetworkProxy: async () => ({ mode: 'direct' }),
-      resolveSandboxNetworkEnvironment: async () => ({}),
-      systemProxyFetch: async () => new Response('ok'),
-      validateNetworkProxyReferences: async () => undefined,
-      maxFilePreviewContentBytes: 12,
-    });
-    servers.push(server);
+    const server = createFilePreviewServer(12);
     await server.start();
     const previewUrl = server.registerFilePreview({
       mimeType: 'application/pdf',
@@ -194,7 +175,74 @@ describe('DesktopNativeBridgeServer', () => {
     expect(server.releaseFilePreview(replacementPreview.previewId)).toBe(true);
     expect((await fetch(replacementPreview.url)).status).toBe(404);
   });
+
+  it('serves HTML preview resources without allowing workspace escapes', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-native-preview-workspace-'));
+    const outsideRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-native-preview-outside-'));
+    const siteDirectory = path.join(workspaceRoot, 'site');
+    await mkdir(siteDirectory);
+    await writeFile(path.join(siteDirectory, 'index.html'), '<link rel="stylesheet" href="./style.css">');
+    await writeFile(path.join(siteDirectory, 'style.css'), 'body { color: tomato; }');
+    await writeFile(path.join(workspaceRoot, 'manifest.json'), '{"name":"preview"}');
+    await writeFile(path.join(outsideRoot, 'secret.txt'), 'secret');
+    await symlink(
+      outsideRoot,
+      path.join(workspaceRoot, 'linked-outside'),
+      process.platform === 'win32' ? 'junction' : 'dir',
+    );
+
+    const server = createFilePreviewServer();
+    await server.start();
+    const previewUrl = server.registerFilePreview({
+      mimeType: 'text/html',
+      name: 'index.html',
+      targetPath: await realpath(path.join(siteDirectory, 'index.html')),
+      workspaceRoot: await realpath(workspaceRoot),
+    });
+
+    expect(decodeURIComponent(new URL(previewUrl).pathname)).toMatch(/\/site\/index\.html$/u);
+    const htmlResponse = await fetch(previewUrl);
+    expect(htmlResponse.headers.get('content-type')).toBe('text/html');
+    expect(await htmlResponse.text()).toContain('./style.css');
+
+    const stylesheetResponse = await fetch(new URL('./style.css', previewUrl));
+    expect(stylesheetResponse.status).toBe(200);
+    expect(stylesheetResponse.headers.get('content-type')).toBe('text/css');
+    expect(await stylesheetResponse.text()).toBe('body { color: tomato; }');
+
+    const parentResourceResponse = await fetch(new URL('../manifest.json', previewUrl));
+    expect(parentResourceResponse.status).toBe(200);
+    expect(parentResourceResponse.headers.get('content-type')).toBe('application/json');
+    expect(await parentResourceResponse.json()).toEqual({ name: 'preview' });
+
+    const escapedResourceResponse = await fetch(new URL('../linked-outside/secret.txt', previewUrl));
+    expect(escapedResourceResponse.status).toBe(404);
+  });
 });
+
+function createFilePreviewServer(maxFilePreviewContentBytes?: number): DesktopNativeBridgeServer {
+  const server = new DesktopNativeBridgeServer({
+    credentialVault: {
+      status: async () => ({ available: true, backend: 'test' }),
+      get: async () => undefined,
+      set: async () => undefined,
+      delete: async () => undefined,
+    },
+    deleteNetworkProxy: async () => ({
+      configPath: '/test/network-proxies.json',
+      routing: defaultDesktopNetworkProxyRouting(),
+      servers: [],
+    }),
+    openExternal: async () => undefined,
+    resolveNetworkProxy: async () => ({ mode: 'direct' }),
+    resolveSandboxNetworkEnvironment: async () => ({}),
+    systemProxyFetch: async () => new Response('ok'),
+    validateNetworkProxyReferences: async () => undefined,
+    maxFilePreviewContentBytes,
+  });
+  servers.push(server);
+  return server;
+}
 
 function systemFetchFrame(metadata: DesktopSystemProxyFetchRequest, body = ''): Buffer {
   const metadataBytes = Buffer.from(JSON.stringify(metadata), 'utf8');

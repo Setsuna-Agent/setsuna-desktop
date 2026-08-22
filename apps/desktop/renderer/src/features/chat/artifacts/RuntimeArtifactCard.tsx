@@ -8,7 +8,6 @@ import { useMarkdownNavigation } from '../markdown/MarkdownNavigationProvider.js
 import {
   openRuntimeArtifactInBrowser,
   openRuntimeArtifactWithDefaultApp,
-  runtimeArtifactSupportsBrowserPreview,
   runtimeArtifactTypeLabel,
 } from './runtimeArtifacts.js';
 
@@ -17,7 +16,7 @@ export function RuntimeArtifactCard({ artifact }: { artifact: RuntimeArtifact })
   const { onOpenInAppBrowser } = useMarkdownNavigation();
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const canOpenInBrowser = runtimeArtifactSupportsBrowserPreview(artifact) && Boolean(onOpenInAppBrowser);
+  const canOpenInBrowser = Boolean(onOpenInAppBrowser);
   const openMenuItems: MenuProps['items'] = [
     ...(canOpenInBrowser ? [{
       key: 'built-in-browser',

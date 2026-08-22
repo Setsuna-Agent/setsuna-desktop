@@ -25,7 +25,18 @@ describe('workspace file preview classification', () => {
 
   it('separates UTF-8 text from executable and archive bytes', () => {
     expect(isProbablyBinaryWorkspaceFile(Buffer.from('export const value = "中文";\n'))).toBe(false);
+    expect(isProbablyBinaryWorkspaceFile(Buffer.from('valid replacement character: \uFFFD\n'))).toBe(false);
+    expect(isProbablyBinaryWorkspaceFile(Buffer.from([0x61, 0xff, 0x62]))).toBe(true);
     expect(isProbablyBinaryWorkspaceFile(Buffer.from([0x4d, 0x5a, 0x00, 0x00]))).toBe(true);
     expect(isProbablyBinaryWorkspaceFile(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x01]))).toBe(true);
+  });
+
+  it('accepts UTF-8 text when the bounded sample ends inside a multi-byte character', () => {
+    const content = Buffer.concat([
+      Buffer.alloc((8 * 1024) - 2, 0x61),
+      Buffer.from('除后仍然是文本'),
+    ]);
+
+    expect(isProbablyBinaryWorkspaceFile(content)).toBe(false);
   });
 });

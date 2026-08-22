@@ -33,6 +33,7 @@ const artifactMimeTypes: Readonly<Record<string, string>> = {
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.gif': 'image/gif',
   '.gz': 'application/gzip',
+  '.htm': 'text/html',
   '.html': 'text/html',
   '.jpeg': 'image/jpeg',
   '.jpg': 'image/jpeg',
@@ -78,7 +79,7 @@ export class ArtifactToolHost implements ToolHost {
     if (request && !request.tools.some((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)) return null;
     return [
       'After creating and verifying a user-facing deliverable file, call publish_artifact once for each final deliverable so it appears as an openable card in the chat.',
-      'Deliverables include reports, PDFs, documents, spreadsheets, presentations, images, archives, and media files.',
+      'Deliverables include reports, web pages, PDFs, documents, spreadsheets, presentations, images, archives, and media files.',
       'Do not publish source code, helper scripts, caches, or intermediate build files unless the user explicitly requested that file itself as the deliverable.',
     ].join(' ');
   }

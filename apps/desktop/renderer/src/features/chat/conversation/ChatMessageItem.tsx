@@ -4,6 +4,7 @@ import {
   type RuntimeCollaborationTask,
   type RuntimeMessage,
   type RuntimeReviewModeNotice,
+  type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
@@ -15,7 +16,9 @@ import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
+import { SubagentToolRunCard } from '../tool-runs/runtimeCollaborationRuns.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
+import { toolRunGroupKind } from '../tool-runs/runtimeToolRunGrouping.js';
 import {
   FileChangesSummaryCard,
   RuntimeHookRuns,
@@ -588,7 +591,7 @@ function renderAssistantTimelinePlan({
   plan.nodes.forEach((node) => {
     if (node.type === 'workHistory') {
       nodes.push(
-        assistantWorkHistoryNode({
+        ...assistantWorkHistoryNodes({
           collaborationTasks,
           handledGuidanceMessageIds,
           itemId,
@@ -678,7 +681,7 @@ function ReviewSummaryCard({
   );
 }
 
-function assistantWorkHistoryNode({
+function assistantWorkHistoryNodes({
   collaborationTasks,
   handledGuidanceMessageIds,
   itemId,
@@ -694,23 +697,107 @@ function assistantWorkHistoryNode({
   onExpandedChange: WorkHistoryExpandedChangeHandler;
   plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
   workHistoryDefaultExpanded: boolean;
-}): ReactNode {
-  const workNodes = assistantWorkEntriesNodes(
-    plan.entries,
-    onAnswerApproval,
-    handledGuidanceMessageIds,
-    collaborationTasks,
-  );
-  const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
-  const hasWorkDetails = workNodes.length > 0;
-  if (!hasWorkDetails && !plan.active) return null;
+}): ReactNode[] {
+  const surfaces = splitWorkHistorySurfaces(plan.entries);
+  const workNodes: ReactNode[] = [];
+  const persistentNodes: ReactNode[] = [];
+  let hasCollapsibleDetails = false;
+  for (const surface of surfaces) {
+    if (surface.type === 'collaboration') {
+      const card = (
+        <SubagentToolRunCard
+          key={`collaboration:${surface.run.id}`}
+          run={surface.run}
+          collaborationTasks={collaborationTasks}
+        />
+      );
+      workNodes.push(card);
+      persistentNodes.push(card);
+      continue;
+    }
+    const surfaceNodes = assistantWorkEntriesNodes(
+      surface.entries,
+      onAnswerApproval,
+      handledGuidanceMessageIds,
+      collaborationTasks,
+    );
+    if (surfaceNodes.length) {
+      hasCollapsibleDetails = true;
+      workNodes.push(...surfaceNodes);
+    }
+  }
+  if (!workNodes.length && !plan.active) return [];
   const workHistoryKey = plan.blocks[0]?.id ?? itemId;
+  const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
   const panelId = `${itemId}:work-history:${workHistoryKey}`;
-  return (
-    <WorkHistoryPanel active={plan.active} collapseWhenContentFollows={plan.hasFollowingContent} completedAtMs={workTiming.completedAtMs} defaultExpanded={workHistoryDefaultExpanded && !plan.hasFollowingContent} hasDetails={hasWorkDetails} key={panelId} panelId={panelId} startedAtMs={workTiming.startedAtMs} onExpandedChange={onExpandedChange}>
+  return [(
+    <WorkHistoryPanel
+      active={plan.active}
+      collapseWhenContentFollows={plan.hasFollowingContent}
+      completedAtMs={workTiming.completedAtMs}
+      defaultExpanded={workHistoryDefaultExpanded && !plan.hasFollowingContent}
+      hasDetails={hasCollapsibleDetails}
+      key={panelId}
+      onExpandedChange={onExpandedChange}
+      panelId={panelId}
+      persistentChildren={persistentNodes.length ? persistentNodes : undefined}
+      startedAtMs={workTiming.startedAtMs}
+    >
       {workNodes}
     </WorkHistoryPanel>
-  );
+  )];
+}
+
+type AssistantWorkHistorySurface =
+  | { type: 'work'; entries: AssistantWorkHistoryPlanEntry[] }
+  | { type: 'collaboration'; run: RuntimeToolRun };
+
+/** 将子代理卡片提升到顶层，同时按工具事件原顺序切开前后的可折叠工作段。 */
+function splitWorkHistorySurfaces(entries: AssistantWorkHistoryPlanEntry[]): AssistantWorkHistorySurface[] {
+  const surfaces: AssistantWorkHistorySurface[] = [];
+  let workEntries: AssistantWorkHistoryPlanEntry[] = [];
+  const flushWork = () => {
+    if (!workEntries.length) return;
+    surfaces.push({ type: 'work', entries: workEntries });
+    workEntries = [];
+  };
+  for (const entry of entries) {
+    if (entry.type !== 'workItem' || entry.item.type !== 'toolRuns') {
+      workEntries.push(entry);
+      continue;
+    }
+    const toolItem = entry.item;
+    let runChunk: RuntimeToolRun[] = [];
+    const flushRunChunk = () => {
+      if (!runChunk.length) return;
+      const firstRun = runChunk[0];
+      if (!firstRun) return;
+      workEntries.push({
+        ...entry,
+        item: {
+          ...toolItem,
+          // A collaboration card can split one tool item into multiple sibling disclosures.
+          // Anchor each chunk to its first append-only run so keys stay unique and stable.
+          id: `${toolItem.id}:chunk:${firstRun.id}`,
+          toolRuns: runChunk,
+        },
+      });
+      runChunk = [];
+    };
+    for (const run of toolItem.toolRuns) {
+      if (toolRunGroupKind(run) === 'collaboration') {
+        if (!isDisplayableRuntimeToolRun(run)) continue;
+        flushRunChunk();
+        flushWork();
+        surfaces.push({ type: 'collaboration', run });
+      } else {
+        runChunk.push(run);
+      }
+    }
+    flushRunChunk();
+  }
+  flushWork();
+  return surfaces;
 }
 
 function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boolean {
@@ -826,7 +913,7 @@ function assistantWorkItemNodes(
   // 或后续正文出现而改写。
   return visibleToolRuns.length ? [
     <RuntimeToolRuns
-      key={item.segment.id}
+      key={item.id}
       runs={visibleToolRuns}
       summaryMode={visibleToolRuns.some(isActiveRuntimeToolRun) ? 'latest' : 'aggregate'}
       collaborationTasks={collaborationTasks}

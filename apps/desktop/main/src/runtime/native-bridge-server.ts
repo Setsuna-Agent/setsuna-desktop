@@ -11,9 +11,11 @@ import {
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import path from 'node:path';
 import type { CredentialVault } from '../security/credential-vault.js';
+import { workspaceFilePreviewMimeType } from '../workspace/file-opening.js';
 import {
   serveDesktopSystemProxyFetch,
   type DesktopSystemProxyFetch,
@@ -45,8 +47,13 @@ type DesktopFilePreview = {
   name: string;
 } & (
   | { content: Buffer; targetPath?: never }
-  | { content?: never; targetPath: string }
+  | { content?: never; targetPath: string; workspaceRoot?: string }
 );
+
+type DesktopFilePreviewRequest = {
+  previewToken: string;
+  resourcePath: string;
+};
 
 export type DesktopFilePreviewRegistration = {
   previewId: string;
@@ -98,6 +105,7 @@ export class DesktopNativeBridgeServer {
     if (contentBytes > contentBudget) {
       throw new Error('File preview exceeds the in-memory preview budget.');
     }
+    const previewPath = filePreviewUrlPath(preview);
     const previewToken = randomBytes(24).toString('hex');
     this.filePreviews.set(previewToken, preview);
     this.filePreviewContentBytes += contentBytes;
@@ -111,7 +119,7 @@ export class DesktopNativeBridgeServer {
     }
     return {
       previewId: previewToken,
-      url: `${this.connection.url}/v1/file-previews/${previewToken}/${encodeURIComponent(preview.name)}`,
+      url: `${this.connection.url}/v1/file-previews/${previewToken}/${previewPath}`,
     };
   }
 
@@ -137,9 +145,9 @@ export class DesktopNativeBridgeServer {
         sendJson(response, 200, { ok: true });
         return;
       }
-      const previewToken = filePreviewToken(request.url);
-      if ((request.method === 'GET' || request.method === 'HEAD') && previewToken) {
-        await this.serveFilePreview(previewToken, request, response);
+      const previewRequest = filePreviewRequest(request.url);
+      if ((request.method === 'GET' || request.method === 'HEAD') && previewRequest) {
+        await this.serveFilePreview(previewRequest, request, response);
         return;
       }
       if (request.headers.authorization !== `Bearer ${this.token}`) {
@@ -205,16 +213,21 @@ export class DesktopNativeBridgeServer {
   }
 
   private async serveFilePreview(
-    previewToken: string,
+    previewRequest: DesktopFilePreviewRequest,
     request: IncomingMessage,
     response: ServerResponse,
   ): Promise<void> {
-    const preview = this.filePreviews.get(previewToken);
+    const preview = this.filePreviews.get(previewRequest.previewToken);
     if (!preview) {
       sendJson(response, 404, { error: 'File preview is unavailable.' });
       return;
     }
-    const fileSize = preview.content?.byteLength ?? await previewFileSize(preview.targetPath);
+    const resource = await resolveFilePreviewResource(preview, previewRequest.resourcePath);
+    if (!resource) {
+      sendJson(response, 404, { error: 'File preview target is unavailable.' });
+      return;
+    }
+    const fileSize = resource.content?.byteLength ?? await previewFileSize(resource.targetPath);
     if (fileSize === null) {
       sendJson(response, 404, { error: 'File preview target is unavailable.' });
       return;
@@ -231,9 +244,9 @@ export class DesktopNativeBridgeServer {
     response.writeHead(range ? 206 : 200, {
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, no-store',
-      'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(preview.name)}`,
+      'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(resource.name)}`,
       'Content-Length': contentLength,
-      'Content-Type': preview.mimeType,
+      'Content-Type': resource.mimeType,
       'X-Content-Type-Options': 'nosniff',
       ...(range ? { 'Content-Range': `bytes ${start}-${end}/${fileSize}` } : {}),
     });
@@ -241,11 +254,11 @@ export class DesktopNativeBridgeServer {
       response.end();
       return;
     }
-    if (preview.content) {
-      response.end(preview.content.subarray(start, end + 1));
+    if (resource.content) {
+      response.end(resource.content.subarray(start, end + 1));
       return;
     }
-    const stream = createReadStream(preview.targetPath, { start, end });
+    const stream = createReadStream(resource.targetPath, { start, end });
     stream.on('error', () => response.destroy());
     stream.pipe(response);
   }
@@ -257,10 +270,70 @@ async function previewFileSize(targetPath: string | undefined): Promise<number |
   return fileStats?.isFile() ? fileStats.size : null;
 }
 
-function filePreviewToken(requestUrl: string | undefined): string | null {
+function filePreviewRequest(requestUrl: string | undefined): DesktopFilePreviewRequest | null {
   if (!requestUrl) return null;
-  const match = new URL(requestUrl, 'http://127.0.0.1').pathname.match(/^\/v1\/file-previews\/([a-f0-9]{48})(?:\/|$)/u);
-  return match?.[1] ?? null;
+  try {
+    const match = new URL(requestUrl, 'http://127.0.0.1').pathname.match(/^\/v1\/file-previews\/([a-f0-9]{48})\/(.+)$/u);
+    const previewToken = match?.[1];
+    const encodedResourcePath = match?.[2];
+    if (!previewToken || !encodedResourcePath) return null;
+    return {
+      previewToken,
+      resourcePath: encodedResourcePath
+        .split('/')
+        .map((segment) => decodeURIComponent(segment))
+        .join(path.sep),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function filePreviewUrlPath(preview: DesktopFilePreview): string {
+  if (preview.content !== undefined || !preview.workspaceRoot) {
+    return encodeURIComponent(preview.name);
+  }
+  const relativePath = path.relative(preview.workspaceRoot, preview.targetPath);
+  if (!isRelativePathInside(relativePath)) {
+    throw new Error('File preview target must stay inside the workspace.');
+  }
+  return relativePath.split(path.sep).map((segment) => encodeURIComponent(segment)).join('/');
+}
+
+async function resolveFilePreviewResource(
+  preview: DesktopFilePreview,
+  resourcePath: string,
+): Promise<DesktopFilePreview | null> {
+  if (preview.content !== undefined) {
+    return resourcePath === preview.name ? preview : null;
+  }
+  if (!preview.workspaceRoot) {
+    return resourcePath === preview.name ? preview : null;
+  }
+  if (path.isAbsolute(resourcePath)) return null;
+  try {
+    const canonicalRoot = await realpath(preview.workspaceRoot);
+    const canonicalTarget = await realpath(path.resolve(canonicalRoot, resourcePath));
+    const relativePath = path.relative(canonicalRoot, canonicalTarget);
+    if (!isRelativePathInside(relativePath)) return null;
+    const targetStats = await stat(canonicalTarget);
+    if (!targetStats.isFile()) return null;
+    return {
+      mimeType: workspaceFilePreviewMimeType(canonicalTarget),
+      name: path.basename(canonicalTarget),
+      targetPath: canonicalTarget,
+      workspaceRoot: canonicalRoot,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function isRelativePathInside(relativePath: string): boolean {
+  return Boolean(relativePath)
+    && relativePath !== '..'
+    && !relativePath.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relativePath);
 }
 
 function parseByteRange(value: string | undefined, size: number): { end: number; start: number } | 'invalid' | null {

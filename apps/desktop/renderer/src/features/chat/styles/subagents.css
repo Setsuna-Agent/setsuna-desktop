@@ -90,18 +90,29 @@
   border-radius: var(--app-radius-md);
   background: var(--app-surface);
   box-shadow:
-    0 1px 2px color-mix(in srgb, #000 9%, transparent),
-    0 4px 12px color-mix(in srgb, #000 7%, transparent);
+    0 1px 2px color-mix(in srgb, #000 5%, transparent),
+    0 3px 10px color-mix(in srgb, #000 4%, transparent);
   color: var(--app-text);
   cursor: pointer;
   text-align: left;
   transition: box-shadow 0.12s ease;
 }
 
+/* 时间线中的持久卡片与正文共用内容宽度，不保留嵌套工具区的阴影边距。 */
+.chat-work-history__body > .subagent-task-card {
+  width: 100%;
+  margin-inline: 0;
+}
+
+/* 齐宽卡片借用对话区的左右留白绘制阴影，正文仍沿用消息内容层的裁剪规则。 */
+.chat-ai-bubble .ant-bubble-content:has(.chat-work-history__body > .subagent-task-card) {
+  overflow: visible;
+}
+
 .subagent-task-card:not(:disabled):hover {
   box-shadow:
-    0 2px 4px color-mix(in srgb, #000 11%, transparent),
-    0 6px 16px color-mix(in srgb, #000 9%, transparent);
+    0 2px 4px color-mix(in srgb, #000 7%, transparent),
+    0 5px 14px color-mix(in srgb, #000 5%, transparent);
 }
 
 .subagent-task-card:focus-visible {

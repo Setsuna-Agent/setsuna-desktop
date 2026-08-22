@@ -3,19 +3,25 @@ import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 type OpenPath = (targetPath: string) => Promise<string>;
-type RegisterPreview = (input: { mimeType: string; name: string; targetPath: string }) => string;
+type RegisterPreview = (input: {
+  mimeType: string;
+  name: string;
+  targetPath: string;
+  workspaceRoot: string;
+}) => string;
 type WorkspacePathAction = (targetPath: string) => void | Promise<void>;
 
 type WorkspacePathKind = 'directory' | 'entry' | 'file';
 
 type WorkspacePathResolution =
-  | { ok: true; targetPath: string }
+  | { ok: true; targetPath: string; workspaceRoot: string }
   | { ok: false; error: string };
 
 export type WorkspaceFilePreview = {
   mimeType: string;
   name: string;
   targetPath: string;
+  workspaceRoot: string;
 };
 
 type WorkspaceFilePreviewResolution =
@@ -108,14 +114,13 @@ export async function resolveWorkspaceFilePreview(
 ): Promise<WorkspaceFilePreviewResolution> {
   const resolved = await resolveWorkspaceFile(workspaceRootValue, filePathValue);
   if (!resolved.ok) return resolved;
-  const mimeType = workspaceFilePreviewMimeType(resolved.targetPath);
-  if (!mimeType) return { ok: false, error: 'Only PDF and image files can be opened in the built-in browser.' };
   return {
     ok: true,
     preview: {
-      mimeType,
+      mimeType: workspaceFilePreviewMimeType(resolved.targetPath),
       name: path.basename(resolved.targetPath),
       targetPath: resolved.targetPath,
+      workspaceRoot: resolved.workspaceRoot,
     },
   };
 }
@@ -166,7 +171,7 @@ async function resolveWorkspacePath(
     if (!targetMatchesKind) {
       return { ok: false, error: kind === 'entry' ? 'Target is not a file or directory.' : `Target is not a ${kind}.` };
     }
-    return { ok: true, targetPath: canonicalTarget };
+    return { ok: true, targetPath: canonicalTarget, workspaceRoot: canonicalRoot };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : `Failed to resolve workspace ${kind}.` };
   }
@@ -188,22 +193,46 @@ async function runWorkspaceEntryPathAction(
   }
 }
 
-export function workspaceFilePreviewMimeType(targetPath: string): string | null {
+const workspaceFilePreviewMimeTypes: Readonly<Record<string, string>> = {
+  '.aac': 'audio/aac',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.css': 'text/css',
+  '.csv': 'text/csv',
+  '.gif': 'image/gif',
+  '.htm': 'text/html',
+  '.html': 'text/html',
+  '.ico': 'image/x-icon',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.js': 'text/javascript',
+  '.json': 'application/json',
+  '.m4a': 'audio/mp4',
+  '.md': 'text/markdown',
+  '.mjs': 'text/javascript',
+  '.mov': 'video/quicktime',
+  '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4',
+  '.ogg': 'audio/ogg',
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+  '.ts': 'text/plain',
+  '.txt': 'text/plain',
+  '.wasm': 'application/wasm',
+  '.wav': 'audio/wav',
+  '.webm': 'video/webm',
+  '.webp': 'image/webp',
+  '.xml': 'application/xml',
+  '.yaml': 'text/yaml',
+  '.yml': 'text/yaml',
+};
+
+export function workspaceFilePreviewMimeType(targetPath: string): string {
   const extension = path.extname(targetPath).toLowerCase();
-  return ({
-    '.avif': 'image/avif',
-    '.bmp': 'image/bmp',
-    '.gif': 'image/gif',
-    '.ico': 'image/x-icon',
-    '.jpeg': 'image/jpeg',
-    '.jpg': 'image/jpeg',
-    '.pdf': 'application/pdf',
-    '.png': 'image/png',
-    '.svg': 'image/svg+xml',
-    '.tif': 'image/tiff',
-    '.tiff': 'image/tiff',
-    '.webp': 'image/webp',
-  } as Record<string, string>)[extension] ?? null;
+  return workspaceFilePreviewMimeTypes[extension] ?? 'application/octet-stream';
 }
 
 function isPathInside(workspaceRoot: string, targetPath: string): boolean {
