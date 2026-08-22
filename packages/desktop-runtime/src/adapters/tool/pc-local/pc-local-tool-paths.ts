@@ -321,16 +321,6 @@ function fileMutationPathCandidates(name: string, args: Record<string, unknown>)
   return [args?.file_path ?? args?.path].filter(Boolean);
 }
 
-export function resolvePathForDisplay(value: unknown, root?: string): string {
-  const raw = String(value || '').trim();
-  if (!raw) return '.';
-  try {
-    return formatPath(resolveWorkspacePath(raw, root), root);
-  } catch {
-    return raw;
-  }
-}
-
 export function workspaceRelativePath(filePath: string, root?: string): string {
   return path.relative(realWorkspaceRoot(root), path.resolve(filePath)).replace(/\\/g, '/') || '.';
 }

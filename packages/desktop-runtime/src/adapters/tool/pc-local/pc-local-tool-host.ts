@@ -36,7 +36,7 @@ type PcToolState = Omit<ReturnType<typeof pcTools.createLocalToolState>, 'sandbo
 type ProjectToolState = {
   toolState: PcToolState;
   baseShellPolicyRules: unknown[];
-  turnFileStates: Map<string, Pick<PcToolState, 'reads' | 'readFileResults'> & { lastUsedAt: number }>;
+  turnFileStates: Map<string, Pick<PcToolState, 'reads'> & { lastUsedAt: number }>;
   lastUsedAt: number;
 };
 
@@ -573,7 +573,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const turnKey = `${context.threadId}\0${context.turnId || 'no-turn'}`;
     let turnFileState = projectState.turnFileStates.get(turnKey);
     if (!turnFileState) {
-      turnFileState = { reads: new Map(), readFileResults: new Map(), lastUsedAt: Date.now() };
+      turnFileState = { reads: new Map(), lastUsedAt: Date.now() };
       projectState.turnFileStates.set(turnKey, turnFileState);
     }
     turnFileState.lastUsedAt = Date.now();
@@ -582,7 +582,6 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     return {
       ...projectState.toolState,
       reads: turnFileState.reads,
-      readFileResults: turnFileState.readFileResults,
       environmentId: context.environment?.id ?? projectState.toolState.environmentId,
       permissionProfile: context.permissionProfile ?? 'workspace-write',
       sandboxWorkspaceWrite: cloneSandboxWorkspaceWrite(context.sandboxWorkspaceWrite),

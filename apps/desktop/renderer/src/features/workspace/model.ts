@@ -6,7 +6,6 @@ import type {
   DesktopTerminalEvent,
   DesktopTerminalSession,
   DesktopWorkspaceApp,
-  RuntimeEvent,
   RuntimeReviewFinding,
   WorkspaceEntry,
 } from '@setsuna-desktop/contracts';
@@ -268,9 +267,3 @@ export function formatTokens(value: number): string {
 export function fileName(path: string): string {
   return path.split('/').filter(Boolean).at(-1) ?? path;
 }
-
-export type ToolRuntimeEvent =
-  | Extract<RuntimeEvent, { type: 'tool.started' }>
-  | Extract<RuntimeEvent, { type: 'tool.completed' }>
-  | Extract<RuntimeEvent, { type: 'hook.started' }>
-  | Extract<RuntimeEvent, { type: 'hook.completed' }>;

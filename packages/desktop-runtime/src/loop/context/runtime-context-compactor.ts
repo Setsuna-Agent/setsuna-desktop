@@ -584,13 +584,6 @@ function positiveRuntimeInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
-export function samplingContextWindowForMessages(
-  messages: RuntimeMessage[],
-  budget?: RuntimeContextCompactionBudget,
-): RuntimeModelRequestStepSnapshot['contextWindow'] {
-  return samplingContextWindowForRequest({ messages, budget });
-}
-
 export function samplingContextWindowForRequest({
   budget,
   messages,

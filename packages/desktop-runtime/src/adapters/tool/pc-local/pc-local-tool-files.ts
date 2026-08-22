@@ -79,13 +79,8 @@ type FileReadIdentity = {
   size: number;
 };
 
-type FileReadResultEntry = FileReadIdentity & {
-  source: 'context' | 'runtime';
-};
-
 type FileReadCacheState = {
   reads: Map<string, FileReadIdentity>;
-  readFileResults?: Map<string, FileReadResultEntry>;
 };
 
 export type PcLocalFileState = FileMutationState & FileReadCacheState & {
@@ -257,7 +252,6 @@ export async function readLocalFile(args: ToolArguments, state: PcLocalFileState
       body = await streamFilePrefix(opened.handle, MAX_TEXT_BYTES);
     }
 
-    rememberReadFileResult(state, filePath, info, range, 'runtime');
     return okResult(`${prefix}\n${truncateText(body, MAX_TEXT_BYTES)}`, `read ${formatAccessiblePath(filePath, state)}`);
   } finally {
     await opened.handle.close().catch(() => undefined);
@@ -845,38 +839,6 @@ export function rememberRead(
     mtimeMs: info.mtimeMs,
     size: info.size,
   }, MAX_FILE_READ_STATE_ENTRIES);
-}
-
-export function rememberReadFileResult(
-  state: FileReadCacheState,
-  filePath: string,
-  info: Pick<Stats, 'mtimeMs' | 'size'>,
-  range: FileReadRange | null,
-  source: FileReadResultEntry['source'],
-): void {
-  if (!state.readFileResults) state.readFileResults = new Map();
-  boundedMapSet(state.readFileResults, readFileResultCacheKey(filePath, range), {
-    mtimeMs: info.mtimeMs,
-    size: info.size,
-    source,
-  }, MAX_FILE_READ_STATE_ENTRIES);
-}
-
-export function rememberedReadFileResult(
-  state: FileReadCacheState,
-  filePath: string,
-  info: Pick<Stats, 'mtimeMs' | 'size'>,
-  range: FileReadRange | null,
-): FileReadResultEntry | null {
-  const entry = state.readFileResults?.get(readFileResultCacheKey(filePath, range));
-  if (!entry) return null;
-  if (entry.mtimeMs !== info.mtimeMs || entry.size !== info.size) return null;
-  return entry;
-}
-
-function readFileResultCacheKey(filePath: string, range: FileReadRange | null): string {
-  if (!range) return `${filePath}\0full`;
-  return `${filePath}\0${range.offset || 1}\0${range.limit ?? 'end'}`;
 }
 
 function boundedMapSet<Key, Value>(

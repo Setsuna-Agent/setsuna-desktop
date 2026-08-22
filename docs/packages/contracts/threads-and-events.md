@@ -95,13 +95,10 @@ Tool run 是 UI/审计投影，包含：
 
 ### 投影 disposition
 
-46 类事件对三个消费者都有编译期穷尽去向：
+每个 `RuntimeEventType` 对 thread snapshot、SWE notification 和 activity list 都有编译期穷尽去向。完整清单由
+`packages/contracts/src/event-projections/dispositions.ts` 持有，文档不复制会随事件增长而漂移的数量。
 
-- `RUNTIME_THREAD_EVENT_DISPOSITIONS`：43 类 `project`，3 类 `ignore(reason)`。
-- `RUNTIME_SWE_EVENT_DISPOSITIONS`：34 类 `project`，12 类 `ignore(reason)`。
-- `RUNTIME_ACTIVITY_EVENT_DISPOSITIONS`：14 类 `include`，32 类 `ignore(reason)`。
-
-`project` 表示对应 reducer/mapper 明确拥有该类型，不保证每个 payload 都产生可见输出。Thread reducer 和 SWE mapper 的默认路径使用 `never` 检查；新增事件不能再静默落空。完整逐项清单见 [Runtime 边界与事件矩阵](../../designs/runtime-boundary-matrix.md)。
+`project` 表示对应 reducer/mapper 明确拥有该类型，不保证每个 payload 都产生可见输出。Thread reducer 和 SWE mapper 的默认路径使用 `never` 检查；新增事件不能再静默落空。投影选择规则与边界见 [Runtime 边界与事件去向](../../designs/runtime-boundary-matrix.md)。
 
 ## Sequence 不变量
 

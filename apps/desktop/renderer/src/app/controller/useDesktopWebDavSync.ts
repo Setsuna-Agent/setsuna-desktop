@@ -144,5 +144,3 @@ export function desktopWebDavSyncErrorMessage(error: unknown): string {
     .replace(/^Error invoking remote method '[^']+':\s*(?:Error:\s*)?/u, '')
     .replace(/^Error:\s*/u, '');
 }
-
-export type DesktopWebDavSyncStateView = ReturnType<typeof useDesktopWebDavSync>;

@@ -67,5 +67,3 @@ export type ToolResultStore = {
   /** 启动恢复:清理已删除线程的孤儿结果。 */
   recover(validThreadIds: string[]): Promise<void>;
 };
-
-export type ToolResultReader = Pick<ToolResultStore, 'read'>;

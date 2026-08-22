@@ -15,11 +15,6 @@ export function requiredStringArg(value: unknown, name: string): string {
   return value.trim();
 }
 
-export function requiredContentArg(value: unknown, name = 'content'): string {
-  if (typeof value !== 'string') throw new Error(`${name} is required.`);
-  return value;
-}
-
 export function optionalStringArg(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }

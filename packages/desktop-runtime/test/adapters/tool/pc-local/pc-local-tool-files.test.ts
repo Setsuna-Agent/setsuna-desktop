@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest';
 import {
   listDirectory,
   rememberRead,
-  rememberReadFileResult,
   writeLocalFile,
 } from '../../../../src/adapters/tool/pc-local/pc-local-tool-files.js';
 import { openValidatedReadableFile } from '../../../../src/adapters/tool/pc-local/pc-local-tool-secure-read.js';
@@ -44,17 +43,15 @@ describe('PC local tool resource bounds', () => {
     }
   });
 
-  it('bounds per-turn file read identity and range caches', () => {
-    const state = { reads: new Map(), readFileResults: new Map() };
+  it('bounds per-turn file read identities', () => {
+    const state = { reads: new Map() };
     const info = { mtimeMs: 1, size: 1 };
     for (let index = 0; index < 2_100; index += 1) {
       const filePath = `/workspace/file-${index}.txt`;
       rememberRead(state, filePath, info);
-      rememberReadFileResult(state, filePath, info, { offset: index + 1, limit: 1 }, 'runtime');
     }
 
     expect(state.reads.size).toBe(2_048);
-    expect(state.readFileResults.size).toBe(2_048);
     expect(state.reads.has('/workspace/file-0.txt')).toBe(false);
     expect(state.reads.has('/workspace/file-2099.txt')).toBe(true);
   });

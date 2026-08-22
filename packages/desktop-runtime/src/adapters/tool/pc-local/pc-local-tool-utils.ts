@@ -61,10 +61,6 @@ export function shortSingleLine(value: unknown, maxChars = MAX_TOOL_SUMMARY_CHAR
   return `${text.slice(0, maxChars - 1)}…`;
 }
 
-export function relativeLabel(value: unknown): string {
-  return String(value || '').trim() || '.';
-}
-
 export function truncateText(value: unknown, maxChars = MAX_TEXT_BYTES): string {
   const text = String(value ?? '');
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n...[truncated]` : text;

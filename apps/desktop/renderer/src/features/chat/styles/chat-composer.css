@@ -499,55 +499,6 @@
   left: 0;
 }
 
-.chat-selected-skills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  width: min(var(--chat-content-max-width), 100%);
-  min-width: 0;
-}
-
-.chat-selected-skill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  max-width: 240px;
-  height: 26px;
-  padding: 0 4px 0 8px;
-  border: 1px solid var(--app-accent-border);
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text);
-  background: var(--app-accent-subtle);
-  font-size: 12px;
-  line-height: 1;
-}
-
-.chat-selected-skill__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-selected-skill button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--app-radius-sm);
-  color: var(--app-text-muted);
-  background: transparent;
-}
-
-.chat-selected-skill button:hover {
-  color: var(--app-text);
-  background: var(--desktop-agent-control-hover-bg);
-}
-
 .chat-sender .ant-sender {
   width: min(var(--chat-content-max-width), 100%);
   overflow: visible;

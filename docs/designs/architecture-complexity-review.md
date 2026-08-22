@@ -7,7 +7,9 @@
 
 本文记录 Setsuna Desktop 的复杂度基线、评审结论、分阶段治理决策及落地状态。P0、P1 和本轮选定的 P2 热点已经实施；后续按差量规则持续治理，不把尺寸本身当作全仓重写理由。
 
-配套清单见 [Runtime 边界与事件矩阵](runtime-boundary-matrix.md)。
+文中的模块尺寸和实施步骤是 2026-07-30 评审时的历史记录，不再充当当前 inventory。当前事件、client 成员和热点数量分别以 contracts 源码、renderer adapter 与 `pnpm check:architecture` 输出为准，避免在文档中维护第二份易漂移事实。
+
+配套边界说明见 [Runtime 边界与事件去向](runtime-boundary-matrix.md)。
 
 ## 结论
 
@@ -32,62 +34,19 @@
 
 > 保留两套边缘协议，收敛为一个业务核心；让每个行为只有一个所有者，并让所有事件去向显式可审计。
 
-## 当前基线
+## 评审基线（历史快照）
 
 ### 协议与事件
 
-- `DesktopRuntimeClient` 有 81 个业务成员；协议边界 P0 后新增全局运行活动查询：
-  - Runtime REST 从 69 个增至 79 个。
-  - renderer app-server RPC 从 9 个降至 0 个。
-  - 1 个 Thread SSE 订阅。
-  - 1 个 preload 上传桥。
-  - 0 个公开 raw request 出口；底层 request closure 只存在于 renderer adapter 实现内部。
-- `scripts/check-architecture.mjs` 已禁止 renderer 源码引用 `/v1/swe/app-server`。
-- REST 与 app-server 通过 `runtime/use-cases/thread-operations.ts` 和 `capability-operations.ts` 复用删除、Goal、Review、Hook、MCP 与 Skill roots 行为。
-- `RuntimeEventType` 有 46 类事件：
-  - thread snapshot：43 类 `project`，3 类 `ignore(reason)`。
-  - SWE notification：34 类 `project`，12 类 `ignore(reason)`。
-  - renderer activity：14 类 `include`，32 类 `ignore(reason)`。
-- `RUNTIME_EVENT_TYPES` 是事件类型清单；三个 `Record<RuntimeEventType, ...>` disposition 是消费者去向真源。
+- Renderer 业务能力只走 Runtime REST、Thread SSE 和明确的 preload 上传桥；不公开 raw request，也不调用 SWE app-server。
+- `scripts/check-architecture.mjs` 禁止 renderer 源码引用 `/v1/swe/app-server`。
+- REST 与 app-server 对共有行为复用 runtime use case，不各自维护业务事务。
+- `RUNTIME_EVENT_TYPES` 定义事件类型，三个穷尽 disposition record 定义 thread、SWE 和 activity 消费者去向。
 - thread reducer 与 SWE mapper 的最终分支使用 `never` 穷尽检查；新增事件未处理或未明确忽略时，类型检查失败。
 
 ### 模块压力
 
-完成 runtime REST、renderer 协调层、tool orchestration、ChatComposer 和选定 P2 热点拆分后，当前生产代码中有 5 个文件达到或超过 1,000 行，11 个达到或超过 900 行，31 个达到或超过 700 行。`pnpm check:architecture` 保留 1,200 行硬限制，同时禁止新增未评审的超过 900 行模块，并对现有超过 900 行热点设置不可增长预算。恰好 900 行只进入评审统计，不需要 legacy budget。
-
-重点模块基线：
-
-| 模块 | 行数 | 结构信号 | 主要风险 |
-| --- | ---: | --- | --- |
-| `useRuntimeClientState.ts` | 233 | 3 个 state、2 个 callback；组合 4 个 domain hook | 只保留 bootstrap、project 与 turn settlement 跨域刷新 |
-| `useRuntimeThreadState.ts` | 601 | 6 个 state、14 个 callback；依赖 12 个 thread client 方法 | 状态机复杂但 owner 单一；继续以 sequence/identity characterization test 约束 |
-| `runtime-rest-routes.ts` | 53 | 只按固定顺序分发 config、extension、resource、thread、turn、capability、workspace、memory/usage handler | transport 入口不再拥有业务 helper 或领域路由实现 |
-| `runtime-workspace-routes.ts` | 152 | Projects、entries、read/search、workspace status 的 REST adapter | 只做协议解析；项目归档事务归 use case |
-| `runtime-memory-usage-routes.ts` | 69 | Memory CRUD/preview 与 Usage query 的 REST adapter | 简单存储协议边界，不再叠加 application 层 |
-| `workspace-operations.ts` | 32 | 项目归档前按 thread owner 串行归档活动线程 | 失败时必须保持项目可见，允许安全重试 |
-| `tool-orchestrator.ts` | 598 | 首次执行、post-process/hook、delta flush 与唯一 terminal owner | terminal 顺序仍需 characterization test 约束 |
-| `tool-approval-coordinator.ts` | 510 | 统一审批策略、PermissionRequest hook、session/persistent grant | 审批语义集中，需保持不同审批入口的一致性 |
-| `tool-approval-lifecycle.ts` | 68 | 唯一 create/requested/wait/cancel/resolved 生命周期 | 取消必须只解析并发布一次 |
-| `tool-retry-strategy.ts` | 334 | Network、readable-root、sandbox bypass 决策与二次执行 | 不得拥有 terminal event 发布能力 |
-| `ChatComposer.tsx` | 683 | 2 个 state、8 个 ref；组合 command、mode 与 queued-edit controller | 继续持有附件/队列发送事务和外部请求接入，不再持有 footer/overlay 细节 |
-| `useChatCommandController.ts` | 240 | 8 个 state；统一 mention/slash、光标、搜索取消与键盘导航 | owner 单一；继续由纯状态矩阵和异步竞态测试约束 |
-| `useChatComposerModeController.ts` | 147 | 5 个 state；统一 Goal、thinking、model/usage view 和 send options | 不得接管附件结算、queued-edit token 或实际发送事务 |
-| `ChatComposerFooter.tsx` | 350 | 0 个 state/ref；按 command、attachment、editing、mode、thinking 分组接收显式控制面 | 纯展示 owner；不得接管发送或附件生命周期 |
-| `ChatComposerOverlays.tsx` | 102 | 0 个 state/ref；组合 mention、slash 与 usage panel | 纯展示 owner；菜单搜索和 open state 仍归 controller |
-| `app-server/dispatcher.ts` | 754 | 69 个 RPC method；删除、Goal、Review、MCP 已下沉 | 协议分发器仍覆盖大量 SWE method |
-| `app-server/config-protocol.ts` | 799 | Config read/write、model、memory、sandbox；feature 与分页已拆出 | model/sandbox 继续按真实变更评审，不做纯尺寸拆分 |
-| `app-server/feature-protocol.ts` | 198 | Feature 目录、默认/强制禁用策略与 enablement 写入 | 上游兼容清单和运行时配置映射由同一 owner 维护 |
-| `app-server/pagination.ts` | 27 | Model、feature、permission、MCP 共用 offset cursor 校验 | 只拥有无状态协议分页，不接管目录业务 |
-| `app-server/command-exec.ts` | 513 | command/exec session facade；复用 process manager 与共享 process runtime | 保持兼容导出，command 与 process 状态机不再共居 |
-| `app-server/process-manager.ts` | 573 | process/* session、background terminal 与连接生命周期 | 单一 process session owner；共享 PTY/stdin/output seam 不拥有协议状态 |
-| `CapabilitiesPage.tsx` | 721 | 页面筛选、mutation 和跨能力编排 | MCP/Skill 目录项与 Plugin market/detail 已有独立展示 owner |
-| `RuntimeToolRuns.tsx` | 672 | tool run 分组和 disclosure 编排 | 文件摘要、Hook、审批/elicitation、shell 展示均已下沉 |
-| `RuntimeToolRunPresentation.tsx` | 877 | tool run 展示映射 facade | shell、change counts 与无状态解析已拆；保持旧导出兼容 |
-| `ReviewDiffView.tsx` | 404 | review 文件卡、展开与 context menu 编排 | diff 变换和虚拟滚动不再与页面状态共居 |
-| `ReviewDiffContent.tsx` | 878 | unified/split diff 渲染与虚拟滚动 | 单一渲染领域；纯数据变换位于 `reviewDiffModel.ts` |
-| `app-server/command-sandbox.ts` | 122 | 权限别名、策略解析、Seatbelt profile、平台探测与 spawn 包装 | 任何受限策略不可静默降级为 unsandboxed |
-
-仓库历史目前较短，文件 churn 很大一部分来自近期目录拆分和迁移，因此第一轮不把 churn 作为硬判定；先用责任数量、依赖面、状态机风险和剩余尺寸空间建立基线。
+评审据职责数量、依赖面和状态机风险选择拆分对象，没有把行数作为单独依据。当前热点由 `pnpm check:architecture` 统一统计并执行 900/1,200 行预算；本文不再复制逐文件行数表。
 
 ## 目标结构
 
@@ -199,8 +158,8 @@ RuntimeEvent log
 已经确认的边界：
 
 - Thread 明确忽略 `thread.deleted`、`reasoning.summary_part_added`、`runtime.warning`；删除后 snapshot 不再存在，reasoning 边界无额外 snapshot 数据，warning 只保留在事件和 activity 历史。
-- SWE 明确忽略 thread metadata/memory/context refresh、三类 queued input、message update/delete/truncate、两类 hook lifecycle 和 `runtime.warning`，共 12 类。
-- Activity 只包含 context、turn、tool/hook、approval 和 runtime 终态等 14 类高层事件；conversation、stream delta 和 telemetry 留在各自 UI 投影。
+- SWE 对没有对应协议通知的 thread refresh、queued input、message mutation、Hook、协作任务和 warning 事件显式忽略。
+- Activity 只包含 context、turn、tool/Hook、approval、collaboration 和 runtime 终态等高层事件；conversation、stream delta 和 telemetry 留在各自 UI 投影。
 
 本轮不为 SWE 协议凭空增加 notification。`project` 表示 mapper 明确拥有该事件类型，不保证每个 payload 都产生通知；例如协议不支持的通用审批仍会显式返回空列表。
 
@@ -236,7 +195,7 @@ RuntimeEvent log
 
 尺寸不是唯一依据。纯协议表、稳定映射或同一状态机可以更长；协调器、React 页面和 transport handler 应更早触发评审。生成文件、i18n 数据和样式应使用独立规则。
 
-## 热点拆分建议
+## 已实施治理记录（历史）
 
 ### P0：协议边界
 
@@ -301,7 +260,7 @@ RuntimeEvent log
 
 ### P2：次级热点
 
-继续评审 app-server config、command/process manager、Capabilities page、tool run presentation、review diff 等超过 1,000 行的模块。只有在发生实际变更或职责继续扩张时拆分，不做纯尺寸驱动的全仓重写。
+评审时选择 app-server config、command/process manager、Capabilities page、tool run presentation 和 review diff 等热点；只有发生实际变更或职责扩张时才拆分，不做纯尺寸驱动的全仓重写。
 
 `app-server/config-protocol.ts`：
 
@@ -344,7 +303,7 @@ Review diff：
 ### 本轮评审完成条件
 
 - 有完整的 client transport inventory。
-- 有 46 类事件的当前投影矩阵。
+- 当时全部 RuntimeEvent 都有投影去向记录。
 - 三项架构决策明确记录状态和取舍。
 - 六条样本链路有红黄绿判断。
 - P0/P1/P2 backlog 有顺序和不变量。
@@ -355,7 +314,7 @@ Review diff：
 - [x] Renderer app-server 调用从 9 降为 0。
 - [x] Renderer business client 不再公开 raw `request`。
 - [x] 本轮覆盖的双协议行为只有一个 application use case 实现。
-- [x] 46 类事件在三个 projection 中都有显式 disposition。
+- [x] 当时全部 RuntimeEvent 在三个 projection 中都有显式 disposition。
 - [x] Renderer-only 能力只增加第一方 Runtime REST，不要求修改 SWE mapper。
 - [x] SWE-only 能力只增加 app-server adapter，不要求修改 renderer client。
 - [x] 重点协调模块停止增加新领域职责，拆分后的 facade 保持现有调用兼容。
@@ -363,7 +322,7 @@ Review diff：
 
 ## 评审维护
 
-- 本文记录决策、优先级和不变量；具体 method/event 清单维护在配套矩阵。
-- 每完成一项决策实施，同步更新“状态”和基线数字。
+- 本文记录决策、优先级、不变量和历史实施结果，不维护当前 method/event 数量或逐文件行数。
+- 当前 method/event 清单以源码为准；热点数量以 `pnpm check:architecture` 输出为准。
 - 新增跨层功能时先在矩阵中写明消费者和所有者，再决定是否需要 REST、app-server、event 或 projection。
 - 如果实现证明提案不成立，应更新决策理由，不为保持文档一致而强行套用抽象。

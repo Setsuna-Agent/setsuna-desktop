@@ -5,7 +5,6 @@ import type {
   RuntimePermissionProfile,
   RuntimeSandboxWorkspaceWrite,
 } from '@setsuna-desktop/contracts';
-import { stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { ShellToolchain } from '../../../ports/workspace-dependency-manager.js';
 import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
@@ -47,17 +46,12 @@ import {
   isEditToolName,
   listDirectory,
   normalizeEditArgs,
-  normalizeReadRange,
   readLocalFile,
-  rememberRead,
-  rememberReadFileResult,
-  rememberedReadFileResult,
   searchText,
   type PcLocalFileState,
   writeLocalFile,
 } from './pc-local-tool-files.js';
 import {
-  calculateMcpServerConfig,
   configureMcpServer,
   isLocalMcpConfigPath,
 } from './pc-local-tool-mcp.js';
@@ -68,20 +62,13 @@ import {
   readDiff,
 } from './pc-local-tool-git.js';
 import {
-  memoryStorePath,
-  normalizePlanItems,
-  normalizeRememberMemoryArgs,
   rememberMemory,
   updatePlan,
 } from './pc-local-tool-memory.js';
 import {
   deniedRootPathForFileMutationTool,
-  formatPath,
   protectedPathForFileMutationTool,
-  resolvePathForDisplay,
-  resolveWorkspacePath,
 } from './pc-local-tool-paths.js';
-import { openValidatedReadableFile } from './pc-local-tool-secure-read.js';
 import {
   listAllBackgroundShellProcesses,
   listBackgroundShellProcesses,
@@ -116,9 +103,6 @@ import {
 } from './pc-local-tool-shell-process.js';
 import {
   errorResult,
-  okResult,
-  relativeLabel,
-  shortSingleLine,
   sleep,
 } from './pc-local-tool-utils.js';
 
@@ -224,7 +208,6 @@ export function createLocalToolState(
     ),
     networkPolicyAmendments: [],
     reads: new Map(),
-    readFileResults: new Map(),
     fileMutationCoordinator: createFileMutationCoordinator(),
     shellProcessStore,
     shellProcesses: shellProcessStore.sessions,
@@ -235,67 +218,6 @@ export function createLocalToolState(
     memoryStorageRoot: options.memoryStorageRoot || DEFAULT_MEMORY_STORE_DIR,
     workspaceSearchEngine: options.workspaceSearchEngine,
   };
-}
-
-export async function rememberContextFileRead(
-  args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  const filePath = resolveWorkspacePath(args?.file_path, state.root);
-  const expectedContent = String(args?.content ?? '');
-  const opened = await openValidatedReadableFile(filePath, state);
-  try {
-    if (!opened.info.isFile()) return false;
-    const currentContent = await opened.handle.readFile({ encoding: 'utf8' });
-    if (currentContent !== expectedContent) return false;
-    rememberRead(state, filePath, opened.info);
-    rememberReadFileResult(state, filePath, opened.info, null, 'context');
-    return true;
-  } finally {
-    await opened.handle.close().catch(() => undefined);
-  }
-}
-
-export async function duplicateReadFileResult(
-  args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  const filePath = resolveWorkspacePath(args?.file_path ?? args?.path, state.root);
-  const info = await stat(filePath);
-  if (!info.isFile()) return null;
-
-  const range = normalizeReadRange(args);
-  const entry = rememberedReadFileResult(state, filePath, info, range);
-  if (!entry) return null;
-
-  const source = entry.source === 'context'
-    ? 'desktop tool context'
-    : 'earlier in this user request';
-  const label = formatPath(filePath, state.root);
-  return okResult(
-    `Skipped duplicate read_file: ${label} was already provided ${source} and the file has not changed. Use that earlier read_file result instead of reading it again.`,
-    `already read ${label}`,
-    { duplicateReadFile: true },
-  );
-}
-
-export async function validateLocalFileMutationReadiness(
-  name: string,
-  _args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  const normalizedName = String(name || '');
-  if (!['write_file', 'append_file', 'delete_file', 'edit', 'edit_file', 'apply_patch'].includes(normalizedName)) {
-    return { ok: true };
-  }
-  if (state.permissionProfile === 'read-only') {
-    return {
-      ok: false,
-      content: '当前权限配置为 read-only，不能修改工作区文件。',
-      display: '当前权限配置为 read-only，不能修改工作区文件。',
-    };
-  }
-  return { ok: true };
 }
 
 export function toolNeedsConfirmation(name: string) {
@@ -335,42 +257,6 @@ export function shellCommandRisk(
   }
   if (declaredRisk === 'low') return { needsConfirmation: false, reason: '', rejectWhenApprovalDisabled };
   return { needsConfirmation: true, reason: '命令未声明风险等级。', rejectWhenApprovalDisabled };
-}
-
-export function summarizeToolCall(
-  name: string,
-  args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  if (isEditToolName(name)) return `编辑 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
-  if (name === 'apply_patch') return '应用补丁';
-  if (name === 'write_file') return `写入 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
-  if (name === 'append_file') return `追加到 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
-  if (name === 'delete_file') return `删除 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
-  if (name === 'configure_mcp_server') return `配置 MCP 服务 ${shortSingleLine(args?.key || '')}`;
-  if (name === 'remember_memory') return `沉淀记忆 ${shortSingleLine(args?.title || args?.content || '')}`;
-  if (name === 'update_plan') {
-    const plan = normalizePlanItems(args?.plan);
-    const active = plan.find((item) => item.status === 'in_progress')?.step;
-    return active ? `更新计划：${active}` : `更新计划：${plan.length} 步`;
-  }
-  if (name === 'run_shell_command') {
-    const label = args?.persist || args?.keep_alive ? '保持运行命令' : '运行命令';
-    return `${label} ${shortSingleLine(args?.command || '')}`;
-  }
-  if (name === 'read_shell_process') return `读取命令进程 ${shortSingleLine(args?.process_id || '')}`;
-  if (name === 'list_shell_processes') return '查看命令进程';
-  if (name === 'write_shell_process') return `写入命令进程 ${shortSingleLine(args?.process_id || '')}`;
-  if (name === 'terminate_shell_process') return `终止命令进程 ${shortSingleLine(args?.process_id || '')}`;
-  if (name === 'search_text') return `搜索文本 ${shortSingleLine(args?.query || '')}`;
-  if (name === 'find_files') return `查找文件 ${shortSingleLine(args?.query || '')}`;
-  if (name === 'git_status') return '查看 Git 状态';
-  if (name === 'git_log') return `查看 Git 历史 ${shortSingleLine(args?.revision || 'HEAD')}`;
-  if (name === 'git_show') return `查看 Git 提交 ${shortSingleLine(args?.revision || '')}`;
-  if (name === 'read_diff') return args?.staged ? '查看暂存区 diff' : '查看工作区 diff';
-  if (name === 'read_file') return `查看 ${relativeLabel(resolvePathForDisplay(args?.file_path, state.root))}`;
-  if (name === 'list_directory') return `查看 ${relativeLabel(resolvePathForDisplay(args?.path, state.root))}`;
-  return '处理请求';
 }
 
 export async function previewWriteFileDiff(
@@ -471,25 +357,6 @@ export async function previewApplyPatchDiff(
         integrityToken: await integrityTokenForCalculatedMutation(result, state),
       }
     : null;
-}
-
-export async function previewMcpServerConfig(
-  args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  const result = await calculateMcpServerConfig(args, state);
-  if (!result.ok) return { error: result.error };
-  return { mcpServer: result.preview };
-}
-
-export function previewRememberMemory(
-  args: ToolArguments,
-  state: PcLocalToolState = createLocalToolState(),
-) {
-  return {
-    memory: normalizeRememberMemoryArgs(args, state),
-    storagePath: memoryStorePath(state),
-  };
 }
 
 export async function executeLocalTool(

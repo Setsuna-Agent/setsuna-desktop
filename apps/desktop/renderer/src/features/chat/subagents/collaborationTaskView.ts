@@ -1,29 +1,13 @@
 import type {
   RuntimeAgentIdentity,
   RuntimeCollaborationTask,
-  RuntimeCollaborationTaskStatus,
   RuntimeThreadSummary,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 
-/** 协作面板 id 固定为 subagent:<childThreadId>，正文卡片与环境面板反复点击只会激活同一个 tab。 */
-export const subagentPanelId = (childThreadId: string): string => `subagent:${childThreadId}`;
-
-/** child 线程不是独立的“主对话”：非 side 且有 parentThreadId 即视为子代理线程。 */
-export function isSubagentThread(thread: RuntimeThreadSummary): boolean {
-  return thread.kind !== 'side' && Boolean(thread.parentThreadId);
-}
-
 /** 主对话线程 = 非 side 且无 parentThreadId；左侧栏、搜索结果与归档列表统一使用该判断。 */
 export function isPrimaryConversationThread(thread: RuntimeThreadSummary): boolean {
   return thread.kind !== 'side' && !thread.parentThreadId;
-}
-
-export function isTerminalCollaborationStatus(status: RuntimeCollaborationTaskStatus): boolean {
-  return status === 'completed'
-    || status === 'failed'
-    || status === 'cancelled'
-    || status === 'interrupted';
 }
 
 export type SpawnAgentToolRunData = {

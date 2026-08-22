@@ -44,7 +44,6 @@
     "validate:release-version": "node scripts/validate-release-version.mjs"
   },
   "dependencies": {
-    "@ant-design/icons": "^6.2.5",
     "@ant-design/x": "^2.5.0",
     "@fontsource/geist-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",
@@ -84,7 +83,6 @@
     "esbuild": "^0.28.1",
     "eslint": "^9.17.0",
     "happy-dom": "^20.11.2",
-    "rimraf": "^6.0.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vite": "^6.0.5",

@@ -12,7 +12,7 @@
 ## 评审与治理
 
 - [架构复杂度收敛评审](architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点和分阶段治理计划。
-- [Runtime 边界与事件矩阵](runtime-boundary-matrix.md)：`DesktopRuntimeClient` 当前传输清单和 46 类 RuntimeEvent 的显式投影边界。
+- [Runtime 边界与事件去向](runtime-boundary-matrix.md)：`DesktopRuntimeClient` 的传输规则和 RuntimeEvent 的显式投影边界。
 
 ## 何时新增设计文档
 
