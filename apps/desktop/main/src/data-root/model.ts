@@ -1,7 +1,4 @@
-import type {
-  DesktopDataMigrationCategoryId,
-  DesktopDataMigrationProgress,
-} from '@setsuna-desktop/contracts';
+import type { DesktopDataMigrationCategoryId } from '@setsuna-desktop/contracts';
 
 export type DataRootMarker = {
   owner: 'setsuna-desktop';
@@ -99,5 +96,3 @@ export type DataMigrationManifest = {
   totalBytes: number;
   rootMode: number;
 };
-
-export type MigrationProgressListener = (progress: DesktopDataMigrationProgress) => void;

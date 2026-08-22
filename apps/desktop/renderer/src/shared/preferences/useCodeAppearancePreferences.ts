@@ -111,7 +111,6 @@ export const codeThemeOptions = [
 export type CodeFontFamilyMode = typeof codeFontFamilyOptions[number]['value'];
 export type CodeFontFamilyOption = typeof codeFontFamilyOptions[number];
 export type CodeTheme = typeof codeThemeOptions[number]['value'];
-export type CodeThemeOption = typeof codeThemeOptions[number];
 
 const codeFontFamilyStorageKey = 'setsuna-code-font-family';
 const codeThemeStorageKey = 'setsuna-code-theme:v1';

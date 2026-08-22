@@ -88,7 +88,7 @@
 
 - [Active turn 发送队列](designs/queued-turn-inputs.md)：普通消息、Goal、steer、取回编辑和 FIFO 调度。
 - [架构复杂度收敛评审](designs/architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点治理计划。
-- [Runtime 边界与事件矩阵](designs/runtime-boundary-matrix.md)：第一方 Runtime、app-server 和事件投影的当前边界。
+- [Runtime 边界与事件去向](designs/runtime-boundary-matrix.md)：第一方 Runtime、app-server 和事件投影的当前边界。
 
 这类文档应说明完整状态机；模块文档只保留本模块在该状态机中的职责，并链接到设计文档。
 

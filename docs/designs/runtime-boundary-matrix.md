@@ -1,37 +1,20 @@
-# Runtime 边界与事件矩阵
+# Runtime 边界与事件去向
 
 状态：当前实现（协议边界、事件完整性 P0 已完成）  
 基线提交：`a372b1fb9`（2026-07-30）  
-实施更新：2026-08-06
+实施更新：2026-08-22
 配套评审：[架构复杂度收敛评审](architecture-complexity-review.md)
 
-本文描述已经落地的协议边界与事件投影约束。
+本文描述已经落地的协议边界与事件投影约束。成员和事件的完整 inventory 由类型化源码持有；本文只记录选择规则和不变量，不再复制会随功能增长而漂移的数量清单。
 
-## DesktopRuntimeClient 传输清单
+## DesktopRuntimeClient 传输边界
 
-`packages/contracts/src/http.ts` 的 `DesktopRuntimeClient` 有 81 个业务成员。`apps/desktop/renderer/src/services/runtime-client/client.ts` 的当前分布：
+完整成员定义位于 `packages/contracts/src/http.ts`，对应 adapter 位于 `apps/desktop/renderer/src/services/runtime-client/client.ts`。传输规则是：
 
-| 传输 | 数量 | 说明 |
-| --- | ---: | --- |
-| Runtime REST | 79 | 经 preload/main 的受控 `/v1/*` request |
-| App-server RPC | 0 | renderer 不再使用 SWE app-server transport |
-| Thread SSE | 1 | `subscribeEvents` 经 preload/main 维护 SSE |
-| Preload upload bridge | 1 | `uploadAttachment` 走二进制上传桥 |
-
-### 按领域的完整 inventory
-
-| 领域 | Client 成员 | 当前传输 |
-| --- | --- | --- |
-| 底层与附件 | `uploadAttachment`、`deleteAttachment`、`subscribeEvents` | preload bridge、REST、SSE |
-| Thread lifecycle | `listThreads`、`listRuntimeActivities`、`getThread`、`createThread`、`updateThread`、`deleteThread`、`listBackgroundShellProcesses`、`terminateBackgroundShellProcess`、`setThreadGoal`、`clearThreadGoal`、`updateThreadMemoryMode`、`clearThreadContext`、`compactThreadContext`、`listDebugTraces` | 14 REST |
-| Turn、message、queue | `sendTurn`、`steerTurn`、`queueTurnInput`、`retrieveQueuedTurnInput`、`releaseQueuedTurnInputEdit`、`updateQueuedTurnInput`、`deleteQueuedTurnInput`、`sendQueuedTurnInputNow`、`updateMessage`、`deleteMessages`、`regenerateFromMessage`、`cancelTurn`、`startReview` | 13 REST |
-| Config 与依赖 | `getConfig`、`saveConfig`、`getWorkspaceDependencies`、`diagnoseWorkspaceDependencies`、`repairWorkspaceDependencies`、`fetchProviderModels` | REST |
-| Hook 与 Skill | `listHooks`、`listSkills`、`createSkill`、`getSkill`、`updateSkill`、`deleteSkill`、`installSkillMcpDependencies`、`authenticateSkillMcpDependency`、`setSkillExtraRoots` | 9 REST |
-| Plugin | `listPlugins`、`listPluginMarketplace`、`getPluginItemContent`、`getMarketplacePluginItemContent`、`installMarketplacePlugin`、`updateMarketplacePlugin`、`removePlugin`、`testImageGeneration` | REST |
-| Project 与 workspace | `listProjects`、`addProject`、`archiveProject`、`removeProject`、`getWorkspaceStatus`、`listProjectEntries`、`searchProjectEntries`、`readProjectFile`、`searchProject` | REST |
-| Usage 与 memory | `getUsage`、`listMemories`、`previewMemories`、`createMemory`、`deleteMemory`、`clearMemories` | REST |
-| MCP | `listMcpServers`、`fetchMcpServerTools`、`upsertMcpServer`、`updateMcpServer`、`deleteMcpServer`、`loginMcpServer`、`logoutMcpServer`、`listMcpServerStatuses`、`readMcpServerResource`、`callMcpServerTool` | 10 REST |
-| Approval | `listApprovals`、`answerApproval` | REST |
+- 普通 runtime query/command 经 preload/main 的受控 `/v1/*` REST request。
+- `subscribeEvents` 经 preload/main 维护 Thread SSE。
+- `uploadAttachment` 使用明确的二进制 preload bridge。
+- Renderer 不使用 SWE app-server transport；架构检查禁止重新引入该路径。
 
 ### 已迁移的双协议能力
 
@@ -66,58 +49,17 @@
 4. 是否有取消、审批、恢复、连接级 capability 或事务语义。
 5. 最后才选择 transport 和 DTO。
 
-## RuntimeEvent 投影矩阵
+## RuntimeEvent 投影边界
 
-下表对应 `packages/contracts/src/event-projections/dispositions.ts` 的穷尽清单。Thread/SWE 使用 `project` 或 `ignore`，Activity 使用 `include` 或 `ignore`。`project` 表示消费者明确拥有该事件类型，但具体 payload 仍可能合法地产生空通知。
+每个事件的完整去向由 `packages/contracts/src/event-projections/dispositions.ts` 的穷尽 record 持有：
 
-| Event | Thread snapshot | SWE notification | Activity list |
-| --- | --- | --- | --- |
-| `thread.created` | project | project | ignore |
-| `thread.updated` | project | project | ignore |
-| `thread.deleted` | ignore | project | ignore |
-| `thread.metadata_updated` | project | ignore | ignore |
-| `thread.memory_mode_updated` | project | ignore | ignore |
-| `thread.goal_updated` | project | project | ignore |
-| `thread.goal_cleared` | project | project | ignore |
-| `thread.context_cleared` | project | ignore | include |
-| `thread.context_compacting` | project | project | include |
-| `thread.context_compacted` | project | project | include |
-| `turn.input_queued` | project | ignore | ignore |
-| `turn.input_updated` | project | ignore | ignore |
-| `turn.input_deleted` | project | ignore | ignore |
-| `turn.started` | project | project | include |
-| `turn.step_snapshot` | project | project | ignore |
-| `mailbox.delivered` | project | project | ignore |
-| `message.created` | project | project | ignore |
-| `message.delta` | project | project | ignore |
-| `message.updated` | project | ignore | ignore |
-| `message.plan_mode_updated` | project | project | ignore |
-| `message.completed` | project | project | ignore |
-| `item.started` | project | project | ignore |
-| `item.delta` | project | project | ignore |
-| `item.completed` | project | project | ignore |
-| `plan.delta` | project | project | ignore |
-| `reasoning.summary_delta` | project | project | ignore |
-| `reasoning.summary_part_added` | ignore | project | ignore |
-| `reasoning.raw_delta` | project | project | ignore |
-| `safety.buffering` | project | project | ignore |
-| `model.verification` | project | project | ignore |
-| `token.count` | project | project | ignore |
-| `turn.diff` | project | project | ignore |
-| `messages.deleted` | project | ignore | ignore |
-| `messages.truncated` | project | ignore | ignore |
-| `tool.preview` | project | project | ignore |
-| `tool.started` | project | project | include |
-| `tool.output_delta` | project | project | ignore |
-| `tool.completed` | project | project | include |
-| `hook.started` | project | ignore | include |
-| `hook.completed` | project | ignore | include |
-| `approval.requested` | project | project | include |
-| `approval.resolved` | project | project | include |
-| `turn.completed` | project | project | include |
-| `turn.cancelled` | project | project | include |
-| `runtime.warning` | ignore | ignore | include |
-| `runtime.error` | project | project | include |
+| 消费者 | 显式动作 | 作用 |
+| --- | --- | --- |
+| Thread snapshot | `project` / `ignore(reason)` | 维护可重放的线程状态 |
+| SWE notification | `project` / `ignore(reason)` | 映射兼容协议通知 |
+| Activity list | `include` / `ignore(reason)` | 选择高层运行活动 |
+
+`project` 表示消费者明确拥有该事件类型，但具体 payload 仍可能合法地产生空通知。`RUNTIME_EVENT_TYPES` 与三个 disposition record 由 TypeScript 校验完整键集合；thread reducer 和 SWE mapper 还使用 ignore type guard 与 `never` fallback，防止新增事件静默落空。
 
 ### 显式边界
 
@@ -132,14 +74,12 @@ SWE notification：
 - Thread metadata、memory mode 和 context clear 通过 `thread/read` 获取当前状态，不新增 live notification。
 - Queued input 是第一方 runtime API 状态，不进入 SWE notification。
 - Message update/delete/truncate 没有对应 SWE live notification；历史读取仍返回当前投影。
-- Hook lifecycle 的结果通过 item/turn 事件体现；runtime warning 保留在事件日志。
+- Hook lifecycle 的结果通过 item/turn 事件体现；协作任务账本由第一方 runtime 持有；runtime warning 保留在事件日志。
 
 Activity list：
 
-- 只包含 context、turn、tool/hook、approval 和 runtime 终态等 14 类高层事件。
+- 只包含 context、turn、tool/Hook、approval、collaboration 和 runtime 终态等高层事件。
 - Conversation、stream delta、tool preview/output 和 model telemetry 由各自 UI 投影展示，不重复进入 activity。
-
-`RUNTIME_EVENT_TYPES` 与三个 disposition record 由 TypeScript 校验完整键集合。Thread reducer 和 SWE mapper 还使用从清单推导的 ignore type guard 与 `never` fallback，防止新增事件静默落空。
 
 ## 变更扩散检查模板
 
@@ -165,7 +105,7 @@ Activity list：
 
 ## 更新规则
 
-- 新增 `DesktopRuntimeClient` 方法时更新传输清单和消费者。
-- 新增 `RuntimeEventType` 时先更新编译期 disposition，再同步本矩阵；源码清单为真源。
+- 新增 `DesktopRuntimeClient` 方法时更新 contract、adapter 和真实消费者；本文只在传输规则变化时更新。
+- 新增 `RuntimeEventType` 时更新编译期 disposition；本文只在投影边界或不变量变化时更新。
 - 协议迁移完成后保留历史决策，但删除已经失效的“当前实现”描述和数字。
-- 矩阵只记录稳定能力，不复制每个 route 的完整请求体；详细类型继续以 contracts 为准。
+- 详细成员、事件和请求类型始终以 contracts 与对应 adapter 源码为准。

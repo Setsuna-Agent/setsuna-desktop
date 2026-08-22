@@ -1,9 +1,7 @@
-import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
-import { LoaderCircle, X } from 'lucide-react';
+import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import { LoaderCircle } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { SkillIcon } from '../../../shared/ui/SkillIcon.js';
 import { WorkspaceEntryIcon } from '../../workspace/WorkspaceEntryIcon.js';
-import { skillDisplayText } from './chatCommandUtils.js';
 import { useActiveOptionScroll } from './useActiveOptionScroll.js';
 
 export function ProjectEntryCommandMenu({
@@ -70,30 +68,6 @@ export function ProjectEntryCommandMenu({
       ) : (
         <div className="chat-command-menu__state">{t('chat.command.noFiles')}</div>
       )}
-    </div>
-  );
-}
-
-export function SelectedSkillChips({
-  skills,
-  onRemove,
-}: {
-  skills: RuntimeSkillSummary[];
-  onRemove: (skill: RuntimeSkillSummary) => void;
-}) {
-  const { t } = useI18n();
-
-  return (
-    <div className="chat-selected-skills" aria-label={t('chat.command.selectedSkills')}>
-      {skills.map((skill) => (
-        <span className="chat-selected-skill" key={skill.id} title={skill.description || skill.id}>
-          <SkillIcon skill={skill} />
-          <span className="chat-selected-skill__label">{skillDisplayText(skill)}</span>
-          <button type="button" aria-label={t('chat.command.removeSkill', { name: skill.name })} onClick={() => onRemove(skill)}>
-            <X size={12} />
-          </button>
-        </span>
-      ))}
     </div>
   );
 }

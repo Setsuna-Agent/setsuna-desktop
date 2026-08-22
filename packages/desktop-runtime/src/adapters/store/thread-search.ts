@@ -1,4 +1,4 @@
-import type { RuntimeMessage, RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 
 const SEARCH_CONTEXT_BEFORE = 22;
 const SEARCH_CONTEXT_AFTER = 52;
@@ -32,17 +32,6 @@ export function threadSearchResult(
   return summaryMatch.matches || searchMatchPreview
     ? [{ ...thread, searchMatchPreview }]
     : [];
-}
-
-export function findThreadMessageSearchPreview(
-  messages: readonly RuntimeMessage[],
-  search: string,
-): string | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const preview = buildThreadSearchPreview(messages[index]?.content ?? '', search);
-    if (preview) return preview;
-  }
-  return undefined;
 }
 
 export function buildThreadSearchPreview(text: string, search: string): string | undefined {

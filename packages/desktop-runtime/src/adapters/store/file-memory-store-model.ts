@@ -61,8 +61,6 @@ export type MemoryIndex = {
   phase2Job?: StoredMemoryPhase2Job;
 };
 
-export type StorageRootResolver = () => Promise<string | null | undefined> | string | null | undefined;
-
 export function clampLimit(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_MEMORY_LIMIT;
   return Math.max(1, Math.min(MAX_MEMORY_LIMIT, Math.floor(value)));

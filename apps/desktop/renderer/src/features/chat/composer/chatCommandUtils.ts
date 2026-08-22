@@ -1,4 +1,4 @@
-import type { RuntimeSkillSummary, WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
+import type { WorkspaceEntrySearchItem } from '@setsuna-desktop/contracts';
 import { skillDisplayText } from '../skills/skillReferenceParser.js';
 
 export { skillDisplayText };
@@ -19,15 +19,6 @@ export function parseSlashCommand(value: string, cursorOffset?: number | null): 
 
 export function entryLabel(entry: WorkspaceEntrySearchItem): string {
   return entry.kind === 'directory' ? `${entry.path.replace(/\/$/, '')}/` : entry.path;
-}
-
-export function skillTokenText(skill: RuntimeSkillSummary): string {
-  return `/${skillDisplayText(skill)}`;
-}
-
-export function stripSkillToken(value: string, skill: RuntimeSkillSummary): string {
-  const escaped = skillTokenText(skill).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return value.replace(new RegExp(`(^|\\s)${escaped}(?=\\s|$)`, 'g'), ' ').replace(/[ \t]{2,}/g, ' ').trimStart();
 }
 
 function parseCursorCommand(value: string, marker: '@' | '/', cursorOffset?: number | null): TextCommand | null {
