@@ -9,7 +9,16 @@ import {
   type RendererFeatureComposition,
   type ComposedRendererMessages,
 } from '@setsuna-desktop/feature-core/renderer';
-import { declareCapabilityProvider, provideHostCapability } from '@setsuna-desktop/feature-core/capability';
+import {
+  declareCapabilityProvider,
+  optionalCapability,
+  provideHostCapability,
+} from '@setsuna-desktop/feature-core/capability';
+import {
+  collaborationRendererStateCapability,
+  createNoopCollaborationRendererStateService,
+  type CollaborationRendererStateService,
+} from '@setsuna-desktop/feature-collaboration/contracts';
 import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/feature-image-generation/contracts';
 import { builtinRendererFeatures } from './builtin-renderer-features.js';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
@@ -24,6 +33,7 @@ import { hostMessages } from '../shared/i18n/messages.js';
 import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 
 export type ActiveRendererFeatures = Readonly<{
+  collaboration: CollaborationRendererStateService;
   composition: RendererFeatureComposition;
   messages: ComposedRendererMessages<AppLocale>;
   views: RendererFeatureViews;
@@ -74,5 +84,16 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       ),
     ],
   });
-  return Object.freeze({ composition, messages, views });
+  const dependencies = composition.resolveHostDependencies({
+    collaboration: optionalCapability(
+      collaborationRendererStateCapability,
+      createNoopCollaborationRendererStateService,
+    ),
+  });
+  return Object.freeze({
+    collaboration: dependencies.collaboration,
+    composition,
+    messages,
+    views,
+  });
 }

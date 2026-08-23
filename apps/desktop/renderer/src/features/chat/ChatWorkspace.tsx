@@ -1,6 +1,5 @@
 import type {
   DesktopRuntimeClient,
-  RuntimeCollaborationTask,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
   RuntimeMessage,
@@ -81,7 +80,6 @@ export function ChatWorkspace({
   onDraftChange,
   onEditUserMessage,
   onOpenSideChat,
-  onOpenSubagent,
   onOpenFileReview,
   onOpenModelSettings,
   onSelectModel,
@@ -130,7 +128,6 @@ export function ChatWorkspace({
   onDraftChange: (value: string) => void;
   onEditUserMessage: (messageId: string, content: string) => void | Promise<void>;
   onOpenSideChat?: () => void;
-  onOpenSubagent?: (task: RuntimeCollaborationTask) => void;
   onOpenFileReview?: DesktopReviewOpenHandler;
   onOpenModelSettings?: () => void;
   onSelectModel: ChatModelSelectionHandler;
@@ -316,7 +313,6 @@ export function ChatWorkspace({
                   setOverviewManuallyCollapsed(false);
                   setOverviewManuallyExpanded(!overviewCanExpand);
                 }}
-                onOpenSubagent={onOpenSubagent}
                 onOpenReview={onOpenFileReview}
                 onReviewRefresh={onReviewRefresh}
                 currentThread={currentThread}

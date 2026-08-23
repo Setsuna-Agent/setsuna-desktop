@@ -3,8 +3,45 @@ import type {
   ModelStreamEvent,
   RuntimeMessage
 } from '@setsuna-desktop/contracts';
+import {
+  collaborationFeature,
+  createInitialCollaborationState,
+  type CollaborationState,
+} from '@setsuna-desktop/feature-collaboration/contracts';
+import {
+  createRuntimeCollaborationEventRegistry,
+  RuntimeCollaborationCoordinator,
+} from '@setsuna-desktop/feature-collaboration/runtime';
+import type { FeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
+import type { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
+import type { ThreadStore } from '../../../src/ports/thread-store.js';
+
+/** Activates the Collaboration Feature control for AgentLoop integration tests. */
+export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: ThreadStore): void {
+  const registry = createRuntimeCollaborationEventRegistry();
+  const projection: FeatureProjectionStore<CollaborationState> = {
+    featureId: collaborationFeature.id,
+    async read(threadId) {
+      const events = await threadStore.listEvents(threadId, 0);
+      let state = createInitialCollaborationState();
+      let throughSeq = 0;
+      for (const event of events) {
+        state = registry.reduce(state, event);
+        throughSeq = Math.max(throughSeq, event.seq);
+      }
+      return { state, throughSeq };
+    },
+    accept: async () => undefined,
+    invalidate: () => undefined,
+    dispose: async () => undefined,
+  };
+  loop.bindCollaborationControl(new RuntimeCollaborationCoordinator({
+    host: loop.collaborationRuntimeHost(),
+    projection,
+  }));
+}
 
 
 export class CollaborationToolModelClient implements ModelClient {

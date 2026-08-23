@@ -96,7 +96,8 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
   let changed = parentThreadId !== thread.parentThreadId
     || memoryMode !== thread.memoryMode
     || persistedKind !== thread.kind
-    || Object.prototype.hasOwnProperty.call(thread, 'goal');
+    || Object.prototype.hasOwnProperty.call(thread, 'goal')
+    || Object.prototype.hasOwnProperty.call(thread, 'collaborationTasks');
   let normalized: RuntimeThread = changed ? {
     ...thread,
     kind: persistedKind,
@@ -106,6 +107,8 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
   // Old snapshots may embed Goal state. Keep the event history for the Goal
   // legacy decoder, but never expose that stale second projection to Core consumers.
   delete (normalized as RuntimeThread & { goal?: unknown }).goal;
+  // Collaboration state follows the same single-projection rule as Goal.
+  delete (normalized as RuntimeThread & { collaborationTasks?: unknown }).collaborationTasks;
   if (normalized.contextCompaction?.status === 'running') {
     // Model requests cannot survive a storage rebuild, so a persisted running compaction is stale.
     normalized = { ...normalized, contextCompaction: undefined };

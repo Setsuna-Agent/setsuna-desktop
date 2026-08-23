@@ -263,7 +263,6 @@ export function ChatTranscript({
                           activeAssistantItemId={activeAssistantItemId}
                           activeTurnId={activeTurnId}
                           assistantItemIdByTurnId={assistantItemIdByTurnId}
-                          collaborationTasks={currentThread?.collaborationTasks}
                           deleteMode={!readOnly && deleteMode}
                           editingDraft={editingDraft}
                           editingMessageId={readOnly ? null : editingMessageId}

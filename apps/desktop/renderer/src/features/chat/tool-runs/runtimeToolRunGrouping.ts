@@ -3,7 +3,6 @@ import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 
 export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
-  if (run.name === 'spawn_agent') return 'collaboration';
   if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
   if (isRuntimeFileMutationRun(run)) return 'fileMutation';
   if (run.name === 'workspace_search_text' || run.name === 'search_text') return 'search';
@@ -13,11 +12,17 @@ export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
 
 export function toolRunGroupingKey(run: RuntimeToolRun): string {
   const kind = toolRunGroupKind(run);
-  if (kind === 'collaboration') {
-    // 多个 spawn_agent 必须一项一卡，不能被聚合成一个泛化工具组。
-    return `${kind}:${run.id}`;
-  }
+  // Feature-owned result views are independently addressable contributions and
+  // must not be collapsed into one generic host-tool disclosure.
+  const featureResultKind = toolResultKind(run.data);
+  if (featureResultKind) return `feature:${featureResultKind}:${run.id}`;
   return kind === 'generic' ? `${kind}:${run.name}` : kind;
+}
+
+function toolResultKind(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  const resultKind = (value as Record<string, unknown>).resultKind;
+  return typeof resultKind === 'string' ? resultKind : '';
 }
 
 export function toolRunGroupStatus(runs: RuntimeToolRun[]): RuntimeToolRun['status'] {

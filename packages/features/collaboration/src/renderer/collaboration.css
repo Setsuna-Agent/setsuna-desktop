@@ -239,3 +239,56 @@
   background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
   color: var(--app-text);
 }
+
+.collaboration-overview__divider {
+  height: 1px;
+  margin: 8px 0;
+  background: color-mix(in srgb, var(--app-border, var(--app-muted)) 55%, transparent);
+}
+
+.collaboration-overview__tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.collaboration-overview__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 8px 5px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+}
+
+.collaboration-overview__title > span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
+.collaboration-overview__task {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--app-text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.collaboration-overview__task:hover {
+  background: color-mix(in srgb, var(--app-surface) 88%, var(--app-text) 12%);
+}
+
+.collaboration-overview__task strong {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

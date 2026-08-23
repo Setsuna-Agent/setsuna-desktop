@@ -90,7 +90,7 @@ export function WorkHistoryPanel({
   hasDetails: boolean;
   onExpandedChange?: WorkHistoryExpandedChangeHandler;
   panelId?: string;
-  /** 折叠时仍需保留的时间线节点，例如持续更新的子代理任务卡片。 */
+  /** 折叠时仍需保留的时间线节点，由 Feature 结果视图按需声明。 */
   persistentChildren?: ReactNode;
   startedAtMs?: number | null;
 }) {

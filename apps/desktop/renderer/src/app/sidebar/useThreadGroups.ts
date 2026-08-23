@@ -1,6 +1,6 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { useMemo } from 'react';
-import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
+import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 export function useThreadGroups(threads: RuntimeThreadSummary[]) {
   return useMemo(() => {

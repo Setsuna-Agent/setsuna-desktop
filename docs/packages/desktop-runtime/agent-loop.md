@@ -197,12 +197,17 @@ Goal continuation 复用 execution metadata，避免重复保存内联图片。
 
 ## Collaboration / mailbox
 
-`RuntimeCollaborationCoordinator` 管理子 Agent 协作和 mailbox：
+Collaboration 业务由 `packages/features/collaboration` 纵向拥有。Feature 内的
+`RuntimeCollaborationCoordinator` 管理协作工具、子任务台账及其生命周期：
 
 - Mailbox input 到独立 turn 或当前协作任务。
 - Cancel 后恢复调度。
+- `collaboration.task-created` / `collaboration.task-status-changed` 是唯一新写事件；旧下划线事件只在 Feature decoder 中兼容读取。
+- renderer 通过 Feature state operation 和全局序号事件流维护任务投影，不从通用 thread snapshot 读取协作私有状态。
 
-协议展示可以通过 app-server mapper，但实际 thread 状态仍由 runtime event 表达。
+Agent loop 只消费 `collaboration.control`，并通过 `collaboration.runtime-host` 向 Feature
+提供通用 thread、turn、cancel、mailbox 和事件写入能力。协议展示可以通过 app-server
+mapper，但实际任务状态仍由 Feature event 表达；child thread 关系和 turn 本身仍属于 Core。
 
 ## Review
 

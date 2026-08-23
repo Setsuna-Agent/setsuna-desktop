@@ -1,5 +1,5 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
+import { isPrimaryConversationThread } from '../../services/runtime-client/runtimeThreadRelations.js';
 
 export type SidebarSearchResult = {
   isBusy: boolean;

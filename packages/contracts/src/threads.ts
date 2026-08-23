@@ -22,7 +22,6 @@ import type {
 } from './message-metadata.js';
 import type { RuntimePluginReference } from './plugin-reference.js';
 import type {
-  RuntimeCollaborationTask,
   RuntimeModelRequestStepSnapshot,
   RuntimeThreadModelBinding,
   RuntimeModelVerification,
@@ -745,7 +744,6 @@ export type RuntimeThreadSummary = {
 };
 export type RuntimeThread = RuntimeThreadSummary & {
   activeTurnId?: string | null;
-  collaborationTasks?: RuntimeCollaborationTask[];
   contextCompaction?: RuntimeThreadContextCompactionState;
   mailboxDeliveries?: RuntimeMailboxDeliveryRecord[];
   modelBinding?: RuntimeThreadModelBinding;

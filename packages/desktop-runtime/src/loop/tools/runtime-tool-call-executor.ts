@@ -15,6 +15,7 @@ import type {
   RuntimeToolCallDelta,
 } from '@setsuna-desktop/contracts';
 import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
+import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import { createRuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
@@ -42,11 +43,6 @@ import {
   unifiedDiffFromToolPreview,
 } from '../core/agent-loop-tool-utils.js';
 import { isAbortError, throwIfAborted, TurnCancelledError } from '../core/runtime-turn-errors.js';
-import {
-  collaborationToolsEnabled,
-  isCollaborationToolName,
-  type RuntimeCollaborationCoordinator,
-} from '../lifecycle/collaboration-coordinator.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
@@ -99,7 +95,7 @@ type RuntimeToolCallExecutorOptions = {
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
   toolHost?: ToolHost;
   toolResultStore?: ToolResultStore;
-  collaborationCoordinator(): RuntimeCollaborationCoordinator;
+  collaborationControl(): CollaborationControl;
   goalCoordinator(): GoalControl;
   threadStore: Pick<ThreadStore, 'getThread'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
@@ -219,15 +215,15 @@ export class RuntimeToolCallExecutor {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
       if (
-        (isCollaborationToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
+        (this.options.collaborationControl().isToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
         && (await this.options.threadStore.getThread(context.threadId))?.kind === 'side'
       ) {
         content = `Tool ${toolCall.name} is unavailable in a side conversation.`;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, content);
       }
-      if (isCollaborationToolName(toolCall.name)) {
-        if (!collaborationToolsEnabled(runtimeConfig)) {
+      if (this.options.collaborationControl().isToolName(toolCall.name)) {
+        if (!this.options.collaborationControl().enabled(runtimeConfig)) {
           content = `Tool ${toolCall.name} failed: multi_agent feature is disabled.`;
           await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
           return this.publishToolMessage(context.threadId, context.turnId, toolCall, content, undefined, toolRouter);
@@ -386,7 +382,7 @@ export class RuntimeToolCallExecutor {
   private async runCollaborationToolCall(toolCall: RuntimeToolCall, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<{ content: string }> {
     const startedAtMs = this.options.clock.now().getTime();
     await this.publishToolStarted(context.threadId, context.turnId, toolCall, parsedArguments);
-    const execution = await this.options.collaborationCoordinator().execute(toolCall.name, parsedArguments, context);
+    const execution = await this.options.collaborationControl().execute(toolCall.name, parsedArguments, context);
     await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, execution.collabToolCall, 'in_progress');
     await this.publishCollaborationItem(context.threadId, context.turnId, toolCall.id, {
       ...execution.collabToolCall,

@@ -1,5 +1,5 @@
-import type { RuntimeAgentIdentity } from '@setsuna-desktop/contracts';
 import { useMemo } from 'react';
+import type { CollaborationAgentIdentity } from '../contracts/index.js';
 import appleAvatarUrl from './avatars/apple.svg';
 import avocadoAvatarUrl from './avatars/avocado.svg';
 import bellPepperAvatarUrl from './avatars/bell-pepper.svg';
@@ -16,6 +16,7 @@ import plumAvatarUrl from './avatars/plum.svg';
 import pumpkinAvatarUrl from './avatars/pumpkin.svg';
 import strawberryAvatarUrl from './avatars/strawberry.svg';
 import watermelonAvatarUrl from './avatars/watermelon.svg';
+import './collaboration.css';
 
 const AVATAR_ICON_URLS = [
   watermelonAvatarUrl,
@@ -36,17 +37,14 @@ const AVATAR_ICON_URLS = [
   jujubeAvatarUrl,
 ];
 
-/**
- * 由 avatarSeed 从本地 SVG 集合中确定性选择头像，离线、即时、重启稳定。
- * 不调用图像模型，也不依赖外部服务。
- */
+/** Deterministically selects a bundled avatar from the persisted identity seed. */
 export function AgentAvatar({
   identity,
   size = 28,
-}: {
-  identity: RuntimeAgentIdentity;
+}: Readonly<{
+  identity: CollaborationAgentIdentity;
   size?: number;
-}) {
+}>) {
   const avatarUrl = useMemo(() => {
     let hash = 0;
     for (let index = 0; index < identity.avatarSeed.length; index += 1) {
@@ -58,10 +56,7 @@ export function AgentAvatar({
     <span
       className="subagent-avatar"
       aria-hidden="true"
-      style={{
-        height: size,
-        width: size,
-      }}
+      style={{ height: size, width: size }}
     >
       <img src={avatarUrl} alt="" draggable={false} />
     </span>

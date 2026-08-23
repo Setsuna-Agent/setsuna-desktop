@@ -1,7 +1,6 @@
 import { Bubble } from '@ant-design/x';
 import {
   normalizeRuntimeReviewNotice,
-  type RuntimeCollaborationTask,
   type RuntimeMessage,
   type RuntimeReviewModeNotice,
   type RuntimeToolRun,
@@ -9,6 +8,7 @@ import {
 import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
 import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
@@ -16,9 +16,7 @@ import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
-import { SubagentToolRunCard } from '../tool-runs/runtimeCollaborationRuns.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
-import { toolRunGroupKind } from '../tool-runs/runtimeToolRunGrouping.js';
 import {
   FileChangesSummaryCard,
   RuntimeHookRuns,
@@ -66,7 +64,6 @@ export function MessageItem({
   activeAssistantItemId,
   activeTurnId,
   assistantItemIdByTurnId,
-  collaborationTasks,
   deleteMode,
   editingDraft,
   editingMessageId,
@@ -90,7 +87,6 @@ export function MessageItem({
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   assistantItemIdByTurnId: Map<string, string>;
-  collaborationTasks?: RuntimeCollaborationTask[];
   deleteMode: boolean;
   editingDraft: string;
   editingMessageId: string | null;
@@ -117,7 +113,6 @@ export function MessageItem({
       <AssistantRunItem
         activeTurnId={activeTurnId}
         activeAssistantItemId={activeAssistantItemId}
-        collaborationTasks={collaborationTasks}
         deleteMode={deleteMode}
         item={item}
         onAnswerApproval={onAnswerApproval}
@@ -233,7 +228,6 @@ function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
 function AssistantRunItem({
   activeAssistantItemId,
   activeTurnId,
-  collaborationTasks,
   deleteMode,
   item,
   onAnswerApproval,
@@ -248,7 +242,6 @@ function AssistantRunItem({
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
-  collaborationTasks?: RuntimeCollaborationTask[];
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
@@ -276,7 +269,7 @@ function AssistantRunItem({
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} collaborationTasks={collaborationTasks} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
@@ -336,7 +329,6 @@ function ReviewModeMarker({
 
 function AssistantRunContent({
   active,
-  collaborationTasks,
   item,
   onAnswerApproval,
   onDiscardFileChanges,
@@ -346,7 +338,6 @@ function AssistantRunContent({
   showThinkingInTranscript,
 }: {
   active: boolean;
-  collaborationTasks?: RuntimeCollaborationTask[];
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
@@ -356,6 +347,7 @@ function AssistantRunContent({
   showThinkingInTranscript: boolean;
 }) {
   const { locale, t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   // The transcript is append-only: collapsing a later write into an earlier row
   // would remove or rewrite work that the user has already seen above it.
   const displaySegments = item.segments;
@@ -437,12 +429,13 @@ function AssistantRunContent({
       ) : leadingGuidance}
       {renderAssistantTimelinePlan({
         active,
-        collaborationTasks,
         handledGuidanceMessageIds: guidanceMessageIds,
         itemId: chatDisplayItemRenderKey(item),
         onAnswerApproval,
         onWorkHistoryExpandedChange,
         plan: timelinePlan,
+        isPersistentToolResult: (run) =>
+          featureViews.toolResults.resolve(run.data)?.contribution.workHistoryPresentation === 'persistent',
         workHistoryDefaultExpanded: workHistoryState.expanded,
         t,
         hideFinalContent: Boolean(reviewExit),
@@ -565,23 +558,23 @@ function GuidanceProcessedMarker() {
 
 function renderAssistantTimelinePlan({
   active,
-  collaborationTasks,
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
   onWorkHistoryExpandedChange,
   plan,
+  isPersistentToolResult,
   t,
   workHistoryDefaultExpanded,
   hideFinalContent = false,
 }: {
   active: boolean;
-  collaborationTasks?: RuntimeCollaborationTask[];
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
   onWorkHistoryExpandedChange: WorkHistoryExpandedChangeHandler;
   plan: AssistantGuidanceTimelinePlan;
+  isPersistentToolResult: (run: RuntimeToolRun) => boolean;
   t: Translate;
   workHistoryDefaultExpanded: boolean;
   hideFinalContent?: boolean;
@@ -592,12 +585,12 @@ function renderAssistantTimelinePlan({
     if (node.type === 'workHistory') {
       nodes.push(
         ...assistantWorkHistoryNodes({
-          collaborationTasks,
           handledGuidanceMessageIds,
           itemId,
           onAnswerApproval,
           onExpandedChange: onWorkHistoryExpandedChange,
           plan: node,
+          isPersistentToolResult,
           workHistoryDefaultExpanded,
         }),
       );
@@ -682,33 +675,33 @@ function ReviewSummaryCard({
 }
 
 function assistantWorkHistoryNodes({
-  collaborationTasks,
   handledGuidanceMessageIds,
   itemId,
   onAnswerApproval,
   onExpandedChange,
   plan,
+  isPersistentToolResult,
   workHistoryDefaultExpanded,
 }: {
-  collaborationTasks?: RuntimeCollaborationTask[];
   handledGuidanceMessageIds: Set<string>;
   itemId: string;
   onAnswerApproval: AnswerApprovalHandler;
   onExpandedChange: WorkHistoryExpandedChangeHandler;
   plan: Extract<AssistantGuidanceTimelinePlan['nodes'][number], { type: 'workHistory' }>;
+  isPersistentToolResult: (run: RuntimeToolRun) => boolean;
   workHistoryDefaultExpanded: boolean;
 }): ReactNode[] {
-  const surfaces = splitWorkHistorySurfaces(plan.entries);
+  const surfaces = splitWorkHistorySurfaces(plan.entries, isPersistentToolResult);
   const workNodes: ReactNode[] = [];
   const persistentNodes: ReactNode[] = [];
   let hasCollapsibleDetails = false;
   for (const surface of surfaces) {
-    if (surface.type === 'collaboration') {
+    if (surface.type === 'persistentToolResult') {
       const card = (
-        <SubagentToolRunCard
-          key={`collaboration:${surface.run.id}`}
-          run={surface.run}
-          collaborationTasks={collaborationTasks}
+        <RuntimeToolRuns
+          key={`persistent-tool-result:${surface.run.id}`}
+          onAnswerApproval={onAnswerApproval}
+          runs={[surface.run]}
         />
       );
       workNodes.push(card);
@@ -719,7 +712,6 @@ function assistantWorkHistoryNodes({
       surface.entries,
       onAnswerApproval,
       handledGuidanceMessageIds,
-      collaborationTasks,
     );
     if (surfaceNodes.length) {
       hasCollapsibleDetails = true;
@@ -750,10 +742,13 @@ function assistantWorkHistoryNodes({
 
 type AssistantWorkHistorySurface =
   | { type: 'work'; entries: AssistantWorkHistoryPlanEntry[] }
-  | { type: 'collaboration'; run: RuntimeToolRun };
+  | { type: 'persistentToolResult'; run: RuntimeToolRun };
 
-/** 将子代理卡片提升到顶层，同时按工具事件原顺序切开前后的可折叠工作段。 */
-function splitWorkHistorySurfaces(entries: AssistantWorkHistoryPlanEntry[]): AssistantWorkHistorySurface[] {
+/** 将 Feature 声明的持久结果提升到顶层，同时按事件原顺序切开前后的可折叠工作段。 */
+function splitWorkHistorySurfaces(
+  entries: AssistantWorkHistoryPlanEntry[],
+  isPersistentToolResult: (run: RuntimeToolRun) => boolean,
+): AssistantWorkHistorySurface[] {
   const surfaces: AssistantWorkHistorySurface[] = [];
   let workEntries: AssistantWorkHistoryPlanEntry[] = [];
   const flushWork = () => {
@@ -776,7 +771,7 @@ function splitWorkHistorySurfaces(entries: AssistantWorkHistoryPlanEntry[]): Ass
         ...entry,
         item: {
           ...toolItem,
-          // A collaboration card can split one tool item into multiple sibling disclosures.
+          // A persistent Feature result can split one tool item into sibling disclosures.
           // Anchor each chunk to its first append-only run so keys stay unique and stable.
           id: `${toolItem.id}:chunk:${firstRun.id}`,
           toolRuns: runChunk,
@@ -785,11 +780,11 @@ function splitWorkHistorySurfaces(entries: AssistantWorkHistoryPlanEntry[]): Ass
       runChunk = [];
     };
     for (const run of toolItem.toolRuns) {
-      if (toolRunGroupKind(run) === 'collaboration') {
+      if (isPersistentToolResult(run)) {
         if (!isDisplayableRuntimeToolRun(run)) continue;
         flushRunChunk();
         flushWork();
-        surfaces.push({ type: 'collaboration', run });
+        surfaces.push({ type: 'persistentToolResult', run });
       } else {
         runChunk.push(run);
       }
@@ -839,7 +834,6 @@ function assistantWorkEntriesNodes(
   entries: AssistantWorkHistoryPlanEntry[],
   onAnswerApproval: AnswerApprovalHandler,
   handledGuidanceMessageIds: Set<string>,
-  collaborationTasks?: RuntimeCollaborationTask[],
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   for (let index = 0; index < entries.length; index += 1) {
@@ -859,7 +853,7 @@ function assistantWorkEntriesNodes(
           || thinkingEntry.item.type !== 'thinking'
           || thinkingEntry.item.segment.active
         ) break;
-        nestedThinkingNodes.push(...assistantWorkItemNodes(thinkingEntry.item, onAnswerApproval, undefined, collaborationTasks));
+        nestedThinkingNodes.push(...assistantWorkItemNodes(thinkingEntry.item, onAnswerApproval));
         followingIndex += 1;
       }
       // 活动思考保持在外层提供实时反馈；完成后才归入对应工具批次的折叠明细。
@@ -869,7 +863,6 @@ function assistantWorkEntriesNodes(
       entry.item,
       onAnswerApproval,
       nestedThinkingNodes.length ? nestedThinkingNodes : undefined,
-      collaborationTasks,
     ));
   }
   return nodes;
@@ -879,7 +872,6 @@ function assistantWorkItemNodes(
   item: Extract<AssistantRunTimelineBlock, { type: 'work' }>['items'][number],
   onAnswerApproval: AnswerApprovalHandler,
   nestedDetails?: ReactNode,
-  collaborationTasks?: RuntimeCollaborationTask[],
 ): ReactNode[] {
   if (item.type === 'content') {
     return [
@@ -916,7 +908,6 @@ function assistantWorkItemNodes(
       key={item.id}
       runs={visibleToolRuns}
       summaryMode={visibleToolRuns.some(isActiveRuntimeToolRun) ? 'latest' : 'aggregate'}
-      collaborationTasks={collaborationTasks}
       onAnswerApproval={onAnswerApproval}
     >
       {nestedDetails}

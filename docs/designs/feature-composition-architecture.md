@@ -8,7 +8,7 @@
 
 本文给出一套可直接拆解实施的 Feature Composition Architecture。它解决的是“一个业务功能横跨 contracts、runtime、main/preload、renderer 后，修改和删除都必须触碰大量中央文件”的问题，不把项目改造成面向第三方的通用插件平台。
 
-本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
+本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser、Collaboration 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
 
 已落地的关键结果：
 
@@ -20,6 +20,7 @@
 - Terminal 已拥有 contracts、main PTY/session、固定 IPC、preload 子桥、renderer xterm 视图、文案与样式；宿主只提供代理/PATH 环境、窗口事件出口和 Workspace panel adapter，并由它首次带出 `PreloadBridgeBuilder`。
 - Review 已拥有 DTO、Git 状态/操作、图片版本解析、worktree watcher、main IPC 与 preload 子桥；宿主只提供 commit-message runtime 调用、受认证 preview registry 和 sender policy。现有 Review presentation 仍作为 Workspace/Chat 的宿主适配层保留，避免 Feature 反向依赖宿主 UI 内部模块。
 - Browser 已拥有 control/UI contracts、runtime 工具语义、main guest/CDP/loopback/IPC、preload 子桥及 renderer tab/webview 视图、文案和样式；宿主只保留四端 composition、窗口/UI adapter 与通用 `ToolHost` adapter。
+- Collaboration 已拥有协作工具语义、子任务台账事件与投影、typed state query/client、任务卡片/概览/子会话 presentation、文案和样式；Core 只保留通用 thread/turn/mailbox 服务，并通过窄 `RuntimeHost` capability 提供给 Feature。旧 `collaboration.task_*` 记录仅由兼容 decoder 读取，不再写入通用 thread snapshot。
 - `scripts/check-feature-boundaries.mjs` 验证进程入口、跨 Feature import、package version、reserved identity、renderer transport 边界，并冻结已迁移 Feature 回流中央 Config/client/UI surface。
 
 ## 1. 决策摘要
@@ -139,6 +140,7 @@ Setsuna 必须继续保留：
 | Image Generation | Feature | 有 provider/config/secret、runtime use case、tool result 和设置 UI |
 | Vision Recognition | Feature | 有独立模型选择、调用链和设置 UI |
 | Goal | Feature | 有持久状态、调度行为、恢复和 UI；通用 turn 事件仍归 Core |
+| Collaboration | Feature | 有协作工具、持久子任务台账、恢复/取消联动和多处 UI；通用 thread、turn 与 mailbox 仍归 Core |
 | Review | Feature | 有独立状态、原生能力和 presentation |
 | Test Connection Button | 不是 | 只是图片生成设置中的 action |
 | 整个 Workspace | 太大 | 应继续由 Files、Review、Terminal 等领域组成 |
@@ -1306,7 +1308,8 @@ Plugin manifest
 2. Terminal 已完成：首次引入 main/preload composition 和 `PreloadBridgeBuilder`，并删除中央 Terminal DTO、main IPC/session、preload 映射及 workspace-owned xterm 实现。
 3. Review native 边界已完成：Feature package 现拥有 DTO、Git 状态机、watcher、IPC 与 preload bridge；Workspace/Chat presentation 因真实宿主 UI 依赖暂留 adapter，不建立反向依赖或复制共享组件。
 4. Browser 已完成：Feature package 现拥有 control/UI contracts、runtime 工具 service/client、main guest/CDP/control server/IPC、preload bridge 及 renderer UI/文案/样式；中央 contracts、main browser 目录、workspace Browser 实现和 runtime Browser 业务 adapter 已删除，只保留窄宿主组合 adapter。
-5. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
+5. Collaboration 已完成：Feature package 现拥有协作工具协调器、任务事件/投影、typed state query/client、spawn result contribution、任务概览与子会话 presentation；Core 只通过 `collaboration.control` 调用 Feature，并通过 `collaboration.runtime-host` 提供通用 thread/turn/mailbox 能力。通用 thread snapshot、SSE mapper 和 Chat tool switch 不再拥有协作私有状态或展示分支，旧事件仅保留读取 decoder。
+6. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
 
 每次迁移都必须有旧 surface 删除清单。没有扩散收益的模块留在原处。
 
@@ -1568,6 +1571,7 @@ pnpm build
 | Review native owner | `packages/features/review/*` | Review DTO、Git 状态/操作、图片预览、worktree watcher、IPC/preload bridge 与 scoped resources；renderer presentation 暂由 Workspace adapter 组合 |
 | Terminal owner | `packages/features/terminal/*` | Terminal DTO、PTY/session、IPC、preload bridge、xterm presentation 与 scoped resources 的纵向 owner |
 | Browser owner | `packages/features/browser/*` | Control/UI DTO、runtime 工具语义、guest/CDP/loopback/IPC、preload bridge、tab/webview presentation、文案与样式的纵向 owner |
+| Collaboration owner | `packages/features/collaboration/*` | 协作工具、子任务事件/投影、typed query/client、任务概览/子会话 UI、Tool Result contribution、文案与样式的纵向 owner；Core 仅提供通用 thread/turn/mailbox host port |
 
 任何 Feature 新增、迁移、降级处理或删除评审都使用同一组问题：
 

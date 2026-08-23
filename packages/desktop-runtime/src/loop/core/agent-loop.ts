@@ -27,6 +27,11 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import {
+  createNoopCollaborationControl,
+  type CollaborationControl,
+  type CollaborationRuntimeHost,
+} from '@setsuna-desktop/feature-collaboration/contracts';
+import {
   createNoopGoalControl,
   type GoalControl,
   type GoalRuntimeHost,
@@ -36,10 +41,6 @@ import { createAutomaticApprovalReviewer } from '../approval-review/automatic-ap
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import { runtimeEnvironmentResolver } from '../context/runtime-environment-resolver.js';
-import {
-  isCollaborationChildLifecycleEvent,
-  RuntimeCollaborationCoordinator,
-} from '../lifecycle/collaboration-coordinator.js';
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import { RuntimeQueuedTurnCoordinator } from '../lifecycle/runtime-queued-turn-coordinator.js';
@@ -54,6 +55,7 @@ import { RuntimeUserShellRunner } from '../tools/runtime-user-shell-runner.js';
 import type { AgentLoopOptions } from './agent-loop-options.js';
 import { normalizeAttachments } from './runtime-attachment-input.js';
 import { RuntimeAgentTurnRunner } from './runtime-agent-turn-runner.js';
+import { createRuntimeCollaborationHost } from './runtime-collaboration-host.js';
 import { createRuntimeGoalHost } from './runtime-goal-host.js';
 import { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeModelSampler } from './runtime-model-sampler.js';
@@ -72,7 +74,7 @@ export class AgentLoop {
   private readonly inputGuard: RuntimeModelInputGuard;
   private readonly contextCompactor: RuntimeContextCompactor;
   private readonly compactionTurns: RuntimeCompactionTurnCoordinator;
-  private readonly collaborationCoordinator: RuntimeCollaborationCoordinator;
+  private collaboration: CollaborationControl = createNoopCollaborationControl();
   private goals: GoalControl = createNoopGoalControl();
   private readonly hooks: RuntimeHookCoordinator;
   private readonly queuedTurns: RuntimeQueuedTurnCoordinator;
@@ -111,23 +113,6 @@ export class AgentLoop {
       appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
     });
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
-    this.collaborationCoordinator = new RuntimeCollaborationCoordinator({
-      clock: options.clock,
-      ids: options.ids,
-      threadStore: options.threadStore,
-      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
-      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
-      startTurn: async (threadId, input) => {
-        const started = await this.startSubagentTurn(threadId, input);
-        if ('queuedInputId' in started && !started.turnId) {
-          throw new Error(`Collaboration turn was queued instead of started: ${started.queuedInputId}`);
-        }
-        if (!started.turnId) throw new Error('Collaboration turn did not return a turn id.');
-        return { turnId: started.turnId };
-      },
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-    });
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
       approvalReviewer: createAutomaticApprovalReviewer(options),
@@ -141,7 +126,7 @@ export class AgentLoop {
       extensions: options.extensionManager,
       toolHost: options.toolHost,
       toolResultStore: options.toolResultStore,
-      collaborationCoordinator: () => this.collaborationCoordinator,
+      collaborationControl: () => this.collaboration,
       goalCoordinator: () => this.goals,
       threadStore: options.threadStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
@@ -174,6 +159,7 @@ export class AgentLoop {
       environmentResolver,
       ids: options.ids,
       goalControl: () => this.goals,
+      collaborationControl: () => this.collaboration,
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
@@ -249,7 +235,7 @@ export class AgentLoop {
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
-      collaborationCoordinator: this.collaborationCoordinator,
+      collaborationControl: () => this.collaboration,
       configStore: options.configStore,
       hooks: this.hooks,
       ids: options.ids,
@@ -357,6 +343,7 @@ export class AgentLoop {
 
   async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
     this.shuttingDown = true;
+    this.collaboration.shutdown();
     this.goals.shutdown();
     this.queuedTurns.shutdown();
     const error = new TurnCancelledError(reason);
@@ -440,7 +427,7 @@ export class AgentLoop {
    * 必须在 settleStaleRuntimeTurns 之后调用。
    */
   reconcileCollaborationTasks(): Promise<void> {
-    return this.collaborationCoordinator.reconcileInterruptedTasks();
+    return this.collaboration.reconcileInterruptedTasks();
   }
 
   /**
@@ -576,6 +563,28 @@ export class AgentLoop {
       throw new Error('Goal control is already bound.');
     }
     this.goals = control;
+  }
+
+  /** Binds the optional Collaboration Feature after runtime composition activates it. */
+  bindCollaborationControl(control: CollaborationControl): void {
+    if (this.collaboration.available && this.collaboration !== control) {
+      throw new Error('Collaboration control is already bound.');
+    }
+    this.collaboration = control;
+  }
+
+  /** Narrow host surface supplied to the Collaboration Feature by the composition root. */
+  collaborationRuntimeHost(): CollaborationRuntimeHost {
+    return createRuntimeCollaborationHost({
+      clock: this.options.clock,
+      ids: this.options.ids,
+      threadStore: this.options.threadStore,
+      eventWriter: this.eventWriter,
+      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
+      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
+      deliverMailbox: (threadId, input) => this.deliverMailboxInput(threadId, input),
+      startTurn: (threadId, input) => this.startSubagentTurn(threadId, input),
+    });
   }
 
   /** Narrow host surface supplied to the Goal Feature by the runtime composition root. */
@@ -804,11 +813,10 @@ export class AgentLoop {
     event: Parameters<ThreadStore['appendEvent']>[1],
   ): Promise<StoredThreadEvent | null> {
     const saved = this.eventWriter.append(threadId, event);
-    // 仅转发协作协调器实际处理的 child 生命周期，避免普通消息和工具事件为判断
-    // “是否 child”反复读取、克隆整条线程快照。
+    // Collaboration owns child lifecycle projection; Core only forwards persisted Core events.
     void saved.then((savedEvent) => {
-      if (savedEvent && isCoreRuntimeEvent(savedEvent) && isCollaborationChildLifecycleEvent(savedEvent)) {
-        return this.collaborationCoordinator.observeChildEvent(savedEvent);
+      if (savedEvent && isCoreRuntimeEvent(savedEvent)) {
+        return this.collaboration.observeCoreEvent(savedEvent);
       }
       return undefined;
     }).catch(() => undefined);
