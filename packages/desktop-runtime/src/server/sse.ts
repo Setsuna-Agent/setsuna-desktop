@@ -52,7 +52,10 @@ export async function handleSse({
     if (format === 'swe' && sweMapEvent) {
       const compatibilityEvent = event.type === 'feature.event'
         ? mapBuiltinFeatureEventToSweCompatibilityEvent(event)
-        : event;
+        : event.type === 'collaboration.task_created'
+          || event.type === 'collaboration.task_status_changed'
+          ? null
+          : event;
       const notifications = compatibilityEvent ? sweMapEvent(compatibilityEvent) : [];
       if (event.seq > sinceSeq) {
         await writeSweSse(response, notifications, { experimentalApi });

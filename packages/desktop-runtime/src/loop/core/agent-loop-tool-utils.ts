@@ -1,7 +1,6 @@
 import type {
   ModelRequest,
   ModelStreamEvent,
-  RuntimeConfigState,
   RuntimeDynamicToolCallResult,
   RuntimeDynamicToolContentItem,
   RuntimeDynamicToolDefinition,
@@ -10,11 +9,6 @@ import type {
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import { parseJsonObjectFromText } from '../context/prompt-utils.js';
-import {
-  COLLABORATION_TOOL_DEFINITIONS,
-  collaborationToolsEnabled,
-  isCollaborationToolName,
-} from '../lifecycle/collaboration-coordinator.js';
 import type { RuntimeToolRouter } from '../tools/tool-router.js';
 
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
@@ -78,8 +72,8 @@ export function appServerDynamicToolContent(contentItems: RuntimeDynamicToolCont
 
 export function modelFacingTools(
   tools: RuntimeToolDefinition[] | undefined,
-  config: RuntimeConfigState | null | undefined,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
+  collaborationTools: readonly RuntimeToolDefinition[] = [],
   goalTools: readonly RuntimeToolDefinition[] = [],
   deferredToolNames: readonly string[] = [],
   hostCatalogTools: readonly RuntimeToolDefinition[] = tools ?? [],
@@ -93,12 +87,10 @@ export function modelFacingTools(
   ]);
   const deferredTools = (tools ?? []).filter((tool) => deferredNames.has(tool.name));
   const merged = (tools ?? []).filter((tool) => !deferredNames.has(tool.name));
-  if (collaborationToolsEnabled(config)) {
-    for (const tool of COLLABORATION_TOOL_DEFINITIONS) {
-      if (!names.has(tool.name)) {
-        names.add(tool.name);
-        merged.push(tool);
-      }
+  for (const tool of collaborationTools) {
+    if (!names.has(tool.name)) {
+      names.add(tool.name);
+      merged.push(tool);
     }
   }
   for (const tool of goalTools) {
@@ -126,20 +118,20 @@ export async function samplingToolRuntimes(
   tools: RuntimeToolDefinition[],
   toolRouter: RuntimeToolRouter | null,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
-  config: RuntimeConfigState | null | undefined,
+  collaborationTools: readonly RuntimeToolDefinition[] = [],
   goalTools: readonly RuntimeToolDefinition[] = [],
 ): Promise<RuntimeModelRequestStepSnapshot['toolRuntimes']> {
   if (!tools.length) return [];
   const routerRuntimes = new Map((await toolRouter?.toolRuntimeMetadata() ?? []).map((runtime) => [runtime.name, runtime]));
   const dynamicToolNames = new Set((dynamicTools ?? []).map((tool) => tool.name));
-  const collaborationEnabled = collaborationToolsEnabled(config);
+  const collaborationToolNames = new Set(collaborationTools.map((tool) => tool.name));
   const goalToolNames = new Set(goalTools.map((tool) => tool.name));
   return tools.map((tool) => {
     const routerRuntime = routerRuntimes.get(tool.name);
     if (routerRuntime) return { ...routerRuntime };
     return {
       name: tool.name,
-      source: collaborationEnabled && isCollaborationToolName(tool.name)
+      source: collaborationToolNames.has(tool.name)
         ? 'collaboration'
         : goalToolNames.has(tool.name) ? 'goal'
         : dynamicToolNames.has(tool.name) ? 'dynamic' : 'host',

@@ -49,9 +49,9 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await cleanupRuntimeSideConversations(runtime);
     // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
     await settleStaleRuntimeTurns(runtime);
+    featureComposition = await activateBuiltinRuntimeFeatures(runtime);
     // 结算完成后，把账本上仍非终态但 child 已无活动 turn 的协作任务修正为 interrupted。
     await runtime.agentLoop.reconcileCollaborationTasks();
-    featureComposition = await activateBuiltinRuntimeFeatures(runtime);
     // 持久 Goal 在 runtime 重启后必须显式恢复，避免打开应用即静默继续自治执行。
     await runtime.agentLoop.reconcileRestoredGoals();
   } catch (error) {

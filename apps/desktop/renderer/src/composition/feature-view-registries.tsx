@@ -103,9 +103,20 @@ export class RendererToolResultViewRegistry implements ToolResultViewRegistry {
     }
     const key = resultKey(contribution.resultKind, contribution.major);
     if (this.contributions.has(key)) throw new Error(`Tool result view conflict for ${key}.`);
+    const legacy = contribution.legacy;
     const erased: ErasedToolResultViewContribution = Object.freeze({
       ...contribution,
       payload: Object.freeze({ parse: (value: unknown) => contribution.payload.parse(value) as unknown }),
+      ...(legacy
+        ? {
+            legacy: Object.freeze({
+              matches: legacy.matches,
+              payload: Object.freeze({
+                parse: (value: unknown) => legacy.payload.parse(value) as unknown,
+              }),
+            }),
+          }
+        : {}),
       render: contribution.render as ErasedToolResultViewContribution['render'],
     });
     const registered = Object.freeze({ featureId: scope.owner.featureId, contribution: erased });
@@ -122,20 +133,42 @@ export class RendererToolResultViewRegistry implements ToolResultViewRegistry {
 
   resolve(value: unknown): ResolvedToolResultView | null {
     const envelope = toolResultEnvelope(value);
-    if (!envelope) return null;
-    const registered = this.contributions.get(resultKey(envelope.resultKind, envelope.resultMajor));
-    if (!registered) return null;
-    try {
-      return Object.freeze({
-        featureId: registered.featureId,
-        contribution: registered.contribution,
-        payload: registered.contribution.payload.parse(envelope.payload),
-      });
-    } catch {
-      console.warn(`[feature-tool-result] Invalid payload for ${envelope.resultKind}@${envelope.resultMajor}.`);
-      return null;
+    if (envelope) {
+      const registered = this.contributions.get(resultKey(envelope.resultKind, envelope.resultMajor));
+      if (!registered) return null;
+      try {
+        return resolvedToolResult(registered, registered.contribution.payload.parse(envelope.payload));
+      } catch {
+        console.warn(`[feature-tool-result] Invalid payload for ${envelope.resultKind}@${envelope.resultMajor}.`);
+        return null;
+      }
     }
+    for (const registered of this.contributions.values()) {
+      const legacy = registered.contribution.legacy;
+      if (!legacy || !legacy.matches(value)) continue;
+      try {
+        return resolvedToolResult(registered, legacy.payload.parse(value));
+      } catch {
+        console.warn(`[feature-tool-result] Invalid legacy payload for ${registered.contribution.id}.`);
+        return null;
+      }
+    }
+    return null;
   }
+}
+
+function resolvedToolResult(
+  registered: Readonly<{
+    featureId: FeatureScope['owner']['featureId'];
+    contribution: ErasedToolResultViewContribution;
+  }>,
+  payload: unknown,
+): ResolvedToolResultView {
+  return Object.freeze({
+    featureId: registered.featureId,
+    contribution: registered.contribution,
+    payload,
+  });
 }
 
 export type RendererFeatureViews = Readonly<{

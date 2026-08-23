@@ -1,7 +1,5 @@
-import type {
-  RuntimeCollaborationTask,
-  WorkspaceProject,
-} from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import { clearTerminalRestoreBuffer } from '@setsuna-desktop/feature-terminal/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -395,7 +393,7 @@ export function useDesktopWorkspacePanels({
    * 打开子代理只读面板。面板 id 固定为 subagent:<childThreadId>，因此正文卡片和
    * 环境面板反复点击只会激活同一个 tab；关闭面板不影响 child 线程本身。
    */
-  const openSubagentPanel = useCallback((parentThreadId: string, task: RuntimeCollaborationTask) => {
+  const openSubagentPanel = useCallback((parentThreadId: string, task: CollaborationTask) => {
     closeWorkspaceMenus();
     const panel = createSubagentPanel(task.childThreadId, parentThreadId, task.identity.displayName);
     if (sidePanelSlot.panels.some((item) => item.id === panel.id)) {

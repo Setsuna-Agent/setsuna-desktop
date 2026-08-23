@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "features": [
     "browser",
+    "collaboration",
     "goal",
     "image-generation",
     "desktop-review",
@@ -12,6 +13,9 @@
     "browser.control-connection@1",
     "browser.main-host@1",
     "browser.runtime-tools@1",
+    "collaboration.control@1",
+    "collaboration.renderer-state@1",
+    "collaboration.runtime-host@1",
     "runtime.feature-routes@1",
     "runtime.feature-settings@1",
     "image-generation.asset-store@1",
@@ -43,12 +47,16 @@
     "vision-recognition/model-selection"
   ],
   "featureEvents": [
+    "collaboration/collaboration.task-created@1",
+    "collaboration/collaboration.task-status-changed@1",
     "goal/goal.state-replaced@1"
   ],
   "toolResults": [
+    "collaboration.spawn-result@1",
     "image-generation.result@1"
   ],
   "operations": [
+    "collaboration.state.read",
     "goal.state.clear",
     "goal.state.read",
     "goal.state.update",

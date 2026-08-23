@@ -1,6 +1,17 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
+import { declareCapabilityProvider, provideHostCapability } from '@setsuna-desktop/feature-core/capability';
 import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
+import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
+import {
+  composeRendererFeatures,
+  mountRendererFeature,
+  rendererFeatureEventFeedCapability,
+  rendererFeatureOperationTransportCapability,
+  rendererToolResultViewRegistryCapability,
+  type RendererFeatureEventFeed,
+} from '@setsuna-desktop/feature-core/renderer';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RendererSettingsViewRegistry,
@@ -57,6 +68,19 @@ describe('Renderer Feature view registries', () => {
         }
         return { count: 2 };
       }),
+      legacy: {
+        matches: (value) => Boolean(
+          value
+          && typeof value === 'object'
+          && (value as { legacyCount?: unknown }).legacyCount !== undefined,
+        ),
+        payload: defineRuntimeCodec<{ count: number }>((value) => {
+          if (!value || typeof value !== 'object' || (value as { legacyCount?: unknown }).legacyCount !== 2) {
+            throw new Error('invalid legacy fixture payload');
+          }
+          return { count: 2 };
+        }),
+      },
       render: () => null,
     });
 
@@ -75,6 +99,12 @@ describe('Renderer Feature view registries', () => {
       resultMajor: 2,
       payload: { count: 1 },
     })).toBeNull();
+    expect(registry.resolve({ legacyCount: 2 })).toMatchObject({
+      featureId: 'result-feature',
+      payload: { count: 2 },
+    });
+    expect(registry.resolve({ legacyCount: 1 })).toBeNull();
+    expect(registry.resolve({ unrelated: true })).toBeNull();
 
     await owner.finishDispose();
     expect(registry.resolve({
@@ -82,6 +112,61 @@ describe('Renderer Feature view registries', () => {
       resultMajor: 2,
       payload: { count: 2 },
     })).toBeNull();
+    expect(registry.resolve({ legacyCount: 2 })).toBeNull();
+  });
+
+  it('lets the Collaboration Feature recover a persisted flat spawn_agent result', async () => {
+    const registry = new RendererToolResultViewRegistry();
+    const transport: FeatureOperationTransport = {
+      call: vi.fn(async () => {
+        throw new Error('State reads are not expected in this registry test.');
+      }) as FeatureOperationTransport['call'],
+    };
+    const feed: RendererFeatureEventFeed = {
+      subscribe: () => ({ dispose: () => undefined }),
+    };
+    const composition = await composeRendererFeatures({
+      mounts: [mountRendererFeature(collaborationRendererFeature, { criticality: 'required' })],
+      hostCapabilities: [
+        provideHostCapability(
+          declareCapabilityProvider(rendererFeatureOperationTransportCapability),
+          transport,
+        ),
+        provideHostCapability(
+          declareCapabilityProvider(rendererFeatureEventFeedCapability),
+          feed,
+        ),
+        provideHostCapability(
+          declareCapabilityProvider(rendererToolResultViewRegistryCapability),
+          registry,
+        ),
+      ],
+    });
+
+    expect(registry.resolve({
+      tool: 'spawn_agent',
+      senderThreadId: 'thread_parent',
+      childThreadId: 'thread_child',
+      taskId: 'task_1',
+      turnId: 'turn_child',
+      title: 'Repository scan',
+      objective: 'Inspect the repository.',
+      identity: { displayName: 'Scout', avatarSeed: 'seed_1' },
+      status: 'running',
+    })).toMatchObject({
+      featureId: 'collaboration',
+      contribution: {
+        presentation: 'replace',
+        workHistoryPresentation: 'persistent',
+      },
+      payload: {
+        parentThreadId: 'thread_parent',
+        childThreadId: 'thread_child',
+        taskId: 'task_1',
+      },
+    });
+
+    await composition.dispose();
   });
 });
 

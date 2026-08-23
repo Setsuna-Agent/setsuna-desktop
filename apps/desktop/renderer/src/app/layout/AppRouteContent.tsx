@@ -358,11 +358,6 @@ export function AppRouteContent({
         projectWorkspace.setFilePreview(null);
         workspacePanels.openDesktopPanel('side', 'files');
       }}
-      onOpenSubagent={(task) => {
-        const parentThreadId = runtime.currentThread?.id;
-        if (!parentThreadId) return;
-        workspacePanels.openSubagentPanel(parentThreadId, task);
-      }}
       onOpenFileReviewPanel={openFileReviewPanel}
       onOpenSideChat={() => workspacePanels.openDesktopPanel('side', 'chat')}
       onOpenSideTerminalPanel={() => workspacePanels.openDesktopPanel('side', 'terminal')}

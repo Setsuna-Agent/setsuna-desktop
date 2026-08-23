@@ -12,7 +12,6 @@ import type {
   RuntimeStreamItem,
   RuntimeThreadModelBinding,
 } from './provider.js';
-import type { RuntimeCollaborationTask, RuntimeCollaborationTaskStatus } from './provider.js';
 import type {
   RuntimeGitInfo,
   RuntimeHookRun,
@@ -78,8 +77,6 @@ export const RUNTIME_EVENT_TYPES = [
   'hook.completed',
   'approval.requested',
   'approval.resolved',
-  'collaboration.task_created',
-  'collaboration.task_status_changed',
   'turn.completed',
   'turn.cancelled',
   'runtime.warning',
@@ -198,17 +195,6 @@ export type CoreRuntimeEvent =
         assessment?: RuntimeApprovalReviewAssessment;
       }
     >
-  | RuntimeEventBase<'collaboration.task_created', { task: RuntimeCollaborationTask }>
-  | RuntimeEventBase<
-      'collaboration.task_status_changed',
-      {
-        taskId: string;
-        status: RuntimeCollaborationTaskStatus;
-        activeTurnId?: string;
-        resultPreview?: string;
-        error?: string;
-      }
-    >
   | RuntimeEventBase<'turn.completed', { usage?: RuntimeUsage; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'turn.cancelled', { reason?: string; taskKind?: RuntimeTaskKind }>
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>
@@ -231,6 +217,20 @@ export type LegacyRuntimeGoalEvent =
       lifecycleMessage?: RuntimeMessage;
     }>;
 
+/** Read-only compatibility records written before Collaboration became a Feature. */
+export type LegacyRuntimeCollaborationEvent =
+  | RuntimeEventBase<'collaboration.task_created', { task: unknown }>
+  | RuntimeEventBase<
+      'collaboration.task_status_changed',
+      {
+        taskId: unknown;
+        status: unknown;
+        activeTurnId?: unknown;
+        resultPreview?: unknown;
+        error?: unknown;
+      }
+    >;
+
 /** @deprecated Core-only code should use CoreRuntimeEvent. */
 export type RuntimeEvent = CoreRuntimeEvent;
 export type PendingRuntimeEvent = RuntimeEvent extends infer TEvent
@@ -239,7 +239,11 @@ export type PendingRuntimeEvent = RuntimeEvent extends infer TEvent
     : never
   : never;
 
-export type StoredThreadEvent = CoreRuntimeEvent | StoredFeatureEventEnvelope | LegacyRuntimeGoalEvent;
+export type StoredThreadEvent =
+  | CoreRuntimeEvent
+  | StoredFeatureEventEnvelope
+  | LegacyRuntimeGoalEvent
+  | LegacyRuntimeCollaborationEvent;
 type WritableStoredThreadEvent = CoreRuntimeEvent | StoredFeatureEventEnvelope;
 export type PendingStoredThreadEvent = WritableStoredThreadEvent extends infer TEvent
   ? TEvent extends WritableStoredThreadEvent

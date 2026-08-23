@@ -1,10 +1,15 @@
 import type {
   DesktopRuntimeClient,
-  RuntimeCollaborationTask,
   RuntimeConfigState,
   RuntimePluginSummary,
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
+import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
+import {
+  AgentAvatar,
+  SubagentTaskStatus,
+  useCollaborationState,
+} from '@setsuna-desktop/feature-collaboration/renderer';
 import { X } from 'lucide-react';
 import { useCallback, useRef, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -14,8 +19,6 @@ import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 import { useObservedRuntimeThread } from './hooks/useObservedRuntimeThread.js';
 import { MarkdownNavigationProvider } from './markdown/MarkdownNavigationProvider.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
-import { AgentAvatar } from './subagents/AgentAvatar.js';
-import { SubagentTaskStatus } from './subagents/SubagentTaskStatus.js';
 
 /**
  * 子代理只读面板：观察 child 线程的实时转录，并从父线程任务账本读取身份与状态。
@@ -26,7 +29,7 @@ export function SubagentConversationPanel({
   client,
   config,
   hidden,
-  initialTask,
+  initialDisplayName,
   parentThreadId,
   placement = 'side',
   plugins,
@@ -47,7 +50,7 @@ export function SubagentConversationPanel({
   client: DesktopRuntimeClient;
   config: RuntimeConfigState | null;
   hidden: boolean;
-  initialTask: RuntimeCollaborationTask;
+  initialDisplayName: string;
   parentThreadId: string;
   placement?: DesktopPanelSlot;
   plugins: RuntimePluginSummary[];
@@ -70,14 +73,9 @@ export function SubagentConversationPanel({
     onError,
     threadId: childThreadId,
   });
-  const parent = useObservedRuntimeThread({
-    client,
-    threadId: parentThreadId,
-  });
-  // 任务账本以父线程为准；父线程删除后回退到面板打开时的快照。
-  const task = parent.currentThread?.collaborationTasks
-    ?.find((candidate) => candidate.childThreadId === childThreadId)
-    ?? initialTask;
+  const collaboration = useCollaborationState(parentThreadId);
+  const task = collaboration.state.tasks.find((candidate) => candidate.childThreadId === childThreadId)
+    ?? fallbackTask(childThreadId, initialDisplayName, child.currentThread?.title, t);
   const messageHistory = useThreadMessageHistory(client, child.currentThread);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const cancelActiveTurn = useCallback(() => {
@@ -91,7 +89,7 @@ export function SubagentConversationPanel({
   return (
     <aside
       className={`desktop-workspace-panel desktop-subagent-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
-      aria-label={t('subagent.panel.label')}
+      aria-label={t('feature.collaboration.panel.label')}
       hidden={hidden}
     >
       {placement === 'side' ? (
@@ -147,7 +145,7 @@ function SubagentHeader({
   activeTurnId: string | null;
   onCancel: () => void;
   onClose: () => void;
-  task: RuntimeCollaborationTask;
+  task: CollaborationTask;
   title?: string;
 }) {
   const { t } = useI18n();
@@ -158,7 +156,7 @@ function SubagentHeader({
         <div className="subagent-panel-header__text">
           <div className="subagent-panel-header__name-row">
             <strong className="subagent-panel-header__name">{task.identity.displayName}</strong>
-            <SubagentTaskStatus status={task.status} />
+            <SubagentTaskStatus status={task.status} translate={t} />
           </div>
           <div className="subagent-panel-header__title" title={title ?? task.title}>
             {title ?? task.title}
@@ -168,14 +166,14 @@ function SubagentHeader({
       <div className="subagent-panel-header__actions">
         {activeTurnId ? (
           <button type="button" className="subagent-panel-header__cancel" onClick={onCancel}>
-            {t('subagent.panel.cancelTurn')}
+            {t('feature.collaboration.panel.cancelTurn')}
           </button>
         ) : null}
         <button
           type="button"
           className="subagent-panel-header__close"
-          aria-label={t('subagent.panel.close')}
-          title={t('subagent.panel.close')}
+          aria-label={t('feature.collaboration.panel.close')}
+          title={t('feature.collaboration.panel.close')}
           onClick={onClose}
         >
           <X size={15} aria-hidden="true" />
@@ -183,4 +181,24 @@ function SubagentHeader({
       </div>
     </header>
   );
+}
+
+function fallbackTask(
+  childThreadId: string,
+  initialDisplayName: string,
+  title: string | undefined,
+  translate: ReturnType<typeof useI18n>['t'],
+): CollaborationTask {
+  const displayName = initialDisplayName.trim()
+    || translate('feature.collaboration.card.unnamedAgent');
+  return {
+    id: `task:${childThreadId}`,
+    childThreadId,
+    title: title ?? '',
+    objective: '',
+    identity: { displayName, avatarSeed: childThreadId },
+    status: 'running',
+    createdAt: '',
+    updatedAt: '',
+  };
 }

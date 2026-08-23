@@ -26,7 +26,6 @@ export type ToolRunGroupKind =
   | 'search'
   | 'shell'
   | 'fileMutation'
-  | 'collaboration'
   | 'generic';
 
 export type ToolRunSummaryMode = 'aggregate' | 'latest';

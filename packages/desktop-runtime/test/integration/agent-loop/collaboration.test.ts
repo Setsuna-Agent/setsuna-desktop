@@ -7,7 +7,8 @@ import { systemClock } from '../../../src/ports/clock.js';
 import {
   CollaborationJoinModelClient,
   CollaborationToolModelClient,
-  MultiAgentConfigStore
+  MultiAgentConfigStore,
+  bindTestCollaborationFeature,
 } from '../../support/agent-loop/collaboration.js';
 import {
   mkDataDir,
@@ -29,6 +30,7 @@ describe('agent loop collaboration tools', () => {
         ids,
         configStore: new MultiAgentConfigStore(),
       });
+      bindTestCollaborationFeature(loop, threadStore);
   
       await loop.sendTurn(parent.id, { input: 'coordinate child agent work' });
   
@@ -94,6 +96,7 @@ describe('agent loop collaboration tools', () => {
         ids,
         configStore: new MultiAgentConfigStore(),
       });
+      bindTestCollaborationFeature(loop, threadStore);
   
       const started = await loop.startTurn(parent.id, { input: 'research this with a child' });
       await modelClient.childStarted;

@@ -5,7 +5,6 @@ import {
 import { FileText, Search, TerminalSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
-import { collaborationGroupSummary } from './runtimeCollaborationRuns.js';
 import type {
   ToolRunDisplayGroup,
   ToolRunGroup,
@@ -242,7 +241,6 @@ export function mixedToolRunBucketSummary(
 ): string {
   const status = toolRunGroupStatus(runs);
   if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
-  if (kind === 'collaboration') return collaborationGroupSummary(runs, t);
   if (kind === 'inspection') {
     const parts = inspectionSummaryParts(inspectionEntries(runs), t);
     return parts.length ? parts.join(t('toolRun.joiner')) : inspectionGroupSummary(runs, t).title;
@@ -264,7 +262,6 @@ export function mixedToolRunGroupPart(group: ToolRunGroup, t: Translate = defaul
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
   const status = toolRunGroupStatus(runs);
   if (kind === 'fileMutation') return fileOperationAggregateTitle(runs, t);
-  if (kind === 'collaboration') return collaborationGroupSummary(runs, t);
   if (kind === 'shell') return shellCountSummary(runs, status, t);
   if (kind === 'inspection') return inspectionGroupSummary(runs, t).title;
   if (kind === 'search') return searchCountSummary(runs, status, t);

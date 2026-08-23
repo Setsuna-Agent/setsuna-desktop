@@ -237,37 +237,3 @@ export type ModelStreamEvent =
   | { type: 'turn_diff'; unifiedDiff: string }
   | { type: 'usage'; usage: RuntimeUsage }
   | { type: 'done'; finishReason?: string };
-
-/**
- * 父线程持有的协作任务账本类型。child thread 自身的事件流仍由子线程保存，
- * 父线程通过该投影只维护“任务卡片”所需的状态，避免 UI 从线程列表反推。
- */
-export type RuntimeCollaborationTaskStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting_approval'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'interrupted';
-
-export type RuntimeAgentIdentity = {
-  displayName: string;
-  avatarSeed: string;
-};
-
-export type RuntimeCollaborationTask = {
-  id: string;
-  childThreadId: string;
-  title: string;
-  objective: string;
-  identity: RuntimeAgentIdentity;
-  status: RuntimeCollaborationTaskStatus;
-  /** 当前正在执行的 child turn；旧 turn 的迟到事件不得覆盖 resume 后的新状态。 */
-  activeTurnId?: string;
-  resultPreview?: string;
-  error?: string;
-  createdAt: string;
-  updatedAt: string;
-  completedAt?: string;
-};

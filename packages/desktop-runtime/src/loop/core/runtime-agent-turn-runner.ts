@@ -12,8 +12,8 @@ import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
+import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import { HookStoppedTurnError } from '../context/runtime-context-compactor.js';
-import type { RuntimeCollaborationCoordinator } from '../lifecycle/collaboration-coordinator.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import type { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
@@ -32,7 +32,7 @@ import { addRuntimeUsage } from './runtime-usage.js';
 
 type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
-  collaborationCoordinator: Pick<RuntimeCollaborationCoordinator, 'collectPendingChildren' | 'pendingChildren'>;
+  collaborationControl(): CollaborationControl;
   configStore?: ConfigStore;
   hooks: Pick<RuntimeHookCoordinator, 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
   ids: IdGenerator;
@@ -336,7 +336,8 @@ export class RuntimeAgentTurnRunner {
           continue;
         }
 
-        const pendingChildren = this.options.collaborationCoordinator.pendingChildren(threadId);
+        const collaboration = this.options.collaborationControl();
+        const pendingChildren = collaboration.pendingChildren(threadId);
         if (pendingChildren.total > 0) {
           if (pendingChildren.active > 0) {
             roundText += COLLABORATION_WAIT_NOTE;
@@ -353,7 +354,7 @@ export class RuntimeAgentTurnRunner {
             status: 'complete',
           });
           // 由 runtime 强制汇合：只要派生子任务尚未结束，父协作轮次就不能完成。
-          conversationMessages.push(...await this.options.collaborationCoordinator.collectPendingChildren(threadId, turnId, signal));
+          conversationMessages.push(...await collaboration.collectPendingChildren(threadId, turnId, signal));
           continue;
         }
 

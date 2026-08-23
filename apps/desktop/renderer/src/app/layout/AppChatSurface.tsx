@@ -2,7 +2,6 @@ import {
   runtimeDeveloperFeaturesEnabled,
   type AnswerRuntimeApprovalInput,
   type DesktopRuntimeClient,
-  type RuntimeCollaborationTask,
   type RuntimeConfiguredModelReference,
   type RuntimeConfigState,
   type RuntimePluginSummary,
@@ -161,7 +160,6 @@ export function AppChatSurface({
   onOpenPlugin,
   onOpenFilesPanel,
   onOpenModelSettings,
-  onOpenSubagent,
   onOpenFileReviewPanel,
   onOpenSideChat,
   onOpenSideTerminalPanel,
@@ -256,7 +254,6 @@ export function AppChatSurface({
   onOpenPlugin: OpenRuntimePluginHandler;
   onOpenFilesPanel: () => void;
   onOpenModelSettings: () => void;
-  onOpenSubagent?: (task: RuntimeCollaborationTask) => void;
   onOpenFileReviewPanel?: DesktopReviewOpenHandler;
   onOpenSideChat: () => void;
   onOpenSideTerminalPanel: () => void;
@@ -450,7 +447,6 @@ export function AppChatSurface({
             onDraftChange={onDraftChange}
             onEditUserMessage={onEditUserMessage}
             onOpenSideChat={onOpenSideChat}
-            onOpenSubagent={onOpenSubagent}
             onOpenFileReview={onOpenFileReviewPanel}
             onOpenModelSettings={onOpenModelSettings}
             onSearchProjectEntries={onSearchProjectEntries}
@@ -567,7 +563,7 @@ export function AppChatSurface({
               client={runtimeClient}
               config={config}
               hidden={hidden}
-              initialTask={initialSubagentTask(currentThread, subagent.threadId)}
+              initialDisplayName={panel.title ?? ''}
               parentThreadId={subagent.parentThreadId}
               placement={placement}
               plugins={plugins}
@@ -679,22 +675,4 @@ function PersistentBrowserPanel({
 
 function isFloatingPanelType(type: DesktopPanelType): boolean {
   return type === 'browser' || type === 'chat' || type === 'subagent' || type === 'conversation-debug';
-}
-
-function initialSubagentTask(
-  currentThread: RuntimeThread | null,
-  childThreadId: string,
-): RuntimeCollaborationTask {
-  const task = currentThread?.collaborationTasks
-    ?.find((candidate) => candidate.childThreadId === childThreadId);
-  return task ?? {
-    id: `task:${childThreadId}`,
-    childThreadId,
-    title: '',
-    objective: '',
-    identity: { displayName: '', avatarSeed: childThreadId },
-    status: 'running',
-    createdAt: '',
-    updatedAt: '',
-  };
 }

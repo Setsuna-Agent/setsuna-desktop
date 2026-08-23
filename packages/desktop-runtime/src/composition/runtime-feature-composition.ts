@@ -14,6 +14,11 @@ import {
 } from '@setsuna-desktop/feature-core/capability';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
 import {
+  collaborationControlCapability,
+  collaborationRuntimeHostCapability,
+  createNoopCollaborationControl,
+} from '@setsuna-desktop/feature-collaboration/contracts';
+import {
   imageGenerationAssetStoreCapability,
   imageGenerationFeature,
   imageGenerationLegacySettingsCapability,
@@ -76,6 +81,10 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.configStore.imageGenerationLegacySettingsAdapter(),
       ),
       provideHostCapability(
+        declareCapabilityProvider(collaborationRuntimeHostCapability),
+        runtime.agentLoop.collaborationRuntimeHost(),
+      ),
+      provideHostCapability(
         declareCapabilityProvider(goalRuntimeHostCapability),
         runtime.agentLoop.goalRuntimeHost(),
       ),
@@ -90,6 +99,11 @@ export async function activateBuiltinRuntimeFeatures(
     tools: requiredCapability(browserRuntimeToolServiceCapability),
   });
   runtime.browserToolHost.bind(browserDependencies.tools);
+
+  const collaborationDependencies = composition.resolveHostDependencies({
+    collaboration: optionalCapability(collaborationControlCapability, createNoopCollaborationControl),
+  });
+  runtime.agentLoop.bindCollaborationControl(collaborationDependencies.collaboration);
 
   const status = composition.status(imageGenerationFeature.id)?.status;
   if (status === 'active' || status === 'degraded') {

@@ -28,9 +28,6 @@ const IGNORE_THREAD_REASONING_BOUNDARY = ignore(
 const IGNORE_THREAD_WARNING = ignore(
   'Warnings remain in the append-only event and activity history without mutating thread state.',
 );
-const IGNORE_SWE_COLLABORATION_TASK = ignore(
-  'Collaboration task ledger is Setsuna-specific; SWE clients observe the underlying child thread events instead.',
-);
 
 export const RUNTIME_THREAD_EVENT_DISPOSITIONS = {
   'thread.created': PROJECT,
@@ -73,8 +70,6 @@ export const RUNTIME_THREAD_EVENT_DISPOSITIONS = {
   'hook.completed': PROJECT,
   'approval.requested': PROJECT,
   'approval.resolved': PROJECT,
-  'collaboration.task_created': PROJECT,
-  'collaboration.task_status_changed': PROJECT,
   'turn.completed': PROJECT,
   'turn.cancelled': PROJECT,
   'runtime.warning': IGNORE_THREAD_WARNING,
@@ -135,8 +130,6 @@ export const RUNTIME_SWE_EVENT_DISPOSITIONS = {
   'hook.completed': IGNORE_SWE_HOOK_LIFECYCLE,
   'approval.requested': PROJECT,
   'approval.resolved': PROJECT,
-  'collaboration.task_created': IGNORE_SWE_COLLABORATION_TASK,
-  'collaboration.task_status_changed': IGNORE_SWE_COLLABORATION_TASK,
   'turn.completed': PROJECT,
   'turn.cancelled': PROJECT,
   'runtime.warning': IGNORE_SWE_WARNING,
@@ -203,8 +196,6 @@ export const RUNTIME_ACTIVITY_EVENT_DISPOSITIONS = {
   'hook.completed': INCLUDE,
   'approval.requested': INCLUDE,
   'approval.resolved': INCLUDE,
-  'collaboration.task_created': INCLUDE,
-  'collaboration.task_status_changed': INCLUDE,
   'turn.completed': INCLUDE,
   'turn.cancelled': INCLUDE,
   'runtime.warning': INCLUDE,

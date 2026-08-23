@@ -18,7 +18,7 @@ import {
   type SetStateAction,
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
-import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
+import { isPrimaryConversationThread } from './runtimeThreadRelations.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';

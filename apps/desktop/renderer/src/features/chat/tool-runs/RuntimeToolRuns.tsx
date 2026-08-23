@@ -1,8 +1,8 @@
 import type {
-  RuntimeCollaborationTask,
   RuntimeHookRun,
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
+import type { ResolvedToolResultView } from '@setsuna-desktop/feature-core/renderer';
 import { ChevronDown } from 'lucide-react';
 import {
   useEffect,
@@ -14,6 +14,7 @@ import {
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { FeatureContributionBoundary } from '../../../composition/FeatureContributionBoundary.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
+import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
 import type {
   AnswerApprovalHandler,
@@ -96,7 +97,6 @@ import {
   networkApprovalSummary,
   permissionApprovalSummary,
 } from './runtimeApprovalSummaries.js';
-import { SubagentToolRunCard } from './runtimeCollaborationRuns.js';
 
 export type { ToolRunGroup, ToolRunGroupKind, ToolRunSummaryMode } from './runtime-tool-run-types.js';
 
@@ -114,21 +114,25 @@ export function RuntimeToolRuns({
   runs,
   onAnswerApproval,
   summaryMode = 'aggregate',
-  collaborationTasks,
 }: {
   children?: ReactNode;
   runs: RuntimeToolRun[];
   onAnswerApproval: AnswerApprovalHandler;
   summaryMode?: ToolRunSummaryMode;
-  collaborationTasks?: RuntimeCollaborationTask[];
 }) {
+  const featureViews = useRendererFeatureViews();
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
+  const singleRun = visibleRuns.length === 1 ? visibleRuns[0] : undefined;
+  const replacement = singleRun ? featureViews.toolResults.resolve(singleRun.data) : null;
+  if (singleRun && replacement?.contribution.presentation === 'replace') {
+    return <FeatureToolResultView result={replacement} runId={singleRun.id} />;
+  }
   const group = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode)[0];
   if (!group) return null;
   return (
     <div className="chat-tool-runs">
-      <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} collaborationTasks={collaborationTasks} />
+      <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
     </div>
   );
 }
@@ -189,50 +193,27 @@ function ToolRunDisplayPanel({
   group,
   nestedDetails,
   onAnswerApproval,
-  collaborationTasks,
 }: {
   group: ToolRunDisplayGroup;
   nestedDetails?: ReactNode;
   onAnswerApproval: AnswerApprovalHandler;
-  collaborationTasks?: RuntimeCollaborationTask[];
 }): JSX.Element {
   const { t } = useI18n();
   const featureViews = useRendererFeatureViews();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
-    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails, collaborationTasks);
-  }
-  if (group.type === 'single' && toolRunGroupKind(group.run) === 'collaboration') {
-    return (
-      <SubagentToolRunCard
-        key={`collaboration:${group.run.id}`}
-        run={group.run}
-        collaborationTasks={collaborationTasks}
-      />
-    );
+    return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
   }
   if (group.type === 'single') {
     const featureResult = featureViews.toolResults.resolve(group.run.data);
     if (featureResult) {
-      const FeatureResultView = featureResult.contribution.render;
+      const content = <FeatureToolResultView result={featureResult} runId={group.run.id} />;
+      if (featureResult.contribution.presentation === 'replace') return content;
       return (
         <FlatToolRunRow
           run={group.run}
-          nestedDetails={(
-            <FeatureContributionBoundary
-              fallback={(reset) => (
-                <div className="chat-tool-run__preview" role="alert">
-                  <p>{t('featureRecovery.toolResultFailed')}</p>
-                  <button type="button" onClick={reset}>{t('common.retry')}</button>
-                </div>
-              )}
-              featureId={featureResult.featureId}
-              resetKey={`${group.run.id}:${featureResult.contribution.resultKind}:${featureResult.contribution.major}`}
-            >
-              <FeatureResultView payload={featureResult.payload} translate={t} />
-            </FeatureContributionBoundary>
-          )}
+          nestedDetails={content}
         />
       );
     }
@@ -255,6 +236,32 @@ function ToolRunDisplayPanel({
     return toolRunPanelNode(group.run, onAnswerApproval, t, nestedDetails);
   }
   return toolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
+}
+
+function FeatureToolResultView({
+  result,
+  runId,
+}: Readonly<{
+  result: ResolvedToolResultView;
+  runId: string;
+}>) {
+  const { t } = useI18n();
+  const threadId = useChatThreadId();
+  const ResultView = result.contribution.render;
+  return (
+    <FeatureContributionBoundary
+      fallback={(reset) => (
+        <div className="chat-tool-run__preview" role="alert">
+          <p>{t('featureRecovery.toolResultFailed')}</p>
+          <button type="button" onClick={reset}>{t('common.retry')}</button>
+        </div>
+      )}
+      featureId={result.featureId}
+      resetKey={`${runId}:${result.contribution.resultKind}:${result.contribution.major}`}
+    >
+      <ResultView payload={result.payload} threadId={threadId} translate={t} />
+    </FeatureContributionBoundary>
+  );
 }
 
 function toolRunPanelNode(
@@ -408,7 +415,6 @@ function mixedToolRunGroupPanelNode(
   onAnswerApproval: AnswerApprovalHandler,
   t: Translate,
   nestedDetails?: ReactNode,
-  collaborationTasks?: RuntimeCollaborationTask[],
 ): JSX.Element {
   const runs = group.groups.flatMap(toolRunGroupRuns);
   const status = toolRunGroupStatus(runs);
@@ -466,7 +472,7 @@ function mixedToolRunGroupPanelNode(
             />
           </>
         ) : (
-          visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval, collaborationTasks))
+          visibleGroups.map((childGroup) => renderMixedToolRunChildGroup(childGroup, onAnswerApproval))
         )}
         {nestedDetails}
       </div>
@@ -477,7 +483,6 @@ function mixedToolRunGroupPanelNode(
 function renderMixedToolRunChildGroup(
   group: ToolRunGroup,
   onAnswerApproval: AnswerApprovalHandler,
-  collaborationTasks?: RuntimeCollaborationTask[],
 ): JSX.Element | null {
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
@@ -489,21 +494,11 @@ function renderMixedToolRunChildGroup(
       </div>
     );
   }
-  if (kind === 'collaboration' && group.type === 'single') {
-    return (
-      <SubagentToolRunCard
-        key={`collaboration:${group.run.id}`}
-        run={group.run}
-        collaborationTasks={collaborationTasks}
-      />
-    );
-  }
   return (
     <ToolRunDisplayPanel
       key={toolRunDisplayStableKey(group)}
       group={group}
       onAnswerApproval={onAnswerApproval}
-      collaborationTasks={collaborationTasks}
     />
   );
 }

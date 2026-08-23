@@ -1,4 +1,5 @@
-import { Component, useEffect, type ErrorInfo, type ReactNode } from 'react';
+import { CollaborationTaskNavigationProvider } from '@setsuna-desktop/feature-collaboration/renderer';
+import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
@@ -60,7 +61,23 @@ function AppContent() {
     );
   }
 
-  return <AppReadyLayout controller={controller} />;
+  return <ReadyAppContent controller={controller} />;
+}
+
+function ReadyAppContent({ controller }: Readonly<{
+  controller: ReturnType<typeof useDesktopAppController>;
+}>) {
+  const openCollaborationTask = useCallback(
+    (parentThreadId: string, task: Parameters<typeof controller.workspacePanels.openSubagentPanel>[1]) => {
+      controller.workspacePanels.openSubagentPanel(parentThreadId, task);
+    },
+    [controller.workspacePanels.openSubagentPanel],
+  );
+  return (
+    <CollaborationTaskNavigationProvider onOpenTask={openCollaborationTask}>
+      <AppReadyLayout controller={controller} />
+    </CollaborationTaskNavigationProvider>
+  );
 }
 
 function AppBlankSurface() {

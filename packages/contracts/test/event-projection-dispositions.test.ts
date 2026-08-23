@@ -31,8 +31,6 @@ const SWE_IGNORED_EVENT_TYPES = [
   'messages.truncated',
   'hook.started',
   'hook.completed',
-  'collaboration.task_created',
-  'collaboration.task_status_changed',
   'runtime.warning',
 ] satisfies RuntimeEventType[];
 
@@ -47,8 +45,6 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
   'hook.completed',
   'approval.requested',
   'approval.resolved',
-  'collaboration.task_created',
-  'collaboration.task_status_changed',
   'turn.completed',
   'turn.cancelled',
   'runtime.warning',
@@ -57,7 +53,7 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
 
 describe('runtime event projection dispositions', () => {
   it('classifies every runtime event exactly once for each consumer', () => {
-    expect(RUNTIME_EVENT_TYPES).toHaveLength(46);
+    expect(RUNTIME_EVENT_TYPES).toHaveLength(44);
 
     for (const dispositions of [
       RUNTIME_THREAD_EVENT_DISPOSITIONS,

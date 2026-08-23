@@ -1,9 +1,12 @@
 import type {
-  RuntimeCollaborationTask,
   RuntimeThread,
   RuntimeUsageResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import {
+  CollaborationTaskList,
+  useCollaborationState,
+} from '@setsuna-desktop/feature-collaboration/renderer';
 import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
 import { formatTokens, type DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
@@ -14,8 +17,6 @@ import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
 import { ConversationGitControls } from './ConversationGitControls.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
-import { AgentAvatar } from '../../chat/subagents/AgentAvatar.js';
-import { SubagentTaskStatus } from '../../chat/subagents/SubagentTaskStatus.js';
 
 export function ConversationOverviewPanel({
   activeProject,
@@ -31,7 +32,6 @@ export function ConversationOverviewPanel({
   onCollapse,
   onExpand,
   onOpenReview,
-  onOpenSubagent,
   onReviewRefresh,
   reviewError,
 }: {
@@ -48,7 +48,6 @@ export function ConversationOverviewPanel({
   onCollapse: () => void;
   onExpand: () => void;
   onOpenReview?: () => void;
-  onOpenSubagent?: (task: RuntimeCollaborationTask) => void;
   onReviewRefresh?: () => void | Promise<void>;
   reviewError: string | null;
 }) {
@@ -65,8 +64,7 @@ export function ConversationOverviewPanel({
   const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
-  // 协作任务以父线程账本为准，不再从 threads.filter(parentThreadId) 猜状态。
-  const collaborationTasks = currentThread.collaborationTasks ?? [];
+  const collaboration = useCollaborationState(currentThread.id);
   const callCount = usageSummary?.recordCount ?? 0;
   const totalTokensLabel = formatTokens(usageSummary?.totalTokens ?? 0);
   const cacheHitRateLabel = formatCacheHitRate(usageSummary?.cachedInputTokens ?? 0, usageSummary?.inputTokens ?? 0);
@@ -146,31 +144,11 @@ export function ConversationOverviewPanel({
         </div>
       </div>
       {shellProcessClient ? <ConversationBackgroundServices client={shellProcessClient} threadId={currentThread.id} /> : null}
-      {collaborationTasks.length ? (
-        <>
-          <div className="chat-conversation-overview-panel__divider" />
-          <div className="chat-conversation-overview-panel__agents">
-            <div className="chat-conversation-overview-panel__agents-title">
-              <span>{t('conversation.overview.collaborationTasks')}</span>
-              <span aria-label={t(collaborationTasks.length === 1 ? 'conversation.overview.collaborationCount.one' : 'conversation.overview.collaborationCount.many', { count: collaborationTasks.length })}>{collaborationTasks.length}</span>
-            </div>
-            {collaborationTasks.map((task) => (
-              <button
-                type="button"
-                className="chat-conversation-overview-panel__agent"
-                key={task.id}
-                disabled={!onOpenSubagent}
-                title={task.title || t('conversation.overview.unnamedTask')}
-                onClick={() => onOpenSubagent?.(task)}
-              >
-                <AgentAvatar identity={task.identity} size={20} />
-                <strong>{task.identity.displayName}</strong>
-                <SubagentTaskStatus status={task.status} />
-              </button>
-            ))}
-          </div>
-        </>
-      ) : null}
+      <CollaborationTaskList
+        parentThreadId={currentThread.id}
+        tasks={collaboration.state.tasks}
+        translate={t}
+      />
       {overview.planItems.length ? (
         <>
           <div className="chat-conversation-overview-panel__divider" />

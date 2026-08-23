@@ -15,6 +15,7 @@ importers:
       '@pierre/diffs': 1.3.3
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
+      '@setsuna-desktop/feature-collaboration': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
@@ -65,6 +66,7 @@ importers:
       '@pierre/diffs': 1.3.3_nnrd3gsncyragczmpvfhocinkq
       '@setsuna-desktop/contracts': link:packages/contracts
       '@setsuna-desktop/feature-browser': link:packages/features/browser
+      '@setsuna-desktop/feature-collaboration': link:packages/features/collaboration
       '@setsuna-desktop/feature-core': link:packages/feature-core
       '@setsuna-desktop/feature-goal': link:packages/features/goal
       '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
@@ -121,6 +123,7 @@ importers:
       '@modelcontextprotocol/sdk': ^1.30.0
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
+      '@setsuna-desktop/feature-collaboration': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
@@ -137,6 +140,7 @@ importers:
       '@modelcontextprotocol/sdk': 1.30.0_zod@4.4.3
       '@setsuna-desktop/contracts': link:../contracts
       '@setsuna-desktop/feature-browser': link:../features/browser
+      '@setsuna-desktop/feature-collaboration': link:../features/collaboration
       '@setsuna-desktop/feature-core': link:../feature-core
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
@@ -165,6 +169,16 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       electron: 43.2.0
       lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/collaboration:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
       react: 18.3.1
 
   packages/features/goal:

@@ -188,18 +188,21 @@ describe('thread snapshot provider metadata compatibility', () => {
   });
 });
 
-describe('legacy thread Goal projection', () => {
-  it('removes embedded Goal state from old snapshots and summaries', () => {
+describe('legacy embedded Feature projections', () => {
+  it('removes Goal and Collaboration state from old Core snapshots', () => {
     const thread = {
       ...threadWithMetadata({}),
       goal: { objective: 'Legacy snapshot state' },
-    } as RuntimeThread & { goal: unknown };
+      collaborationTasks: [{ id: 'legacy_task' }],
+    } as RuntimeThread & { goal: unknown; collaborationTasks: unknown };
 
     const normalized = normalizeThreadSnapshot(thread);
 
     expect(normalized.changed).toBe(true);
     expect(normalized.thread).not.toHaveProperty('goal');
+    expect(normalized.thread).not.toHaveProperty('collaborationTasks');
     expect(toSummary(normalized.thread)).not.toHaveProperty('goal');
+    expect(toSummary(normalized.thread)).not.toHaveProperty('collaborationTasks');
   });
 });
 

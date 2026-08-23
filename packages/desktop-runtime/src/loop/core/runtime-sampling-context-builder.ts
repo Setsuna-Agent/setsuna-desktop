@@ -13,6 +13,7 @@ import {
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
+import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -49,7 +50,6 @@ import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
-import { isCollaborationToolName } from '../lifecycle/collaboration-coordinator.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import { runtimeTaskModelRequest } from './runtime-task-model.js';
@@ -80,6 +80,7 @@ type RuntimeSamplingContextBuilderOptions = {
   debugTrace?: RuntimeDebugTraceSink;
   environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
+  collaborationControl(): CollaborationControl;
   goalControl(): GoalControl;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
@@ -233,6 +234,8 @@ export class RuntimeSamplingContextBuilder {
       && goalControl.isCompletionPending(turnId, stepGoal.id),
     );
     const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending);
+    const collaborationControl = this.options.collaborationControl();
+    const collaborationTools = collaborationControl.toolDefinitions(stepRuntimeConfig);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -251,8 +254,8 @@ export class RuntimeSamplingContextBuilder {
       ? undefined
       : modelFacingTools(
           toolRouter?.tools,
-          stepRuntimeConfig,
           dynamicTools,
+          collaborationTools,
           goalTools,
           toolRouter?.loadedDeferredToolNames(),
           toolRouter?.catalogToolDefinitions,
@@ -260,7 +263,7 @@ export class RuntimeSamplingContextBuilder {
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
     const scopedTools = sideConversation
       ? availableTools?.filter((tool) => (
-          !isCollaborationToolName(tool.name) && !goalControl.isToolName(tool.name)
+          !collaborationControl.isToolName(tool.name) && !goalControl.isToolName(tool.name)
         ))
       : availableTools;
     const tools = toolAccess === 'read-only'
@@ -273,7 +276,7 @@ export class RuntimeSamplingContextBuilder {
       tools ?? [],
       toolRouter,
       dynamicTools,
-      stepRuntimeConfig,
+      collaborationTools,
       goalTools,
     );
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);

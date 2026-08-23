@@ -1,6 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_BROWSER_URL } from '../../src/contracts/index.js';
 import {
   BrowserPanel,
   nextBrowserZoomFactor,
@@ -16,6 +17,10 @@ const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => (
 );
 
 describe('normalizeBrowserInput', () => {
+  it('uses the internal home page for an empty address', () => {
+    expect(normalizeBrowserInput('  ')).toBe(DEFAULT_BROWSER_URL);
+  });
+
   it('keeps absolute web URLs', () => {
     expect(normalizeBrowserInput('https://example.com/docs')).toBe('https://example.com/docs');
   });
@@ -76,12 +81,28 @@ describe('browserScreenshotOutcomeFeedback', () => {
 });
 
 describe('BrowserPanel', () => {
+  it('renders the internal history home without creating a webview', () => {
+    const html = renderToStaticMarkup(createElement(BrowserPanel, {
+      bridge: null,
+      hidden: false,
+      notify: () => undefined,
+      panel: browserPanel('browser-home'),
+      translate,
+      onPanelMetadataChange: () => undefined,
+    }));
+
+    expect(html).toContain('从这里继续浏览');
+    expect(html).toContain('还没有浏览记录');
+    expect(html).not.toContain('<webview');
+    expect(html).not.toContain('www.bing.com');
+  });
+
   it('enables Electron popup requests on the embedded webview', () => {
     const html = renderToStaticMarkup(createElement(BrowserPanel, {
       bridge: null,
       hidden: false,
       notify: () => undefined,
-      panel: browserPanel('browser-1'),
+      panel: browserPanel('browser-1', 'https://example.com/'),
       translate,
       onPanelMetadataChange: () => undefined,
     }));
@@ -113,9 +134,9 @@ describe('BrowserPanel', () => {
   });
 });
 
-function browserPanel(id: string, url = 'https://www.bing.com/') {
+function browserPanel(id: string, url = DEFAULT_BROWSER_URL) {
   return {
-    browser: { faviconUrl: null, loading: true, url },
+    browser: { faviconUrl: null, loading: url !== DEFAULT_BROWSER_URL, url },
     id,
     title: '新标签页',
   };

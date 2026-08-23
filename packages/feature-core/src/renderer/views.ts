@@ -73,6 +73,8 @@ export const rendererSettingsViewRegistryCapability: CapabilityToken<SettingsVie
 
 export type ToolResultViewProps<TPayload> = Readonly<{
   payload: TPayload;
+  /** Thread whose transcript currently owns this persisted tool result. */
+  threadId: string | null;
   translate: RendererTranslate;
 }>;
 
@@ -81,6 +83,15 @@ export type ToolResultViewContribution<TPayload> = Readonly<{
   resultKind: `${string}.${string}`;
   major: number;
   payload: RuntimeCodec<TPayload>;
+  /** Identifies and decodes a result persisted before Feature envelopes existed. */
+  legacy?: Readonly<{
+    matches(value: unknown): boolean;
+    payload: RuntimeCodec<TPayload>;
+  }>;
+  /** `replace` lets the contribution own the complete tool-result surface. */
+  presentation?: 'details' | 'replace';
+  /** Keep this result visible when surrounding work history is collapsed. */
+  workHistoryPresentation?: 'persistent';
   render: ComponentType<ToolResultViewProps<TPayload>>;
 }>;
 
@@ -89,6 +100,15 @@ export type ErasedToolResultViewContribution = Readonly<{
   resultKind: `${string}.${string}`;
   major: number;
   payload: RuntimeCodec<unknown>;
+  /** Identifies and decodes a result persisted before Feature envelopes existed. */
+  legacy?: Readonly<{
+    matches(value: unknown): boolean;
+    payload: RuntimeCodec<unknown>;
+  }>;
+  /** `replace` lets the contribution own the complete tool-result surface. */
+  presentation?: 'details' | 'replace';
+  /** Keep this result visible when surrounding work history is collapsed. */
+  workHistoryPresentation?: 'persistent';
   render: ComponentType<ToolResultViewProps<unknown>>;
 }>;
 

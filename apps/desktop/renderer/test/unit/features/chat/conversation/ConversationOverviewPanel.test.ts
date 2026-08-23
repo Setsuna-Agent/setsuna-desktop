@@ -100,30 +100,6 @@ describe('ConversationOverviewPanel', () => {
     expect(html).not.toContain('无变更');
   });
 
-  it('shows collaboration tasks from the parent thread ledger', () => {
-    const html = renderOverviewPanel({
-      ...baseProps,
-      compact: false,
-      currentThread: {
-        ...baseProps.currentThread,
-        collaborationTasks: [{
-          id: 'task_1',
-          childThreadId: 'child_1',
-          title: 'Child agent',
-          objective: 'Inspect the repository.',
-          identity: { displayName: 'Scout', avatarSeed: 'seed_1' },
-          status: 'running',
-          createdAt: '2026-07-01T00:00:00.000Z',
-          updatedAt: '2026-07-01T00:00:00.000Z',
-        }],
-      },
-    });
-
-    expect(html).toContain('aria-label="1 个协作任务"');
-    expect(html).toContain('Scout');
-    expect(html).toContain('运行中');
-  });
-
   it('renders active plan progress with its detail popover', () => {
     const html = renderOverviewPanel({
       ...baseProps,

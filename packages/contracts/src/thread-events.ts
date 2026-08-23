@@ -37,7 +37,6 @@ import {
 } from './thread-event-projection.js';
 import { RuntimeThreadEventDraft } from './event-projections/thread-event-draft.js';
 import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
-import type { RuntimeCollaborationTask, RuntimeCollaborationTaskStatus } from './provider.js';
 import {
   cloneRuntimeSkillReferences,
   normalizeRuntimeQueuedTurnInputKind,
@@ -63,6 +62,9 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
 
   // Core owns the global sequence gate but never inspects Feature payloads.
   if (event.type === 'feature.event') return next;
+  // Legacy Collaboration ledger records are decoded by the Feature projection only.
+  if (event.type === 'collaboration.task_created'
+    || event.type === 'collaboration.task_status_changed') return next;
 
   if (event.type === 'thread.created') {
     next.title = event.payload.title;
@@ -468,33 +470,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
     return next;
   }
 
-  if (event.type === 'collaboration.task_created') {
-    const tasks = next.collaborationTasks ?? [];
-    if (!tasks.some((task) => task.id === event.payload.task.id)) {
-      next.collaborationTasks = [...tasks, cloneRuntimeCollaborationTask(event.payload.task)];
-    }
-    return next;
-  }
-
-  if (event.type === 'collaboration.task_status_changed') {
-    const tasks = next.collaborationTasks;
-    const task = tasks?.find((item) => item.id === event.payload.taskId);
-    if (!task) return next;
-    const updated: RuntimeCollaborationTask = {
-      ...task,
-      status: event.payload.status,
-      updatedAt: event.createdAt,
-    };
-    if (event.payload.activeTurnId !== undefined) updated.activeTurnId = event.payload.activeTurnId;
-    if (event.payload.resultPreview !== undefined) updated.resultPreview = event.payload.resultPreview;
-    if (event.payload.error !== undefined) updated.error = event.payload.error;
-    if (isTerminalCollaborationTaskStatus(event.payload.status)) {
-      updated.completedAt = task.completedAt ?? event.createdAt;
-    }
-    next.collaborationTasks = tasks!.map((item) => item.id === updated.id ? updated : item);
-    return next;
-  }
-
   if (event.type === 'tool.preview') {
     const message = draft.mutableMessage(assistantMessageForTurn(next.messages, event.turnId));
     if (message) {
@@ -665,20 +640,6 @@ function appendMessageStreamPart(
     parts.push({ type, content });
   }
   message.streamParts = parts;
-}
-
-function isTerminalCollaborationTaskStatus(status: RuntimeCollaborationTaskStatus): boolean {
-  return status === 'completed'
-    || status === 'failed'
-    || status === 'cancelled'
-    || status === 'interrupted';
-}
-
-function cloneRuntimeCollaborationTask(task: RuntimeCollaborationTask): RuntimeCollaborationTask {
-  return {
-    ...task,
-    identity: { ...task.identity },
-  };
 }
 
 function assertNeverRuntimeEvent(event: never): never {

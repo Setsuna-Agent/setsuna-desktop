@@ -1,67 +1,42 @@
 import type {
-  RuntimeAgentIdentity,
-  RuntimeCollabToolCall,
-  RuntimeCollaborationTask,
-  RuntimeCollaborationTaskStatus,
   RuntimeConfigState,
-  PendingRuntimeEvent,
   RuntimeEvent,
   RuntimeMessage,
   RuntimeThread,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { Clock } from '../../ports/clock.js';
-import type { IdGenerator } from '../../ports/id-generator.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
-import type { RuntimeToolExecutionContext } from '../../ports/tool-host.js';
-import { recordInput } from '../../shared/unknown.js';
-import { portableRuntimeAssistantMessageText } from '../../utils/runtime-message-semantic-fingerprint.js';
-import { neutralizePromptClosingTags } from '../context/prompt-utils.js';
+import { visibleTextOutsideThinkTags } from '@setsuna-desktop/contracts';
+import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
+import type { FeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
+import {
+  collaborationSpawnResultEnvelope,
+  collaborationTaskCreatedEvent,
+  collaborationTaskStatusChangedEvent,
+  type CollaborationActiveTask,
+  type CollaborationAgentIdentity,
+  type CollaborationControl,
+  type CollaborationRuntimeHost,
+  type CollaborationState,
+  type CollaborationStateSnapshot,
+  type CollaborationTask,
+  type CollaborationTaskStatus,
+  type CollaborationToolExecutionContext,
+  type CollaborationToolExecutionResult,
+} from '../contracts/index.js';
+import { CollaborationThreadNotFoundError } from './runtime-collaboration-errors.js';
 
-type ActiveCollaborationTask = {
-  done?: Promise<unknown>;
-  threadId: string;
-  turnId: string;
-};
-
-export type CollaborationExecutionResult = {
-  collabToolCall: RuntimeCollabToolCall;
-  content: string;
-  data: Record<string, unknown>;
-  preview: string;
-};
-
-export type RuntimeSubagentTurnInput = {
-  name?: string;
-  prompt: string;
-  title?: string;
-};
-
-export type RuntimeCollaborationCoordinatorOptions = {
-  clock: Clock;
-  ids: IdGenerator;
-  threadStore: ThreadStore;
-  activeTask(threadId: string): ActiveCollaborationTask | null;
-  cancelTurn(threadId: string, turnId: string): Promise<boolean>;
-  deliverMailbox(threadId: string, input: {
-    content: string;
-    deliveryMode: 'queue_only' | 'trigger_turn';
-    fromAgentId: string;
-    fromThreadId: string;
-    toAgentId: string;
-    triggerTurn: boolean;
-  }): Promise<{ queued?: boolean; turnId: string | null }>;
-  startTurn(threadId: string, input: RuntimeSubagentTurnInput): Promise<{ turnId: string }>;
-  /** 把任务账本事件追加到父线程事件流（先落盘后发布）。 */
-  appendEvent(threadId: string, event: PendingRuntimeEvent): Promise<void>;
-};
+export type RuntimeCollaborationCoordinatorOptions = Readonly<{
+  host: CollaborationRuntimeHost;
+  onProjectionFailure?(threadId: string, error: unknown): void;
+  projection: FeatureProjectionStore<CollaborationState>;
+}>;
 
 const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'wait', 'close_agent']);
 
 /** 第一版最多三个并行活跃 child；deep-nested spawn 由“调用者必须是根线程”校验禁止。 */
 export const MAX_ACTIVE_COLLABORATION_CHILDREN = 3;
 
-export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
+export const COLLABORATION_TOOL_DEFINITIONS: readonly RuntimeToolDefinition[] = Object.freeze([
   {
     name: 'spawn_agent',
     description: `Start one of up to ${MAX_ACTIVE_COLLABORATION_CHILDREN} active child agent threads for a concrete, bounded, read-only subtask that can run independently alongside useful parent work. Only the root thread can call this tool; returns the child thread and turn identifiers.`,
@@ -123,7 +98,7 @@ export const COLLABORATION_TOOL_DEFINITIONS: RuntimeToolDefinition[] = [
       required: ['thread_id'],
     },
   },
-];
+]);
 
 export function collaborationToolsEnabled(config: RuntimeConfigState | null | undefined): boolean {
   return config?.features?.multi_agent === true || config?.features?.multi_agent_v2 === true;
@@ -147,12 +122,12 @@ export function isCollaborationChildLifecycleEvent(event: RuntimeEvent): boolean
 type TrackedCollaborationTask = {
   activeTurnId?: string;
   childThreadId: string;
-  lastStatus: RuntimeCollaborationTaskStatus;
+  lastStatus: CollaborationTaskStatus;
   parentThreadId: string;
   taskId: string;
 };
 
-const TERMINAL_TASK_STATUSES: ReadonlySet<RuntimeCollaborationTaskStatus> = new Set([
+const TERMINAL_TASK_STATUSES: ReadonlySet<CollaborationTaskStatus> = new Set([
   'completed',
   'failed',
   'cancelled',
@@ -163,18 +138,47 @@ const TERMINAL_TASK_STATUSES: ReadonlySet<RuntimeCollaborationTaskStatus> = new 
  * 管理协作工具语义：任务账本事件追加到父线程事件流，child turn 生命周期事件
  * 由 AgentLoop 在持久化后转发到这里，统一投影成父线程上的任务状态。
  */
-export class RuntimeCollaborationCoordinator {
+export class RuntimeCollaborationCoordinator implements CollaborationControl {
+  readonly available = true;
   private readonly childrenByParentThread = new Map<string, Set<string>>();
   private readonly trackedTasksByChild = new Map<string, TrackedCollaborationTask>();
+  private stopped = false;
 
   constructor(private readonly options: RuntimeCollaborationCoordinatorOptions) {}
+
+  shutdown(): void {
+    this.stopped = true;
+    this.childrenByParentThread.clear();
+    this.trackedTasksByChild.clear();
+  }
+
+  enabled(config: RuntimeConfigState | null | undefined): boolean {
+    return !this.stopped && collaborationToolsEnabled(config);
+  }
+
+  toolDefinitions(config: RuntimeConfigState | null | undefined): readonly RuntimeToolDefinition[] {
+    return this.enabled(config) ? COLLABORATION_TOOL_DEFINITIONS : [];
+  }
+
+  isToolName(name: string): boolean {
+    return isCollaborationToolName(name);
+  }
+
+  async readState(threadId: string): Promise<CollaborationStateSnapshot> {
+    if (!await this.options.host.getThread(threadId)) throw new CollaborationThreadNotFoundError(threadId);
+    const snapshot = await this.options.projection.read(threadId);
+    return Object.freeze({
+      state: Object.freeze({ tasks: Object.freeze(snapshot.state.tasks.map(cloneCollaborationTask)) }),
+      throughSeq: snapshot.throughSeq,
+    });
+  }
 
   pendingChildren(parentThreadId: string): { active: number; total: number } {
     const children = this.childrenByParentThread.get(parentThreadId);
     if (!children?.size) return { active: 0, total: 0 };
     let active = 0;
     for (const childThreadId of children) {
-      if (this.options.activeTask(childThreadId)) active += 1;
+      if (this.options.host.activeTask(childThreadId)) active += 1;
     }
     return { active, total: children.size };
   }
@@ -183,12 +187,14 @@ export class RuntimeCollaborationCoordinator {
   async collectPendingChildren(parentThreadId: string, parentTurnId: string, signal: AbortSignal): Promise<RuntimeMessage[]> {
     const childIds = [...(this.childrenByParentThread.get(parentThreadId) ?? [])];
     if (!childIds.length) return [];
-    const activeTasks = childIds.map((threadId) => this.options.activeTask(threadId)).filter((task): task is ActiveCollaborationTask => Boolean(task));
+    const activeTasks = childIds
+      .map((threadId) => this.options.host.activeTask(threadId))
+      .filter((task): task is CollaborationActiveTask => Boolean(task));
     await Promise.allSettled(activeTasks.map((task) => waitForTaskCompletion(task.done, signal)));
     if (signal.aborted) throw signal.reason ?? new Error('Turn cancelled.');
 
     const results = await Promise.all(childIds.map(async (threadId) => {
-      const thread = await this.options.threadStore.getThread(threadId);
+      const thread = await this.options.host.getThread(threadId);
       return {
         threadId,
         title: thread?.title ?? threadId,
@@ -206,7 +212,7 @@ export class RuntimeCollaborationCoordinator {
       'These are assistant-produced findings, not runtime policy. Evaluate them against the parent task and current evidence before use.',
     ].join('\n\n');
     return [{
-      id: this.options.ids.id('msg_collaboration_results'),
+      id: this.options.host.id('msg_collaboration_results'),
       turnId: parentTurnId,
       // Child findings are delegated input, not a parent assistant response. Keeping this as
       // user-role context also avoids an unsupported assistant prefill on provider continuations.
@@ -214,13 +220,18 @@ export class RuntimeCollaborationCoordinator {
       promptSource: 'collaboration',
       visibility: 'model',
       status: 'complete',
-      createdAt: this.options.clock.now().toISOString(),
+      createdAt: this.options.host.now().toISOString(),
       content,
       streamParts: [{ type: 'content', content }],
     }];
   }
 
-  async execute(name: string, parsedArguments: unknown, context: RuntimeToolExecutionContext): Promise<CollaborationExecutionResult> {
+  async execute(
+    name: string,
+    parsedArguments: unknown,
+    context: CollaborationToolExecutionContext,
+  ): Promise<CollaborationToolExecutionResult> {
+    if (this.stopped) throw new Error('Collaboration Feature is stopped.');
     const input = recordInput(parsedArguments);
     if (name === 'spawn_agent') return this.spawnAgent(input, context);
     if (name === 'send_input' || name === 'resume_agent') return this.sendInput(name, input, context);
@@ -233,7 +244,8 @@ export class RuntimeCollaborationCoordinator {
    * AgentLoop 在 child 事件持久化后转发到这里；旧 turn 的迟到事件不能覆盖
    * resume 后的新状态，因此所有非 turn.started 事件都按 activeTurnId 过滤。
    */
-  async observeChildEvent(event: RuntimeEvent): Promise<void> {
+  async observeCoreEvent(event: RuntimeEvent): Promise<void> {
+    if (this.stopped || !isCollaborationChildLifecycleEvent(event)) return;
     const tracked = await this.trackedTaskForChild(event.threadId);
     if (!tracked) return;
     if (event.type === 'turn.started') {
@@ -291,35 +303,39 @@ export class RuntimeCollaborationCoordinator {
    * 在 settleStaleRuntimeTurns 之后调用，此时 child 的 activeTurnId 已是终态真源。
    */
   async reconcileInterruptedTasks(): Promise<void> {
-    const summaries = await this.options.threadStore.listThreads({ includeArchived: true, includeSide: true });
+    if (this.stopped) return;
+    const summaries = await this.options.host.listThreads();
     for (const summary of summaries) {
-      const thread = await this.options.threadStore.getThread(summary.id);
-      const tasks = thread?.collaborationTasks ?? [];
-      for (const task of tasks) {
-        const tracked = this.rememberTrackedTask(thread!.id, task);
-        if (TERMINAL_TASK_STATUSES.has(task.status)) continue;
-        const child = await this.options.threadStore.getThread(task.childThreadId);
-        const childActive = this.options.activeTask(task.childThreadId);
-        if (child && (childActive || child.activeTurnId)) continue;
-        await this.emitTaskStatus(
-          tracked,
-          'interrupted',
-          { activeTurnId: task.activeTurnId },
-        );
+      try {
+        const tasks = (await this.options.projection.read(summary.id)).state.tasks;
+        for (const task of tasks) {
+          const tracked = this.rememberTrackedTask(summary.id, task);
+          if (TERMINAL_TASK_STATUSES.has(task.status)) continue;
+          const child = await this.options.host.getThread(task.childThreadId);
+          const childActive = this.options.host.activeTask(task.childThreadId);
+          if (child && (childActive || child.activeTurnId)) continue;
+          await this.emitTaskStatus(
+            tracked,
+            'interrupted',
+            { activeTurnId: task.activeTurnId },
+          );
+        }
+      } catch (error) {
+        this.options.onProjectionFailure?.(summary.id, error);
       }
     }
   }
 
   private async spawnAgent(
     input: Record<string, unknown>,
-    context: RuntimeToolExecutionContext,
-  ): Promise<CollaborationExecutionResult> {
+    context: CollaborationToolExecutionContext,
+  ): Promise<CollaborationToolExecutionResult> {
     const prompt = requiredString(input, ['prompt', 'task', 'input'], 'prompt');
-    const parent = await this.options.threadStore.getThread(context.threadId);
+    const parent = await this.options.host.getThread(context.threadId);
     if (!parent) throw new Error(`Thread not found: ${context.threadId}`);
     assertSpawnCallerIsRootThread(parent, context.threadId);
 
-    const existingTasks = parent.collaborationTasks ?? [];
+    const existingTasks = (await this.options.projection.read(context.threadId)).state.tasks;
     const activeChildCount = this.activeCollaborationChildCount(existingTasks);
     if (activeChildCount >= MAX_ACTIVE_COLLABORATION_CHILDREN) {
       throw new Error(
@@ -327,35 +343,38 @@ export class RuntimeCollaborationCoordinator {
       );
     }
 
-    const child = await this.options.threadStore.createThread({
+    const child = await this.options.host.createThread({
       title: collaborationTitle(input, prompt),
       projectId: parent.projectId,
       parentThreadId: context.threadId,
       memoryMode: parent.memoryMode,
       modelBinding: parent.modelBinding ? { ...parent.modelBinding } : undefined,
     });
-    const identity: RuntimeAgentIdentity = {
+    const identity: CollaborationAgentIdentity = {
       displayName: collaborationDisplayName(input, existingTasks),
       avatarSeed: avatarSeedForThread(child.id),
     };
-    const task: RuntimeCollaborationTask = {
-      id: this.options.ids.id('task'),
+    const createdAt = this.options.host.now().toISOString();
+    const task: CollaborationTask = {
+      id: this.options.host.id('task'),
       childThreadId: child.id,
       title: child.title,
       objective: prompt,
       identity,
       status: 'queued',
-      createdAt: this.options.clock.now().toISOString(),
-      updatedAt: this.options.clock.now().toISOString(),
+      createdAt,
+      updatedAt: createdAt,
     };
     // 先落盘账本（queued），再启动 child turn，保证父线程事件顺序：created 在 running 之前。
-    await this.options.appendEvent(context.threadId, {
-      id: this.options.ids.id('event'),
-      threadId: context.threadId,
-      type: 'collaboration.task_created',
-      createdAt: task.createdAt,
-      payload: { task },
-    });
+    await this.options.host.appendEvents(context.threadId, [createFeatureEvent(
+      collaborationTaskCreatedEvent,
+      {
+        id: this.options.host.id('event'),
+        threadId: context.threadId,
+        createdAt: task.createdAt,
+      },
+      task,
+    )]);
 
     const children = this.rememberPendingChild(context.threadId, child.id);
     const tracked: TrackedCollaborationTask = {
@@ -367,7 +386,7 @@ export class RuntimeCollaborationCoordinator {
     this.trackedTasksByChild.set(child.id, tracked);
     let started: { turnId: string };
     try {
-      started = await this.options.startTurn(child.id, { name: identity.displayName, prompt, title: child.title });
+      started = await this.options.host.startTurn(child.id, { name: identity.displayName, prompt, title: child.title });
     } catch (error) {
       children.delete(child.id);
       if (!children.size) this.childrenByParentThread.delete(context.threadId);
@@ -379,8 +398,8 @@ export class RuntimeCollaborationCoordinator {
     tracked.lastStatus = 'running';
     // 显式落盘 running，避免 child 的 turn.started 观察事件与 spawn 返回之间出现空窗。
     await this.emitTaskStatus(tracked, 'running', { activeTurnId: started.turnId });
-    const data = {
-      tool: 'spawn_agent',
+    const modelData = {
+      tool: 'spawn_agent' as const,
       senderThreadId: context.threadId,
       childThreadId: child.id,
       newThreadId: child.id,
@@ -389,8 +408,18 @@ export class RuntimeCollaborationCoordinator {
       title: task.title,
       objective: prompt,
       identity,
-      status: 'running',
+      status: 'running' as const,
     };
+    const data = collaborationSpawnResultEnvelope({
+      childThreadId: child.id,
+      identity,
+      objective: prompt,
+      parentThreadId: context.threadId,
+      status: 'running',
+      taskId: task.id,
+      title: task.title,
+      turnId: started.turnId,
+    });
     return {
       collabToolCall: {
         tool: 'spawn_agent',
@@ -400,8 +429,8 @@ export class RuntimeCollaborationCoordinator {
         prompt,
         agentStatus: 'running',
       },
-      content: JSON.stringify(data),
-      data,
+      content: JSON.stringify(modelData),
+      data: { ...data },
       preview: `Spawned child agent ${identity.displayName}.`,
     };
   }
@@ -409,21 +438,24 @@ export class RuntimeCollaborationCoordinator {
   private async sendInput(
     name: 'send_input' | 'resume_agent',
     input: Record<string, unknown>,
-    context: RuntimeToolExecutionContext,
-  ): Promise<CollaborationExecutionResult> {
+    context: CollaborationToolExecutionContext,
+  ): Promise<CollaborationToolExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
     const content = requiredString(input, ['content', 'prompt', 'input'], 'content');
     await this.requireDirectChild(receiverThreadId, context);
     const resume = name === 'resume_agent';
-    const parent = resume ? await this.options.threadStore.getThread(context.threadId) : null;
+    const parent = resume ? await this.options.host.getThread(context.threadId) : null;
     if (resume && !parent) throw new Error(`Thread not found: ${context.threadId}`);
-    const matchingTask = parent?.collaborationTasks?.find((task) => task.childThreadId === receiverThreadId);
+    const parentTasks = parent
+      ? (await this.options.projection.read(context.threadId)).state.tasks
+      : [];
+    const matchingTask = parentTasks.find((task) => task.childThreadId === receiverThreadId);
     const tracked = matchingTask
       ? this.rememberTrackedTask(context.threadId, matchingTask)
       : this.trackedTasksByChild.get(receiverThreadId);
-    const receiverActive = Boolean(this.options.activeTask(receiverThreadId));
+    const receiverActive = Boolean(this.options.host.activeTask(receiverThreadId));
     if (resume && parent && !receiverActive) {
-      const currentActiveCount = this.activeCollaborationChildCount(parent.collaborationTasks ?? []);
+      const currentActiveCount = this.activeCollaborationChildCount(parentTasks);
       const targetAlreadyCounted = Boolean(
         matchingTask && !TERMINAL_TASK_STATUSES.has(matchingTask.status),
       );
@@ -434,7 +466,7 @@ export class RuntimeCollaborationCoordinator {
         );
       }
     }
-    const delivered = await this.options.deliverMailbox(receiverThreadId, {
+    const delivered = await this.options.host.deliverMailbox(receiverThreadId, {
       content,
       deliveryMode: resume ? 'trigger_turn' : 'queue_only',
       fromAgentId: context.threadId,
@@ -474,16 +506,16 @@ export class RuntimeCollaborationCoordinator {
 
   private async waitForAgent(
     input: Record<string, unknown>,
-    context: RuntimeToolExecutionContext,
-  ): Promise<CollaborationExecutionResult> {
+    context: CollaborationToolExecutionContext,
+  ): Promise<CollaborationToolExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
     // 等待自己的当前 turn 用于自检，属于协作工具既有语义；其余目标必须是直属 child。
     if (receiverThreadId !== context.threadId) {
       await this.requireDirectChild(receiverThreadId, context);
     }
     const wait = await this.waitForThread(receiverThreadId, context, collaborationTimeoutMs(input));
-    const thread = await this.options.threadStore.getThread(receiverThreadId);
-    const activeTurnId = this.options.activeTask(receiverThreadId)?.turnId ?? null;
+    const thread = await this.options.host.getThread(receiverThreadId);
+    const activeTurnId = this.options.host.activeTask(receiverThreadId)?.turnId ?? null;
     const output = wait.status === 'running' ? '' : childAgentOutput(thread);
     if (receiverThreadId !== context.threadId && wait.status !== 'running') {
       // The terminal result is now present in this tool response, so forced convergence must not
@@ -515,13 +547,13 @@ export class RuntimeCollaborationCoordinator {
 
   private async closeAgent(
     input: Record<string, unknown>,
-    context: RuntimeToolExecutionContext,
-  ): Promise<CollaborationExecutionResult> {
+    context: CollaborationToolExecutionContext,
+  ): Promise<CollaborationToolExecutionResult> {
     const receiverThreadId = requiredString(input, ['thread_id', 'threadId', 'receiver_thread_id', 'receiverThreadId'], 'thread_id');
     const reason = optionalString(input, ['reason']);
     await this.requireDirectChild(receiverThreadId, context);
-    const active = this.options.activeTask(receiverThreadId);
-    const cancelled = active ? await this.options.cancelTurn(receiverThreadId, active.turnId) : false;
+    const active = this.options.host.activeTask(receiverThreadId);
+    const cancelled = active ? await this.options.host.cancelTurn(receiverThreadId, active.turnId) : false;
     this.removePendingChild(context.threadId, receiverThreadId);
     const data = {
       tool: 'close_agent',
@@ -547,9 +579,9 @@ export class RuntimeCollaborationCoordinator {
   /** 校验协作工具目标确实是调用者的直属 child（kind 不参与判断，parentThreadId 即权威）。 */
   private async requireDirectChild(
     receiverThreadId: string,
-    context: RuntimeToolExecutionContext,
+    context: CollaborationToolExecutionContext,
   ): Promise<RuntimeThread> {
-    const receiver = await this.options.threadStore.getThread(receiverThreadId);
+    const receiver = await this.options.host.getThread(receiverThreadId);
     if (!receiver) throw new Error(`Thread not found: ${receiverThreadId}`);
     if (receiver.parentThreadId !== context.threadId) {
       throw new Error(`Thread ${receiverThreadId} is not a direct child of thread ${context.threadId}.`);
@@ -557,10 +589,10 @@ export class RuntimeCollaborationCoordinator {
     return receiver;
   }
 
-  private activeCollaborationChildCount(tasks: RuntimeCollaborationTask[]): number {
+  private activeCollaborationChildCount(tasks: readonly CollaborationTask[]): number {
     return tasks.filter((task) => (
       !TERMINAL_TASK_STATUSES.has(task.status)
-      || Boolean(this.options.activeTask(task.childThreadId))
+      || Boolean(this.options.host.activeTask(task.childThreadId))
     )).length;
   }
 
@@ -582,7 +614,7 @@ export class RuntimeCollaborationCoordinator {
 
   private rememberTrackedTask(
     parentThreadId: string,
-    task: RuntimeCollaborationTask,
+    task: CollaborationTask,
   ): TrackedCollaborationTask {
     const existing = this.trackedTasksByChild.get(task.childThreadId);
     if (existing) return existing;
@@ -601,38 +633,42 @@ export class RuntimeCollaborationCoordinator {
   private async trackedTaskForChild(childThreadId: string): Promise<TrackedCollaborationTask | null> {
     const existing = this.trackedTasksByChild.get(childThreadId);
     if (existing) return existing;
-    const child = await this.options.threadStore.getThread(childThreadId);
+    const child = await this.options.host.getThread(childThreadId);
     if (!child?.parentThreadId || child.kind === 'side') return null;
-    const parent = await this.options.threadStore.getThread(child.parentThreadId);
-    const task = parent?.collaborationTasks?.find((candidate) => candidate.childThreadId === childThreadId);
+    const parent = await this.options.host.getThread(child.parentThreadId);
+    if (!parent) return null;
+    const task = (await this.options.projection.read(child.parentThreadId)).state.tasks
+      .find((candidate) => candidate.childThreadId === childThreadId);
     return task ? this.rememberTrackedTask(child.parentThreadId, task) : null;
   }
 
   private async emitTaskStatus(
     tracked: TrackedCollaborationTask,
-    status: RuntimeCollaborationTaskStatus,
+    status: CollaborationTaskStatus,
     patch: { activeTurnId?: string | undefined; error?: string; resultPreview?: string } = {},
   ): Promise<void> {
     if (TERMINAL_TASK_STATUSES.has(tracked.lastStatus) && TERMINAL_TASK_STATUSES.has(status)) return;
     tracked.lastStatus = status;
-    const payload: RuntimeEvent['payload'] & { status: RuntimeCollaborationTaskStatus; taskId: string } = {
+    const payload = {
       taskId: tracked.taskId,
       status,
       ...(patch.activeTurnId ? { activeTurnId: patch.activeTurnId } : {}),
       ...(patch.resultPreview !== undefined ? { resultPreview: patch.resultPreview } : {}),
       ...(patch.error ? { error: patch.error } : {}),
     };
-    await this.options.appendEvent(tracked.parentThreadId, {
-      id: this.options.ids.id('event'),
-      threadId: tracked.parentThreadId,
-      type: 'collaboration.task_status_changed',
-      createdAt: this.options.clock.now().toISOString(),
+    await this.options.host.appendEvents(tracked.parentThreadId, [createFeatureEvent(
+      collaborationTaskStatusChangedEvent,
+      {
+        id: this.options.host.id('event'),
+        threadId: tracked.parentThreadId,
+        createdAt: this.options.host.now().toISOString(),
+      },
       payload,
-    });
+    )]);
   }
 
   private async childResultPreview(childThreadId: string): Promise<string | undefined> {
-    const child = await this.options.threadStore.getThread(childThreadId);
+    const child = await this.options.host.getThread(childThreadId);
     const output = child ? childAgentOutput(child) : '';
     if (output) return clipPreview(output, 240);
     return child?.lastMessagePreview ? clipPreview(child.lastMessagePreview, 240) : undefined;
@@ -640,12 +676,12 @@ export class RuntimeCollaborationCoordinator {
 
   private async waitForThread(
     threadId: string,
-    context: RuntimeToolExecutionContext,
+    context: CollaborationToolExecutionContext,
     timeoutMs: number,
   ): Promise<{ status: 'idle' | 'running' | 'failed'; timedOut: boolean }> {
-    const active = this.options.activeTask(threadId);
+    const active = this.options.host.activeTask(threadId);
     if (!active) {
-      if (!await this.options.threadStore.getThread(threadId)) throw new Error(`Thread not found: ${threadId}`);
+      if (!await this.options.host.getThread(threadId)) throw new Error(`Thread not found: ${threadId}`);
       return { status: 'idle', timedOut: false };
     }
     if (active.threadId === context.threadId && active.turnId === context.turnId) {
@@ -654,7 +690,7 @@ export class RuntimeCollaborationCoordinator {
     const wait = await waitForTask(active.done, context.signal, timeoutMs);
     if (wait === 'failed') return { status: 'failed', timedOut: false };
     if (wait === 'timeout') return { status: 'running', timedOut: true };
-    return { status: this.options.activeTask(threadId) ? 'running' : 'idle', timedOut: false };
+    return { status: this.options.host.activeTask(threadId) ? 'running' : 'idle', timedOut: false };
   }
 }
 
@@ -722,7 +758,7 @@ function collaborationTitle(record: Record<string, unknown>, prompt: string): st
 /** 短展示名：优先工具参数 name，其次按同父线程现有任务数生成 Agent N，并做去重。 */
 function collaborationDisplayName(
   record: Record<string, unknown>,
-  existingTasks: RuntimeCollaborationTask[],
+  existingTasks: readonly CollaborationTask[],
 ): string {
   const requested = optionalString(record, ['name']).slice(0, 24);
   const existingNames = new Set(existingTasks.map((task) => task.identity.displayName));
@@ -762,6 +798,33 @@ function collaborationTimeoutMs(record: Record<string, unknown>): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function cloneCollaborationTask(task: CollaborationTask): CollaborationTask {
+  return Object.freeze({
+    ...task,
+    identity: Object.freeze({ ...task.identity }),
+  });
+}
+
+function recordInput(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function portableRuntimeAssistantMessageText(
+  message: Pick<RuntimeMessage, 'content' | 'streamParts'>,
+): string {
+  return message.streamParts === undefined
+    ? visibleTextOutsideThinkTags(message.content)
+    : message.content;
+}
+
+function neutralizePromptClosingTags(value: string, tagNames: readonly string[]): string {
+  if (!value || !tagNames.length) return value;
+  const alternatives = tagNames.map((tag) => tag.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('|');
+  return value.replace(new RegExp(`</(?:${alternatives})`, 'giu'), (match) => `<\\/${match.slice(2)}`);
 }
 
 async function waitForTask(

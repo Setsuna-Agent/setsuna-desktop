@@ -85,7 +85,7 @@ export const createBrowserPanel = (id: string, url = DEFAULT_BROWSER_URL): Deskt
   // Never let that object become a relative `[object Object]` renderer URL.
   const initialUrl = typeof url === 'string' && url.trim() ? url.trim() : DEFAULT_BROWSER_URL;
   return {
-    browser: { faviconUrl: null, loading: true, url: initialUrl },
+    browser: { faviconUrl: null, loading: initialUrl !== DEFAULT_BROWSER_URL, url: initialUrl },
     id,
     type: 'browser',
     title: '新标签页',

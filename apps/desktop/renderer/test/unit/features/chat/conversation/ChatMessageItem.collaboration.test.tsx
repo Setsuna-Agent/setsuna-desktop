@@ -1,10 +1,38 @@
 // @vitest-environment happy-dom
 
-import type { RuntimeCollaborationTask, RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage, RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
+
+vi.mock('../../../../../src/composition/feature-view-registries.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../../../src/composition/feature-view-registries.js')>();
+  return {
+    ...original,
+    useRendererFeatureViews: () => ({
+      toolResults: {
+        resolve(value: unknown) {
+          if (!value || typeof value !== 'object'
+            || (value as { resultKind?: unknown }).resultKind !== 'test.persistent-result') return null;
+          return {
+            featureId: 'test-feature',
+            payload: {},
+            contribution: {
+              id: 'test.persistent-result-view',
+              resultKind: 'test.persistent-result',
+              major: 1,
+              payload: { parse: (payload: unknown) => payload },
+              presentation: 'replace',
+              workHistoryPresentation: 'persistent',
+              render: () => <div className="subagent-task-card" />,
+            },
+          };
+        },
+      },
+    }),
+  };
+});
 
 afterEach(() => {
   cleanup();
@@ -19,31 +47,35 @@ describe('MessageItem collaboration updates', () => {
       if (message.includes('same key') || message.includes('unique "key"')) keyWarnings.push(message);
     });
     const readBefore = toolRun('read_before_spawn', 'workspace_read_file');
-    const spawn = {
+    const persistentResult = {
       ...toolRun('spawn_runtime', 'spawn_agent'),
-      data: { childThreadId: 'child_runtime' },
+      data: { resultKind: 'test.persistent-result', resultMajor: 1, payload: {} },
     };
     const readAfter = toolRun('read_after_spawn', 'workspace_read_file');
-    const view = render(messageItem([readBefore, spawn]));
+    const view = render(messageItem([readBefore, persistentResult]));
 
-    view.rerender(messageItem([readBefore, spawn, readAfter]));
+    view.rerender(messageItem([readBefore, persistentResult, readAfter]));
 
     const bodyChildren = [...(view.container.querySelector('.chat-work-history__body')?.children ?? [])];
     expect(bodyChildren.map((element) => (
       element.classList.contains('subagent-task-card') ? 'subagent' : 'tools'
     ))).toEqual(['tools', 'subagent', 'tools']);
     expect(keyWarnings).toEqual([]);
+
+    view.rerender(messageItem([readBefore, persistentResult, readAfter], true));
+    expect(view.container.querySelector('.subagent-task-card')).not.toBeNull();
+    expect(view.container.querySelectorAll('.chat-tool-runs')).toHaveLength(0);
   });
 });
 
-function messageItem(toolRuns: RuntimeToolRun[]) {
+function messageItem(toolRuns: RuntimeToolRun[], completed = false) {
   const segment: RuntimeMessage = {
     id: 'assistant_collaboration_tools',
     turnId: 'turn_collaboration_tools',
     role: 'assistant',
     content: '',
     createdAt: '2026-08-21T00:00:00.000Z',
-    status: 'streaming',
+    status: 'complete',
     phase: 'commentary',
     toolRuns,
   };
@@ -52,26 +84,23 @@ function messageItem(toolRuns: RuntimeToolRun[]) {
     id: 'assistant_item',
     handledSteerMessageIds: [],
     messageIds: [segment.id],
-    segments: [segment],
+    segments: completed ? [segment, {
+      id: 'assistant_collaboration_answer',
+      turnId: segment.turnId,
+      role: 'assistant',
+      content: 'Done.',
+      createdAt: '2026-08-21T00:00:01.000Z',
+      status: 'complete',
+      phase: 'final_answer',
+    }] : [segment],
     steerMessages: [],
     turnId: segment.turnId,
   };
-  const collaborationTasks: RuntimeCollaborationTask[] = [{
-    id: 'task_runtime',
-    childThreadId: 'child_runtime',
-    title: 'Runtime explorer',
-    objective: 'Inspect the runtime architecture.',
-    identity: { displayName: 'runtime-explorer', avatarSeed: 'runtime-seed' },
-    status: 'running',
-    createdAt: '2026-08-21T00:00:00.000Z',
-    updatedAt: '2026-08-21T00:00:01.000Z',
-  }];
   return (
     <MessageItem
       activeAssistantItemId={item.id}
-      activeTurnId={segment.turnId ?? null}
+      activeTurnId={completed ? null : segment.turnId ?? null}
       assistantItemIdByTurnId={new Map()}
-      collaborationTasks={collaborationTasks}
       deleteMode={false}
       editingDraft=""
       editingMessageId={null}
