@@ -137,6 +137,7 @@ Contracts 不直接读写文件，但定义持久化内容的 JSON shape：
 
 ```text
 <dataRoot>/
+├── window-preferences.json           # main-owned window behavior
 ├── window-state.json                 # main internal
 ├── secure-credentials.json           # main vault internal
 ├── update-download-sources.json      # updater contract/internal

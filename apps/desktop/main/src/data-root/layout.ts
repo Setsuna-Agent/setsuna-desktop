@@ -26,6 +26,7 @@ export function desktopDataLayout(dataRoot: string) {
     networkProxyPath: path.join(root, 'network-proxies.json'),
     webDavSyncConfigPath: path.join(root, 'webdav-sync.json'),
     updateSourcesPath: path.join(root, 'update-download-sources.json'),
+    windowPreferencesPath: path.join(root, 'window-preferences.json'),
     windowStatePath: path.join(root, 'window-state.json'),
     markerPath: path.join(root, DATA_ROOT_MARKER_FILE_NAME),
   };

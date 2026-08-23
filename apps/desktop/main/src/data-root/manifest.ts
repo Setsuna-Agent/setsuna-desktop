@@ -202,6 +202,7 @@ export function migrationCategory(relativePath: string): DesktopDataMigrationCat
     normalized === 'network-proxies.json'
     || normalized === 'secure-credentials.json'
     || normalized === 'webdav-sync.json'
+    || normalized === 'window-preferences.json'
   ) {
     return 'settings_credentials';
   }
