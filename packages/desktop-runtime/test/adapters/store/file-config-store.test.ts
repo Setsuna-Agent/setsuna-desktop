@@ -223,7 +223,7 @@ describe('file config store', () => {
       .rejects.toThrow('Local models');
   });
 
-  it('persists task model references, migrates legacy memory models, and supports clearing assignments', async () => {
+  it('keeps host task models separate while the Memory adapter imports and retires legacy fields', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);
     const initial = await store.getConfig();
@@ -232,24 +232,10 @@ describe('file config store', () => {
     if (!provider || !model) throw new Error('Expected the default provider and model fixtures.');
 
     await expect(store.saveConfig({
-      memory: {
-        extractModel: model.code,
-        consolidationModel: model.code,
-      },
-    })).resolves.toMatchObject({
-      taskModels: {
-        memoryExtraction: { providerId: provider.id, modelId: model.id },
-        memoryConsolidation: { providerId: provider.id, modelId: model.id },
-      },
-    });
-
-    await expect(store.saveConfig({
       taskModels: {
         threadTitle: { providerId: provider.id, modelId: model.id },
         review: { providerId: provider.id, modelId: model.id },
         approvalReview: { providerId: provider.id, modelId: model.id },
-        memoryExtraction: { providerId: provider.id, modelId: model.id },
-        memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     })).resolves.toMatchObject({
@@ -257,30 +243,49 @@ describe('file config store', () => {
         threadTitle: { providerId: provider.id, modelId: model.id },
         review: { providerId: provider.id, modelId: model.id },
         approvalReview: { providerId: provider.id, modelId: model.id },
-        memoryExtraction: { providerId: provider.id, modelId: model.id },
-        memoryConsolidation: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     });
 
-    const stored = JSON.parse(await readFile(path.join(dataDir, 'config.json'), 'utf8')) as {
-      memory?: Record<string, unknown>;
+    const configPath = path.join(dataDir, 'config.json');
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    stored.memory = {
+      useMemories: false,
+      generateMemories: true,
+      disableOnExternalContext: true,
+      extractModel: model.code,
     };
-    expect(stored.memory).not.toHaveProperty('extractModel');
-    expect(stored.memory).not.toHaveProperty('consolidationModel');
+    stored.memoryEnabled = true;
+    stored.taskModels = {
+      ...(stored.taskModels as Record<string, unknown>),
+      memoryExtraction: { providerId: provider.id, modelId: model.id },
+      memoryConsolidation: { providerId: provider.id, modelId: model.id },
+    };
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
 
-    await expect(store.saveConfig({
-      taskModels: { memoryExtraction: null },
-    })).resolves.toMatchObject({
-      taskModels: {
-        threadTitle: { providerId: provider.id, modelId: model.id },
-        review: { providerId: provider.id, modelId: model.id },
-        approvalReview: { providerId: provider.id, modelId: model.id },
-        memoryConsolidation: { providerId: provider.id, modelId: model.id },
-        contextCompaction: { providerId: provider.id, modelId: model.id },
+    const legacy = store.memoryLegacySettingsAdapter();
+    await expect(legacy.read()).resolves.toMatchObject({
+      value: {
+        useMemories: false,
+        generateMemories: true,
+        extractionModel: { providerId: provider.id, modelId: model.id },
+        consolidationModel: { providerId: provider.id, modelId: model.id },
+        extractionModelCode: model.code,
       },
     });
-    expect((await store.getConfig()).taskModels).not.toHaveProperty('memoryExtraction');
+    expect((await store.getConfig()).taskModels).toEqual({
+      threadTitle: { providerId: provider.id, modelId: model.id },
+      review: { providerId: provider.id, modelId: model.id },
+      approvalReview: { providerId: provider.id, modelId: model.id },
+      contextCompaction: { providerId: provider.id, modelId: model.id },
+    });
+
+    await legacy.retire();
+    const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    expect(migrated).not.toHaveProperty('memory');
+    expect(migrated).not.toHaveProperty('memoryEnabled');
+    expect(migrated.taskModels).not.toHaveProperty('memoryExtraction');
+    expect(migrated.taskModels).not.toHaveProperty('memoryConsolidation');
   });
 
   it('normalizes missing Anthropic output limits to the provider-specific fallback', async () => {

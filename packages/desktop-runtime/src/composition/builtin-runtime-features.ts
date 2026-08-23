@@ -4,6 +4,7 @@ import { browserRuntimeFeature } from '@setsuna-desktop/feature-browser/runtime'
 import { collaborationRuntimeFeature } from '@setsuna-desktop/feature-collaboration/runtime';
 import { imageGenerationRuntimeFeature } from '@setsuna-desktop/feature-image-generation/runtime';
 import { goalRuntimeFeature } from '@setsuna-desktop/feature-goal/runtime';
+import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import { visionRecognitionRuntimeFeature } from '@setsuna-desktop/feature-vision-recognition/runtime';
 
 /**
@@ -15,5 +16,6 @@ export const builtinRuntimeFeatures = [
   mountRuntimeFeature(collaborationRuntimeFeature, { criticality: 'optional' }),
   mountRuntimeFeature(imageGenerationRuntimeFeature, { criticality: 'optional' }),
   mountRuntimeFeature(goalRuntimeFeature, { criticality: 'optional' }),
+  mountRuntimeFeature(memoryRuntimeFeature, { criticality: 'optional' }),
   mountRuntimeFeature(visionRecognitionRuntimeFeature, { criticality: 'optional' }),
 ] as const satisfies readonly RuntimeFeatureMount[];

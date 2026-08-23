@@ -4,6 +4,7 @@ import { browserRendererFeature } from '@setsuna-desktop/feature-browser/rendere
 import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
+import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
 
@@ -13,6 +14,7 @@ export const builtinRendererFeatures = [
   mountRendererFeature(collaborationRendererFeature, { criticality: 'optional' }),
   mountRendererFeature(imageGenerationRendererFeature, { criticality: 'optional' }),
   mountRendererFeature(goalRendererFeature, { criticality: 'optional' }),
+  mountRendererFeature(memoryRendererFeature, { criticality: 'optional' }),
   mountRendererFeature(terminalRendererFeature, { criticality: 'required' }),
   mountRendererFeature(visionRecognitionRendererFeature, { criticality: 'optional' }),
 ] as const satisfies readonly RendererFeatureMount[];

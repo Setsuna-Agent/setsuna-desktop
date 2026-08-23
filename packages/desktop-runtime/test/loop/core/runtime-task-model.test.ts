@@ -3,19 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { runtimeTaskModelRequest } from '../../../src/loop/core/runtime-task-model.js';
 
 describe('runtime task model selection', () => {
-  it('resolves a task to its configured provider and model', () => {
-    const config = taskModelConfig();
-
-    expect(runtimeTaskModelRequest(
-      config,
-      'memoryExtraction',
-      'passive-memory-extraction',
-    )).toEqual({
-      model: 'background-model-code',
-      providerId: 'background-provider',
-    });
-  });
-
   it('resolves the dedicated thread title model', () => {
     const config = taskModelConfig();
 
@@ -61,21 +48,9 @@ describe('runtime task model selection', () => {
 
     expect(runtimeTaskModelRequest(
       config,
-      'memoryExtraction',
-      'passive-memory-extraction',
-    )).toEqual({ model: 'passive-memory-extraction' });
-  });
-
-  it('keeps legacy memory model strings working until they are migrated', () => {
-    const config = taskModelConfig();
-    delete config.taskModels;
-    config.memory.extractModel = 'legacy-extract-model';
-
-    expect(runtimeTaskModelRequest(
-      config,
-      'memoryExtraction',
-      'passive-memory-extraction',
-    )).toEqual({ model: 'legacy-extract-model' });
+      'threadTitle',
+      'chat-model-code',
+    )).toEqual({ model: 'chat-model-code' });
   });
 });
 
@@ -124,12 +99,6 @@ function taskModelConfig(): RuntimeConfigState {
       },
     ],
     globalPrompt: '',
-    memory: {
-      useMemories: true,
-      generateMemories: true,
-      disableOnExternalContext: false,
-    },
-    memoryEnabled: true,
     taskModels: {
       threadTitle: {
         providerId: 'background-provider',
@@ -140,10 +109,6 @@ function taskModelConfig(): RuntimeConfigState {
         modelId: 'background-model',
       },
       approvalReview: {
-        providerId: 'background-provider',
-        modelId: 'background-model',
-      },
-      memoryExtraction: {
         providerId: 'background-provider',
         modelId: 'background-model',
       },

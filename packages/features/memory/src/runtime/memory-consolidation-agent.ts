@@ -7,11 +7,13 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { ModelClient } from '../../ports/model-client.js';
-import type { ToolExecutionContext, ToolExecutionResult, ToolHost } from '../../ports/tool-host.js';
-import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
-import { recordInput } from '../../shared/unknown.js';
-import { addRuntimeUsage, runtimeUsageTokenCount } from '../core/runtime-usage.js';
+import type { MemoryRuntimeHost } from '../contracts/capabilities.js';
+import { resolveConfinedPathWithoutSymlinks } from './path-confinement.js';
+import {
+  addRuntimeUsage,
+  recordInput,
+  runtimeUsageTokenCount,
+} from './runtime-helpers.js';
 
 export type MemoryConsolidationAgentResult = {
   rounds: number;
@@ -19,7 +21,7 @@ export type MemoryConsolidationAgentResult = {
 };
 
 export type RunMemoryConsolidationAgentInput = {
-  modelClient: ModelClient;
+  streamModel: MemoryRuntimeHost['streamModel'];
   model?: string;
   providerId?: string;
   root: string;
@@ -59,12 +61,7 @@ async function runMemoryConsolidationRollout(
   signal: AbortSignal,
 ): Promise<MemoryConsolidationAgentResult> {
   const host = new MemoryConsolidationToolHost(input.root);
-  const context: ToolExecutionContext = {
-    threadId: 'internal:memory_consolidation',
-    permissionProfile: 'workspace-write',
-    signal,
-  };
-  const tools = await host.listTools(context);
+  const tools = await host.listTools();
   const messages: RuntimeMessage[] = [
     modelMessage('memory_consolidation_system', 'system', consolidationSystemPrompt(), input.now()),
     modelMessage('memory_consolidation_user', 'user', buildConsolidationPrompt(input.root), input.now()),
@@ -81,7 +78,7 @@ async function runMemoryConsolidationRollout(
 
     const assistantId = `memory_consolidation_assistant_${rounds}`;
     const { text, toolCalls, usage: roundUsage } = await runConsolidationModelRound({
-      modelClient: input.modelClient,
+      streamModel: input.streamModel,
       model: input.model,
       providerId: input.providerId,
       messages,
@@ -104,10 +101,7 @@ async function runMemoryConsolidationRollout(
     for (const toolCall of toolCalls) {
       await assertHeartbeat(input.heartbeat);
       throwIfAborted(signal);
-      const result = await host.runTool(toolCall.name, parseToolArguments(toolCall.arguments), {
-        ...context,
-        toolCallId: toolCall.id,
-      });
+      const result = await host.runTool(toolCall.name, parseToolArguments(toolCall.arguments));
       messages.push({
         id: `memory_consolidation_tool_${toolCall.id}`,
         role: 'tool',
@@ -143,10 +137,10 @@ class MemoryConsolidationRolloutBudget {
   }
 }
 
-class MemoryConsolidationToolHost implements ToolHost {
+class MemoryConsolidationToolHost {
   constructor(private readonly root: string) {}
 
-  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+  async listTools(): Promise<RuntimeToolDefinition[]> {
     return [
       {
         name: 'list_directory',
@@ -188,7 +182,7 @@ class MemoryConsolidationToolHost implements ToolHost {
     ];
   }
 
-  async runTool(name: string, input: unknown, _context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  async runTool(name: string, input: unknown): Promise<{ content: string }> {
     const args = recordInput(input);
     if (name === 'list_directory') {
       const target = resolveMemoryPath(this.root, stringArg(args.path, '.'));
@@ -258,7 +252,7 @@ class MemoryConsolidationToolHost implements ToolHost {
 }
 
 async function runConsolidationModelRound(input: {
-  modelClient: ModelClient;
+  streamModel: MemoryRuntimeHost['streamModel'];
   model?: string;
   providerId?: string;
   messages: RuntimeMessage[];
@@ -279,7 +273,7 @@ async function runConsolidationModelRound(input: {
   let text = '';
   let toolCalls: RuntimeToolCall[] = [];
   let usage: RuntimeUsage | undefined;
-  for await (const event of input.modelClient.stream(request)) {
+  for await (const event of input.streamModel(request)) {
     throwIfAborted(input.signal);
     if (event.type === 'text_delta') text += event.text;
     if (event.type === 'tool_calls') toolCalls = event.toolCalls;

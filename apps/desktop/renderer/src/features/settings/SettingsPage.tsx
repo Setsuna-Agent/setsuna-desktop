@@ -3,13 +3,12 @@ import type {
   RuntimeAvailableModelsResponse,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
-  RuntimeMemoryPreview,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
-  WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { RegisteredSettingsView, RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import {
   Archive,
   Bot,
@@ -19,6 +18,7 @@ import {
   Info,
   Keyboard,
   Network,
+  Puzzle,
   SlidersHorizontal,
   Sparkles,
   Wrench,
@@ -26,7 +26,9 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import type { DesktopUpdaterStateView } from '../../app/controller/useDesktopUpdater.js';
 import type { DesktopNetworkProxyStateView } from '../../app/controller/useDesktopNetworkProxy.js';
+import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
+import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import {
@@ -41,12 +43,17 @@ import { GeneralSettings } from './sections/GeneralSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
 import { RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
-import type { RuntimePreferenceInput, SettingsSectionId } from './settings-types.js';
+import type {
+  CoreSettingsSectionId,
+  RuntimePreferenceInput,
+  SettingsSectionId,
+} from './settings-types.js';
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
 import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 import { WebDavSyncSettings } from './webdav-sync/WebDavSyncSettings.js';
 import { SettingsPageHeading } from './SettingsPageHeading.js';
+import { SettingsSectionExtensionOutlet } from './SettingsSectionExtensionOutlet.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 
@@ -94,7 +101,7 @@ const settingsSectionGroups = [
   },
 ] satisfies readonly SettingsSidebarGroup[];
 
-const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
+const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
   general: 'settings.section.general',
   shortcuts: 'settings.section.shortcuts',
   personalization: 'settings.section.personalization',
@@ -108,7 +115,7 @@ const settingsSectionLabelKeys: Record<SettingsSectionId, MessageKey> = {
   about: 'settings.section.about',
 };
 
-const settingsSectionDescriptionKeys: Partial<Record<SettingsSectionId, MessageKey>> = {
+const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, MessageKey>> = {
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
   networkProxy: 'settings.section.networkProxyDescription',
@@ -123,21 +130,15 @@ export function SettingsPage({
   archivedThreads,
   config,
   initialSection,
-  projects,
   skillExtraRoots,
   updater,
   usage,
-  memoryPreview,
-  memoryPreviewLoading,
   networkProxy,
   onBack,
   onFetchProviderModels,
   onSaveProviders,
   onSaveRuntimePreferences,
   onQueryUsage,
-  onPreviewMemories,
-  onDeleteMemory,
-  onResetMemories,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
   onRestoreArchivedThread,
@@ -146,12 +147,9 @@ export function SettingsPage({
   archivedThreads: RuntimeThreadSummary[];
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
-  projects: WorkspaceProject[];
   skillExtraRoots: string[];
   updater: DesktopUpdaterStateView;
   usage: RuntimeUsageResponse | null;
-  memoryPreview: RuntimeMemoryPreview | null;
-  memoryPreviewLoading: boolean;
   networkProxy: DesktopNetworkProxyStateView;
   onBack: () => void;
   onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
@@ -161,26 +159,34 @@ export function SettingsPage({
   ) => Promise<void>;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onQueryUsage: (query: RuntimeUsageQuery) => Promise<RuntimeUsageResponse>;
-  onPreviewMemories: () => Promise<RuntimeMemoryPreview>;
-  onDeleteMemory: (memoryId: string) => Promise<void>;
-  onResetMemories: () => Promise<void>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
   onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
   onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
+  const featureViews = useRendererFeatureViews();
+  const featureSections = featureViews.settings.list('settings');
   // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
   // 所以这里只需在挂载时取一次初始值。
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
   const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
+  const activeFeatureSection = featureSections.find((section) => section.sectionId === activeSection);
+  const activeSectionExtensions = featureViews.settings.listSectionExtensions(activeSection);
+  const translateFeature: RendererTranslate = t;
 
   useEffect(() => {
     if (activeSection !== 'localLlm') setLocalModelSaveState(idleSaveState());
   }, [activeSection]);
 
-  const content =
-    activeSection === 'general' ? (
+  const FeatureSettingsContent = activeFeatureSection?.render;
+  const content = FeatureSettingsContent ? (
+    <FeatureSettingsContent
+      sectionId={activeFeatureSection.sectionId}
+      translate={translateFeature}
+      ui={settingsViewUi}
+    />
+  ) : activeSection === 'general' ? (
       <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
     ) : activeSection === 'shortcuts' ? (
       <KeyboardShortcutsSettings />
@@ -221,35 +227,42 @@ export function SettingsPage({
       />
     ) : activeSection === 'personalization' ? (
       config ? (
-        <PersonalizationSettings
-          config={config}
-          projects={projects}
-          memoryPreview={memoryPreview}
-          memoryPreviewLoading={memoryPreviewLoading}
-          onSavePreferences={onSaveRuntimePreferences}
-          onPreview={onPreviewMemories}
-          onDelete={onDeleteMemory}
-          onReset={onResetMemories}
-        />
+        <PersonalizationSettings config={config} onSavePreferences={onSaveRuntimePreferences} />
       ) : (
         <EmptyState title={t('settings.configUnavailable')} />
       )
     ) : activeSection === 'about' ? (
       <AboutSettings updater={updater} />
-    ) : config ? (
+    ) : activeSection === 'runtime' && config ? (
       <RuntimePolicySettings
         config={config}
         skillExtraRoots={skillExtraRoots}
         onSave={onSaveRuntimePreferences}
         onSetSkillExtraRoots={onSetSkillExtraRoots}
       />
+    ) : activeSection === 'runtime' ? (
+      <EmptyState title={t('settings.configUnavailable')} />
     ) : (
       <EmptyState title={t('settings.configUnavailable')} />
     );
 
+  const coreSection = activeSection as CoreSettingsSectionId;
+  const coreDescriptionKey = settingsSectionDescriptionKeys[coreSection];
+  const title = activeFeatureSection
+    ? translateFeature(activeFeatureSection.titleKey as `feature.${string}`)
+    : t(settingsSectionLabelKeys[coreSection]);
+  const description = activeFeatureSection?.descriptionKey
+    ? translateFeature(activeFeatureSection.descriptionKey as `feature.${string}`)
+    : coreDescriptionKey ? t(coreDescriptionKey) : undefined;
+
   return (
     <>
-      <SettingsSidebar activeSection={activeSection} onBack={onBack} onSelectSection={setActiveSection} />
+      <SettingsSidebar
+        activeSection={activeSection}
+        featureSections={featureSections}
+        onBack={onBack}
+        onSelectSection={setActiveSection}
+      />
       <main className="desktop-settings-panel">
         <section
           className={`chat-user-settings__content ${
@@ -261,13 +274,19 @@ export function SettingsPage({
               action={activeSection === 'localLlm' && localModelSaveState.status === 'error' && localModelSaveState.message ? (
                 <AutoSaveStatus state={localModelSaveState} />
               ) : null}
-              description={settingsSectionDescriptionKeys[activeSection]
-                ? t(settingsSectionDescriptionKeys[activeSection])
-                : undefined}
-              title={t(settingsSectionLabelKeys[activeSection])}
+              description={description}
+              title={title}
             />
           )}
-          {content}
+          <SettingsSectionExtensionOutlet
+            key={activeSection}
+            extensions={activeSectionExtensions}
+            sectionId={activeSection}
+            translate={translateFeature}
+            ui={settingsViewUi}
+          >
+            {content}
+          </SettingsSectionExtensionOutlet>
         </section>
       </main>
     </>
@@ -276,10 +295,12 @@ export function SettingsPage({
 
 export function SettingsSidebar({
   activeSection,
+  featureSections,
   onBack,
   onSelectSection,
 }: {
   activeSection: SettingsSectionId;
+  featureSections: readonly RegisteredSettingsView[];
   onBack: () => void;
   onSelectSection: (section: SettingsSectionId) => void;
 }) {
@@ -320,7 +341,33 @@ export function SettingsSidebar({
             </div>
           );
         })}
+        {featureSections.length ? (
+          <div
+            aria-labelledby="settings-sidebar-group-features"
+            className="chat-user-settings__tab-group"
+            role="group"
+          >
+            <div id="settings-sidebar-group-features" className="chat-user-settings__tab-group-title">
+              {t('settings.group.features')}
+            </div>
+            {featureSections.map((section) => (
+              <button
+                key={section.sectionId}
+                className={activeSection === section.sectionId ? 'is-active' : ''}
+                type="button"
+                onClick={() => onSelectSection(section.sectionId)}
+              >
+                <Puzzle size={14} />
+                <span>{translateFeatureTitle(t, section.titleKey)}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </nav>
   );
+}
+
+function translateFeatureTitle(translate: ReturnType<typeof useI18n>['t'], key: string): string {
+  return (translate as RendererTranslate)(key as `feature.${string}`);
 }

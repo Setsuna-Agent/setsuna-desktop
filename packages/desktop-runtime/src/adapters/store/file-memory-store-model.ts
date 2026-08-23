@@ -6,7 +6,7 @@ import type {
   RuntimeMemorySourceLocation,
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1Status
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-memory/contracts';
 import path from 'node:path';
 import { isNodeErrorCode } from '../../shared/node-errors.js';
 import type { RenderedMemoryArtifacts } from './file-memory-store-artifacts.js';

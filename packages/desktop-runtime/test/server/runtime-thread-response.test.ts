@@ -83,8 +83,6 @@ function runtimeConfig(): RuntimeConfigState {
       provider('provider-b', 'model-b', 'model-b-code', 'openai-responses'),
     ],
     globalPrompt: '',
-    memory: { useMemories: false, generateMemories: false, disableOnExternalContext: true },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

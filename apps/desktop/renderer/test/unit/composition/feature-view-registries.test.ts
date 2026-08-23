@@ -7,11 +7,13 @@ import {
   mountRendererFeature,
   rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
+  rendererSettingsViewRegistryCapability,
   rendererToolResultViewRegistryCapability,
   type RendererFeatureEventFeed,
 } from '@setsuna-desktop/feature-core/renderer';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
+import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RendererSettingsViewRegistry,
@@ -52,6 +54,91 @@ describe('Renderer Feature view registries', () => {
     await first.finishDispose();
     expect(registry.find('capabilities', 'later')).toBeUndefined();
     await second.finishDispose();
+  });
+
+  it('orders host-section extensions and removes them with their Feature scope', async () => {
+    const registry = new RendererSettingsViewRegistry();
+    const first = scope('first-feature');
+    const second = scope('second-feature');
+    registry.registerSectionExtension(first.scope, {
+      id: 'later-preferences',
+      targetSectionId: 'personalization',
+      order: 20,
+      render: () => null,
+      subpages: [{ id: 'details', render: () => null }],
+    });
+    registry.registerSectionExtension(second.scope, {
+      id: 'earlier-preferences',
+      targetSectionId: 'personalization',
+      order: 10,
+      render: () => null,
+    });
+    registry.registerSectionExtension(second.scope, {
+      id: 'task-models',
+      targetSectionId: 'taskModels',
+      order: 10,
+      render: () => null,
+    });
+
+    expect(registry.listSectionExtensions('personalization').map(({ id }) => id)).toEqual([
+      'earlier-preferences',
+      'later-preferences',
+    ]);
+    expect(registry.listSectionExtensions('taskModels').map(({ id }) => id)).toEqual(['task-models']);
+    expect(registry.listSectionExtensions('personalization')[1]?.subpages?.map(({ id }) => id)).toEqual([
+      'details',
+    ]);
+    expect(() => registry.registerSectionExtension(second.scope, {
+      id: 'later-preferences',
+      targetSectionId: 'personalization',
+      order: 30,
+      render: () => null,
+    })).toThrow('Settings section extension conflict');
+
+    await first.finishDispose();
+    expect(registry.listSectionExtensions('personalization').map(({ id }) => id)).toEqual([
+      'earlier-preferences',
+    ]);
+    await second.finishDispose();
+    expect(registry.listSectionExtensions('personalization')).toEqual([]);
+    expect(registry.listSectionExtensions('taskModels')).toEqual([]);
+  });
+
+  it('mounts Memory into Personalization and Task Models without creating a settings page', async () => {
+    const registry = new RendererSettingsViewRegistry();
+    const transport: FeatureOperationTransport = {
+      call: vi.fn(async () => {
+        throw new Error('State reads are not expected while composing the Feature.');
+      }) as FeatureOperationTransport['call'],
+    };
+    const composition = await composeRendererFeatures({
+      mounts: [mountRendererFeature(memoryRendererFeature, { criticality: 'required' })],
+      hostCapabilities: [
+        provideHostCapability(
+          declareCapabilityProvider(rendererFeatureOperationTransportCapability),
+          transport,
+        ),
+        provideHostCapability(
+          declareCapabilityProvider(rendererSettingsViewRegistryCapability),
+          registry,
+        ),
+      ],
+    });
+
+    expect(registry.list('settings')).toEqual([]);
+    expect(registry.listSectionExtensions('personalization')).toMatchObject([{
+      featureId: 'memory',
+      id: 'memory-preferences',
+      subpages: [{ id: 'preview' }],
+    }]);
+    expect(registry.listSectionExtensions('taskModels')).toMatchObject([{
+      featureId: 'memory',
+      id: 'memory-task-models',
+    }]);
+
+    await composition.dispose();
+    expect(registry.listSectionExtensions('personalization')).toEqual([]);
+    expect(registry.listSectionExtensions('taskModels')).toEqual([]);
   });
 
   it('uses exact result kind and major, fails closed on bad payloads, and unregisters on dispose', async () => {

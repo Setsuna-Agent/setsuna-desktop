@@ -37,8 +37,8 @@ export const imageGenerationRendererFeature = defineRendererFeature({
       location: 'capabilities',
       order: 100,
       titleKey: 'feature.imageGeneration.settings.title',
-      render: ({ translate }) => (
-        <ImageGenerationSettingsView assets={assets} client={client} translate={translate} />
+      render: ({ translate, ui }) => (
+        <ImageGenerationSettingsView assets={assets} client={client} translate={translate} ui={ui} />
       ),
     });
     context.dependencies.toolResultViews.register(context.scope, {

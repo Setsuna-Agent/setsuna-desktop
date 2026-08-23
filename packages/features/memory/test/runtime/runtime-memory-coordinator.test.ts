@@ -1,6 +1,7 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { memoryStartupExtractionCandidates } from '../../../src/loop/memory/runtime-memory-coordinator.js';
+import { DEFAULT_MEMORY_PREFERENCES } from '../../src/contracts/settings.js';
+import { memoryStartupExtractionCandidates } from '../../src/runtime/runtime-memory-coordinator.js';
 
 const NOW = new Date('2026-07-20T12:00:00.000Z');
 
@@ -11,7 +12,12 @@ describe('memoryStartupExtractionCandidates', () => {
     const newestIdle = summary('thread_new2', '2026-07-19T00:00:00.000Z', '2026-07-19T00:00:00.000Z');
 
     // 输入沿用 listThreads 的创建时间倒序；若直接截断，thread_old 将永远排不进去。
-    const candidates = memoryStartupExtractionCandidates([newestIdle, newerIdle, olderButActive], null, NOW, 2);
+    const candidates = memoryStartupExtractionCandidates(
+      [newestIdle, newerIdle, olderButActive],
+      DEFAULT_MEMORY_PREFERENCES,
+      NOW,
+      2,
+    );
 
     expect(candidates.map((thread) => thread.id)).toEqual(['thread_old', 'thread_new2']);
   });
@@ -21,7 +27,12 @@ describe('memoryStartupExtractionCandidates', () => {
     const eligibleA = summary('thread_a', '2026-07-02T00:00:00.000Z', '2026-07-19T00:00:00.000Z');
     const eligibleB = summary('thread_b', '2026-07-03T00:00:00.000Z', '2026-07-19T00:00:00.000Z');
 
-    const candidates = memoryStartupExtractionCandidates([tooRecent, eligibleB, eligibleA], null, NOW, 2);
+    const candidates = memoryStartupExtractionCandidates(
+      [tooRecent, eligibleB, eligibleA],
+      DEFAULT_MEMORY_PREFERENCES,
+      NOW,
+      2,
+    );
 
     expect(candidates.map((thread) => thread.id)).toEqual(['thread_a', 'thread_b']);
   });

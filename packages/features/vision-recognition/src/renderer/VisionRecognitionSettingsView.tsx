@@ -1,4 +1,4 @@
-import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
 import { Eye, Loader2, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import {
@@ -13,10 +13,13 @@ import './vision-recognition.css';
 export function VisionRecognitionSettingsView({
   client,
   translate,
+  ui,
 }: Readonly<{
   client: VisionRecognitionClient;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
 }>) {
+  const { SelectField } = ui;
   const [state, setState] = useState<VisionRecognitionSettingsState | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -84,11 +87,12 @@ export function VisionRecognitionSettingsView({
 
       <label className="feature-vision-recognition-settings__field">
         <span>{translate('feature.visionRecognition.settings.model')}</span>
-        <select
+        <SelectField
           aria-label={translate('feature.visionRecognition.settings.model')}
+          className="feature-vision-recognition-settings__select"
           disabled={saving || testing || !state}
           value={selectedValue}
-          onChange={(event) => void selectModel(event.currentTarget.value)}
+          onValueChange={(value) => void selectModel(value)}
         >
           <option value="">{translate('feature.visionRecognition.settings.modelPlaceholder')}</option>
           {selectedValue && !selectionAvailable ? (
@@ -101,7 +105,7 @@ export function VisionRecognitionSettingsView({
               {modelOptionLabel(option)}
             </option>
           ))}
-        </select>
+        </SelectField>
         <small>{translate(state?.availableModels.length
           ? 'feature.visionRecognition.settings.modelHelp'
           : 'feature.visionRecognition.settings.modelEmpty')}</small>
@@ -117,6 +121,7 @@ export function VisionRecognitionSettingsView({
         disabled={!selectionAvailable || saving}
         testing={testing}
         translate={translate}
+        ui={ui}
         onAnalyze={runTest}
       />
     </section>
@@ -127,13 +132,16 @@ function VisionRecognitionTestView({
   disabled,
   testing,
   translate,
+  ui,
   onAnalyze,
 }: Readonly<{
   disabled: boolean;
   testing: boolean;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
   onAnalyze(prompt: string): Promise<VisionRecognitionTestResult>;
 }>) {
+  const { Button, TextArea } = ui;
   const [prompt, setPrompt] = useState(() => translate('feature.visionRecognition.test.promptDefault'));
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<VisionRecognitionTestResult | null>(null);
@@ -164,7 +172,8 @@ function VisionRecognitionTestView({
 
       <label className="feature-vision-recognition-test__prompt">
         <span>{translate('feature.visionRecognition.test.prompt')}</span>
-        <textarea
+        <TextArea
+          className="feature-vision-recognition-test__textarea"
           rows={3}
           maxLength={VISION_RECOGNITION_PROMPT_MAX_CHARS}
           value={prompt}
@@ -194,10 +203,14 @@ function VisionRecognitionTestView({
           ) : null}
           {!error && !testing && !result ? <span>{translate('feature.visionRecognition.test.shortcut')}</span> : null}
         </div>
-        <button type="button" className="is-primary" disabled={disabled || testing || !prompt.trim()} onClick={() => void analyze()}>
-          {testing ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />}
+        <Button
+          disabled={disabled || testing || !prompt.trim()}
+          icon={testing ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />}
+          variant="primary"
+          onClick={() => void analyze()}
+        >
           {translate(testing ? 'feature.visionRecognition.test.testing' : 'feature.visionRecognition.test.run')}
-        </button>
+        </Button>
       </div>
 
       {result ? (

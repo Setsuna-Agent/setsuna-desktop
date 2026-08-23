@@ -67,7 +67,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `background-shell-processes.ts` | 后台 shell process 状态与全局运行活动投影 |
 | `hooks.ts` | Hook event、matcher、input 和 result |
 | `mcp.ts` | Server、transport、tool、resource、OAuth、审批 |
-| `memory.ts` | Memory record、query、preview |
+| `memory.ts` | 持久 transcript 需要的 Memory citation 元数据；Memory record、query、preview 由 Memory Feature contracts 拥有 |
 | `plugins.ts` / `plugin-reference.ts` | Bundle、marketplace、归因与配置 |
 | `skills.ts` | Skill summary/detail/input/dependency |
 | `usage.ts` | Usage record、summary、bucket |

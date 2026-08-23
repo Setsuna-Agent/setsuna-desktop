@@ -30,12 +30,6 @@ import type {
   RuntimeMcpToolList,
 } from './mcp.js';
 import type {
-  CreateRuntimeMemoryInput,
-  RuntimeMemoryList,
-  RuntimeMemoryPreview,
-  RuntimeMemoryQuery,
-} from './memory.js';
-import type {
   RuntimeExtensionStatusList,
   RuntimeExtensionTrustInput,
   RuntimePluginInstallResult,
@@ -73,7 +67,6 @@ import type {
   StartTurnResponse,
   SteerTurnInput,
   ThreadList,
-  ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
 } from './threads.js';
@@ -145,7 +138,6 @@ export type DesktopRuntimeClient = {
   deleteThread(threadId: string): Promise<void>;
   listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcessList>;
   terminateBackgroundShellProcess(threadId: string, processId: string): Promise<RuntimeBackgroundShellProcessTermination>;
-  updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
   sendTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse>;
@@ -203,11 +195,6 @@ export type DesktopRuntimeClient = {
   saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
   getUsage(query?: RuntimeUsageQuery): Promise<RuntimeUsageResponse>;
-  listMemories(query?: RuntimeMemoryQuery): Promise<RuntimeMemoryList>;
-  previewMemories(): Promise<RuntimeMemoryPreview>;
-  createMemory(input: CreateRuntimeMemoryInput): Promise<RuntimeMemoryList>;
-  deleteMemory(memoryId: string): Promise<void>;
-  clearMemories(): Promise<RuntimeMemoryList>;
   listMcpServers(): Promise<RuntimeMcpServerList>;
   fetchMcpServerTools(input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList>;
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;

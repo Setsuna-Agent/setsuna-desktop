@@ -2,56 +2,6 @@
   color: var(--sd-color-text, CanvasText);
 }
 
-[data-feature-id='image-generation'] button,
-[data-feature-id='image-generation'] input,
-[data-feature-id='image-generation'] textarea {
-  font: inherit;
-}
-
-[data-feature-id='image-generation'] button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 5px 10px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-border, CanvasText) 88%, transparent);
-  border-radius: 7px;
-  color: var(--sd-color-text, CanvasText);
-  background: var(--sd-color-surface, Canvas);
-  cursor: default;
-}
-
-[data-feature-id='image-generation'] button:hover:not(:disabled),
-[data-feature-id='image-generation'] button:focus-visible {
-  border-color: color-mix(in srgb, var(--sd-color-text, CanvasText) 28%, var(--sd-color-border, CanvasText));
-  background: var(--sd-color-surface-subtle, Canvas);
-}
-
-[data-feature-id='image-generation'] button:focus-visible,
-[data-feature-id='image-generation'] input:focus-visible,
-[data-feature-id='image-generation'] textarea:focus-visible {
-  outline: 0;
-  box-shadow: var(--sd-focus-ring, 0 0 0 3px color-mix(in srgb, Highlight 22%, transparent));
-}
-
-[data-feature-id='image-generation'] button.is-primary {
-  border-color: var(--sd-color-accent, Highlight);
-  color: var(--sd-color-accent-text, HighlightText);
-  background: var(--sd-color-accent, Highlight);
-}
-
-[data-feature-id='image-generation'] button.is-primary:hover:not(:disabled),
-[data-feature-id='image-generation'] button.is-primary:focus-visible {
-  border-color: color-mix(in srgb, var(--sd-color-accent, Highlight) 84%, white);
-  background: color-mix(in srgb, var(--sd-color-accent, Highlight) 84%, white);
-}
-
-[data-feature-id='image-generation'] button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
 .feature-image-generation-settings {
   display: grid;
   gap: 16px;
@@ -119,32 +69,9 @@
   grid-column: 1 / -1;
 }
 
-.feature-image-generation-settings input,
-.feature-image-generation-test textarea {
-  width: 100%;
-  min-height: 34px;
-  padding: 7px 10px;
-  border: 1px solid color-mix(in srgb, var(--sd-color-border, CanvasText) 88%, transparent);
-  border-radius: 7px;
-  color: var(--sd-color-text, CanvasText);
-  background: var(--sd-color-input, Canvas);
+.feature-image-generation-settings__input,
+.feature-image-generation-test__textarea {
   caret-color: var(--sd-color-accent, Highlight);
-}
-
-.feature-image-generation-settings input:hover,
-.feature-image-generation-test textarea:hover {
-  border-color: color-mix(in srgb, var(--sd-color-accent, Highlight) 48%, var(--sd-color-border, CanvasText));
-}
-
-.feature-image-generation-settings input:focus,
-.feature-image-generation-test textarea:focus {
-  border-color: var(--sd-color-accent, Highlight);
-  outline: 0;
-}
-
-.feature-image-generation-settings input::placeholder,
-.feature-image-generation-test textarea::placeholder {
-  color: var(--sd-color-text-muted, GrayText);
 }
 
 .feature-image-generation-settings__warning {
@@ -214,7 +141,7 @@
   line-height: 17px;
 }
 
-.feature-image-generation-test textarea {
+.feature-image-generation-test__textarea {
   min-height: 92px;
   resize: vertical;
 }
@@ -281,7 +208,7 @@
   margin-left: auto;
 }
 
-.feature-image-generation-test__image-footer button {
+.feature-image-generation-test__image-footer .sd-button {
   min-height: 28px;
   padding: 4px 7px;
 }

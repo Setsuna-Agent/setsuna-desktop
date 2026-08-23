@@ -13,10 +13,10 @@ import {
   runtimeAccessModeForConfig,
 } from '../../../shared/lib/runtimeAccessMode.js';
 import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.js';
+import { SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
 import { WorkspaceDependenciesSettings } from '../WorkspaceDependenciesSettings.js';
 import { WindowsSandboxSettings } from '../windows-sandbox/WindowsSandboxSettings.js';
-import { SettingsToggle } from '../components/SettingsControls.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -139,7 +139,6 @@ export function RuntimePolicySettings({
     </div>
   );
 }
-
 function RuntimeAdvancedSettings({
   config,
   skillExtraRoots,
@@ -252,23 +251,6 @@ function RuntimeAdvancedSettings({
               setAdvancedError(errorMessage(unknownError, t('settings.runtime.featureFlagsInvalid')));
             }
           }}>{t('settings.runtime.saveFeatureFlags')}</Button>
-        </div>
-        <div className="chat-user-settings__runtime-memory-tuning">
-          <strong>{t('settings.runtime.memoryTuning')}</strong>
-          <TextField
-            type="number"
-            min="1"
-            defaultValue={config.memory.maxRolloutsPerStartup ?? ''}
-            placeholder={t('settings.runtime.maxRollouts')}
-            onBlur={(event) => void onSave({ memory: { maxRolloutsPerStartup: optionalPositiveNumber(event.currentTarget.value) } })}
-          />
-          <TextField
-            type="number"
-            min="1"
-            defaultValue={config.memory.maxRawMemoriesForConsolidation ?? ''}
-            placeholder={t('settings.runtime.maxRawMemories')}
-            onBlur={(event) => void onSave({ memory: { maxRawMemoriesForConsolidation: optionalPositiveNumber(event.currentTarget.value) } })}
-          />
         </div>
       </div>
       {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
@@ -433,9 +415,4 @@ function RuntimeListEditor({
       {error ? <span className="chat-user-settings__runtime-list-error" role="alert">{error}</span> : null}
     </div>
   );
-}
-
-function optionalPositiveNumber(value: string): number | undefined {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : undefined;
 }

@@ -69,7 +69,7 @@
   justify-self: end;
 }
 
-.desktop-settings-panel .chat-user-settings__preview-open .sd-button__icon {
+.desktop-settings-panel .sd-settings-navigation-row__action .sd-button__icon {
   order: 2;
 }
 

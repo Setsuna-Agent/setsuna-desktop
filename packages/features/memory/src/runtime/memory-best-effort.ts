@@ -1,4 +1,4 @@
-import { errorMessage } from '../../shared/node-errors.js';
+import { errorMessage } from './runtime-helpers.js';
 
 type MemoryBestEffortContext = {
   threadId?: string;

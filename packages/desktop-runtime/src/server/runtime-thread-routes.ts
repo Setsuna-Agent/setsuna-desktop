@@ -3,7 +3,6 @@ import type {
   MessageDeleteInput,
   MessagePatch,
   RegenerateMessageInput,
-  RuntimeConfigState,
   RuntimeThread,
   RuntimeThreadSummary,
   ThreadMemoryModePatch,
@@ -53,10 +52,10 @@ export async function handleRuntimeThreadRequest(
 
   if (request.method === 'POST' && url.pathname === '/v1/threads') {
     const input = await readBody<CreateThreadInput>(request, {});
-    const config = await runtime.configStore.getConfig().catch(() => null);
+    const settings = await runtime.agentLoop.memoryControl().readSettings().catch(() => null);
     const thread = await runtime.threadStore.createThread({
       ...input,
-      memoryMode: input.memoryMode ?? newThreadMemoryMode(config),
+      memoryMode: input.memoryMode ?? (settings?.value.generateMemories ? 'enabled' : 'disabled'),
     });
     sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
     return true;
@@ -192,7 +191,7 @@ export async function handleRuntimeThreadRequest(
     const input = await readBody<ThreadMemoryModePatch>(request);
     const thread = await runtime.agentLoop.withThreadMutation(
       threadId,
-      () => runtime.threadStore.updateThreadMemoryMode(
+      () => runtime.agentLoop.memoryControl().updateThreadMode(
         threadId,
         threadMemoryModeFromInput(input.mode),
         'user_request',
@@ -336,15 +335,6 @@ export async function handleRuntimeThreadRequest(
   }
 
   return false;
-}
-
-function newThreadMemoryMode(
-  config: RuntimeConfigState | null,
-): CreateThreadInput['memoryMode'] {
-  if (!config) return 'enabled';
-  return (config.memory?.generateMemories ?? config.memoryEnabled)
-    ? 'enabled'
-    : 'disabled';
 }
 
 function threadMemoryModeFromInput(

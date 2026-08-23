@@ -13,6 +13,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import { HookStoppedTurnError } from '../context/runtime-context-compactor.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
@@ -21,7 +22,6 @@ import type { RuntimeTurnInputCoordinator } from '../lifecycle/runtime-turn-inpu
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import type { RuntimeQueuedSteer } from '../lifecycle/turn-input-queue.js';
 import type { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
-import { isSuccessfulRememberMemoryMessage } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import type { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { assertNewToolCallBatchInvariants } from './runtime-model-message-order.js';
@@ -33,6 +33,7 @@ import { addRuntimeUsage } from './runtime-usage.js';
 type RuntimeAgentTurnRunnerOptions = {
   clock: Clock;
   collaborationControl(): CollaborationControl;
+  memoryControl(): MemoryControl;
   configStore?: ConfigStore;
   hooks: Pick<RuntimeHookCoordinator, 'runStopHooks' | 'runTurnStartHooks' | 'stopContinuationMessages'>;
   ids: IdGenerator;
@@ -314,7 +315,9 @@ export class RuntimeAgentTurnRunner {
             status: 'complete',
           });
           const toolMessages = await this.options.toolExecutor.runToolCalls(toolCalls, stepContext.toolContext, stepContext.toolRouter, stepContext.runtimeConfig);
-          if (toolMessages.some(isSuccessfulRememberMemoryMessage)) memorySavedByTool = true;
+          if (toolMessages.some((message) => this.options.memoryControl().isSuccessfulRememberMessage(message))) {
+            memorySavedByTool = true;
+          }
           conversationMessages.push(...toolMessages);
           continue;
         }
@@ -390,7 +393,6 @@ export class RuntimeAgentTurnRunner {
           finalization: {
             explicitMemory: taskKind === 'goal' ? undefined : {
               alreadySaved: memorySavedByTool,
-              config: runtimeConfig,
               projectId: thread.projectId,
               userContent: explicitMemoryUserContent,
             },

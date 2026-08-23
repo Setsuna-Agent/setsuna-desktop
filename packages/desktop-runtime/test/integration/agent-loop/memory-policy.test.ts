@@ -4,7 +4,7 @@ import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { MemoryToolHost } from '../../../src/adapters/tool/memory-tool-host.js';
-import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
+import { TestMemoryAgentLoop as AgentLoop } from '../../support/agent-loop/memory-feature.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
   ActiveMemoryModelClient,
@@ -208,7 +208,7 @@ describe('agent loop memory policy', () => {
         clock: systemClock,
         ids,
         memoryStore,
-        toolHost: new MemoryToolHost(memoryStore),
+        toolHost: new MemoryToolHost(),
       });
   
       await loop.sendTurn(thread.id, { input: '请记住，当前仓库的样式需要尽可能使用 UnoCSS。' });
@@ -273,7 +273,7 @@ describe('agent loop memory policy', () => {
         ids,
         memoryStore,
         configStore,
-        toolHost: new MemoryToolHost(memoryStore, configStore),
+        toolHost: new MemoryToolHost(),
       });
   
       await loop.sendTurn(thread.id, { input: 'do not use memory tools' });
@@ -305,7 +305,7 @@ describe('agent loop memory policy', () => {
         ids,
         memoryStore,
         configStore,
-        toolHost: new MemoryToolHost(memoryStore, configStore),
+        toolHost: new MemoryToolHost(),
       });
   
       await loop.sendTurn(thread.id, { input: 'answer using memory but do not extract' });

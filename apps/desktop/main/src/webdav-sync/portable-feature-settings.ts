@@ -3,6 +3,7 @@ import type {
   PortableFeatureSettingsDocument,
 } from '@setsuna-desktop/feature-core/settings';
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
+import { memorySettings } from '@setsuna-desktop/feature-memory/contracts';
 import { visionRecognitionSettings } from '@setsuna-desktop/feature-vision-recognition/contracts';
 import { randomUUID } from 'node:crypto';
 import {
@@ -84,6 +85,9 @@ export async function preparePortableFeatureSettingsRestore(input: Readonly<{
   const legacyVisionSelection = input.preferencesSelected
     ? await readLegacyVisionSelection(path.join(input.stagingRoot, 'runtime', 'config.json'))
     : undefined;
+  const legacyMemoryPreferences = input.preferencesSelected
+    ? await readLegacyMemoryPreferences(path.join(input.stagingRoot, 'runtime', 'config.json'))
+    : undefined;
   const legacyApiKey = input.modelCredentialsSelected
     ? await preferredLegacyImageApiKey(
         input.restoredSecretsBuffer,
@@ -103,13 +107,20 @@ export async function preparePortableFeatureSettingsRestore(input: Readonly<{
       visionRecognitionSettings.documents['model-selection'].featureId,
       visionRecognitionSettings.documents['model-selection'].documentId,
     );
-    const importedData = remoteDocument
-      ? normalizePortableDocument(definition, remoteDocument).data
-      : isImageConnection && legacyConnection
-        ? definition.schema.parse(legacyConnection)
-        : isVisionSelection && legacyVisionSelection !== undefined
-          ? definition.schema.parse(legacyVisionSelection)
-        : undefined;
+    const isMemoryPreferences = key === documentKey(
+      memorySettings.documents.preferences.featureId,
+      memorySettings.documents.preferences.documentId,
+    );
+    let importedData: unknown;
+    if (remoteDocument) {
+      importedData = normalizePortableDocument(definition, remoteDocument).data;
+    } else if (isImageConnection && legacyConnection) {
+      importedData = definition.schema.parse(legacyConnection);
+    } else if (isVisionSelection && legacyVisionSelection !== undefined) {
+      importedData = definition.schema.parse(legacyVisionSelection);
+    } else if (isMemoryPreferences && legacyMemoryPreferences !== undefined) {
+      importedData = definition.schema.parse(legacyMemoryPreferences);
+    }
     const importedSecret = isImageConnection ? legacyApiKey : undefined;
     const localPath = localDocumentPath(input.dataRoot, definition);
     const stagedPath = stagedDocumentPath(input.stagingRoot, definition);
@@ -299,6 +310,75 @@ async function readLegacyVisionSelection(filePath: string): Promise<unknown | un
   const config = await readBoundedJson(filePath, 'legacy portable config');
   if (!isRecord(config) || !Object.hasOwn(config, 'visionRecognition')) return undefined;
   return visionRecognitionSettings.documents['model-selection'].schema.parse(config.visionRecognition);
+}
+
+async function readLegacyMemoryPreferences(filePath: string): Promise<unknown | undefined> {
+  if (!await isRegularFile(filePath)) return undefined;
+  const config = await readBoundedJson(filePath, 'legacy portable config');
+  if (!isRecord(config)) return undefined;
+  const memory = isRecord(config.memory) ? config.memory : {};
+  const taskModels = isRecord(config.taskModels) ? config.taskModels : {};
+  const hasLegacyMemory = Object.hasOwn(config, 'memory')
+    || Object.hasOwn(config, 'memoryEnabled')
+    || Object.hasOwn(taskModels, 'memoryExtraction')
+    || Object.hasOwn(taskModels, 'memoryConsolidation');
+  if (!hasLegacyMemory) return undefined;
+
+  const legacyEnabled = typeof config.memoryEnabled === 'boolean' ? config.memoryEnabled : true;
+  const extractionModel = legacyModelReference(taskModels.memoryExtraction);
+  const consolidationModel = legacyModelReference(taskModels.memoryConsolidation);
+  return memorySettings.documents.preferences.schema.parse({
+    useMemories: legacyBoolean(memory.useMemories, legacyEnabled),
+    generateMemories: legacyBoolean(memory.generateMemories, legacyEnabled),
+    disableOnExternalContext: legacyBoolean(memory.disableOnExternalContext, false),
+    extractionModel: extractionModel ?? null,
+    consolidationModel: consolidationModel ?? null,
+    ...legacyString(memory.extractModel, 'extractionModelCode'),
+    ...legacyString(memory.consolidationModel, 'consolidationModelCode'),
+    ...legacyInteger(memory.minRateLimitRemainingPercent, 'minRateLimitRemainingPercent', 0, 100),
+    ...legacyInteger(memory.maxRolloutsPerStartup, 'maxRolloutsPerStartup', 1),
+    ...legacyInteger(memory.maxRolloutAgeDays, 'maxRolloutAgeDays', 1),
+    ...legacyInteger(memory.minRolloutIdleHours, 'minRolloutIdleHours', 1),
+    ...legacyInteger(memory.maxUnusedDays, 'maxUnusedDays', 1),
+    ...legacyInteger(memory.maxRawMemoriesForConsolidation, 'maxRawMemoriesForConsolidation', 1),
+  });
+}
+
+function legacyBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function legacyModelReference(value: unknown): Readonly<{ providerId: string; modelId: string }> | undefined {
+  if (!isRecord(value)) return undefined;
+  const providerId = legacyStableId(value.providerId);
+  const modelId = legacyStableId(value.modelId);
+  return providerId && modelId ? Object.freeze({ providerId, modelId }) : undefined;
+}
+
+function legacyStableId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim();
+  return normalized && normalized.length <= 256 ? normalized : undefined;
+}
+
+function legacyString(
+  value: unknown,
+  key: 'extractionModelCode' | 'consolidationModelCode',
+): Record<string, string> {
+  if (typeof value !== 'string' || !value.trim()) return {};
+  return { [key]: value.trim() };
+}
+
+function legacyInteger(
+  value: unknown,
+  key: string,
+  minimum: number,
+  maximum = Number.MAX_SAFE_INTEGER,
+): Record<string, number> {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return {};
+  const normalized = Math.floor(value);
+  if (!Number.isSafeInteger(normalized) || normalized < minimum || normalized > maximum) return {};
+  return { [key]: normalized };
 }
 
 async function preferredLegacyImageApiKey(

@@ -1,18 +1,20 @@
-import type { RuntimeConfigInput, RuntimeConfigState } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_MEMORY_PREFERENCES,
+  type MemoryPreferences,
+} from '@setsuna-desktop/feature-memory/contracts';
+import { MemoryRuntimeTools } from '@setsuna-desktop/feature-memory/runtime';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
-import { MemoryToolHost } from '../../../src/adapters/tool/memory-tool-host.js';
 import { systemClock } from '../../../src/ports/clock.js';
-import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 
 describe('memory tool host', () => {
   it('exposes remember and recall tools backed by local memory', async () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-test-')), systemClock, new RandomIdGenerator());
-    const host = new MemoryToolHost(store);
+    const host = memoryTools(store);
     const context = { threadId: 'thread_1', turnId: 'turn_1', features: { memory_unscoped_files: true } };
 
     const tools = await host.listTools(context);
@@ -47,7 +49,7 @@ describe('memory tool host', () => {
 
   it('enforces the current thread project boundary for memory tools', async () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-scope-test-')), systemClock, new RandomIdGenerator());
-    const host = new MemoryToolHost(store);
+    const host = memoryTools(store);
     await store.rememberMemory({ content: 'Global preference.', scope: 'global' });
     await store.rememberMemory({ content: 'Project alpha convention.', scope: 'project', projectId: 'project_alpha' });
     await store.rememberMemory({ content: 'Project beta secret.', scope: 'project', projectId: 'project_beta' });
@@ -78,11 +80,11 @@ describe('memory tool host', () => {
     const store = new FileMemoryStore(await mkdtemp(path.join(tmpdir(), 'setsuna-memory-tool-test-')), systemClock, new RandomIdGenerator());
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
 
-    const disabled = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: false, disableOnExternalContext: true }));
+    const disabled = memoryTools(store, { useMemories: false, generateMemories: false, disableOnExternalContext: true });
     await expect(disabled.listTools(context)).resolves.toEqual([]);
-    await expect(disabled.systemPrompt()).resolves.toBeNull();
+    await expect(disabled.systemPrompt(context)).resolves.toBeNull();
 
-    const readOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: true, generateMemories: false, disableOnExternalContext: true }));
+    const readOnly = memoryTools(store, { useMemories: true, generateMemories: false, disableOnExternalContext: true });
     await expect(readOnly.listTools(context)).resolves.toEqual(expect.arrayContaining([
       expect.objectContaining({ name: 'recall_memory' }),
     ]));
@@ -93,39 +95,18 @@ describe('memory tool host', () => {
       expect.objectContaining({ name: 'remember_memory' }),
     ]));
 
-    const writeOnly = new MemoryToolHost(store, new StaticConfigStore({ useMemories: false, generateMemories: true, disableOnExternalContext: true }));
+    const writeOnly = memoryTools(store, { useMemories: false, generateMemories: true, disableOnExternalContext: true });
     await expect(writeOnly.listTools(context)).resolves.toEqual([expect.objectContaining({ name: 'remember_memory' })]);
-    await expect(writeOnly.systemPrompt()).resolves.toContain('Use remember_memory only');
+    await expect(writeOnly.systemPrompt(context)).resolves.toContain('Use remember_memory only');
   });
 });
 
-class StaticConfigStore implements ConfigStore {
-  constructor(private readonly memory: RuntimeConfigState['memory']) {}
-
-  async getConfig(): Promise<RuntimeConfigState> {
-    return {
-      configPath: '/tmp/config.json',
-      dataPath: '/tmp',
-      storagePath: '',
-      activeProviderId: 'test',
-      providers: [],
-      globalPrompt: '',
-      memory: this.memory,
-      memoryEnabled: this.memory.useMemories || this.memory.generateMemories,
-      setsunaStyle: 'developer',
-      approvalPolicy: 'on-request',
-      permissionProfile: 'workspace-write',
-      sandboxWorkspaceWrite: {},
-      features: {},
-      desktopSettings: {},
-    };
-  }
-
-  async saveConfig(_input: RuntimeConfigInput): Promise<RuntimeConfigState> {
-    return this.getConfig();
-  }
-
-  async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
-    return null;
-  }
+function memoryTools(
+  store: FileMemoryStore,
+  preferences: Pick<MemoryPreferences, 'useMemories' | 'generateMemories' | 'disableOnExternalContext'> & Partial<MemoryPreferences> = DEFAULT_MEMORY_PREFERENCES,
+): MemoryRuntimeTools {
+  return new MemoryRuntimeTools(
+    store,
+    async () => ({ ...DEFAULT_MEMORY_PREFERENCES, ...preferences }),
+  );
 }

@@ -1,4 +1,4 @@
-import type { RuntimeMemorySourceLocation } from '@setsuna-desktop/contracts';
+import type { RuntimeMemorySourceLocation } from '@setsuna-desktop/feature-memory/contracts';
 import type { Dirent } from 'node:fs';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';

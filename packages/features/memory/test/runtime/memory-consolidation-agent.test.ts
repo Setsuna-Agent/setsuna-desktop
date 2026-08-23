@@ -3,8 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runMemoryConsolidationAgent } from '../../../src/loop/memory/memory-consolidation-agent.js';
-import type { ModelClient } from '../../../src/ports/model-client.js';
+import { runMemoryConsolidationAgent } from '../../src/runtime/memory-consolidation-agent.js';
 
 describe('memory consolidation agent', () => {
   it('continues beyond the former tool-round cap while the rollout stays within its token budget', async () => {
@@ -13,7 +12,7 @@ describe('memory consolidation agent', () => {
     const modelClient = new FiniteConsolidationModelClient(toolCallBatches);
 
     const result = await runMemoryConsolidationAgent({
-      modelClient,
+      streamModel: (request) => modelClient.stream(request),
       model: 'background-memory-model',
       providerId: 'background-provider',
       root,
@@ -38,7 +37,7 @@ describe('memory consolidation agent', () => {
     const modelClient = new EndlessConsolidationModelClient();
 
     await expect(runMemoryConsolidationAgent({
-      modelClient,
+      streamModel: (request) => modelClient.stream(request),
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -55,7 +54,7 @@ describe('memory consolidation agent', () => {
     const modelClient = new FinalConsolidationModelClient();
 
     await expect(runMemoryConsolidationAgent({
-      modelClient,
+      streamModel: (request) => modelClient.stream(request),
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -70,7 +69,7 @@ describe('memory consolidation agent', () => {
     const modelClient = new UsageFreeBlockingModelClient();
 
     await expect(runMemoryConsolidationAgent({
-      modelClient,
+      streamModel: (request) => modelClient.stream(request),
       root,
       now: fixedNow,
       rolloutTokenBudget: 8,
@@ -87,7 +86,7 @@ describe('memory consolidation agent', () => {
     controller.abort(new Error('runtime shutdown'));
 
     await expect(runMemoryConsolidationAgent({
-      modelClient,
+      streamModel: (request) => modelClient.stream(request),
       root,
       now: fixedNow,
       signal: controller.signal,
@@ -98,7 +97,7 @@ describe('memory consolidation agent', () => {
   });
 });
 
-class FiniteConsolidationModelClient implements ModelClient {
+class FiniteConsolidationModelClient {
   readonly requests: ModelRequest[] = [];
 
   constructor(private readonly toolCallBatches: number) {}
@@ -123,7 +122,7 @@ class FiniteConsolidationModelClient implements ModelClient {
   }
 }
 
-class EndlessConsolidationModelClient implements ModelClient {
+class EndlessConsolidationModelClient {
   readonly requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
@@ -141,7 +140,7 @@ class EndlessConsolidationModelClient implements ModelClient {
   }
 }
 
-class FinalConsolidationModelClient implements ModelClient {
+class FinalConsolidationModelClient {
   readonly requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
@@ -152,7 +151,7 @@ class FinalConsolidationModelClient implements ModelClient {
   }
 }
 
-class UsageFreeBlockingModelClient implements ModelClient {
+class UsageFreeBlockingModelClient {
   readonly requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {

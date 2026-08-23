@@ -6,12 +6,12 @@ import type {
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
 import { parseRuntimeReviewResult } from '@setsuna-desktop/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import type { RuntimeModelStreamEventPublisher } from '../core/runtime-model-stream-event-publisher.js';
-import type { ExplicitMemoryInput, RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type {
   RuntimeThreadTitleCoordinator,
   RuntimeThreadTitleGeneration,
@@ -19,7 +19,7 @@ import type {
 
 export type RuntimeAssistantTurnFinalization = {
   content?: string;
-  explicitMemory?: ExplicitMemoryInput;
+  explicitMemory?: NonNullable<Parameters<MemoryControl['rememberExplicitUserMemory']>[2]>;
   memoryCitation?: RuntimeMemoryCitation;
   providerMetadata?: RuntimeMessage['providerMetadata'];
   review?: {
@@ -33,7 +33,7 @@ export type RuntimeAssistantTurnFinalization = {
 type RuntimeTurnFinalizerOptions = {
   clock: Clock;
   ids: IdGenerator;
-  memory: Pick<RuntimeMemoryCoordinator, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
+  memoryControl(): Pick<MemoryControl, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
   streamEvents: Pick<RuntimeModelStreamEventPublisher, 'completeMessage' | 'publishMessage'>;
   threadTitles: Pick<RuntimeThreadTitleCoordinator, 'commit'>;
   usageStore?: UsageStore;
@@ -90,7 +90,11 @@ export class RuntimeTurnFinalizer {
         : parseRuntimeReviewResult(fallbackReview, { legacyThinkTags: false });
       await this.publishReviewModeMessage(threadId, turnId, 'exited', review, result);
     }
-    await this.options.memory.rememberExplicitUserMemory(threadId, turnId, finalization.explicitMemory);
+    await this.options.memoryControl().rememberExplicitUserMemory(
+      threadId,
+      turnId,
+      finalization.explicitMemory,
+    );
     await this.options.appendEvent(threadId, {
       id: this.options.ids.id('event'),
       threadId,
@@ -100,7 +104,7 @@ export class RuntimeTurnFinalizer {
       payload: { usage, taskKind: finalization.taskKind },
     });
     // 被动记忆属于辅助工作，只能在轮次持久化完成后入队。
-    this.options.memory.schedulePassiveMemoriesForTurn(threadId, turnId);
+    this.options.memoryControl().schedulePassiveMemoriesForTurn(threadId, turnId);
   }
 
   async publishReviewModeMessage(

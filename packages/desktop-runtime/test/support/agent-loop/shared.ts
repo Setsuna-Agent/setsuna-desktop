@@ -10,6 +10,10 @@ import type {
   RuntimeToolDefinition,
   RuntimeUsageRecord
 } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_MEMORY_PREFERENCES,
+  type MemoryPreferences,
+} from '@setsuna-desktop/feature-memory/contracts';
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../../../src/adapters/approval/in-memory-approval-gate.js';
@@ -570,12 +574,6 @@ export function nodeEvalHook(script: string): string {
   return `node ${JSON.stringify(scriptPath)}`;
 }
 
-const defaultTestMemory: RuntimeConfigState['memory'] = {
-  useMemories: true,
-  generateMemories: true,
-  disableOnExternalContext: true,
-};
-
 function testRuntimeConfig(overrides: Partial<RuntimeConfigState> = {}): RuntimeConfigState {
   return {
     configPath: '/tmp/config.json',
@@ -584,8 +582,6 @@ function testRuntimeConfig(overrides: Partial<RuntimeConfigState> = {}): Runtime
     activeProviderId: 'test',
     providers: [],
     globalPrompt: '',
-    memory: defaultTestMemory,
-    memoryEnabled: true,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
@@ -597,6 +593,7 @@ export class TestConfigStore implements ConfigStore {
   constructor(
     private readonly config: RuntimeConfigState = testRuntimeConfig(),
     private readonly activeProvider: RuntimeProviderConfig | null = null,
+    readonly memoryPreferencesForTest: MemoryPreferences = DEFAULT_MEMORY_PREFERENCES,
   ) {}
 
   async getConfig(): Promise<RuntimeConfigState> {
@@ -616,10 +613,13 @@ export class PersonalizationConfigStore extends TestConfigStore {
   constructor() {
     super(testRuntimeConfig({
       globalPrompt: 'Prefer crisp context before the answer.',
-      memory: { ...defaultTestMemory, useMemories: false, generateMemories: false },
-      memoryEnabled: false,
       setsunaStyle: 'daily',
-    }));
+    }), null, {
+      ...DEFAULT_MEMORY_PREFERENCES,
+      useMemories: false,
+      generateMemories: false,
+      disableOnExternalContext: true,
+    });
   }
 }
 
@@ -654,8 +654,6 @@ export class ContextWindowConfigStore extends TestConfigStore {
     super(
       testRuntimeConfig({
         providers: [provider],
-        memory: { ...defaultTestMemory, useMemories: false, generateMemories: false },
-        memoryEnabled: false,
       }),
       { ...provider, apiKey: 'secret', activeModel: model },
     );
@@ -663,11 +661,8 @@ export class ContextWindowConfigStore extends TestConfigStore {
 }
 
 export class MemorySettingsConfigStore extends TestConfigStore {
-  constructor(memory: RuntimeConfigState['memory']) {
-    super(testRuntimeConfig({
-      memory,
-      memoryEnabled: memory.useMemories || memory.generateMemories,
-    }));
+  constructor(memory: Pick<MemoryPreferences, 'useMemories' | 'generateMemories' | 'disableOnExternalContext'> & Partial<MemoryPreferences>) {
+    super(testRuntimeConfig(), null, { ...DEFAULT_MEMORY_PREFERENCES, ...memory });
   }
 }
 

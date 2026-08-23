@@ -213,21 +213,15 @@ export function AppRouteContent({
           archivedThreads={runtime.archivedThreads}
           config={runtime.config}
           initialSection={settingsInitialSection ?? undefined}
-          projects={runtime.projects}
           skillExtraRoots={runtime.skillExtraRoots}
           updater={updater}
           usage={runtime.usage}
-          memoryPreview={runtime.memoryPreview}
-          memoryPreviewLoading={runtime.memoryPreviewLoading}
           networkProxy={networkProxy}
           onBack={() => setActiveView('chat')}
           onFetchProviderModels={runtime.fetchProviderModels}
           onSaveProviders={runtime.saveProviders}
           onSaveRuntimePreferences={runtime.saveRuntimePreferences}
           onQueryUsage={runtime.queryUsage}
-          onPreviewMemories={runtime.previewMemories}
-          onDeleteMemory={runtime.deleteMemory}
-          onResetMemories={runtime.clearMemories}
           onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
           onDeleteArchivedThread={runtime.permanentlyDeleteThread}
           onRestoreArchivedThread={runtime.restoreArchivedThread}

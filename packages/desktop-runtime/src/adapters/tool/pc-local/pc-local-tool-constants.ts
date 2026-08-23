@@ -1,6 +1,5 @@
 /** Shared limits and policy constants for PC local tools. */
 
-import type { RuntimeMemoryKind } from '@setsuna-desktop/contracts';
 import path from 'node:path';
 
 export const MAX_TEXT_BYTES = 60000;
@@ -128,40 +127,6 @@ export const MCP_SERVERS_KEY = 'mcpServers';
 export const DEFAULT_MCP_TIMEOUT_MS = 60000;
 
 export const MAX_MCP_TIMEOUT_MS = 10 * 60 * 1000;
-
-export const DEFAULT_MEMORY_STORE_DIR = path.join(DEFAULT_RUNTIME_DATA_DIR, 'memories');
-
-export const MEMORY_STORE_FILE_NAME = 'memories.json';
-
-export const MEMORY_STORE_VERSION = 1;
-
-export const MAX_MEMORY_CONTENT_CHARS = 4000;
-
-export const MAX_MEMORY_TITLE_CHARS = 80;
-
-export const MAX_MEMORY_SOURCE_CHARS = 160;
-
-export const MAX_MEMORY_TAG_CHARS = 40;
-
-export const MAX_MEMORY_TAGS = 8;
-
-export const MEMORY_KINDS = new Set<RuntimeMemoryKind>([
-  'preference',
-  'project_rule',
-  'fact',
-  'workflow',
-  'decision',
-  'note',
-]);
-
-export const MEMORY_KIND_LABELS: Record<RuntimeMemoryKind, string> = {
-  preference: '偏好',
-  project_rule: '项目规则',
-  fact: '事实',
-  workflow: '流程',
-  decision: '决策',
-  note: '备注',
-};
 
 export const IGNORED_DIRS = new Set([
   '.git',

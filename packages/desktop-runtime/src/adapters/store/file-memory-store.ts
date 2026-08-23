@@ -1,7 +1,9 @@
 import type {
+  RuntimeMemoryCitation,
+} from '@setsuna-desktop/contracts';
+import type {
   CreateRuntimeMemoryInput,
   CreateRuntimeMemoryStage1OutputInput,
-  RuntimeMemoryCitation,
   RuntimeMemoryFileList,
   RuntimeMemoryFileRead,
   RuntimeMemoryFileReadInput,
@@ -18,7 +20,8 @@ import type {
   RuntimeMemorySourceLocation,
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1OutputList
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-memory/contracts';
+import type { MemoryStore } from '@setsuna-desktop/feature-memory/contracts';
 import {
   mkdir,
   readdir,
@@ -28,7 +31,6 @@ import {
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { MemoryStore } from '../../ports/memory-store.js';
 import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';
 import type {
   MemoryIndex,

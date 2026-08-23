@@ -10,6 +10,9 @@ describe('createAssistantItemStreamBridge', () => {
     const reasoningDeltas: string[] = [];
     const output = createAssistantOutputAccumulator(async (delta) => {
       visibleDeltas.push(delta);
+    }, {
+      push: (delta) => ({ visibleText: delta }),
+      finish: () => ({ visibleText: '' }),
     });
     const bridge = createAssistantItemStreamBridge(output, async (delta) => {
       reasoningDeltas.push(delta);

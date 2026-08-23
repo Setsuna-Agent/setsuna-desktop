@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MemoryCitationStreamParser,
   parseMemoryCitationBodies,
-} from '../../../src/loop/memory/memory-citation.js';
+} from '../../src/runtime/memory-citation.js';
 
 describe('memory citation parser', () => {
   it('hides citations across stream chunk boundaries', () => {

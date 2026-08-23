@@ -3,11 +3,13 @@ import type {
   ComposerStatusViewRegistry,
   ErasedToolResultViewContribution,
   RegisteredComposerStatusView,
+  RegisteredSettingsSectionExtension,
   RegisteredSettingsView,
   ResolvedToolResultView,
   SettingsViewContribution,
   SettingsViewLocation,
   SettingsViewRegistry,
+  SettingsSectionExtensionContribution,
   ToolResultViewContribution,
   ToolResultViewRegistry,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -16,6 +18,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
 
 const SECTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+const HOST_SECTION_ID_PATTERN = /^[a-z][A-Za-z0-9]*(?:-[a-z0-9]+)*$/u;
 const RESULT_ID_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/u;
 
 export class RendererComposerStatusViewRegistry implements ComposerStatusViewRegistry {
@@ -54,6 +57,7 @@ export class RendererComposerStatusViewRegistry implements ComposerStatusViewReg
 
 export class RendererSettingsViewRegistry implements SettingsViewRegistry {
   private readonly contributions = new Map<string, RegisteredSettingsView>();
+  private readonly sectionExtensions = new Map<string, RegisteredSettingsSectionExtension>();
 
   register(scope: FeatureScope, contribution: SettingsViewContribution): Readonly<{ dispose(): void }> {
     if (!SECTION_ID_PATTERN.test(contribution.sectionId)) {
@@ -74,10 +78,60 @@ export class RendererSettingsViewRegistry implements SettingsViewRegistry {
     return Object.freeze({ dispose });
   }
 
+  registerSectionExtension(
+    scope: FeatureScope,
+    contribution: SettingsSectionExtensionContribution,
+  ): Readonly<{ dispose(): void }> {
+    if (!SECTION_ID_PATTERN.test(contribution.id)) {
+      throw new Error(`Invalid settings section extension id: ${contribution.id}`);
+    }
+    if (!HOST_SECTION_ID_PATTERN.test(contribution.targetSectionId)) {
+      throw new Error(`Invalid settings extension targetSectionId: ${contribution.targetSectionId}`);
+    }
+    if (!Number.isFinite(contribution.order)) {
+      throw new Error('Settings section extension order must be finite.');
+    }
+    const subpageIds = new Set<string>();
+    const subpages = Object.freeze((contribution.subpages ?? []).map((subpage) => {
+      if (!SECTION_ID_PATTERN.test(subpage.id)) {
+        throw new Error(`Invalid settings section subpage id: ${subpage.id}`);
+      }
+      if (subpageIds.has(subpage.id)) {
+        throw new Error(`Settings section subpage conflict for ${contribution.id}:${subpage.id}.`);
+      }
+      subpageIds.add(subpage.id);
+      return Object.freeze({ ...subpage });
+    }));
+    const key = settingsSectionExtensionKey(contribution.targetSectionId, contribution.id);
+    if (this.sectionExtensions.has(key)) {
+      throw new Error(`Settings section extension conflict for ${key}.`);
+    }
+    const registered = Object.freeze({
+      ...contribution,
+      featureId: scope.owner.featureId,
+      subpages,
+    });
+    this.sectionExtensions.set(key, registered);
+    let disposed = false;
+    const dispose = () => {
+      if (disposed) return;
+      disposed = true;
+      if (this.sectionExtensions.get(key) === registered) this.sectionExtensions.delete(key);
+    };
+    scope.add(dispose);
+    return Object.freeze({ dispose });
+  }
+
   list(location: SettingsViewLocation): readonly RegisteredSettingsView[] {
     return Object.freeze([...this.contributions.values()]
       .filter((contribution) => contribution.location === location)
       .sort((left, right) => left.order - right.order || left.sectionId.localeCompare(right.sectionId)));
+  }
+
+  listSectionExtensions(targetSectionId: string): readonly RegisteredSettingsSectionExtension[] {
+    return Object.freeze([...this.sectionExtensions.values()]
+      .filter((contribution) => contribution.targetSectionId === targetSectionId)
+      .sort((left, right) => left.order - right.order || left.id.localeCompare(right.id)));
   }
 
   find(location: SettingsViewLocation, sectionId: string): RegisteredSettingsView | undefined {
@@ -200,6 +254,10 @@ export function useRendererFeatureViews(): RendererFeatureViews {
 
 function settingsKey(location: SettingsViewLocation, sectionId: string): string {
   return `${location}\u0000${sectionId}`;
+}
+
+function settingsSectionExtensionKey(targetSectionId: string, id: string): string {
+  return `${targetSectionId}\u0000${id}`;
 }
 
 function resultKey(resultKind: string, major: number): string {

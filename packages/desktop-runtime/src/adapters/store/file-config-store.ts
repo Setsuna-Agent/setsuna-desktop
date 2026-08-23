@@ -8,7 +8,6 @@ import type {
   RuntimeHookHandlerConfig,
   RuntimeHookMatcherGroup,
   RuntimeHooksConfig,
-  RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
 import {
   defaultModelMaxOutputTokens,
@@ -24,6 +23,10 @@ import {
   type ImageGenerationLegacySettingsAdapter,
 } from '@setsuna-desktop/feature-image-generation/contracts';
 import type {
+  MemoryLegacySettingsAdapter,
+  MemoryPreferences,
+} from '@setsuna-desktop/feature-memory/contracts';
+import type {
   VisionRecognitionLegacySettingsAdapter,
   VisionRecognitionModelSelection,
 } from '@setsuna-desktop/feature-vision-recognition/contracts';
@@ -35,6 +38,13 @@ import type {
 } from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import {
+  copyOptionalMemoryLimits,
+  legacyMemoryTaskModels,
+  normalizeLegacyMemorySettings,
+  type LegacyRuntimeMemorySettings,
+  type StoredTaskModelSettings,
+} from './legacy-memory-config.js';
 import {
   normalizeConfiguredModelReference,
   taskModelSettingsForSave,
@@ -70,13 +80,14 @@ type StoredImageGenerationConfig = Readonly<{
 
 type StoredConfig = Omit<
   RuntimeConfigState,
-  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled'
+  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'taskModels'
 > & {
   schemaVersion?: number;
   /** Pre-v3 compatibility input. It is consumed once and never written again. */
   storagePath?: string;
-  memory?: Partial<RuntimeMemorySettings>;
+  memory?: Partial<LegacyRuntimeMemorySettings>;
   memoryEnabled?: boolean;
+  taskModels?: StoredTaskModelSettings;
   imageGeneration?: StoredImageGenerationConfig;
   /** Compatibility input consumed once by the Vision Recognition Feature. */
   visionRecognition?: VisionRecognitionModelSelection;
@@ -126,6 +137,13 @@ export class FileConfigStore implements ConfigStore {
     return Object.freeze({
       read: () => this.readLegacyImageGenerationSettings(),
       retire: () => this.retireLegacyImageGenerationSettings(),
+    });
+  }
+
+  memoryLegacySettingsAdapter(): MemoryLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyMemorySettings(),
+      retire: () => this.retireLegacyMemorySettings(),
     });
   }
 
@@ -183,22 +201,16 @@ export class FileConfigStore implements ConfigStore {
       await this.validateProviderProxyReferences(providers);
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
-      const memory = memorySettingsForSave(input, previous);
-      const taskModels = taskModelSettingsForSave(input.taskModels, previous.taskModels);
-      if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryExtraction')) {
-        delete memory.extractModel;
-      }
-      if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryConsolidation')) {
-        delete memory.consolidationModel;
-      }
+      const taskModels: StoredTaskModelSettings = {
+        ...legacyMemoryTaskModels(previous.taskModels),
+        ...taskModelSettingsForSave(input.taskModels, previous.taskModels),
+      };
       const previousAccessMode = accessModeForStoredConfig(previous);
 
       const stored: StoredConfig = {
         schemaVersion: CONFIG_SCHEMA_VERSION,
         activeProviderId,
         globalPrompt: normalizeGlobalPrompt(input.globalPrompt ?? previous.globalPrompt),
-        memory,
-        memoryEnabled: memory.useMemories || memory.generateMemories,
         taskModels,
         setsunaStyle: normalizeSetsunaStyle(input.setsunaStyle ?? previous.setsunaStyle),
         approvalPolicy: normalizeApprovalPolicy(input.approvalPolicy ?? previousAccessMode.approvalPolicy),
@@ -219,6 +231,9 @@ export class FileConfigStore implements ConfigStore {
         features: normalizeFeatureFlags(input.features ?? previous.features),
         desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
+        // Preserve unconsumed legacy fields until the owning Feature commits its migration.
+        ...(previous.memory === undefined ? {} : { memory: previous.memory }),
+        ...(typeof previous.memoryEnabled === 'boolean' ? { memoryEnabled: previous.memoryEnabled } : {}),
       };
 
       // 先写入密钥可保证失败安全：只有私密文件完成持久替换后，配置提交才能引用新密钥。
@@ -236,6 +251,46 @@ export class FileConfigStore implements ConfigStore {
         connection: Object.freeze(normalizeStoredImageGeneration(stored.imageGeneration)),
         apiKey: secrets.imageGenerationApiKey ?? '',
       });
+    });
+  }
+
+  private async readLegacyMemorySettings(): Promise<{ value: MemoryPreferences }> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const memory = normalizeLegacyMemorySettings(stored.memory, stored.memoryEnabled);
+      return Object.freeze({
+        value: Object.freeze({
+          useMemories: memory.useMemories,
+          generateMemories: memory.generateMemories,
+          disableOnExternalContext: memory.disableOnExternalContext,
+          extractionModel: normalizeConfiguredModelReference(stored.taskModels?.memoryExtraction) ?? null,
+          consolidationModel: normalizeConfiguredModelReference(stored.taskModels?.memoryConsolidation) ?? null,
+          ...(memory.extractModel ? { extractionModelCode: memory.extractModel } : {}),
+          ...(memory.consolidationModel ? { consolidationModelCode: memory.consolidationModel } : {}),
+          ...copyOptionalMemoryLimits(memory),
+        }),
+      });
+    });
+  }
+
+  private async retireLegacyMemorySettings(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const hadSettings = Object.hasOwn(stored, 'memory') || Object.hasOwn(stored, 'memoryEnabled');
+      const taskModels = stored.taskModels ? { ...stored.taskModels } : undefined;
+      const hadTaskModels = Boolean(taskModels && (
+        Object.hasOwn(taskModels, 'memoryExtraction')
+        || Object.hasOwn(taskModels, 'memoryConsolidation')
+      ));
+      if (!hadSettings && !hadTaskModels) return;
+      delete stored.memory;
+      delete stored.memoryEnabled;
+      if (taskModels) {
+        delete taskModels.memoryExtraction;
+        delete taskModels.memoryConsolidation;
+        stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
+      }
+      await writeJsonFile(this.configPath, stored);
     });
   }
 
@@ -315,7 +370,6 @@ export class FileConfigStore implements ConfigStore {
   }
 
   private toState(stored: StoredConfig, secrets: StoredSecrets): RuntimeConfigState {
-    const memory = normalizeMemorySettings(stored.memory, stored.memoryEnabled);
     const providers = stored.providers.map((provider) => {
       const apiKey = secrets.providerApiKeys[provider.id] ?? '';
       const icon = normalizeProviderIconConfig(provider.icon);
@@ -335,14 +389,7 @@ export class FileConfigStore implements ConfigStore {
       storagePath: path.join(this.dataDir, 'memories'),
       activeProviderId: stored.activeProviderId,
       globalPrompt: normalizeGlobalPrompt(stored.globalPrompt),
-      memory,
-      memoryEnabled: memory.useMemories || memory.generateMemories,
-      taskModels: taskModelSettingsForState(
-        stored.taskModels,
-        memory,
-        providers,
-        stored.activeProviderId,
-      ),
+      taskModels: taskModelSettingsForState(stored.taskModels),
       setsunaStyle: normalizeSetsunaStyle(stored.setsunaStyle),
       approvalPolicy: normalizeApprovalPolicy(stored.approvalPolicy),
       approvalReviewer: normalizeApprovalReviewer(
@@ -378,8 +425,6 @@ function defaultConfig(): StoredConfig {
     schemaVersion: CONFIG_SCHEMA_VERSION,
     activeProviderId: 'local-test',
     globalPrompt: '',
-    memory: defaultMemorySettings(),
-    memoryEnabled: true,
     taskModels: {},
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
@@ -624,66 +669,12 @@ function normalizeStoragePath(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function defaultMemorySettings(): RuntimeMemorySettings {
-  return {
-    useMemories: true,
-    generateMemories: true,
-    disableOnExternalContext: false,
-  };
-}
-
-function memorySettingsForSave(input: RuntimeConfigInput, previous: StoredConfig): RuntimeMemorySettings {
-  const previousMemory = normalizeMemorySettings(previous.memory, previous.memoryEnabled);
-  const base = typeof input.memoryEnabled === 'boolean'
-    ? {
-        ...previousMemory,
-        useMemories: input.memoryEnabled,
-        generateMemories: input.memoryEnabled,
-      }
-    : previousMemory;
-  return normalizeMemorySettings(input.memory ? { ...base, ...input.memory } : base);
-}
-
-function normalizeMemorySettings(value: unknown, legacyMemoryEnabled?: unknown): RuntimeMemorySettings {
-  const legacyEnabled = typeof legacyMemoryEnabled === 'boolean' ? legacyMemoryEnabled : undefined;
-  const fallback = legacyEnabled === undefined
-    ? defaultMemorySettings()
-    : {
-        ...defaultMemorySettings(),
-        useMemories: legacyEnabled,
-        generateMemories: legacyEnabled,
-      };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
-  const record = value as Record<string, unknown>;
-  return {
-    useMemories: booleanValue(record.useMemories, fallback.useMemories),
-    generateMemories: booleanValue(record.generateMemories, fallback.generateMemories),
-    disableOnExternalContext: booleanValue(record.disableOnExternalContext, fallback.disableOnExternalContext),
-    extractModel: nonEmpty(record.extractModel),
-    consolidationModel: nonEmpty(record.consolidationModel),
-    minRateLimitRemainingPercent: percentOptionalInt(record.minRateLimitRemainingPercent),
-    maxRolloutsPerStartup: positiveOptionalInt(record.maxRolloutsPerStartup),
-    maxRolloutAgeDays: positiveOptionalInt(record.maxRolloutAgeDays),
-    minRolloutIdleHours: positiveOptionalInt(record.minRolloutIdleHours),
-    maxUnusedDays: positiveOptionalInt(record.maxUnusedDays),
-    maxRawMemoriesForConsolidation: positiveOptionalInt(record.maxRawMemoriesForConsolidation),
-  };
-}
-
-function booleanValue(value: unknown, fallback: boolean): boolean {
-  return typeof value === 'boolean' ? value : fallback;
-}
-
 function booleanOrUndefined(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
 function positiveOptionalInt(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
-}
-
-function percentOptionalInt(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100 ? Math.floor(value) : undefined;
 }
 
 function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle'] {

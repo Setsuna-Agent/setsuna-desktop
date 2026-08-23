@@ -11,7 +11,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 ### 页面编排
 
-`SettingsPage.tsx` 负责 section 导航和数据/回调分发。具体内容位于：
+`SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并通过通用 `settings` contribution slot 挂载纵向 Feature 设置。具体宿主内容位于：
 
 - `sections/`
 - `providers/`
@@ -27,11 +27,15 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | 文件 | 内容 |
 | --- | --- |
 | `GeneralSettings.tsx` | 主题、字体、缩放、外观 |
-| `PersonalizationSettings.tsx` | Global prompt、Setsuna style、memory |
+| `PersonalizationSettings.tsx` | Global prompt、Setsuna style |
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
-| `TaskModelSettings.tsx` | 标题、代码审查、审批审查、记忆和上下文压缩等任务的模型选择 |
+| `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 | `AboutSettings.tsx` | 版本与 updater |
+
+Memory 是独立 renderer Feature，但不单独占用设置导航。它通过 `registerSectionExtension()` 把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 `SettingsViewHostProps.ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
+
+`shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。
 
 ### Provider settings
 
@@ -127,7 +131,7 @@ Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `Shell
 - `packages/features/image-generation/src/renderer/`
 - `packages/features/vision-recognition/src/renderer/`
 
-两个插件都默认不安装，只有用户从市场安装后详情页才显示 contribution。图片生成 Feature 维护自己的 Images API 服务配置；视觉识别 Feature 只列出“模型服务”中已启用且标记为支持图片的模型，在自己的 `model-selection` document 保存 provider/model 引用，并复用 provider 的服务地址、API key、协议和代理设置。组件只调用各自 typed Feature client，不读取根 Config，也不调用统一 `DesktopRuntimeClient` 的业务方法。
+两个插件都默认不安装，只有用户从市场安装后详情页才显示 contribution。图片生成 Feature 维护自己的 Images API 服务配置；视觉识别 Feature 只列出“模型服务”中已启用且标记为支持图片的模型，在自己的 `model-selection` document 保存 provider/model 引用，并复用 provider 的服务地址、API key、协议和代理设置。组件只调用各自 typed Feature client，不读取根 Config，也不调用统一 `DesktopRuntimeClient` 的业务方法；输入框、文本域、选择器和按钮统一使用宿主注入的 `SettingsViewUi`，测试结果和图片预览仍由 Feature 自己布局。
 
 Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 

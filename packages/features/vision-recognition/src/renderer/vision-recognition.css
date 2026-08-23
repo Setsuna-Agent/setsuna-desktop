@@ -52,32 +52,13 @@
   font-size: 12px;
 }
 
-.feature-vision-recognition-settings select,
-.feature-vision-recognition-test textarea {
+.feature-vision-recognition-settings__select {
   width: 100%;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
 }
 
-.feature-vision-recognition-settings select {
-  min-height: 36px;
-  padding: 0 10px;
-}
-
-.feature-vision-recognition-test textarea {
+.feature-vision-recognition-test__textarea {
   min-height: 92px;
-  padding: 9px 10px;
   resize: vertical;
-}
-
-.feature-vision-recognition-settings select:focus-visible,
-.feature-vision-recognition-test textarea:focus-visible,
-.feature-vision-recognition-test button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--app-primary) 65%, transparent);
-  outline-offset: 1px;
 }
 
 .feature-vision-recognition-settings__status,
@@ -130,34 +111,6 @@
 
 .feature-vision-recognition-test__status {
   margin-right: auto;
-}
-
-.feature-vision-recognition-test button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 34px;
-  padding: 6px 11px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface);
-  color: var(--app-text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.feature-vision-recognition-test button.is-primary {
-  border-color: var(--app-primary);
-  background: var(--app-primary);
-  color: var(--app-primary-contrast, #fff);
-}
-
-.feature-vision-recognition-test button:disabled,
-.feature-vision-recognition-settings select:disabled,
-.feature-vision-recognition-test textarea:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
 }
 
 .feature-vision-recognition-test__result {

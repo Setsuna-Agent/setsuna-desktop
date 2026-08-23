@@ -140,6 +140,7 @@
   --sd-color-text-muted: var(--app-text-muted);
   --sd-color-surface: var(--app-surface);
   --sd-color-surface-subtle: var(--app-surface-subtle);
+  --sd-color-surface-muted: var(--app-surface-muted);
   --sd-color-input: var(--app-surface);
   --sd-color-border: var(--app-border);
   --sd-color-accent: var(--app-primary);
@@ -148,6 +149,10 @@
   --sd-color-success: var(--app-success);
   --sd-color-warning: var(--app-warning);
   --sd-focus-ring: var(--app-focus-ring);
+  --sd-radius-sm: var(--app-radius-sm);
+  --sd-radius-md: var(--app-radius-md);
+  --sd-radius-lg: var(--app-radius-lg);
+  --sd-shadow-card: var(--app-shadow-card);
 }
 
 :root[data-font-size='80'] {

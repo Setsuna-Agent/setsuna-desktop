@@ -4,7 +4,7 @@ import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bu
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { FileMemoryStore } from '../../../src/adapters/store/file-memory-store.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
-import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
+import { TestMemoryAgentLoop as AgentLoop } from '../../support/agent-loop/memory-feature.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import {
   ActiveMemorySettingsConfigStore,
@@ -246,6 +246,13 @@ describe('agent loop memory extraction', () => {
 });
 
 class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
+  constructor(memory: ConstructorParameters<typeof MemorySettingsConfigStore>[0]) {
+    super({
+      ...memory,
+      extractionModel: { providerId: 'memory-provider', modelId: 'memory-model' },
+    });
+  }
+
   async getConfig() {
     const config = await super.getConfig();
     return {
@@ -269,12 +276,6 @@ class TaskModelMemoryConfigStore extends MemorySettingsConfigStore {
           thinkingEfforts: [],
         }],
       }],
-      taskModels: {
-        memoryExtraction: {
-          providerId: 'memory-provider',
-          modelId: 'memory-model',
-        },
-      },
     };
   }
 }

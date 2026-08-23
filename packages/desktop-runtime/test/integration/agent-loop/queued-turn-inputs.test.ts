@@ -831,12 +831,6 @@ function queuedModelConfig(): RuntimeConfigState {
       },
     ],
     globalPrompt: '',
-    memory: {
-      useMemories: false,
-      generateMemories: false,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

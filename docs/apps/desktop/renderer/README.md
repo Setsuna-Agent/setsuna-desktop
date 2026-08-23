@@ -29,7 +29,7 @@ createDesktopRuntimeClient
 useRuntimeClientState
         ├→ useRuntimeCapabilityState
         ├→ useRuntimeConfigState
-        ├→ useRuntimeMemoryUsageState
+        ├→ useRuntimeUsageState
         ├→ useRuntimeThreadState
         ↓
 useDesktopAppController
@@ -48,6 +48,7 @@ Runtime state、导航状态、feature 临时状态分开持有：
 - Workspace panel/session：`features/workspace/hooks/`。
 - Chat composer 与 turn action：`features/chat/hooks/`。
 - Theme/appearance：`shared/preferences/`。
+- 纵向 Feature 的设置与管理状态：对应 `packages/features/*/renderer` contribution；例如 Memory 不进入全局 runtime facade。
 
 不要把所有状态重新汇总到 `App.tsx`，也不要让展示组件直接调用 runtime。
 

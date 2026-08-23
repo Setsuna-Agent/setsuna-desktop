@@ -661,12 +661,6 @@ function configFixture(): RuntimeConfigState {
       },
     ],
     globalPrompt: '',
-    memory: {
-      useMemories: true,
-      generateMemories: true,
-      disableOnExternalContext: false,
-    },
-    memoryEnabled: true,
     taskModels: {
       approvalReview: {
         providerId: 'review-provider',

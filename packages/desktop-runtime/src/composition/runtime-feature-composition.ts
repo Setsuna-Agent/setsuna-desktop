@@ -33,6 +33,12 @@ import {
   goalRuntimeHostCapability,
 } from '@setsuna-desktop/feature-goal/contracts';
 import {
+  createNoopMemoryControl,
+  memoryControlCapability,
+  memoryLegacySettingsCapability,
+  memoryRuntimeHostCapability,
+} from '@setsuna-desktop/feature-memory/contracts';
+import {
   visionRecognitionFeature,
   visionRecognitionRuntimeHostCapability,
   visionRecognitionServiceCapability,
@@ -89,6 +95,14 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.agentLoop.goalRuntimeHost(),
       ),
       provideHostCapability(
+        declareCapabilityProvider(memoryRuntimeHostCapability),
+        runtime.agentLoop.memoryRuntimeHost(),
+      ),
+      provideHostCapability(
+        declareCapabilityProvider(memoryLegacySettingsCapability),
+        runtime.configStore.memoryLegacySettingsAdapter(),
+      ),
+      provideHostCapability(
         declareCapabilityProvider(visionRecognitionRuntimeHostCapability),
         runtime.visionRecognitionHost,
       ),
@@ -116,6 +130,11 @@ export async function activateBuiltinRuntimeFeatures(
     goal: optionalCapability(goalControlCapability, createNoopGoalControl),
   });
   runtime.agentLoop.bindGoalControl(goalDependencies.goal);
+  const memoryDependencies = composition.resolveHostDependencies({
+    memory: optionalCapability(memoryControlCapability, createNoopMemoryControl),
+  });
+  runtime.agentLoop.bindMemoryControl(memoryDependencies.memory);
+  runtime.memoryToolHost.bind(memoryDependencies.memory);
   const visionStatus = composition.status(visionRecognitionFeature.id)?.status;
   if (visionStatus === 'active' || visionStatus === 'degraded') {
     const dependencies = composition.resolveHostDependencies({

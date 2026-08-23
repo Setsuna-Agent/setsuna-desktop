@@ -21,8 +21,6 @@ export type RuntimePreferenceInput = Pick<
   | 'desktopSettings'
   | 'features'
   | 'globalPrompt'
-  | 'memory'
-  | 'memoryEnabled'
   | 'permissionProfile'
   | 'sandboxWorkspaceWrite'
   | 'setsunaStyle'

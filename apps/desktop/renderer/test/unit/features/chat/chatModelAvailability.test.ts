@@ -54,12 +54,6 @@ function configWith(providers: ProviderConfigState[]): RuntimeConfigState {
     activeProviderId: providers[0]?.id ?? '',
     providers,
     globalPrompt: '',
-    memory: {
-      useMemories: false,
-      generateMemories: false,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

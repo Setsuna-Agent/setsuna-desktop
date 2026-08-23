@@ -28,7 +28,7 @@ import {
   useRuntimeCapabilityState,
 } from './useRuntimeCapabilityState.js';
 import { useRuntimeConfigState } from './useRuntimeConfigState.js';
-import { useRuntimeMemoryUsageState } from './useRuntimeMemoryUsageState.js';
+import { useRuntimeUsageState } from './useRuntimeUsageState.js';
 import {
   useRuntimeThreadState,
   type RuntimeTurnSettlement,
@@ -137,12 +137,10 @@ export function useRuntimeClientState({
     applyBootstrapUsage,
     refreshThreadUsage,
     refreshUsage,
-    ...memoryUsageState
-  } = useRuntimeMemoryUsageState({
-    activeProjectId,
+    ...usageState
+  } = useRuntimeUsageState({
     client,
     currentThreadId,
-    enabled: loadState === 'ready',
   });
 
   // React hooks cannot form a dependency cycle. The stable forwarding callback lets the
@@ -222,7 +220,7 @@ export function useRuntimeClientState({
   return {
     ...capabilityState,
     ...configState,
-    ...memoryUsageState,
+    ...usageState,
     ...threadState,
     client,
     error,

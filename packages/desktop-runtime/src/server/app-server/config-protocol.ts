@@ -4,8 +4,11 @@ import type {
   RuntimeConfigState,
   RuntimeConfiguredModelReference,
   RuntimeMcpServerStatus,
-  RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
+import type {
+  MemoryPreferences,
+  MemoryPreferencesPatch,
+} from '@setsuna-desktop/feature-memory/contracts';
 import path from 'node:path';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
@@ -14,12 +17,16 @@ import {
   hasOwn,
   numericInput,
   recordInput,
-  requiredPositiveInteger,
   requiredRawString,
   requiredString,
   stringInput,
 } from './input.js';
 import { sweOffsetPage } from './pagination.js';
+import {
+  appServerMemoryConfig,
+  appServerMemorySettingInput,
+  appServerMemorySettingsInput,
+} from './memory-config-protocol.js';
 
 type AppServerModelCatalogItem = {
   id: string;
@@ -64,9 +71,13 @@ type AppServerConfigEdit = {
 };
 
 const APP_SERVER_CONFIG_LAYER_VERSION = '1';
-export function appServerConfigReadResponse(config: RuntimeConfigState, input: Record<string, unknown>) {
+export function appServerConfigReadResponse(
+  config: RuntimeConfigState,
+  memory: MemoryPreferences,
+  input: Record<string, unknown>,
+) {
   const cwd = stringInput(input.cwd) || process.cwd();
-  const configValue = sweEffectiveConfig(config, cwd);
+  const configValue = sweEffectiveConfig(config, memory, cwd);
   const metadata = appServerConfigLayerMetadata(config);
   const origins = appServerConfigOrigins(configValue, metadata);
   const includeLayers = input.includeLayers === true || input.include_layers === true;
@@ -87,7 +98,11 @@ export function appServerConfigReadResponse(config: RuntimeConfigState, input: R
   };
 }
 
-function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<string, unknown> {
+function sweEffectiveConfig(
+  config: RuntimeConfigState,
+  memory: MemoryPreferences,
+  cwd: string,
+): Record<string, unknown> {
   const reasoningEffort = activeModelReasoningEffort(config);
   return {
     model: activeModelCode(config),
@@ -120,9 +135,9 @@ function sweEffectiveConfig(config: RuntimeConfigState, cwd: string): Record<str
       data_path: config.dataPath,
       storage_path: config.storagePath,
       setsuna_style: config.setsunaStyle,
-      memory_enabled: config.memoryEnabled,
+      memory_enabled: memory.useMemories || memory.generateMemories,
     },
-    memories: appServerMemoryConfig(config.memory),
+    memories: appServerMemoryConfig(config, memory),
     features: appServerConfigFeatureEnablement(config),
   };
 }
@@ -208,12 +223,23 @@ export function appServerConfigWriteResponse(config: RuntimeConfigState) {
   };
 }
 
-export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState, edits: AppServerConfigEdit[]): RuntimeConfigInput {
+export type AppServerConfigMutation = Readonly<{
+  config: RuntimeConfigInput;
+  memoryPatch: MemoryPreferencesPatch;
+  writesConfig: boolean;
+}>;
+
+export function appServerRuntimeConfigInputFromEdits(
+  config: RuntimeConfigState,
+  edits: AppServerConfigEdit[],
+): AppServerConfigMutation {
   const next: RuntimeConfigInput = {
     features: { ...(config.features ?? {}) },
     desktopSettings: { ...(config.desktopSettings ?? {}) },
     sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}) },
   };
+  let memoryPatch: MemoryPreferencesPatch = {};
+  let writesConfig = false;
   let providers: RuntimeConfigInput['providers'];
 
   const ensureProviders = () => {
@@ -240,6 +266,7 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
   for (const edit of edits) {
     switch (edit.keyPath) {
       case 'model':
+        writesConfig = true;
         providers = sweProvidersWithActiveModel(
           activeProviderIdForEdit(),
           ensureProviders(),
@@ -247,6 +274,7 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         );
         break;
       case 'model_context_window':
+        writesConfig = true;
         providers = sweProvidersWithModelContextWindow(
           activeProviderIdForEdit(),
           ensureProviders(),
@@ -254,26 +282,31 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         );
         break;
       case 'model_auto_compact_token_limit':
+        writesConfig = true;
         next.desktopSettings = {
           ...(next.desktopSettings ?? {}),
           model_auto_compact_token_limit: edit.value === null ? null : positiveRequiredConfigInt(edit.value, 'model_auto_compact_token_limit'),
         };
         break;
       case 'model_provider':
+        writesConfig = true;
         next.activeProviderId = sweProviderIdForWrite(
           ensureProviders(),
           requiredRawString(edit.value, 'model_provider'),
         );
         break;
       case 'approval_policy':
+        writesConfig = true;
         next.approvalPolicy = appServerApprovalPolicyToRuntime(requiredRawString(edit.value, 'approval_policy'));
         break;
       case 'approvals_reviewer':
+        writesConfig = true;
         next.approvalReviewer = appServerApprovalReviewerToRuntime(
           requiredRawString(edit.value, 'approvals_reviewer'),
         );
         break;
       case 'review_model':
+        writesConfig = true;
         next.taskModels = {
           ...(next.taskModels ?? {}),
           review: appServerReviewModelInput(edit.value, {
@@ -284,15 +317,19 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         };
         break;
       case 'sandbox_mode':
+        writesConfig = true;
         next.permissionProfile = sweSandboxModeToRuntime(requiredRawString(edit.value, 'sandbox_mode'));
         break;
       case 'sandbox_workspace_write':
+        writesConfig = true;
         next.sandboxWorkspaceWrite = sweSandboxWorkspaceWriteInput(edit.value);
         break;
       case 'instructions':
+        writesConfig = true;
         next.globalPrompt = edit.value === null ? '' : requiredRawString(edit.value, 'instructions');
         break;
       case 'model_reasoning_effort':
+        writesConfig = true;
         providers = sweProvidersWithReasoningEffort(
           activeProviderIdForEdit(),
           ensureProviders(),
@@ -300,24 +337,29 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         );
         break;
       case 'features':
+        writesConfig = true;
         next.features = sweMergeObject(next.features ?? {}, sweBooleanRecord(edit.value, 'features'), edit.mergeStrategy);
         break;
       case 'memories':
-        next.memory = appServerMemorySettingsInput(edit.value);
+        memoryPatch = { ...memoryPatch, ...appServerMemorySettingsInput(edit.value) };
         break;
       case 'hooks':
+        writesConfig = true;
         next.hooks = appServerHooksConfigInput(edit.value);
         break;
       case 'bypass_hook_trust':
+        writesConfig = true;
         if (typeof edit.value !== 'boolean') throw new AppServerRpcError(-32602, 'bypass_hook_trust must be a boolean');
         next.bypassHookTrust = edit.value;
         break;
       case 'desktop':
+        writesConfig = true;
         next.desktopSettings = sweMergeObject(next.desktopSettings ?? {}, recordInput(edit.value), edit.mergeStrategy);
-        sweApplyDesktopSettings(next, next.desktopSettings);
+        memoryPatch = { ...memoryPatch, ...sweApplyDesktopSettings(next, next.desktopSettings) };
         break;
       default:
         if (edit.keyPath.startsWith('features.')) {
+          writesConfig = true;
           const name = edit.keyPath.slice('features.'.length);
           if (typeof edit.value !== 'boolean') throw new AppServerRpcError(-32602, `${edit.keyPath} must be a boolean`);
           next.features = { ...(next.features ?? {}), [name]: edit.value };
@@ -325,14 +367,15 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
         }
         if (edit.keyPath.startsWith('desktop.')) {
           const key = edit.keyPath.slice('desktop.'.length);
+          if (key !== 'memory_enabled') writesConfig = true;
           next.desktopSettings = { ...(next.desktopSettings ?? {}), [key]: edit.value };
-          sweApplyDesktopSettings(next, { [key]: edit.value });
+          memoryPatch = { ...memoryPatch, ...sweApplyDesktopSettings(next, { [key]: edit.value }) };
           break;
         }
         if (edit.keyPath.startsWith('memories.')) {
           const key = edit.keyPath.slice('memories.'.length);
-          next.memory = {
-            ...(next.memory ?? config.memory),
+          memoryPatch = {
+            ...memoryPatch,
             ...appServerMemorySettingInput(key, edit.value),
           };
           break;
@@ -342,7 +385,7 @@ export function appServerRuntimeConfigInputFromEdits(config: RuntimeConfigState,
   }
 
   if (providers) next.providers = providers;
-  return next;
+  return { config: next, memoryPatch, writesConfig };
 }
 
 function sweProvidersWithActiveModel(
@@ -544,133 +587,24 @@ function sweMergeObject<T extends Record<string, unknown>>(current: T, update: R
   return (strategy === 'replace' ? { ...update } : { ...current, ...update }) as T;
 }
 
-function sweApplyDesktopSettings(input: RuntimeConfigInput, settings: Record<string, unknown>): void {
-  if (hasOwn(settings, 'memory_enabled')) input.memoryEnabled = settings.memory_enabled === true;
+function sweApplyDesktopSettings(
+  input: RuntimeConfigInput,
+  settings: Record<string, unknown>,
+): MemoryPreferencesPatch {
+  const patch: MemoryPreferencesPatch = hasOwn(settings, 'memory_enabled')
+    ? {
+        useMemories: settings.memory_enabled === true,
+        generateMemories: settings.memory_enabled === true,
+      }
+    : {};
+  if (input.desktopSettings && hasOwn(input.desktopSettings, 'memory_enabled')) {
+    delete input.desktopSettings.memory_enabled;
+  }
   if (hasOwn(settings, 'setsuna_style')) input.setsunaStyle = settings.setsuna_style as string;
   if (hasOwn(settings, 'storage_path') && typeof settings.storage_path === 'string') {
     input.storagePath = settings.storage_path;
   }
-}
-
-function appServerMemoryConfig(memory: RuntimeMemorySettings): Record<string, unknown> {
-  return {
-    disable_on_external_context: memory.disableOnExternalContext,
-    generate_memories: memory.generateMemories,
-    use_memories: memory.useMemories,
-    ...(memory.extractModel ? { extract_model: memory.extractModel } : {}),
-    ...(memory.consolidationModel ? { consolidation_model: memory.consolidationModel } : {}),
-    ...(memory.minRateLimitRemainingPercent !== undefined ? { min_rate_limit_remaining_percent: memory.minRateLimitRemainingPercent } : {}),
-    ...(memory.maxRolloutsPerStartup ? { max_rollouts_per_startup: memory.maxRolloutsPerStartup } : {}),
-    ...(memory.maxRolloutAgeDays ? { max_rollout_age_days: memory.maxRolloutAgeDays } : {}),
-    ...(memory.minRolloutIdleHours ? { min_rollout_idle_hours: memory.minRolloutIdleHours } : {}),
-    ...(memory.maxUnusedDays ? { max_unused_days: memory.maxUnusedDays } : {}),
-    ...(memory.maxRawMemoriesForConsolidation ? { max_raw_memories_for_consolidation: memory.maxRawMemoriesForConsolidation } : {}),
-  };
-}
-
-function appServerMemorySettingsInput(value: unknown): Partial<RuntimeMemorySettings> {
-  const input = recordInput(value);
-  return {
-    ...optionalMemoryBoolean(input, ['disable_on_external_context', 'no_memories_if_mcp_or_web_search', 'disableOnExternalContext'], 'disableOnExternalContext'),
-    ...optionalMemoryBoolean(input, ['generate_memories', 'generateMemories'], 'generateMemories'),
-    ...optionalMemoryBoolean(input, ['use_memories', 'useMemories'], 'useMemories'),
-    ...optionalMemoryString(input, ['extract_model', 'extractModel'], 'extractModel'),
-    ...optionalMemoryString(input, ['consolidation_model', 'consolidationModel'], 'consolidationModel'),
-    ...optionalMemoryPercent(input, ['min_rate_limit_remaining_percent', 'minRateLimitRemainingPercent'], 'minRateLimitRemainingPercent'),
-    ...optionalMemoryPositiveInteger(input, ['max_rollouts_per_startup', 'maxRolloutsPerStartup'], 'maxRolloutsPerStartup'),
-    ...optionalMemoryPositiveInteger(input, ['max_rollout_age_days', 'maxRolloutAgeDays'], 'maxRolloutAgeDays'),
-    ...optionalMemoryPositiveInteger(input, ['min_rollout_idle_hours', 'minRolloutIdleHours'], 'minRolloutIdleHours'),
-    ...optionalMemoryPositiveInteger(input, ['max_unused_days', 'maxUnusedDays'], 'maxUnusedDays'),
-    ...optionalMemoryPositiveInteger(input, ['max_raw_memories_for_consolidation', 'maxRawMemoriesForConsolidation'], 'maxRawMemoriesForConsolidation'),
-  };
-}
-
-function appServerMemorySettingInput(key: string, value: unknown): Partial<RuntimeMemorySettings> {
-  switch (key) {
-    case 'disable_on_external_context':
-    case 'no_memories_if_mcp_or_web_search':
-    case 'disableOnExternalContext':
-      return { disableOnExternalContext: requiredMemoryBoolean(value, key) };
-    case 'generate_memories':
-    case 'generateMemories':
-      return { generateMemories: requiredMemoryBoolean(value, key) };
-    case 'use_memories':
-    case 'useMemories':
-      return { useMemories: requiredMemoryBoolean(value, key) };
-    case 'extract_model':
-    case 'extractModel':
-      return { extractModel: memoryStringValue(value, key) };
-    case 'consolidation_model':
-    case 'consolidationModel':
-      return { consolidationModel: memoryStringValue(value, key) };
-    case 'min_rate_limit_remaining_percent':
-    case 'minRateLimitRemainingPercent':
-      return { minRateLimitRemainingPercent: requiredMemoryPercent(value, key) };
-    case 'max_rollouts_per_startup':
-    case 'maxRolloutsPerStartup':
-      return { maxRolloutsPerStartup: requiredPositiveInteger(value, key) };
-    case 'max_rollout_age_days':
-    case 'maxRolloutAgeDays':
-      return { maxRolloutAgeDays: requiredPositiveInteger(value, key) };
-    case 'min_rollout_idle_hours':
-    case 'minRolloutIdleHours':
-      return { minRolloutIdleHours: requiredPositiveInteger(value, key) };
-    case 'max_unused_days':
-    case 'maxUnusedDays':
-      return { maxUnusedDays: requiredPositiveInteger(value, key) };
-    case 'max_raw_memories_for_consolidation':
-    case 'maxRawMemoriesForConsolidation':
-      return { maxRawMemoriesForConsolidation: requiredPositiveInteger(value, key) };
-    default:
-      throw appServerConfigWriteError('configValidationError', `Unsupported config key path: memories.${key}`);
-  }
-}
-
-function optionalMemoryBoolean(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
-  for (const key of keys) {
-    if (hasOwn(input, key)) return { [field]: requiredMemoryBoolean(input[key], key) };
-  }
-  return {};
-}
-
-function optionalMemoryString(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
-  for (const key of keys) {
-    if (hasOwn(input, key)) return { [field]: memoryStringValue(input[key], key) };
-  }
-  return {};
-}
-
-function optionalMemoryPositiveInteger(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
-  for (const key of keys) {
-    if (hasOwn(input, key)) return { [field]: requiredPositiveInteger(input[key], key) };
-  }
-  return {};
-}
-
-function optionalMemoryPercent(input: Record<string, unknown>, keys: string[], field: keyof RuntimeMemorySettings): Partial<RuntimeMemorySettings> {
-  for (const key of keys) {
-    if (hasOwn(input, key)) return { [field]: requiredMemoryPercent(input[key], key) };
-  }
-  return {};
-}
-
-function requiredMemoryBoolean(value: unknown, name: string): boolean {
-  if (typeof value === 'boolean') return value;
-  throw new AppServerRpcError(-32602, `memories.${name} must be a boolean`);
-}
-
-function memoryStringValue(value: unknown, name: string): string | undefined {
-  if (value === null) return undefined;
-  if (typeof value === 'string') return stringInput(value);
-  throw new AppServerRpcError(-32602, `memories.${name} must be a string or null`);
-}
-
-function requiredMemoryPercent(value: unknown, name: string): number {
-  const numeric = numericInput(value);
-  if (numeric === undefined || numeric < 0 || numeric > 100 || !Number.isInteger(numeric)) {
-    throw new AppServerRpcError(-32602, `memories.${name} must be between 0 and 100`);
-  }
-  return numeric;
+  return patch;
 }
 
 export function sweCollaborationModeListResponse() {

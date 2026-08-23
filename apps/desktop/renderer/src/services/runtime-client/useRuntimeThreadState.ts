@@ -50,7 +50,6 @@ export type RuntimeThreadClient = Pick<
   | 'startReview'
   | 'subscribeEvents'
   | 'updateThread'
-  | 'updateThreadMemoryMode'
 >;
 
 export type RuntimeThreadBootstrap = {

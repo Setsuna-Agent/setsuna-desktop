@@ -2,7 +2,7 @@ import type {
   RuntimeMemoryPhase2Workspace,
   RuntimeMemoryPhase2WorkspaceChange,
   RuntimeMemoryPhase2WorkspaceChangeStatus,
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-memory/contracts';
 import { lstat, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveConfinedPathWithoutSymlinks } from '../../security/path-confinement.js';

@@ -410,12 +410,6 @@ function developerRuntimeConfig(): RuntimeConfigState {
     storagePath: '/tmp/memory',
     providers: [],
     globalPrompt: '',
-    memory: {
-      useMemories: false,
-      generateMemories: false,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

@@ -1,7 +1,7 @@
 import type {
   RuntimeMemoryFileSearchMatch,
   RuntimeMemorySearchMatchMode,
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-memory/contracts';
 
 export function normalizeSearchMatchMode(
   value: RuntimeMemorySearchMatchMode | undefined,
