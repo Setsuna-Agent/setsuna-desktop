@@ -47,6 +47,7 @@ describe('window frame interactions', () => {
         if (message === 0x0112) callback = nextCallback;
       }),
       isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => false),
       isMaximized: vi.fn(() => true),
       maximize: vi.fn(),
       unmaximize: vi.fn(),
@@ -57,6 +58,27 @@ describe('window frame interactions', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(window.unmaximize).toHaveBeenCalledOnce();
+    expect(window.maximize).not.toHaveBeenCalled();
+  });
+
+  it('preserves maximized state when Windows restores a minimized taskbar window', async () => {
+    let callback: ((wParam: Buffer, lParam: Buffer) => void) | undefined;
+    const window = {
+      hookWindowMessage: vi.fn((message, nextCallback) => {
+        if (message === 0x0112) callback = nextCallback;
+      }),
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => true),
+      isMaximized: vi.fn(() => true),
+      maximize: vi.fn(),
+      unmaximize: vi.fn(),
+    } as unknown as BrowserWindow;
+
+    registerWindowsTitlebarDoubleClick(window, 'win32');
+    callback?.(windowsParameter(0xf122), Buffer.alloc(8));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(window.unmaximize).not.toHaveBeenCalled();
     expect(window.maximize).not.toHaveBeenCalled();
   });
 

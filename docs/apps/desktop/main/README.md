@@ -43,6 +43,8 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 - 拦截外链和 `<webview>` attach。
 - 等待 renderer 首帧后揭示工作台。
 
+Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-windows.png`，安装包/可执行文件使用由同一画面生成的多尺寸 `assets/build/icon.ico`；macOS 与 Linux 继续使用保留平台留白的 `icon.icns` / `icon.png`。
+
 ### 3. 本机服务组装
 
 按依赖顺序启动：
@@ -67,6 +69,8 @@ Runtime 依赖 Browser Feature/native bridge 的地址和 token，因此相应 p
 ### 5. 关闭
 
 窗口关闭和 app quit 都收敛到幂等的服务关闭流程。要先停止新工作，再依次 dispose Main Feature（Review 会撤销 handler/watcher，Terminal 会撤销 handler 并关闭 PTY）、排空 runtime、browser/native bridge 和 updater；重复 quit 事件不能启动两套 shutdown。
+
+Windows 用户可选择关闭窗口时直接退出或隐藏到系统托盘。托盘模式只隐藏原窗口并保持本机服务运行；托盘图标负责恢复窗口，右键菜单提供打开与显式退出。若托盘初始化失败，关闭行为必须回退为直接退出。
 
 ## Main 中应该放什么
 

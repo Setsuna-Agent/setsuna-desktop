@@ -1,4 +1,8 @@
-import type { RuntimeConfigState, RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import type {
+  DesktopWindowCloseBehavior,
+  RuntimeConfigState,
+  RuntimeInterfaceLanguage,
+} from '@setsuna-desktop/contracts';
 import {
   Bold,
   Code2,
@@ -9,6 +13,7 @@ import {
   Paintbrush,
   Palette,
   PanelLeft,
+  Power,
   SlidersHorizontal,
   Sun,
   Type,
@@ -49,6 +54,7 @@ import { SelectField } from '../../../shared/ui/primitives.js';
 import { markdownLinkOpenModeFromConfig } from '../../chat/markdown/markdownLinkPreference.js';
 import { SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
+import { useDesktopWindowCloseBehavior } from './useDesktopWindowCloseBehavior.js';
 
 const themeModeLabelKeys: Record<ThemeMode, MessageKey> = {
   light: 'settings.general.theme.light',
@@ -89,6 +95,9 @@ export function GeneralSettings({
   const { sidebarBackgroundStyle, setSidebarBackgroundStyle } = useSidebarBackgroundPreference();
   const { mode, setThemeModeWithTransition } = useThemeTransition();
   const { accentColor, setAccentColor } = useAccentColorPreference();
+  const supportsWindowCloseBehavior = typeof window !== 'undefined'
+    && window.setsunaDesktop?.desktop.platform === 'win32';
+  const windowCloseBehavior = useDesktopWindowCloseBehavior(supportsWindowCloseBehavior);
   const availableFontFamilyOptions = getFontFamilyOptionsForPlatform();
   const availableCodeFontFamilyOptions = getCodeFontFamilyOptionsForPlatform();
   const selectedFont = availableFontFamilyOptions.find((item) => item.value === fontFamily) ?? fontFamilyOptions.find((item) => item.value === fontFamily) ?? availableFontFamilyOptions[0] ?? fontFamilyOptions[0];
@@ -176,6 +185,40 @@ export function GeneralSettings({
           </label>
         </div>
       </div>
+
+      {supportsWindowCloseBehavior ? (
+        <div className="chat-user-settings__section-block">
+          <div className="chat-user-settings__group-title">{t('settings.general.window')}</div>
+          <div className="chat-user-settings__group chat-user-settings__general-section">
+            <label className="chat-user-settings__row">
+              <span className="chat-user-settings__row-label">
+                <Power size={14} />
+                <span>{t('settings.general.closeBehavior')}</span>
+              </span>
+              <span className="settings-window-close-behavior__control">
+                <SelectField
+                  aria-label={t('settings.general.closeBehavior')}
+                  className="settings-local-control"
+                  disabled={windowCloseBehavior.pending}
+                  value={windowCloseBehavior.closeBehavior ?? 'quit'}
+                  onValueChange={(nextValue) => {
+                    if (!isDesktopWindowCloseBehavior(nextValue)) return;
+                    void windowCloseBehavior.setCloseBehavior(nextValue);
+                  }}
+                >
+                  <option value="quit">{t('settings.general.closeQuit')}</option>
+                  <option value="hide-to-tray">{t('settings.general.closeHideToTray')}</option>
+                </SelectField>
+                {windowCloseBehavior.error ? (
+                  <small className="settings-window-close-behavior__error" role="alert">
+                    {t('settings.general.closeBehaviorError')}
+                  </small>
+                ) : null}
+              </span>
+            </label>
+          </div>
+        </div>
+      ) : null}
 
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.general.font')}</div>
@@ -347,6 +390,10 @@ export function GeneralSettings({
       </div>
     </div>
   );
+}
+
+function isDesktopWindowCloseBehavior(value: string): value is DesktopWindowCloseBehavior {
+  return value === 'quit' || value === 'hide-to-tray';
 }
 
 function CodeAppearancePreview({ fontLabel, themeLabel }: { fontLabel: string; themeLabel: string }) {

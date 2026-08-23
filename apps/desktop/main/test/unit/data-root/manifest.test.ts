@@ -56,6 +56,7 @@ describe('desktop data migration manifest', () => {
     expect(paths).not.toContain('runtime/logs/runtime.log');
     expect(manifest.entries.find((entry) => entry.relativePath === 'secure-credentials.json')?.category)
       .toBe('settings_credentials');
+    expect(migrationCategory('window-preferences.json')).toBe('settings_credentials');
     expect(migrationCategory('runtime/.memories-before-unification-1/MEMORY.md')).toBe('memories');
   });
 

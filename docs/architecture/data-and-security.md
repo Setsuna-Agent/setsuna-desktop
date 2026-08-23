@@ -9,6 +9,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 ```text
 <dataRoot>/
 ├── .setsuna-data-root.json
+├── window-preferences.json
 ├── window-state.json
 ├── secure-credentials.json
 ├── update-download-sources.json

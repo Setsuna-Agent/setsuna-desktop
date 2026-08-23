@@ -122,6 +122,7 @@
     "files": [
       "dist/**/*",
       "assets/build/icon.png",
+      "assets/build/icon-windows.png",
       "package.json",
       "packages/contracts/package.json",
       "packages/feature-core/package.json",

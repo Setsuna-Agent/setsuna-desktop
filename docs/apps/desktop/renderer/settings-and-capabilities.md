@@ -26,7 +26,7 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 | 文件 | 内容 |
 | --- | --- |
-| `GeneralSettings.tsx` | 主题、字体、缩放、外观 |
+| `GeneralSettings.tsx` | 主题、字体、缩放、外观与 Windows 关闭窗口行为 |
 | `PersonalizationSettings.tsx` | Global prompt、Setsuna style |
 | `RuntimeSettings.tsx` | Approval、permission、developer features、runtime 行为 |
 | `TaskModelSettings.tsx` | 标题、代码审查、审批审查与上下文压缩等宿主任务的模型选择 |

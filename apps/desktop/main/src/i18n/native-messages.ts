@@ -2,6 +2,8 @@ import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 
 const zhCNMessages = {
   'plugins.installLocal.title': '选择本地插件目录',
+  'tray.open': '打开 Setsuna Desktop',
+  'tray.quit': '退出',
   'updater.ready.title': '更新已经准备完成',
   'updater.ready.later': '稍后',
   'updater.ready.openFinder': '打开访达',
@@ -20,6 +22,8 @@ export type NativeTranslate = (key: NativeMessageKey, params?: Record<string, st
 
 const enUSMessages: Record<NativeMessageKey, string> = {
   'plugins.installLocal.title': 'Choose local plugin folder',
+  'tray.open': 'Open Setsuna Desktop',
+  'tray.quit': 'Exit',
   'updater.ready.title': 'Update ready',
   'updater.ready.later': 'Later',
   'updater.ready.openFinder': 'Open in Finder',

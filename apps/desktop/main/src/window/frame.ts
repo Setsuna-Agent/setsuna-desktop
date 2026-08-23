@@ -35,6 +35,10 @@ export function registerWindowsTitlebarDoubleClick(window: BrowserWindow, platfo
     const command = parameter & windowsSystemCommandMask;
     if (command !== windowsMaximizeCommand && command !== windowsRestoreCommand) return;
 
+    // Let Windows restore minimized taskbar windows natively so it can preserve
+    // whether the window was maximized before it was minimized.
+    if (command === windowsRestoreCommand && window.isMinimized()) return;
+
     // Chromium 自绘标题栏在两种窗口状态下都可能发出 SC_MAXIMIZE。
     // 将重复的最大化命令视为原生标题栏切换操作。
     scheduleMaximizedState(command === windowsMaximizeCommand ? !window.isMaximized() : false);

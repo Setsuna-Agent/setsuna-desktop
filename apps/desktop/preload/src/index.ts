@@ -121,6 +121,8 @@ const windowControls: SetsunaDesktopBridge['windowControls'] = {
   minimize: () => ipcRenderer.invoke('window-control:minimize'),
   toggleMaximize: () => ipcRenderer.invoke('window-control:toggle-maximize'),
   close: () => ipcRenderer.invoke('window-control:close'),
+  getCloseBehavior: () => ipcRenderer.invoke('window-control:get-close-behavior'),
+  setCloseBehavior: (behavior) => ipcRenderer.invoke('window-control:set-close-behavior', behavior),
   isMaximized: () => ipcRenderer.invoke('window-control:is-maximized'),
   onMaximizedChange(callback: (maximized: boolean) => void): () => void {
     const listener = (_event: Electron.IpcRendererEvent, maximized: boolean) => callback(maximized);

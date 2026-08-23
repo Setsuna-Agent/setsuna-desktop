@@ -150,6 +150,8 @@ export type DesktopKeyboardShortcutInput = {
   shiftKey: boolean;
 };
 
+export type DesktopWindowCloseBehavior = 'quit' | 'hide-to-tray';
+
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
   desktop: {
@@ -234,6 +236,8 @@ export type SetsunaDesktopBridge = {
     minimize(): Promise<boolean>;
     toggleMaximize(): Promise<boolean>;
     close(): Promise<boolean>;
+    getCloseBehavior(): Promise<DesktopWindowCloseBehavior>;
+    setCloseBehavior(behavior: DesktopWindowCloseBehavior): Promise<DesktopWindowCloseBehavior>;
     isMaximized(): Promise<boolean>;
     onMaximizedChange(callback: (maximized: boolean) => void): () => void;
     setTitlebarScale(scale: number): Promise<boolean>;

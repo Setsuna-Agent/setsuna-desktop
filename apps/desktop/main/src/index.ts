@@ -6,11 +6,13 @@ import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main'
 import {
   app,
   BrowserWindow,
+  Menu,
   nativeImage,
   safeStorage,
   screen,
   session,
   shell,
+  Tray,
   WebContentsView,
   type NativeImage,
   type Rectangle,
@@ -72,12 +74,18 @@ import {
   type ActivatedBuiltinMainFeatures,
 } from './composition/builtin-main-features.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
+import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
+import { DesktopWindowPreferencesStore } from './window/preferences.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
 import { resolveMainWindowSurfaceOptions } from './window/surface.js';
+import { DesktopTrayController, revealDesktopWindow } from './window/tray.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const desktopIconRelativePath = path.join('assets', 'build', 'icon.png');
+// Windows already constrains taskbar and tray icons, so use artwork without the
+// platform-style transparent inset applied to the macOS/Linux source image.
+const desktopIconFileName = process.platform === 'win32' ? 'icon-windows.png' : 'icon.png';
+const desktopIconRelativePath = path.join('assets', 'build', desktopIconFileName);
 const mainWindowDefaultWidth = 1320;
 const mainWindowDefaultHeight = 860;
 const mainWindowMinWidth = 880;
@@ -168,10 +176,35 @@ async function createWindow(): Promise<void> {
   let startupClosedBeforeHandoff = false;
   let startupInProgress = true;
   mainWindow = currentMainWindow;
+  const currentDesktopTray = new DesktopTrayController({
+    buildMenu: (template) => Menu.buildFromTemplate(template),
+    createTray: (icon) => new Tray(icon),
+    getInterfaceLanguage: () => interfaceLanguage,
+    icon: desktopIcon,
+    onOpen: () => revealDesktopWindow(currentMainWindow),
+    onQuit: () => app.quit(),
+  });
+  const closeBehaviorController = new DesktopWindowCloseBehaviorController(
+    new DesktopWindowPreferencesStore(dataLayout.windowPreferencesPath),
+    currentDesktopTray,
+  );
+  if (process.platform === 'win32') await closeBehaviorController.initialize();
+  let isSystemSessionEnding = false;
+  currentMainWindow.on('query-session-end', () => {
+    isSystemSessionEnding = true;
+  });
+  const handleMainWindowClose = (event: Electron.Event) => {
+    // Windows shutdown/logoff does not emit app.before-quit, so it must bypass tray hiding here.
+    if (!closeBehaviorController.shouldHideWindow(isAppQuitting || isSystemSessionEnding)) return;
+    event.preventDefault();
+    currentMainWindow.hide();
+  };
+  currentMainWindow.on('close', handleMainWindowClose);
   const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
   registerWindowsTitlebarDoubleClick(currentMainWindow);
   if (usesCustomFrame) currentMainWindow.setMenu(null);
   currentMainWindow.on('closed', () => {
+    currentDesktopTray.dispose();
     unregisterDataRootState();
     startupClosedBeforeHandoff = startupInProgress;
     if (mainWindow === currentMainWindow) mainWindow = null;
@@ -350,12 +383,22 @@ async function createWindow(): Promise<void> {
     onActiveKeyboardShortcutBindingsChange: (bindings) => {
       activeKeyboardShortcutBindings = new Set(bindings);
     },
-    onInterfaceLanguageChange: (locale) => { interfaceLanguage = locale; },
+    onInterfaceLanguageChange: (locale) => {
+      interfaceLanguage = locale;
+      currentDesktopTray.refreshMenu();
+    },
     userDataPath: dataLayout.root,
   });
   registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
   registerPluginIpc(currentRuntimeHost, currentMainWindow, () => interfaceLanguage);
-  registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
+  registerWindowIpc({
+    mainWindow: currentMainWindow,
+    macTrafficLightPosition: getMacTrafficLightPosition,
+    getCloseBehavior: () => closeBehaviorController.getCloseBehavior(),
+    setCloseBehavior: (behavior) => process.platform === 'win32'
+      ? closeBehaviorController.setCloseBehavior(behavior)
+      : Promise.resolve('quit'),
+  });
   registerWindowsSandboxIpc(
     new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
     currentMainWindow,
@@ -430,7 +473,10 @@ async function createDataRootMaintenanceWindow(): Promise<void> {
   trackDesktopWindowState(currentMainWindow, profileLayout.windowStatePath);
   registerWindowsTitlebarDoubleClick(currentMainWindow);
   if (usesCustomFrame) currentMainWindow.setMenu(null);
-  registerWindowIpc({ macTrafficLightPosition: getMacTrafficLightPosition });
+  registerWindowIpc({
+    mainWindow: currentMainWindow,
+    macTrafficLightPosition: getMacTrafficLightPosition,
+  });
   const unregisterDataRootState = registerDataRootIpc(dataRootCoordinator, currentMainWindow);
   currentMainWindow.on('closed', () => {
     unregisterDataRootState();
@@ -512,7 +558,7 @@ function loadDesktopIcon(): NativeImage | undefined {
 function resolveDesktopIconPath(): string | undefined {
   const candidates = [
     path.join(app.getAppPath(), desktopIconRelativePath),
-    path.join(process.resourcesPath, 'icon.png'),
+    path.join(process.resourcesPath, desktopIconFileName),
     path.join(process.resourcesPath, desktopIconRelativePath),
   ];
   return candidates.find((candidate) => existsSync(candidate));
@@ -604,9 +650,7 @@ if (!ownsDesktopInstance) {
 } else {
   app.on('second-instance', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.show();
-    mainWindow.focus();
+    revealDesktopWindow(mainWindow);
   });
 
   app.whenReady().then(createWindow).catch((error) => {

@@ -923,6 +923,19 @@
   color: var(--app-text-muted);
 }
 
+.desktop-settings-panel .settings-window-close-behavior__control {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+
+.desktop-settings-panel .settings-window-close-behavior__error {
+  color: var(--app-danger);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: right;
+}
+
 .desktop-settings-panel .chat-user-settings__toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
