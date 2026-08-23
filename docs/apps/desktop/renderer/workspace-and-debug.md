@@ -84,7 +84,7 @@ UI resize 要与 pty cols/rows 同步，但不能在每个像素变化中无节�
 
 ## 内置浏览器
 
-主要文件：
+Browser presentation 位于 `packages/features/browser/src/renderer/`，主要文件：
 
 - `BrowserPanel.tsx`：Tab/webview 编排。
 - `BrowserAddressBar.tsx`：受控导航输入。
@@ -94,7 +94,7 @@ UI resize 要与 pty cols/rows 同步，但不能在每个像素变化中无节�
 - `browser/runtimeBrowserActions.ts`：runtime 请求引起的 tab 动作。
 - `useBrowserScreenshot.ts`：截图。
 
-Renderer 负责可见 tab UI；可信 guest registry 和 CDP 在 main。详情见 [main 浏览器文档](../main/browser.md)。
+`apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx` 只注入 preload bridge、i18n、通知、外链、Select 和 Workspace resize handle。Feature renderer 负责可见 tab UI；可信 guest registry 和 CDP 由同一 Feature 的 main 入口持有。详情见 [main 浏览器文档](../main/browser.md)。
 
 ## 外部 Workspace apps
 

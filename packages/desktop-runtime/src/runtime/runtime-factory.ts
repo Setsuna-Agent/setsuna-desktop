@@ -1,6 +1,5 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
-import { HttpBrowserControlClient } from '../adapters/browser/http-browser-control-client.js';
 import { InMemoryRuntimeDebugTraceStore } from '../adapters/debug/in-memory-runtime-debug-trace-store.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
@@ -153,7 +152,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
-  const browserControl = HttpBrowserControlClient.fromEnvironment();
   const configuredModelClient = new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
     debugTrace: debugTraceStore,
     fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
@@ -195,10 +193,11 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       ),
     },
   );
+  const browserToolHost = new BrowserToolHost();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
-    new BrowserToolHost(browserControl),
+    browserToolHost,
     new McpManagementToolHost(mcpStore, mcpConnections),
     new McpRuntimeToolHost(mcpStore, mcpConnections),
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
@@ -241,6 +240,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     approvalGate,
     appServerNotificationBus,
     backgroundShellProcesses,
+    browserToolHost,
     configStore,
     debugTraceStore,
     eventBus,

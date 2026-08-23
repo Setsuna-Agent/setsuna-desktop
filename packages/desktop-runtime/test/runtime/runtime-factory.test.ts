@@ -25,59 +25,69 @@ describe('runtime factory tool wiring', () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-factory-test-'));
     const runtime = createRuntimeFactory({ dataDir });
     const context = { threadId: 'thread_1', turnId: 'turn_1' };
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
 
-    const tools = await runtime.toolHost.listTools(context);
-    expect(tools.filter((tool) => tool.name === 'configure_skill')).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === 'request_user_input')).toHaveLength(1);
-    expect(tools.filter((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)).toHaveLength(1);
-    const systemPrompt = await runtime.toolHost.systemPrompt?.(context, { tools });
-    expect(systemPrompt).toContain('call publish_artifact once');
-    expect(systemPrompt).toContain('Use python3 or uv directly');
-    await expect(runtime.toolHost.toolRuntimeProfile?.('request_user_input', context)).resolves.toMatchObject({
-      approvalMode: 'selfManaged',
-      supportsParallel: false,
-    });
+    try {
+      const tools = await runtime.toolHost.listTools(context);
+      expect(tools.filter((tool) => tool.name === 'configure_skill')).toHaveLength(1);
+      expect(tools.filter((tool) => tool.name === 'open_browser')).toHaveLength(1);
+      expect(tools.filter((tool) => tool.name === 'request_user_input')).toHaveLength(1);
+      expect(tools.filter((tool) => tool.name === PUBLISH_ARTIFACT_TOOL_NAME)).toHaveLength(1);
+      const systemPrompt = await runtime.toolHost.systemPrompt?.(context, { tools });
+      expect(systemPrompt).toContain('call publish_artifact once');
+      expect(systemPrompt).toContain('Use python3 or uv directly');
+      await expect(runtime.toolHost.toolRuntimeProfile?.('request_user_input', context)).resolves.toMatchObject({
+        approvalMode: 'selfManaged',
+        supportsParallel: false,
+      });
 
-    await expect(runtime.toolHost.runTool('open_browser', { url: 'https://www.baidu.com' }, context)).resolves.toMatchObject({
-      data: { kind: 'browser.open', url: 'https://www.baidu.com/' },
-    });
+      await expect(runtime.toolHost.runTool('open_browser', { url: 'https://www.baidu.com' }, context)).resolves.toMatchObject({
+        data: { kind: 'browser.open', url: 'https://www.baidu.com/' },
+      });
 
-    const created = await runtime.toolHost.runTool('configure_skill', {
-      name: 'Factory Skill',
-      description: 'Created through the chat Skill tool.',
-      content: '# Factory Skill\n\nUse this from the shared runtime registry.',
-    }, context);
+      const created = await runtime.toolHost.runTool('configure_skill', {
+        name: 'Factory Skill',
+        description: 'Created through the chat Skill tool.',
+        content: '# Factory Skill\n\nUse this from the shared runtime registry.',
+      }, context);
 
-    expect(created.content).toContain('Skill configured: Factory Skill');
-    await expect(runtime.skillRegistry.listSkills()).resolves.toMatchObject({
-      skills: expect.arrayContaining([
-        expect.objectContaining({
-          id: 'factory-skill',
-          name: 'Factory Skill',
-          kind: 'user',
-          enabled: true,
-        }),
-      ]),
-    });
+      expect(created.content).toContain('Skill configured: Factory Skill');
+      await expect(runtime.skillRegistry.listSkills()).resolves.toMatchObject({
+        skills: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'factory-skill',
+            name: 'Factory Skill',
+            kind: 'user',
+            enabled: true,
+          }),
+        ]),
+      });
 
-    const updated = await runtime.skillRegistry.updateSkill('factory-skill', {
-      name: 'Factory Skill Updated',
-      content: '# Factory Skill Updated\n\nUpdated through the capability form registry.',
-    });
+      const updated = await runtime.skillRegistry.updateSkill('factory-skill', {
+        name: 'Factory Skill Updated',
+        content: '# Factory Skill Updated\n\nUpdated through the capability form registry.',
+      });
 
-    expect(updated).toMatchObject({
-      id: 'factory-skill',
-      name: 'Factory Skill Updated',
-      content: expect.stringContaining('capability form registry'),
-    });
-    await expect(runtime.toolHost.previewToolCall?.('configure_skill', {
-      id: 'factory-skill',
-      name: 'Factory Skill Updated',
-      content: '# Factory Skill Updated\n\nPreview existing skill.',
-    }, context)).resolves.toMatchObject({
-      resultPreview: expect.stringContaining('"action":"update"'),
-    });
+      expect(updated).toMatchObject({
+        id: 'factory-skill',
+        name: 'Factory Skill Updated',
+        content: expect.stringContaining('capability form registry'),
+      });
+      await expect(runtime.toolHost.previewToolCall?.('configure_skill', {
+        id: 'factory-skill',
+        name: 'Factory Skill Updated',
+        content: '# Factory Skill Updated\n\nPreview existing skill.',
+      }, context)).resolves.toMatchObject({
+        resultPreview: expect.stringContaining('"action":"update"'),
+      });
+    } finally {
+      await composition.dispose();
+      await runtime.extensionManager.shutdown();
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
   });
 
   it('creates and updates a managed local Plugin through the chat tool', async () => {

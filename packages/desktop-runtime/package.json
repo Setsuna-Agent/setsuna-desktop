@@ -16,6 +16,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/feature-browser": "workspace:*",
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",

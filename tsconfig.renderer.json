@@ -15,6 +15,7 @@
       "@renderer/*": ["apps/desktop/renderer/src/*"],
       "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"],
       "@setsuna-desktop/feature-core/*": ["packages/feature-core/src/*"],
+      "@setsuna-desktop/feature-browser/*": ["packages/features/browser/src/*"],
       "@setsuna-desktop/feature-image-generation/*": ["packages/features/image-generation/src/*"],
       "@setsuna-desktop/feature-goal/*": ["packages/features/goal/src/*"],
       "@setsuna-desktop/feature-review/*": ["packages/features/review/src/*"],
@@ -31,6 +32,7 @@
   "references": [
     { "path": "./packages/contracts/tsconfig.build.json" },
     { "path": "./packages/feature-core/tsconfig.build.json" },
+    { "path": "./packages/features/browser/tsconfig.build.json" },
     { "path": "./packages/features/image-generation/tsconfig.build.json" },
     { "path": "./packages/features/goal/tsconfig.build.json" },
     { "path": "./packages/features/review/tsconfig.build.json" },

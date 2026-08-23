@@ -1,23 +1,25 @@
 # 内置浏览器与 CDP 控制
 
-源码目录：`apps/desktop/main/src/browser/`
+Feature 源码目录：`packages/features/browser/src/`
 
-内置浏览器的可视标签由 renderer 管理，但 guest 身份、CDP session 和 Agent 自动化都由 main 持有。网页内容属于外部不可信上下文。
+Browser 是纵向内置 Feature：共享 contract、runtime 工具语义、main guest/CDP 控制、preload bridge 与 renderer 视图都由 `packages/features/browser` 持有。宿主只负责四端 composition、注入窗口/i18n/通知等窄能力，以及把 Feature 工具服务适配到通用 `ToolHost`。网页内容属于外部不可信上下文。
 
 ## 模块组成
 
-| 文件 | 职责 |
+| 目录/文件 | 职责 |
 | --- | --- |
-| `control.ts` | Tab registry、active tab、固定浏览器动作 facade |
-| `control-server.ts` | 带 bearer token 的 loopback HTTP 控制面 |
-| `cdp/automation.ts` | CDP attach、target/frame 管理和输入动作 |
-| `cdp/snapshot.ts` | DOM/AX/layout/visible text 快照与 ref |
-| `cdp/device-emulation.ts` | 设备 viewport、scale、touch 等模拟 |
-| `native-keyboard.ts` | 跨平台 key 到 CDP 输入的规范化 |
-| `favicon.ts` | 安全解析和读取 favicon |
-| `context-menu.ts` | Guest 页面右键菜单 |
+| `contracts/` | Browser control DTO、preload bridge、runtime tool service、panel action 与 Feature definition |
+| `main/control.ts` | Tab registry、active tab、固定浏览器动作 facade |
+| `main/control-server.ts` | 带 bearer token 的 loopback HTTP 控制面 |
+| `main/cdp/*` | CDP attach、快照、target/frame、输入动作和设备模拟 |
+| `main/ipc.ts` / `main/webview.ts` | 固定 IPC、guest 校验、安全配置、右键菜单与新标签拦截 |
+| `preload/feature.ts` | Typed Browser bridge contribution |
+| `runtime/browser-runtime-tools.ts` | 工具 schema、审批、外部上下文与结果格式化 |
+| `runtime/http-browser-control-client.ts` | runtime 到 main loopback 控制面的窄 client |
+| `renderer/Browser*.tsx` | Tab/webview、地址栏、设备模拟、favicon、截图与菜单 |
+| `renderer/browser.css` | Browser 作用域样式 |
 
-Renderer 侧对应 `features/workspace/Browser*.tsx`；runtime 侧对应 `adapters/browser/http-browser-control-client.ts` 与 `adapters/tool/browser-tool-host.ts`。
+四端注册入口分别位于 runtime、main、preload、renderer 的 `composition/builtin-*-features.ts`。Renderer 宿主适配器是 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx`；runtime 的 `apps` 外适配器 `packages/desktop-runtime/src/adapters/tool/browser-tool-host.ts` 只把 Feature 服务接入通用工具路由，不拥有 Browser 业务规则。
 
 ## Tab 注册
 
@@ -56,7 +58,7 @@ Main 启动独立 loopback server：
 - 只暴露 tabs、snapshot、click、type、scroll、key、navigate、wait 等固定命令。
 - 请求和响应做大小、类型、超时与取消限制。
 
-Runtime 的 `HttpBrowserControlClient` 实现 `BrowserControlPort`，因此 Agent loop 不依赖 Electron。
+Feature runtime 的 `HttpBrowserControlClient` 实现 Feature-owned `BrowserControlPort`，因此 Agent loop 不依赖 Electron。
 
 ## Snapshot
 
@@ -91,12 +93,14 @@ Main 不执行页面任意 JavaScript，也不向 runtime 暴露原始 CDP comma
 
 ## Tool 审批与外部上下文
 
-`BrowserToolHost`：
+`BrowserRuntimeTools`：
 
 - 把 snapshot/page result 标为 `containsExternalContext`。
 - Click、type 默认进入工具审批策略。
 - Enter/Delete 等有提交或删除语义的 key 进入审批。
 - 只把 contract 定义的字段返回模型。
+
+中央 `BrowserToolHost` 是通用 `ToolHost` 的薄 adapter，只绑定并转发 `BrowserRuntimeToolService`，不复制 schema、审批或结果格式化。
 
 网页文本可能包含 prompt injection；它只能作为外部数据，不能提升为 system/runtime policy。
 
@@ -123,34 +127,35 @@ Main 不执行页面任意 JavaScript，也不向 runtime 暴露原始 CDP comma
 
 新增浏览器动作时：
 
-1. 先扩展 contracts 的 browser control 类型。
-2. 在 `DesktopBrowserController` 增加固定方法。
-3. 在 control server/client 两侧增加窄协议。
+1. 先扩展 `packages/features/browser/src/contracts/` 的 control 类型。
+2. 在 Feature main 的 `DesktopBrowserController` 增加固定方法。
+3. 在 Feature control server/client 两侧增加窄协议。
 4. 定义 timeout、cancel、ref 失效和不可信结果。
 5. 判断是否需要审批。
-6. 更新 `BrowserToolHost` schema。
-7. 补 main controller/server/CDP 与 runtime host 测试。
+6. 更新 `BrowserRuntimeTools` schema。
+7. 补 Feature main controller/server/CDP 与 runtime 工具测试；只有通用 ToolHost 接缝变化时才改宿主 adapter。
 
 ## 测试
 
-Main：
+Main（`packages/features/browser/test/main/`）：
 
-- `test/unit/browser/control.test.ts`
-- `test/unit/browser/control-server.test.ts`
-- `test/unit/browser/cdp/automation.test.ts`
-- `test/unit/browser/cdp/device-emulation.test.ts`
-- `test/unit/browser/favicon.test.ts`
-- `test/unit/browser/context-menu.test.ts`
+- `control.test.ts`
+- `control-server.test.ts`
+- `cdp/automation.test.ts`
+- `cdp/device-emulation.test.ts`
+- `favicon.test.ts`
+- `context-menu.test.ts`
 
-Runtime：
+Runtime（`packages/features/browser/test/runtime/`）：
 
-- `test/adapters/browser/http-browser-control-client.test.ts`
-- `test/adapters/tool/browser-tool-host.test.ts`
+- `http-browser-control-client.test.ts`
+- `browser-runtime-tools.test.ts`
 
-Renderer：
+Renderer（`packages/features/browser/test/renderer/`）：
 
-- `test/unit/features/workspace/BrowserPanel.test.ts`
+- `BrowserPanel.test.ts`
+- `BrowserPanel.interaction.test.tsx`
 - `BrowserDeviceToolbar.test.tsx`
-- `BrowserDeviceViewport.test.tsx`
-- `browser/runtimeBrowserActions.test.ts`
+- `browserDeviceEmulation.test.ts`
+- `runtimeBrowserActions.test.ts`
 

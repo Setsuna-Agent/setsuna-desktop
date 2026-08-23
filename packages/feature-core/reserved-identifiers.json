@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "features": [
+    "browser",
     "goal",
     "image-generation",
     "desktop-review",
@@ -8,6 +9,9 @@
     "vision-recognition"
   ],
   "capabilities": [
+    "browser.control-connection@1",
+    "browser.main-host@1",
+    "browser.runtime-tools@1",
     "runtime.feature-routes@1",
     "runtime.feature-settings@1",
     "image-generation.asset-store@1",

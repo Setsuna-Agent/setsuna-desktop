@@ -30,7 +30,6 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 - `ModelClient`
 - `ToolHost`
 - `ApprovalGate`
-- `BrowserControlPort`
 - `McpClientRuntime`
 - `BackgroundShellProcessManager`
 - `WorkspaceDependencyManager`
@@ -139,12 +138,12 @@ Project panel 可以 latest-wins；Agent 并行 `search_text` 不应互相取消
 
 Runtime 不能 import Electron：
 
-- Browser 使用 `HttpBrowserControlClient`。
+- Browser Feature 在自身 contracts 中定义 `BrowserControlPort`，并在 runtime 入口使用 `HttpBrowserControlClient`。
 - Credential/open external 使用 `HttpDesktopNativeBridge`。
 - 地址和 token 从 main 注入环境。
 - Port 只暴露固定动作。
 
-如果新增必须由 main 持有的能力，先扩展窄 loopback protocol 和 port，不要把 Electron 放进 runtime。
+如果新增 Browser 动作，在 `packages/features/browser` 内同步扩展窄 loopback protocol 和 port；其他必须由 main 持有的能力仍按其 owner 建立窄 bridge，不要把 Electron 放进 runtime。
 
 ## 新增 port/adapter
 

@@ -8,7 +8,7 @@
 
 本文给出一套可直接拆解实施的 Feature Composition Architecture。它解决的是“一个业务功能横跨 contracts、runtime、main/preload、renderer 后，修改和删除都必须触碰大量中央文件”的问题，不把项目改造成面向第三方的通用插件平台。
 
-本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
+本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
 
 已落地的关键结果：
 
@@ -19,6 +19,7 @@
 - Vision Recognition 已复用同一框架拥有模型引用 document、typed route/client、Capabilities Settings View 和 runtime service；宿主仅提供 provider/model、附件安全读取、usage、Plugin 来源和旧设置导入的窄 adapter。
 - Terminal 已拥有 contracts、main PTY/session、固定 IPC、preload 子桥、renderer xterm 视图、文案与样式；宿主只提供代理/PATH 环境、窗口事件出口和 Workspace panel adapter，并由它首次带出 `PreloadBridgeBuilder`。
 - Review 已拥有 DTO、Git 状态/操作、图片版本解析、worktree watcher、main IPC 与 preload 子桥；宿主只提供 commit-message runtime 调用、受认证 preview registry 和 sender policy。现有 Review presentation 仍作为 Workspace/Chat 的宿主适配层保留，避免 Feature 反向依赖宿主 UI 内部模块。
+- Browser 已拥有 control/UI contracts、runtime 工具语义、main guest/CDP/loopback/IPC、preload 子桥及 renderer tab/webview 视图、文案和样式；宿主只保留四端 composition、窗口/UI adapter 与通用 `ToolHost` adapter。
 - `scripts/check-feature-boundaries.mjs` 验证进程入口、跨 Feature import、package version、reserved identity、renderer transport 边界，并冻结已迁移 Feature 回流中央 Config/client/UI surface。
 
 ## 1. 决策摘要
@@ -1304,7 +1305,8 @@ Plugin manifest
 1. Vision Recognition，验证第一套框架可复用。已完成：Feature package、runtime/renderer composition、typed operations、portable settings、Plugin bridge 接入和旧 surface 删除均已落地。
 2. Terminal 已完成：首次引入 main/preload composition 和 `PreloadBridgeBuilder`，并删除中央 Terminal DTO、main IPC/session、preload 映射及 workspace-owned xterm 实现。
 3. Review native 边界已完成：Feature package 现拥有 DTO、Git 状态机、watcher、IPC 与 preload bridge；Workspace/Chat presentation 因真实宿主 UI 依赖暂留 adapter，不建立反向依赖或复制共享组件。
-4. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
+4. Browser 已完成：Feature package 现拥有 control/UI contracts、runtime 工具 service/client、main guest/CDP/control server/IPC、preload bridge 及 renderer UI/文案/样式；中央 contracts、main browser 目录、workspace Browser 实现和 runtime Browser 业务 adapter 已删除，只保留窄宿主组合 adapter。
+5. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
 
 每次迁移都必须有旧 surface 删除清单。没有扩散收益的模块留在原处。
 
@@ -1348,6 +1350,9 @@ Plugin manifest
 | `packages/contracts/src/desktop.ts` 的 Review DTO/bridge 字段 | Review contracts + preload composition | 已删除；host bridge 与 Review contribution 显式相交 |
 | `apps/desktop/main/src/{review,ipc/review-ipc.ts}` | Review main Feature | 已删除；Git 状态、watcher、预览版本与 handler lifecycle 由 Feature 单一拥有 |
 | preload 中的 `desktopReview` 手写映射 | Review preload Feature | 已删除；异步 watcher 订阅竞态与 cleanup 由 Feature bridge 拥有 |
+| `packages/contracts/src/{browser-control,ui-actions}.ts` 与 `desktop.ts` Browser bridge 字段 | Browser contracts + preload composition | 已删除；control/UI DTO 和 typed 子桥由 Feature 单一拥有，宿主 bridge 类型通过 contribution 显式相交 |
+| `apps/desktop/main/src/{browser,ipc/browser-ipc.ts}` | Browser main Feature | 已删除；guest 安全、CDP/controller、loopback server、IPC 与 scope disposal 由 Feature 单一拥有 |
+| workspace Browser UI/文案/样式与 runtime Browser client/tool 业务实现 | Browser renderer/runtime Feature | 已删除；宿主仅保留 Workspace pane adapter 与通用 `ToolHost` adapter，不复制 Browser 规则 |
 
 如果一个 Adapter 开始需要第二份缓存、双向同步、Feature ID switch 或复杂状态机，说明业务尚未真正迁移，必须停止并重新划分 owner。
 
@@ -1562,6 +1567,7 @@ pnpm build
 | Vision Recognition owner | `packages/features/vision-recognition/*` | 模型选择 Settings、识别 use case、typed Route/client、Capabilities Settings View 的纵向 owner |
 | Review native owner | `packages/features/review/*` | Review DTO、Git 状态/操作、图片预览、worktree watcher、IPC/preload bridge 与 scoped resources；renderer presentation 暂由 Workspace adapter 组合 |
 | Terminal owner | `packages/features/terminal/*` | Terminal DTO、PTY/session、IPC、preload bridge、xterm presentation 与 scoped resources 的纵向 owner |
+| Browser owner | `packages/features/browser/*` | Control/UI DTO、runtime 工具语义、guest/CDP/loopback/IPC、preload bridge、tab/webview presentation、文案与样式的纵向 owner |
 
 任何 Feature 新增、迁移、降级处理或删除评审都使用同一组问题：
 

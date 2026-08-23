@@ -1,7 +1,7 @@
 import { Bug, Code2, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
-import { BrowserFavicon } from './BrowserFavicon.js';
+import { BrowserFavicon } from '@setsuna-desktop/feature-browser/renderer';
 import { fileName, type DesktopPanelTab, type DesktopPanelType, type DesktopWorkspaceApp } from './model.js';
 import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';

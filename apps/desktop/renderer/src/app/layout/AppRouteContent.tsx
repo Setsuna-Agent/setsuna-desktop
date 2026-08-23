@@ -18,7 +18,7 @@ import {
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
-import { latestBrowserOpenRequest } from '../../features/workspace/browser/runtimeBrowserActions.js';
+import { latestBrowserOpenRequest } from '@setsuna-desktop/feature-browser/renderer';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {

@@ -1,5 +1,4 @@
 import {
-  BROWSER_SNAPSHOT_TOOL_NAME,
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeMessage,
@@ -26,7 +25,6 @@ import {
   type DeferredToolSearchEntry,
 } from './deferred-tool-search.js';
 import {
-  TOOL_OUTPUT_BUDGET_BROWSER_SNAPSHOT_TOKENS,
   TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS,
   TOOL_OUTPUT_BUDGET_READ_TOOL_RESULT_TOKENS,
   TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
@@ -95,7 +93,6 @@ const READ_TOOL_RESULT_TOOL: RuntimeToolDefinition = {
 
 /** 未在 profile 声明 modelOutputTokenLimit 时的名称回退预算。 */
 const DEFAULT_BOUNDED_OUTPUT_TOOL_LIMITS = new Map<string, number>([
-  [BROWSER_SNAPSHOT_TOOL_NAME, TOOL_OUTPUT_BUDGET_BROWSER_SNAPSHOT_TOKENS],
   ['run_shell_command', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
   ['exec_command', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],
   ['write_shell_process', TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS],

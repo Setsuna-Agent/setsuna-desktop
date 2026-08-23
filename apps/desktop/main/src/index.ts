@@ -1,10 +1,11 @@
-import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeInterfaceLanguage,
+  RuntimeRequestInput,
+} from '@setsuna-desktop/contracts';
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
   BrowserWindow,
-  clipboard,
-  Menu,
   nativeImage,
   safeStorage,
   screen,
@@ -18,15 +19,6 @@ import { existsSync, mkdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createBrowserContextMenuTemplate } from './browser/context-menu.js';
-import { embeddedBrowserKeyboardShortcut } from './browser/keyboard-shortcuts.js';
-import {
-  isAllowedEmbeddedBrowserUrl,
-  requestEmbeddedBrowserNewTab,
-} from './browser/new-tab.js';
-import { BrowserControlServer } from './browser/control-server.js';
-import { DesktopBrowserController } from './browser/control.js';
-import { registerBrowserIpc } from './ipc/browser-ipc.js';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
@@ -75,7 +67,10 @@ import {
 } from './webdav-sync/restore-journal.js';
 import { WebDavSyncService } from './webdav-sync/service.js';
 import { DesktopUpdater } from './updater/updater.js';
-import { activateBuiltinMainFeatures } from './composition/builtin-main-features.js';
+import {
+  activateBuiltinMainFeatures,
+  type ActivatedBuiltinMainFeatures,
+} from './composition/builtin-main-features.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
@@ -92,8 +87,6 @@ const macTrafficLightSize = 14;
 const appTopbarHeight = 42;
 let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
-let browserController: DesktopBrowserController | null = null;
-let browserControlServer: BrowserControlServer | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
@@ -240,17 +233,6 @@ async function createWindow(): Promise<void> {
   browserProxyController = currentBrowserProxyController;
   await currentBrowserProxyController.start();
 
-  const currentBrowserController = new DesktopBrowserController({
-    openTab: async (url) => {
-      if (!mainWindow || mainWindow.isDestroyed()) return false;
-      mainWindow.webContents.send('browser:open-new-tab', { openerWebContentsId: 0, url });
-      return true;
-    },
-  });
-  const currentBrowserControlServer = new BrowserControlServer(currentBrowserController);
-  browserController = currentBrowserController;
-  browserControlServer = currentBrowserControlServer;
-  const browserControl = await currentBrowserControlServer.start();
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
     deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
@@ -264,9 +246,31 @@ async function createWindow(): Promise<void> {
   desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
   const nativeBridge = await currentDesktopNativeBridgeServer.start();
 
+  let requestRuntime = (_input: RuntimeRequestInput): Promise<unknown> => (
+    Promise.reject(new Error('Desktop runtime is still starting.'))
+  );
+  let activatedMainFeatures: ActivatedBuiltinMainFeatures;
+  try {
+    activatedMainFeatures = await activateBuiltinMainFeatures({
+      activeKeyboardShortcutBindings: () => activeKeyboardShortcutBindings,
+      interfaceLanguage: () => interfaceLanguage,
+      mainWindow: currentMainWindow,
+      nativeBridge: currentDesktopNativeBridgeServer,
+      networkProxyService: currentNetworkProxyService,
+      requestRuntime: (input) => requestRuntime(input),
+    });
+  } catch (error) {
+    await currentDesktopNativeBridgeServer.stop();
+    currentBrowserProxyController.stop();
+    await currentNetworkProxyService.close();
+    throw error;
+  }
+  const currentMainFeatureComposition = activatedMainFeatures.composition;
+  mainFeatureComposition = currentMainFeatureComposition;
+
   const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
-    browserControl,
+    browserControl: activatedMainFeatures.browserControl,
     nativeBridge,
     dataDir: dataLayout.root,
     ripgrepPath,
@@ -278,6 +282,7 @@ async function createWindow(): Promise<void> {
     requireBundledWindowsSandbox: app.isPackaged && process.platform === 'win32',
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
+  requestRuntime = (input) => currentRuntimeHost.request(input);
   runtimeHost = currentRuntimeHost;
   try {
     try {
@@ -293,7 +298,8 @@ async function createWindow(): Promise<void> {
       await finalizeCommittedWebDavRestore(dataLayout.root);
     }
   } catch (error) {
-    await currentBrowserControlServer.stop();
+    await currentMainFeatureComposition.dispose().catch(() => undefined);
+    if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     await currentDesktopNativeBridgeServer.stop();
     currentBrowserProxyController.stop();
     await currentNetworkProxyService.close();
@@ -338,13 +344,6 @@ async function createWindow(): Promise<void> {
     fetch: (input, init) => currentNetworkProxyFetch.fetch('updater', input, init),
   });
   await desktopUpdater.initialize();
-  const currentMainFeatureComposition = await activateBuiltinMainFeatures({
-    mainWindow: currentMainWindow,
-    nativeBridge: currentDesktopNativeBridgeServer,
-    networkProxyService: currentNetworkProxyService,
-    runtimeHost: currentRuntimeHost,
-  });
-  mainFeatureComposition = currentMainFeatureComposition;
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
@@ -362,7 +361,6 @@ async function createWindow(): Promise<void> {
     currentMainWindow,
   );
   registerWorkspaceIpc();
-  registerBrowserIpc(currentBrowserController, currentMainWindow);
   const unregisterNetworkProxyState = registerNetworkProxyIpc(
     currentNetworkProxyService,
     currentRuntimeHost,
@@ -383,56 +381,6 @@ async function createWindow(): Promise<void> {
   currentMainWindow.webContents.setWindowOpenHandler(({ url }) => {
     void shell.openExternal(url);
     return { action: 'deny' };
-  });
-  currentMainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
-    // 浏览器来宾页面绝不能继承桌面渲染进程的本地预加载脚本或 Node 能力。
-    delete webPreferences.preload;
-    webPreferences.nodeIntegration = false;
-    webPreferences.contextIsolation = true;
-    webPreferences.sandbox = true;
-    // Chromium's built-in PDF viewer is exposed as a plugin inside webview guests.
-    webPreferences.plugins = true;
-    if (!isAllowedEmbeddedBrowserUrl(params.src)) event.preventDefault();
-  });
-  currentMainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
-    guestContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
-    guestContents.on('before-input-event', (event, input) => {
-      const shortcut = embeddedBrowserKeyboardShortcut(input, activeKeyboardShortcutBindings);
-      if (!shortcut) return;
-      const hostWebContents = guestContents.hostWebContents;
-      if (!hostWebContents || hostWebContents.isDestroyed()) return;
-      event.preventDefault();
-      hostWebContents.send('desktop:keyboard-shortcut-input', shortcut.input);
-    });
-    const requestNewBrowserTab = (url: string): boolean => {
-      const hostWebContents = guestContents.hostWebContents;
-      if (requestEmbeddedBrowserNewTab(hostWebContents, guestContents.id, url)) {
-        console.info('[browser] intercepted new-window request', { openerWebContentsId: guestContents.id, url });
-        return true;
-      }
-      console.warn('[browser] blocked new-window request', {
-        hasHostWebContents: Boolean(hostWebContents),
-        openerWebContentsId: guestContents.id,
-        url,
-      });
-      return false;
-    };
-    guestContents.on('context-menu', (_contextMenuEvent, params) => {
-      if (currentMainWindow.isDestroyed()) return;
-      Menu.buildFromTemplate(createBrowserContextMenuTemplate(guestContents, params, {
-        canOpenInNewTab: isAllowedEmbeddedBrowserUrl,
-        copyText: (value) => clipboard.writeText(value),
-        locale: interfaceLanguage,
-        openInNewTab: (url) => { requestNewBrowserTab(url); },
-      })).popup({ window: currentMainWindow });
-    });
-    guestContents.setWindowOpenHandler(({ url }) => {
-      requestNewBrowserTab(url);
-      return { action: 'deny' };
-    });
-    guestContents.on('will-navigate', (event, url) => {
-      if (!isAllowedEmbeddedBrowserUrl(url)) event.preventDefault();
-    });
   });
   const publishWindowMaximizedState = () => {
     if (currentMainWindow.isDestroyed()) return;
@@ -595,8 +543,6 @@ function shutdownDesktopServices(
   if (desktopServicesShutdownPromise) return desktopServicesShutdownPromise;
 
   const currentRuntimeHost = runtimeHost;
-  const currentBrowserController = browserController;
-  const currentBrowserControlServer = browserControlServer;
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
   const currentMainFeatureComposition = mainFeatureComposition;
   const currentDesktopUpdater = desktopUpdater;
@@ -606,17 +552,10 @@ function shutdownDesktopServices(
   const currentWebDavSyncService = webdavSyncService;
 
   currentDesktopUpdater?.stop();
-  currentBrowserController?.clear();
   currentBrowserProxyController?.stop();
   currentWebDavSyncService?.close();
 
   desktopServicesShutdownPromise = (async () => {
-    try {
-      await currentMainFeatureComposition?.dispose();
-    } catch (error) {
-      console.error('[desktop] main Feature shutdown failed', error);
-    }
-
     let runtimeStopError: unknown;
     try {
       await currentRuntimeHost?.stop();
@@ -625,8 +564,14 @@ function shutdownDesktopServices(
       runtimeStopError = error;
     }
 
+    // The runtime consumes Browser's loopback provider, so drain the consumer first.
+    try {
+      await currentMainFeatureComposition?.dispose();
+    } catch (error) {
+      console.error('[desktop] main Feature shutdown failed', error);
+    }
+
     const bridgeResults = await Promise.allSettled([
-      currentBrowserControlServer?.stop() ?? Promise.resolve(),
       currentDesktopNativeBridgeServer?.stop() ?? Promise.resolve(),
       currentNetworkProxyFetch?.close() ?? Promise.resolve(),
       currentNetworkProxyService?.close() ?? Promise.resolve(),
@@ -636,8 +581,6 @@ function shutdownDesktopServices(
     }
 
     if (!runtimeStopError && runtimeHost === currentRuntimeHost) runtimeHost = null;
-    if (browserController === currentBrowserController) browserController = null;
-    if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;

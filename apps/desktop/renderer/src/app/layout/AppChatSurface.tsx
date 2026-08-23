@@ -84,8 +84,8 @@ const BottomToolsPanel = lazy(async () => {
   return { default: module.BottomToolsPanel };
 });
 const BrowserPanel = lazy(async () => {
-  const module = await import('../../features/workspace/BrowserPanel.js');
-  return { default: module.BrowserPanel };
+  const module = await import('../../composition/BrowserFeaturePane.js');
+  return { default: module.BrowserFeaturePane };
 });
 const WorkspacePanel = lazy(async () => {
   const module = await import('../../features/workspace/WorkspacePanel.js');

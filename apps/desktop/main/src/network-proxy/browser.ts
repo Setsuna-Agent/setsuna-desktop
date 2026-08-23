@@ -1,4 +1,4 @@
-import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/contracts';
+import { DESKTOP_BROWSER_PARTITION } from '@setsuna-desktop/feature-browser/contracts';
 import { app, session, type AuthInfo, type Event, type WebContents } from 'electron';
 import type { DesktopNetworkProxyService } from './service.js';
 
