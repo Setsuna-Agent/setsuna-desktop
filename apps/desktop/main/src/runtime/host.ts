@@ -15,6 +15,7 @@ import {
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
+import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
 import type {
   FeatureCredentialBackup,
@@ -34,10 +35,7 @@ import { fetchRuntimeResponse } from './runtime-request.js';
 
 type RuntimeHostOptions = {
   appRoot: string;
-  browserControl?: {
-    token: string;
-    url: string;
-  };
+  browserControl?: BrowserControlConnection;
   nativeBridge?: {
     token: string;
     url: string;

@@ -226,7 +226,7 @@ describe('RuntimeToolRouter', () => {
       .resolves.toContain('not found or is not authorized');
   });
 
-  it('applies output token limits from profiles and name fallbacks', async () => {
+  it('applies output token limits from profiles and generic name fallbacks', async () => {
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
@@ -236,7 +236,7 @@ describe('RuntimeToolRouter', () => {
 
     await expect(router.modelOutputTokenLimitFor('read_file')).resolves.toBe(10_000);
     await expect(router.modelOutputTokenLimitFor('run_shell_command')).resolves.toBe(8_000);
-    await expect(router.modelOutputTokenLimitFor('browser_snapshot')).resolves.toBe(4_000);
+    await expect(router.modelOutputTokenLimitFor('browser_snapshot')).resolves.toBe(10_000);
     await expect(router.modelOutputTokenLimitFor(READ_TOOL_RESULT_TOOL_NAME)).resolves.toBe(8_000);
   });
 

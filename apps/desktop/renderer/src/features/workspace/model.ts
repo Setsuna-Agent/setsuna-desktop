@@ -6,6 +6,10 @@ import type {
   RuntimeReviewFinding,
   WorkspaceEntry,
 } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_BROWSER_URL,
+  type BrowserPanelState,
+} from '@setsuna-desktop/feature-browser/contracts';
 import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import type {
   DesktopTerminalEvent,
@@ -33,11 +37,7 @@ export type DesktopPanelType =
   | 'file'
   | 'review'
   | 'terminal';
-export type DesktopBrowserPanelState = {
-  faviconUrl: string | null;
-  loading: boolean;
-  url: string;
-};
+export type DesktopBrowserPanelState = BrowserPanelState;
 export type DesktopPanelTab = {
   browser?: DesktopBrowserPanelState;
   id: string;
@@ -61,7 +61,6 @@ export const FILES_PANEL_ID = 'files';
 export const WORKSPACE_OVERVIEW_PANEL_ID = 'workspace-overview';
 export const SIDE_CHAT_PANEL_ID = 'side-chat';
 export const CONVERSATION_DEBUG_PANEL_ID = 'conversation-debug';
-export const DEFAULT_BROWSER_URL = 'https://www.bing.com/';
 
 export const createEmptyPanelSlot = (): DesktopPanelSlotState => ({ active: null, panels: [] });
 export const createDefaultSidePanelSlot = (): DesktopPanelSlotState => {

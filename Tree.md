@@ -37,14 +37,12 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 140 total files
-├── src/ — 2 direct / 87 total files
-│   ├── browser/ — 7 direct / 10 total files
-│   │   └── cdp/ — 3 direct / 3 total files
+apps/desktop/main/ — 0 direct / 121 total files
+├── src/ — 2 direct / 76 total files
 │   ├── composition/ — 2 direct / 2 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
-│   ├── ipc/ — 12 direct / 12 total files
+│   ├── ipc/ — 11 direct / 11 total files
 │   ├── network-proxy/ — 7 direct / 7 total files
 │   ├── runtime/ — 8 direct / 8 total files
 │   ├── security/ — 2 direct / 2 total files
@@ -54,11 +52,9 @@ apps/desktop/main/ — 0 direct / 140 total files
 │   │   └── splash/ — 2 direct / 2 total files
 │   ├── windows-sandbox/ — 1 direct / 1 total files
 │   └── workspace/ — 3 direct / 3 total files
-└── test/ — 53 files
+└── test/ — 45 files
     ├── support/ — 3 direct / 3 total files
-    └── unit/ — 1 direct / 50 total files
-        ├── browser/ — 6 direct / 8 total files
-        │   └── cdp/ — 2 direct / 2 total files
+    └── unit/ — 1 direct / 42 total files
         ├── data-root/ — 8 direct / 8 total files
         ├── network-proxy/ — 2 direct / 2 total files
         ├── runtime/ — 7 direct / 7 total files
@@ -82,16 +78,16 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 694 total files
-├── src/ — 2 direct / 508 total files
+apps/desktop/renderer/ — 0 direct / 679 total files
+├── src/ — 2 direct / 499 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 8 direct / 8 total files
 │   │   ├── layout/ — 15 direct / 15 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 10 direct / 10 total files
-│   ├── features/ — 368 files
+│   ├── composition/ — 11 direct / 11 total files
+│   ├── features/ — 358 files
 │   │   ├── capabilities/ — 21 direct / 31 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
@@ -123,9 +119,8 @@ apps/desktop/renderer/ — 0 direct / 694 total files
 │   │   │   ├── usage/ — 9 direct / 9 total files
 │   │   │   ├── webdav-sync/ — 7 direct / 7 total files
 │   │   │   └── windows-sandbox/ — 2 direct / 2 total files
-│   │   └── workspace/ — 33 direct / 83 total files
+│   │   └── workspace/ — 24 direct / 73 total files
 │   │       ├── assets/ — 21 direct / 21 total files
-│   │       ├── browser/ — 1 direct / 1 total files
 │   │       ├── editor/ — 3 direct / 3 total files
 │   │       ├── git/ — 2 direct / 2 total files
 │   │       ├── hooks/ — 12 direct / 12 total files
@@ -145,15 +140,15 @@ apps/desktop/renderer/ — 0 direct / 694 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 8 direct / 8 total files
 │       └── ui/ — 7 direct / 7 total files
-└── test/ — 186 files
-    └── unit/ — 186 files
+└── test/ — 180 files
+    └── unit/ — 180 files
         ├── app/ — 1 direct / 15 total files
         │   ├── controller/ — 3 direct / 3 total files
         │   ├── layout/ — 6 direct / 6 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── composition/ — 3 direct / 3 total files
-        ├── features/ — 142 files
+        ├── features/ — 136 files
         │   ├── capabilities/ — 11 direct / 12 total files
         │   │   └── hooks/ — 1 direct / 1 total files
         │   ├── chat/ — 3 direct / 75 total files
@@ -171,8 +166,7 @@ apps/desktop/renderer/ — 0 direct / 694 total files
         │   │   ├── data-root/ — 2 direct / 2 total files
         │   │   ├── usage/ — 5 direct / 5 total files
         │   │   └── windows-sandbox/ — 1 direct / 1 total files
-        │   └── workspace/ — 13 direct / 23 total files
-        │       ├── browser/ — 1 direct / 1 total files
+        │   └── workspace/ — 8 direct / 17 total files
         │       ├── hooks/ — 8 direct / 8 total files
         │       └── model/ — 1 direct / 1 total files
         ├── services/ — 8 files
@@ -191,8 +185,8 @@ apps/desktop/renderer/ — 0 direct / 694 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 78 total files
-├── src/ — 35 direct / 51 total files
+packages/contracts/ — 4 direct / 76 total files
+├── src/ — 33 direct / 49 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── review/ — 1 direct / 1 total files
@@ -224,7 +218,21 @@ packages/feature-core/ — 5 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 118 total files
+packages/features/ — 0 direct / 182 total files
+├── browser/ — 2 direct / 64 total files
+│   ├── src/ — 46 files
+│   │   ├── contracts/ — 8 direct / 8 total files
+│   │   ├── generated/ — 1 direct / 1 total files
+│   │   ├── main/ — 13 direct / 16 total files
+│   │   │   └── cdp/ — 3 direct / 3 total files
+│   │   ├── preload/ — 2 direct / 2 total files
+│   │   ├── renderer/ — 15 direct / 15 total files
+│   │   └── runtime/ — 4 direct / 4 total files
+│   └── test/ — 16 files
+│       ├── main/ — 6 direct / 8 total files
+│       │   └── cdp/ — 2 direct / 2 total files
+│       ├── renderer/ — 6 direct / 6 total files
+│       └── runtime/ — 2 direct / 2 total files
 ├── goal/ — 2 direct / 32 total files
 │   ├── src/ — 25 files
 │   │   ├── contracts/ — 6 direct / 6 total files
@@ -277,11 +285,10 @@ packages/features/ — 0 direct / 118 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 574 total files
-├── src/ — 2 direct / 336 total files
-│   ├── adapters/ — 140 files
+packages/desktop-runtime/ — 4 direct / 570 total files
+├── src/ — 2 direct / 334 total files
+│   ├── adapters/ — 139 files
 │   │   ├── approval/ — 1 direct / 1 total files
-│   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 1 direct / 1 total files
@@ -314,7 +321,7 @@ packages/desktop-runtime/ — 4 direct / 574 total files
 │   │   ├── lifecycle/ — 13 direct / 13 total files
 │   │   ├── memory/ — 5 direct / 5 total files
 │   │   └── tools/ — 12 direct / 12 total files
-│   ├── ports/ — 35 direct / 35 total files
+│   ├── ports/ — 34 direct / 34 total files
 │   ├── runtime/ — 3 direct / 11 total files
 │   │   └── use-cases/ — 8 direct / 8 total files
 │   ├── security/ — 5 direct / 5 total files
@@ -322,10 +329,9 @@ packages/desktop-runtime/ — 4 direct / 574 total files
 │   │   └── app-server/ — 22 direct / 22 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 234 files
-    ├── adapters/ — 69 files
+└── test/ — 232 files
+    ├── adapters/ — 67 files
     │   ├── approval/ — 1 direct / 1 total files
-    │   ├── browser/ — 1 direct / 1 total files
     │   ├── debug/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 5 direct / 5 total files
@@ -338,7 +344,7 @@ packages/desktop-runtime/ — 4 direct / 574 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 15 direct / 15 total files
-    │   ├── tool/ — 11 direct / 16 total files
+    │   ├── tool/ — 10 direct / 15 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 6 direct / 6 total files
     ├── extensions/ — 7 direct / 7 total files

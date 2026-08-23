@@ -1,10 +1,24 @@
-import { declareCapabilityProvider, provideHostCapability } from '@setsuna-desktop/feature-core/capability';
+import type {
+  RuntimeInterfaceLanguage,
+  RuntimeRequestInput,
+} from '@setsuna-desktop/contracts';
+import {
+  declareCapabilityProvider,
+  provideHostCapability,
+  requiredCapability,
+} from '@setsuna-desktop/feature-core/capability';
 import {
   composeMainFeatures,
   mountMainFeature,
   type MainFeatureComposition,
   type MainFeatureMount,
 } from '@setsuna-desktop/feature-core/main';
+import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
+import {
+  browserControlConnectionCapability,
+  browserMainFeature,
+  browserMainHostCapability,
+} from '@setsuna-desktop/feature-browser/main';
 import {
   reviewCommitMessageCapability,
   reviewFilePreviewCapability,
@@ -21,36 +35,54 @@ import {
 import { terminalMainFeature } from '@setsuna-desktop/feature-terminal/main';
 import type { BrowserWindow } from 'electron';
 import type { DesktopNetworkProxyService } from '../network-proxy/service.js';
-import type { RuntimeHost } from '../runtime/host.js';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 
 /** Main-process Features are explicit so native ownership and startup policy stay reviewable. */
 export const builtinMainFeatures = [
+  mountMainFeature(browserMainFeature, { criticality: 'required' }),
   mountMainFeature(reviewMainFeature, { criticality: 'required' }),
   mountMainFeature(terminalMainFeature, { criticality: 'required' }),
 ] as const satisfies readonly MainFeatureMount[];
 
-export function activateBuiltinMainFeatures(input: Readonly<{
+export type ActivatedBuiltinMainFeatures = Readonly<{
+  browserControl: BrowserControlConnection;
+  composition: MainFeatureComposition;
+}>;
+
+export async function activateBuiltinMainFeatures(input: Readonly<{
+  activeKeyboardShortcutBindings(): ReadonlySet<string>;
+  interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
   networkProxyService: DesktopNetworkProxyService;
-  runtimeHost: RuntimeHost;
-}>): Promise<MainFeatureComposition> {
-  return composeMainFeatures({
+  requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
+}>): Promise<ActivatedBuiltinMainFeatures> {
+  const composition = await composeMainFeatures({
     mounts: builtinMainFeatures,
     hostCapabilities: [
+      provideHostCapability(
+        declareCapabilityProvider(browserMainHostCapability),
+        Object.freeze({
+          activeKeyboardShortcutBindings: input.activeKeyboardShortcutBindings,
+          interfaceLanguage: input.interfaceLanguage,
+          mainWindow: input.mainWindow,
+        }),
+      ),
       provideHostCapability(
         declareCapabilityProvider(reviewCommitMessageCapability),
         Object.freeze({
           generate: async (source: DesktopCommitMessageGenerationSource) => {
-            const result = await input.runtimeHost.request<{ message?: unknown }>({
+            const result = await input.requestRuntime({
               path: '/v1/git/commit-message/generate',
               method: 'POST',
               body: source,
             });
-            return String(result.message ?? '').trim();
+            const message = result && typeof result === 'object'
+              ? (result as { message?: unknown }).message
+              : undefined;
+            return String(message ?? '').trim();
           },
         }),
       ),
@@ -110,5 +142,12 @@ export function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
     ],
+  });
+  const dependencies = composition.resolveHostDependencies({
+    browserControl: requiredCapability(browserControlConnectionCapability),
+  });
+  return Object.freeze({
+    browserControl: dependencies.browserControl,
+    composition,
   });
 }

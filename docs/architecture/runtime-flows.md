@@ -158,8 +158,9 @@ Active turn 期间的普通提交默认进入线程级 FIFO 队列。用户显�
 用户看到的浏览器标签位于 renderer 的 `<webview>`；可信控制面位于 Electron main：
 
 ```text
-BrowserToolHost
-  → HttpBrowserControlClient
+BrowserToolHost（通用 ToolHost adapter）
+  → BrowserRuntimeTools（Browser Feature）
+  → HttpBrowserControlClient（Browser Feature）
   → authenticated loopback BrowserControlServer
   → DesktopBrowserController
   → ElectronBrowserCdpAutomation

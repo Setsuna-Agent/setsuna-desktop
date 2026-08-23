@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_BROWSER_URL } from '@setsuna-desktop/feature-browser/contracts';
 import {
-  DEFAULT_BROWSER_URL,
   WORKSPACE_OVERVIEW_PANEL_ID,
   addPanelToSlotState,
   canMoveDesktopPanelAcrossSlots,

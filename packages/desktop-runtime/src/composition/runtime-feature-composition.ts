@@ -12,6 +12,7 @@ import {
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
+import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
 import {
   imageGenerationAssetStoreCapability,
   imageGenerationFeature,
@@ -84,6 +85,11 @@ export async function activateBuiltinRuntimeFeatures(
       ),
     ],
   });
+
+  const browserDependencies = composition.resolveHostDependencies({
+    tools: requiredCapability(browserRuntimeToolServiceCapability),
+  });
+  runtime.browserToolHost.bind(browserDependencies.tools);
 
   const status = composition.status(imageGenerationFeature.id)?.status;
   if (status === 'active' || status === 'degraded') {

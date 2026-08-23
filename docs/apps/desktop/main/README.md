@@ -48,12 +48,12 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 按依赖顺序启动：
 
 1. Desktop 环境与 bundled ripgrep。
-2. `DesktopBrowserController` / `BrowserControlServer`。
-3. `DesktopNativeBridgeServer` / credential vault。
-4. `RuntimeHost`。
-5. Updater、Main Feature composition 和其余 IPC。
+2. `DesktopNativeBridgeServer` / credential vault 与网络代理。
+3. Main Feature composition；Browser Feature 在这里启动 controller 和独立 control server。
+4. `RuntimeHost`，注入 Browser Feature 与 native bridge 的地址/token。
+5. Updater 和其余宿主 IPC。
 
-Runtime 依赖 browser/native bridge 的地址和 token，因此它们必须先启动。
+Runtime 依赖 Browser Feature/native bridge 的地址和 token，因此相应 provider 必须先激活；关闭时先停止 runtime consumer，再 dispose Main Feature composition。
 
 ### 4. 维护窗口
 

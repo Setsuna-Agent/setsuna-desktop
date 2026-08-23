@@ -1,5 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import type { BrowserControlPort } from '@setsuna-desktop/feature-browser/contracts';
+import { BrowserRuntimeTools } from '@setsuna-desktop/feature-browser/runtime';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -11,7 +13,6 @@ import { WorkspaceImageToolHost } from '../../../src/adapters/tool/workspace-ima
 import { FileWorkspaceProjectStore } from '../../../src/adapters/workspace/file-workspace-project-store.js';
 import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { AttachmentStore } from '../../../src/ports/attachment-store.js';
-import type { BrowserControlPort } from '../../../src/ports/browser-control.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import { type ToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
 import {
@@ -172,6 +173,8 @@ describe('agent loop reasoning and attachments', () => {
           };
         },
       };
+      const browserToolHost = new BrowserToolHost();
+      browserToolHost.bind(new BrowserRuntimeTools(browserControl));
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -179,7 +182,7 @@ describe('agent loop reasoning and attachments', () => {
         clock: systemClock,
         ids,
         configStore: new ImageCapabilityConfigStore(true),
-        toolHost: new BrowserToolHost(browserControl),
+        toolHost: browserToolHost,
       });
   
       await loop.sendTurn(thread.id, { input: 'inspect the visible page' });

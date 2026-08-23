@@ -32,7 +32,7 @@ ToolHost 不直接发布 React UI；它返回结构化结果，由 tool executor
 Factory 当前按顺序组合：
 
 1. `UserInputToolHost`
-2. `BrowserToolHost`
+2. `BrowserToolHost`（Browser Feature service 的通用 adapter）
 3. `McpManagementToolHost`
 4. `McpRuntimeToolHost`
 5. `PluginBundleToolHost`
@@ -202,12 +202,14 @@ Renderer 通过 runtime REST 查看后台进程；运行中心只读取生命周
 
 ## Browser
 
-`BrowserToolHost` 通过 `BrowserControlPort`：
+`packages/features/browser` 的 `BrowserRuntimeTools` 通过 Feature-owned `BrowserControlPort`：
 
 - Tabs/snapshot/click/type/scroll/key/navigate/wait。
 - Snapshot/result 标记 external context。
 - Click/type/危险 key 返回 approval requirement。
 - Runtime 不接触 Electron/CDP。
+
+中央 `BrowserToolHost` 只把该服务适配到通用 `ToolHost`，不拥有 Browser schema、审批或输出预算。
 
 详见 [main 浏览器](../../apps/desktop/main/browser.md)。
 

@@ -154,26 +154,6 @@ const windowsSandbox: SetsunaDesktopBridge['windowsSandbox'] = {
   runAction: (action) => ipcRenderer.invoke('windows-sandbox:run-action', action),
 };
 
-const browser: SetsunaDesktopBridge['browser'] = {
-  captureScreenshot: (tabId) =>
-    ipcRenderer.invoke('browser:capture-screenshot', { tabId }),
-  resolveFavicon: (webContentsId, faviconUrls) =>
-    ipcRenderer.invoke('browser:resolve-favicon', { faviconUrls: [...faviconUrls], webContentsId }),
-  registerTab: (tabId, webContentsId) =>
-    ipcRenderer.invoke('browser:register-tab', { tabId, webContentsId }),
-  unregisterTab: (tabId, webContentsId) =>
-    ipcRenderer.invoke('browser:unregister-tab', { tabId, webContentsId }),
-  setActiveTab: (tabId) =>
-    ipcRenderer.invoke('browser:set-active-tab', { tabId }),
-  setDeviceEmulation: (tabId, emulation) =>
-    ipcRenderer.invoke('browser:set-device-emulation', { emulation, tabId }),
-  onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void {
-    const listener = (_event: Electron.IpcRendererEvent, request: { openerWebContentsId: number; url: string }) => callback(request);
-    ipcRenderer.on('browser:open-new-tab', listener);
-    return () => ipcRenderer.off('browser:open-new-tab', listener);
-  },
-};
-
 const updater: SetsunaDesktopBridge['updater'] = {
   getState: () => ipcRenderer.invoke('desktop-updater:get-state'),
   checkForUpdates: () => ipcRenderer.invoke('desktop-updater:check'),
@@ -221,7 +201,6 @@ const workspaceApps: SetsunaDesktopBridge['workspaceApps'] = {
 };
 
 const hostBridge: SetsunaDesktopBridge = {
-  browser,
   dataRoot,
   desktop,
   links,

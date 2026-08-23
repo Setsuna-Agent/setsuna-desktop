@@ -3,12 +3,15 @@ import {
   createPreloadBridgeBuilder,
   type PreloadFeatureModule,
 } from '@setsuna-desktop/feature-core/preload';
+import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-browser/contracts';
+import { browserPreloadFeature } from '@setsuna-desktop/feature-browser/preload';
 import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-review/contracts';
 import { reviewPreloadFeature } from '@setsuna-desktop/feature-review/preload';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
 import { terminalPreloadFeature } from '@setsuna-desktop/feature-terminal/preload';
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
+  & BrowserPreloadBridgeContribution
   & ReviewPreloadBridgeContribution
   & TerminalPreloadBridgeContribution;
 
@@ -30,6 +33,7 @@ const desktopPreloadBridgeKeys = [
 ] as const satisfies readonly (keyof DesktopPreloadBridge)[];
 
 export const builtinPreloadFeatures = [
+  browserPreloadFeature,
   reviewPreloadFeature,
   terminalPreloadFeature,
 ] as const satisfies readonly PreloadFeatureModule[];

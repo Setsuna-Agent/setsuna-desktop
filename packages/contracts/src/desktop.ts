@@ -1,5 +1,4 @@
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
-import type { DesktopBrowserDeviceEmulation, DesktopBrowserScreenshot } from './browser-control.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
 import type { RuntimePluginInstallResult } from './plugins.js';
@@ -153,15 +152,6 @@ export type DesktopKeyboardShortcutInput = {
 
 /** 向渲染进程暴露的有限预加载 API 所使用的共享契约。 */
 export type SetsunaDesktopBridge = {
-  browser: {
-    captureScreenshot(tabId: string): Promise<DesktopBrowserScreenshot | null>;
-    resolveFavicon(webContentsId: number, faviconUrls: readonly string[]): Promise<string | null>;
-    registerTab(tabId: string, webContentsId: number): Promise<boolean>;
-    unregisterTab(tabId: string, webContentsId: number): Promise<boolean>;
-    setActiveTab(tabId: string | null): Promise<boolean>;
-    setDeviceEmulation(tabId: string, emulation: DesktopBrowserDeviceEmulation | null): Promise<boolean>;
-    onOpenNewTab(callback: (request: { openerWebContentsId: number; url: string }) => void): () => void;
-  };
   desktop: {
     platform: string;
     setInterfaceLanguage(locale: RuntimeInterfaceLanguage): Promise<boolean>;
