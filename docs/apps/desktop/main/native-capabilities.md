@@ -29,7 +29,10 @@
 
 ## Review
 
-源码：`apps/desktop/main/src/review/state.ts`
+源码：
+
+- `packages/features/review/src/main/`
+- `apps/desktop/main/src/composition/builtin-main-features.ts`
 
 职责：
 
@@ -46,13 +49,16 @@
 - Untracked discard 只删除普通文件，不递归猜测用户意图。
 - Git 命令参数使用结构化数组，不拼接 shell。
 
-Main integration 测试：`test/integration/review/review-state.test.ts`。
+宿主 composition 只提供 commit-message runtime adapter、受认证文件预览 registry 与主 renderer sender policy。Main integration 测试：`packages/features/review/test/integration/main/`。
 
 Renderer 的 review 编排见 [Workspace](../renderer/workspace-and-debug.md)。
 
 ## Terminal
 
-源码：`apps/desktop/main/src/terminal/sessions.ts`
+源码：
+
+- `packages/features/terminal/src/main/`
+- `apps/desktop/main/src/composition/builtin-main-features.ts`
 
 `DesktopTerminalStore` 用 `node-pty` 管理：
 
@@ -68,10 +74,10 @@ Renderer 的 review 编排见 [Workspace](../renderer/workspace-and-debug.md)。
 - 根据平台选择 shell。
 - 补齐可用 PATH、颜色变量并禁用 pager。
 - 输出事件有有界缓存，renderer 重挂载可以从 sequence 恢复。
-- Window/app shutdown 必须 `closeAll()`。
+- Feature scope/window/app shutdown 必须撤销 IPC handler 并 `closeAll()`。
 - Session ID 由 main 生成，renderer 不能选择任意进程。
 
-Integration 测试：`test/integration/terminal/terminal-sessions.test.ts`。
+Integration 测试：`packages/features/terminal/test/integration/main/terminal-sessions.test.ts`。
 
 ## Workspace apps 与文件动作
 

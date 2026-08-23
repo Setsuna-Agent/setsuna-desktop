@@ -1,3 +1,4 @@
+import { imageGenerationFeature } from '@setsuna-desktop/feature-image-generation/contracts';
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -11,6 +12,8 @@ import {
 import { MemoryWebDavServer } from '../../support/memory-webdav.js';
 
 const temporaryRoots: string[] = [];
+const noPortableFeatureSettings = async () => [] as const;
+const noFeatureCredentialBackups = async () => [] as const;
 
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -36,6 +39,8 @@ describe('WebDavSyncService', () => {
         release: async () => undefined,
         stop: async () => undefined,
         start: async () => undefined,
+        exportPortableFeatureSettings: noPortableFeatureSettings,
+        exportFeatureCredentialBackups: noFeatureCredentialBackups,
       },
       requestRelaunch: async () => undefined,
     });
@@ -70,6 +75,8 @@ describe('WebDavSyncService', () => {
         release: async () => undefined,
         stop: async () => undefined,
         start: async () => undefined,
+        exportPortableFeatureSettings: noPortableFeatureSettings,
+        exportFeatureCredentialBackups: noFeatureCredentialBackups,
       },
       requestRelaunch: async () => undefined,
     });
@@ -103,6 +110,8 @@ describe('WebDavSyncService', () => {
         release: async () => undefined,
         stop: async () => undefined,
         start: async () => undefined,
+        exportPortableFeatureSettings: noPortableFeatureSettings,
+        exportFeatureCredentialBackups: noFeatureCredentialBackups,
       },
       requestRelaunch: async () => undefined,
     });
@@ -125,12 +134,26 @@ describe('WebDavSyncService', () => {
     const stop = vi.fn(async () => undefined);
     const start = vi.fn(async () => undefined);
     const requestRelaunch = vi.fn(async () => undefined);
+    let imageApiKey = 'sk-image-backup-value';
+    const exportFeatureCredentialBackups = async () => [Object.freeze({
+      featureId: imageGenerationFeature.id,
+      documentId: 'connection',
+      secretName: 'api-key',
+      value: imageApiKey,
+    })] as const;
     const service = new WebDavSyncService({
       dataRoot,
       appVersion: '0.2.1',
       configStore: new WebDavSyncConfigStore(path.join(dataRoot, 'webdav-sync.json'), vault),
       fetch: server.fetch,
-      runtime: { prepare, release, stop, start },
+      runtime: {
+        prepare,
+        release,
+        stop,
+        start,
+        exportPortableFeatureSettings: noPortableFeatureSettings,
+        exportFeatureCredentialBackups,
+      },
       requestRelaunch,
     });
     await service.initialize();
@@ -168,6 +191,7 @@ describe('WebDavSyncService', () => {
         remotePath.includes(firstBackup.snapshot.id)
       ))).toBe(false);
 
+      imageApiKey = 'sk-image-locally-changed';
       await writeRuntimeConfig(dataRoot, 'locally changed');
       await writeFile(path.join(dataRoot, 'runtime', 'secrets.json'), JSON.stringify({
         providerApiKeys: {
@@ -213,6 +237,23 @@ describe('WebDavSyncService', () => {
         'provider-local-only': 'sk-local-only',
         'provider-openai': 'sk-backup-value',
       });
+      const imageConnection = JSON.parse(await readFile(path.join(
+        dataRoot,
+        'runtime',
+        'features',
+        imageGenerationFeature.id,
+        'settings',
+        'connection.json',
+      ), 'utf8')) as { secretRevision: string };
+      const restoredImageSecret = JSON.parse(await readFile(path.join(
+        dataRoot,
+        'runtime',
+        'secrets',
+        imageGenerationFeature.id,
+        'connection',
+        `${imageConnection.secretRevision}.json`,
+      ), 'utf8')) as Record<string, string>;
+      expect(restoredImageSecret).toEqual({ 'api-key': 'sk-image-backup-value' });
       expect(restoreDownloadProgress[0]?.completed).toBe(0);
       const finalDownloadProgress = restoreDownloadProgress.at(-1);
       expect(finalDownloadProgress).toBeDefined();
@@ -221,6 +262,7 @@ describe('WebDavSyncService', () => {
         index === 0 || item.completed >= restoreDownloadProgress[index - 1]!.completed
       ))).toBe(true);
       expect([...server.files.values()].some((data) => data.includes('sk-backup-value'))).toBe(false);
+      expect([...server.files.values()].some((data) => data.includes('sk-image-backup-value'))).toBe(false);
     } finally {
       service.close();
     }
@@ -235,6 +277,8 @@ describe('WebDavSyncService', () => {
       release: async () => undefined,
       stop: async () => undefined,
       start: async () => undefined,
+      exportPortableFeatureSettings: noPortableFeatureSettings,
+      exportFeatureCredentialBackups: noFeatureCredentialBackups,
     };
     const failedService = new WebDavSyncService({
       dataRoot,
@@ -287,6 +331,8 @@ describe('WebDavSyncService', () => {
       release,
       stop: async () => undefined,
       start: async () => undefined,
+      exportPortableFeatureSettings: noPortableFeatureSettings,
+      exportFeatureCredentialBackups: noFeatureCredentialBackups,
     });
     try {
       await fixture.service.updatePreferences({ categories: ['preferences'] });
@@ -327,6 +373,8 @@ describe('WebDavSyncService', () => {
       release,
       stop: async () => undefined,
       start: async () => undefined,
+      exportPortableFeatureSettings: noPortableFeatureSettings,
+      exportFeatureCredentialBackups: noFeatureCredentialBackups,
     });
     try {
       await fixture.service.updatePreferences({ categories: ['preferences'] });
@@ -347,6 +395,8 @@ describe('WebDavSyncService', () => {
       release: async () => undefined,
       stop: async () => undefined,
       start: async () => undefined,
+      exportPortableFeatureSettings: noPortableFeatureSettings,
+      exportFeatureCredentialBackups: noFeatureCredentialBackups,
     });
     try {
       await fixture.service.updatePreferences({
@@ -411,6 +461,8 @@ describe('WebDavSyncService', () => {
           release: async () => undefined,
           stop: async () => undefined,
           start: async () => undefined,
+          exportPortableFeatureSettings: noPortableFeatureSettings,
+          exportFeatureCredentialBackups: noFeatureCredentialBackups,
         },
         requestRelaunch: async () => undefined,
       });
@@ -481,6 +533,8 @@ describe('WebDavSyncService', () => {
         release: async () => undefined,
         stop,
         start,
+        exportPortableFeatureSettings: noPortableFeatureSettings,
+        exportFeatureCredentialBackups: noFeatureCredentialBackups,
       },
       requestRelaunch,
     });

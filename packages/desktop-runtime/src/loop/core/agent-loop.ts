@@ -11,9 +11,13 @@ import type {
   RuntimeMemoryCitation,
   RuntimeDataMigrationReadiness,
   RuntimeMessage,
+  PendingRuntimeEvent,
+  RuntimeEvent,
+  StoredThreadEvent,
   RuntimeThread,
   RuntimeThreadGoal,
   RuntimeThreadGoalPatch,
+  RuntimeTaskKind,
   RuntimeToolCall,
   RuntimeUsage,
   SendTurnInput,
@@ -21,6 +25,12 @@ import type {
   StartTurnResponse,
   SteerTurnInput,
 } from '@setsuna-desktop/contracts';
+import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
+import {
+  createNoopGoalControl,
+  type GoalControl,
+  type GoalRuntimeHost,
+} from '@setsuna-desktop/feature-goal/contracts';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
@@ -31,7 +41,6 @@ import {
   RuntimeCollaborationCoordinator,
 } from '../lifecycle/collaboration-coordinator.js';
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
-import { RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import { RuntimeQueuedTurnCoordinator } from '../lifecycle/runtime-queued-turn-coordinator.js';
 import { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
@@ -43,7 +52,9 @@ import { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.j
 import { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeUserShellRunner } from '../tools/runtime-user-shell-runner.js';
 import type { AgentLoopOptions } from './agent-loop-options.js';
+import { normalizeAttachments } from './runtime-attachment-input.js';
 import { RuntimeAgentTurnRunner } from './runtime-agent-turn-runner.js';
+import { createRuntimeGoalHost } from './runtime-goal-host.js';
 import { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
@@ -62,7 +73,7 @@ export class AgentLoop {
   private readonly contextCompactor: RuntimeContextCompactor;
   private readonly compactionTurns: RuntimeCompactionTurnCoordinator;
   private readonly collaborationCoordinator: RuntimeCollaborationCoordinator;
-  private readonly goals: RuntimeGoalCoordinator;
+  private goals: GoalControl = createNoopGoalControl();
   private readonly hooks: RuntimeHookCoordinator;
   private readonly queuedTurns: RuntimeQueuedTurnCoordinator;
   private readonly samplingContexts: RuntimeSamplingContextBuilder;
@@ -162,7 +173,7 @@ export class AgentLoop {
       debugTrace: options.debugTrace,
       environmentResolver,
       ids: options.ids,
-      isGoalCompletionPending: (turnId, goalId) => this.goals.isCompletionPending(turnId, goalId),
+      goalControl: () => this.goals,
       mcpStore: options.mcpStore,
       memory: this.memory,
       projectInstructions: options.projectInstructions,
@@ -299,25 +310,6 @@ export class AgentLoop {
       // 队列协调器已经观察自己的 run；这里只接入目标计量与续轮调度。
       onRunCreated: (threadId, turnId, taskKind, done) =>
         this.goals.observeRun(threadId, turnId, taskKind, done),
-    });
-    this.goals = new RuntimeGoalCoordinator({
-      clock: options.clock,
-      ids: options.ids,
-      threadStore: options.threadStore,
-      activeTask: (threadId) => this.turnTasks.activeForThread(threadId),
-      registeredTask: (threadId) => this.turnTasks.registeredForThread(threadId),
-      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
-      createContinuation: (threadId, goal, execution) => this.withThreadMutation(
-        threadId,
-        async () => {
-          const run = await this.turnRuns.createGoalContinuation(threadId, goal, execution);
-          this.queuedTurns.observeRun(threadId, run.turnId, 'goal', run.done);
-          return run;
-        },
-      ),
-      hasQueuedInput: (threadId) => this.queuedTurns.hasPending(threadId),
-      waitForCancellationWrites: (threadId) => this.turnTermination.waitForThread(threadId),
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
@@ -578,6 +570,30 @@ export class AgentLoop {
     return this.turnTasks.activeForThread(threadId)?.turnId ?? null;
   }
 
+  /** Binds the optional Goal Feature after runtime composition has activated it. */
+  bindGoalControl(control: GoalControl): void {
+    if (this.goals.available && this.goals !== control) {
+      throw new Error('Goal control is already bound.');
+    }
+    this.goals = control;
+  }
+
+  /** Narrow host surface supplied to the Goal Feature by the runtime composition root. */
+  goalRuntimeHost(): GoalRuntimeHost {
+    return createRuntimeGoalHost({
+      clock: this.options.clock,
+      ids: this.options.ids,
+      threadStore: this.options.threadStore,
+      eventWriter: this.eventWriter,
+      queuedTurns: this.queuedTurns,
+      turnRuns: this.turnRuns,
+      turnTasks: this.turnTasks,
+      turnTermination: this.turnTermination,
+      cancelTurn: (threadId, turnId) => this.cancelTurn(threadId, turnId),
+      mutateThread: (threadId, operation) => this.withThreadMutation(threadId, operation),
+    });
+  }
+
   getThreadGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
     return this.goals.getGoal(threadId);
   }
@@ -777,13 +793,21 @@ export class AgentLoop {
 
   private appendAndPublishWithResult(
     threadId: string,
+    event: PendingRuntimeEvent,
+  ): Promise<RuntimeEvent | null>;
+  private appendAndPublishWithResult(
+    threadId: string,
     event: Parameters<ThreadStore['appendEvent']>[1],
-  ) {
+  ): Promise<StoredThreadEvent | null>;
+  private appendAndPublishWithResult(
+    threadId: string,
+    event: Parameters<ThreadStore['appendEvent']>[1],
+  ): Promise<StoredThreadEvent | null> {
     const saved = this.eventWriter.append(threadId, event);
     // 仅转发协作协调器实际处理的 child 生命周期，避免普通消息和工具事件为判断
     // “是否 child”反复读取、克隆整条线程快照。
     void saved.then((savedEvent) => {
-      if (savedEvent && isCollaborationChildLifecycleEvent(savedEvent)) {
+      if (savedEvent && isCoreRuntimeEvent(savedEvent) && isCollaborationChildLifecycleEvent(savedEvent)) {
         return this.collaborationCoordinator.observeChildEvent(savedEvent);
       }
       return undefined;
@@ -800,7 +824,7 @@ export class AgentLoop {
   private observeRun(
     threadId: string,
     turnId: string,
-    taskKind: Parameters<RuntimeGoalCoordinator['observeRun']>[2],
+    taskKind: RuntimeTaskKind,
     done: Promise<void>,
   ): void {
     this.goals.observeRun(threadId, turnId, taskKind, done);
@@ -865,31 +889,4 @@ export class AgentLoop {
     for (const event of events) this.options.eventBus.publish(event);
   }
 
-}
-
-/**
- * 归一化外部输入附件：内联附件必须有 URL，受管文件必须有 opaque asset id。
- *
- * @param value 外部传入的附件字段。
- */
-function normalizeAttachments(value: unknown): NonNullable<RuntimeMessage['attachments']> {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item): NonNullable<RuntimeMessage['attachments']>[number] | null => {
-      if (!item || typeof item !== 'object') return null;
-      const record = item as Record<string, unknown>;
-      const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : '';
-      const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : 'attachment';
-      const type = typeof record.type === 'string' && record.type.trim() ? record.type.trim() : 'application/octet-stream';
-      const size = typeof record.size === 'number' && Number.isFinite(record.size) ? Math.max(0, Math.floor(record.size)) : 0;
-      if (record.source === 'runtime') {
-        const assetId = typeof record.assetId === 'string' && record.assetId.trim() ? record.assetId.trim() : '';
-        if (!id || !assetId) return null;
-        return { id, assetId, source: 'runtime' as const, name, type, size };
-      }
-      const url = typeof record.url === 'string' && record.url.trim() ? record.url.trim() : '';
-      if (!id || !url) return null;
-      return { id, name, type, size, url };
-    })
-    .filter((item): item is NonNullable<RuntimeMessage['attachments']>[number] => Boolean(item));
 }

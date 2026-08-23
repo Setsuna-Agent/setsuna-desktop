@@ -1,11 +1,6 @@
 import type {
-  RuntimeConfigState,
   RuntimeExtensionStatus,
   RuntimeHookMetadata,
-  RuntimeImageGenerationConfigInput,
-  RuntimeImageGenerationConfigState,
-  RuntimeImageGenerationTestInput,
-  RuntimeImageGenerationTestResult,
   RuntimeMcpServer,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -13,26 +8,20 @@ import type {
   RuntimePluginSummary,
   RuntimeSkillDetail,
   RuntimeSkillSummary,
-  RuntimeVisionRecognitionConfigInput,
-  RuntimeVisionRecognitionTestInput,
-  RuntimeVisionRecognitionTestResult,
-} from '@setsuna-desktop/contracts';
-import {
-  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
 } from '@setsuna-desktop/contracts';
 import { Dropdown, type MenuProps } from 'antd';
 import { AlertTriangle, BookOpen, Check, Download, FileText, Loader2, MessageSquare, MoreHorizontal, Plug, ShieldCheck, ShieldOff, Trash2, Workflow, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { FeatureContributionBoundary } from '../../composition/FeatureContributionBoundary.js';
+import { FeatureRecoveryShell } from '../../composition/FeatureRecoveryShell.js';
+import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { Button, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginSkillItem } from './CapabilitiesPluginSkillItem.js';
-import { ImageGenerationPluginSettings } from './ImageGenerationPluginSettings.js';
-import { VisionRecognitionPluginSettings } from './VisionRecognitionPluginSettings.js';
 import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills, mergePluginTools } from './pluginDisplay.js';
 import { localizedPluginCopy } from './pluginLocalization.js';
 
@@ -40,8 +29,6 @@ export function CapabilitiesPluginDetail({
   error,
   extensionStatus,
   extensionTrusting = false,
-  imageGenerationConfig,
-  runtimeConfig,
   installedPlugin,
   installing,
   marketplacePlugin,
@@ -57,18 +44,12 @@ export function CapabilitiesPluginDetail({
   onSetHookEnabled,
   onSetHookTrust,
   onSetSkillEnabled,
-  onSaveImageGenerationConfig,
-  onTestImageGeneration,
-  onSaveVisionRecognitionConfig,
-  onTestVisionRecognition,
   removing,
   runtimeHooks,
 }: {
   error: string | null;
   extensionStatus?: RuntimeExtensionStatus;
   extensionTrusting?: boolean;
-  imageGenerationConfig?: RuntimeImageGenerationConfigState;
-  runtimeConfig?: RuntimeConfigState;
   installedPlugin?: RuntimePluginSummary;
   installing: boolean;
   marketplacePlugin?: RuntimePluginMarketplaceItem;
@@ -84,14 +65,11 @@ export function CapabilitiesPluginDetail({
   onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
   onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSetSkillEnabled?: (skill: RuntimeSkillSummary, enabled: boolean) => Promise<void>;
-  onSaveImageGenerationConfig?: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
-  onTestImageGeneration?: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
-  onSaveVisionRecognitionConfig?: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
-  onTestVisionRecognition?: (input: RuntimeVisionRecognitionTestInput) => Promise<RuntimeVisionRecognitionTestResult>;
   removing: boolean;
   runtimeHooks?: RuntimeHookMetadata[];
 }) {
   const { t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   const [selectedItem, setSelectedItem] = useState<CapabilitiesPluginItem | null>(null);
   const plugin = installedPlugin ?? marketplacePlugin;
   if (!plugin) return null;
@@ -129,6 +107,8 @@ export function CapabilitiesPluginDetail({
     : Math.max(resources.length, marketplaceMetadata?.capabilities.resources ?? 0);
   const installed = Boolean(installedPlugin ?? marketplaceMetadata?.installed);
   const installedFromMarketplace = installedPlugin?.installationSource === 'marketplace';
+  const featureSettings = featureViews.settings.find('capabilities', plugin.id);
+  const FeatureSettingsView = featureSettings?.render;
   const publisher = marketplaceMetadata?.publisher ?? plugin.publisher;
   const subtitle = [publisher, plugin.version ? `v${plugin.version}` : null].filter(Boolean).join(' · ') || t('capabilities.market.pluginSummary');
   const extension = installedPlugin?.extension ?? marketplaceMetadata?.extension;
@@ -280,25 +260,24 @@ export function CapabilitiesPluginDetail({
         </section>
       ) : null}
 
-      {installedFromMarketplace
-        && plugin.id === OPENAI_IMAGE_GENERATION_PLUGIN_ID
-        && onSaveImageGenerationConfig
-        && onTestImageGeneration ? (
-        <ImageGenerationPluginSettings
-          config={imageGenerationConfig}
-          onSave={onSaveImageGenerationConfig}
-          onTest={onTestImageGeneration}
-        />
-      ) : null}
-
-      {installedFromMarketplace
-        && plugin.id === OPENAI_VISION_RECOGNITION_PLUGIN_ID
-        && onSaveVisionRecognitionConfig
-        && onTestVisionRecognition ? (
-        <VisionRecognitionPluginSettings
-          config={runtimeConfig}
-          onSave={onSaveVisionRecognitionConfig}
-          onTest={onTestVisionRecognition}
+      {installedFromMarketplace && FeatureSettingsView ? (
+        <FeatureContributionBoundary
+          fallback={(reset) => (
+            <FeatureRecoveryShell
+              candidateFeatureIds={[featureSettings.featureId]}
+              onRetryView={reset}
+              reason="view-failed"
+            />
+          )}
+          featureId={featureSettings.featureId}
+          resetKey={`${featureSettings.featureId}:${featureSettings.sectionId}`}
+        >
+          <FeatureSettingsView sectionId={featureSettings.sectionId} translate={t} />
+        </FeatureContributionBoundary>
+      ) : installedFromMarketplace ? (
+        <FeatureRecoveryShell
+          candidateFeatureIds={displayPlugin.extension?.capabilities ?? []}
+          reason="view-missing"
         />
       ) : null}
 

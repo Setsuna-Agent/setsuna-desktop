@@ -81,7 +81,7 @@ Runtime 不通过 renderer。浏览器操作走 browser control loopback server�
 ```text
 apps/desktop/main/test/
 ├── unit/          # 镜像 main/src
-└── integration/   # review、terminal 等真实边界
+└── integration/   # review 等 app main 真实边界；Terminal integration 跟随其 Feature owner
 
 apps/desktop/renderer/test/unit/
 ├── app/

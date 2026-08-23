@@ -37,6 +37,7 @@ import type {
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
 import { canCompareReviewBranch } from './reviewChanges.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
+import { ReviewFileBrowser } from './ReviewFileBrowser.js';
 import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
 import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
@@ -75,18 +76,23 @@ const reviewEmptyTextKeys: Record<DesktopReviewSource, { title: MessageKey; desc
 const reviewSourceOptions: DesktopReviewSource[] = ['unstaged', 'staged', 'branch', 'latest'];
 const REVIEW_REFRESH_FEEDBACK_MS = 650;
 const DEFAULT_REVIEW_LINE_WRAP = true;
+const REVIEW_AUTO_EXPAND_MAX_FILES = 24;
+const REVIEW_AUTO_EXPAND_MAX_LINES = 3_000;
+const EMPTY_REVIEW_FINDINGS: RuntimeReviewFinding[] = [];
+const EMPTY_WORKSPACE_APPS: DesktopWorkspaceApp[] = [];
 const noopWorkspaceFileAction = () => undefined;
+const noopReviewSourceChange = (_source: DesktopReviewSource) => undefined;
 
 export function DesktopReviewPanel({
   activeProject,
   error,
-  findings = [],
+  findings = EMPTY_REVIEW_FINDINGS,
   focusRequest,
   latestSummary,
   loading,
   reviewState,
   workspaceApp,
-  workspaceApps = [],
+  workspaceApps = EMPTY_WORKSPACE_APPS,
   onAddFileToConversation = noopWorkspaceFileAction,
   onCopyFilePath = noopWorkspaceFileAction,
   onExternalOpenFile,
@@ -94,6 +100,7 @@ export function DesktopReviewPanel({
   onOpenProjectFile,
   onRefresh,
   onSelectBaseRef,
+  onSourceChange = noopReviewSourceChange,
   onRevealFile = noopWorkspaceFileAction,
 }: {
   activeProject?: WorkspaceProject;
@@ -112,6 +119,7 @@ export function DesktopReviewPanel({
   onOpenProjectFile: (filePath: string, line?: number) => void;
   onRefresh: () => void;
   onSelectBaseRef: (baseRef: string) => void;
+  onSourceChange?: (source: DesktopReviewSource) => void;
   onRevealFile?: (filePath: string) => void;
 }) {
   const { t } = useI18n();
@@ -155,6 +163,29 @@ export function DesktopReviewPanel({
   const reviewRefreshing = loading || refreshFeedbackVisible;
   const reviewRefreshTip = t(reviewRefreshing ? 'workspace.review.refreshing' : 'workspace.review.refresh');
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
+  const fileBrowserVisible = shouldUseReviewFileBrowser(activeSummary);
+  const autoExpandReviewFiles = shouldAutoExpandReviewSummary(activeSummary);
+  const effectiveFileExpansionRequest = useMemo<ReviewFileExpansionRequest>(() => {
+    // A previous small summary may have been expanded explicitly. Never carry
+    // that bulk state into a large refresh/source switch: large reviews stay
+    // file-by-file so one render cannot mount every syntax highlighter.
+    if (!autoExpandReviewFiles) return { expanded: false, version: 0 };
+    return fileExpansionRequest.version === 0
+      ? { expanded: true, version: 0 }
+      : fileExpansionRequest;
+  }, [autoExpandReviewFiles, fileExpansionRequest]);
+  const pathContext = useMemo<ReviewPathContext>(() => ({
+    baseRef: reviewState?.baseRef ?? null,
+    source: activeSource,
+    workspaceRoot: reviewState?.workspaceRoot ?? activeProject?.path ?? null,
+    gitRoot: reviewState?.gitRoot ?? null,
+  }), [
+    activeProject?.path,
+    activeSource,
+    reviewState?.baseRef,
+    reviewState?.gitRoot,
+    reviewState?.workspaceRoot,
+  ]);
   const visibleFindings = useMemo(
     () => mergeFocusedReviewFinding(findings, focusRequest?.finding),
     [findings, focusRequest?.finding],
@@ -187,6 +218,10 @@ export function DesktopReviewPanel({
   }, []);
 
   useEffect(() => {
+    onSourceChange(activeSource);
+  }, [activeSource, onSourceChange, reviewSourceStorageKey]);
+
+  useEffect(() => {
     const consumption = consumeReviewFocusRequest(
       handledFocusRequestKeyRef.current,
       focusRequestKey,
@@ -200,7 +235,6 @@ export function DesktopReviewPanel({
       ));
       writeReviewSourcePreference(reviewSourceStorageKey, focusTargetSource);
     }
-    setFileExpansionRequest((current) => ({ expanded: true, version: current.version + 1 }));
   }, [activeSource, focusRequestKey, focusTargetSource, reviewSourceStorageKey]);
 
   if (!activeProject) {
@@ -226,13 +260,14 @@ export function DesktopReviewPanel({
   }
 
   const hasReviewFiles = Boolean(activeSummary?.files.length);
-  const reviewFileExpansionTip = t(fileExpansionRequest.expanded ? 'workspace.review.collapseAll' : 'workspace.review.expandAll');
-  const pathContext: ReviewPathContext = {
-    baseRef: reviewState?.baseRef ?? null,
-    source: activeSource,
-    workspaceRoot: reviewState?.workspaceRoot ?? activeProject.path,
-    gitRoot: reviewState?.gitRoot ?? null,
-  };
+  const bulkExpandDisabled = !effectiveFileExpansionRequest.expanded && !autoExpandReviewFiles;
+  const reviewFileExpansionTip = t(
+    effectiveFileExpansionRequest.expanded
+      ? 'workspace.review.collapseAll'
+      : bulkExpandDisabled
+        ? 'workspace.review.expandLargeIndividually'
+        : 'workspace.review.expandAll',
+  );
   const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((source) => ({
     disabled: source === 'branch' && !branchComparisonAvailable,
     key: source,
@@ -273,8 +308,11 @@ export function DesktopReviewPanel({
     writeReviewLineWrapPreference(reviewLineWrapStorageKey, nextLineWrap);
   };
   const handleReviewFileExpansionToggle = () => {
-    if (!hasReviewFiles) return;
-    setFileExpansionRequest((current) => ({ expanded: !current.expanded, version: current.version + 1 }));
+    if (!hasReviewFiles || bulkExpandDisabled) return;
+    setFileExpansionRequest((current) => ({
+      expanded: !effectiveFileExpansionRequest.expanded,
+      version: current.version + 1,
+    }));
   };
   const handleReviewRefresh = () => {
     if (reviewRefreshing) return;
@@ -314,19 +352,21 @@ export function DesktopReviewPanel({
         </div>
         <div className="desktop-review-panel__actions">
           <div className="desktop-review-panel__action-group" role="group" aria-label={t('workspace.review.diffDisplay')}>
-            <ActionTooltip title={reviewFileExpansionTip}>
-              <IconButton
-                aria-pressed={!fileExpansionRequest.expanded}
-                className="desktop-review-panel__file-expansion-toggle"
-                disabled={!hasReviewFiles}
-                label={reviewFileExpansionTip}
-                title=""
-                variant="ghost"
-                onClick={handleReviewFileExpansionToggle}
-              >
-                {fileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
-              </IconButton>
-            </ActionTooltip>
+            {!fileBrowserVisible ? (
+              <ActionTooltip title={reviewFileExpansionTip}>
+                <IconButton
+                  aria-pressed={!effectiveFileExpansionRequest.expanded}
+                  className="desktop-review-panel__file-expansion-toggle"
+                  disabled={!hasReviewFiles || bulkExpandDisabled}
+                  label={reviewFileExpansionTip}
+                  title=""
+                  variant="ghost"
+                  onClick={handleReviewFileExpansionToggle}
+                >
+                  {effectiveFileExpansionRequest.expanded ? <ChevronsDownUp size={14} /> : <ChevronsUpDown size={14} />}
+                </IconButton>
+              </ActionTooltip>
+            ) : null}
             <ActionTooltip title={reviewLayoutToggleTip}>
               <IconButton
                 aria-pressed={reviewDiffLayout === 'split'}
@@ -389,21 +429,18 @@ export function DesktopReviewPanel({
           onBaseRefChange={handleBranchBaseRefChange}
         />
       ) : null}
-      <Virtualizer
-        className="desktop-review-panel__sections"
-        contentClassName="desktop-review-panel__sections-content"
-      >
-        <ReviewSummarySection
+      {fileBrowserVisible && activeSummary ? (
+        <ReviewFileBrowser
           emptyText={{
             title: t(reviewEmptyTextKeys[activeSource].title),
             description: t(reviewEmptyTextKeys[activeSource].description),
           }}
           diffLayout={reviewDiffLayout}
-          fileExpansionRequest={fileExpansionRequest}
           findings={visibleFindings}
           focusRequest={focusTargetSource === activeSource ? focusRequest : null}
           lineWrap={reviewLineWrap}
           pathContext={pathContext}
+          selectionKey={`${reviewSourceStorageKey ?? 'review'}:${activeSource}`}
           summary={activeSummary}
           workspaceApp={workspaceApp}
           workspaceApps={workspaceApps}
@@ -414,7 +451,34 @@ export function DesktopReviewPanel({
           onOpenProjectFile={onOpenProjectFile}
           onRevealFile={onRevealFile}
         />
-      </Virtualizer>
+      ) : (
+        <Virtualizer
+          className="desktop-review-panel__sections"
+          contentClassName="desktop-review-panel__sections-content"
+        >
+          <ReviewSummarySection
+            emptyText={{
+              title: t(reviewEmptyTextKeys[activeSource].title),
+              description: t(reviewEmptyTextKeys[activeSource].description),
+            }}
+            diffLayout={reviewDiffLayout}
+            fileExpansionRequest={effectiveFileExpansionRequest}
+            findings={visibleFindings}
+            focusRequest={focusTargetSource === activeSource ? focusRequest : null}
+            lineWrap={reviewLineWrap}
+            pathContext={pathContext}
+            summary={activeSummary}
+            workspaceApp={workspaceApp}
+            workspaceApps={workspaceApps}
+            onAddFileToConversation={onAddFileToConversation}
+            onCopyFilePath={onCopyFilePath}
+            onExternalOpenFile={onExternalOpenFile}
+            onOpenFileWithApp={onOpenFileWithApp}
+            onOpenProjectFile={onOpenProjectFile}
+            onRevealFile={onRevealFile}
+          />
+        </Virtualizer>
+      )}
     </section>
   );
 }
@@ -429,6 +493,24 @@ function reviewSummaryForSource(
   if (source === 'staged') return reviewState?.stagedSummary ?? null;
   if (source === 'branch') return reviewState?.branchSummary ?? null;
   return null;
+}
+
+export function shouldAutoExpandReviewSummary(summary: DesktopDiffSummary | null): boolean {
+  return Boolean(summary && !isLargeReviewSummary(summary));
+}
+
+export function shouldUseReviewFileBrowser(summary: DesktopDiffSummary | null): boolean {
+  return Boolean(summary && isLargeReviewSummary(summary));
+}
+
+function isLargeReviewSummary(summary: DesktopDiffSummary): boolean {
+  if (summary.files.length > REVIEW_AUTO_EXPAND_MAX_FILES) return true;
+  let retainedLines = 0;
+  for (const file of summary.files) {
+    retainedLines += file.lines.length;
+    if (retainedLines > REVIEW_AUTO_EXPAND_MAX_LINES) return true;
+  }
+  return false;
 }
 
 function reviewSourceForFocusPath(

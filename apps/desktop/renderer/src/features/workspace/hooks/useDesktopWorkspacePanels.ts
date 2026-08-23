@@ -2,13 +2,13 @@ import type {
   RuntimeCollaborationTask,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import { clearTerminalRestoreBuffer } from '@setsuna-desktop/feature-terminal/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
   type ChatComposerTargetIdentity,
 } from '../../chat/hooks/useChatComposerSession.js';
-import { clearTerminalRestoreBuffer } from '../terminalRestoreBuffer.js';
 import {
   activatePanelInSlotState,
   activePanelInSlot,
@@ -95,6 +95,7 @@ export function useDesktopWorkspacePanels({
     reviewLoading,
     reviewState,
     selectReviewBaseRef,
+    setReviewSource,
   } = useDesktopReviewState({ activeProject });
   // These dispatchers are scoped to targetIdentity, so callbacks using them must
   // include them in their dependency list instead of treating them like useState setters.
@@ -670,6 +671,7 @@ export function useDesktopWorkspacePanels({
       selectWorkspaceApp,
       selectedWorkspaceApp,
       selectReviewBaseRef,
+      setReviewSource,
       sideActivePanel,
       sidePanelSlot,
       sidePanelPresent,
@@ -722,6 +724,7 @@ export function useDesktopWorkspacePanels({
       selectWorkspaceApp,
       selectedWorkspaceApp,
       selectReviewBaseRef,
+      setReviewSource,
       sideActivePanel,
       sidePanelSlot,
       sidePanelPresent,

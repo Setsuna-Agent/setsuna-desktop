@@ -87,7 +87,6 @@ describe('chat slash command items', () => {
 
 function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSlashCommandItemsOptions {
   return {
-    activeGoal: null,
     activeModelName: 'Current model',
     activeProjectSelected: true,
     activeTurnId: null,

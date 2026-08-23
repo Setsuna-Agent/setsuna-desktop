@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeEvent } from '../../src/events.js';
+import type { LegacyRuntimeGoalEvent, RuntimeEvent } from '../../src/events.js';
 import {
   createSweNotificationMapper,
   runtimeEventToSweNotifications
@@ -86,7 +86,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
       }]);
     });
   
-  it('maps thread goal events to AppServer goal notifications', () => {
+  it('maps legacy thread goal records for historical AppServer replay', () => {
       const goal = {
         version: 1 as const,
         id: 'goal_1',
@@ -99,7 +99,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: 1782432001,
         updatedAt: 1782432001,
       };
-      const updated: RuntimeEvent = {
+      const updated: LegacyRuntimeGoalEvent = {
         id: 'event_goal_1',
         seq: 1,
         threadId: 'thread_1',
@@ -108,7 +108,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: '2026-06-27T00:00:00.000Z',
         payload: { goal },
       };
-      const queuedUpdated: RuntimeEvent = {
+      const queuedUpdated: LegacyRuntimeGoalEvent = {
         ...updated,
         id: 'event_goal_queued',
         payload: {
@@ -125,7 +125,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
           },
         },
       };
-      const cleared: RuntimeEvent = {
+      const cleared: LegacyRuntimeGoalEvent = {
         id: 'event_goal_2',
         seq: 2,
         threadId: 'thread_1',
@@ -133,7 +133,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: '2026-06-27T00:00:01.000Z',
         payload: { cleared: true },
       };
-      const clearNoop: RuntimeEvent = {
+      const clearNoop: LegacyRuntimeGoalEvent = {
         id: 'event_goal_3',
         seq: 3,
         threadId: 'thread_1',

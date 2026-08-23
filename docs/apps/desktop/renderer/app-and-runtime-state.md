@@ -153,10 +153,9 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 - Provider 保存与 active provider 回退。
 - Composer 模型选择。
 - Runtime preferences。
-- 图像生成配置与连通性测试。
 - Provider model discovery。
 
-该 hook 只依赖 `saveConfig`、`fetchProviderModels`、`testImageGeneration` 三个 client 方法。Provider state 到 config input 的映射由纯函数集中处理，不能把 `apiKeySet`、`apiKeyPreview` 等安全投影字段误写回 runtime。Bootstrap 和 Hook mutation 通过 `replaceConfig` 更新同一份状态，不复制第二个 config owner。
+该 hook 只依赖 Core `saveConfig` 与 `fetchProviderModels`。Provider state 到 config input 的映射由纯函数集中处理；Bootstrap 和 Hook mutation 通过 `replaceConfig` 更新同一份状态，不复制第二个 config owner。图片生成连接、secret 安全投影和连通性测试由 Image Generation renderer controller 与 typed Feature client 独立持有，不能回流根 config。
 
 ### `useRuntimeCapabilityState.ts`
 

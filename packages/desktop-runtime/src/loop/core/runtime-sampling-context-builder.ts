@@ -12,6 +12,7 @@ import {
   type RuntimeThreadGoalExecutionOptions,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -48,9 +49,7 @@ import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
-import { goalContinuationContextMessages } from '../lifecycle/runtime-goal-prompts.js';
 import { isCollaborationToolName } from '../lifecycle/collaboration-coordinator.js';
-import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
 import { runtimeTaskModelRequest } from './runtime-task-model.js';
@@ -81,7 +80,7 @@ type RuntimeSamplingContextBuilderOptions = {
   debugTrace?: RuntimeDebugTraceSink;
   environmentResolver: RuntimeEnvironmentResolver;
   ids: IdGenerator;
-  isGoalCompletionPending?(turnId: string, goalId: string): boolean;
+  goalControl(): GoalControl;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
@@ -222,11 +221,18 @@ export class RuntimeSamplingContextBuilder {
     };
     const dynamicTools = this.options.toolExecutor.dynamicToolsForThread(threadId);
     // Tool follow-ups must reflect Goal mutations committed earlier in the same turn.
-    const stepGoal = snapshotThread ? snapshotThread.goal : thread.goal;
+    const goalControl = this.options.goalControl();
+    const stepGoal = await goalControl.getGoal(threadId).catch((error) => {
+      // A broken optional Goal projection must not take ordinary Core turns down with it.
+      // Goal turns still fail closed because continuing without their state would change semantics.
+      if (taskKind === 'goal') throw error;
+      return null;
+    });
     const goalCompletionPending = Boolean(
       stepGoal
-      && this.options.isGoalCompletionPending?.(turnId, stepGoal.id),
+      && goalControl.isCompletionPending(turnId, stepGoal.id),
     );
+    const goalTools = goalControl.toolDefinitions(stepGoal, goalCompletionPending);
     const toolRouter = this.options.toolHost && toolAccess !== 'none'
       ? await RuntimeToolRouter.create({
           toolHost: this.options.toolHost,
@@ -247,15 +253,14 @@ export class RuntimeSamplingContextBuilder {
           toolRouter?.tools,
           stepRuntimeConfig,
           dynamicTools,
-          stepGoal,
-          goalCompletionPending,
+          goalTools,
           toolRouter?.loadedDeferredToolNames(),
           toolRouter?.catalogToolDefinitions,
         );
     const sideConversation = (snapshotThread ?? thread).kind === 'side';
     const scopedTools = sideConversation
       ? availableTools?.filter((tool) => (
-          !isCollaborationToolName(tool.name) && !isGoalToolName(tool.name)
+          !isCollaborationToolName(tool.name) && !goalControl.isToolName(tool.name)
         ))
       : availableTools;
     const tools = toolAccess === 'read-only'
@@ -269,8 +274,7 @@ export class RuntimeSamplingContextBuilder {
       toolRouter,
       dynamicTools,
       stepRuntimeConfig,
-      stepGoal,
-      goalCompletionPending,
+      goalTools,
     );
     const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);
     const persistentContextBudget = taskKind === 'review'
@@ -280,7 +284,7 @@ export class RuntimeSamplingContextBuilder {
       config: stepRuntimeConfig,
       hookContextMessages: [
         ...(taskKind === 'goal' && stepGoal?.status === 'active' && !goalCompletionPending
-          ? goalContinuationContextMessages(stepGoal, this.options.ids, this.options.clock)
+          ? goalControl.continuationContextMessages(stepGoal)
           : []),
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),

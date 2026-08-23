@@ -1,0 +1,186 @@
+.feature-vision-recognition-settings {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 22%, var(--app-border));
+  border-radius: var(--app-radius-md);
+}
+
+.feature-vision-recognition-settings > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.feature-vision-recognition-settings__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 11%, transparent);
+}
+
+.feature-vision-recognition-settings h3,
+.feature-vision-recognition-settings h4,
+.feature-vision-recognition-settings p {
+  margin: 0;
+}
+
+.feature-vision-recognition-settings h3,
+.feature-vision-recognition-settings h4 {
+  color: var(--app-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.feature-vision-recognition-settings header p,
+.feature-vision-recognition-settings__field small {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.feature-vision-recognition-settings__field,
+.feature-vision-recognition-test__prompt {
+  display: grid;
+  gap: 7px;
+  color: var(--app-text-muted);
+  font-size: 12px;
+}
+
+.feature-vision-recognition-settings select,
+.feature-vision-recognition-test textarea {
+  width: 100%;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+}
+
+.feature-vision-recognition-settings select {
+  min-height: 36px;
+  padding: 0 10px;
+}
+
+.feature-vision-recognition-test textarea {
+  min-height: 92px;
+  padding: 9px 10px;
+  resize: vertical;
+}
+
+.feature-vision-recognition-settings select:focus-visible,
+.feature-vision-recognition-test textarea:focus-visible,
+.feature-vision-recognition-test button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-primary) 65%, transparent);
+  outline-offset: 1px;
+}
+
+.feature-vision-recognition-settings__status,
+.feature-vision-recognition-test__status {
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.feature-vision-recognition-settings__status .is-error,
+.feature-vision-recognition-test__status .is-error {
+  color: var(--app-danger);
+}
+
+.feature-vision-recognition-settings__status .is-success,
+.feature-vision-recognition-test__status .is-success {
+  color: var(--app-success);
+}
+
+.feature-vision-recognition-test {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--app-primary) 16%, var(--app-border));
+}
+
+.feature-vision-recognition-test > header,
+.feature-vision-recognition-test__controls {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feature-vision-recognition-test > header > span {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.feature-vision-recognition-test__controls {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.feature-vision-recognition-test__status {
+  margin-right: auto;
+}
+
+.feature-vision-recognition-test button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+  color: var(--app-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.feature-vision-recognition-test button.is-primary {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+  color: var(--app-primary-contrast, #fff);
+}
+
+.feature-vision-recognition-test button:disabled,
+.feature-vision-recognition-settings select:disabled,
+.feature-vision-recognition-test textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.feature-vision-recognition-test__result {
+  max-height: 240px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--app-border) 88%, transparent);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-bg) 94%, var(--app-text) 4%);
+  color: var(--app-text);
+  font: inherit;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 760px) {
+  .feature-vision-recognition-test__controls {
+    flex-wrap: wrap;
+  }
+
+  .feature-vision-recognition-test__status {
+    flex-basis: 100%;
+  }
+}

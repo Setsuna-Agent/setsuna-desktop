@@ -26,8 +26,12 @@ export async function fetchRuntimeResponse(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
+      throwIfRuntimeRequestCancelled(init.signal);
       return await fetchImpl(url, init);
     } catch (error) {
+      // Retrying with the same aborted signal can never succeed. Renderer-driven
+      // cancellation is an expected lifecycle outcome, not a transport failure.
+      throwIfRuntimeRequestCancelled(init.signal, error);
       lastError = error;
       if (attempt >= maxAttempts) break;
       console.warn(`[runtime] ${options.label} transport failed; retrying once`, error);
@@ -38,6 +42,14 @@ export async function fetchRuntimeResponse(
   }
 
   throw runtimeTransportError(lastError, options.label, options.runtimeState(), maxAttempts);
+}
+
+function throwIfRuntimeRequestCancelled(
+  signal: AbortSignal | null | undefined,
+  fallback?: unknown,
+): void {
+  if (!signal?.aborted) return;
+  throw signal.reason ?? fallback ?? new Error('Runtime request was cancelled.');
 }
 
 function runtimeTransportError(

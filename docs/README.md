@@ -87,6 +87,7 @@
 跨越多个源码模块、但不适合归属于单个目录的设计放在 [designs](designs/README.md)：
 
 - [Active turn 发送队列](designs/queued-turn-inputs.md)：普通消息、Goal、steer、取回编辑和 FIFO 调度。
+- [Feature Composition Architecture](designs/feature-composition-architecture.md)：通过跨进程独立 Feature Module、Capability、类型化 Registry 和显式 composition root 收敛功能变更扩散。
 - [架构复杂度收敛评审](designs/architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点治理计划。
 - [Runtime 边界与事件去向](designs/runtime-boundary-matrix.md)：第一方 Runtime、app-server 和事件投影的当前边界。
 

@@ -1,6 +1,7 @@
 import {
   DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
   type DesktopWebDavSyncBackupResult,
+  type DesktopWebDavSyncCategoryId,
   type DesktopWebDavSyncCategorySummary,
   type DesktopWebDavSyncConfigureInput,
   type DesktopWebDavSyncConfigureResult,
@@ -15,6 +16,10 @@ import {
   type DesktopWebDavSyncState,
   type RuntimeDataMigrationReadiness,
 } from '@setsuna-desktop/contracts';
+import type {
+  FeatureCredentialBackup,
+  PortableFeatureSettingsDocument,
+} from '@setsuna-desktop/feature-core/settings';
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -70,6 +75,8 @@ export type WebDavSyncRuntimeCoordinator = {
   release(): Promise<void>;
   stop(): Promise<void>;
   start(): Promise<void>;
+  exportPortableFeatureSettings(): Promise<readonly PortableFeatureSettingsDocument[]>;
+  exportFeatureCredentialBackups(): Promise<readonly FeatureCredentialBackup[]>;
 };
 
 type WebDavSyncServiceOptions = {
@@ -151,10 +158,12 @@ export class WebDavSyncService {
     this.assertAvailable();
     const workRoot = await this.createWorkRoot('summary');
     try {
+      const featureData = await this.exportSnapshotFeatureData(DESKTOP_WEBDAV_SYNC_CATEGORY_IDS);
       return await summarizeLocalSnapshotCategories({
         dataRoot: this.options.dataRoot,
         categories: DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
         stagingRoot: path.join(workRoot, 'local-snapshot'),
+        ...featureData,
       });
     } finally {
       await rm(workRoot, { recursive: true, force: true }).catch(() => undefined);
@@ -287,10 +296,12 @@ export class WebDavSyncService {
       let runtimePrepared = false;
       try {
         runtimePrepared = await this.prepareRuntime(false, signal);
+        const featureData = await this.exportSnapshotFeatureData(categories);
         const localItems = await createLocalInventory({
           dataRoot: this.options.dataRoot,
           categories,
           workRoot,
+          ...featureData,
           signal,
           onProgress: (progress) => this.applyTransferProgress(progress),
         });
@@ -355,6 +366,7 @@ export class WebDavSyncService {
         });
         secretsBuffer = downloaded.secretsBuffer;
         runtimePrepared = await this.prepareRuntime(false, signal);
+        const featureData = await this.exportSnapshotFeatureData(plan.publicPlan.categories);
         this.updateOperation('preparing-restore', { cancellable: false });
         // Stopping the runtime before the final inventory closes every local
         // mutation path, so the confirmed overwrite plan cannot race a config
@@ -366,6 +378,7 @@ export class WebDavSyncService {
           dataRoot: this.options.dataRoot,
           categories: plan.publicPlan.categories,
           workRoot: path.join(workRoot, 'current'),
+          ...featureData,
           signal,
           onProgress: (progress) => this.applyTransferProgress(progress),
         });
@@ -462,10 +475,12 @@ export class WebDavSyncService {
           const replaceableSnapshots = await repository.listSnapshots(signal);
           await this.prepareRuntime(automatic, signal);
           try {
+            const featureData = await this.exportSnapshotFeatureData(config.categories);
             sources = await materializeSnapshotForUpload({
               dataRoot: this.options.dataRoot,
               categories: config.categories,
               workRoot,
+              ...featureData,
               signal,
               onProgress: (progress) => this.applyTransferProgress(progress),
             });
@@ -517,6 +532,21 @@ export class WebDavSyncService {
 
   private async connectedRepository(signal?: AbortSignal): Promise<EncryptedWebDavRepository> {
     return this.repositoryFor(await this.requireConnection(), signal);
+  }
+
+  private async exportSnapshotFeatureData(
+    categories: readonly DesktopWebDavSyncCategoryId[],
+  ): Promise<Readonly<{
+    portableFeatureSettings: readonly PortableFeatureSettingsDocument[];
+    featureCredentialBackups: readonly FeatureCredentialBackup[];
+  }>> {
+    const portableFeatureSettings = categories.includes('preferences')
+      ? await this.options.runtime.exportPortableFeatureSettings()
+      : [];
+    const featureCredentialBackups = categories.includes('model_credentials')
+      ? await this.options.runtime.exportFeatureCredentialBackups()
+      : [];
+    return Object.freeze({ portableFeatureSettings, featureCredentialBackups });
   }
 
   private async requireConnection(): Promise<ResolvedWebDavSyncConnection> {

@@ -100,36 +100,6 @@ export type RuntimeDesktopSettings = {
   pythonPackageIndexUrl?: string;
 };
 
-export type RuntimeImageGenerationConfigState = {
-  baseUrl: string;
-  model: string;
-  apiKeySet: boolean;
-  apiKeyPreview: string;
-};
-
-export type RuntimeImageGenerationConfigInput = {
-  baseUrl?: string;
-  model?: string;
-  apiKey?: string;
-  clearApiKey?: boolean;
-};
-
-/** 接受用户自定义的 HTTP/HTTPS OpenAI Images 服务地址，不强制公网 HTTPS。 */
-export function normalizeImageGenerationServiceUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  if (!normalized) return '';
-  try {
-    const url = new URL(normalized);
-    if ((url.protocol !== 'http:' && url.protocol !== 'https:') || !url.hostname || url.username || url.password) {
-      return null;
-    }
-    return normalized;
-  } catch {
-    return null;
-  }
-}
-
 export const DEFAULT_NPM_REGISTRY_URL = 'https://registry.npmmirror.com';
 export const DEFAULT_PYTHON_PACKAGE_INDEX_URL = 'https://pypi.tuna.tsinghua.edu.cn/simple';
 
@@ -188,9 +158,6 @@ export type RuntimeConfiguredModelReference = {
   modelId: string;
 };
 
-export type RuntimeVisionRecognitionConfigState = RuntimeConfiguredModelReference;
-export type RuntimeVisionRecognitionConfigInput = RuntimeConfiguredModelReference | null;
-
 export type RuntimeTaskModelSettings = Partial<
   Record<RuntimeTaskModelId, RuntimeConfiguredModelReference>
 >;
@@ -224,8 +191,6 @@ export type RuntimeConfigState = {
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
-  imageGeneration?: RuntimeImageGenerationConfigState;
-  visionRecognition?: RuntimeVisionRecognitionConfigState;
 };
 
 export type RuntimeAccessMode =
@@ -341,7 +306,5 @@ export type RuntimeConfigInput = {
   bypassHookTrust?: boolean;
   features?: Record<string, boolean>;
   desktopSettings?: RuntimeDesktopSettings;
-  imageGeneration?: RuntimeImageGenerationConfigInput;
-  visionRecognition?: RuntimeVisionRecognitionConfigInput;
   providers?: ProviderConfigInput[];
 };

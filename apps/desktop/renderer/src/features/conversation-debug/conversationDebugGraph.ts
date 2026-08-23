@@ -1,9 +1,9 @@
 import type {
+  CoreRuntimeEventType,
   RuntimeDebugTraceEvent,
-  RuntimeEvent,
-  RuntimeEventType,
   RuntimeMessageRole,
   RuntimeStreamItemKind,
+  StoredThreadEvent,
 } from '@setsuna-desktop/contracts';
 import { sanitizeConversationDebugText } from './conversationDebugSerialization.js';
 
@@ -43,8 +43,8 @@ export type ConversationDebugNodeStatus =
 export type ConversationDebugNode = {
   completedAt?: string;
   eventIds: string[];
-  events: RuntimeEvent[];
-  eventTypes: RuntimeEventType[];
+  events: StoredThreadEvent[];
+  eventTypes: StoredThreadEvent['type'][];
   id: string;
   kind: ConversationDebugNodeKind;
   lane: ConversationDebugLane;
@@ -61,7 +61,7 @@ export type ConversationDebugNode = {
   turnId?: string;
 };
 
-export type ConversationDebugRecord = RuntimeDebugTraceEvent | RuntimeEvent;
+export type ConversationDebugRecord = RuntimeDebugTraceEvent | StoredThreadEvent;
 
 export type ConversationDebugEdge = {
   from: string;
@@ -83,7 +83,7 @@ export type ConversationDebugTurnGroup = {
 export type ConversationDebugGraph = {
   edges: ConversationDebugEdge[];
   eventNodeIds: Map<string, string>;
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   nodes: ConversationDebugNode[];
   records: ConversationDebugRecord[];
   traceNodeIds: Map<string, string>;
@@ -102,7 +102,7 @@ type NodeIdentity = Pick<
 >;
 
 export function projectConversationDebugGraph(
-  incomingEvents: RuntimeEvent[],
+  incomingEvents: StoredThreadEvent[],
   turnGroupIds: ReadonlyMap<string, string> = new Map(),
 ): ConversationDebugGraph {
   const events = uniqueOrderedEvents(incomingEvents);
@@ -216,7 +216,7 @@ export function filterConversationDebugGraphByTurn(
   };
 }
 
-export function runtimeEventDebugSummary(event: RuntimeEvent): string {
+export function runtimeEventDebugSummary(event: StoredThreadEvent): string {
   switch (event.type) {
     case 'thread.created':
     case 'thread.updated':
@@ -300,13 +300,15 @@ export function runtimeEventDebugSummary(event: RuntimeEvent): string {
     case 'runtime.warning':
     case 'runtime.error':
       return compactText(event.payload.message);
+    case 'feature.event':
+      return `${event.featureId} · ${event.eventType}@${event.schemaVersion}`;
     default:
       return event.type;
   }
 }
 
-function uniqueOrderedEvents(events: RuntimeEvent[]): RuntimeEvent[] {
-  const bySequence = new Map<number, RuntimeEvent>();
+function uniqueOrderedEvents(events: StoredThreadEvent[]): StoredThreadEvent[] {
+  const bySequence = new Map<number, StoredThreadEvent>();
   for (const event of events) {
     const current = bySequence.get(event.seq);
     if (!current || current.id === event.id) bySequence.set(event.seq, event);
@@ -315,7 +317,7 @@ function uniqueOrderedEvents(events: RuntimeEvent[]): RuntimeEvent[] {
 }
 
 function debugNodeIdentity(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   messageLanes: Map<string, ConversationDebugLane>,
   itemKinds: Map<string, RuntimeStreamItemKind>,
   activeCompactionNodeId: string | null,
@@ -451,13 +453,12 @@ function debugNodeIdentity(
     case 'thread.deleted':
     case 'thread.metadata_updated':
     case 'thread.memory_mode_updated':
-    case 'thread.goal_updated':
-    case 'thread.goal_cleared':
       return nodeIdentity(`thread:${event.id}`, 'thread', 'runtime', runtimeEventDebugSummary(event));
+    case 'feature.event':
+      return nodeIdentity(`feature:${event.id}`, 'event', 'runtime', runtimeEventDebugSummary(event));
     default: {
-      // Keep a generic fallback for forward-compatible events even though the current
-      // RuntimeEvent union is exhaustively covered above.
-      const unknownEvent = event as RuntimeEvent;
+      // Keep a generic fallback for forward-compatible stored records.
+      const unknownEvent = event as StoredThreadEvent;
       return nodeIdentity(
         `event:${unknownEvent.id}`,
         'event',
@@ -498,7 +499,7 @@ function streamItemIdentity(
   };
 }
 
-function createMutableNode(identity: NodeIdentity, event: RuntimeEvent): MutableDebugNode {
+function createMutableNode(identity: NodeIdentity, event: StoredThreadEvent): MutableDebugNode {
   return {
     ...identity,
     eventIds: [],
@@ -516,7 +517,7 @@ function createMutableNode(identity: NodeIdentity, event: RuntimeEvent): Mutable
   };
 }
 
-function updateMutableNode(node: MutableDebugNode, event: RuntimeEvent): void {
+function updateMutableNode(node: MutableDebugNode, event: StoredThreadEvent): void {
   node.eventIds.push(event.id);
   node.events.push(event);
   if (!node.eventTypes.includes(event.type)) node.eventTypes.push(event.type);
@@ -535,7 +536,7 @@ function updateMutableNode(node: MutableDebugNode, event: RuntimeEvent): void {
 }
 
 function statusForEvent(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   current: ConversationDebugNodeStatus = 'neutral',
 ): ConversationDebugNodeStatus {
   switch (event.type) {
@@ -594,7 +595,7 @@ function statusForEvent(
   }
 }
 
-function eventCompletesNode(event: RuntimeEvent): boolean {
+function eventCompletesNode(event: StoredThreadEvent): boolean {
   return event.type === 'message.completed'
     || event.type === 'item.completed'
     || event.type === 'tool.completed'
@@ -606,7 +607,7 @@ function eventCompletesNode(event: RuntimeEvent): boolean {
     || event.type === 'runtime.error';
 }
 
-function isStreamingDeltaEvent(event: RuntimeEvent): boolean {
+function isStreamingDeltaEvent(event: StoredThreadEvent): boolean {
   return event.type === 'message.delta'
     || event.type === 'item.delta'
     || event.type === 'plan.delta'
@@ -615,7 +616,7 @@ function isStreamingDeltaEvent(event: RuntimeEvent): boolean {
     || event.type === 'tool.output_delta';
 }
 
-function relatedToolCallId(event: RuntimeEvent): string | undefined {
+function relatedToolCallId(event: StoredThreadEvent): string | undefined {
   switch (event.type) {
     case 'tool.preview':
     case 'tool.started':
@@ -758,12 +759,12 @@ function isDebugTraceRecord(
   return 'kind' in record;
 }
 
-function eventTurnScope(event: RuntimeEvent): string {
+function eventTurnScope(event: StoredThreadEvent): string {
   return event.turnId ?? `thread:${event.threadId}`;
 }
 
 function eventTransactionScope(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   assistantTransactions: Map<string, string>,
 ): string {
   const turnScope = eventTurnScope(event);
@@ -787,7 +788,7 @@ function laneForStreamItem(kind: RuntimeStreamItemKind): ConversationDebugLane {
   return 'provider';
 }
 
-function streamItemKindFromEvent(type: RuntimeEventType): RuntimeStreamItemKind {
+function streamItemKindFromEvent(type: CoreRuntimeEventType): RuntimeStreamItemKind {
   if (type === 'plan.delta') return 'plan';
   if (type.startsWith('reasoning.')) return 'reasoning';
   return 'agent_message';

@@ -39,7 +39,7 @@
 
 ## 数据模型
 
-`RuntimeThreadGoal` 是线程投影的一部分：
+当前 Goal 是 `@setsuna-desktop/feature-goal` 拥有的 Feature 状态，不再放入通用 `RuntimeThread` / `RuntimeThreadSummary` 快照。`Goal` 包含：
 
 - `version`、`id`：识别持久化版本和替换边界；旧 Goal 在恢复时补齐。
 - `objective`、`status`：当前目标与生命周期状态。
@@ -48,7 +48,7 @@
 - `safety`：自动轮次数、连续无进展次数和最近进展指纹。
 - `execution`：初始附件、Skill、thinking 配置和 source message，供后续续轮复用。
 
-Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为真源。`goal.id` 让旧 turn 的迟到结算无法覆盖已经替换的新 Goal。
+真源是 append-only `feature.event` envelope 中的 `goal/goal.state-replaced@1`；payload 是 `{ goal: Goal | null }`。runtime 与 renderer 都通过同一个 reducer 构建 `{ state, throughSeq }` 投影，无关 Core 事件只推进全局水位。旧 `thread.goal_updated` / `thread.goal_cleared` 只保留读取 decoder，新代码不再写入。`goal.id` 与 objective revision binding 共同阻止旧 turn 的迟到结算覆盖新版 Goal。
 
 ## 生命周期
 
@@ -59,7 +59,7 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 | `active` | 暂停 | `paused` | 写 `userPaused`，取消 active Goal turn |
 | `paused` / `blocked` / `usageLimited` | 继续 | `active` | 清除停止原因与安全计数，启动续轮 |
 | 非 `complete` | 编辑 | 状态不变 | 保留 ID、累计计量、创建时间和 execution；下一轮按新 objective 执行 |
-| 任意 Goal | 删除 | 无 Goal | 取消 Goal turn，只写 clear 事件，不保留 transcript 墓碑 |
+| 任意 Goal | 删除 | 无 Goal | 取消 Goal turn，写 `{ goal: null }` Feature 状态，不保留 transcript 墓碑 |
 | `active` | 模型完成审计 | `complete` | 停止续轮，最终 turn 结算后写一次退出总结 |
 | `active` | runtime reload | `paused` | 写 `runtimeReloaded`，等待用户继续 |
 | `active` | 连续无进展/轮次上限 | `blocked` | 写结构化 stop reason，不再自动续轮 |
@@ -68,7 +68,7 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 
 ## 自动续轮与优先级
 
-每个 Goal turn 结束后，协调器重新读取线程投影、结算该 turn 的时间和 Token，并判断是否继续。续轮只在以下条件同时成立时创建：
+每个 Goal turn 结束后，协调器重新读取 Goal Feature 投影、结算该 turn 的时间和 Token，并判断是否继续。续轮只在以下条件同时成立时创建：
 
 - Goal 仍是同一个 `goal.id` 且状态为 `active`；
 - 线程没有 active task；
@@ -98,11 +98,11 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 
 ## Renderer 交互
 
-当前 Goal（除 `complete`）显示在输入框上方的常驻状态栏：
+Goal renderer controller 先订阅当前线程的全局 `advance/event` feed，再读取强类型 state snapshot。当前 Goal（除 `complete`）通过 composer-status contribution 显示在输入框上方：
 
 - 状态与单行 objective；
 - 累计耗时，active turn 期间每秒更新；
-- 编辑按钮，打开 textarea 弹窗并通过现有 `setThreadGoal` 更新 objective；
+- 编辑按钮，打开 textarea 弹窗并通过 Goal typed operation 更新 objective；
 - active 时显示暂停，其他可恢复状态显示继续；
 - 删除按钮清除 Goal。
 
@@ -111,7 +111,7 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 ## 错误与恢复
 
 - renderer i18n 对未知动态 key 回退为 key 文本，不能再因单个缺失翻译触发整页 `undefined.replace` 崩溃。
-- runtime 启动完成旧 turn 收尾后统一执行 Goal reconcile；旧 active Goal 转为 paused。
+- runtime composition 激活 Goal 后完成旧 turn 收尾并执行 reconcile；旧 active Goal 转为 paused。单个损坏的历史投影使 Goal degraded/query fail closed，但不阻塞 Core thread 启动。
 - provider usage/quota 错误进入 `usageLimited`，其他 runtime error 进入 `blocked`，错误内容写入 `stopReason`。
 - 取消 active Goal turn 进入 `paused(turnCancelled)`；用户主动暂停使用 `userPaused`。
 - 清除或替换时通过 Goal ID 绑定忽略旧 turn 的迟到结算；编辑后再用 objective
@@ -119,19 +119,18 @@ Goal 仍以 append-only `thread.goal_updated` / `thread.goal_cleared` 事件为�
 
 ## 验证覆盖
 
-- contract/store：Goal identity、stop reason、safety 和退出 notice 的 clone/projection，并兼容读取旧 lifecycle notice。
-- runtime integration：自动续轮与最终计量、取消暂停、用户 steer、编辑保留状态、reload 暂停、无进展保护、队列 Goal 替换。
-- renderer unit：状态栏耗时、继续/编辑/删除操作、退出数据合并到助手文本、旧过程及 cleared notice 隐藏和缺失 i18n key 不崩溃。
+- Feature event/projection：live/replay 同 reducer、固定高水位、duplicate/gap、cache dispose、旧事件 decoder 和未知版本诊断。
+- runtime integration：自动续轮与最终计量、取消/clear 迟到结算、用户 steer、编辑保留状态、restart reconcile、无进展保护、队列 Goal 替换与单写 envelope。
+- renderer unit：subscribe-before-query、`snapshot 10 → advance 11 → Goal event 12`、gap refetch、迟到 snapshot、状态栏操作和退出数据展示。
 - Skill：`quick_validate.py` 校验 frontmatter 和 interface metadata；registry integration 负责实际发现与加载。
 
 ## 相关文件
 
-- `packages/contracts/src/threads.ts`
-- `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-coordinator.ts`
-- `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-state.ts`
-- `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-prompts.ts`
-- `packages/desktop-runtime/src/loop/lifecycle/runtime-goal-tools.ts`
-- `apps/desktop/renderer/src/features/chat/composer/ChatGoalStatusBar.tsx`
+- `packages/features/goal/src/contracts/`
+- `packages/features/goal/src/runtime/`
+- `packages/features/goal/src/renderer/`
+- `packages/feature-core/src/runtime/events.ts`
+- `packages/desktop-runtime/src/composition/builtin-runtime-features.ts`
+- `apps/desktop/renderer/src/composition/builtin-renderer-features.ts`
 - `apps/desktop/renderer/src/features/chat/conversation/chatMessageDisplay.ts`
-- `apps/desktop/renderer/src/features/chat/goalFormatting.ts`
 - `skills/goal-writer/SKILL.md`

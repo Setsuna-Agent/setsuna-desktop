@@ -1,0 +1,35 @@
+{
+  "name": "@setsuna-desktop/feature-review",
+  "version": "0.1.0",
+  "description": "Native Git review Feature for Setsuna Desktop.",
+  "license": "MIT",
+  "type": "module",
+  "setsunaFeature": {
+    "id": "desktop-review"
+  },
+  "exports": {
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
+    },
+    "./main": {
+      "types": "./dist/main/index.d.ts",
+      "default": "./dist/main/index.js"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts",
+      "default": "./dist/preload/index.js"
+    }
+  },
+  "dependencies": {
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@setsuna-desktop/feature-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "electron": ">=30"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

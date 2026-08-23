@@ -4,6 +4,7 @@ import { Code2, PanelRightOpen } from 'lucide-react';
 import {
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useState,
   type MouseEvent,
@@ -193,7 +194,7 @@ export function ReviewSummarySection({
   );
 }
 
-function ReviewFileCard({
+const ReviewFileCard = memo(function ReviewFileCard({
   diffLayout,
   fileExpansionRequest,
   file,
@@ -473,7 +474,7 @@ function ReviewFileCard({
       />
     </>
   );
-}
+});
 
 type ReviewImagePreviewSide = 'before' | 'after';
 

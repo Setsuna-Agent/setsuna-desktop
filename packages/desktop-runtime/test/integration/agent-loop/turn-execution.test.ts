@@ -375,31 +375,31 @@ describe('agent loop turn execution', () => {
       expect(toolHost.listCalls).toBe(2);
       expect(toolHost.environmentCalls).toBe(2);
       expect(snapshotEvents.map((event) => event.payload.snapshot.toolNames)).toEqual([
-        ['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal'],
-        ['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal'],
+        ['step_tool_1', 'tool_search', 'read_tool_result'],
+        ['step_tool_2', 'tool_search', 'read_tool_result'],
       ]);
       expect(snapshotEvents.map((event) => event.payload.snapshot.advertisedToolNames)).toEqual([
-        ['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal'],
-        ['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal'],
+        ['step_tool_1', 'tool_search', 'read_tool_result'],
+        ['step_tool_2', 'tool_search', 'read_tool_result'],
       ]);
       expect(saved?.turns?.[0]?.stepSnapshots?.map((step) => step.snapshot.toolNames)).toEqual([
-        ['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal'],
-        ['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal'],
+        ['step_tool_1', 'tool_search', 'read_tool_result'],
+        ['step_tool_2', 'tool_search', 'read_tool_result'],
       ]);
       expect(saved?.messages.find((message) => message.role === 'user')).toMatchObject({
         skillIds: ['skill_step'],
         skillReferences: [{ skillId: 'skill_step', start: 0, end: 'Step Skill'.length }],
       });
-      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal']);
-      expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal']);
+      expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual(['step_tool_1', 'tool_search', 'read_tool_result']);
+      expect(modelClient.requests[1].tools?.map((tool) => tool.name)).toEqual(['step_tool_2', 'tool_search', 'read_tool_result']);
       expect(modelClient.requests[1].messages.some((message) => message.role === 'tool' && message.content.includes('step_tool_1 result'))).toBe(true);
       const firstSnapshotEnvironment = modelClient.requests[0].stepSnapshot?.toolEnvironment;
       const secondSnapshotEnvironment = modelClient.requests[1].stepSnapshot?.toolEnvironment;
       expect(modelClient.requests[0].stepSnapshot).toMatchObject({
         threadId: thread.id,
         projectId: 'project_1',
-        toolNames: ['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal'],
-        advertisedToolNames: ['step_tool_1', 'tool_search', 'read_tool_result', 'create_goal'],
+        toolNames: ['step_tool_1', 'tool_search', 'read_tool_result'],
+        advertisedToolNames: ['step_tool_1', 'tool_search', 'read_tool_result'],
         toolChoice: 'auto',
         toolEnvironment: {
           id: expect.stringMatching(/^step_env_\d+$/),
@@ -442,8 +442,8 @@ describe('agent loop turn execution', () => {
         },
       });
       expect(modelClient.requests[1].stepSnapshot).toMatchObject({
-        toolNames: ['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal'],
-        advertisedToolNames: ['step_tool_2', 'tool_search', 'read_tool_result', 'create_goal'],
+        toolNames: ['step_tool_2', 'tool_search', 'read_tool_result'],
+        advertisedToolNames: ['step_tool_2', 'tool_search', 'read_tool_result'],
         toolEnvironment: {
           id: expect.stringMatching(/^step_env_\d+$/),
           cwd: expect.stringMatching(/^\/tmp\/setsuna-step-\d+$/),

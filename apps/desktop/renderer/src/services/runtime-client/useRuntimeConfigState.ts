@@ -5,16 +5,12 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeFetchModelsInput,
-  RuntimeImageGenerationConfigInput,
-  RuntimeImageGenerationTestInput,
-  RuntimeVisionRecognitionConfigInput,
-  RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useRef, useState } from 'react';
 
 export type RuntimeConfigClient = Pick<
   DesktopRuntimeClient,
-  'fetchProviderModels' | 'saveConfig' | 'testImageGeneration' | 'testVisionRecognition'
+  'fetchProviderModels' | 'saveConfig'
 >;
 
 export type RuntimePreferenceInput = Pick<
@@ -124,34 +120,6 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     [config?.activeProviderId, saveConfig],
   );
 
-  const saveImageGenerationConfig = useCallback(
-    async (input: RuntimeImageGenerationConfigInput) => {
-      await saveConfig({ imageGeneration: input });
-    },
-    [saveConfig],
-  );
-
-  const testImageGeneration = useCallback(
-    async (input: RuntimeImageGenerationTestInput) => (
-      await client.testImageGeneration(input)
-    ),
-    [client],
-  );
-
-  const saveVisionRecognitionConfig = useCallback(
-    async (input: RuntimeVisionRecognitionConfigInput) => {
-      await saveConfig({ visionRecognition: input });
-    },
-    [saveConfig],
-  );
-
-  const testVisionRecognition = useCallback(
-    async (input: RuntimeVisionRecognitionTestInput) => (
-      await client.testVisionRecognition(input)
-    ),
-    [client],
-  );
-
   const saveRuntimePreferences = useCallback(
     async (input: RuntimePreferenceInput) => {
       await saveConfig(input);
@@ -217,12 +185,8 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     config,
     fetchProviderModels,
     replaceConfig,
-    saveImageGenerationConfig,
-    saveVisionRecognitionConfig,
     saveProviders,
     saveRuntimePreferences,
     selectProviderModel,
-    testImageGeneration,
-    testVisionRecognition,
   };
 }

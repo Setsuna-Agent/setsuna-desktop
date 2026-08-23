@@ -8,12 +8,16 @@ import {
   WEB_SEARCH_TOOL_NAME,
   type DesktopResolveNetworkProxyInput,
 } from '@setsuna-desktop/contracts';
+import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
+import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
+import { visionRecognitionServiceCapability } from '@setsuna-desktop/feature-vision-recognition/contracts';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { createRuntimeFactory } from '../../src/runtime/runtime-factory.js';
+import { activateBuiltinRuntimeFeatures } from '../../src/composition/runtime-feature-composition.js';
 import { InMemoryDesktopNativeBridge } from '../support/in-memory-secret-store.js';
 
 describe('runtime factory tool wiring', () => {
@@ -156,15 +160,19 @@ describe('runtime factory tool wiring', () => {
       extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
       extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
     });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
 
     try {
       await runtime.pluginMarketplace.installPlugin(OPENAI_IMAGE_GENERATION_PLUGIN_ID);
-      await runtime.configStore.saveConfig({
-        imageGeneration: {
-          apiKey: 'image-secret',
+      await runtime.featureSettings.updatePublicDocument({
+        featureId: imageGenerationSettings.documents.connection.featureId,
+        documentId: imageGenerationSettings.documents.connection.documentId,
+        expectedRevision: 1,
+        patch: {
           baseUrl: 'https://images.example.test/v1',
           model: 'gpt-image-1',
         },
+        secretPatch: { apiKey: 'image-secret' },
       });
 
       await expect(runtime.toolHost.runTool(
@@ -177,6 +185,7 @@ describe('runtime factory tool wiring', () => {
         override: undefined,
       }]);
     } finally {
+      await composition.dispose();
       await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
@@ -191,6 +200,7 @@ describe('runtime factory tool wiring', () => {
       extensionWorkerEntryPath: path.resolve('packages/desktop-runtime/src/extensions/extension-worker-entry.ts'),
       extensionWorkerExecArgv: ['--import', pathToFileURL(path.resolve('node_modules/tsx/dist/loader.mjs')).href],
     });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
 
     try {
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
@@ -216,7 +226,14 @@ describe('runtime factory tool wiring', () => {
             supportsImages: true,
           }],
         }],
-        visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
+      });
+      const service = composition.resolveHostDependencies({
+        vision: requiredCapability(visionRecognitionServiceCapability),
+      }).vision;
+      const settings = await service.readSettings();
+      await service.updateSettings({
+        expectedRevision: settings.revision,
+        selection: { providerId: 'vision-provider', modelId: 'vision-model' },
       });
 
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
@@ -227,6 +244,7 @@ describe('runtime factory tool wiring', () => {
         expect.arrayContaining([expect.objectContaining({ name: OPENAI_VISION_RECOGNITION_TOOL_NAME })]),
       );
     } finally {
+      await composition.dispose();
       await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();

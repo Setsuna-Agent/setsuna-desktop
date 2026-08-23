@@ -9,6 +9,10 @@
   "include": ["test/**/*.ts"],
   "references": [
     { "path": "../contracts/tsconfig.build.json" },
+    { "path": "../feature-core/tsconfig.build.json" },
+    { "path": "../features/image-generation/tsconfig.build.json" },
+    { "path": "../features/goal/tsconfig.build.json" },
+    { "path": "../features/vision-recognition/tsconfig.build.json" },
     { "path": "./tsconfig.build.json" }
   ]
 }

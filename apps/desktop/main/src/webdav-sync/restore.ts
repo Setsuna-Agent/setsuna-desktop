@@ -9,6 +9,7 @@ import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { relocateDataRootContents } from '../data-root/relocate.js';
 import { mergePortableConfigForRestore } from './portable-config.js';
+import { preparePortableFeatureSettingsRestore } from './portable-feature-settings.js';
 import { mergePortableSkillStateForRestore } from './portable-skill-state.js';
 import {
   buildProjectRestoreActions,
@@ -122,6 +123,13 @@ export async function applyRestoredSnapshot(input: {
   secretsBuffer?: Buffer;
 }): Promise<void> {
   await relocateDataRootContents(input.stagingRoot, input.sourceDataRoot, input.dataRoot);
+  const featureSettingsTargets = await preparePortableFeatureSettingsRestore({
+    dataRoot: input.dataRoot,
+    stagingRoot: input.stagingRoot,
+    preferencesSelected: input.categories.includes('preferences'),
+    modelCredentialsSelected: input.categories.includes('model_credentials'),
+    ...(input.secretsBuffer ? { restoredSecretsBuffer: input.secretsBuffer } : {}),
+  });
   const localConfigPath = path.join(input.dataRoot, 'runtime', 'config.json');
   const stagedConfigPath = path.join(input.stagingRoot, 'runtime', 'config.json');
   if (input.categories.includes('preferences') && await pathExists(stagedConfigPath)) {
@@ -160,7 +168,10 @@ export async function applyRestoredSnapshot(input: {
       memories: input.categories.includes('memories'),
     });
   }
-  const targets = categoryTargetPaths(input.dataRoot, input.categories);
+  const targets = [...new Set([
+    ...categoryTargetPaths(input.dataRoot, input.categories),
+    ...featureSettingsTargets,
+  ])];
   const rollbackRoot = path.join(input.dataRoot, `.webdav-sync-rollback-${randomUUID()}`);
   const relativeTargets = targets.map((target) => safeRelativePath(input.dataRoot, target));
   const existingTargets: string[] = [];

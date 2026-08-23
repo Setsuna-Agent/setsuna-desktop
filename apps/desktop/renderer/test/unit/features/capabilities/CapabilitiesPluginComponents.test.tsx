@@ -662,16 +662,10 @@ describe('capabilities plugin components', () => {
     expect(onSetHookEnabled).toHaveBeenCalledWith(runtimeHook, false);
   });
 
-  it('renders private Images API settings only for the installed image plugin', () => {
+  it('keeps the plugin detail usable when a Feature settings contribution is absent', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginDetail
         error={null}
-        imageGenerationConfig={{
-          baseUrl: 'http://127.0.0.1:8000',
-          model: 'gpt-image-1',
-          apiKeySet: true,
-          apiKeyPreview: 'ima••••cret',
-        }}
         installing={false}
         installedPlugin={{
           id: 'openai-image-generation',
@@ -689,62 +683,17 @@ describe('capabilities plugin components', () => {
         onBack={() => undefined}
         onInstall={async () => undefined}
         onRemove={async () => undefined}
-        onSaveImageGenerationConfig={async () => undefined}
-        onTestImageGeneration={async () => ({ images: [], durationMs: 0 })}
       />,
     );
 
-    expect(html).toContain('desktop-image-generation-settings');
-    expect(html).toContain('http://127.0.0.1:8000');
-    expect(html).toContain('gpt-image-1');
-    expect(html).toContain('当前使用 HTTP');
-    expect(html).toContain('快速测试');
-    expect(html).toContain('保存配置并生成');
-    expect(html).toContain('测试请求只携带提示词');
-    expect(html).not.toContain('>启用<');
-    expect(html).not.toContain('image-secret');
+    expect(html).toContain('图片生成');
+    expect(html).not.toContain('data-feature-id="image-generation"');
   });
 
-  it('selects an existing image-capable model and lists the installed vision tool', () => {
+  it('keeps vision settings out of the plugin detail when its Feature contribution is absent', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesPluginDetail
         error={null}
-        runtimeConfig={{
-          configPath: 'C:\\runtime\\config.json',
-          dataPath: 'C:\\runtime',
-          storagePath: 'C:\\runtime\\memories',
-          activeProviderId: 'vision-provider',
-          providers: [{
-            id: 'vision-provider',
-            name: '已配置视觉服务',
-            provider: 'openai-compatible',
-            baseUrl: 'http://127.0.0.1:9000/v1',
-            enabled: true,
-            apiKeySet: true,
-            apiKeyPreview: 'vis••••cret',
-            models: [{
-              id: 'vision-model',
-              name: 'Qwen Vision',
-              code: 'qwen-vl-max',
-              enabled: true,
-              maxOutputTokens: 8_192,
-              thinkingEnabled: false,
-              thinkingEfforts: [],
-              supportsImages: true,
-            }],
-          }],
-          globalPrompt: '',
-          memory: {
-            useMemories: false,
-            generateMemories: false,
-            disableOnExternalContext: false,
-          },
-          memoryEnabled: false,
-          setsunaStyle: 'developer',
-          approvalPolicy: 'on-request',
-          permissionProfile: 'workspace-write',
-          visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
-        }}
         installing={false}
         installedPlugin={{
           id: 'openai-vision-recognition',
@@ -766,22 +715,12 @@ describe('capabilities plugin components', () => {
         onBack={() => undefined}
         onInstall={async () => undefined}
         onRemove={async () => undefined}
-        onSaveVisionRecognitionConfig={async () => undefined}
-        onTestVisionRecognition={async () => ({ content: 'Image received.', durationMs: 0 })}
       />,
     );
 
-    expect(html).toContain('desktop-vision-recognition-settings');
-    expect(html).toContain('已配置视觉服务 · Qwen Vision (qwen-vl-max)');
-    expect(html).toContain('qwen-vl-max');
-    expect(html).toContain('这里只显示已启用服务中标记为支持图片的模型');
-    expect(html).toContain('内置测试图片');
-    expect(html).toContain('测试模型');
     expect(html).toContain('analyze_image');
     expect(html).toContain('使用已配置视觉模型分析当前会话中的图片附件。');
-    expect(html).not.toContain('http://127.0.0.1:9000/v1');
-    expect(html).not.toContain('type="password"');
-    expect(html).not.toContain('vision-secret');
+    expect(html).not.toContain('data-feature-id="vision-recognition"');
   });
 
   it('hides built-in settings for local bundles that reuse reserved plugin ids', () => {
@@ -804,8 +743,6 @@ describe('capabilities plugin components', () => {
         onBack={() => undefined}
         onInstall={async () => undefined}
         onRemove={async () => undefined}
-        onSaveImageGenerationConfig={async () => undefined}
-        onTestImageGeneration={async () => ({ images: [], durationMs: 0 })}
       />,
     );
     const visionHtml = renderToStaticMarkup(
@@ -827,13 +764,11 @@ describe('capabilities plugin components', () => {
         onBack={() => undefined}
         onInstall={async () => undefined}
         onRemove={async () => undefined}
-        onSaveVisionRecognitionConfig={async () => undefined}
-        onTestVisionRecognition={async () => ({ content: '', durationMs: 0 })}
       />,
     );
 
     expect(imageHtml).not.toContain('desktop-image-generation-settings');
-    expect(visionHtml).not.toContain('desktop-vision-recognition-settings');
+    expect(visionHtml).not.toContain('data-feature-id="vision-recognition"');
   });
 
   it('renders Markdown files by default while keeping a source view available', () => {

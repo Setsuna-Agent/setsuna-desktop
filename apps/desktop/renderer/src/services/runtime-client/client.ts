@@ -27,10 +27,6 @@ import type {
   RuntimeExtensionTrustInput,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
-  RuntimeImageGenerationTestInput,
-  RuntimeImageGenerationTestResult,
-  RuntimeVisionRecognitionTestInput,
-  RuntimeVisionRecognitionTestResult,
   RuntimeMcpResourceReadResult,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -57,9 +53,6 @@ import type {
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
   RuntimeThread,
-  RuntimeThreadGoalClearResponse,
-  RuntimeThreadGoalPatch,
-  RuntimeThreadGoalSetResponse,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
   RuntimeWorkspaceDependenciesStatus,
@@ -162,19 +155,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     terminateBackgroundShellProcess(threadId: string, processId: string) {
       return request<RuntimeBackgroundShellProcessTermination>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes/${encodeURIComponent(processId)}`,
-        method: 'DELETE',
-      });
-    },
-    setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch) {
-      return request<RuntimeThreadGoalSetResponse>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/goal`,
-        method: 'PUT',
-        body: patch,
-      });
-    },
-    clearThreadGoal(threadId: string) {
-      return request<RuntimeThreadGoalClearResponse>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/goal`,
         method: 'DELETE',
       });
     },
@@ -392,20 +372,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<RuntimePluginList>({
         path: `/v1/plugins/${encodeURIComponent(pluginId)}/extension/trust`,
         method: 'PUT',
-        body: input,
-      });
-    },
-    testImageGeneration(input: RuntimeImageGenerationTestInput) {
-      return request<RuntimeImageGenerationTestResult>({
-        path: '/v1/plugins/openai-image-generation/test',
-        method: 'POST',
-        body: input,
-      });
-    },
-    testVisionRecognition(input: RuntimeVisionRecognitionTestInput) {
-      return request<RuntimeVisionRecognitionTestResult>({
-        path: '/v1/plugins/openai-vision-recognition/test',
-        method: 'POST',
         body: input,
       });
     },

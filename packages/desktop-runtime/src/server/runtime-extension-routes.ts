@@ -1,21 +1,15 @@
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeExtensionTrustInput,
-  RuntimeImageGenerationTestInput,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
   RuntimePluginInstallInput,
   RuntimePluginItemKind,
-  RuntimeVisionRecognitionTestInput,
 } from '@setsuna-desktop/contracts';
 import {
   mergeRuntimeMcpServerInput,
-  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-  OPENAI_VISION_RECOGNITION_PLUGIN_ID,
-  RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS,
   RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
-  RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
@@ -87,60 +81,6 @@ export async function handleRuntimeExtensionRequest(
         'plugin id',
       ),
     ));
-    return true;
-  }
-
-  if (
-    request.method === 'POST'
-    && url.pathname === `/v1/plugins/${OPENAI_IMAGE_GENERATION_PLUGIN_ID}/test`
-  ) {
-    await assertInstalledMarketplacePlugin(runtime, OPENAI_IMAGE_GENERATION_PLUGIN_ID);
-    const input = await readBody<RuntimeImageGenerationTestInput | null>(
-      request,
-      null,
-    );
-    if (
-      !input
-      || typeof input !== 'object'
-      || typeof input.prompt !== 'string'
-      || !input.prompt.trim()
-    ) {
-      throw new RuntimeHttpError(400, 'prompt must be a non-empty string.');
-    }
-    if (input.prompt.trim().length > RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS) {
-      throw new RuntimeHttpError(
-        400,
-        `prompt must not exceed ${RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS} characters.`,
-      );
-    }
-    sendJson(
-      response,
-      200,
-      await runtime.imageGenerationCoordinator.testGeneration({ prompt: input.prompt }),
-    );
-    return true;
-  }
-
-  if (
-    request.method === 'POST'
-    && url.pathname === `/v1/plugins/${OPENAI_VISION_RECOGNITION_PLUGIN_ID}/test`
-  ) {
-    await assertInstalledMarketplacePlugin(runtime, OPENAI_VISION_RECOGNITION_PLUGIN_ID);
-    const input = await readBody<RuntimeVisionRecognitionTestInput | null>(request, null);
-    if (!input || typeof input !== 'object' || typeof input.prompt !== 'string' || !input.prompt.trim()) {
-      throw new RuntimeHttpError(400, 'prompt must be a non-empty string.');
-    }
-    if (input.prompt.trim().length > RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS) {
-      throw new RuntimeHttpError(
-        400,
-        `prompt must not exceed ${RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS} characters.`,
-      );
-    }
-    sendJson(
-      response,
-      200,
-      await runtime.visionRecognitionCoordinator.testRecognition({ prompt: input.prompt }),
-    );
     return true;
   }
 
@@ -388,22 +328,6 @@ function normalizeMcpServerKey(value: string): string {
     );
   }
   return key;
-}
-
-async function assertInstalledMarketplacePlugin(
-  runtime: RuntimeFactory,
-  pluginId: string,
-): Promise<void> {
-  const installed = (await runtime.pluginStore.listInstalledRecords()).some(
-    (plugin) => plugin.id === pluginId && plugin.installationSource === 'marketplace',
-  );
-  if (!installed) {
-    throw new RuntimeHttpError(
-      404,
-      `Marketplace plugin is not installed: ${pluginId}`,
-      'plugin_not_installed',
-    );
-  }
 }
 
 async function withMcpAuthStatuses(

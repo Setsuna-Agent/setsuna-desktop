@@ -337,14 +337,18 @@ export function sweClientUserMessageId(input: Record<string, unknown>): string |
   return stringInput(input.clientUserMessageId ?? input.client_user_message_id);
 }
 
-export function sweSetThreadGoal(thread: RuntimeThread, input: Record<string, unknown>): RuntimeThreadGoalPatch {
+export function sweSetThreadGoal(
+  threadId: string,
+  currentGoal: Readonly<{ objective: string; status: RuntimeThreadGoalStatus }> | null,
+  input: Record<string, unknown>,
+): RuntimeThreadGoalPatch {
   const hasObjective = Object.prototype.hasOwnProperty.call(input, 'objective') && input.objective !== null;
-  const objective = hasObjective ? normalizeAppServerGoalObjective(input.objective) : thread.goal?.objective;
-  if (!objective) throw new AppServerRpcError(-32602, `cannot update goal for thread ${thread.id}: no goal exists`);
+  const objective = hasObjective ? normalizeAppServerGoalObjective(input.objective) : currentGoal?.objective;
+  if (!objective) throw new AppServerRpcError(-32602, `cannot update goal for thread ${threadId}: no goal exists`);
 
   const status = hasOwn(input, 'status') && input.status !== null
     ? sweGoalStatus(input.status)
-    : thread.goal?.status ?? 'active';
+    : currentGoal?.status ?? 'active';
   if (hasOwn(input, 'tokenBudget') && input.tokenBudget !== null) {
     throw new AppServerRpcError(-32602, 'goal token budgets are no longer supported');
   }

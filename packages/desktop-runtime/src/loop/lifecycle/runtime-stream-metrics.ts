@@ -1,5 +1,6 @@
 import type {
-  RuntimeEvent,
+  PendingStoredThreadEvent,
+  StoredThreadEvent,
   RuntimeStreamPipelineDebugPayload,
 } from '@setsuna-desktop/contracts';
 import {
@@ -7,14 +8,15 @@ import {
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
 
-type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
+type PendingRuntimeEvent = PendingStoredThreadEvent;
+type StreamMetricEvent = PendingStoredThreadEvent | StoredThreadEvent;
 
 type TurnStreamMetrics = Omit<
   RuntimeStreamPipelineDebugPayload,
   'terminalEventType'
 >;
 
-const terminalEventTypes = new Set<RuntimeEvent['type']>([
+const terminalEventTypes = new Set<string>([
   'runtime.error',
   'turn.cancelled',
   'turn.completed',
@@ -58,7 +60,7 @@ export class RuntimeStreamMetricsCollector {
     }
   }
 
-  recordPersisted(event: RuntimeEvent): void {
+  recordPersisted(event: StoredThreadEvent): void {
     const metrics = this.metricsFor(event);
     if (!metrics) return;
     metrics.persistedEventCount += 1;
@@ -86,7 +88,7 @@ export class RuntimeStreamMetricsCollector {
     }
   }
 
-  private metricsFor(event: PendingRuntimeEvent): TurnStreamMetrics | null {
+  private metricsFor(event: StreamMetricEvent): TurnStreamMetrics | null {
     const key = turnMetricsKey(event);
     // Cancellation is persisted before providers and tools necessarily unwind. Keep a
     // bounded tombstone so their late callbacks cannot reopen a finalized metrics bucket.
@@ -107,7 +109,7 @@ export class RuntimeStreamMetricsCollector {
   }
 }
 
-function turnMetricsKey(event: PendingRuntimeEvent): string | null {
+function turnMetricsKey(event: StreamMetricEvent): string | null {
   return event.turnId ? `${event.threadId}\u0000${event.turnId}` : null;
 }
 
@@ -126,7 +128,7 @@ function emptyTurnStreamMetrics(): TurnStreamMetrics {
   };
 }
 
-function streamDeltaCharacters(event: PendingRuntimeEvent): number | null {
+function streamDeltaCharacters(event: StreamMetricEvent): number | null {
   const payload = event.payload as Record<string, unknown>;
   if (event.type === 'message.delta') {
     return typeof payload.text === 'string' ? payload.text.length : null;

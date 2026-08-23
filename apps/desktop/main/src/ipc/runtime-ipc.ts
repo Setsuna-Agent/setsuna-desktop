@@ -3,12 +3,16 @@ import type { RuntimeHost } from '../runtime/host.js';
 
 export function registerRuntimeIpc(host: RuntimeHost): void {
   ipcMain.removeHandler('runtime:request');
+  ipcMain.removeHandler('runtime:cancel-request');
   ipcMain.removeHandler('runtime:link-attachment');
   ipcMain.removeHandler('runtime:upload-attachment');
   ipcMain.removeHandler('runtime:read-attachment-image');
   ipcMain.removeHandler('runtime:subscribe');
   ipcMain.removeHandler('runtime:unsubscribe');
   ipcMain.handle('runtime:request', async (_event, input) => host.request(input));
+  ipcMain.handle('runtime:cancel-request', async (_event, input) => (
+    host.cancelRequest(String(input?.requestId ?? ''))
+  ));
   ipcMain.handle('runtime:link-attachment', async (_event, input) => host.linkAttachment({
     path: String(input?.path ?? ''),
     type: String(input?.type ?? ''),

@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from './events.js';
+import type { StoredThreadEvent } from './events.js';
 import { normalizeLegacyAssistantPhasesForTurn } from './event-projections/assistant-phase.js';
 import { isRuntimeThreadProjectionIgnoredEvent } from './event-projections/dispositions.js';
 import {
@@ -40,7 +40,6 @@ import { DEFAULT_THREAD_TITLE, fallbackThreadTitle } from './thread-title.js';
 import type { RuntimeCollaborationTask, RuntimeCollaborationTaskStatus } from './provider.js';
 import {
   cloneRuntimeSkillReferences,
-  cloneRuntimeThreadGoal,
   normalizeRuntimeQueuedTurnInputKind,
   type RuntimeMessage,
   type RuntimeThread,
@@ -54,13 +53,16 @@ export { hasActiveToolRun, isActiveToolRun, isPendingToolApproval };
  * @param thread 当前线程快照。
  * @param event 需要应用到线程上的 runtime event。
  */
-export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeEvent): RuntimeThread {
+export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredThreadEvent): RuntimeThread {
   const draft = new RuntimeThreadEventDraft(
     thread,
     Math.max(thread.lastSeq, event.seq),
     event.createdAt,
   );
   const next = draft.thread;
+
+  // Core owns the global sequence gate but never inspects Feature payloads.
+  if (event.type === 'feature.event') return next;
 
   if (event.type === 'thread.created') {
     next.title = event.payload.title;
@@ -88,14 +90,8 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'thread.goal_updated') {
-    const previousExecution = next.goal?.execution;
-    next.goal = cloneRuntimeThreadGoal(event.payload.goal);
-    if (event.payload.preserveExecution && previousExecution) {
-      next.goal.execution = cloneRuntimeThreadGoal({
-        ...next.goal,
-        execution: previousExecution,
-      }).execution;
-    }
+    // Legacy Goal records bundled Core queue/message effects with private Goal
+    // state. Replay only those Core effects; Goal state belongs to its Feature projection.
     if (event.payload.queuedInputId) {
       next.queuedTurnInputs = next.queuedTurnInputs?.filter(
         (input) => input.id !== event.payload.queuedInputId,
@@ -113,7 +109,6 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: RuntimeE
   }
 
   if (event.type === 'thread.goal_cleared') {
-    if (event.payload.cleared) delete next.goal;
     if (event.payload.lifecycleMessage) {
       draft.prepareMessageAppend();
       appendCreatedMessage(next, event.payload.lifecycleMessage, event.createdAt);

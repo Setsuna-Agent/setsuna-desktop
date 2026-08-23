@@ -1,5 +1,5 @@
 import type {
-  RuntimeEvent,
+  StoredThreadEvent,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeThread,
@@ -64,7 +64,7 @@ export function insertThreadProjection(
     summary.archived ? 1 : 0,
     normalizeThreadMemoryMode(summary.memoryMode),
     optionalJson(summary.gitInfo),
-    optionalJson(summary.goal),
+    null,
     summary.messageCount,
     summary.lastMessagePreview,
     JSON.stringify(thread),
@@ -75,7 +75,7 @@ export function insertThreadProjection(
   replaceMessageIndex(database, thread);
 }
 
-export function insertRuntimeEvent(database: DatabaseSync, event: RuntimeEvent): void {
+export function insertRuntimeEvent(database: DatabaseSync, event: StoredThreadEvent): void {
   database.prepare(`
     INSERT INTO runtime_event_ids(thread_id, event_id, seq)
     VALUES (?, ?, ?)
@@ -113,7 +113,7 @@ export function updateThreadProjection(
     summary.archived ? 1 : 0,
     normalizeThreadMemoryMode(summary.memoryMode),
     optionalJson(summary.gitInfo),
-    optionalJson(summary.goal),
+    null,
     summary.messageCount,
     summary.lastMessagePreview,
   ] as const;

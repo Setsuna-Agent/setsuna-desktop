@@ -1,7 +1,7 @@
 import type {
   RuntimeCompactionDebugPayload,
   RuntimeDebugTraceEvent,
-  RuntimeEvent,
+  StoredThreadEvent,
   RuntimeHistoryNormalizationDebugPayload,
   RuntimeProviderReplayDebugPayload,
   RuntimeStreamPipelineDebugPayload,
@@ -66,19 +66,19 @@ export function isRuntimeDebugTrace(
 }
 
 export function conversationDebugRecordKind(
-  record: RuntimeDebugTraceEvent | RuntimeEvent,
+  record: RuntimeDebugTraceEvent | StoredThreadEvent,
 ): string {
   return isRuntimeDebugTrace(record) ? record.kind : record.type;
 }
 
 export function conversationDebugRecordSequenceLabel(
-  record: RuntimeDebugTraceEvent | RuntimeEvent,
+  record: RuntimeDebugTraceEvent | StoredThreadEvent,
 ): string {
   return `${isRuntimeDebugTrace(record) ? 'D' : 'E'}#${record.seq}`;
 }
 
 export function conversationDebugRecordSummary(
-  record: RuntimeDebugTraceEvent | RuntimeEvent,
+  record: RuntimeDebugTraceEvent | StoredThreadEvent,
 ): string {
   return isRuntimeDebugTrace(record)
     ? runtimeDebugTraceSummary(record)

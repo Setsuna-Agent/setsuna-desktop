@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '../events.js';
+import type { CoreRuntimeEvent, LegacyRuntimeGoalEvent } from '../events.js';
 import { isRuntimeSweProjectionIgnoredEvent } from '../event-projections/dispositions.js';
 import {
   cloneRuntimeThreadGoal,
@@ -78,7 +78,9 @@ import {
 } from './turn-mapper.js';
 import type { SweNotification, SweTurn } from './types.js';
 
-export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotification[] {
+type SweMappableRuntimeEvent = CoreRuntimeEvent | LegacyRuntimeGoalEvent;
+
+export function createSweNotificationMapper(): (event: SweMappableRuntimeEvent) => SweNotification[] {
   const state: SweMapperState = {
     assistantStreams: new Map(),
     itemTranscriptMessageIds: new Set(),
@@ -98,7 +100,7 @@ export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotif
   return (event) => runtimeEventToSweNotifications(event, state);
 }
 
-export function runtimeEventsToSweNotifications(events: RuntimeEvent[]): SweNotification[] {
+export function runtimeEventsToSweNotifications(events: SweMappableRuntimeEvent[]): SweNotification[] {
   const mapEvent = createSweNotificationMapper();
   return events.flatMap((event) => mapEvent(event));
 }
@@ -142,7 +144,7 @@ export function runtimeThreadToSweTurns(thread: RuntimeThread): SweTurn[] {
     .map(({ turnId, entries }) => runtimeEntriesToSweTurn(thread.id, turnId, entries));
 }
 
-export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweMapperState): SweNotification[] {
+export function runtimeEventToSweNotifications(event: SweMappableRuntimeEvent, state?: SweMapperState): SweNotification[] {
   const turnId = event.turnId ?? '';
 
   if (event.type === 'thread.created') {

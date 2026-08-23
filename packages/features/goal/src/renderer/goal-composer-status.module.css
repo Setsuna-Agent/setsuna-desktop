@@ -1,0 +1,212 @@
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 2;
+  width: min(var(--chat-content-max-width), 100%);
+  min-width: 0;
+  height: 34px;
+  margin-bottom: -5px;
+  padding: 0 10px;
+  border: 1px solid var(--desktop-agent-panel-border);
+  border-radius: 17px;
+  color: var(--app-text-secondary);
+  background: color-mix(in srgb, var(--desktop-agent-main-surface) 94%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, #000 7%, transparent);
+  font-size: 12px;
+}
+
+.target {
+  flex: 0 0 auto;
+  color: var(--app-primary);
+}
+
+.status strong {
+  flex: 0 0 auto;
+  color: var(--app-text);
+  font-weight: 600;
+}
+
+.objective {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.elapsed {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.action:hover:not(:disabled),
+.action:focus-visible {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.action.danger:hover:not(:disabled),
+.action.danger:focus-visible {
+  color: var(--app-danger);
+}
+
+.action:disabled {
+  opacity: 0.45;
+}
+
+.error {
+  max-width: 140px;
+  overflow: hidden;
+  color: var(--app-danger);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unavailable {
+  border-color: color-mix(in srgb, var(--app-warning) 35%, var(--desktop-agent-panel-border));
+}
+
+.editorTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.editorTitle svg {
+  color: var(--app-primary);
+}
+
+.editorModal :global(.ant-modal-container),
+.editorModal :global(.ant-modal-content) {
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-lg);
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-modal);
+}
+
+.editorModal :global(.ant-modal-header),
+.editorModal :global(.ant-modal-footer) {
+  color: var(--app-text);
+  background: transparent;
+}
+
+.editorModal :global(.ant-modal-title) {
+  color: var(--app-text);
+}
+
+.editorModal :global(.ant-modal-close) {
+  color: var(--app-text-muted);
+}
+
+.editorModal :global(.ant-modal-close:hover),
+.editorModal :global(.ant-modal-close:focus-visible) {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.editorInputShell {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  margin-top: 8px;
+}
+
+.editorModal .editorInput {
+  padding-bottom: 28px;
+  border-color: var(--app-border-strong);
+  color: var(--app-text);
+  background-color: var(--app-surface);
+  caret-color: var(--app-primary);
+}
+
+.editorModal .editorInput:hover {
+  border-color: color-mix(in srgb, var(--app-primary) 52%, var(--app-border-strong));
+  color: var(--app-text);
+  background-color: var(--app-surface);
+}
+
+.editorModal .editorInput:focus,
+.editorModal .editorInput:focus-within {
+  border-color: var(--app-primary);
+  color: var(--app-text);
+  background-color: var(--app-surface);
+  box-shadow: var(--app-focus-ring);
+}
+
+.editorModal .editorInput::placeholder {
+  color: var(--app-text-subtle);
+}
+
+.editorCount {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  color: var(--app-text-subtle);
+  font-size: 11px;
+  line-height: 14px;
+  pointer-events: none;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.editorActions button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  background: var(--app-surface);
+}
+
+.editorActions button:hover:not(:disabled),
+.editorActions button:focus-visible {
+  border-color: var(--desktop-agent-button-hover-border);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.editorActions button:disabled {
+  opacity: 0.5;
+}
+
+.editorActions .primaryButton {
+  border-color: var(--app-primary);
+  color: var(--app-primary-text);
+  background: var(--app-primary);
+}
+
+.editorActions .primaryButton:hover:not(:disabled),
+.editorActions .primaryButton:focus-visible {
+  border-color: var(--app-primary-hover);
+  color: var(--app-primary-text);
+  background: var(--app-primary-hover);
+}
+
+.editorError {
+  margin: 8px 0 0;
+  color: var(--app-danger);
+  font-size: 12px;
+}

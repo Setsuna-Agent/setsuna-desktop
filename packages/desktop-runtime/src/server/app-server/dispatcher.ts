@@ -478,8 +478,12 @@ export async function dispatchAppServerRpcRequest(
   if (method === 'thread/goal/set') {
     const input = recordInput(params);
     const threadId = requiredString(input.threadId, 'threadId');
-    const thread = await requireRuntimeThread(runtime, threadId);
-    const requested = sweSetThreadGoal(thread, input);
+    await requireRuntimeThread(runtime, threadId);
+    const requested = sweSetThreadGoal(
+      threadId,
+      await runtime.agentLoop.getThreadGoal(threadId),
+      input,
+    );
     const { goal } = await setRuntimeThreadGoal(runtime, threadId, {
       objective: requested.objective,
       status: requested.status,

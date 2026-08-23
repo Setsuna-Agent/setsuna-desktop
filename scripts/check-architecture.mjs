@@ -3,10 +3,12 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { checkFeatureBoundaries } from './check-feature-boundaries.mjs';
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const layerRoots = new Map([
   ['contracts', path.join(repositoryRoot, 'packages/contracts/src')],
+  ['feature-core', path.join(repositoryRoot, 'packages/feature-core/src')],
   ['runtime', path.join(repositoryRoot, 'packages/desktop-runtime/src')],
   ['main', path.join(repositoryRoot, 'apps/desktop/main/src')],
   ['preload', path.join(repositoryRoot, 'apps/desktop/preload/src')],
@@ -22,10 +24,11 @@ const testRoots = [
 ];
 const allowedLayerDependencies = new Map([
   ['contracts', new Set()],
-  ['runtime', new Set(['contracts'])],
-  ['main', new Set(['contracts', 'runtime'])],
-  ['preload', new Set(['contracts'])],
-  ['renderer', new Set(['contracts'])],
+  ['feature-core', new Set()],
+  ['runtime', new Set(['contracts', 'feature-core'])],
+  ['main', new Set(['contracts', 'feature-core', 'runtime'])],
+  ['preload', new Set(['contracts', 'feature-core'])],
+  ['renderer', new Set(['contracts', 'feature-core'])],
 ]);
 const sourceExtensions = new Set(['.cjs', '.css', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
 const codeExtensions = new Set(['.cjs', '.cts', '.js', '.jsx', '.mjs', '.mts', '.ts', '.tsx']);
@@ -94,6 +97,9 @@ function sourceLayerForPath(filePath) {
 function sourceLayerForSpecifier(specifier) {
   if (specifier === '@setsuna-desktop/contracts' || specifier.startsWith('@setsuna-desktop/contracts/')) {
     return 'contracts';
+  }
+  if (specifier === '@setsuna-desktop/feature-core' || specifier.startsWith('@setsuna-desktop/feature-core/')) {
+    return 'feature-core';
   }
   if (specifier === '@setsuna-desktop/desktop-runtime' || specifier.startsWith('@setsuna-desktop/desktop-runtime/')) {
     return 'runtime';
@@ -174,6 +180,7 @@ function stronglyConnectedComponents(graph) {
 }
 
 const violations = [];
+violations.push(...await checkFeatureBoundaries(repositoryRoot));
 const productionFiles = [];
 let reviewHotspotCount = 0;
 for (const root of layerRoots.values()) {
@@ -320,6 +327,7 @@ for (const component of stronglyConnectedComponents(contractGraph)) {
 const buildRoots = [
   path.join(repositoryRoot, 'dist'),
   path.join(repositoryRoot, 'packages/contracts/dist'),
+  path.join(repositoryRoot, 'packages/feature-core/dist'),
   path.join(repositoryRoot, 'packages/desktop-runtime/dist'),
 ];
 for (const buildRoot of buildRoots) {

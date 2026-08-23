@@ -134,6 +134,20 @@
   --chat-send-bg: #242424;
   --chat-send-bg-hover: #333333;
   --chat-send-bg-active: #171717;
+  /* Scoped built-in Feature views consume this small semantic palette instead
+     of depending on a light-only fallback or the host's component classes. */
+  --sd-color-text: var(--app-text);
+  --sd-color-text-muted: var(--app-text-muted);
+  --sd-color-surface: var(--app-surface);
+  --sd-color-surface-subtle: var(--app-surface-subtle);
+  --sd-color-input: var(--app-surface);
+  --sd-color-border: var(--app-border);
+  --sd-color-accent: var(--app-primary);
+  --sd-color-accent-text: var(--app-primary-text);
+  --sd-color-danger: var(--app-danger);
+  --sd-color-success: var(--app-success);
+  --sd-color-warning: var(--app-warning);
+  --sd-focus-ring: var(--app-focus-ring);
 }
 
 :root[data-font-size='80'] {

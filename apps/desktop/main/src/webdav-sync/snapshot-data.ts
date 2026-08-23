@@ -3,6 +3,11 @@ import {
   type DesktopWebDavSyncCategoryId,
   type DesktopWebDavSyncCategorySummary,
 } from '@setsuna-desktop/contracts';
+import type {
+  FeatureCredentialBackup,
+  PortableFeatureSettingsDocument,
+} from '@setsuna-desktop/feature-core/settings';
+import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
 import { createHash } from 'node:crypto';
 import { constants, createReadStream, createWriteStream } from 'node:fs';
 import {
@@ -20,6 +25,7 @@ import { pipeline } from 'node:stream/promises';
 import { desktopDataLayout } from '../data-root/layout.js';
 import { sha256Buffer } from './crypto.js';
 import { createPortableConfigSnapshot } from './portable-config.js';
+import { materializePortableFeatureSettings } from './portable-feature-settings.js';
 import { createPortableSkillStateSnapshot } from './portable-skill-state.js';
 import { portableProjectCatalogSource } from './portable-projects.js';
 import type {
@@ -41,6 +47,8 @@ type SnapshotSourceInput = {
   categories: readonly DesktopWebDavSyncCategoryId[];
   stagingRoot: string;
   signal?: AbortSignal;
+  portableFeatureSettings?: readonly PortableFeatureSettingsDocument[];
+  featureCredentialBackups?: readonly FeatureCredentialBackup[];
 };
 
 type StoredModelSecrets = {
@@ -176,8 +184,23 @@ async function collectLocalSnapshotSources(
       '应用与模型配置',
     ));
   }
+  if (categories.has('preferences')) {
+    const featureSettings = await materializePortableFeatureSettings({
+      documents: input.portableFeatureSettings ?? [],
+      stagingRoot: input.stagingRoot,
+    });
+    sources.push(...featureSettings.map((file) => fileSource(
+      'preferences',
+      file.sourcePath,
+      file.logicalPath,
+      file.label,
+    )));
+  }
   if (categories.has('model_credentials')) {
-    sources.push(...await modelCredentialSources(layout.runtimeRoot));
+    sources.push(...await modelCredentialSources(
+      layout.runtimeRoot,
+      input.featureCredentialBackups ?? [],
+    ));
   }
   if (categories.has('user_skills')) {
     const skillStatePath = path.join(layout.runtimeRoot, 'skills.json');
@@ -328,9 +351,6 @@ export async function mergeRestoredSecretsBuffer(
   const local = await readOptionalModelSecrets(localSecretsPath);
   const merged: StoredModelSecrets = {
     providerApiKeys: { ...local.providerApiKeys, ...restored.providerApiKeys },
-    ...(restored.imageGenerationApiKey || local.imageGenerationApiKey
-      ? { imageGenerationApiKey: restored.imageGenerationApiKey ?? local.imageGenerationApiKey }
-      : {}),
   };
   return Buffer.from(`${JSON.stringify(merged, null, 2)}\n`, 'utf8');
 }
@@ -520,38 +540,85 @@ async function copySnapshotFile(
   }
 }
 
-async function modelCredentialSources(runtimeRoot: string): Promise<LocalSnapshotSource[]> {
+async function modelCredentialSources(
+  runtimeRoot: string,
+  featureCredentials: readonly FeatureCredentialBackup[],
+): Promise<LocalSnapshotSource[]> {
+  const sources = featureCredentialSources(featureCredentials);
   const secretsPath = path.join(runtimeRoot, 'secrets.json');
-  if (!await isRegularFile(secretsPath)) return [];
-  const data = await readFile(secretsPath);
   try {
-    if (data.byteLength > MAX_SECRETS_FILE_BYTES) throw new Error('模型密钥文件超过安全大小限制。');
-    const secrets = normalizeModelSecrets(JSON.parse(data.toString('utf8')));
-    const providerNames = await readProviderNames(path.join(runtimeRoot, 'config.json'));
-    const sources = Object.entries(secrets.providerApiKeys)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([providerId, apiKey]): LocalSnapshotSource => ({
-        category: 'model_credentials',
-        kind: 'provider-key',
-        logicalPath: `model-credentials/providers/${credentialPathToken(providerId)}`,
-        label: providerNames.get(providerId) ?? providerId,
-        detail: providerId,
-        credentialId: providerId,
-        data: Buffer.from(apiKey, 'utf8'),
-      }));
-    if (secrets.imageGenerationApiKey) {
-      sources.push({
-        category: 'model_credentials',
-        kind: 'image-generation-key',
-        logicalPath: 'model-credentials/image-generation',
-        label: '图片生成服务',
-        data: Buffer.from(secrets.imageGenerationApiKey, 'utf8'),
-      });
+    if (await isRegularFile(secretsPath)) {
+      const data = await readFile(secretsPath);
+      try {
+        if (data.byteLength > MAX_SECRETS_FILE_BYTES) throw new Error('模型密钥文件超过安全大小限制。');
+        const secrets = normalizeModelSecrets(JSON.parse(data.toString('utf8')));
+        const providerNames = await readProviderNames(path.join(runtimeRoot, 'config.json'));
+        sources.push(...Object.entries(secrets.providerApiKeys)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([providerId, apiKey]): LocalSnapshotSource => ({
+            category: 'model_credentials',
+            kind: 'provider-key',
+            logicalPath: `model-credentials/providers/${credentialPathToken(providerId)}`,
+            label: providerNames.get(providerId) ?? providerId,
+            detail: providerId,
+            credentialId: providerId,
+            data: Buffer.from(apiKey, 'utf8'),
+          })));
+      } finally {
+        data.fill(0);
+      }
     }
+    if (sources.length > MAX_MODEL_CREDENTIALS) throw new Error('模型密钥数量超过安全限制。');
     return sources;
-  } finally {
-    data.fill(0);
+  } catch (error) {
+    for (const source of sources) source.data?.fill(0);
+    throw error;
   }
+}
+
+function featureCredentialSources(
+  credentials: readonly FeatureCredentialBackup[],
+): LocalSnapshotSource[] {
+  const imageConnection = imageGenerationSettings.documents.connection;
+  const supportedIdentity = credentialIdentity(
+    imageConnection.featureId,
+    imageConnection.documentId,
+    'api-key',
+  );
+  const seen = new Set<string>();
+  const values = credentials.map((credential) => {
+    if (
+      typeof credential.featureId !== 'string'
+      || typeof credential.documentId !== 'string'
+      || typeof credential.secretName !== 'string'
+      || typeof credential.value !== 'string'
+    ) {
+      throw new Error('Feature 凭据备份条目格式无效。');
+    }
+    const identity = credentialIdentity(
+      credential.featureId,
+      credential.documentId,
+      credential.secretName,
+    );
+    if (seen.has(identity)) throw new Error('Feature 凭据备份包含重复条目。');
+    seen.add(identity);
+    if (identity !== supportedIdentity) {
+      throw new Error(`不支持的 Feature 凭据备份条目：${credential.featureId}/${credential.documentId}/${credential.secretName}`);
+    }
+    validateModelCredential(credential.value);
+    return credential.value;
+  });
+  return values.map((value): LocalSnapshotSource => ({
+    category: 'model_credentials',
+    kind: 'image-generation-key',
+    logicalPath: 'model-credentials/image-generation',
+    label: '图片生成服务',
+    data: Buffer.from(value, 'utf8'),
+  }));
+}
+
+function credentialIdentity(featureId: string, documentId: string, secretName: string): string {
+  return `${featureId}\0${documentId}\0${secretName}`;
 }
 
 async function readOptionalModelSecrets(filePath: string): Promise<StoredModelSecrets> {

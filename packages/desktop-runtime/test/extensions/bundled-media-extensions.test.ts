@@ -1,5 +1,4 @@
 import {
-  OPENAI_IMAGE_GENERATION_PLUGIN_ID,
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_TOOL_NAME,
@@ -78,10 +77,13 @@ describe('bundled media extensions', () => {
         attachments: [{ source: 'generated', assetId: 'generated_image_asset_1' }],
         preview: '已生成 1 张图片',
         data: {
-          pluginId: OPENAI_IMAGE_GENERATION_PLUGIN_ID,
-          imageCount: 1,
-          model: 'gpt-image-1',
-          size: '1024x1024',
+          resultKind: 'image-generation.result',
+          resultMajor: 1,
+          payload: {
+            imageCount: 1,
+            model: 'gpt-image-1',
+            size: '1024x1024',
+          },
         },
         containsExternalContext: true,
       });

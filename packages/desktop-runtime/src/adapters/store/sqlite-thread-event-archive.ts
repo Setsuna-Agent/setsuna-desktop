@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { CoreRuntimeEvent, StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { DatabaseSync } from 'node:sqlite';
 import { gunzipSync, gzipSync } from 'node:zlib';
 
@@ -13,7 +13,7 @@ const TRANSIENT_EVENT_TYPES = [
   'plan.delta',
   'tool.preview',
   'tool.output_delta',
-] as const satisfies readonly RuntimeEvent['type'][];
+] as const satisfies readonly CoreRuntimeEvent['type'][];
 
 /** Moves checkpointed deltas out of the hot replay table without losing event-source history. */
 export function archiveTransientEvents(
@@ -66,7 +66,7 @@ export function readArchivedEvents(
   database: DatabaseSync,
   threadId: string,
   sinceSeq: number,
-): RuntimeEvent[] {
+): StoredThreadEvent[] {
   const rows = database.prepare(`
     SELECT start_seq, end_seq, events_gzip
     FROM runtime_event_archives
@@ -76,11 +76,11 @@ export function readArchivedEvents(
   return rows.flatMap((row) => {
     const startSeq = numberColumn(row, 'start_seq');
     const endSeq = numberColumn(row, 'end_seq');
-    let events: RuntimeEvent[];
+    let events: StoredThreadEvent[];
     try {
       const parsed = JSON.parse(gunzipSync(blobColumn(row, 'events_gzip')).toString('utf8')) as unknown;
       if (!Array.isArray(parsed)) throw new Error('Archive payload is not an array.');
-      events = parsed as RuntimeEvent[];
+      events = parsed as StoredThreadEvent[];
     } catch (error) {
       throw new Error(`Invalid SQLite runtime event archive for ${threadId}:${startSeq}-${endSeq}`, {
         cause: error,
@@ -102,7 +102,7 @@ export function readRawEvents(
   database: DatabaseSync,
   threadId: string,
   sinceSeq: number,
-): RuntimeEvent[] {
+): StoredThreadEvent[] {
   const rows = database.prepare(`
     SELECT seq, event_id, event_json
     FROM runtime_events
@@ -111,9 +111,9 @@ export function readRawEvents(
   `).all(threadId, sinceSeq);
   return rows.map((row) => {
     const seq = numberColumn(row, 'seq');
-    let event: RuntimeEvent;
+    let event: StoredThreadEvent;
     try {
-      event = JSON.parse(stringColumn(row, 'event_json')) as RuntimeEvent;
+      event = JSON.parse(stringColumn(row, 'event_json')) as StoredThreadEvent;
     } catch (error) {
       throw new Error(`Invalid SQLite runtime event JSON for ${threadId}:${seq}`, { cause: error });
     }

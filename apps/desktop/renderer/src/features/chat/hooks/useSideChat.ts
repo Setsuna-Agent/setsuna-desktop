@@ -1,22 +1,23 @@
 import type {
   AnswerRuntimeApprovalInput,
+  CoreRuntimeEvent,
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
-  RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
+import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   activeTurnIdFromThreadSnapshot,
-  adoptOwnedThreadSnapshot,
   applyCurrentThreadEventBatch,
   isThreadContextCompacting,
 } from '../../../services/runtime-client/runtimeThreadState.js';
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
 import { useChatTurnActions } from './useChatTurnActions.js';
@@ -62,6 +63,7 @@ export function useSideChat({
   setError,
 }: SideChatOptions) {
   const { locale, t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
@@ -138,6 +140,9 @@ export function useSideChat({
       setCurrentThread(projection.thread);
 
       if (projection.resynced) {
+        if (projection.thread) {
+          featureViews.events.advance(projection.thread.id, projection.thread.lastSeq);
+        }
         terminalTurnIdsRef.current.clear();
         setActiveTurnId(activeTurnIdFromThreadSnapshot(
           projection.thread,
@@ -146,7 +151,9 @@ export function useSideChat({
         void reloadThreads();
       }
 
-      const activeTurnEvents = projection.acceptedEvents.filter((event) => (
+      for (const event of projection.acceptedEvents) featureViews.events.accept(event);
+      const coreEvents = projection.acceptedEvents.filter(isCoreRuntimeEvent);
+      const activeTurnEvents = coreEvents.filter((event) => (
         event.type === 'turn.started' || isTerminalSideChatEvent(event)
       ));
       for (const event of activeTurnEvents) {
@@ -162,7 +169,7 @@ export function useSideChat({
         }, active));
         void reloadThreads();
       }
-      for (const event of projection.acceptedEvents) {
+      for (const event of coreEvents) {
         if (event.type === 'runtime.error') setError(event.payload.message);
         if (event.type !== 'turn.completed') continue;
         if (event.payload.usage) {
@@ -172,7 +179,7 @@ export function useSideChat({
         }
       }
     });
-  }, [client, reloadThreads, setError, threadId]);
+  }, [client, featureViews.events, reloadThreads, setError, threadId]);
 
   useEffect(() => {
     if (!threadId) {
@@ -272,32 +279,6 @@ export function useSideChat({
     }
   }, [client, contextCompacting, contextRequests, currentThread, reloadThreads]);
 
-  const clearGoal = useCallback(async () => {
-    if (!currentThread) return false;
-    const requestedThreadId = currentThread.id;
-    const result = await client.clearThreadGoal(requestedThreadId);
-    setCurrentThread((current) => adoptOwnedThreadSnapshot(
-      current,
-      requestedThreadId,
-      result.thread,
-    ));
-    await reloadThreads();
-    return result.cleared;
-  }, [client, currentThread, reloadThreads]);
-
-  const updateGoal = useCallback(async (patch: Parameters<DesktopRuntimeClient['setThreadGoal']>[1]) => {
-    if (!currentThread) return null;
-    const requestedThreadId = currentThread.id;
-    const result = await client.setThreadGoal(requestedThreadId, patch);
-    setCurrentThread((current) => adoptOwnedThreadSnapshot(
-      current,
-      requestedThreadId,
-      result.thread,
-    ));
-    await reloadThreads();
-    return result.goal;
-  }, [client, currentThread, reloadThreads]);
-
   const answerApproval = useCallback(async (approvalId: string, input: AnswerRuntimeApprovalInput) => {
     await client.answerApproval(approvalId, input);
     if (!threadId) return;
@@ -346,7 +327,6 @@ export function useSideChat({
     activeTurnId: effectiveActiveTurnId,
     answerApproval,
     clearContext,
-    clearGoal,
     composerKey,
     compactContext,
     contextCompacting,
@@ -355,12 +335,10 @@ export function useSideChat({
     setDraft,
     startReview,
     threadUsage,
-    updateGoal,
   }), [
     actions,
     answerApproval,
     clearContext,
-    clearGoal,
     composerKey,
     compactContext,
     contextCompacting,
@@ -370,11 +348,10 @@ export function useSideChat({
     setDraft,
     startReview,
     threadUsage,
-    updateGoal,
   ]);
 }
 
-function isTerminalSideChatEvent(event: RuntimeEvent): boolean {
+function isTerminalSideChatEvent(event: CoreRuntimeEvent): boolean {
   return event.type === 'turn.completed'
     || event.type === 'turn.cancelled'
     || event.type === 'runtime.error';

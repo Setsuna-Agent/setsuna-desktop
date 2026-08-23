@@ -1,14 +1,7 @@
 import type {
-  RuntimeConfigState,
   RuntimeExtensionStatus,
   RuntimeHookListResponse,
   RuntimeHookMetadata,
-  RuntimeImageGenerationConfigInput,
-  RuntimeImageGenerationTestInput,
-  RuntimeImageGenerationTestResult,
-  RuntimeVisionRecognitionConfigInput,
-  RuntimeVisionRecognitionTestInput,
-  RuntimeVisionRecognitionTestResult,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -79,7 +72,6 @@ export function capabilityCatalogTitle(
 }
 
 export function CapabilitiesPage({
-  config,
   skills,
   mcpState,
   hookState,
@@ -112,12 +104,7 @@ export function CapabilitiesPage({
   onSetHookEnabled,
   onSetHookTrust,
   onSelectedPluginIdChange,
-  onSaveImageGenerationConfig,
-  onTestImageGeneration,
-  onSaveVisionRecognitionConfig,
-  onTestVisionRecognition,
 }: {
-  config: RuntimeConfigState | null;
   skills: RuntimeSkillSummary[];
   mcpState: RuntimeMcpServerList | null;
   hookState: RuntimeHookListResponse | null;
@@ -150,10 +137,6 @@ export function CapabilitiesPage({
   onSetHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
   onSetHookTrust: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
   onSelectedPluginIdChange: (pluginId: string | null) => void;
-  onSaveImageGenerationConfig: (input: RuntimeImageGenerationConfigInput) => Promise<void>;
-  onTestImageGeneration: (input: RuntimeImageGenerationTestInput) => Promise<RuntimeImageGenerationTestResult>;
-  onSaveVisionRecognitionConfig: (input: RuntimeVisionRecognitionConfigInput) => Promise<void>;
-  onTestVisionRecognition: (input: RuntimeVisionRecognitionTestInput) => Promise<RuntimeVisionRecognitionTestResult>;
 }) {
   const { t } = useI18n();
   const [draft, setDraft] = useState<McpDraft>(emptyMcpDraft);
@@ -511,8 +494,6 @@ export function CapabilitiesPage({
         <section className="desktop-capabilities-panel__inner desktop-capabilities-panel__inner--detail">
           <CapabilitiesPluginDetail
             error={pluginError}
-            imageGenerationConfig={config?.imageGeneration}
-            runtimeConfig={config ?? undefined}
             installedPlugin={selectedInstalledPlugin}
             installing={installingPluginIds.has(selectedPluginId)}
             marketplacePlugin={selectedMarketplacePlugin}
@@ -539,10 +520,6 @@ export function CapabilitiesPage({
             onSetSkillEnabled={async (skill, enabled) => {
               await onUpdateSkill(skill, { enabled });
             }}
-            onSaveImageGenerationConfig={onSaveImageGenerationConfig}
-            onTestImageGeneration={onTestImageGeneration}
-            onSaveVisionRecognitionConfig={onSaveVisionRecognitionConfig}
-            onTestVisionRecognition={onTestVisionRecognition}
           />
         </section>
       </main>

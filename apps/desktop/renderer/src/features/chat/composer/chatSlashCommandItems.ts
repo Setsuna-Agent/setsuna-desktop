@@ -1,6 +1,5 @@
 import type {
   RuntimeSkillSummary,
-  RuntimeThreadGoal,
 } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../../shared/i18n/I18nProvider.js';
 import type { SlashCommandMenuItem } from './ChatSlashCommandMenu.js';
@@ -10,7 +9,6 @@ type SlashQuickAction = Exclude<SlashCommandMenuItem, { kind: 'skill' }>;
 const MAX_VISIBLE_SKILLS = 8;
 
 export type ChatSlashCommandItemsOptions = {
-  activeGoal: RuntimeThreadGoal | null;
   activeModelName: string | null;
   activeProjectSelected: boolean;
   activeTurnId: string | null;
@@ -29,7 +27,6 @@ export type ChatSlashCommandItemsOptions = {
 };
 
 export function createChatSlashCommandItems({
-  activeGoal,
   activeModelName,
   activeProjectSelected,
   activeTurnId,
@@ -67,9 +64,7 @@ export function createChatSlashCommandItems({
       kind: 'action',
       type: 'goal',
       title: t('chat.composer.goalMode'),
-      description: activeGoal
-        ? t('chat.composer.goalActive', { objective: activeGoal.objective })
-        : activeTurnId
+      description: activeTurnId
           ? goalModeEnabled
             ? t('chat.composer.goalEnabledNext')
             : t('chat.composer.goalEnableNext')

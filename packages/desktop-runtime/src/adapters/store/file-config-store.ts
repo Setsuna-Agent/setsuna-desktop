@@ -3,19 +3,15 @@ import type {
   ProviderConfigState,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeConfiguredModelReference,
   RuntimeDesktopSettings,
   RuntimeHookEventName,
   RuntimeHookHandlerConfig,
   RuntimeHookMatcherGroup,
   RuntimeHooksConfig,
-  RuntimeImageGenerationConfigInput,
-  RuntimeImageGenerationConfigState,
   RuntimeMemorySettings,
 } from '@setsuna-desktop/contracts';
 import {
   defaultModelMaxOutputTokens,
-  normalizeImageGenerationServiceUrl,
   normalizeDesktopNetworkProxyRoute,
   normalizeModelIconConfig,
   normalizeNpmRegistryUrl,
@@ -23,11 +19,18 @@ import {
   normalizePythonPackageIndexUrl,
   normalizeRuntimeAccessModeConfig,
 } from '@setsuna-desktop/contracts';
+import {
+  normalizeImageGenerationServiceUrl,
+  type ImageGenerationLegacySettingsAdapter,
+} from '@setsuna-desktop/feature-image-generation/contracts';
+import type {
+  VisionRecognitionLegacySettingsAdapter,
+  VisionRecognitionModelSelection,
+} from '@setsuna-desktop/feature-vision-recognition/contracts';
 import { chmod, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   ConfigStore,
-  RuntimeImageGenerationProviderConfig,
   RuntimeProviderConfig,
 } from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
@@ -60,11 +63,14 @@ const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
   'Stop',
 ];
 
-type StoredImageGenerationConfig = Omit<RuntimeImageGenerationConfigState, 'apiKeySet' | 'apiKeyPreview'>;
+type StoredImageGenerationConfig = Readonly<{
+  baseUrl: string;
+  model: string;
+}>;
 
 type StoredConfig = Omit<
   RuntimeConfigState,
-  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled' | 'imageGeneration' | 'visionRecognition'
+  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'memory' | 'memoryEnabled'
 > & {
   schemaVersion?: number;
   /** Pre-v3 compatibility input. It is consumed once and never written again. */
@@ -72,7 +78,8 @@ type StoredConfig = Omit<
   memory?: Partial<RuntimeMemorySettings>;
   memoryEnabled?: boolean;
   imageGeneration?: StoredImageGenerationConfig;
-  visionRecognition?: RuntimeConfiguredModelReference;
+  /** Compatibility input consumed once by the Vision Recognition Feature. */
+  visionRecognition?: VisionRecognitionModelSelection;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
 };
 
@@ -115,6 +122,20 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  imageGenerationLegacySettingsAdapter(): ImageGenerationLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyImageGenerationSettings(),
+      retire: () => this.retireLegacyImageGenerationSettings(),
+    });
+  }
+
+  visionRecognitionLegacySettingsAdapter(): VisionRecognitionLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyVisionRecognitionSelection(),
+      retire: () => this.retireLegacyVisionRecognitionSelection(),
+    });
+  }
+
   async getActiveProviderConfig(): Promise<RuntimeProviderConfig | null> {
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
@@ -132,17 +153,6 @@ export class FileConfigStore implements ConfigStore {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       const secrets = await this.readSecrets();
       return runtimeProviderConfig(stored.providers.find((provider) => provider.id === providerId), secrets);
-    });
-  }
-
-  async getImageGenerationConfig(): Promise<RuntimeImageGenerationProviderConfig> {
-    return withFileStateUpdate(this.configPath, async () => {
-      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-      const secrets = await this.readSecrets();
-      return {
-        ...normalizeStoredImageGeneration(stored.imageGeneration),
-        apiKey: secrets.imageGenerationApiKey ?? '',
-      };
     });
   }
 
@@ -181,14 +191,6 @@ export class FileConfigStore implements ConfigStore {
       if (input.taskModels && Object.hasOwn(input.taskModels, 'memoryConsolidation')) {
         delete memory.consolidationModel;
       }
-      const imageGeneration = imageGenerationSettingsForSave(
-        input.imageGeneration,
-        previous.imageGeneration,
-        secrets,
-      );
-      const visionRecognition = input.visionRecognition === undefined
-        ? normalizeConfiguredModelReference(previous.visionRecognition)
-        : normalizeConfiguredModelReference(input.visionRecognition);
       const previousAccessMode = accessModeForStoredConfig(previous);
 
       const stored: StoredConfig = {
@@ -216,8 +218,6 @@ export class FileConfigStore implements ConfigStore {
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
         features: normalizeFeatureFlags(input.features ?? previous.features),
         desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
-        imageGeneration,
-        ...(visionRecognition ? { visionRecognition } : {}),
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
       };
 
@@ -225,6 +225,47 @@ export class FileConfigStore implements ConfigStore {
       await this.writeSecrets(secrets);
       await writeJsonFile(this.configPath, stored);
       return this.toState(stored, secrets);
+    });
+  }
+
+  private async readLegacyImageGenerationSettings() {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      return Object.freeze({
+        connection: Object.freeze(normalizeStoredImageGeneration(stored.imageGeneration)),
+        apiKey: secrets.imageGenerationApiKey ?? '',
+      });
+    });
+  }
+
+  private async retireLegacyImageGenerationSettings(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const secrets = await this.readSecrets();
+      const hadSettings = Object.hasOwn(stored, 'imageGeneration');
+      const hadSecret = Object.hasOwn(secrets, 'imageGenerationApiKey');
+      if (!hadSettings && !hadSecret) return;
+      delete stored.imageGeneration;
+      delete secrets.imageGenerationApiKey;
+      if (hadSecret) await this.writeSecrets(secrets);
+      if (hadSettings) await writeJsonFile(this.configPath, stored);
+    });
+  }
+
+  private async readLegacyVisionRecognitionSelection(): Promise<VisionRecognitionModelSelection> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return normalizeConfiguredModelReference(stored.visionRecognition) ?? null;
+    });
+  }
+
+  private async retireLegacyVisionRecognitionSelection(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      if (!Object.hasOwn(stored, 'visionRecognition')) return;
+      delete stored.visionRecognition;
+      await writeJsonFile(this.configPath, stored);
     });
   }
 
@@ -288,7 +329,6 @@ export class FileConfigStore implements ConfigStore {
         apiKeyPreview: maskApiKey(apiKey),
       };
     });
-    const visionRecognition = normalizeConfiguredModelReference(stored.visionRecognition);
     return {
       configPath: this.configPath,
       dataPath: this.dataDir,
@@ -318,8 +358,6 @@ export class FileConfigStore implements ConfigStore {
       bypassHookTrust: stored.bypassHookTrust === true,
       features: normalizeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
-      imageGeneration: imageGenerationState(stored.imageGeneration, secrets),
-      ...(visionRecognition ? { visionRecognition } : {}),
       providers,
     };
   }
@@ -352,7 +390,6 @@ function defaultConfig(): StoredConfig {
     bypassHookTrust: false,
     features: { request_permissions_tool: true },
     desktopSettings: {},
-    imageGeneration: defaultImageGenerationSettings(),
     providers: [
       {
         id: 'local-test',
@@ -475,33 +512,6 @@ function normalizeStoredImageGeneration(value: unknown): StoredImageGenerationCo
   return {
     baseUrl: normalizeImageGenerationServiceUrl(record.baseUrl) ?? '',
     model: nonEmpty(record.model) ?? '',
-  };
-}
-
-function imageGenerationSettingsForSave(
-  input: RuntimeImageGenerationConfigInput | undefined,
-  previous: StoredImageGenerationConfig | undefined,
-  secrets: StoredSecrets,
-): StoredImageGenerationConfig {
-  const base = normalizeStoredImageGeneration(previous);
-  if (typeof input?.apiKey === 'string' && input.apiKey.trim()) {
-    secrets.imageGenerationApiKey = input.apiKey.trim();
-  }
-  if (input?.clearApiKey === true) delete secrets.imageGenerationApiKey;
-  return {
-    baseUrl: normalizeImageGenerationServiceUrl(input?.baseUrl ?? base.baseUrl) ?? '',
-    model: typeof input?.model === 'string' ? input.model.trim() : base.model,
-  };
-}
-
-function imageGenerationState(
-  value: StoredImageGenerationConfig | undefined,
-  secrets: StoredSecrets,
-): RuntimeImageGenerationConfigState {
-  return {
-    ...normalizeStoredImageGeneration(value),
-    apiKeySet: Boolean(secrets.imageGenerationApiKey),
-    apiKeyPreview: maskApiKey(secrets.imageGenerationApiKey ?? ''),
   };
 }
 

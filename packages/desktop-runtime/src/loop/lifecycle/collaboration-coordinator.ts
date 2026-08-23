@@ -4,6 +4,7 @@ import type {
   RuntimeCollaborationTask,
   RuntimeCollaborationTaskStatus,
   RuntimeConfigState,
+  PendingRuntimeEvent,
   RuntimeEvent,
   RuntimeMessage,
   RuntimeThread,
@@ -52,7 +53,7 @@ export type RuntimeCollaborationCoordinatorOptions = {
   }): Promise<{ queued?: boolean; turnId: string | null }>;
   startTurn(threadId: string, input: RuntimeSubagentTurnInput): Promise<{ turnId: string }>;
   /** 把任务账本事件追加到父线程事件流（先落盘后发布）。 */
-  appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>): Promise<void>;
+  appendEvent(threadId: string, event: PendingRuntimeEvent): Promise<void>;
 };
 
 const COLLABORATION_TOOL_NAMES = new Set(['spawn_agent', 'send_input', 'resume_agent', 'wait', 'close_agent']);

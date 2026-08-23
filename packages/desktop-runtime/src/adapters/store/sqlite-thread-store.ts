@@ -1,18 +1,19 @@
 import type {
   MessageDeleteInput,
   MessagePatch,
-  RuntimeEvent,
+  PendingStoredThreadEvent,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
+  StoredThreadEvent,
 } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread, DEFAULT_THREAD_TITLE } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import type { DatabaseSync, StatementResultingChanges } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore, ThreadStoreCreateInput, ThreadStorePatch, ThreadStoreQuery } from '../../ports/thread-store.js';
@@ -34,6 +35,13 @@ import {
   updateThreadProjection,
 } from './sqlite-thread-projections.js';
 import { ensureSqliteThreadSchema } from './sqlite-thread-schema.js';
+import {
+  changedRows,
+  numberColumn,
+  optionalJson,
+  stringColumn,
+  summaryFromRow,
+} from './sqlite-thread-row.js';
 import {
   assertThreadSnapshot,
   cloneThread,
@@ -68,8 +76,6 @@ type SqliteThreadStoreOptions = {
   ownershipWaitMs?: number;
   ownerId?: string;
 };
-
-type SqliteThreadRow = Record<string, string | number | bigint | Uint8Array | null>;
 
 export class RuntimeStorageInUseError extends Error {
   readonly code = 'runtime_storage_in_use';
@@ -260,7 +266,7 @@ export class SqliteThreadStore implements ThreadStore {
       createdAt: now,
       payload: { title: initial.title, modelBinding: input.modelBinding ? { ...input.modelBinding } : undefined },
       seq: 1,
-    } satisfies RuntimeEvent;
+    } satisfies StoredThreadEvent;
     const thread = applyRuntimeEventToThread(initial, event);
 
     this.withWriteTransaction(() => {
@@ -377,7 +383,7 @@ export class SqliteThreadStore implements ThreadStore {
     });
   }
 
-  async appendEvent(threadId: string, eventWithoutSeq: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+  async appendEvent(threadId: string, eventWithoutSeq: PendingStoredThreadEvent): Promise<StoredThreadEvent> {
     const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
     if (eventWithoutSeq.threadId !== safeThreadId) {
       throw new Error('Runtime event thread id does not match its storage thread.');
@@ -386,7 +392,24 @@ export class SqliteThreadStore implements ThreadStore {
     return this.enqueueThreadWrite(safeThreadId, () => this.appendEventUnlocked(safeThreadId, eventWithoutSeq));
   }
 
-  async listEvents(threadId: string, sinceSeq = 0): Promise<RuntimeEvent[]> {
+  async appendEvents(
+    threadId: string,
+    eventsWithoutSeq: readonly PendingStoredThreadEvent[],
+  ): Promise<StoredThreadEvent[]> {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    for (const event of eventsWithoutSeq) {
+      if (event.threadId !== safeThreadId) {
+        throw new Error('Runtime event thread id does not match its storage thread.');
+      }
+    }
+    await this.ensureReady();
+    return this.enqueueThreadWrite(
+      safeThreadId,
+      () => this.appendEventsUnlocked(safeThreadId, eventsWithoutSeq),
+    );
+  }
+
+  async listEvents(threadId: string, sinceSeq = 0): Promise<StoredThreadEvent[]> {
     const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
     await this.ensureReady();
     this.assertOwnership();
@@ -481,7 +504,7 @@ export class SqliteThreadStore implements ThreadStore {
 
   private async enqueueThreadMutation(
     threadId: string,
-    event: Omit<RuntimeEvent, 'seq'>,
+    event: PendingStoredThreadEvent,
   ): Promise<RuntimeThread> {
     await this.appendEvent(threadId, event);
     const thread = await this.getThread(threadId);
@@ -491,12 +514,25 @@ export class SqliteThreadStore implements ThreadStore {
 
   private async appendEventUnlocked(
     threadId: string,
-    eventWithoutSeq: Omit<RuntimeEvent, 'seq'>,
-  ): Promise<RuntimeEvent> {
+    eventWithoutSeq: PendingStoredThreadEvent,
+  ): Promise<StoredThreadEvent> {
+    const events = await this.appendEventsUnlocked(threadId, [eventWithoutSeq]);
+    const event = events[0];
+    if (!event) throw new Error(`Unable to persist runtime event for thread: ${threadId}`);
+    return event;
+  }
+
+  private async appendEventsUnlocked(
+    threadId: string,
+    eventsWithoutSeq: readonly PendingStoredThreadEvent[],
+  ): Promise<StoredThreadEvent[]> {
     this.throwIfFailed();
+    if (!eventsWithoutSeq.length) return [];
     const current = await this.requireThread(threadId);
-    const delayedCheckpoint = eventCanUseDelayedCheckpoint(eventWithoutSeq as RuntimeEvent);
-    let event: RuntimeEvent | null = null;
+    const delayedCheckpoint = eventsWithoutSeq.every((event) => eventCanUseDelayedCheckpoint(
+      { ...event, seq: current.lastSeq + 1 } as StoredThreadEvent,
+    ));
+    let events: StoredThreadEvent[] = [];
     let nextThread: RuntimeThread | null = null;
 
     this.withWriteTransaction(() => {
@@ -506,9 +542,17 @@ export class SqliteThreadStore implements ThreadStore {
       if (persistedLastSeq !== current.lastSeq) {
         throw new Error(`Thread cache is stale for ${threadId}: cached ${current.lastSeq}, persisted ${persistedLastSeq}.`);
       }
-      event = { ...eventWithoutSeq, seq: persistedLastSeq + 1 } as RuntimeEvent;
-      nextThread = applyRuntimeEventToThread(current, event);
-      insertRuntimeEvent(this.requireDatabase(), event);
+      let projected = current;
+      events = eventsWithoutSeq.map((eventWithoutSeq, index) => {
+        const event = {
+          ...eventWithoutSeq,
+          seq: persistedLastSeq + index + 1,
+        } as StoredThreadEvent;
+        projected = applyRuntimeEventToThread(projected, event);
+        insertRuntimeEvent(this.requireDatabase(), event);
+        return event;
+      });
+      nextThread = projected;
       updateThreadProjection(
         this.requireDatabase(),
         nextThread,
@@ -518,13 +562,13 @@ export class SqliteThreadStore implements ThreadStore {
       syncMessageIndex(this.requireDatabase(), current, nextThread);
     });
 
-    if (!event || !nextThread) throw new Error(`Unable to persist runtime event for thread: ${threadId}`);
+    if (!events.length || !nextThread) throw new Error(`Unable to persist runtime events for thread: ${threadId}`);
     this.threadCache.set(threadId, nextThread);
     if (!delayedCheckpoint) this.cancelCheckpoint(threadId);
     // Archiving is maintenance, not part of the event commit. Keeping it on the
     // checkpoint queue prevents compression work from delaying lifecycle publication.
     this.scheduleCheckpoint(threadId);
-    return event;
+    return events;
   }
 
   private async readThread(threadId: string) {
@@ -580,7 +624,7 @@ export class SqliteThreadStore implements ThreadStore {
     return thread;
   }
 
-  private readEvents(threadId: string, sinceSeq: number): RuntimeEvent[] {
+  private readEvents(threadId: string, sinceSeq: number): StoredThreadEvent[] {
     const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
     const events = [
       ...readArchivedEvents(this.requireDatabase(), threadId, sinceSeq),
@@ -599,7 +643,7 @@ export class SqliteThreadStore implements ThreadStore {
     return events;
   }
 
-  private readHotEvents(threadId: string, sinceSeq: number): RuntimeEvent[] {
+  private readHotEvents(threadId: string, sinceSeq: number): StoredThreadEvent[] {
     const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
     const events = readRawEvents(this.requireDatabase(), threadId, sinceSeq);
     let expectedSeq = sinceSeq + 1;
@@ -636,7 +680,7 @@ export class SqliteThreadStore implements ThreadStore {
         summary.archived ? 1 : 0,
         normalizeThreadMemoryMode(summary.memoryMode),
         optionalJson(summary.gitInfo),
-        optionalJson(summary.goal),
+        null,
         summary.messageCount,
         summary.lastMessagePreview,
         JSON.stringify(thread),
@@ -682,7 +726,7 @@ export class SqliteThreadStore implements ThreadStore {
         summary.archived ? 1 : 0,
         normalizeThreadMemoryMode(summary.memoryMode),
         optionalJson(summary.gitInfo),
-        optionalJson(summary.goal),
+        null,
         summary.messageCount,
         summary.lastMessagePreview,
         JSON.stringify(thread),
@@ -898,64 +942,6 @@ function withTransaction<T>(database: DatabaseSync, operation: () => T): T {
     }
     throw error;
   }
-}
-
-function summaryFromRow(row: SqliteThreadRow): RuntimeThreadSummary {
-  return {
-    id: stringColumn(row, 'id'),
-    ...(stringColumn(row, 'kind') === 'side' ? { kind: 'side' as const } : {}),
-    activeTurnId: nullableStringColumn(row, 'active_turn_id'),
-    forkedFromId: nullableStringColumn(row, 'forked_from_id'),
-    parentThreadId: nullableStringColumn(row, 'parent_thread_id'),
-    projectId: nullableStringColumn(row, 'project_id'),
-    title: stringColumn(row, 'title'),
-    createdAt: stringColumn(row, 'created_at'),
-    updatedAt: stringColumn(row, 'updated_at'),
-    archived: numberColumn(row, 'archived') === 1,
-    memoryMode: normalizeThreadMemoryMode(stringColumn(row, 'memory_mode')),
-    gitInfo: parseOptionalJson(row, 'git_info_json'),
-    goal: parseOptionalJson(row, 'goal_json'),
-    messageCount: numberColumn(row, 'message_count'),
-    lastMessagePreview: stringColumn(row, 'last_message_preview'),
-  } as RuntimeThreadSummary;
-}
-
-function parseOptionalJson(row: SqliteThreadRow, column: string): unknown {
-  const value = nullableStringColumn(row, column);
-  if (value === undefined) return undefined;
-  try {
-    return JSON.parse(value) as unknown;
-  } catch (error) {
-    throw new Error(`Invalid SQLite JSON column: ${column}`, { cause: error });
-  }
-}
-
-function optionalJson(value: unknown): string | null {
-  return value === undefined || value === null ? null : JSON.stringify(value);
-}
-
-function stringColumn(row: SqliteThreadRow | undefined, column: string): string {
-  const value = row?.[column];
-  if (typeof value !== 'string') throw new Error(`Invalid SQLite text column: ${column}`);
-  return value;
-}
-
-function nullableStringColumn(row: SqliteThreadRow, column: string): string | undefined {
-  const value = row[column];
-  if (value === null) return undefined;
-  if (typeof value !== 'string') throw new Error(`Invalid SQLite nullable text column: ${column}`);
-  return value;
-}
-
-function numberColumn(row: SqliteThreadRow | undefined, column: string): number {
-  const value = row?.[column];
-  if (typeof value === 'bigint') return Number(value);
-  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Invalid SQLite number column: ${column}`);
-  return value;
-}
-
-function changedRows(result: StatementResultingChanges): number {
-  return typeof result.changes === 'bigint' ? Number(result.changes) : result.changes;
 }
 
 function delay(delayMs: number): Promise<void> {

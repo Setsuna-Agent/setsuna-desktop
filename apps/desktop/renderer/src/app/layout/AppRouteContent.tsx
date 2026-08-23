@@ -241,7 +241,6 @@ export function AppRouteContent({
     return (
       <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
         <CapabilitiesPage
-          config={runtime.config}
           skills={runtime.skills}
           mcpState={runtime.mcpState}
           hookState={runtime.hookState}
@@ -274,10 +273,6 @@ export function AppRouteContent({
           onSetHookEnabled={runtime.setHookEnabled}
           onSetHookTrust={runtime.setHookTrust}
           onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
-          onSaveImageGenerationConfig={runtime.saveImageGenerationConfig}
-          onTestImageGeneration={runtime.testImageGeneration}
-          onSaveVisionRecognitionConfig={runtime.saveVisionRecognitionConfig}
-          onTestVisionRecognition={runtime.testVisionRecognition}
         />
       </Suspense>
     );
@@ -339,17 +334,15 @@ export function AppRouteContent({
       onAnswerApproval={(approvalId, input) => runtime.answerApproval(approvalId, input)}
       onCompactContext={() => void runtime.compactCurrentThreadContext()}
       onClearContext={() => void runtime.clearCurrentThreadContext()}
-      onClearThreadGoal={() => runtime.clearCurrentThreadGoal()}
-      onUpdateThreadGoal={(patch) => runtime.updateCurrentThreadGoal(patch)}
       onDeleteMessages={(messageIds) => chatActions.deleteMessages(messageIds)}
       onDiscardFileChanges={discardFileChanges}
       onClosePanel={(placement, panelId) => workspacePanels.closeDesktopPanelItem(placement, panelId)}
       onCloseBottomSlot={() => workspacePanels.closeDesktopPanelSlot('bottom')}
-      onCopyFilePath={(filePath) => void workspacePanels.copyWorkspaceFilePath(filePath)}
+      onCopyFilePath={workspacePanels.copyWorkspaceFilePath}
       onDraftChange={setDraft}
       onEditUserMessage={(messageId, content) => chatActions.editUserMessage(messageId, content)}
-      onExternalOpenFile={(filePath, line) => void workspacePanels.openFileInWorkspaceApp(filePath, line)}
-      onOpenFileWithApp={(appId, filePath, line) => void workspacePanels.openFileWithWorkspaceApp(appId, filePath, line)}
+      onExternalOpenFile={workspacePanels.openFileInWorkspaceApp}
+      onOpenFileWithApp={workspacePanels.openFileWithWorkspaceApp}
       onSelectModel={runtime.selectConversationModel}
       onSearchProjectEntries={projectWorkspace.searchProjectEntries}
       onOpenBottomPanel={(panelType) => {
@@ -380,9 +373,10 @@ export function AppRouteContent({
         workspacePanels.moveDesktopPanel('bottom', panelId, targetPlacement, targetPanelId, placement);
       }}
       onReorderBottomPanels={(panelId, targetPanelId, placement) => workspacePanels.reorderDesktopPanel('bottom', panelId, targetPanelId, placement)}
-      onReviewBaseRefChange={(baseRef) => workspacePanels.selectReviewBaseRef(baseRef)}
-      onReviewRefresh={() => workspacePanels.loadReviewState()}
-      onRevealFile={(filePath) => void workspacePanels.revealWorkspaceFile(filePath)}
+      onReviewBaseRefChange={workspacePanels.selectReviewBaseRef}
+      onReviewRefresh={workspacePanels.loadReviewState}
+      onReviewSourceChange={workspacePanels.setReviewSource}
+      onRevealFile={workspacePanels.revealWorkspaceFile}
       onSetMultiAgentEnabled={(enabled) => runtime.saveRuntimePreferences({
         features: {
           ...(runtime.config?.features ?? {}),

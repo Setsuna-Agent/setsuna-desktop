@@ -6,7 +6,6 @@ import type {
   RuntimeDynamicToolContentItem,
   RuntimeDynamicToolDefinition,
   RuntimeModelRequestStepSnapshot,
-  RuntimeThreadGoal,
   RuntimeToolCall,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
@@ -16,7 +15,6 @@ import {
   collaborationToolsEnabled,
   isCollaborationToolName,
 } from '../lifecycle/collaboration-coordinator.js';
-import { goalToolDefinitions, isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import type { RuntimeToolRouter } from '../tools/tool-router.js';
 
 const READ_FILE_TOOL_NAMES = new Set(['read_file', 'workspace_read_file']);
@@ -82,8 +80,7 @@ export function modelFacingTools(
   tools: RuntimeToolDefinition[] | undefined,
   config: RuntimeConfigState | null | undefined,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
-  goal?: RuntimeThreadGoal | null,
-  goalCompletionPending = false,
+  goalTools: readonly RuntimeToolDefinition[] = [],
   deferredToolNames: readonly string[] = [],
   hostCatalogTools: readonly RuntimeToolDefinition[] = tools ?? [],
 ): RuntimeToolDefinition[] | undefined {
@@ -104,7 +101,7 @@ export function modelFacingTools(
       }
     }
   }
-  for (const tool of goalToolDefinitions(goal, goalCompletionPending)) {
+  for (const tool of goalTools) {
     if (!names.has(tool.name)) {
       names.add(tool.name);
       merged.push(tool);
@@ -130,14 +127,13 @@ export async function samplingToolRuntimes(
   toolRouter: RuntimeToolRouter | null,
   dynamicTools: RuntimeDynamicToolDefinition[] | undefined,
   config: RuntimeConfigState | null | undefined,
-  goal?: RuntimeThreadGoal | null,
-  goalCompletionPending = false,
+  goalTools: readonly RuntimeToolDefinition[] = [],
 ): Promise<RuntimeModelRequestStepSnapshot['toolRuntimes']> {
   if (!tools.length) return [];
   const routerRuntimes = new Map((await toolRouter?.toolRuntimeMetadata() ?? []).map((runtime) => [runtime.name, runtime]));
   const dynamicToolNames = new Set((dynamicTools ?? []).map((tool) => tool.name));
   const collaborationEnabled = collaborationToolsEnabled(config);
-  const goalToolNames = new Set(goalToolDefinitions(goal, goalCompletionPending).map((tool) => tool.name));
+  const goalToolNames = new Set(goalTools.map((tool) => tool.name));
   return tools.map((tool) => {
     const routerRuntime = routerRuntimes.get(tool.name);
     if (routerRuntime) return { ...routerRuntime };
@@ -145,7 +141,7 @@ export async function samplingToolRuntimes(
       name: tool.name,
       source: collaborationEnabled && isCollaborationToolName(tool.name)
         ? 'collaboration'
-        : goalToolNames.has(tool.name) && isGoalToolName(tool.name) ? 'goal'
+        : goalToolNames.has(tool.name) ? 'goal'
         : dynamicToolNames.has(tool.name) ? 'dynamic' : 'host',
       exposure: 'direct',
       supportsParallel: false,

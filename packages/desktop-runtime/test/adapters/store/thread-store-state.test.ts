@@ -188,39 +188,18 @@ describe('thread snapshot provider metadata compatibility', () => {
   });
 });
 
-describe('thread summary Goal projection', () => {
-  it('omits Goal execution attachments from list summaries', () => {
-    const thread = threadWithMetadata({});
-    thread.goal = {
-      version: 1,
-      id: 'goal_1',
-      threadId: thread.id,
-      objective: 'Inspect the attached design.',
-      status: 'active',
-      tokenBudget: null,
-      tokensUsed: 0,
-      timeUsedSeconds: 0,
-      createdAt: 1,
-      updatedAt: 1,
-      execution: {
-        attachments: [{
-          id: 'goal_image',
-          name: 'design.png',
-          type: 'image/png',
-          size: 1,
-          url: 'data:image/png;base64,AA==',
-        }],
-        skillIds: ['skill_design'],
-        thinking: true,
-      },
-    };
+describe('legacy thread Goal projection', () => {
+  it('removes embedded Goal state from old snapshots and summaries', () => {
+    const thread = {
+      ...threadWithMetadata({}),
+      goal: { objective: 'Legacy snapshot state' },
+    } as RuntimeThread & { goal: unknown };
 
-    expect(toSummary(thread).goal).toMatchObject({
-      objective: 'Inspect the attached design.',
-      status: 'active',
-    });
-    expect(toSummary(thread).goal?.execution).toBeUndefined();
-    expect(thread.goal?.execution?.attachments).toHaveLength(1);
+    const normalized = normalizeThreadSnapshot(thread);
+
+    expect(normalized.changed).toBe(true);
+    expect(normalized.thread).not.toHaveProperty('goal');
+    expect(toSummary(normalized.thread)).not.toHaveProperty('goal');
   });
 });
 

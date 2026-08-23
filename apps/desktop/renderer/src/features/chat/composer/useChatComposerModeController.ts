@@ -3,7 +3,6 @@ import type {
   ProviderModelConfig,
   RuntimeMessageAttachment,
   RuntimeSkillReference,
-  RuntimeThreadGoal,
 } from '@setsuna-desktop/contracts';
 import {
   useCallback,
@@ -39,17 +38,13 @@ type ModelThinkingSelectionState = {
 };
 
 export function useChatComposerModeController({
-  activeGoal,
   currentThreadId,
   model,
   provider,
-  onClearThreadGoal,
 }: {
-  activeGoal: RuntimeThreadGoal | null;
   currentThreadId?: string | null;
   model: ProviderModelConfig | null;
   provider: ProviderConfigState | null;
-  onClearThreadGoal: () => void | Promise<unknown>;
 }) {
   const modelCapabilities = useMemo(
     () => createChatComposerModelCapabilities(provider, model),
@@ -115,13 +110,12 @@ export function useChatComposerModeController({
   }, []);
 
   const clearGoalMode = useCallback(() => {
-    if (activeGoal) void onClearThreadGoal();
     setLocalModes(clearChatComposerGoalMode);
-  }, [activeGoal, onClearThreadGoal]);
+  }, []);
 
   const enableGoalMode = useCallback(() => {
-    if (!activeGoal) setLocalModes(enableChatComposerGoalMode);
-  }, [activeGoal]);
+    setLocalModes(enableChatComposerGoalMode);
+  }, []);
 
   const clearReviewMode = useCallback(() => {
     setLocalModes(clearChatComposerReviewMode);

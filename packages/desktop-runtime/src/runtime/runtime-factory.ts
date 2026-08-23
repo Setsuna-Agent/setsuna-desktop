@@ -2,6 +2,7 @@ import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { HttpBrowserControlClient } from '../adapters/browser/http-browser-control-client.js';
 import { InMemoryRuntimeDebugTraceStore } from '../adapters/debug/in-memory-runtime-debug-trace-store.js';
+import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
@@ -45,9 +46,12 @@ import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-
 import { ManagedWorkspaceDependencyManager } from '../adapters/workspace/managed-workspace-dependency-manager.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
 import { ExtensionManager } from '../extensions/extension-manager.js';
-import { ExtensionImageGenerationCoordinator } from '../extensions/extension-image-generation-coordinator.js';
+import { RuntimeRouteRegistry } from '../features/routes/runtime-route-registry.js';
+import { FileFeatureSettingsRegistry } from '../features/settings/file-feature-settings-registry.js';
+import { RuntimeFeatureManagement } from '../features/management/runtime-feature-management.js';
+import { RuntimeFeatureEventRegistry } from '../features/events/runtime-feature-event-registry.js';
+import { ThreadStoreEventReader } from '../features/events/thread-store-event-reader.js';
 import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
-import { ExtensionVisionRecognitionCoordinator } from '../extensions/extension-vision-recognition-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
@@ -81,9 +85,14 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const eventBus = new InMemoryEventBus();
   const debugTraceStore = new InMemoryRuntimeDebugTraceStore(clock, ids);
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
+  const featureRoutes = new RuntimeRouteRegistry();
+  const featureSettings = new FileFeatureSettingsRegistry(runtimeDataDir);
+  const featureManagement = new RuntimeFeatureManagement();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
   const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
+  const featureEvents = new RuntimeFeatureEventRegistry();
+  const threadEventReader = new ThreadStoreEventReader(persistedThreadStore);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
   const toolResultStore = new FileToolResultStore(runtimeDataDir);
@@ -93,6 +102,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     undefined,
     debugTraceStore,
   );
+  eventWriter.subscribePersisted((event) => featureEvents.accept(event));
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
   const configStore = new FileConfigStore(runtimeDataDir, {
@@ -149,27 +159,19 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
   });
   const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
-  const imageGenerationCoordinator = new ExtensionImageGenerationCoordinator(
-    configStore,
-    generatedImageStore,
-    {
-      fetchImpl: networkProxyFetch.forRoute(),
-      threadStore,
-      workspaceProjects,
-    },
-  );
-  const visionRecognitionCoordinator = new ExtensionVisionRecognitionCoordinator(
-    configStore,
-    attachmentStore,
-    threadStore,
-    configuredModelClient,
-    { clock, usageStore },
-  );
+  const visionRecognitionHost = new DesktopVisionRecognitionRuntimeHost({
+    attachments: attachmentStore,
+    clock,
+    config: configStore,
+    legacySettings: configStore.visionRecognitionLegacySettingsAdapter(),
+    models: configuredModelClient,
+    plugins: pluginStore,
+    threads: threadStore,
+    usage: usageStore,
+  });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
     networkFetch: networkProxyFetch.forRoute(),
-    imageGeneration: imageGenerationCoordinator,
-    visionRecognition: visionRecognitionCoordinator,
     ...(options.extensionWorkerEntryPath ? { workerEntryPath: options.extensionWorkerEntryPath } : {}),
     ...(options.extensionWorkerExecArgv ? { workerExecArgv: options.extensionWorkerExecArgv } : {}),
   });
@@ -243,11 +245,14 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     debugTraceStore,
     eventBus,
     eventWriter,
+    featureRoutes,
+    featureEvents,
+    featureSettings,
+    featureManagement,
     environmentResolver,
     extensionManager,
     generatedImageStore,
-    imageGenerationCoordinator,
-    visionRecognitionCoordinator,
+    visionRecognitionHost,
     memoryStore,
     modelClient,
     networkProxyFetch,
@@ -264,6 +269,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolHost,
     toolResultStore,
     threadStore,
+    threadEventReader,
     usageStore,
     workspaceDependencies,
     workspaceProjects,

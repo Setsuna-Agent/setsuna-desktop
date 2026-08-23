@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeEvent } from '../src/events.js';
+import type { LegacyRuntimeGoalEvent, RuntimeEvent } from '../src/events.js';
 import { applyRuntimeEventToThread } from '../src/thread-events.js';
 import type { RuntimeThread } from '../src/threads.js';
 
@@ -557,7 +557,7 @@ describe('thread event lifecycle and metadata projection', () => {
     expect(updated.title).toBe('Thread');
   });
 
-  it('stores and clears thread goals from thread goal events', () => {
+  it('replays only Core queue and message effects from legacy Goal records', () => {
     const thread: RuntimeThread = {
       id: 'thread_1',
       title: 'Thread',
@@ -575,7 +575,7 @@ describe('thread event lifecycle and metadata projection', () => {
         createdAt: '2026-06-26T00:00:00.000Z',
       }],
     };
-    const updatedEvent: RuntimeEvent = {
+    const updatedEvent: LegacyRuntimeGoalEvent = {
       id: 'event_goal_1',
       seq: 1,
       threadId: 'thread_1',
@@ -624,7 +624,7 @@ describe('thread event lifecycle and metadata projection', () => {
         },
       },
     };
-    const accountedEvent: RuntimeEvent = {
+    const accountedEvent: LegacyRuntimeGoalEvent = {
       id: 'event_goal_accounted',
       seq: 2,
       threadId: 'thread_1',
@@ -646,7 +646,7 @@ describe('thread event lifecycle and metadata projection', () => {
       tokensUsed: 25,
       updatedAt: 1782432003,
     };
-    const completedEvent: RuntimeEvent = {
+    const completedEvent: LegacyRuntimeGoalEvent = {
       id: 'event_goal_completed',
       seq: 3,
       threadId: 'thread_1',
@@ -668,7 +668,7 @@ describe('thread event lifecycle and metadata projection', () => {
         },
       },
     };
-    const clearedEvent: RuntimeEvent = {
+    const clearedEvent: LegacyRuntimeGoalEvent = {
       id: 'event_goal_2',
       seq: 4,
       threadId: 'thread_1',
@@ -694,7 +694,7 @@ describe('thread event lifecycle and metadata projection', () => {
     const completed = applyRuntimeEventToThread(accounted, completedEvent);
     const cleared = applyRuntimeEventToThread(completed, clearedEvent);
 
-    expect(withGoal.goal).toEqual(updatedEvent.payload.goal);
+    expect(withGoal).not.toHaveProperty('goal');
     expect(withGoal.queuedTurnInputs).toEqual([]);
     expect(withGoal.messages).toEqual([
       expect.objectContaining({
@@ -705,21 +705,14 @@ describe('thread event lifecycle and metadata projection', () => {
     ]);
     expect(withGoal.messageCount).toBe(1);
     expect(withGoal.lastMessagePreview).toBe('Ship alignment.');
-    expect(accounted.goal).toMatchObject({
-      tokensUsed: 25,
-      execution: updatedEvent.payload.goal.execution,
-    });
-    expect(completed.goal).toMatchObject({
-      status: 'complete',
-      tokensUsed: 25,
-      execution: updatedEvent.payload.goal.execution,
-    });
+    expect(accounted).not.toHaveProperty('goal');
+    expect(completed).not.toHaveProperty('goal');
     expect(completed.messages).toContainEqual(expect.objectContaining({
       id: 'message_goal_completed',
       goalMode: expect.objectContaining({ kind: 'complete' }),
     }));
     expect(completed.messageCount).toBe(2);
-    expect(cleared.goal).toBeUndefined();
+    expect(cleared).not.toHaveProperty('goal');
     expect(cleared.messages).toContainEqual(expect.objectContaining({
       id: 'message_goal_cleared',
       goalMode: expect.objectContaining({ kind: 'cleared' }),

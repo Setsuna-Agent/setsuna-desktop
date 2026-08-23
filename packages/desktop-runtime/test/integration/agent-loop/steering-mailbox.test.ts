@@ -242,9 +242,9 @@ describe('agent loop turn steering and mailbox input', () => {
         toolChoice: request.toolChoice,
       }))).toEqual([
         { model: 'local-runtime-smoke', toolChoice: 'none' },
-        { model: 'local-runtime-smoke', toolChoice: 'auto' },
+        { model: 'local-runtime-smoke', toolChoice: undefined },
         { model: 'local-runtime-smoke', toolChoice: 'none' },
-        { model: 'local-runtime-smoke', toolChoice: 'auto' },
+        { model: 'local-runtime-smoke', toolChoice: undefined },
       ]);
       expect(compactRequest?.messages.map((message) => message.content).join('\n')).toContain(oversizedSteer.slice(0, 200));
       expect(savedSteer).toMatchObject({

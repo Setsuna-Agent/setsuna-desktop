@@ -74,7 +74,7 @@ pnpm test:integration -- packages/desktop-runtime/test/integration/agent-loop/qu
 | Provider | `test/adapters/model/` + history/compaction |
 | Tool/MCP/Skill/Plugin | 对应 adapter + AgentLoop integration |
 | Main | `apps/desktop/main/test/unit/<domain>/` |
-| Review/terminal | Main integration |
+| Review/terminal | Review 使用 app main integration；Terminal 使用 `packages/features/terminal/test/integration/main/` |
 | Renderer | `apps/desktop/renderer/test/unit/` 镜像 feature |
 | Build/release script | `scripts/test/` + `test:release` |
 

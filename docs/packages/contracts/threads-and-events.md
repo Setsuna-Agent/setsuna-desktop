@@ -21,7 +21,7 @@
 - Archived。
 - Active turn / task 摘要。
 - Last sequence。
-- Goal、memory mode 等列表需要的信息。
+- Memory mode 等列表需要的信息；Feature 私有状态不进入 summary。
 
 Summary 不包含完整 messages，避免列表接口加载所有 transcript。
 
@@ -34,7 +34,7 @@ Full snapshot 通常包含：
 - `lastSeq`。
 - Context compaction 状态。
 - 尚未进入 transcript 的 `queuedTurnInputs`。
-- Goal、review、active task 等投影状态。
+- Review、active task 等 Core 投影状态；Goal 等 Feature 私有状态通过独立 query 获取。
 
 它是 reducer checkpoint，不是可以绕过 event 任意写回的对象。
 
@@ -68,7 +68,7 @@ Tool run 是 UI/审计投影，包含：
 
 模型上下文中的 tool result 与 UI tool run 有联系，但不是同一数据结构。
 
-## RuntimeEvent
+## Core RuntimeEvent 与 StoredThreadEvent
 
 每条事件包含：
 
@@ -80,10 +80,10 @@ Tool run 是 UI/审计投影，包含：
 - `type`
 - 对应 `payload`
 
-常见类别：
+`RuntimeEvent` 是封闭且穷尽的 Core union。`StoredThreadEvent` 还允许 opaque `feature.event` envelope，以及只读历史兼容事件；Feature payload 不进入 Core reducer。Core 常见类别：
 
 - Thread create/update/delete/archive/metadata。
-- Goal、memory mode、context clear/compact。
+- Memory mode、context clear/compact。
 - Turn start/complete/cancel。
 - Queued input create/update/delete。
 - Message create/delta/update/complete/delete/truncate。
@@ -91,7 +91,7 @@ Tool run 是 UI/审计投影，包含：
 - Approval request/resolve。
 - Runtime error。
 
-准确 variant 以 `events.ts` 的 union 为准。
+准确 Core variant 以 `events.ts` 的 `CoreRuntimeEvent` union 为准。Goal 当前状态使用 `goal/goal.state-replaced@1`，由 Goal package 的 codec、migration 和 reducer 拥有；旧 Goal 事件只能由兼容 decoder 读取。
 
 ### 投影 disposition
 
@@ -141,15 +141,14 @@ turn.input_deleted
 
 普通项在真实用户 `message.created` 带 `queuedInputId` 时被原子消费。
 
-Goal 项由 `thread.goal_updated` 携带：
+Goal 项在同一存储批次中写入两条职责明确的记录：
 
-- `queuedInputId`
-- `sourceMessage`
-- `goal`
+- Core `message.created` 携带 `queuedInputId` 和可见 Goal 用户消息，负责消费队列；
+- Feature `goal.state-replaced@1` 携带 Goal 状态，并与前者共享真实 `turnId`。
 
-一次投影完成队列消费、可见消息和 goal 建立，不能拆成多个可能中断的状态写入。
+批次提交保证队列消费、可见消息和 Goal 建立不出现部分写；Core 与 Feature 各自只投影自己拥有的语义。
 
-Goal 的附件、Skill、thinking 等放在 `RuntimeThreadGoal.execution`，后续 continuation 使用 `preserveExecution` 复用，不重复持久化大附件。
+Goal 的附件、Skill、thinking 等放在 Feature-owned `Goal.execution`，后续 continuation 复用既有 execution，不重复持久化大附件。
 
 完整状态机见 [Active turn 发送队列](../../designs/queued-turn-inputs.md)。
 

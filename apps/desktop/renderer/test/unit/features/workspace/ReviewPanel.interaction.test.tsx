@@ -31,6 +31,43 @@ afterEach(() => {
 });
 
 describe('DesktopReviewPanel interactions', () => {
+  it('does not rerender an unchanged Pierre diff when its parent rerenders', async () => {
+    const summary: DesktopDiffSummary = {
+      additions: 1,
+      deletions: 0,
+      files: [diffFile('src/stable.ts', 1)],
+    };
+    const state = { ...reviewState, unstagedSummary: summary };
+    const findings: RuntimeReviewFinding[] = [];
+    const workspaceApps: [] = [];
+    const noop = () => undefined;
+    const pierreRender = vi.spyOn(VirtualizedFileDiff.prototype, 'render');
+    const panel = () => (
+      <I18nProvider initialLocale="zh-CN">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          findings={findings}
+          latestSummary={summary}
+          loading={false}
+          reviewState={state}
+          workspaceApps={workspaceApps}
+          onExternalOpenFile={noop}
+          onOpenProjectFile={noop}
+          onRefresh={noop}
+          onSelectBaseRef={noop}
+        />
+      </I18nProvider>
+    );
+    const view = render(panel());
+
+    await waitFor(() => expect(pierreRender).toHaveBeenCalled());
+    const renderCount = pierreRender.mock.calls.length;
+    view.rerender(panel());
+
+    expect(pierreRender).toHaveBeenCalledTimes(renderCount);
+  });
+
   it('expands unsupported formats with a user-facing format notice', () => {
     const summary: DesktopDiffSummary = {
       additions: 0,
@@ -528,6 +565,72 @@ describe('DesktopReviewPanel interactions', () => {
 
     expect(screen.queryByText('Could not load review information')).toBeNull();
     expect(screen.getByRole('button', { name: 'Refresh review information' })).toBeTruthy();
+  });
+
+  it('switches the only mounted diff and preserves large-review navigation preferences', async () => {
+    const pierreRender = vi.spyOn(VirtualizedFileDiff.prototype, 'render');
+    const summary: DesktopDiffSummary = {
+      additions: 25,
+      deletions: 0,
+      files: Array.from({ length: 25 }, (_, index) => (
+        diffFile(`src/file-${index}.ts`, index + 1)
+      )),
+    };
+
+    render(
+      <I18nProvider initialLocale="zh-CN">
+        <DesktopReviewPanel
+          activeProject={project}
+          error={null}
+          latestSummary={summary}
+          loading={false}
+          reviewState={{ ...reviewState, unstagedSummary: summary }}
+          onExternalOpenFile={() => undefined}
+          onOpenProjectFile={() => undefined}
+          onRefresh={() => undefined}
+          onSelectBaseRef={() => undefined}
+        />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('diffs-container')).toHaveLength(1);
+      expect(screen.getByRole('button', { name: /折叠 src\/file-0\.ts/u })).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'src/file-1.ts' }));
+    await waitFor(() => {
+      expect(document.querySelectorAll('diffs-container')).toHaveLength(1);
+      expect(screen.getByRole('button', { name: /折叠 src\/file-1\.ts/u })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /折叠 src\/file-0\.ts/u })).toBeNull();
+    });
+    const selectedDiffRenderCount = pierreRender.mock.calls.length;
+
+    expect(screen.getByRole('button', { name: 'src' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '切换为平铺列表' }));
+    expect(screen.queryByRole('button', { name: 'src' })).toBeNull();
+    expect(screen.getByRole('button', { name: '切换为目录树' })).toBeTruthy();
+    expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-layout')).toBe('flat');
+
+    const resizeHandle = screen.getByRole('separator', { name: '调整变更文件栏宽度' });
+    expect(resizeHandle.getAttribute('aria-valuenow')).toBe('248');
+    fireEvent.pointerDown(resizeHandle, { button: 0, clientX: 500, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 460, pointerId: 1 });
+    fireEvent.pointerUp(window, { clientX: 460, pointerId: 1 });
+    expect(screen.getByRole('separator', { name: '调整变更文件栏宽度' })
+      .getAttribute('aria-valuenow')).toBe('288');
+    expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-width')).toBe('288');
+
+    fireEvent.click(screen.getByRole('button', { name: '收起变更文件' }));
+    expect(document.querySelector('.desktop-review-file-tree')?.classList
+      .contains('is-collapsed')).toBe(true);
+    expect(screen.queryByRole('separator', { name: '调整变更文件栏宽度' })).toBeNull();
+    expect(screen.getByRole('button', { name: '展开变更文件' })).toBeTruthy();
+    expect(window.localStorage.getItem('setsuna-desktop:review-file-browser-visible')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: '展开变更文件' }));
+    expect(screen.getByRole('separator', { name: '调整变更文件栏宽度' })
+      .getAttribute('aria-valuenow')).toBe('288');
+    expect(pierreRender).toHaveBeenCalledTimes(selectedDiffRenderCount);
   });
 });
 

@@ -41,17 +41,6 @@ export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
-export type DesktopReviewImagePreviewResult =
-  | { ok: true; previewId: string; url: string }
-  | { ok: false; error: string };
-
-export type DesktopReviewImagePreviewInput = {
-  baseRef?: string | null;
-  filePath: string;
-  side: 'before' | 'after';
-  source: 'unstaged' | 'staged' | 'branch' | 'latest';
-};
-
 export type DesktopWindowsSandboxState =
   | 'unsupported'
   | 'unavailable'
@@ -85,22 +74,6 @@ export type DesktopImageInput = {
 export type DesktopImageDataResult =
   | { ok: true; data: Uint8Array; type: string }
   | { ok: false; error: string };
-
-export type DesktopTerminalSession = {
-  sessionId: string;
-  workspaceRoot: string;
-  shell: string;
-};
-
-export type DesktopTerminalEvent = {
-  seq: number;
-  event: 'ready' | 'output' | 'exit' | 'closed' | 'error';
-  data: Record<string, unknown>;
-};
-
-export type DesktopTerminalEventPayload = DesktopTerminalEvent & {
-  sessionId: string;
-};
 
 export type DesktopWorkspaceApp = {
   id: string;
@@ -145,78 +118,9 @@ export type DesktopDiffSummary = {
   deletions: number;
 };
 
-export type DesktopReviewBranch = {
-  name: string;
-  current: boolean;
-  remote: boolean;
-  uncommittedFiles: number;
-};
-
-export type DesktopReviewState = {
-  isGitRepository: boolean;
-  workspaceRoot: string;
-  gitRoot: string | null;
-  currentBranch: string | null;
-  currentRemoteRef: string | null;
-  baseRef: string | null;
-  baseRefs: string[];
-  branches: DesktopReviewBranch[];
-  currentRemoteSummary: DesktopDiffSummary | null;
-  branchSummary: DesktopDiffSummary | null;
-  stagedSummary: DesktopDiffSummary | null;
-  unstagedSummary: DesktopDiffSummary | null;
-};
-
-export type DesktopReviewStateOptions = {
-  baseRef?: string | null;
-};
-
-export type DesktopReviewChangeEvent = {
-  subscriptionId: string;
-};
-
-export type DesktopReviewCommitInput = {
-  includeUnstaged?: boolean;
-  message: string;
-  push?: boolean;
-};
-
-export type DesktopReviewCreateBranchOptions = {
-  allowUnstaged?: boolean;
-};
-
-export type DesktopReviewActionResult = {
-  ok: true;
-  files: string[];
-  state: DesktopReviewState;
-};
-
-export type DesktopReviewCommitResult = {
-  ok: true;
-  commitHash: string;
-  pushed: boolean;
-  pushError?: string;
-  state: DesktopReviewState;
-};
-
-export type DesktopReviewPushResult = {
-  ok: true;
-  pushed: true;
-  state: DesktopReviewState;
-};
-
-export type DesktopReviewGeneratedCommitMessage = {
-  message: string;
-};
-
-export type DesktopCommitMessageGenerationSource = {
-  branch: string | null;
-  status: string;
-  diff: string;
-};
-
 export type DesktopRuntimeBridge = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
+  cancelRequest(requestId: string): Promise<boolean>;
   linkAttachment(file: File): Promise<RuntimeStoredMessageAttachment | null>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
   readAttachmentImage(threadId: string, assetId: string): Promise<DesktopImageDataResult>;
@@ -289,20 +193,6 @@ export type SetsunaDesktopBridge = {
     dismissRetainedBackups(backupIds: string[]): Promise<DesktopDataRootActionResult>;
     onStateChange(callback: (state: DesktopDataRootState) => void): () => void;
   };
-  desktopReview: {
-    getState(workspaceRoot: string, options?: DesktopReviewStateOptions): Promise<DesktopReviewState>;
-    createImagePreview(workspaceRoot: string, input: DesktopReviewImagePreviewInput): Promise<DesktopReviewImagePreviewResult>;
-    releaseImagePreview(previewId: string): Promise<boolean>;
-    watchChanges(workspaceRoot: string, callback: () => void): () => void;
-    discardUnstaged(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
-    stageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
-    unstageFiles(workspaceRoot: string, filePaths: string[]): Promise<DesktopReviewActionResult>;
-    checkoutBranch(workspaceRoot: string, branchName: string): Promise<DesktopReviewState>;
-    createBranch(workspaceRoot: string, branchName: string, options?: DesktopReviewCreateBranchOptions): Promise<DesktopReviewState>;
-    commit(workspaceRoot: string, input: DesktopReviewCommitInput): Promise<DesktopReviewCommitResult>;
-    push(workspaceRoot: string): Promise<DesktopReviewPushResult>;
-    generateCommitMessage(workspaceRoot: string, input?: { includeUnstaged?: boolean }): Promise<DesktopReviewGeneratedCommitMessage>;
-  };
   links: {
     openExternal(url: string): Promise<boolean>;
   };
@@ -322,15 +212,6 @@ export type SetsunaDesktopBridge = {
     installLocal(): Promise<RuntimePluginInstallResult | null>;
   };
   runtime: DesktopRuntimeBridge;
-  terminal: {
-    open(workspaceRoot?: string | null, cols?: number, rows?: number): Promise<DesktopTerminalSession>;
-    write(sessionId: string, input: string): Promise<boolean>;
-    read(sessionId: string): Promise<DesktopTerminalEvent[]>;
-    resize(sessionId: string, cols: number, rows: number): Promise<boolean>;
-    restart(sessionId: string, cols?: number, rows?: number): Promise<boolean>;
-    close(sessionId: string): Promise<boolean>;
-    onEvent(sessionId: string, callback: (event: DesktopTerminalEvent) => void): () => void;
-  };
   updater: {
     getState(): Promise<DesktopUpdateState>;
     checkForUpdates(): Promise<DesktopUpdateState>;

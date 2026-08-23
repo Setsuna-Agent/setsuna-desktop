@@ -1,0 +1,64 @@
+{
+  "name": "@setsuna-desktop/feature-core",
+  "version": "0.1.0",
+  "description": "Process-safe feature composition kernel for Setsuna Desktop.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./capability": {
+      "types": "./dist/capability.d.ts",
+      "default": "./dist/capability.js"
+    },
+    "./codec": {
+      "types": "./dist/codec.d.ts",
+      "default": "./dist/codec.js"
+    },
+    "./definition": {
+      "types": "./dist/definition.d.ts",
+      "default": "./dist/definition.js"
+    },
+    "./events": {
+      "types": "./dist/events.d.ts",
+      "default": "./dist/events.js"
+    },
+    "./scope": {
+      "types": "./dist/scope.d.ts",
+      "default": "./dist/scope.js"
+    },
+    "./operation": {
+      "types": "./dist/operation.d.ts",
+      "default": "./dist/operation.js"
+    },
+    "./settings": {
+      "types": "./dist/settings.d.ts",
+      "default": "./dist/settings.js"
+    },
+    "./status": {
+      "types": "./dist/status.d.ts",
+      "default": "./dist/status.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "default": "./dist/renderer/index.js"
+    },
+    "./main": {
+      "types": "./dist/main/index.d.ts",
+      "default": "./dist/main/index.js"
+    },
+    "./preload": {
+      "types": "./dist/preload/index.d.ts",
+      "default": "./dist/preload/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1"
+  }
+}

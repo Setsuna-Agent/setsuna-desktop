@@ -43,8 +43,6 @@ export const RUNTIME_EVENT_TYPES = [
   'thread.deleted',
   'thread.metadata_updated',
   'thread.memory_mode_updated',
-  'thread.goal_updated',
-  'thread.goal_cleared',
   'thread.context_cleared',
   'thread.context_compacting',
   'thread.context_compacted',
@@ -88,9 +86,11 @@ export const RUNTIME_EVENT_TYPES = [
   'runtime.error',
 ] as const;
 
-export type RuntimeEventType = (typeof RUNTIME_EVENT_TYPES)[number];
+export type CoreRuntimeEventType = (typeof RUNTIME_EVENT_TYPES)[number];
+/** @deprecated Use CoreRuntimeEventType. */
+export type RuntimeEventType = CoreRuntimeEventType;
 
-export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
+export type RuntimeEventBase<TType extends string, TPayload> = {
   id: string;
   seq: number;
   threadId: string;
@@ -100,7 +100,21 @@ export type RuntimeEventBase<TType extends RuntimeEventType, TPayload> = {
   payload: TPayload;
 };
 
-export type RuntimeEvent =
+/** Structural transport shape; the contracts package stays independent of the Feature kernel. */
+export type StoredFeatureEventEnvelope = Readonly<{
+  id: string;
+  seq: number;
+  threadId: string;
+  turnId?: string;
+  type: 'feature.event';
+  createdAt: string;
+  featureId: string;
+  eventType: string;
+  schemaVersion: number;
+  payload: unknown;
+}>;
+
+export type CoreRuntimeEvent =
   | RuntimeEventBase<'thread.created', { title: string; modelBinding?: RuntimeThreadModelBinding }>
   | RuntimeEventBase<'thread.updated', {
       title?: string;
@@ -110,24 +124,6 @@ export type RuntimeEvent =
   | RuntimeEventBase<'thread.deleted', Record<string, never>>
   | RuntimeEventBase<'thread.metadata_updated', { gitInfo: RuntimeGitInfo | null }>
   | RuntimeEventBase<'thread.memory_mode_updated', { mode: RuntimeThreadMemoryMode; reason?: string }>
-  | RuntimeEventBase<'thread.goal_updated', {
-      goal: RuntimeThreadGoal;
-      queuedInputId?: string;
-      /**
-       * 队列 Goal 首次启动时，与目标状态原子落盘的可见用户消息。
-       * 状态/计量更新不携带该字段。
-       */
-      sourceMessage?: RuntimeMessage;
-      /** Completion marker committed with the final accounted Goal snapshot. */
-      lifecycleMessage?: RuntimeMessage;
-      /** 计量/状态更新可复用既有执行选项，避免在每轮事件中重复内联附件数据。 */
-      preserveExecution?: boolean;
-    }>
-  | RuntimeEventBase<'thread.goal_cleared', {
-      cleared: boolean;
-      /** 与 Goal 清除状态原子提交，避免只留下生命周期标记或只清掉状态。 */
-      lifecycleMessage?: RuntimeMessage;
-    }>
   | RuntimeEventBase<'thread.context_cleared', { clearedMessageCount: number }>
   | RuntimeEventBase<
       'thread.context_compacting',
@@ -218,9 +214,42 @@ export type RuntimeEvent =
   | RuntimeEventBase<'runtime.warning', { message: string; code?: string }>
   | RuntimeEventBase<'runtime.error', { message: string; code?: string }>;
 
+/**
+ * Read-only compatibility records written before Goal became a Feature. New
+ * append APIs must use the Feature envelope instead.
+ */
+export type LegacyRuntimeGoalEvent =
+  | RuntimeEventBase<'thread.goal_updated', {
+      goal: RuntimeThreadGoal;
+      queuedInputId?: string;
+      sourceMessage?: RuntimeMessage;
+      lifecycleMessage?: RuntimeMessage;
+      preserveExecution?: boolean;
+    }>
+  | RuntimeEventBase<'thread.goal_cleared', {
+      cleared: boolean;
+      lifecycleMessage?: RuntimeMessage;
+    }>;
+
+/** @deprecated Core-only code should use CoreRuntimeEvent. */
+export type RuntimeEvent = CoreRuntimeEvent;
+export type PendingRuntimeEvent = RuntimeEvent extends infer TEvent
+  ? TEvent extends RuntimeEvent
+    ? Omit<TEvent, 'seq'>
+    : never
+  : never;
+
+export type StoredThreadEvent = CoreRuntimeEvent | StoredFeatureEventEnvelope | LegacyRuntimeGoalEvent;
+type WritableStoredThreadEvent = CoreRuntimeEvent | StoredFeatureEventEnvelope;
+export type PendingStoredThreadEvent = WritableStoredThreadEvent extends infer TEvent
+  ? TEvent extends WritableStoredThreadEvent
+    ? Omit<TEvent, 'seq'>
+    : never
+  : never;
+
 /** Ordered delivery unit used across the Electron bridge. */
 export type RuntimeEventBatch = {
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   resync?: RuntimeEventResync;
 };
 
@@ -232,5 +261,5 @@ export type RuntimeEventResync = {
 };
 
 export type RuntimeSseEnvelope = {
-  event: RuntimeEvent;
+  event: StoredThreadEvent;
 };

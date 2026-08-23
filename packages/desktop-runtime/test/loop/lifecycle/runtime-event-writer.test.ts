@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { StoredThreadEvent } from '@setsuna-desktop/contracts';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -184,7 +184,7 @@ describe('runtime event writer', () => {
     const eventBus = new InMemoryEventBus();
     const writer = new RuntimeEventWriter(store, eventBus, 10_000);
     const thread = await store.createThread({ title: 'Delta batching' });
-    const published: RuntimeEvent[] = [];
+    const published: StoredThreadEvent[] = [];
     eventBus.subscribe(thread.id, (event) => published.push(event));
     const createdAt = systemClock.now().toISOString();
 
@@ -414,7 +414,7 @@ describe('runtime event writer', () => {
     const writer = new RuntimeEventWriter(store, eventBus, 10_000);
     const thread = await store.createThread({ title: 'Structured delta batching' });
     const createdAt = systemClock.now().toISOString();
-    const published: RuntimeEvent[] = [];
+    const published: StoredThreadEvent[] = [];
     eventBus.subscribe(thread.id, (event) => published.push(event));
 
     const deltas = [

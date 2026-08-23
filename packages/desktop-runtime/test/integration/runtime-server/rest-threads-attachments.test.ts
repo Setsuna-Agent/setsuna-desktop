@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MAX_IN_MEMORY_RASTER_IMAGE_BYTES } from '../../../src/utils/safe-image.js';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 import {
+  createDelayedOpenAiCaptureServer,
   createOpenAiCaptureServer,
   withTimeout
 } from '../../support/runtime-server/shared.js';
@@ -41,25 +42,25 @@ describe('runtime server REST threads and attachments', () => {
         body: JSON.stringify({ title: 'Invalid REST goal patch' }),
       });
       const response = await fetch(
-        `${harness.baseUrl}/v1/threads/${encodeURIComponent(created.id)}/goal`,
+        `${harness.baseUrl}/v1/features/goal/threads/${encodeURIComponent(created.id)}/state`,
         {
-          method: 'PUT',
+          method: 'PATCH',
           headers: {
             Authorization: `Bearer ${harness.token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ status: 'bogus' }),
+          body: JSON.stringify({ patch: { status: 'bogus' } }),
         },
       );
 
       expect(response.status).toBe(400);
       await expect(response.json()).resolves.toMatchObject({
-        code: 'invalid_input',
-        error: 'Unsupported goal status: bogus',
+        code: 'INVALID_INPUT',
+        error: 'Feature operation input is invalid.',
       });
       await expect(
-        harness.runtimeFetch(`/v1/threads/${encodeURIComponent(created.id)}`),
-      ).resolves.not.toHaveProperty('goal');
+        harness.runtimeFetch(`/v1/features/goal/threads/${encodeURIComponent(created.id)}/state`),
+      ).resolves.toMatchObject({ state: { goal: null } });
     });
   
   it('uploads and deletes validated pending document attachments', async () => {
@@ -118,6 +119,7 @@ describe('runtime server REST threads and attachments', () => {
         });
         const request = await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for attachment model request');
         const serializedMessages = JSON.stringify(request.messages ?? []);
+        const messageText = flattenStringValues(request.messages ?? []).join('\n');
         const updated = await harness.waitForThread(
           thread.id,
           (item) => item.messages.some((message) => message.turnId === started.turnId && message.role === 'user'),
@@ -125,10 +127,10 @@ describe('runtime server REST threads and attachments', () => {
   
         expect(serializedMessages).toContain('User attachments available to this thread');
         expect(serializedMessages).toContain('notes.txt');
-        expect(serializedMessages).toContain(canonicalSourcePath);
-        expect(serializedMessages).toContain('do not grant additional write access');
-        expect(serializedMessages).toContain('Existing workspace permissions still apply');
-        expect(serializedMessages).not.toContain('plugin-readable local file');
+        expect(messageText).toContain(JSON.stringify(canonicalSourcePath).slice(1, -1));
+        expect(messageText).toContain('do not grant additional write access');
+        expect(messageText).toContain('Existing workspace permissions still apply');
+        expect(messageText).not.toContain('plugin-readable local file');
         expect(updated.messages.find((message) => message.turnId === started.turnId && message.role === 'user'))
           .toMatchObject({ attachments: [expect.objectContaining({ source: 'runtime', name: 'notes.txt' })] });
       } finally {
@@ -224,7 +226,8 @@ describe('runtime server REST threads and attachments', () => {
           'Timed out waiting for oversized image model request',
         );
         const serializedRequest = JSON.stringify(request);
-        expect(serializedRequest).toContain(canonicalSourcePath);
+        expect(flattenStringValues(request.messages ?? []).join('\n'))
+          .toContain(JSON.stringify(canonicalSourcePath).slice(1, -1));
         expect(serializedRequest).not.toContain('input_image');
         expect(serializedRequest).not.toContain('image_url');
 
@@ -391,57 +394,54 @@ describe('runtime server REST threads and attachments', () => {
       expect(list.threads).toMatchObject([{ id: created.id, memoryMode: 'enabled' }]);
     });
 
-  it('sets, clears, and deletes a thread through first-party REST commands', async () => {
+  it('updates and clears Goal Feature state, then deletes the Core thread', async () => {
       const created = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',
         body: JSON.stringify({ title: 'REST thread commands' }),
       });
       const threadPath = `/v1/threads/${encodeURIComponent(created.id)}`;
+      const goalPath = `/v1/features/goal/threads/${encodeURIComponent(created.id)}/state`;
 
-      const goalResult = await harness.runtimeFetch(`${threadPath}/goal`, {
-        method: 'PUT',
+      const goalResult = await harness.runtimeFetch(goalPath, {
+        method: 'PATCH',
         body: JSON.stringify({
-          objective: 'Keep the first-party runtime boundary small.',
-          status: 'paused',
+          patch: {
+            objective: 'Keep the first-party runtime boundary small.',
+            status: 'paused',
+          },
         }),
       });
       expect(goalResult).toMatchObject({
-        goal: {
-          threadId: created.id,
-          objective: 'Keep the first-party runtime boundary small.',
-          status: 'paused',
-          tokenBudget: null,
-        },
-        thread: {
-          id: created.id,
-          goal: expect.objectContaining({ objective: 'Keep the first-party runtime boundary small.' }),
+        state: {
+          goal: {
+            threadId: created.id,
+            objective: 'Keep the first-party runtime boundary small.',
+            status: 'paused',
+            tokenBudget: null,
+          },
         },
       });
-      await expect(harness.runtimeFetch(threadPath)).resolves.toMatchObject({
-        id: created.id,
-        goal: expect.objectContaining({ objective: goalResult.goal.objective }),
+      await expect(harness.runtimeFetch(goalPath)).resolves.toMatchObject({
+        state: { goal: expect.objectContaining({ objective: goalResult.state.goal.objective }) },
       });
-      await expect(harness.runtimeFetch(`${threadPath}/goal`, {
-        method: 'PUT',
-        body: JSON.stringify({ objective: 'Unsupported budget', tokenBudget: 1_000 }),
-      })).rejects.toThrow('Goal token budgets are no longer supported');
+      await expect(harness.runtimeFetch(threadPath)).resolves.not.toHaveProperty('goal');
+      await expect(harness.runtimeFetch(goalPath, {
+        method: 'PATCH',
+        body: JSON.stringify({ patch: { objective: 'Unsupported budget', tokenBudget: 1_000 } }),
+      })).rejects.toThrow('Feature operation input is invalid.');
 
-      const clearedResult = await harness.runtimeFetch(`${threadPath}/goal`, {
+      const clearedResult = await harness.runtimeFetch(goalPath, {
         method: 'DELETE',
       });
       expect(clearedResult).toMatchObject({
-        cleared: true,
-        thread: { id: created.id },
+        state: { goal: null },
       });
-      expect(clearedResult.thread).not.toHaveProperty('goal');
-      const emptyClearResult = await harness.runtimeFetch(`${threadPath}/goal`, {
+      const emptyClearResult = await harness.runtimeFetch(goalPath, {
         method: 'DELETE',
       });
       expect(emptyClearResult).toMatchObject({
-        cleared: false,
-        thread: { id: created.id },
+        state: { goal: null },
       });
-      expect(emptyClearResult.thread).not.toHaveProperty('goal');
 
       await expect(harness.runtimeFetch(threadPath, {
         method: 'DELETE',
@@ -449,7 +449,67 @@ describe('runtime server REST threads and attachments', () => {
       const threads = await harness.runtimeFetch('/v1/threads?includeArchived=true');
       expect(threads.threads.some((thread: { id: string }) => thread.id === created.id)).toBe(false);
     });
-  
+
+  it('maps missing Goal threads and queued Goal conflicts to declared business errors', async () => {
+    const missing = await fetch(`${harness.baseUrl}/v1/features/goal/threads/thread_missing/state`, {
+      headers: { Authorization: `Bearer ${harness.token}` },
+    });
+    expect(missing.status).toBe(404);
+    await expect(missing.json()).resolves.toMatchObject({
+      code: 'THREAD_NOT_FOUND',
+      error: 'Thread not found.',
+      retryable: false,
+    });
+
+    const capture = await createDelayedOpenAiCaptureServer();
+    try {
+      await harness.configureOpenAiProvider('goal-conflict-provider', capture.baseUrl);
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Goal conflict mapping' }),
+      });
+      await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
+        method: 'POST',
+        body: JSON.stringify({ input: 'Keep this turn active.' }),
+      });
+      await withTimeout(capture.nextBody, harness.providerCaptureTimeoutMs, 'Timed out waiting for Goal conflict provider request');
+      const queued = await harness.runtimeFetch(
+        `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ input: 'Queued Goal', kind: 'goal' }),
+        },
+      );
+
+      const conflict = await fetch(
+        `${harness.baseUrl}/v1/features/goal/threads/${encodeURIComponent(thread.id)}/state`,
+        {
+          method: 'PATCH',
+          headers: {
+            Authorization: `Bearer ${harness.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ patch: { objective: 'Conflicting Goal', status: 'active' } }),
+        },
+      );
+      expect(conflict.status).toBe(409);
+      await expect(conflict.json()).resolves.toMatchObject({
+        code: 'GOAL_CONFLICT',
+        retryable: false,
+      });
+
+      await harness.runtimeFetch(
+        `/v1/threads/${encodeURIComponent(thread.id)}/queued-turn-inputs/${encodeURIComponent(queued.queuedInputId)}`,
+        { method: 'DELETE' },
+      );
+      capture.release();
+      await harness.waitForThread(thread.id, (item) => item.activeTurnId === null);
+    } finally {
+      capture.release();
+      await capture.close();
+    }
+  });
+
   it('updates thread memory mode through the AppServer RPC', async () => {
       const started = await harness.appServerRpc('thread/start', { name: 'AppServer memory mode', cwd: process.cwd() });
   
@@ -483,3 +543,10 @@ describe('runtime server REST threads and attachments', () => {
       });
     });
 });
+
+function flattenStringValues(value: unknown): string[] {
+  if (typeof value === 'string') return [value];
+  if (Array.isArray(value)) return value.flatMap(flattenStringValues);
+  if (!value || typeof value !== 'object') return [];
+  return Object.values(value).flatMap(flattenStringValues);
+}

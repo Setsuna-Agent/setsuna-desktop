@@ -1,15 +1,14 @@
 import type {
   AnswerRuntimeApprovalInput,
+  CoreRuntimeEvent,
   RuntimeConfiguredModelReference,
   DesktopRuntimeClient,
-  RuntimeEvent,
   RuntimeReviewTarget,
   RuntimeThread,
-  RuntimeThreadGoalPatch,
   RuntimeThreadSummary,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
-import { isRuntimeActivityEvent } from '@setsuna-desktop/contracts';
+import { isCoreRuntimeEvent, isRuntimeActivityEvent } from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -20,6 +19,7 @@ import {
 } from 'react';
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { isPrimaryConversationThread } from '../../features/chat/subagents/collaborationTaskView.js';
+import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
@@ -42,13 +42,11 @@ export type RuntimeThreadClient = Pick<
   DesktopRuntimeClient,
   | 'answerApproval'
   | 'clearThreadContext'
-  | 'clearThreadGoal'
   | 'compactThreadContext'
   | 'createThread'
   | 'deleteThread'
   | 'getThread'
   | 'listThreads'
-  | 'setThreadGoal'
   | 'startReview'
   | 'subscribeEvents'
   | 'updateThread'
@@ -89,11 +87,12 @@ export function useRuntimeThreadState({
   setActiveProjectId,
 }: RuntimeThreadStateOptions) {
   const { locale, t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
-  const [activityEvents, setActivityEvents] = useState<RuntimeEvent[]>([]);
+  const [activityEvents, setActivityEvents] = useState<CoreRuntimeEvent[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const initializedSelectionRef = useRef(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -272,6 +271,9 @@ export function useRuntimeThreadState({
         setCurrentThreadState(projection.thread);
 
         if (projection.resynced) {
+          if (projection.thread) {
+            featureViews.events.advance(projection.thread.id, projection.thread.lastSeq);
+          }
           setActivityEvents([]);
           terminalTurnIdsRef.current.clear();
           setActiveTurnId(activeTurnIdFromThreadSnapshot(
@@ -281,13 +283,15 @@ export function useRuntimeThreadState({
           refreshThreadsSoon(true);
         }
 
-        const activityBatch = projection.acceptedEvents.filter(isRuntimeActivityEvent);
+        for (const event of projection.acceptedEvents) featureViews.events.accept(event);
+        const coreEvents = projection.acceptedEvents.filter(isCoreRuntimeEvent);
+        const activityBatch = coreEvents.filter(isRuntimeActivityEvent);
         if (activityBatch.length) {
           setActivityEvents((items) => mergeRecentActivityEvents(items, activityBatch));
         }
-        const terminalTurnEvent = projection.acceptedEvents.some(isTerminalTurnEvent);
+        const terminalTurnEvent = coreEvents.some(isTerminalTurnEvent);
         refreshThreadsSoon(terminalTurnEvent);
-        const activeTurnEvents = projection.acceptedEvents.filter((event) => (
+        const activeTurnEvents = coreEvents.filter((event) => (
           event.type === 'turn.started' || isTerminalTurnEvent(event)
         ));
         for (const event of activeTurnEvents) {
@@ -302,7 +306,7 @@ export function useRuntimeThreadState({
             return next === event.turnId ? null : next;
           }, active));
         }
-        for (const event of projection.acceptedEvents) {
+        for (const event of coreEvents) {
           if (event.type === 'runtime.error') onError(event.payload.message);
           if (event.type !== 'turn.completed') continue;
           const refreshUsage = Boolean(event.payload.usage);
@@ -318,11 +322,10 @@ export function useRuntimeThreadState({
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThreadId, onError, onTurnSettled, refreshThreadsSoon]);
+  }, [client, currentThreadId, featureViews.events, onError, onTurnSettled, refreshThreadsSoon]);
 
   useEffect(() => {
-    const recoveringActiveGoal = currentThread?.goal?.status === 'active';
-    if ((!effectiveActiveTurnId && !recoveringActiveGoal) || !currentThreadId) {
+    if (!effectiveActiveTurnId || !currentThreadId) {
       return undefined;
     }
     let cancelled = false;
@@ -355,7 +358,7 @@ export function useRuntimeThreadState({
             terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
             setActiveTurnId(snapshotActiveTurnId);
           } else {
-            continuePolling = nextThread.goal?.status === 'active';
+            continuePolling = false;
           }
         } else if (!snapshotActiveTurnId) {
           terminalTurnIdsRef.current.add(turnId);
@@ -366,7 +369,7 @@ export function useRuntimeThreadState({
             refreshUsage: true,
             refreshThreadUsage: false,
           });
-          continuePolling = nextThread.goal?.status === 'active';
+          continuePolling = false;
         } else if (snapshotActiveTurnId !== turnId) {
           terminalTurnIdsRef.current.delete(snapshotActiveTurnId);
           setActiveTurnId(snapshotActiveTurnId);
@@ -389,7 +392,6 @@ export function useRuntimeThreadState({
   }, [
     adoptSnapshot,
     client,
-    currentThread?.goal?.status,
     currentThreadId,
     effectiveActiveTurnId,
     onTurnSettled,
@@ -453,24 +455,6 @@ export function useRuntimeThreadState({
     reloadThreads,
     setCurrentThread,
   ]);
-
-  const clearCurrentThreadGoal = useCallback(async () => {
-    if (!currentThread) return false;
-    const threadId = currentThread.id;
-    const result = await client.clearThreadGoal(threadId);
-    adoptSnapshot(threadId, result.thread);
-    await reloadThreads();
-    return result.cleared;
-  }, [adoptSnapshot, client, currentThread, reloadThreads]);
-
-  const updateCurrentThreadGoal = useCallback(async (patch: RuntimeThreadGoalPatch) => {
-    if (!currentThread) return null;
-    const threadId = currentThread.id;
-    const result = await client.setThreadGoal(threadId, patch);
-    adoptSnapshot(threadId, result.thread);
-    await reloadThreads();
-    return result.goal;
-  }, [adoptSnapshot, client, currentThread, reloadThreads]);
 
   const restoreArchivedThread = useCallback(async (threadId: string) => {
     const restored = await client.updateThread(threadId, { archived: false });
@@ -564,7 +548,6 @@ export function useRuntimeThreadState({
     applyBootstrapThreads,
     archivedThreads,
     clearCurrentThreadContext,
-    clearCurrentThreadGoal,
     compactCurrentThreadContext,
     contextCompacting,
     currentThread,
@@ -577,20 +560,19 @@ export function useRuntimeThreadState({
     startCurrentThreadReview,
     terminalTurnIdsRef,
     threads,
-    updateCurrentThreadGoal,
   };
 }
 
-function isTerminalTurnEvent(event: RuntimeEvent): boolean {
+function isTerminalTurnEvent(event: CoreRuntimeEvent): boolean {
   return event.type === 'turn.completed'
     || event.type === 'turn.cancelled'
     || event.type === 'runtime.error';
 }
 
 function mergeRecentActivityEvents(
-  current: RuntimeEvent[],
-  incoming: RuntimeEvent[],
-): RuntimeEvent[] {
+  current: CoreRuntimeEvent[],
+  incoming: CoreRuntimeEvent[],
+): CoreRuntimeEvent[] {
   const seen = new Set<string>();
   return [...incoming].reverse().concat(current).filter((event) => {
     if (seen.has(event.id)) return false;

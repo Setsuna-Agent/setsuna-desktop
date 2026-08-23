@@ -13,7 +13,13 @@
     "baseUrl": ".",
     "paths": {
       "@renderer/*": ["apps/desktop/renderer/src/*"],
-      "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"]
+      "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"],
+      "@setsuna-desktop/feature-core/*": ["packages/feature-core/src/*"],
+      "@setsuna-desktop/feature-image-generation/*": ["packages/features/image-generation/src/*"],
+      "@setsuna-desktop/feature-goal/*": ["packages/features/goal/src/*"],
+      "@setsuna-desktop/feature-review/*": ["packages/features/review/src/*"],
+      "@setsuna-desktop/feature-terminal/*": ["packages/features/terminal/src/*"],
+      "@setsuna-desktop/feature-vision-recognition/*": ["packages/features/vision-recognition/src/*"]
     }
   },
   "include": [
@@ -23,6 +29,12 @@
     "apps/desktop/renderer/test/**/*.tsx"
   ],
   "references": [
-    { "path": "./packages/contracts/tsconfig.build.json" }
+    { "path": "./packages/contracts/tsconfig.build.json" },
+    { "path": "./packages/feature-core/tsconfig.build.json" },
+    { "path": "./packages/features/image-generation/tsconfig.build.json" },
+    { "path": "./packages/features/goal/tsconfig.build.json" },
+    { "path": "./packages/features/review/tsconfig.build.json" },
+    { "path": "./packages/features/terminal/tsconfig.build.json" },
+    { "path": "./packages/features/vision-recognition/tsconfig.build.json" }
   ]
 }

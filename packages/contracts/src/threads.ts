@@ -738,7 +738,6 @@ export type RuntimeThreadSummary = {
   archived: boolean;
   memoryMode?: RuntimeThreadMemoryMode;
   gitInfo?: RuntimeGitInfo | null;
-  goal?: RuntimeThreadGoal;
   messageCount: number;
   lastMessagePreview: string;
   /** Present only on search results when an older message matched the query. */

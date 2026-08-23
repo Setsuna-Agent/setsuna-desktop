@@ -313,7 +313,7 @@ describe('agent loop memory policy', () => {
       expect(modelClient.requests).toHaveLength(1);
       expect(modelClient.requests[0].messages.map((message) => message.content).join('\n')).toContain('concise verification notes');
       const toolNames = (modelClient.requests[0].tools ?? []).map((tool) => tool.name);
-      expect(toolNames).toEqual(['recall_memory', 'tool_search', 'read_tool_result', 'create_goal']);
+      expect(toolNames).toEqual(['recall_memory', 'tool_search', 'read_tool_result']);
       await expect(memoryStore.previewMemories()).resolves.toMatchObject({ total: 1 });
     });
   

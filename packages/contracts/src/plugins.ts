@@ -1,4 +1,3 @@
-import type { RuntimeGeneratedMessageAttachment } from './attachments.js';
 import type { RuntimeHookEventName } from './hooks.js';
 import type { RuntimeMcpTransport } from './mcp.js';
 
@@ -51,34 +50,10 @@ export type RuntimeExtensionTrustInput = { trusted: boolean };
 
 export const OPENAI_IMAGE_GENERATION_PLUGIN_ID = 'openai-image-generation';
 export const OPENAI_IMAGE_GENERATION_TOOL_NAME = 'generate_image';
-export const RUNTIME_IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS = 4_000;
 export const OPENAI_VISION_RECOGNITION_PLUGIN_ID = 'openai-vision-recognition';
 export const OPENAI_VISION_RECOGNITION_TOOL_NAME = 'analyze_image';
-export const RUNTIME_VISION_RECOGNITION_PROMPT_MAX_CHARS = 4_000;
 export const WEB_SEARCH_PLUGIN_ID = 'web-search';
 export const WEB_SEARCH_TOOL_NAME = 'web_search';
-
-export type RuntimeImageGenerationTestInput = {
-  prompt: string;
-};
-
-/** 插件配置页直连 Images API 后返回的安全结果，不包含服务地址、密钥或图片 Base64。 */
-export type RuntimeImageGenerationTestResult = {
-  images: RuntimeGeneratedMessageAttachment[];
-  durationMs: number;
-  model?: string;
-};
-
-export type RuntimeVisionRecognitionTestInput = {
-  prompt: string;
-};
-
-/** 配置页使用内置测试图片得到的文本结果，不包含 API key 或图片 Base64。 */
-export type RuntimeVisionRecognitionTestResult = {
-  content: string;
-  durationMs: number;
-  model?: string;
-};
 
 export type RuntimePluginSkill = {
   id: string;

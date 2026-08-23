@@ -2,7 +2,8 @@ import type {
   CreateThreadInput,
   MessageDeleteInput,
   MessagePatch,
-  RuntimeEvent,
+  PendingStoredThreadEvent,
+  StoredThreadEvent,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeThread,
@@ -30,7 +31,7 @@ export type ThreadStoreQuery = ThreadQuery & {
 };
 
 export type RuntimeEventReplay = {
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   latestSeq: number;
   retainedFromSeq: number;
   requiresResync: boolean;
@@ -58,7 +59,11 @@ export type ThreadStore = {
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   truncateMessagesAfter(threadId: string, messageId: string, includeSelf?: boolean): Promise<RuntimeThread>;
   clearThreadMessages(threadId: string): Promise<RuntimeThread>;
-  appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent>;
-  listEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEvent[]>;
+  appendEvent(threadId: string, event: PendingStoredThreadEvent): Promise<StoredThreadEvent>;
+  appendEvents?(
+    threadId: string,
+    events: readonly PendingStoredThreadEvent[],
+  ): Promise<StoredThreadEvent[]>;
+  listEvents(threadId: string, sinceSeq?: number): Promise<StoredThreadEvent[]>;
   replayEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEventReplay>;
 };

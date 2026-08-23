@@ -26,9 +26,15 @@ async function removeTsBuildInfoFiles(dir) {
 async function listPackageDirs() {
   const packagesDir = path.join(rootDir, 'packages');
   const entries = await listDir(packagesDir);
-  return entries
+  const directPackages = entries
     .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.name !== 'features')
     .map((entry) => path.join(packagesDir, entry.name));
+  const featurePackagesDir = path.join(packagesDir, 'features');
+  const featurePackages = (await listDir(featurePackagesDir))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(featurePackagesDir, entry.name));
+  return [...directPackages, ...featurePackages];
 }
 
 await rm(path.join(rootDir, 'dist'), { recursive: true, force: true });

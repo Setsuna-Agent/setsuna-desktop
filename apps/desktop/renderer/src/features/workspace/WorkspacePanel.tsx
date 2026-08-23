@@ -11,6 +11,7 @@ import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, 
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -20,6 +21,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
+import { TerminalFeaturePane } from '../../composition/TerminalFeaturePane.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
 import { ShortcutHint } from '../../shared/ui/ShortcutTooltip.js';
@@ -44,7 +46,7 @@ import type {
 } from './model.js';
 import { desktopPanelTitle } from './PanelChrome.js';
 import { DesktopReviewPanel } from './ReviewPanel.js';
-import { LazyTerminalPane } from './LazyTerminalPane.js';
+import type { DesktopReviewSource } from './review-types.js';
 import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
@@ -94,6 +96,7 @@ export function WorkspacePanel({
   onTerminalTitleChange,
   onReviewRefresh,
   onReviewBaseRefChange,
+  onReviewSourceChange,
   onRevealFile,
   onResizeStep,
   onResizeStart,
@@ -132,6 +135,7 @@ export function WorkspacePanel({
   onTerminalTitleChange?: (panelId: string, title: string) => void;
   onReviewRefresh: () => void;
   onReviewBaseRefChange: (baseRef: string) => void;
+  onReviewSourceChange: (source: DesktopReviewSource) => void;
   onRevealFile: (filePath: string) => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -156,6 +160,10 @@ export function WorkspacePanel({
   const query = treeQuery.trim().toLowerCase();
   const activeProjectLabel = activeProject?.name ?? t('workspace.files.noProject');
   const editorPath = filePreview ? `${activeProjectLabel}/${filePreview.path}` : activeProjectLabel;
+  const addReviewFileToConversation = useCallback(
+    (filePath: string) => onAddFileToConversation(workspaceFileMentionEntry(filePath)),
+    [onAddFileToConversation],
+  );
 
   useEffect(() => {
     if (!activeProject) {
@@ -371,18 +379,19 @@ export function WorkspacePanel({
         reviewState={reviewState}
         workspaceApp={selectedWorkspaceApp}
         workspaceApps={workspaceApps}
-        onAddFileToConversation={(filePath) => onAddFileToConversation(workspaceFileMentionEntry(filePath))}
+        onAddFileToConversation={addReviewFileToConversation}
         onCopyFilePath={onCopyFilePath}
         onExternalOpenFile={onExternalOpenFile}
         onOpenFileWithApp={onOpenFileWithApp}
         onOpenProjectFile={onOpenProjectFile}
         onRefresh={onReviewRefresh}
         onSelectBaseRef={onReviewBaseRefChange}
+        onSourceChange={onReviewSourceChange}
         onRevealFile={onRevealFile}
       />
     ) : activePanel.type === 'terminal' ? (
       <section className="desktop-workspace-terminal-panel" aria-label={desktopPanelTitle(activePanel, t)}>
-        <LazyTerminalPane
+        <TerminalFeaturePane
           session={terminalSession}
           onTitleChange={(title) => onTerminalTitleChange?.(activePanel.id, title)}
         />

@@ -73,7 +73,7 @@ Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git �
 
 ## Terminal
 
-`TerminalPane.tsx` 使用 xterm：
+Terminal presentation 位于 `packages/features/terminal/src/renderer/`；`apps/desktop/renderer/src/composition/TerminalFeaturePane.tsx` 只注入 preload bridge、i18n、外链和外观变更。Workspace hook 继续拥有 panel/project 对 session 的编排：
 
 1. 通过 preload 打开 main `node-pty` session。
 2. 订阅有 sequence 的 terminal event。
@@ -155,8 +155,8 @@ Conversation debug 有独立 `conversation-debug.css`，不要把图和虚拟列
 
 ## 测试
 
-Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser、review、icons、hooks、model 与 resize。
+Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser、review、icons、hooks、model 与 resize。Terminal 自有 renderer helper 测试位于 `packages/features/terminal/test/renderer/`。
 
 Conversation debug 测试位于 `test/unit/features/conversation-debug/`，重点覆盖 graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation 和 virtual window。
 
-Main 对应 review、terminal、browser、workspace tests 也必须随跨层改动更新。
+Main 对应 review、browser、workspace tests，以及 Terminal Feature integration tests，也必须随跨层改动更新。
