@@ -224,24 +224,24 @@ packages/feature-core/ — 5 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 114 total files
-├── goal/ — 2 direct / 31 total files
+packages/features/ — 0 direct / 117 total files
+├── goal/ — 2 direct / 32 total files
 │   ├── src/ — 25 files
 │   │   ├── contracts/ — 6 direct / 6 total files
 │   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── renderer/ — 9 direct / 9 total files
 │   │   └── runtime/ — 9 direct / 9 total files
-│   └── test/ — 4 files
-│       ├── renderer/ — 1 direct / 1 total files
+│   └── test/ — 5 files
+│       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 3 direct / 3 total files
-├── image-generation/ — 3 direct / 20 total files
+├── image-generation/ — 3 direct / 21 total files
 │   ├── src/ — 16 files
 │   │   ├── contracts/ — 5 direct / 5 total files
 │   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── renderer/ — 7 direct / 7 total files
 │   │   └── runtime/ — 3 direct / 3 total files
-│   └── test/ — 1 files
-│       └── runtime/ — 1 direct / 1 total files
+│   └── test/ — 2 files
+│       └── runtime/ — 2 direct / 2 total files
 ├── review/ — 2 direct / 21 total files
 │   ├── src/ — 15 files
 │   │   ├── contracts/ — 4 direct / 4 total files
@@ -263,14 +263,14 @@ packages/features/ — 0 direct / 114 total files
 │       ├── integration/ — 1 files
 │       │   └── main/ — 1 direct / 1 total files
 │       └── renderer/ — 2 direct / 2 total files
-└── vision-recognition/ — 2 direct / 18 total files
+└── vision-recognition/ — 2 direct / 19 total files
     ├── src/ — 15 files
     │   ├── contracts/ — 5 direct / 5 total files
     │   ├── generated/ — 1 direct / 1 total files
     │   ├── renderer/ — 6 direct / 6 total files
     │   └── runtime/ — 3 direct / 3 total files
-    └── test/ — 1 files
-        └── runtime/ — 1 direct / 1 total files
+    └── test/ — 2 files
+        └── runtime/ — 2 direct / 2 total files
 ```
 
 ### `packages/desktop-runtime/`

@@ -60,11 +60,12 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
     private readonly diagnose: () => Promise<FeatureSettingsDiagnosis>,
   ) {}
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     await this.refreshAppliedModel();
     this.scope.add(this.settings.subscribeRuntime(() => {
       void this.queueRefresh();
     }));
+    return this.applied !== null;
   }
 
   isAvailable(): Promise<boolean> {

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyChatComposerFocusRequest,
   ChatComposer,
-  composerActiveTurnStartedAt,
+  composerActiveTurn,
 } from '../../../../src/features/chat/ChatComposer.js';
 
 const composerHarness = vi.hoisted(() => ({
@@ -127,14 +127,16 @@ describe('ChatComposer view state characterization', () => {
     expect(consume).toHaveBeenCalledTimes(1);
   });
 
-  it('exposes the active turn start time to generic composer contributions', () => {
+  it('exposes neutral active turn metadata to composer contributions', () => {
     const thread = {
       turns: [{ id: 'turn-1', items: [], startedAt: '2026-08-10T00:00:00.000Z', taskKind: 'regular' }],
     } as unknown as RuntimeThread;
 
-    expect(composerActiveTurnStartedAt(thread, 'turn-1'))
-      .toBe('2026-08-10T00:00:00.000Z');
-    expect(composerActiveTurnStartedAt(thread, 'turn-2')).toBeUndefined();
+    expect(composerActiveTurn(thread, 'turn-1')).toEqual({
+      startedAt: '2026-08-10T00:00:00.000Z',
+      taskKind: 'regular',
+    });
+    expect(composerActiveTurn(thread, 'turn-2')).toBeUndefined();
   });
 
   beforeEach(() => {

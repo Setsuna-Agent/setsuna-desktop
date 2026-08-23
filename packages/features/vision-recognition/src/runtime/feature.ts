@@ -13,6 +13,7 @@ import {
   visionRecognitionRuntimeHostCapability,
   visionRecognitionServiceCapability,
   visionRecognitionSettings,
+  type VisionRecognitionModelSelection,
 } from '../contracts/index.js';
 import { RuntimeVisionRecognitionService } from './vision-recognition-service.js';
 
@@ -31,9 +32,11 @@ export const visionRecognitionRuntimeFeature = defineRuntimeFeature({
     const selection = context.dependencies.settings.open(
       visionRecognitionSettings.documents['model-selection'],
     );
+    let importedLegacy: VisionRecognitionModelSelection | undefined;
     if (!await selection.exists()) {
+      importedLegacy = await context.dependencies.host.readLegacySelection();
       await selection.initialize({
-        value: await context.dependencies.host.readLegacySelection(),
+        value: importedLegacy,
       });
     }
 
@@ -47,8 +50,10 @@ export const visionRecognitionRuntimeFeature = defineRuntimeFeature({
         visionRecognitionSettings.documents['model-selection'].documentId,
       ),
     );
-    await service.initialize();
-    await context.dependencies.host.retireLegacySelection();
+    const settingsApplied = await service.initialize();
+    if (shouldRetireLegacyVisionSelection(settingsApplied, importedLegacy)) {
+      await context.dependencies.host.retireLegacySelection();
+    }
 
     context.dependencies.routes.register(
       context.scope,
@@ -68,3 +73,10 @@ export const visionRecognitionRuntimeFeature = defineRuntimeFeature({
     context.provide(declareCapabilityProvider(visionRecognitionServiceCapability), service);
   },
 });
+
+function shouldRetireLegacyVisionSelection(
+  settingsApplied: boolean,
+  importedLegacy: VisionRecognitionModelSelection | undefined,
+): boolean {
+  return settingsApplied || importedLegacy === null;
+}

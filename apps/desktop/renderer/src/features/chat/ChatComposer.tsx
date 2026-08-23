@@ -12,6 +12,7 @@ import type {
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ComposerActiveTurn } from '@setsuna-desktop/feature-core/renderer';
 import {
   useCallback,
   useEffect,
@@ -80,13 +81,17 @@ export function applyChatComposerFocusRequest(
   if (focusRequest !== 0) onConsumed?.(focusRequest);
 }
 
-export function composerActiveTurnStartedAt(
+export function composerActiveTurn(
   thread: RuntimeThread | null | undefined,
   activeTurnId: string | null,
-): string | undefined {
+): ComposerActiveTurn | undefined {
   if (!thread || !activeTurnId) return undefined;
   const turn = thread.turns?.find((candidate) => candidate.id === activeTurnId);
-  return turn?.startedAt;
+  if (!turn) return undefined;
+  return {
+    ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
+    ...(turn.taskKind ? { taskKind: turn.taskKind } : {}),
+  };
 }
 
 export function ChatComposer({
@@ -226,8 +231,8 @@ export function ChatComposer({
   useEffect(() => {
     if (pendingMatchesPersisted) setPendingModelSelection(null);
   }, [pendingMatchesPersisted]);
-  const activeComposerTurnStartedAt = useMemo(
-    () => composerActiveTurnStartedAt(currentThread, activeTurnId),
+  const activeComposerTurn = useMemo(
+    () => composerActiveTurn(currentThread, activeTurnId),
     [activeTurnId, currentThread?.turns],
   );
   const modeController = useChatComposerModeController({
@@ -725,7 +730,7 @@ export function ChatComposer({
             )}
           >
             <StatusView
-              activeTurnStartedAt={activeComposerTurnStartedAt}
+              activeTurn={activeComposerTurn}
               threadId={currentThread.id}
               translate={t}
             />

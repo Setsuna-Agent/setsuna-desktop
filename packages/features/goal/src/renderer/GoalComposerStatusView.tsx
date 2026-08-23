@@ -2,6 +2,7 @@ import { Input, Modal } from 'antd';
 import { Pause, Pencil, Play, RefreshCw, Target, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
+  ComposerActiveTurn,
   ComposerStatusViewHostProps,
   RendererFeatureEventFeed,
 } from '@setsuna-desktop/feature-core/renderer';
@@ -24,7 +25,7 @@ const INITIAL_SNAPSHOT: GoalRendererControllerSnapshot = Object.freeze({
 });
 
 export function GoalComposerStatusView({
-  activeTurnStartedAt,
+  activeTurn,
   client,
   feed,
   scope,
@@ -58,13 +59,17 @@ export function GoalComposerStatusView({
   }
   return (
     <GoalStatus
-      activeTurnStartedAt={activeTurnStartedAt}
+      activeTurnStartedAt={goalActiveTurnStartedAt(activeTurn)}
       controller={() => controllerRef.current}
       goal={snapshot.goal}
       projectionError={snapshot.error}
       translate={translate}
     />
   );
+}
+
+export function goalActiveTurnStartedAt(activeTurn?: ComposerActiveTurn): string | undefined {
+  return activeTurn?.taskKind === 'goal' ? activeTurn.startedAt : undefined;
 }
 
 function GoalStatus({

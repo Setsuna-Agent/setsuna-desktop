@@ -95,6 +95,7 @@ export {
   rendererToolResultViewRegistryCapability,
 } from './views.js';
 export type {
+  ComposerActiveTurn,
   ComposerStatusViewContribution,
   ComposerStatusViewHostProps,
   ComposerStatusViewRegistry,

@@ -77,12 +77,13 @@ export class RuntimeImageGenerationService implements ImageGenerationService {
     private readonly diagnose: () => Promise<FeatureSettingsDiagnosis>,
   ) {}
 
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     await this.refreshAppliedConnection();
     const unsubscribe = this.settings.subscribeRuntime(() => {
       void this.queueRefresh();
     });
     this.scope.add(unsubscribe);
+    return this.applied !== null;
   }
 
   async isAvailable(): Promise<boolean> {

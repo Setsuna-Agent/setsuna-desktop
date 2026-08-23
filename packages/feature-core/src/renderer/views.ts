@@ -7,8 +7,13 @@ import type { RendererTranslate } from './messages.js';
 
 export type SettingsViewLocation = 'settings' | 'capabilities';
 
+export type ComposerActiveTurn = Readonly<{
+  startedAt?: string;
+  taskKind?: string;
+}>;
+
 export type ComposerStatusViewHostProps = Readonly<{
-  activeTurnStartedAt?: string;
+  activeTurn?: ComposerActiveTurn;
   threadId: string;
   translate: RendererTranslate;
 }>;

@@ -5,6 +5,7 @@ import type {
   RendererFeatureEventFeedListener,
 } from '@setsuna-desktop/feature-core/renderer';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { FeatureScopeUnavailableError } from '@setsuna-desktop/feature-core/status';
 
 type Subscription = Readonly<{
   featureId: FeatureScope['owner']['featureId'];
@@ -21,6 +22,9 @@ export class RendererFeatureEventHub implements RendererFeatureEventFeed {
     listener: RendererFeatureEventFeedListener,
   ): Readonly<{ dispose(): void }> {
     if (!threadId.trim()) throw new Error('Feature event feed threadId is required.');
+    if (scope.state === 'draining' || scope.state === 'disposed') {
+      throw new FeatureScopeUnavailableError('Cannot subscribe after Feature draining has begun.');
+    }
     const subscription = Object.freeze({
       featureId: scope.owner.featureId,
       listener,
@@ -32,12 +36,16 @@ export class RendererFeatureEventHub implements RendererFeatureEventFeed {
     const dispose = () => {
       if (disposed) return;
       disposed = true;
+      scope.signal.removeEventListener('abort', dispose);
       subscriptions.delete(subscription);
       if (!subscriptions.size && this.subscriptionsByThread.get(threadId) === subscriptions) {
         this.subscriptionsByThread.delete(threadId);
       }
     };
-    scope.add(dispose);
+    // Component subscriptions are shorter-lived than the Feature scope. A
+    // removable abort listener preserves scope shutdown without retaining every
+    // unmounted controller in the scope's disposer stack.
+    scope.signal.addEventListener('abort', dispose, { once: true });
     return Object.freeze({ dispose });
   }
 

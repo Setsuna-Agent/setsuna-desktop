@@ -55,6 +55,20 @@ describe('RendererFeatureEventHub', () => {
 
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it('releases its scope listener when a component subscription is disposed', () => {
+    const hub = new RendererFeatureEventHub();
+    const owner = scope('goal');
+    const listener = vi.fn();
+    const removeEventListener = vi.spyOn(owner.scope.signal, 'removeEventListener');
+    const subscription = hub.subscribe(owner.scope, 'thread_1', listener);
+
+    subscription.dispose();
+    hub.advance('thread_1', 8);
+
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
 
 function scope(id: string) {

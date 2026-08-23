@@ -372,6 +372,20 @@ export function runtimeEventToSweNotifications(event: SweMappableRuntimeEvent, s
     const message = event.payload.message;
     if (message.visibility === 'model') return [];
     if (!turnId || message.role === 'tool') return [];
+    const turnKey = turnDiffKey(event.threadId, turnId);
+    if (
+      state
+      && event.payload.queuedInputId
+      && message.role === 'user'
+      && message.inputKind === 'goal'
+      && !state.turnStartedAtMs.has(turnKey)
+    ) {
+      // A queued Goal persists its visible source message before Core starts the
+      // continuation. Keep the SWE item behind turn/started while preserving
+      // that durable ordering for Goal attachment and replay semantics.
+      state.pendingGoalSourceMessages.set(turnKey, event);
+      return [];
+    }
     if (message.role === 'system' || message.role === 'developer') {
       if (!message.reviewMode) return [];
       const item = reviewModeItem(turnId, message.reviewMode);

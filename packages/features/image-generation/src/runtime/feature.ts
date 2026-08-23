@@ -15,6 +15,7 @@ import {
   imageGenerationServiceCapability,
   imageGenerationSettings,
   imageGenerationWorkspaceFilesCapability,
+  type LegacyImageGenerationSettings,
   readImageGenerationSettings,
   testImageGenerationConnection,
   updateImageGenerationSettings,
@@ -38,11 +39,12 @@ export const imageGenerationRuntimeFeature = defineRuntimeFeature({
   settings: [imageGenerationSettings],
   async setup(context) {
     const connection = context.dependencies.settings.open(imageGenerationSettings.documents.connection);
+    let importedLegacy: LegacyImageGenerationSettings | null = null;
     if (!await connection.exists()) {
-      const legacy = await context.dependencies.legacySettings.read();
+      importedLegacy = await context.dependencies.legacySettings.read();
       await connection.initialize({
-        value: legacy.connection,
-        ...(legacy.apiKey ? { secrets: { 'api-key': legacy.apiKey } } : {}),
+        value: importedLegacy.connection,
+        ...(importedLegacy.apiKey ? { secrets: { 'api-key': importedLegacy.apiKey } } : {}),
       });
     }
 
@@ -59,8 +61,10 @@ export const imageGenerationRuntimeFeature = defineRuntimeFeature({
         imageGenerationSettings.documents.connection.documentId,
       ),
     );
-    await service.initialize();
-    await context.dependencies.legacySettings.retire();
+    const settingsApplied = await service.initialize();
+    if (shouldRetireLegacyImageGenerationSettings(settingsApplied, importedLegacy)) {
+      await context.dependencies.legacySettings.retire();
+    }
 
     context.dependencies.routes.register(
       context.scope,
@@ -80,6 +84,17 @@ export const imageGenerationRuntimeFeature = defineRuntimeFeature({
     context.provide(declareCapabilityProvider(imageGenerationServiceCapability), service);
   },
 });
+
+function shouldRetireLegacyImageGenerationSettings(
+  settingsApplied: boolean,
+  importedLegacy: LegacyImageGenerationSettings | null,
+): boolean {
+  if (settingsApplied) return true;
+  if (!importedLegacy) return false;
+  return !importedLegacy.connection.baseUrl.trim()
+    && !importedLegacy.connection.model.trim()
+    && !importedLegacy.apiKey.trim();
+}
 
 export function unavailableImageGenerationService(): never {
   throw new FeatureOperationFailure({

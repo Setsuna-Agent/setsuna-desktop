@@ -185,6 +185,62 @@ describe('runtime AppServer SWE thread lifecycle', () => {
       }]);
       expect(runtimeEventToSweNotifications(clearNoop)).toEqual([]);
     });
+
+  it('keeps a queued Goal source item behind its turn start notification', () => {
+      const mapEvent = createSweNotificationMapper();
+      const sourceMessage: RuntimeEvent = {
+        id: 'event_goal_source',
+        seq: 1,
+        threadId: 'thread_1',
+        turnId: 'turn_goal_1',
+        type: 'message.created',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        payload: {
+          queuedInputId: 'queued_goal_1',
+          message: {
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            turnId: 'turn_goal_1',
+            role: 'user',
+            inputKind: 'goal',
+            content: 'Ship the Feature migration.',
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+          },
+        },
+      };
+
+      expect(mapEvent(sourceMessage)).toEqual([]);
+      const startedNotifications = mapEvent({
+        id: 'event_goal_turn_started',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_goal_1',
+        type: 'turn.started',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        payload: { input: 'Continue the active goal.', taskKind: 'goal' },
+      });
+
+      expect(startedNotifications.map((notification) => notification.method)).toEqual([
+        'thread/status/changed',
+        'turn/started',
+        'item/started',
+      ]);
+      expect(startedNotifications[2]).toEqual({
+        method: 'item/started',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_goal_1',
+          item: {
+            type: 'userMessage',
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            content: [{ type: 'text', text: 'Ship the Feature migration.' }],
+          },
+          startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        },
+      });
+    });
   
   it('maps context compaction events to AppServer contextCompaction item lifecycle notifications', () => {
       const compacting: RuntimeEvent = {
