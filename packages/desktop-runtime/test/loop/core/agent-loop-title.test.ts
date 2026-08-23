@@ -253,12 +253,6 @@ class TitleConfigStore implements ConfigStore {
       activeProviderId: 'provider',
       providers,
       globalPrompt: '',
-      memory: {
-        useMemories: false,
-        generateMemories: false,
-        disableOnExternalContext: true,
-      },
-      memoryEnabled: false,
       ...(this.dedicatedTitleModel
         ? {
             taskModels: {

@@ -43,6 +43,7 @@ export function createVitestConfig(test: VitestTestConfig = {}) {
         '@setsuna-desktop/feature-collaboration': resolve(rootDir, 'packages/features/collaboration/src'),
         '@setsuna-desktop/feature-image-generation': resolve(rootDir, 'packages/features/image-generation/src'),
         '@setsuna-desktop/feature-goal': resolve(rootDir, 'packages/features/goal/src'),
+        '@setsuna-desktop/feature-memory': resolve(rootDir, 'packages/features/memory/src'),
         '@setsuna-desktop/feature-review': resolve(rootDir, 'packages/features/review/src'),
         '@setsuna-desktop/feature-terminal': resolve(rootDir, 'packages/features/terminal/src'),
         '@setsuna-desktop/feature-vision-recognition': resolve(rootDir, 'packages/features/vision-recognition/src'),

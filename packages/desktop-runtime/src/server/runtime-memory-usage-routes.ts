@@ -1,8 +1,10 @@
 import type {
-  CreateRuntimeMemoryInput,
-  RuntimeMemoryQuery,
   RuntimeUsageQuery,
 } from '@setsuna-desktop/contracts';
+import type {
+  CreateRuntimeMemoryInput,
+  RuntimeMemoryQuery,
+} from '@setsuna-desktop/feature-memory/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import {

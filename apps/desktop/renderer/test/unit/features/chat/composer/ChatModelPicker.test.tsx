@@ -84,8 +84,6 @@ function runtimeConfig(activeProviderId: 'provider-a' | 'provider-b'): RuntimeCo
       provider('provider-b', 'Model B', 'openai-responses', activeProviderId === 'provider-b'),
     ],
     globalPrompt: '',
-    memory: { useMemories: false, generateMemories: false, disableOnExternalContext: true },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

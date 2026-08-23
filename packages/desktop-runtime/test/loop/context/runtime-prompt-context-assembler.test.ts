@@ -6,7 +6,7 @@ describe('RuntimePromptContextAssembler', () => {
   it('prioritizes explicitly selected skills over automatic activations when the full-content budget is exhausted', async () => {
     let instructionEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
-      memory: { contextMessages: async () => [] },
+      memoryControl: () => ({ contextMessages: async () => [] }),
       projectInstructions: {
         load: async (input) => {
           instructionEnvironment = input.environment;
@@ -91,7 +91,7 @@ describe('RuntimePromptContextAssembler', () => {
   it('injects external project workflow data before narrower project instructions', async () => {
     let workflowEnvironment: unknown;
     const assembler = new RuntimePromptContextAssembler({
-      memory: { contextMessages: async () => [] },
+      memoryControl: () => ({ contextMessages: async () => [] }),
       projectWorkflow: {
         resolve: async ({ environment }) => {
           workflowEnvironment = environment;
@@ -162,7 +162,7 @@ describe('RuntimePromptContextAssembler', () => {
 
   it('keeps external tool instructions in a user-trust fragment instead of developer policy', async () => {
     const assembler = new RuntimePromptContextAssembler({
-      memory: { contextMessages: async () => [] },
+      memoryControl: () => ({ contextMessages: async () => [] }),
       toolHost: {
         listTools: async () => [],
         runTool: async () => ({ content: '' }),
@@ -215,7 +215,7 @@ describe('RuntimePromptContextAssembler', () => {
 
   it('injects proactive collaboration policy only when spawn_agent is advertised', async () => {
     const assembler = new RuntimePromptContextAssembler({
-      memory: { contextMessages: async () => [] },
+      memoryControl: () => ({ contextMessages: async () => [] }),
     });
     const thread = { id: 'thread_1', projectId: 'project_1' } as RuntimeThread;
     const toolContext = {
@@ -264,7 +264,7 @@ describe('RuntimePromptContextAssembler', () => {
 
   it('marks delegated collaboration context as external rather than user-authorized', async () => {
     const assembler = new RuntimePromptContextAssembler({
-      memory: { contextMessages: async () => [] },
+      memoryControl: () => ({ contextMessages: async () => [] }),
     });
     const delegatedMessage: RuntimeMessage = {
       id: 'delegated_task',
@@ -314,12 +314,6 @@ function runtimeConfig(): RuntimeConfigState {
     storagePath: '/runtime/memories',
     providers: [],
     globalPrompt: '',
-    memory: {
-      useMemories: false,
-      generateMemories: false,
-      disableOnExternalContext: false,
-    },
-    memoryEnabled: false,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

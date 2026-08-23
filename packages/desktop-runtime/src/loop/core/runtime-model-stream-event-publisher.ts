@@ -9,9 +9,9 @@ import type {
   RuntimeToolCallDelta,
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { MemoryStore } from '../../ports/memory-store.js';
 import { mergeToolArgumentDelta } from './agent-loop-tool-utils.js';
 import type { LegacyModelStreamMirrorState } from './model-stream-output.js';
 
@@ -32,7 +32,7 @@ type AssistantItemStreamState = {
 type RuntimeModelStreamEventPublisherOptions = {
   clock: Clock;
   ids: IdGenerator;
-  memoryStore?: MemoryStore;
+  memoryControl(): MemoryControl;
   appendEvent(
     threadId: string,
     event: PendingRuntimeEvent,
@@ -441,7 +441,7 @@ export class RuntimeModelStreamEventPublisher {
     }
     this.assistantItems.delete(key);
     if (payload.memoryCitation) {
-      await this.options.memoryStore?.recordMemoryCitationUsage(payload.memoryCitation).catch(() => undefined);
+      await this.options.memoryControl().recordCitationUsage(payload.memoryCitation).catch(() => undefined);
     }
   }
 

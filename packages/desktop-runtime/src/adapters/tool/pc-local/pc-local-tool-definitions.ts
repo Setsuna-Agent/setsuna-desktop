@@ -264,40 +264,6 @@ export const LOCAL_TOOL_DEFINITIONS: LocalToolDefinition[] = [
     ['plan'],
   ),
   localTool(
-    'remember_memory',
-    'Save a durable memory for future conversations when the user explicitly asks to remember or persist it. Do not use for passive or inferred memories.',
-    {
-      content: {
-        type: 'string',
-        description: 'The memory text to persist. Keep it concise, durable, and self-contained.',
-      },
-      scope: {
-        type: 'string',
-        enum: ['project', 'global'],
-        description: 'Use project for the current workspace, global for cross-project user preferences. Defaults to project.',
-      },
-      kind: {
-        type: 'string',
-        enum: ['preference', 'project_rule', 'fact', 'workflow', 'decision', 'note'],
-        description: 'Memory category. Defaults to note.',
-      },
-      title: {
-        type: 'string',
-        description: 'Optional short title for preview and review surfaces.',
-      },
-      tags: {
-        type: 'array',
-        items: { type: 'string' },
-        description: 'Optional short tags for later filtering.',
-      },
-      source: {
-        type: 'string',
-        description: 'Optional short provenance, such as 当前对话.',
-      },
-    },
-    ['content'],
-  ),
-  localTool(
     'configure_mcp_server',
     'Add or update a desktop MCP server configuration. Use this instead of editing MCP config files directly. Requires user authorization.',
     {

@@ -43,14 +43,13 @@ type ProjectToolState = {
 type PcLocalToolHostOptions = {
   globalPolicyPaths?: readonly string[];
   mcpConfigPath?: string;
-  memoryStorageRoot?: string;
   shellSandboxCapability?: () => ReturnType<typeof pcTools.shellSandboxCapability>;
   resolveShellEnvironment?: (options: {
     sandboxNetworkAccess: boolean;
   }) => Promise<Record<string, string | null>>;
 };
 
-const EXCLUDED_PC_TOOLS = new Set(['remember_memory', 'configure_mcp_server']);
+const EXCLUDED_PC_TOOLS = new Set(['configure_mcp_server']);
 const REQUEST_PERMISSIONS_TOOL_NAME = 'request_permissions';
 /** Shell、后台进程和 Git 工具走 deferred 暴露,经 tool_search 激活。 */
 const DEFERRED_PC_TOOL_NAMES = new Set([
@@ -548,7 +547,6 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     const toolState = pcTools.createLocalToolState(root, {
       environmentId: environment.id,
       mcpConfigPath: this.options.mcpConfigPath,
-      memoryStorageRoot: this.options.memoryStorageRoot,
       shellProcessStore: this.shellProcessStore,
       userPolicyConfigPaths: this.options.globalPolicyPaths ?? [],
       workspaceSearchEngine: this.workspaceSearchEngine,

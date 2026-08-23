@@ -18,7 +18,6 @@ describe('runtime server AppServer config', () => {
         body: JSON.stringify({
           activeProviderId: 'config-openai',
           globalPrompt: 'Prefer terse answers.',
-          memoryEnabled: false,
           approvalPolicy: 'strict',
           approvalReviewer: 'automatic',
           permissionProfile: 'workspace-write',
@@ -58,6 +57,17 @@ describe('runtime server AppServer config', () => {
               ],
             },
           ],
+        }),
+      });
+
+      const memorySettings = await harness.runtimeFetch('/v1/features/memory/settings') as {
+        revision: number;
+      };
+      await harness.runtimeFetch('/v1/features/memory/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          expectedRevision: memorySettings.revision,
+          patch: { useMemories: false, generateMemories: false },
         }),
       });
   
@@ -282,6 +292,68 @@ describe('runtime server AppServer config', () => {
           min_rate_limit_remaining_percent: 0,
           max_rollouts_per_startup: 3,
         },
+      });
+    });
+
+  it('rejects a mixed core and Memory batch before either document is committed', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({ globalPrompt: 'keep this prompt' }),
+      });
+      const memoryBefore = await harness.runtimeFetch('/v1/features/memory/settings') as {
+        revision: number;
+        value: { useMemories: boolean };
+      };
+
+      await expect(harness.appServerRpcEnvelope({
+        id: 'mixed_config_batch',
+        method: 'config/batchWrite',
+        params: {
+          edits: [
+            { keyPath: 'instructions', value: 'must not be committed', mergeStrategy: 'replace' },
+            { keyPath: 'memories.use_memories', value: false, mergeStrategy: 'replace' },
+          ],
+        },
+      })).resolves.toMatchObject({
+        id: 'mixed_config_batch',
+        error: {
+          code: -32602,
+          message: 'Core config and Memory settings must be written in separate requests.',
+          data: { config_write_error_code: 'configValidationError' },
+        },
+      });
+
+      const configAfter = await harness.appServerRpc('config/read', {});
+      const memoryAfter = await harness.runtimeFetch('/v1/features/memory/settings') as {
+        revision: number;
+        value: { useMemories: boolean };
+      };
+      expect(configAfter.config.instructions).toBe('keep this prompt');
+      expect(memoryAfter).toMatchObject(memoryBefore);
+    });
+
+  it('uses the provider id when a Memory model option has an empty provider name', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'unnamed-provider',
+          providers: [{
+            id: 'unnamed-provider',
+            name: '   ',
+            provider: 'openai-compatible',
+            baseUrl: 'https://unnamed.example.test/v1',
+            enabled: true,
+            models: [modelConfig('memory-model', true)],
+          }],
+        }),
+      });
+
+      await expect(harness.runtimeFetch('/v1/features/memory/settings')).resolves.toMatchObject({
+        availableModels: [{
+          providerId: 'unnamed-provider',
+          providerName: 'unnamed-provider',
+          modelId: 'memory-model',
+        }],
       });
     });
   

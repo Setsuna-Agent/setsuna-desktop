@@ -1,5 +1,5 @@
 import type { RuntimeGeneratedMessageAttachment } from '@setsuna-desktop/contracts';
-import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
+import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
 import { Image } from 'antd';
 import { Copy, FolderOpen, KeyRound, Loader2, Play, Save, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -17,11 +17,14 @@ export function ImageGenerationSettingsView({
   assets,
   client,
   translate,
+  ui,
 }: Readonly<{
   assets: ImageGenerationRendererAssets;
   client: ImageGenerationClient;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
 }>) {
+  const { Button, TextField } = ui;
   const [state, setState] = useState<ImageGenerationSettingsState | null>(null);
   const [baseUrl, setBaseUrl] = useState('');
   const [model, setModel] = useState('');
@@ -107,7 +110,8 @@ export function ImageGenerationSettingsView({
       <div className="feature-image-generation-settings__form">
         <label className="feature-image-generation-settings__field feature-image-generation-settings__field--wide">
           <span>{translate('feature.imageGeneration.settings.baseUrl')}</span>
-          <input
+          <TextField
+            className="feature-image-generation-settings__input"
             type="url"
             value={baseUrl}
             placeholder="https://api.example.com/v1"
@@ -117,11 +121,18 @@ export function ImageGenerationSettingsView({
         </label>
         <label className="feature-image-generation-settings__field">
           <span>{translate('feature.imageGeneration.settings.model')}</span>
-          <input value={model} placeholder="gpt-image-1" spellCheck={false} onChange={(event) => { setModel(event.target.value); setSaved(false); }} />
+          <TextField
+            className="feature-image-generation-settings__input"
+            value={model}
+            placeholder="gpt-image-1"
+            spellCheck={false}
+            onChange={(event) => { setModel(event.target.value); setSaved(false); }}
+          />
         </label>
         <label className="feature-image-generation-settings__field">
           <span>{translate('feature.imageGeneration.settings.apiKey')}</span>
-          <input
+          <TextField
+            className="feature-image-generation-settings__input"
             type="password"
             value={apiKey}
             autoComplete="new-password"
@@ -151,13 +162,33 @@ export function ImageGenerationSettingsView({
             })}</span>
           ) : null}
         </div>
-        {hasSavedKey ? <button type="button" disabled={busy} onClick={() => { setClearApiKey(true); setApiKey(''); setSaved(false); }}><Trash2 size={14} />{translate('feature.imageGeneration.settings.clearKey')}</button> : null}
-        <button type="button" className="is-primary" disabled={busy || !state} onClick={() => void save()}>
-          {saving ? <Loader2 className="is-spinning" size={14} /> : <Save size={14} />}{translate('feature.imageGeneration.settings.save')}
-        </button>
+        {hasSavedKey ? (
+          <Button
+            disabled={busy}
+            icon={<Trash2 size={14} />}
+            variant="danger"
+            onClick={() => { setClearApiKey(true); setApiKey(''); setSaved(false); }}
+          >
+            {translate('feature.imageGeneration.settings.clearKey')}
+          </Button>
+        ) : null}
+        <Button
+          disabled={busy || !state}
+          icon={saving ? <Loader2 className="is-spinning" size={14} /> : <Save size={14} />}
+          variant="primary"
+          onClick={() => void save()}
+        >
+          {translate('feature.imageGeneration.settings.save')}
+        </Button>
       </footer>
 
-      <ImageGenerationConnectionTest assets={assets} generating={testing} onGenerate={test} translate={translate} />
+      <ImageGenerationConnectionTest
+        assets={assets}
+        generating={testing}
+        onGenerate={test}
+        translate={translate}
+        ui={ui}
+      />
     </section>
   );
 }
@@ -167,12 +198,15 @@ function ImageGenerationConnectionTest({
   generating,
   onGenerate,
   translate,
+  ui,
 }: Readonly<{
   assets: ImageGenerationRendererAssets;
   generating: boolean;
   onGenerate(prompt: string): Promise<ImageGenerationTestResult>;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
 }>) {
+  const { Button, TextArea } = ui;
   const [prompt, setPrompt] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ImageGenerationTestResult | null>(null);
@@ -190,7 +224,8 @@ function ImageGenerationConnectionTest({
       <header><div><h4 id="feature-image-generation-test-title">{translate('feature.imageGeneration.test.title')}</h4><p>{translate('feature.imageGeneration.test.description')}</p></div><span>{translate('feature.imageGeneration.test.badge')}</span></header>
       <label className="feature-image-generation-test__prompt">
         <span>{translate('feature.imageGeneration.test.prompt')}</span>
-        <textarea
+        <TextArea
+          className="feature-image-generation-test__textarea"
           rows={4}
           maxLength={IMAGE_GENERATION_TEST_PROMPT_MAX_CHARS}
           value={prompt}
@@ -202,18 +237,27 @@ function ImageGenerationConnectionTest({
       </label>
       <div className="feature-image-generation-test__controls">
         <div aria-live="polite">{error ? <span className="is-error">{error}</span> : result ? <span className="is-success">{translate('feature.imageGeneration.test.generated', { count: result.images.length, duration: formatDuration(result.durationMs) })}</span> : <span>{translate('feature.imageGeneration.test.shortcut')}</span>}</div>
-        <button type="button" className="is-primary" disabled={generating || !prompt.trim()} onClick={() => void generate()}>{generating ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />}{translate('feature.imageGeneration.test.generate')}</button>
+        <Button
+          disabled={generating || !prompt.trim()}
+          icon={generating ? <Loader2 className="is-spinning" size={14} /> : <Play size={14} />}
+          variant="primary"
+          onClick={() => void generate()}
+        >
+          {translate('feature.imageGeneration.test.generate')}
+        </Button>
       </div>
-      {result?.images.length ? <Image.PreviewGroup><div className="feature-image-generation-test__results">{result.images.map((attachment) => <QuickTestImage assets={assets} attachment={attachment} key={attachment.assetId} translate={translate} />)}</div></Image.PreviewGroup> : null}
+      {result?.images.length ? <Image.PreviewGroup><div className="feature-image-generation-test__results">{result.images.map((attachment) => <QuickTestImage assets={assets} attachment={attachment} key={attachment.assetId} translate={translate} ui={ui} />)}</div></Image.PreviewGroup> : null}
     </section>
   );
 }
 
-function QuickTestImage({ assets, attachment, translate }: Readonly<{
+function QuickTestImage({ assets, attachment, translate, ui }: Readonly<{
   assets: ImageGenerationRendererAssets;
   attachment: RuntimeGeneratedMessageAttachment;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
 }>) {
+  const { Button } = ui;
   const [source, setSource] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -234,7 +278,17 @@ function QuickTestImage({ assets, attachment, translate }: Readonly<{
   return (
     <article className="feature-image-generation-test__image">
       <div className="feature-image-generation-test__preview">{source ? <Image src={source} alt={attachment.name} /> : <div role={error ? 'alert' : 'status'}>{error ?? translate('feature.imageGeneration.test.loading')}</div>}</div>
-      <div className="feature-image-generation-test__image-footer"><span>{attachment.name}</span><div><button type="button" onClick={() => void action('copy')}><Copy size={13} />{translate('feature.imageGeneration.test.copy')}</button><button type="button" onClick={() => void action('reveal')}><FolderOpen size={13} />{translate('feature.imageGeneration.test.reveal')}</button></div></div>
+      <div className="feature-image-generation-test__image-footer">
+        <span>{attachment.name}</span>
+        <div>
+          <Button icon={<Copy size={13} />} variant="ghost" onClick={() => void action('copy')}>
+            {translate('feature.imageGeneration.test.copy')}
+          </Button>
+          <Button icon={<FolderOpen size={13} />} variant="ghost" onClick={() => void action('reveal')}>
+            {translate('feature.imageGeneration.test.reveal')}
+          </Button>
+        </div>
+      </div>
     </article>
   );
 }

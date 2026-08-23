@@ -64,12 +64,6 @@ function configWithContextWindow(contextWindowTokens: number): RuntimeConfigStat
     storagePath: '',
     activeProviderId: 'minimax',
     globalPrompt: '',
-    memory: {
-      useMemories: true,
-      generateMemories: true,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: true,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

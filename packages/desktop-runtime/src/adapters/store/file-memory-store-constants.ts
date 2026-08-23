@@ -1,4 +1,4 @@
-import type { RuntimeMemoryKind } from '@setsuna-desktop/contracts';
+import type { RuntimeMemoryKind } from '@setsuna-desktop/feature-memory/contracts';
 
 export const DEFAULT_MEMORY_LIMIT = 50;
 export const MAX_MEMORY_LIMIT = 500;

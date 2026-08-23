@@ -16,6 +16,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import { createRuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
@@ -43,7 +44,6 @@ import {
   unifiedDiffFromToolPreview,
 } from '../core/agent-loop-tool-utils.js';
 import { isAbortError, throwIfAborted, TurnCancelledError } from '../core/runtime-turn-errors.js';
-import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
 import { boundToolOutput, TOOL_OUTPUT_BUDGET_DEFAULT_TOKENS } from './tool-output-budget.js';
@@ -89,7 +89,7 @@ type RuntimeToolCallExecutorOptions = {
   clock: Clock;
   ids: IdGenerator;
   imageStore?: GeneratedImageStore;
-  memory: RuntimeMemoryCoordinator;
+  memoryControl(): MemoryControl;
   policyAmendmentStore?: PolicyAmendmentStore;
   persistentToolApprovalStore?: PersistentToolApprovalStore;
   extensions?: Pick<ExtensionRuntime, 'dispatch'>;
@@ -240,7 +240,7 @@ export class RuntimeToolCallExecutor {
         const execution = await this.runAppServerDynamicToolCall(toolCall, parsedArguments, context, dynamicTool.registration, dynamicTool.tool);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }
-      const memoryBlock = await this.options.memory.toolBlockForCall(toolCall, context.threadId, runtimeConfig);
+      const memoryBlock = await this.options.memoryControl().toolBlockForCall(toolCall, context.threadId);
       if (memoryBlock) {
         content = memoryBlock;
         await this.publishToolCompleted(context.threadId, context.turnId, toolCall, parsedArguments, 'error', content);
@@ -269,7 +269,12 @@ export class RuntimeToolCallExecutor {
             ...result,
             attachments: await externalizeToolImageAttachments(result.attachments, this.options.imageStore),
           };
-          await this.options.memory.markPollutedByExternalContext(context.threadId, context.turnId, toolCall, processedResult, runtimeConfig);
+          await this.options.memoryControl().markPollutedByExternalContext(
+            context.threadId,
+            context.turnId,
+            toolCall,
+            processedResult,
+          );
           return processedResult;
         },
       });

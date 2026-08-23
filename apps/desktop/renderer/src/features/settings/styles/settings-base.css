@@ -1,5 +1,6 @@
 .desktop-settings-panel {
   --chat-settings-divider: color-mix(in srgb, var(--app-border) 52%, transparent);
+  --settings-standard-control-width: 260px;
 
   display: grid;
   grid-column: 2 / -1;
@@ -128,10 +129,17 @@
 }
 
 .desktop-settings-panel .chat-user-settings__page-heading,
-.desktop-settings-panel .chat-user-settings__content > .chat-user-settings__section {
+.desktop-settings-panel .chat-user-settings__content > .chat-user-settings__section,
+.desktop-settings-panel .chat-user-settings__section-extensions {
   width: min(720px, 100%);
   margin-right: auto;
   margin-left: auto;
+}
+
+.desktop-settings-panel .chat-user-settings__section-extensions {
+  display: grid;
+  gap: 20px;
+  margin-top: 20px;
 }
 
 .desktop-settings-panel .chat-user-settings__content > .chat-user-settings__local-llm-section {
@@ -933,7 +941,28 @@
   min-width: 0;
 }
 
-.desktop-settings-panel .chat-user-settings__toggle-copy small {
+.desktop-settings-panel .sd-settings-row__copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.desktop-settings-panel .sd-settings-field-row {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, var(--settings-standard-control-width));
+}
+
+.desktop-settings-panel .sd-settings-field-row--described {
+  min-height: 78px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.desktop-settings-panel .sd-settings-field-row--described .sd-settings-row__label {
+  align-items: flex-start;
+}
+
+.desktop-settings-panel .chat-user-settings__toggle-copy small,
+.desktop-settings-panel .sd-settings-row__copy small {
   max-width: 560px;
   color: var(--app-text-muted);
   font-size: 12px;
@@ -1050,7 +1079,7 @@
 }
 
 .desktop-settings-panel .chat-user-settings__section--general .settings-local-control {
-  max-width: 260px;
+  max-width: var(--settings-standard-control-width);
 }
 
 .desktop-settings-panel .chat-user-settings__slider {

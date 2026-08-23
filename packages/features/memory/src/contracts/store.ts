@@ -1,7 +1,7 @@
+import type { RuntimeMemoryCitation } from '@setsuna-desktop/contracts';
 import type {
   CreateRuntimeMemoryInput,
   CreateRuntimeMemoryStage1OutputInput,
-  RuntimeMemoryCitation,
   RuntimeMemoryFileList,
   RuntimeMemoryFileRead,
   RuntimeMemoryFileReadInput,
@@ -16,11 +16,12 @@ import type {
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1OutputList,
   RuntimeMemoryUsageUpdate,
-} from '@setsuna-desktop/contracts';
+} from './types.js';
 
-export type MemoryStore = {
+/** Persistence port owned by Memory and implemented by the desktop runtime adapter. */
+export interface MemoryStore {
   listMemories(query?: RuntimeMemoryQuery): Promise<RuntimeMemoryList>;
-  listMemoryFiles(query?: { path?: string; cursor?: string; maxResults?: number }): Promise<RuntimeMemoryFileList>;
+  listMemoryFiles(input?: { path?: string; cursor?: string; maxResults?: number }): Promise<RuntimeMemoryFileList>;
   readMemoryFile(input: RuntimeMemoryFileReadInput): Promise<RuntimeMemoryFileRead>;
   searchMemoryFiles(input: RuntimeMemoryFileSearchInput): Promise<RuntimeMemoryFileSearch>;
   recordMemoryCitationUsage(citation: RuntimeMemoryCitation): Promise<RuntimeMemoryUsageUpdate>;
@@ -37,4 +38,4 @@ export type MemoryStore = {
   rememberMemory(input: CreateRuntimeMemoryInput): Promise<RuntimeMemoryRecord>;
   deleteMemory(memoryId: string): Promise<void>;
   clearMemories(): Promise<void>;
-};
+}

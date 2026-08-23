@@ -4,7 +4,7 @@ import type {
   RuntimeStreamItem,
   RuntimeToolCall,
 } from '@setsuna-desktop/contracts';
-import { MemoryCitationStreamParser, parseMemoryCitationBodies } from '../memory/memory-citation.js';
+import type { MemoryCitationOutputFilter } from '@setsuna-desktop/feature-memory/contracts';
 
 export type LegacyModelStreamMirrorState = {
   reasoningItemStarted: boolean;
@@ -22,13 +22,11 @@ export type AssistantOutputAccumulator = {
 
 export function createAssistantOutputAccumulator(
   publishVisibleDelta: (delta: string) => Promise<void>,
+  filter: MemoryCitationOutputFilter,
 ): AssistantOutputAccumulator {
-  const parser = new MemoryCitationStreamParser();
-  const citationBodies: string[] = [];
   let visibleText = '';
 
-  const appendParsed = async (chunk: { visibleText: string; citations: string[] }) => {
-    citationBodies.push(...chunk.citations);
+  const appendParsed = async (chunk: { visibleText: string }) => {
     if (!chunk.visibleText) return;
     visibleText += chunk.visibleText;
     await publishVisibleDelta(chunk.visibleText);
@@ -36,11 +34,12 @@ export function createAssistantOutputAccumulator(
 
   return {
     async append(delta: string) {
-      if (delta) await appendParsed(parser.push(delta));
+      if (delta) await appendParsed(filter.push(delta));
     },
     async finish() {
-      await appendParsed(parser.finish());
-      return parseMemoryCitationBodies(citationBodies);
+      const completed = filter.finish();
+      await appendParsed(completed);
+      return completed.citation;
     },
     text: () => visibleText,
   };

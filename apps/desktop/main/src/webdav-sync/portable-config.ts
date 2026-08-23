@@ -84,6 +84,16 @@ export async function mergePortableConfigForRestore(input: {
   delete merged.imageGeneration;
   // Legacy visionRecognition follows the same one-way Feature import path.
   delete merged.visionRecognition;
+  // Legacy Memory fields are decoded into its portable Feature document before
+  // this merge. Keeping them would recreate a second source on next startup.
+  delete merged.memory;
+  delete merged.memoryEnabled;
+  const taskModels = recordValue(merged.taskModels);
+  if (taskModels) {
+    delete taskModels.memoryExtraction;
+    delete taskModels.memoryConsolidation;
+    if (!Object.keys(taskModels).length) delete merged.taskModels;
+  }
 
   await writeFile(input.portablePath, `${JSON.stringify(merged, null, 2)}\n`, {
     mode: 0o600,

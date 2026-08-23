@@ -185,7 +185,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
         path.join(runtimeDataDir, 'pc-local-policies', 'legacy-shell-policy.json'),
       ],
       mcpConfigPath: path.join(runtimeDataDir, 'mcp.json'),
-      memoryStorageRoot: path.join(runtimeDataDir, 'memories'),
       resolveShellEnvironment: ({ sandboxNetworkAccess }) => (
         process.platform === 'win32' && sandboxNetworkAccess
           ? networkProxyFetch.environmentForSandboxRoute()
@@ -194,6 +193,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     },
   );
   const browserToolHost = new BrowserToolHost();
+  const memoryToolHost = new MemoryToolHost();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
@@ -206,7 +206,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new ArtifactToolHost(workspaceProjects),
     backgroundShellProcesses,
     new SkillManagementToolHost(skillRegistry, skillRegistry),
-    new MemoryToolHost(memoryStore, configStore),
+    memoryToolHost,
   ]);
   const agentLoop = new AgentLoop({
     attachmentStore,
@@ -254,6 +254,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     generatedImageStore,
     visionRecognitionHost,
     memoryStore,
+    memoryToolHost,
     modelClient,
     networkProxyFetch,
     mcpConnections,

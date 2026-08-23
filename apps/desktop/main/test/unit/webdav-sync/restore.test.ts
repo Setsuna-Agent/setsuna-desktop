@@ -144,8 +144,17 @@ describe('WebDAV restore planning and commit', () => {
     const dataRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-restore-'));
     temporaryRoots.push(dataRoot);
     const stagingRoot = path.join(dataRoot, '.webdav-sync-work', 'restored');
+    const localMemorySettingsPath = path.join(
+      dataRoot,
+      'runtime',
+      'features',
+      'memory',
+      'settings',
+      'preferences.json',
+    );
     await mkdir(path.join(dataRoot, 'runtime', 'memories'), { recursive: true });
     await mkdir(path.join(dataRoot, 'runtime', 'user-skills', 'local-skill'), { recursive: true });
+    await mkdir(path.dirname(localMemorySettingsPath), { recursive: true });
     await mkdir(path.join(stagingRoot, 'runtime'), { recursive: true });
     await writeFile(path.join(dataRoot, 'runtime', 'config.json'), JSON.stringify({
       schemaVersion: 7,
@@ -163,6 +172,19 @@ describe('WebDAV restore planning and commit', () => {
         },
         { id: 'local-only', name: 'Local only', models: [] },
       ],
+    }));
+    await writeFile(localMemorySettingsPath, JSON.stringify({
+      featureId: 'memory',
+      documentId: 'preferences',
+      schemaVersion: 1,
+      revision: 4,
+      data: {
+        useMemories: true,
+        generateMemories: true,
+        disableOnExternalContext: false,
+        extractionModel: null,
+        consolidationModel: null,
+      },
     }));
     await writeFile(path.join(dataRoot, 'runtime', 'secrets.json'), JSON.stringify({
       providerApiKeys: { old: 'old-key', openai: 'local-openai-key' },
@@ -196,6 +218,24 @@ describe('WebDAV restore planning and commit', () => {
         visionRecognition: {
           providerId: 'openai',
           modelId: 'legacy-vision-model',
+        },
+        memory: {
+          useMemories: false,
+          generateMemories: false,
+          disableOnExternalContext: true,
+          extractModel: 'legacy-memory-extractor',
+          maxRolloutsPerStartup: 4,
+        },
+        memoryEnabled: true,
+        taskModels: {
+          memoryExtraction: {
+            providerId: 'openai',
+            modelId: 'legacy-memory-extraction-model',
+          },
+          memoryConsolidation: {
+            providerId: 'openai',
+            modelId: 'legacy-memory-consolidation-model',
+          },
         },
         providers: [
           {
@@ -234,6 +274,9 @@ describe('WebDAV restore planning and commit', () => {
     });
     expect(restoredConfig).not.toHaveProperty('imageGeneration');
     expect(restoredConfig).not.toHaveProperty('visionRecognition');
+    expect(restoredConfig).not.toHaveProperty('memory');
+    expect(restoredConfig).not.toHaveProperty('memoryEnabled');
+    expect(restoredConfig).not.toHaveProperty('taskModels');
     expect(restoredConfig.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'openai',
@@ -281,6 +324,31 @@ describe('WebDAV restore planning and commit', () => {
     expect(restoredVisionSettings.data).toEqual({
       providerId: 'openai',
       modelId: 'legacy-vision-model',
+    });
+    const restoredMemorySettings = JSON.parse(await readFile(
+      localMemorySettingsPath,
+      'utf8',
+    )) as { revision: number; data: unknown };
+    expect(restoredMemorySettings).toEqual({
+      featureId: 'memory',
+      documentId: 'preferences',
+      schemaVersion: 1,
+      revision: 5,
+      data: {
+        useMemories: false,
+        generateMemories: false,
+        disableOnExternalContext: true,
+        extractionModel: {
+          providerId: 'openai',
+          modelId: 'legacy-memory-extraction-model',
+        },
+        consolidationModel: {
+          providerId: 'openai',
+          modelId: 'legacy-memory-consolidation-model',
+        },
+        extractionModelCode: 'legacy-memory-extractor',
+        maxRolloutsPerStartup: 4,
+      },
     });
     expect(JSON.parse(await readFile(path.join(dataRoot, 'runtime', 'skills.json'), 'utf8')))
       .toEqual({

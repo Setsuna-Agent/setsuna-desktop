@@ -14,6 +14,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -47,7 +48,6 @@ import {
 } from '../context/runtime-context-compactor.js';
 import { RuntimePromptContextAssembler } from '../context/runtime-prompt-context-assembler.js';
 import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
-import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
@@ -83,7 +83,7 @@ type RuntimeSamplingContextBuilderOptions = {
   collaborationControl(): CollaborationControl;
   goalControl(): GoalControl;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
-  memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
+  memoryControl(): Pick<MemoryControl, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: SkillRegistry;
@@ -110,7 +110,7 @@ export class RuntimeSamplingContextBuilder {
 
   constructor(private readonly options: RuntimeSamplingContextBuilderOptions) {
     this.promptContexts = new RuntimePromptContextAssembler({
-      memory: options.memory,
+      memoryControl: options.memoryControl,
       projectInstructions: options.projectInstructions,
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
@@ -384,8 +384,6 @@ export class RuntimeSamplingContextBuilder {
         ...(stepRuntimeConfig?.activeProviderId ? { activeProviderId: stepRuntimeConfig.activeProviderId } : {}),
         ...(stepRuntimeConfig?.configPath ? { configPath: stepRuntimeConfig.configPath } : {}),
         ...(stepRuntimeConfig?.dataPath ? { dataPath: stepRuntimeConfig.dataPath } : {}),
-        ...(stepRuntimeConfig ? { memoryEnabled: stepRuntimeConfig.memoryEnabled } : {}),
-        ...(stepRuntimeConfig?.storagePath ? { storagePath: stepRuntimeConfig.storagePath } : {}),
         threadMessageCount: snapshotThread?.messageCount ?? thread.messageCount,
         threadUpdatedAt: snapshotThread?.updatedAt ?? thread.updatedAt,
       },

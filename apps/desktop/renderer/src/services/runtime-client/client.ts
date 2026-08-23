@@ -2,7 +2,6 @@ import type {
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
   AnswerRuntimeApprovalInput,
-  CreateRuntimeMemoryInput,
   CreateThreadInput,
   DesktopRuntimeClient,
   MessageDeleteInput,
@@ -36,9 +35,6 @@ import type {
   RuntimeMcpToolList,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
-  RuntimeMemoryList,
-  RuntimeMemoryPreview,
-  RuntimeMemoryQuery,
   RuntimePluginInstallResult,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -61,7 +57,6 @@ import type {
   StartTurnResponse,
   SteerTurnInput,
   ThreadList,
-  ThreadMemoryModePatch,
   ThreadPatch,
   ThreadQuery,
   WorkspaceEntryList,
@@ -156,13 +151,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<RuntimeBackgroundShellProcessTermination>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes/${encodeURIComponent(processId)}`,
         method: 'DELETE',
-      });
-    },
-    updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch) {
-      return request<RuntimeThread>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/memory-mode`,
-        method: 'PATCH',
-        body: patch,
       });
     },
     clearThreadContext(threadId: string) {
@@ -445,27 +433,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       if (query.to) params.set('to', query.to);
       const suffix = params.size ? `?${params}` : '';
       return request<RuntimeUsageResponse>({ path: `/v1/usage${suffix}` });
-    },
-    listMemories(query: RuntimeMemoryQuery = {}) {
-      const params = new URLSearchParams();
-      if (query.scope) params.set('scope', query.scope);
-      if (query.projectId) params.set('projectId', query.projectId);
-      if (query.search) params.set('search', query.search);
-      if (typeof query.limit === 'number') params.set('limit', String(query.limit));
-      const suffix = params.size ? `?${params}` : '';
-      return request<RuntimeMemoryList>({ path: `/v1/memories${suffix}` });
-    },
-    previewMemories() {
-      return request<RuntimeMemoryPreview>({ path: '/v1/memories/preview' });
-    },
-    createMemory(input: CreateRuntimeMemoryInput) {
-      return request<RuntimeMemoryList>({ path: '/v1/memories', method: 'POST', body: input });
-    },
-    deleteMemory(memoryId: string) {
-      return request<void>({ path: `/v1/memories/${encodeURIComponent(memoryId)}`, method: 'DELETE' });
-    },
-    clearMemories() {
-      return request<RuntimeMemoryList>({ path: '/v1/memories', method: 'DELETE' });
     },
     listMcpServers() {
       return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers' });

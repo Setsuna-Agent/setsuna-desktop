@@ -1,4 +1,10 @@
-import type { ComponentType } from 'react';
+import type {
+  ButtonHTMLAttributes,
+  ComponentType,
+  InputHTMLAttributes,
+  ReactNode,
+  TextareaHTMLAttributes,
+} from 'react';
 import { defineCapability, type CapabilityToken } from '../capability.js';
 import type { RuntimeCodec } from '../codec.js';
 import type { FeatureId } from '../definition.js';
@@ -42,12 +48,96 @@ export const rendererComposerStatusViewRegistryCapability: CapabilityToken<Compo
   description: 'Owned and ordered status views rendered above the chat composer',
 });
 
+export type SettingsButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & Readonly<{
+  icon?: ReactNode;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+}>;
+
+export type SettingsIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & Readonly<{
+  children: ReactNode;
+  label: string;
+  variant?: 'secondary' | 'ghost' | 'danger';
+}>;
+
+export type SettingsSelectFieldProps = Readonly<{
+  'aria-label'?: string;
+  'aria-labelledby'?: string;
+  children: ReactNode;
+  className?: string;
+  disabled?: boolean;
+  id?: string;
+  name?: string;
+  onValueChange(value: string): boolean | void;
+  required?: boolean;
+  title?: string;
+  value: string;
+  valueContent?: ReactNode;
+}>;
+
+export type SettingsSectionProps = Readonly<{
+  children: ReactNode;
+  className?: string;
+  featureId?: string;
+}>;
+
+export type SettingsGroupProps = Readonly<{
+  children: ReactNode;
+  className?: string;
+  title?: ReactNode;
+}>;
+
+export type SettingsRowProps = Readonly<{
+  children: ReactNode;
+  className?: string;
+  description?: ReactNode;
+  icon?: ReactNode;
+  label: ReactNode;
+}>;
+
+export type SettingsToggleProps = Readonly<{
+  checked: boolean;
+  description: ReactNode;
+  disabled?: boolean;
+  icon?: ReactNode;
+  label: ReactNode;
+  onChange(checked: boolean): void;
+}>;
+
+export type SettingsNavigationRowProps = Readonly<{
+  actionLabel: ReactNode;
+  disabled?: boolean;
+  icon?: ReactNode;
+  label: ReactNode;
+  onClick(): void;
+}>;
+
+/**
+ * Host-owned controls for standard Feature settings. Features keep business
+ * state and specialized presentation while the host keeps form behavior,
+ * accessibility, density, and theme treatment consistent.
+ */
+export type SettingsViewUi = Readonly<{
+  Button: ComponentType<SettingsButtonProps>;
+  EmptyState: ComponentType<Readonly<{ action?: ReactNode; body?: string; title: string }>>;
+  Group: ComponentType<SettingsGroupProps>;
+  IconButton: ComponentType<SettingsIconButtonProps>;
+  NavigationRow: ComponentType<SettingsNavigationRowProps>;
+  Row: ComponentType<SettingsRowProps>;
+  Section: ComponentType<SettingsSectionProps>;
+  SelectField: ComponentType<SettingsSelectFieldProps>;
+  TextArea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>;
+  TextField: ComponentType<InputHTMLAttributes<HTMLInputElement>>;
+  Toggle: ComponentType<SettingsToggleProps>;
+}>;
+
 export type SettingsViewHostProps = Readonly<{
   sectionId: string;
   translate: RendererTranslate;
+  ui: SettingsViewUi;
 }>;
 
 export type SettingsViewContribution = Readonly<{
+  descriptionKey?: string;
   sectionId: string;
   location: SettingsViewLocation;
   order: number;
@@ -59,9 +149,44 @@ export type RegisteredSettingsView = SettingsViewContribution & Readonly<{
   featureId: FeatureId;
 }>;
 
+export type SettingsSectionExtensionHostProps = SettingsViewHostProps & Readonly<{
+  openSubpage(subpageId: string): void;
+}>;
+
+export type SettingsSectionSubpageHostProps = SettingsViewHostProps & Readonly<{
+  onBack(): void;
+}>;
+
+export type SettingsSectionSubpageContribution = Readonly<{
+  id: string;
+  render: ComponentType<SettingsSectionSubpageHostProps>;
+}>;
+
+/**
+ * Appends Feature-owned settings to an existing host section without creating
+ * another sidebar item. Optional subpages let the host own nested navigation
+ * instead of leaving a Feature to simulate a page transition inside its slot.
+ */
+export type SettingsSectionExtensionContribution = Readonly<{
+  id: string;
+  targetSectionId: string;
+  order: number;
+  render: ComponentType<SettingsSectionExtensionHostProps>;
+  subpages?: readonly SettingsSectionSubpageContribution[];
+}>;
+
+export type RegisteredSettingsSectionExtension = SettingsSectionExtensionContribution & Readonly<{
+  featureId: FeatureId;
+}>;
+
 export interface SettingsViewRegistry {
   register(scope: FeatureScope, contribution: SettingsViewContribution): Readonly<{ dispose(): void }>;
+  registerSectionExtension(
+    scope: FeatureScope,
+    contribution: SettingsSectionExtensionContribution,
+  ): Readonly<{ dispose(): void }>;
   list(location: SettingsViewLocation): readonly RegisteredSettingsView[];
+  listSectionExtensions(targetSectionId: string): readonly RegisteredSettingsSectionExtension[];
   find(location: SettingsViewLocation, sectionId: string): RegisteredSettingsView | undefined;
 }
 

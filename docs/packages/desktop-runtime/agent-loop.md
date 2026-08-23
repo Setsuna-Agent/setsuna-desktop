@@ -2,7 +2,7 @@
 
 源码：`packages/desktop-runtime/src/loop/`
 
-`AgentLoop` 是 runtime 对 thread/turn 行为的 facade。实际工作按 `core / context / lifecycle / memory / tools` 拆给协作者，避免一个类同时承担所有状态机。
+`AgentLoop` 是 runtime 对 thread/turn 行为的 facade。实际工作按 `core / context / lifecycle / tools` 拆给协作者；Goal、Collaboration、Memory 等纵向能力通过 Feature control 延迟绑定，避免一个类同时承担所有状态机。
 
 ## Facade
 
@@ -233,13 +233,15 @@ Review 使用同一 Agent loop/tool/context 基础设施，但有独立 task kin
 
 ## Memory
 
-`loop/memory/`：
+Memory 业务实现位于 `packages/features/memory/src/runtime/`：
 
 - `runtime-memory-coordinator.ts`：查询、注入、显式保存、后台 consolidation。
 - `memory-citation.ts`：模型上下文中的 memory 引用。
 - `memory-consolidation-agent.ts`：被动抽取。
 
-Memory mode 属于 thread contract。抽取使用 runtime model client，但与主 turn task 分开计量和取消。
+Core 不导入这些实现，只依赖 `memory.control`；composition root 通过 `memory.runtime-host` 提供通用 model/thread/event/usage 与 Feature-owned `MemoryStore`。因为 Feature 在 `AgentLoop` 创建后激活，所有长期持有者必须通过 accessor 读取当前 control，不能在构造期捕获 no-op 实例。
+
+Memory mode 与 citation 仍属于 thread/message 持久 contract：前者参与线程生命周期，后者要随历史消息重放。抽取使用 runtime model client，但与主 turn task 分开计量和取消。
 
 ## Tool call/result 顺序
 
@@ -277,7 +279,7 @@ Integration：`test/integration/agent-loop/`
 - Hooks。
 - Permissions/sandbox/network。
 
-单元：`test/loop/{core,lifecycle,memory,tools}/`
+单元：`test/loop/{core,lifecycle,tools}/` 与 `packages/features/memory/test/runtime/`
 
 共享 harness：`test/support/agent-loop/`。
 

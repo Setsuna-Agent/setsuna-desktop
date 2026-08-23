@@ -1,7 +1,5 @@
 import type {
   DesktopRuntimeClient,
-  RuntimeMemoryPreview,
-  RuntimeMemoryRecord,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
@@ -10,18 +8,13 @@ import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGu
 import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
 import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
-export type RuntimeMemoryUsageClient = Pick<
-  DesktopRuntimeClient,
-  'clearMemories' | 'deleteMemory' | 'getUsage' | 'listMemories' | 'previewMemories'
->;
+export type RuntimeUsageClient = Pick<DesktopRuntimeClient, 'getUsage'>;
 
 export type RuntimeUsageBootstrapResult = PromiseSettledResult<RuntimeUsageResponse>;
 
-type RuntimeMemoryUsageStateOptions = {
-  activeProjectId: string | null;
-  client: RuntimeMemoryUsageClient;
+type RuntimeUsageStateOptions = {
+  client: RuntimeUsageClient;
   currentThreadId: string | null;
-  enabled: boolean;
 };
 
 export function fulfilledUsageValue(
@@ -39,26 +32,17 @@ export function isOwnedRequestCurrent(
 }
 
 /**
- * Owns renderer memory and usage state, including project/thread request identities.
+ * Owns renderer usage state, including thread request identities.
  */
-export function useRuntimeMemoryUsageState({
-  activeProjectId,
+export function useRuntimeUsageState({
   client,
   currentThreadId,
-  enabled,
-}: RuntimeMemoryUsageStateOptions) {
+}: RuntimeUsageStateOptions) {
   const [usage, setUsage] = useState<RuntimeUsageResponse | null>(null);
   const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
-  const [memories, setMemories] = useState<RuntimeMemoryRecord[]>([]);
-  const [memoryPreview, setMemoryPreview] = useState<RuntimeMemoryPreview | null>(null);
-  const [memoryPreviewLoading, setMemoryPreviewLoading] = useState(false);
-  const memoryListRequests = useIdentityRequestGuard(
-    activeProjectId ? `project:${activeProjectId}` : 'project:global',
-  );
   const threadUsageRequests = useIdentityRequestGuard(
     currentThreadId ? `thread:${currentThreadId}` : 'thread:none',
   );
-  const memoryPreviewRequests = useLatestRequestGuard();
   const usageRequests = useLatestRequestGuard();
   const currentThreadIdRef = useRef(currentThreadId);
   currentThreadIdRef.current = currentThreadId;
@@ -107,23 +91,6 @@ export function useRuntimeMemoryUsageState({
   );
 
   useEffect(() => {
-    if (!enabled) return undefined;
-    const isCurrentRequest = memoryListRequests.begin();
-    setMemories([]);
-    void client
-      .listMemories({ projectId: activeProjectId ?? undefined, limit: 20 })
-      .then((result) => {
-        if (isCurrentRequest()) setMemories(result.memories);
-      })
-      .catch((unknownError) => {
-        if (isCurrentRequest()) {
-          reportRuntimeBackgroundFailure('memory list refresh', unknownError);
-        }
-      });
-    return () => memoryListRequests.invalidate();
-  }, [activeProjectId, client, enabled, memoryListRequests]);
-
-  useEffect(() => {
     if (!currentThreadId) {
       threadUsageRequests.invalidate();
       setThreadUsage(null);
@@ -134,51 +101,8 @@ export function useRuntimeMemoryUsageState({
     return () => threadUsageRequests.invalidate();
   }, [currentThreadId, refreshThreadUsage, threadUsageRequests]);
 
-  const previewMemories = useCallback(async () => {
-    const isLatest = memoryPreviewRequests.begin();
-    setMemoryPreviewLoading(true);
-    try {
-      const preview = await client.previewMemories();
-      if (isLatest()) setMemoryPreview(preview);
-      return preview;
-    } finally {
-      if (isLatest()) setMemoryPreviewLoading(false);
-    }
-  }, [client, memoryPreviewRequests]);
-
-  const deleteMemory = useCallback(
-    async (memoryId: string) => {
-      const projectId = activeProjectId;
-      const isCurrentListRequest = memoryListRequests.begin();
-      const isLatestPreviewRequest = memoryPreviewRequests.begin();
-      await client.deleteMemory(memoryId);
-      const [list, preview] = await Promise.all([
-        client.listMemories({ projectId: projectId ?? undefined, limit: 20 }),
-        client.previewMemories(),
-      ]);
-      if (isCurrentListRequest()) setMemories(list.memories);
-      if (isLatestPreviewRequest()) setMemoryPreview(preview);
-    },
-    [activeProjectId, client, memoryListRequests, memoryPreviewRequests],
-  );
-
-  const clearMemories = useCallback(async () => {
-    const isCurrentListRequest = memoryListRequests.begin();
-    const isLatestPreviewRequest = memoryPreviewRequests.begin();
-    const list = await client.clearMemories();
-    const preview = await client.previewMemories();
-    if (isCurrentListRequest()) setMemories(list.memories);
-    if (isLatestPreviewRequest()) setMemoryPreview(preview);
-  }, [client, memoryListRequests, memoryPreviewRequests]);
-
   return {
     applyBootstrapUsage,
-    clearMemories,
-    deleteMemory,
-    memories,
-    memoryPreview,
-    memoryPreviewLoading,
-    previewMemories,
     queryUsage,
     refreshThreadUsage,
     refreshUsage,

@@ -10,6 +10,7 @@ describe('SettingsSidebar', () => {
   it('groups settings navigation by purpose while preserving the section order', () => {
     const html = renderToStaticMarkup(createElement(SettingsSidebar, {
       activeSection: 'general',
+      featureSections: [],
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     }));

@@ -18,11 +18,7 @@ import {
   parsePartialWriteFileArguments,
   parseToolArguments,
 } from './pc-local-tool-arguments.js';
-import {
-  DEFAULT_MEMORY_STORE_DIR,
-  MCP_CONFIG_PATH,
-  SHELL_GRACEFUL_KILL_MS,
-} from './pc-local-tool-constants.js';
+import { MCP_CONFIG_PATH, SHELL_GRACEFUL_KILL_MS } from './pc-local-tool-constants.js';
 import {
   LOCAL_TOOL_DEFINITIONS,
 } from './pc-local-tool-definitions.js';
@@ -61,10 +57,7 @@ import {
   gitStatus,
   readDiff,
 } from './pc-local-tool-git.js';
-import {
-  rememberMemory,
-  updatePlan,
-} from './pc-local-tool-memory.js';
+import { updatePlan } from './pc-local-tool-plan.js';
 import {
   deniedRootPathForFileMutationTool,
   protectedPathForFileMutationTool,
@@ -154,9 +147,6 @@ export type CreateLocalToolStateOptions = {
   environmentId?: string;
   mcpConfigPath?: string;
   userPolicyConfigPaths?: readonly string[];
-  allowPassiveMemory?: boolean;
-  memoryEnabled?: boolean;
-  memoryStorageRoot?: string;
   workspaceSearchEngine?: WorkspaceSearchEngine;
 };
 
@@ -173,9 +163,6 @@ export type PcLocalToolState = PcLocalFileState & {
   shellProcesses: ReturnType<typeof createShellProcessStore>['sessions'];
   ownedShellProcessIds: Set<string>;
   ownsShellProcessStore: boolean;
-  allowPassiveMemory: boolean;
-  memoryEnabled: boolean;
-  memoryStorageRoot: string;
   workspaceSearchEngine?: WorkspaceSearchEngine;
   shellEnvironment?: Record<string, string>;
   shellToolchain?: ShellToolchain;
@@ -213,9 +200,6 @@ export function createLocalToolState(
     shellProcesses: shellProcessStore.sessions,
     ownedShellProcessIds: new Set(),
     ownsShellProcessStore: !options.shellProcessStore,
-    allowPassiveMemory: options.allowPassiveMemory === true,
-    memoryEnabled: options.memoryEnabled !== false,
-    memoryStorageRoot: options.memoryStorageRoot || DEFAULT_MEMORY_STORE_DIR,
     workspaceSearchEngine: options.workspaceSearchEngine,
   };
 }
@@ -377,7 +361,6 @@ export async function executeLocalTool(
     if (name === 'git_show') return await gitShow(args, state, options.signal);
     if (name === 'read_diff') return await readDiff(args, state, options.signal);
     if (name === 'update_plan') return updatePlan(args);
-    if (name === 'remember_memory') return await rememberMemory(args, state);
     if (name === 'configure_mcp_server') return await configureMcpServer(args, state);
     if (name === 'apply_patch') return await applyLocalPatch(args, state);
     if (name === 'write_file') return await writeLocalFile(args, state);

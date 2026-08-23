@@ -5,6 +5,7 @@
     "collaboration",
     "goal",
     "image-generation",
+    "memory",
     "desktop-review",
     "terminal",
     "vision-recognition"
@@ -25,6 +26,9 @@
     "image-generation.renderer-assets@1",
     "image-generation.service@1",
     "image-generation.workspace-files@1",
+    "memory.control@1",
+    "memory.legacy-settings@1",
+    "memory.runtime-host@1",
     "goal.control@1",
     "goal.runtime-host@1",
     "renderer.feature-operation-transport@1",
@@ -44,6 +48,7 @@
   ],
   "settingsDocuments": [
     "image-generation/connection",
+    "memory/preferences",
     "vision-recognition/model-selection"
   ],
   "featureEvents": [
@@ -63,6 +68,11 @@
     "image-generation.connection.test",
     "image-generation.settings.read",
     "image-generation.settings.update",
+    "memory.item.delete",
+    "memory.preview.read",
+    "memory.settings.read",
+    "memory.settings.update",
+    "memory.store.clear",
     "vision-recognition.model.test",
     "vision-recognition.settings.read",
     "vision-recognition.settings.update"

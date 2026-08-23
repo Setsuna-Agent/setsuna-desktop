@@ -19,6 +19,7 @@ importers:
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
@@ -70,6 +71,7 @@ importers:
       '@setsuna-desktop/feature-core': link:packages/feature-core
       '@setsuna-desktop/feature-goal': link:packages/features/goal
       '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
+      '@setsuna-desktop/feature-memory': link:packages/features/memory
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
@@ -127,6 +129,7 @@ importers:
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       ai: ^7.0.0
       node-pty: ^1.1.0
@@ -144,6 +147,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../feature-core
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
+      '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       ai: 7.0.51_zod@4.4.3
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
@@ -206,6 +210,18 @@ importers:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/memory:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 

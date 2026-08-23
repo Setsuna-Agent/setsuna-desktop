@@ -2,12 +2,12 @@ import type {
   RuntimeMemoryKind,
   RuntimeMemoryScope,
   RuntimeMemoryStage1Status,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/types.js';
 import {
   parseJsonArrayFromText,
   parseJsonObjectFromText,
   stripMarkdownFence,
-} from '../context/prompt-utils.js';
+} from './runtime-helpers.js';
 
 export const PASSIVE_MEMORY_MAX_ITEMS = 5;
 const PASSIVE_MEMORY_STAGE1_RAW_MAX_CHARS = 60_000;

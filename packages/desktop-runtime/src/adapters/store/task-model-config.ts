@@ -1,7 +1,5 @@
 import {
   RUNTIME_TASK_MODEL_IDS,
-  type ProviderConfigState,
-  type RuntimeMemorySettings,
   type RuntimeTaskModelId,
   type RuntimeTaskModelSettings,
   type RuntimeTaskModelSettingsInput,
@@ -25,28 +23,8 @@ export function taskModelSettingsForSave(
 
 export function taskModelSettingsForState(
   stored: RuntimeTaskModelSettings | undefined,
-  legacyMemory: RuntimeMemorySettings,
-  providers: ProviderConfigState[],
-  activeProviderId: string | undefined,
 ): RuntimeTaskModelSettings {
-  const next = normalizeTaskModelSettings(stored);
-  if (!next.memoryExtraction) {
-    const legacy = legacyTaskModelReference(
-      legacyMemory.extractModel,
-      providers,
-      activeProviderId,
-    );
-    if (legacy) next.memoryExtraction = legacy;
-  }
-  if (!next.memoryConsolidation) {
-    const legacy = legacyTaskModelReference(
-      legacyMemory.consolidationModel,
-      providers,
-      activeProviderId,
-    );
-    if (legacy) next.memoryConsolidation = legacy;
-  }
-  return next;
+  return normalizeTaskModelSettings(stored);
 }
 
 export function normalizeTaskModelSettings(value: unknown): RuntimeTaskModelSettings {
@@ -68,27 +46,6 @@ export function normalizeConfiguredModelReference(
   const providerId = nonEmpty(record.providerId);
   const modelId = nonEmpty(record.modelId);
   return providerId && modelId ? { providerId, modelId } : undefined;
-}
-
-function legacyTaskModelReference(
-  modelValue: string | undefined,
-  providers: ProviderConfigState[],
-  activeProviderId: string | undefined,
-): RuntimeTaskModelSettings[RuntimeTaskModelId] | undefined {
-  const modelCode = nonEmpty(modelValue);
-  if (!modelCode) return undefined;
-  const enabledProviders = providers.filter((provider) => provider.enabled);
-  const activeProvider = enabledProviders.find((provider) => provider.id === activeProviderId)
-    ?? enabledProviders[0];
-  const orderedProviders = activeProvider
-    ? [activeProvider, ...enabledProviders.filter((provider) => provider.id !== activeProvider.id)]
-    : enabledProviders;
-
-  for (const provider of orderedProviders) {
-    const model = provider.models.find((item) => item.code === modelCode || item.id === modelCode);
-    if (model) return { providerId: provider.id, modelId: model.id };
-  }
-  return undefined;
 }
 
 function nonEmpty(value: unknown): string | undefined {

@@ -1,6 +1,6 @@
 import type { RuntimeConfigInput } from '@setsuna-desktop/contracts';
 
-export type SettingsSectionId =
+export type CoreSettingsSectionId =
   | 'general'
   | 'shortcuts'
   | 'personalization'
@@ -13,11 +13,11 @@ export type SettingsSectionId =
   | 'runtime'
   | 'about';
 
+export type SettingsSectionId = CoreSettingsSectionId | (string & {});
+
 export type RuntimePreferenceInput = Pick<
   RuntimeConfigInput,
   | 'globalPrompt'
-  | 'memory'
-  | 'memoryEnabled'
   | 'taskModels'
   | 'setsunaStyle'
   | 'approvalPolicy'

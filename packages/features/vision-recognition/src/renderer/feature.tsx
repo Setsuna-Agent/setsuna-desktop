@@ -26,8 +26,8 @@ export const visionRecognitionRendererFeature = defineRendererFeature({
       location: 'capabilities',
       order: 110,
       titleKey: 'feature.visionRecognition.settings.title',
-      render: ({ translate }) => (
-        <VisionRecognitionSettingsView client={client} translate={translate} />
+      render: ({ translate, ui }) => (
+        <VisionRecognitionSettingsView client={client} translate={translate} ui={ui} />
       ),
     });
   },

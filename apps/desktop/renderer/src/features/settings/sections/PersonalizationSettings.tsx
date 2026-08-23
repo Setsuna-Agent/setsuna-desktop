@@ -1,54 +1,28 @@
-import type {
-  RuntimeConfigState,
-  RuntimeMemoryPreview,
-  RuntimeMemoryPreviewItem,
-  WorkspaceProject,
-} from '@setsuna-desktop/contracts';
-import { Popconfirm } from 'antd';
-import { ChevronRight, Code2, Eye, FileText, Palette, RefreshCw, Sun, Trash2 } from 'lucide-react';
+import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { Code2, Palette, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import {
-  Button,
-  IconButton,
-  PageHeader,
-  TextArea,
-} from '../../../shared/ui/primitives.js';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import { SettingsChoiceGroup, SettingsToggle, type SettingsChoiceOption } from '../components/SettingsControls.js';
+import { TextArea } from '../../../shared/ui/primitives.js';
+import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { SettingsChoiceGroup, type SettingsChoiceOption } from '../components/SettingsControls.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
-import { errorMessage, formatSettingsDate } from '../settings-utils.js';
 
 const PERSONALIZATION_PROMPT_MAX_LENGTH = 8000;
 const PERSONALIZATION_PROMPT_SAVE_DELAY_MS = 360;
+
+/** Host-owned personalization that is independent from optional business Features. */
 export function PersonalizationSettings({
   config,
-  projects,
-  memoryPreview,
-  memoryPreviewLoading,
   onSavePreferences,
-  onPreview,
-  onDelete,
-  onReset,
-}: {
+}: Readonly<{
   config: RuntimeConfigState;
-  projects: WorkspaceProject[];
-  memoryPreview: RuntimeMemoryPreview | null;
-  memoryPreviewLoading: boolean;
   onSavePreferences: (input: RuntimePreferenceInput) => Promise<void>;
-  onPreview: () => Promise<RuntimeMemoryPreview>;
-  onDelete: (memoryId: string) => Promise<void>;
-  onReset: () => Promise<void>;
-}) {
-  const { locale, t } = useI18n();
+}>) {
+  const { t } = useI18n();
   const setsunaStyleOptions: Array<SettingsChoiceOption<RuntimeConfigState['setsunaStyle']>> = [
     { value: 'developer', label: t('settings.personalization.styleDeveloper'), icon: <Code2 size={14} /> },
     { value: 'daily', label: t('settings.personalization.styleDaily'), icon: <Sun size={14} /> },
   ];
-  const [personalizationView, setPersonalizationView] = useState<'overview' | 'memoryPreview'>('overview');
   const [globalPromptDraft, setGlobalPromptDraft] = useState(config.globalPrompt);
-  const [memoryDeletingId, setMemoryDeletingId] = useState<string | null>(null);
-  const [memoryResetting, setMemoryResetting] = useState(false);
-  const [memoryError, setMemoryError] = useState<string | null>(null);
   const globalPromptLength = Array.from(globalPromptDraft).length;
 
   useEffect(() => {
@@ -63,109 +37,6 @@ export function PersonalizationSettings({
     return () => window.clearTimeout(timer);
   }, [config.globalPrompt, globalPromptDraft, onSavePreferences]);
 
-  const loadMemoryPreview = async () => {
-    setMemoryError(null);
-    try {
-      return await onPreview();
-    } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, t('settings.personalization.previewError')));
-      return null;
-    }
-  };
-
-  const openMemoryPreview = async () => {
-    setPersonalizationView('memoryPreview');
-    await loadMemoryPreview();
-  };
-
-  const deleteMemoryItem = async (item: RuntimeMemoryPreviewItem) => {
-    setMemoryDeletingId(item.id);
-    setMemoryError(null);
-    try {
-      await onDelete(item.id);
-    } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, t('settings.personalization.deleteError')));
-    } finally {
-      setMemoryDeletingId(null);
-    }
-  };
-
-  const resetMemoryItems = async () => {
-    setMemoryResetting(true);
-    setMemoryError(null);
-    try {
-      await onReset();
-    } catch (unknownError) {
-      setMemoryError(errorMessage(unknownError, t('settings.personalization.resetError')));
-    } finally {
-      setMemoryResetting(false);
-    }
-  };
-
-  if (personalizationView === 'memoryPreview') {
-    const items = memoryPreview?.items ?? [];
-
-    return (
-      <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__memory-preview-section">
-        <PageHeader
-          className="chat-user-settings__memory-preview-header"
-          onBack={() => setPersonalizationView('overview')}
-          title={t('settings.personalization.preview')}
-          actions={
-            <Button className="chat-user-settings__tiny-action" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || memoryResetting || Boolean(memoryDeletingId)} onClick={() => void loadMemoryPreview()}>
-              {memoryPreviewLoading ? t('settings.personalization.refreshing') : t('settings.personalization.refresh')}
-            </Button>
-          }
-        />
-        <div className="chat-user-settings__memory-preview-summary">
-          <div>
-            <strong>{t('settings.personalization.previewCount', { count: memoryPreview?.total ?? 0 })}</strong>
-            <span>{t('settings.personalization.previewDescription')}</span>
-          </div>
-        </div>
-        {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
-        {items.length ? (
-          <div className="chat-user-settings__memory-list" aria-busy={memoryPreviewLoading}>
-            {items.map((item) => {
-              const meta = [
-                item.origin === 'active' ? t('settings.personalization.originActive') : t('settings.personalization.originBackground'),
-                memoryScopeLabel(item, projects, t),
-                item.source,
-                formatSettingsDate(item.updatedAt, locale),
-                t('settings.personalization.characters', { count: Number(item.chars || 0).toLocaleString(locale) }),
-              ].filter(Boolean);
-
-              return (
-                <div className="chat-user-settings__memory-item" key={item.id}>
-                  <div className="chat-user-settings__memory-item-head">
-                    <FileText size={14} />
-                    <span title={item.workspaceRoot || item.title}>{item.title}</span>
-                    <IconButton label={t('settings.personalization.deleteMemory')} variant="danger" disabled={memoryResetting || memoryPreviewLoading || memoryDeletingId === item.id} onClick={() => void deleteMemoryItem(item)}>
-                      <Trash2 size={14} />
-                    </IconButton>
-                  </div>
-                  <div className="chat-user-settings__memory-item-meta">
-                    {meta.map((value, index) => (
-                      <span key={`${value}-${index}`}>{value}</span>
-                    ))}
-                  </div>
-                  {item.tags?.length ? (
-                    <div className="chat-user-settings__memory-tags">
-                      {item.tags.map((tag) => (
-                        <span key={tag}>{tag}</span>
-                      ))}
-                    </div>
-                  ) : null}
-                  <pre className="chat-user-settings__memory-snippet">{item.preview}</pre>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__personalization-section">
       <div className="chat-user-settings__section-block">
@@ -176,7 +47,12 @@ export function PersonalizationSettings({
               <Palette size={14} />
               <span>{t('settings.personalization.setsunaStyle')}</span>
             </span>
-            <SettingsChoiceGroup ariaLabel={t('settings.personalization.setsunaStyle')} options={setsunaStyleOptions} value={config.setsunaStyle} onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })} />
+            <SettingsChoiceGroup
+              ariaLabel={t('settings.personalization.setsunaStyle')}
+              options={setsunaStyleOptions}
+              value={config.setsunaStyle}
+              onChange={(setsunaStyle) => void onSavePreferences({ setsunaStyle })}
+            />
           </div>
         </div>
       </div>
@@ -198,8 +74,9 @@ export function PersonalizationSettings({
                   maxLength={PERSONALIZATION_PROMPT_MAX_LENGTH}
                   placeholder={t('settings.personalization.promptPlaceholder')}
                   onBlur={() => {
-                    if (globalPromptDraft === config.globalPrompt) return;
-                    void onSavePreferences({ globalPrompt: globalPromptDraft });
+                    if (globalPromptDraft !== config.globalPrompt) {
+                      void onSavePreferences({ globalPrompt: globalPromptDraft });
+                    }
                   }}
                   onChange={(event) => setGlobalPromptDraft(event.target.value)}
                 />
@@ -211,46 +88,6 @@ export function PersonalizationSettings({
           </div>
         </div>
       </div>
-
-      <div className="chat-user-settings__section-block chat-user-settings__memory-settings-block">
-        <div className="chat-user-settings__memory-heading">
-          <div className="chat-user-settings__group-title">{t('settings.personalization.memory')}</div>
-          <p>{t('settings.personalization.memoryDescription')}</p>
-        </div>
-        {memoryError ? <div className="chat-user-settings__memory-error">{memoryError}</div> : null}
-        <div className="chat-user-settings__group chat-user-settings__personalization-card">
-          <SettingsToggle checked={config.memory.useMemories} description={t('settings.personalization.useMemoriesDescription')} label={t('settings.personalization.useMemories')} onChange={(checked) => void onSavePreferences({ memory: { useMemories: checked } })} />
-          <SettingsToggle checked={config.memory.generateMemories} description={t('settings.personalization.generateMemoriesDescription')} label={t('settings.personalization.generateMemories')} onChange={(checked) => void onSavePreferences({ memory: { generateMemories: checked } })} />
-          <SettingsToggle checked={config.memory.disableOnExternalContext} description={t('settings.personalization.externalContextDescription')} label={t('settings.personalization.externalContext')} onChange={(checked) => void onSavePreferences({ memory: { disableOnExternalContext: checked } })} />
-          <div className="chat-user-settings__row chat-user-settings__local-action-row">
-            <span className="chat-user-settings__row-label">
-              <Eye size={14} />
-              <span>{t('settings.personalization.preview')}</span>
-            </span>
-            <Button className="chat-user-settings__preview-open" icon={<ChevronRight size={14} />} onClick={() => void openMemoryPreview()}>
-              {t('settings.personalization.view')}
-            </Button>
-          </div>
-          <div className="chat-user-settings__row chat-user-settings__local-action-row chat-user-settings__memory-reset-row">
-            <span className="chat-user-settings__row-label">
-              <RefreshCw size={14} />
-              <span>{t('settings.personalization.resetMemory')}</span>
-            </span>
-            <Popconfirm title={t('settings.personalization.resetTitle')} description={t('settings.personalization.resetDescription')} placement="topRight" okText={t('settings.personalization.reset')} cancelText={t('common.cancel')} okButtonProps={{ danger: true, loading: memoryResetting }} onConfirm={() => void resetMemoryItems()}>
-              <Button variant="danger" icon={<RefreshCw size={14} />} disabled={memoryPreviewLoading || Boolean(memoryDeletingId) || memoryResetting}>
-                {memoryResetting ? t('settings.personalization.resetting') : t('settings.personalization.reset')}
-              </Button>
-            </Popconfirm>
-          </div>
-        </div>
-      </div>
     </div>
   );
-}
-
-function memoryScopeLabel(item: RuntimeMemoryPreviewItem, projects: WorkspaceProject[], t: Translate): string {
-  if (item.scope === 'global') return t('settings.personalization.scopeGlobal');
-  const projectName = projects.find((project) => project.id === item.projectId)?.name;
-  const project = projectName || item.projectId;
-  return project ? t('settings.personalization.scopeProject', { project }) : t('settings.personalization.scopeProjectFallback');
 }

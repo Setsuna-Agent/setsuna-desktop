@@ -29,15 +29,5 @@ export function runtimeTaskModelRequest(
     return fallbackRequest ?? { model: fallbackModel };
   }
 
-  const legacyModel = legacyTaskModel(config, taskId);
-  return legacyModel ? { model: legacyModel } : fallbackRequest ?? { model: fallbackModel };
-}
-
-function legacyTaskModel(
-  config: RuntimeConfigState | null | undefined,
-  taskId: RuntimeTaskModelId,
-): string | undefined {
-  if (taskId === 'memoryExtraction') return config?.memory.extractModel?.trim() || undefined;
-  if (taskId === 'memoryConsolidation') return config?.memory.consolidationModel?.trim() || undefined;
-  return undefined;
+  return fallbackRequest ?? { model: fallbackModel };
 }

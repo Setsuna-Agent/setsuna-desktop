@@ -90,8 +90,6 @@ export type RuntimeModelRequestWorldState = {
   activeProviderId?: string;
   configPath?: string;
   dataPath?: string;
-  memoryEnabled?: boolean;
-  storagePath?: string;
   threadMessageCount: number;
   threadUpdatedAt: string;
 };

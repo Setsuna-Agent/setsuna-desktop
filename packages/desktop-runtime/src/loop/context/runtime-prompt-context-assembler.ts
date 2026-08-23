@@ -5,6 +5,7 @@ import type {
   RuntimeThread,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflow, ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
@@ -14,7 +15,6 @@ import type {
   ToolExternalContext,
   ToolHost,
 } from '../../ports/tool-host.js';
-import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import type { RuntimeToolRouter } from '../tools/tool-router.js';
 import type { RuntimePromptFragment } from './prompt-compiler.js';
 import {
@@ -35,7 +35,7 @@ const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
 const DEFAULT_TOOL_EXTERNAL_CONTEXT_MAX_BYTES = 64 * 1024;
 
 type RuntimePromptContextAssemblerOptions = {
-  memory: Pick<RuntimeMemoryCoordinator, 'contextMessages'>;
+  memoryControl(): Pick<MemoryControl, 'contextMessages'>;
   projectInstructions?: ProjectInstructionLoader;
   projectWorkflow?: ProjectWorkflowResolver;
   skillRegistry?: Pick<SkillRegistry, 'resolvePromptContext'>;
@@ -85,7 +85,7 @@ export class RuntimePromptContextAssembler {
         skillCatalogContextWindowTokens,
         tools.some((tool) => tool.name === 'read_skill'),
       ),
-      this.options.memory.contextMessages(thread.projectId, config),
+      this.options.memoryControl().contextMessages(thread.projectId),
       this.options.projectInstructions?.load({
         environment,
         maxBytes: positiveSetting(config?.desktopSettings?.projectInstructionMaxBytes),

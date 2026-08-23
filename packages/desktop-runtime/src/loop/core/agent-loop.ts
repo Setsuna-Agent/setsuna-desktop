@@ -36,6 +36,11 @@ import {
   type GoalControl,
   type GoalRuntimeHost,
 } from '@setsuna-desktop/feature-goal/contracts';
+import {
+  createNoopMemoryControl,
+  type MemoryControl,
+  type MemoryRuntimeHost,
+} from '@setsuna-desktop/feature-memory/contracts';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
@@ -49,7 +54,6 @@ import { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
 import { RuntimeTurnInputCoordinator, type DeliverMailboxInput, type DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 import { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
-import { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RuntimeUserShellRunner } from '../tools/runtime-user-shell-runner.js';
 import type { AgentLoopOptions } from './agent-loop-options.js';
@@ -57,19 +61,21 @@ import { normalizeAttachments } from './runtime-attachment-input.js';
 import { RuntimeAgentTurnRunner } from './runtime-agent-turn-runner.js';
 import { createRuntimeCollaborationHost } from './runtime-collaboration-host.js';
 import { createRuntimeGoalHost } from './runtime-goal-host.js';
+import { createRuntimeMemoryHost } from './runtime-memory-host.js';
 import { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeTurnRunFactory, type RuntimeReviewTurnInput } from './runtime-turn-run-factory.js';
+import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
 
 export type { AgentLoopOptions } from './agent-loop-options.js';
 export type { DeliverMailboxInput, DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 export class AgentLoop {
   private readonly turnTasks = new RuntimeTurnTaskRegistry();
   private readonly eventWriter: RuntimeEventWriter;
-  private readonly memory: RuntimeMemoryCoordinator;
+  private memory: MemoryControl = createNoopMemoryControl();
   private readonly modelStreamEvents: RuntimeModelStreamEventPublisher;
   private readonly inputGuard: RuntimeModelInputGuard;
   private readonly contextCompactor: RuntimeContextCompactor;
@@ -89,27 +95,17 @@ export class AgentLoop {
   private readonly modelSampler: RuntimeModelSampler;
   private readonly userShellRunner: RuntimeUserShellRunner;
   private readonly deletingThreads = new Set<string>();
-  private readonly threadMutationAdmissions = new Map<string, Set<Promise<void>>>();
+  private readonly threadMutationAdmissions = new ThreadMutationAdmissions();
   private shuttingDown = false;
   private dataMigrationPreparing = false;
 
   constructor(private readonly options: AgentLoopOptions) {
     const environmentResolver = runtimeEnvironmentResolver(options.environmentResolver, options.toolHost);
     this.eventWriter = options.eventWriter ?? new RuntimeEventWriter(options.threadStore, options.eventBus);
-    this.memory = new RuntimeMemoryCoordinator({
-      clock: options.clock,
-      configStore: options.configStore,
-      ids: options.ids,
-      memoryStore: options.memoryStore,
-      modelClient: options.modelClient,
-      threadStore: options.threadStore,
-      usageStore: options.usageStore,
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-    });
     this.modelStreamEvents = new RuntimeModelStreamEventPublisher({
       clock: options.clock,
       ids: options.ids,
-      memoryStore: options.memoryStore,
+      memoryControl: () => this.memory,
       appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
     });
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
@@ -120,7 +116,7 @@ export class AgentLoop {
       clock: options.clock,
       ids: options.ids,
       imageStore: options.imageStore,
-      memory: this.memory,
+      memoryControl: () => this.memory,
       policyAmendmentStore: options.policyAmendmentStore,
       persistentToolApprovalStore: options.persistentToolApprovalStore,
       extensions: options.extensionManager,
@@ -161,7 +157,7 @@ export class AgentLoop {
       goalControl: () => this.goals,
       collaborationControl: () => this.collaboration,
       mcpStore: options.mcpStore,
-      memory: this.memory,
+      memoryControl: () => this.memory,
       projectInstructions: options.projectInstructions,
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
@@ -173,6 +169,7 @@ export class AgentLoop {
     this.modelSampler = new RuntimeModelSampler({
       clock: options.clock,
       ids: options.ids,
+      memoryControl: () => this.memory,
       modelClient: options.modelClient,
       streamEvents: this.modelStreamEvents,
       toolExecutor: this.toolExecutor,
@@ -190,7 +187,7 @@ export class AgentLoop {
     this.turnFinalizer = new RuntimeTurnFinalizer({
       clock: options.clock,
       ids: options.ids,
-      memory: this.memory,
+      memoryControl: () => this.memory,
       streamEvents: this.modelStreamEvents,
       threadTitles: this.threadTitles,
       usageStore: options.usageStore,
@@ -236,6 +233,7 @@ export class AgentLoop {
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
       collaborationControl: () => this.collaboration,
+      memoryControl: () => this.memory,
       configStore: options.configStore,
       hooks: this.hooks,
       ids: options.ids,
@@ -326,8 +324,7 @@ export class AgentLoop {
   prepareDataMigration(additionalPendingMutations = 0): RuntimeDataMigrationReadiness {
     const registeredTasks = this.turnTasks.registeredTaskCount();
     const pendingMutations = Math.max(0, additionalPendingMutations)
-      + [...this.threadMutationAdmissions.values()]
-        .reduce((total, admissions) => total + admissions.size, 0)
+      + this.threadMutationAdmissions.count()
       + this.memory.pendingBackgroundTaskCount();
     const ready = !this.shuttingDown
       && !this.dataMigrationPreparing
@@ -532,7 +529,7 @@ export class AgentLoop {
       // Then wait all older mutations (attachment claims, regeneration, shell, compact, goal and
       // context writes) before the final task check and destructive commit.
       await this.drainRegisteredTasksForDeletion(threadId);
-      await this.waitForThreadMutationAdmissions(threadId);
+      await this.threadMutationAdmissions.waitForThread(threadId);
       await this.drainRegisteredTasksForDeletion(threadId);
       // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
       await this.turnTermination.waitForThread(threadId);
@@ -572,7 +569,30 @@ export class AgentLoop {
     }
     this.collaboration = control;
   }
-
+  /** Binds the optional Memory Feature after runtime composition activates it. */
+  bindMemoryControl(control: MemoryControl): void {
+    if (this.memory.available && this.memory !== control) {
+      throw new Error('Memory control is already bound.');
+    }
+    this.memory = control;
+  }
+  memoryControl(): MemoryControl {
+    return this.memory;
+  }
+  /** Narrow host surface supplied to Memory by the runtime composition root. */
+  memoryRuntimeHost(): MemoryRuntimeHost {
+    if (!this.options.memoryStore) throw new Error('Memory persistence is unavailable.');
+    return createRuntimeMemoryHost({
+      clock: this.options.clock,
+      configStore: this.options.configStore,
+      eventWriter: this.eventWriter,
+      ids: this.options.ids,
+      modelClient: this.options.modelClient,
+      store: this.options.memoryStore,
+      threadStore: this.options.threadStore,
+      usageStore: this.options.usageStore,
+    });
+  }
   /** Narrow host surface supplied to the Collaboration Feature by the composition root. */
   collaborationRuntimeHost(): CollaborationRuntimeHost {
     return createRuntimeCollaborationHost({
@@ -849,31 +869,11 @@ export class AgentLoop {
   /** Runs a per-thread mutation under the same admission boundary used by destructive deletion. */
   async withThreadMutation<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
     this.assertThreadAcceptingWork(threadId);
-    let resolveAdmission: () => void = () => undefined;
-    const admission = new Promise<void>((resolve) => {
-      resolveAdmission = resolve;
-    });
-    const pending = this.threadMutationAdmissions.get(threadId) ?? new Set<Promise<void>>();
-    pending.add(admission);
-    this.threadMutationAdmissions.set(threadId, pending);
-    try {
-      await this.turnRuns.persistInferredThreadModelBinding(threadId);
-      return await operation();
-    } finally {
-      pending.delete(admission);
-      if (!pending.size && this.threadMutationAdmissions.get(threadId) === pending) {
-        this.threadMutationAdmissions.delete(threadId);
-      }
-      resolveAdmission();
-    }
-  }
-
-  private async waitForThreadMutationAdmissions(threadId: string): Promise<void> {
-    for (;;) {
-      const pending = [...(this.threadMutationAdmissions.get(threadId) ?? [])];
-      if (!pending.length) return;
-      await Promise.all(pending);
-    }
+    return this.threadMutationAdmissions.run(
+      threadId,
+      () => this.turnRuns.persistInferredThreadModelBinding(threadId),
+      operation,
+    );
   }
 
   private async drainRegisteredTasksForDeletion(threadId: string): Promise<void> {

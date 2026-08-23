@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   fulfilledUsageValue,
   isOwnedRequestCurrent,
-} from '../../../../src/services/runtime-client/useRuntimeMemoryUsageState.js';
+} from '../../../../src/services/runtime-client/useRuntimeUsageState.js';
 
 describe('fulfilledUsageValue', () => {
   it('hydrates optional usage only when bootstrap succeeded', () => {

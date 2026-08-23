@@ -17,6 +17,7 @@ import { FeatureContributionBoundary } from '../../composition/FeatureContributi
 import { FeatureRecoveryShell } from '../../composition/FeatureRecoveryShell.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { Button, IconButton, PageHeader } from '../../shared/ui/primitives.js';
+import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
@@ -272,7 +273,11 @@ export function CapabilitiesPluginDetail({
           featureId={featureSettings.featureId}
           resetKey={`${featureSettings.featureId}:${featureSettings.sectionId}`}
         >
-          <FeatureSettingsView sectionId={featureSettings.sectionId} translate={t} />
+          <FeatureSettingsView
+            sectionId={featureSettings.sectionId}
+            translate={t}
+            ui={settingsViewUi}
+          />
         </FeatureContributionBoundary>
       ) : installedFromMarketplace ? (
         <FeatureRecoveryShell

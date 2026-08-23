@@ -68,7 +68,7 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
 - `runtime-capability-routes.ts`：Hook、MCP status/resource/tool 与 Skill extra roots。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
-- `runtime-memory-usage-routes.ts`：Memory CRUD/preview 和 Usage query。
+- `runtime-memory-usage-routes.ts`：Usage query 与旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
 
 Route family 只做 method/path/body 解析、错误映射和 response DTO。跨 port 的业务事务下沉到 `runtime/use-cases/`；例如项目归档由 `workspace-operations.ts` 持有，commit message 的模型选择、prompt 安全和 fallback 由 `commit-message-generation.ts` 持有。
 
@@ -105,7 +105,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 ### 数据域
 
 - Projects、entries、search、file read、workspace status；项目归档事务由 `runtime/use-cases/workspace-operations.ts` 持有。
-- Memory 与 Usage 只在对应 domain handler 中做 query/body 解析和 store 调用。
+- Usage 由对应 domain handler 解析；旧 Memory REST 只作为兼容 adapter 调用 Feature-owned store contract，设置与新管理面走 `MemoryControl`/typed operations。
 
 Route 应：
 

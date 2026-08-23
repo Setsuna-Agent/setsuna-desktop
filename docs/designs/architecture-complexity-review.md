@@ -217,7 +217,7 @@ RuntimeEvent log
 
 - [x] 保持现有 facade 调用面，并把 Skill/MCP/Hook/Plugin 的 7 组 state、刷新与 mutation 下沉到 `useRuntimeCapabilityState.ts`。
 - [x] 能力域只依赖 25 个明确列出的 `DesktopRuntimeClient` 方法；Hook 通过窄 `onConfigChange` 回写共享 config。
-- [x] 把 memory/usage 的 5 组 state、project/thread identity guard 和 turn 完成刷新下沉到 `useRuntimeMemoryUsageState.ts`。
+- [x] 先把 memory/usage state 与 identity guard 下沉，随后在 Memory Feature 迁移中把该 hook 收敛为只负责 usage 的 `useRuntimeUsageState.ts`。
 - [x] Memory/usage 域只依赖 5 个明确列出的 client 方法；迟到结果必须同时满足 latest request 和 owner identity。
 - [x] 把共享 config state、provider 映射、runtime preferences 和 image generation 操作下沉到 `useRuntimeConfigState.ts`。
 - [x] Config 域只依赖 3 个明确列出的 client 方法；bootstrap 与 Hook mutation 通过 `replaceConfig` 汇入同一个 state owner。

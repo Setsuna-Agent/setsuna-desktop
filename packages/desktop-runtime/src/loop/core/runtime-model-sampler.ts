@@ -10,6 +10,7 @@ import {
   type RuntimeToolDefinition,
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
@@ -50,6 +51,7 @@ type RuntimeModelSamplerOptions = {
   clock: Clock;
   ids: IdGenerator;
   modelClient: ModelClient;
+  memoryControl(): MemoryControl;
   streamEvents: RuntimeModelStreamEventPublisher;
   toolExecutor: RuntimeToolCallExecutor;
 };
@@ -104,7 +106,7 @@ export class RuntimeModelSampler {
     const output = createAssistantOutputAccumulator(async (delta) => {
       appendAssistantStreamPart(assistantStreamParts, 'content', delta);
       await this.options.streamEvents.publishAssistantDelta(threadId, turnId, assistantMessageId, delta);
-    });
+    }, this.options.memoryControl().createCitationOutputFilter());
     let reasoningReceived = false;
     const streamBridge = createAssistantItemStreamBridge(
       output,

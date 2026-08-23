@@ -34,7 +34,7 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 - Workspace dependencies。
 - Hooks、Skills、Plugins、marketplace。
 - Projects、files、search、workspace status。
-- Usage、memory。
+- Usage；Memory 管理通过独立 typed Feature operations，不扩展统一 client。
 - MCP server/tool/resource/OAuth。
 - Approvals。
 - Debug traces。
@@ -147,7 +147,7 @@ Contracts 不直接读写文件，但定义持久化内容的 JSON shape：
     ├── mcp.json                      # MCP contracts
     ├── skills.json                   # Skill state
     ├── plugins.json                  # Plugin ownership/index
-    ├── memories/                     # memory contracts + text assets
+    ├── memories/                     # Memory Feature store text assets
     ├── usage.jsonl                   # usage record
     └── threads.sqlite                # event/message JSON payload
 ```

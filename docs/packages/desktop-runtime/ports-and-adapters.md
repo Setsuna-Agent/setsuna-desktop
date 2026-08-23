@@ -17,7 +17,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 - `AttachmentStore`
 - `GeneratedImageStore`
 - `UsageStore`
-- `MemoryStore`
+- Memory Feature contracts 中的 `MemoryStore`（由 desktop runtime 提供文件 adapter）
 - `McpStore`
 - `SkillRegistry`
 - `PluginBundleStore`
@@ -67,7 +67,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 `src/runtime/runtime-factory.ts` 组装顺序大致为：
 
 1. Clock、IDs、event/debug/notification buses、approval gate。
-2. Thread/attachment/image/config/usage/MCP/policy/memory stores。
+2. Thread/attachment/image/config/usage/MCP/policy stores，以及提供给 Memory Feature 的 store adapter。
 3. Event writer 与 `EventCoordinatedThreadStore`。
 4. MCP connection 与 elicitation。
 5. Skill registry 和 MCP dependency wrapper。
@@ -76,7 +76,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 8. Browser/native bridge。
 9. Tool hosts 与 `CompositeToolHost`。
 10. Configured model client + image asset resolver。
-11. AgentLoop。
+11. AgentLoop 与 Runtime Feature composition；Feature control 激活后绑定到 Core facade/tool adapter。
 
 Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options。测试可以替换端口，生产路径不使用全局 singleton。
 

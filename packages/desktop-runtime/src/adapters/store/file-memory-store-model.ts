@@ -6,7 +6,7 @@ import type {
   RuntimeMemorySourceLocation,
   RuntimeMemoryStage1Output,
   RuntimeMemoryStage1Status
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-memory/contracts';
 import path from 'node:path';
 import { isNodeErrorCode } from '../../shared/node-errors.js';
 import type { RenderedMemoryArtifacts } from './file-memory-store-artifacts.js';
@@ -92,9 +92,8 @@ export function normalizeMemoryFilePath(value: unknown): string | undefined {
   if (path.posix.isAbsolute(raw) || path.win32.isAbsolute(raw)) {
     throw new Error(`Invalid memory file path: ${value}`);
   }
-  const text = raw.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-  if (!text) return undefined;
-  const parts = text.split('/').filter(Boolean);
+  const parts = raw.replaceAll('\\', '/').split('/').filter(Boolean);
+  if (!parts.length) return undefined;
   if (parts.some((part) => part === '..' || part === '.' || part.startsWith('.'))) {
     throw new Error(`Invalid memory file path: ${value}`);
   }

@@ -8,7 +8,7 @@
 
 本文给出一套可直接拆解实施的 Feature Composition Architecture。它解决的是“一个业务功能横跨 contracts、runtime、main/preload、renderer 后，修改和删除都必须触碰大量中央文件”的问题，不把项目改造成面向第三方的通用插件平台。
 
-本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser、Collaboration 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
+本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser、Collaboration、Memory 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
 
 已落地的关键结果：
 
@@ -21,6 +21,8 @@
 - Review 已拥有 DTO、Git 状态/操作、图片版本解析、worktree watcher、main IPC 与 preload 子桥；宿主只提供 commit-message runtime 调用、受认证 preview registry 和 sender policy。现有 Review presentation 仍作为 Workspace/Chat 的宿主适配层保留，避免 Feature 反向依赖宿主 UI 内部模块。
 - Browser 已拥有 control/UI contracts、runtime 工具语义、main guest/CDP/loopback/IPC、preload 子桥及 renderer tab/webview 视图、文案和样式；宿主只保留四端 composition、窗口/UI adapter 与通用 `ToolHost` adapter。
 - Collaboration 已拥有协作工具语义、子任务台账事件与投影、typed state query/client、任务卡片/概览/子会话 presentation、文案和样式；Core 只保留通用 thread/turn/mailbox 服务，并通过窄 `RuntimeHost` capability 提供给 Feature。旧 `collaboration.task_*` 记录仅由兼容 decoder 读取，不再写入通用 thread snapshot。
+- Memory 已拥有偏好与管理 DTO、portable settings、typed operations/client、分别追加到“个性化”和“专用模型”的设置分区扩展、记忆工具语义、上下文注入、显式/被动抽取、整理与引用过滤；Core 只保留通用 model/thread/event/usage 服务、文件存储 adapter，以及持久 transcript 必需的引用和 thread mode 字段。
+- Renderer Settings View 由宿主通过 `SettingsViewHostProps.ui` 显式提供表单组件与语义主题 token；Feature 继续拥有业务状态和特有 presentation，但不再各自重写 Button、Input、Select、Switch 与设置页密度。
 - `scripts/check-feature-boundaries.mjs` 验证进程入口、跨 Feature import、package version、reserved identity、renderer transport 边界，并冻结已迁移 Feature 回流中央 Config/client/UI surface。
 
 ## 1. 决策摘要
@@ -48,10 +50,10 @@ External Plugin Bundle
 
 1. Feature 是业务所有权单位，不是跨进程对象。contracts、runtime、renderer、main、preload 必须是独立入口。
 2. Core 只拥有组合、类型化 Capability、生命周期、依赖验证、通用事件与安全边界；Registry 由两个纵向试点按真实接缝逐个带出，不理解具体 Feature 业务语义。
-3. 内置 Feature 是编译期可信代码，可以提供 React 视图和作用域样式；外部 Plugin 是受限 Adapter，不得直接注入 React、JavaScript、HTML、全局 CSS、route、IPC 或核心事件。
+3. 内置 Feature 是编译期可信代码，可以提供 React 视图和业务特有的作用域样式；标准表单控件、设置页节奏与主题由宿主设计系统提供。外部 Plugin 是受限 Adapter，不得直接注入 React、JavaScript、HTML、全局 CSS、route、IPC 或核心事件。
 4. 持久事件分为封闭的 Core RuntimeEvent 和 Feature Event。Feature Event 由所属 Feature 提供 codec、migration 和 reducer，但不得用来绕过通用线程语义。
 5. 一个 Feature 可以拥有多个强类型 Settings Document；schema、revision、secret、同步、保留和生效策略均属于具体 document，cache 不伪装成设置。
-6. 第一轮只建设有真实扩散证据的 Registry；不建设万能容器、Service Locator、Page/Panel/Theme 大全。
+6. 只建设有真实扩散证据的 Registry；不建设万能容器、Service Locator、Page/Panel/Theme 大全。多个 Settings View 已形成的控件复用通过普通 host props 解决，不新增可动态覆盖的 Theme Registry。
 7. 迁移使用单向兼容 Adapter，禁止双写。最后一个旧消费者移除后，必须端到端删除旧 contract、实现、测试和文档。
 8. Module 静态声明 `provides` 和 `dependencies`，composition 在 setup 前完成依赖图验证；Feature 的 required/optional 是宿主 mount policy，不写死在跨进程定义中。
 9. 使用“图片生成 + Goal”两个正交试点。Image Generation 按需带出 Route/Settings/UI Registry，Goal 按需带出 Feature Event/Projection；第二个试点不得继续给 Kernel 加入媒体或 Goal 专用参数。
@@ -106,7 +108,7 @@ Setsuna 必须继续保留：
 
 ### 4.1 目标
 
-- 一个 Feature 的 contracts、use case、route、typed client、设置、UI、i18n 和样式有明确单一 owner。
+- 一个 Feature 的 contracts、use case、route、typed client、设置、业务 UI、i18n 和作用域样式有明确单一 owner；通用控件与主题仍由宿主设计系统统一拥有。
 - 新 Feature 通常只新增 Feature 包并修改相应进程的 composition root。
 - Feature 之间依赖稳定 Capability contract，不导入彼此实现。
 - Feature 可以在 composition/profile 中独立启用、替换和删除；Scope 停止时其注册项会结构化释放。V1 不开放运行中的单 Feature 热停用。
@@ -205,7 +207,7 @@ packages/
 
 - `contracts`：只能依赖纯 TypeScript、schema 库和稳定共享 contract；不能依赖 DOM、Node、Electron、React。
 - `runtime`：可以依赖 Node 和 runtime ports；不能依赖 renderer/main/preload。
-- `renderer`：可以依赖 React 和 renderer UI primitives；不能依赖 Node、Electron、runtime 实现。
+- `renderer`：可以依赖 React，并通过 View Host Contract 使用宿主注入的 renderer UI primitives；不能反向导入宿主内部路径，也不能依赖 Node、Electron、runtime 实现。
 - `main`：可以依赖 Electron main API；不能被 renderer/runtime 导入。
 - `preload`：只能暴露可结构化克隆的 DTO 和窄方法；不能暴露 Node 对象或泛型 dispatch。
 
@@ -525,7 +527,7 @@ Registry registration 都有 owner 和 disposer，但默认 lifetime 是 `execut
 4. Registry 在对应纵向切片之前不创建；Kernel contract fixture 只验证组合合同，不替尚不存在的业务设计 Registry。
 5. 第二个正交试点不能要求给 Kernel 或既有 Registry 加 Feature 专用参数。
 
-Page、Panel、Sidebar、Slot、Theme 等先保留为候选，不在第一轮创建。
+Page、Panel、Sidebar、Slot、可运行时覆盖的 Theme Registry 等仍保留为候选。已经出现三个真实 Settings View 消费者的标准控件不再作为推测性 Registry 处理，而是通过 `SettingsViewHostProps.ui` 由宿主显式传入。
 
 ## 12. Runtime Route 与 Feature Client
 
@@ -990,6 +992,8 @@ cache 使用独立的 Feature-owned CachePort namespace，必须可删除、可�
 
 Vision Recognition 在阶段 5 复用了同一单向规则：`vision-recognition/model-selection` 是唯一新真源，根 Config 不再公开或写入 `visionRecognition`；runtime 首次建立 document 时才读取旧字段并在提交后退休，WebDAV legacy decoder 只把旧备份导入新 document。新备份只枚举 portable document，不再写旧表示。
 
+Memory 同样只做一次单向迁移：`memory/preferences` 是唯一新设置真源，首次建立 document 时读取旧 `memory`、`memoryEnabled` 与两个旧 task-model 引用，成功提交后退休旧字段。后续设置只经 Feature operation 写入；SWE app-server 的 `memories.*` 与 `desktop.memory_enabled` 是协议转换层，不会恢复根 Config 双写。
+
 禁止新旧配置双写，也不允许 WebDAV 同时备份两份可独立恢复的真源。
 
 ## 15. Renderer Feature 依赖与 UI
@@ -1018,7 +1022,7 @@ type ImageGenerationFeatureContext = {
 
 ### 15.1 SettingsViewRegistry
 
-注册项至少包含：
+Registry 只支持两种明确的贡献形态。Feature 确实需要独立页面或 Plugin 详情时，注册完整 View：
 
 ~~~ts
 type SettingsViewContribution = {
@@ -1026,11 +1030,29 @@ type SettingsViewContribution = {
   location: 'settings' | 'capabilities';
   order: number;
   titleKey: MessageKey;
+  descriptionKey?: MessageKey;
   render: React.ComponentType<SettingsViewHostProps>;
 };
 ~~~
 
-展示名称和 `titleKey` 从 `FeatureDefinition` 移到此类 renderer contribution。宿主只提供通用 navigation、error boundary、可访问性和布局 props。Feature component 从自己的窄 Provider/controller 取数据，不能要求 `SettingsPage` 增加业务 props。
+展示名称、`titleKey` 和可选 `descriptionKey` 从 `FeatureDefinition` 移到此类 renderer contribution。宿主提供通用 navigation、error boundary、可访问性、布局和 `SettingsViewUi`；Feature component 从自己的窄 Provider/controller 取数据，不能要求 `SettingsPage` 增加业务 props。
+
+Feature 设置天然属于宿主现有分类时，注册分区扩展：
+
+~~~ts
+type SettingsSectionExtensionContribution = {
+  id: string;
+  targetSectionId: string;
+  order: number;
+  render: React.ComponentType<SettingsViewHostProps>;
+};
+~~~
+
+`targetSectionId` 只能引用宿主公开的稳定分区；`registerSectionExtension()` 不创建标题页或侧栏导航，由宿主在目标分区按 `order + id` 渲染。该能力是 Settings 专用的命名扩展点，不演化为任意页面、任意 DOM 位置都能插入的通用 Slot Registry。Memory 用两个独立 contribution 把偏好与管理入口追加到 `personalization`，把抽取/整理模型追加到 `taskModels`；`SettingsPage` 不认识 Memory 类型、client 或状态。
+
+`SettingsViewUi` 是普通的、显式传入的组件集合，不是全局 Context、Service Locator 或可覆盖 Registry。当前稳定面只包含 Settings View 已经真实复用的 `Section`、`Group`、`Row`、`Toggle`、`Button`、`IconButton`、`TextField`、`TextArea`、`SelectField` 与 `EmptyState`。Feature 负责字段含义、状态、校验和业务特有 presentation；宿主负责控件交互、可访问性、密度、focus、disabled、danger/primary 状态与主题适配。
+
+内置 Feature 的标准表单必须优先使用该集合。只有图片预览、记忆条目、连接测试结果等业务特有展示才保留 Feature-scoped CSS；不得为了视觉独立性再次实现一套通用 Button/Input/Select/Switch。外部 Plugin 的声明式 settings renderer 未来也复用同一宿主实现，但不会获得 React component 引用。
 
 ### 15.2 ToolResultViewRegistry
 
@@ -1067,12 +1089,14 @@ type RendererMessageBundle = Readonly<{
 - 消息 metadata 跟随静态安装模块并在 renderer composition 生命周期内有效，不挂在 execution scope；renderer setup 失败不会撤销错误页或通用修复 UI 需要的文案。V1 没有运行时热卸载，因此不实现动态 message removal。
 - 文案 key 必须位于声明 namespace 下，不能把 Feature 文案继续加入共享巨型 namespace。`SettingsViewContribution.titleKey` 也必须被本模块或宿主公共 namespace 覆盖。
 - 新增/修改 Feature 文案只改 Feature `/renderer` 入口旁的资源；中央 messages 文件只保留宿主导航、安全、通用错误和设计系统文案。
+- 标准设置表单控件使用 `SettingsViewHostProps.ui`，不在 Feature CSS 中复制按钮、输入框、选择器或开关的 hover/focus/disabled/theme 规则。
 - Feature 入口静态 import 自有 CSS，卸载视图不等于动态卸载 stylesheet。
 - 首选 CSS Modules；使用普通 CSS 时，所有选择器必须位于 `[data-feature-id="<id>"]` 根下。
 - 禁止修改无关全局 selector。真正通用的视觉 token 经设计系统评审后加入 `tokens.css`，不能从 Feature CSS 反向覆盖。
+- Feature 特有 presentation 只使用宿主公开的 `--sd-color-*`、`--sd-radius-*`、`--sd-shadow-card` 与 `--sd-focus-ring` 语义 token；不依赖某个亮色主题的硬编码值，也不把宿主内部组件 class 当作 API。
 - ErrorBoundary 以 Feature 为单位隔离，失败时显示可诊断 fallback，不拖垮整页或消息列表。
 
-这使内置 Feature 可以完整改变自己的设置区、工具卡片和交互样式，同时保持宿主导航、权限提示和全局设计 token 的所有权。
+这使内置 Feature 可以完整表达自己的业务设置、工具卡片和特有交互，同时保持宿主导航、标准表单、权限提示和全局设计 token 的所有权。
 
 ## 16. Main/Preload 窄桥
 
@@ -1142,7 +1166,7 @@ Plugin manifest
   → schema/permission validation
   → Plugin Adapter
   → approved Settings/ToolResult contribution
-  → host React component
+  → host React component / SettingsViewUi
   → sanitized token values on data-plugin-id root
 ~~~
 
@@ -1309,7 +1333,8 @@ Plugin manifest
 3. Review native 边界已完成：Feature package 现拥有 DTO、Git 状态机、watcher、IPC 与 preload bridge；Workspace/Chat presentation 因真实宿主 UI 依赖暂留 adapter，不建立反向依赖或复制共享组件。
 4. Browser 已完成：Feature package 现拥有 control/UI contracts、runtime 工具 service/client、main guest/CDP/control server/IPC、preload bridge 及 renderer UI/文案/样式；中央 contracts、main browser 目录、workspace Browser 实现和 runtime Browser 业务 adapter 已删除，只保留窄宿主组合 adapter。
 5. Collaboration 已完成：Feature package 现拥有协作工具协调器、任务事件/投影、typed state query/client、spawn result contribution、任务概览与子会话 presentation；Core 只通过 `collaboration.control` 调用 Feature，并通过 `collaboration.runtime-host` 提供通用 thread/turn/mailbox 能力。通用 thread snapshot、SSE mapper 和 Chat tool switch 不再拥有协作私有状态或展示分支，旧事件仅保留读取 decoder。
-6. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
+6. Memory 已完成：Feature package 现拥有偏好/管理 contracts、portable settings、typed operations/client、Settings 分区扩展、记忆工具、上下文、抽取、整理与引用过滤。Core 通过 `memory.control` 延迟绑定 Feature，并用 `memory.runtime-host` 提供 model/thread/event/usage/store 窄能力；根 Config、统一 client、全局 config/memory hook、Personalization 与 task-model 页面不再拥有 Memory 私有设置或管理状态。
+7. 其他继续增长根 Config、统一 client、设置页面或工具结果 switch 的能力。
 
 每次迁移都必须有旧 surface 删除清单。没有扩散收益的模块留在原处。
 
@@ -1356,6 +1381,11 @@ Plugin manifest
 | `packages/contracts/src/{browser-control,ui-actions}.ts` 与 `desktop.ts` Browser bridge 字段 | Browser contracts + preload composition | 已删除；control/UI DTO 和 typed 子桥由 Feature 单一拥有，宿主 bridge 类型通过 contribution 显式相交 |
 | `apps/desktop/main/src/{browser,ipc/browser-ipc.ts}` | Browser main Feature | 已删除；guest 安全、CDP/controller、loopback server、IPC 与 scope disposal 由 Feature 单一拥有 |
 | workspace Browser UI/文案/样式与 runtime Browser client/tool 业务实现 | Browser renderer/runtime Feature | 已删除；宿主仅保留 Workspace pane adapter 与通用 `ToolHost` adapter，不复制 Browser 规则 |
+| `RuntimeConfigState/Input.memory`、`memoryEnabled` 与 Memory task model | Memory `preferences` document | 已从根 Config 删除；旧字段只由一次性 migration adapter 导入，成功提交后退休，不再双写 |
+| `DesktopRuntimeClient` Memory CRUD/preview 与 `useRuntimeMemoryUsageState` | Memory typed client + Settings View；Core `useRuntimeUsageState` | 已删除/拆分；Memory 状态由 Feature view 按需持有，Core hook 只负责 usage |
+| Personalization/TaskModel 中的 Memory props、selector 与文案 | Memory Settings section extensions | 已删除；`SettingsPage` 只按目标分区渲染通用 extension，偏好/管理入口归入“个性化”，抽取/整理模型归入“专用模型”，业务状态仍由 Memory Feature 持有 |
+| `loop/memory` 与 PC-local `remember_memory` 实现 | Memory runtime Feature + `memory.control` | 业务语义已迁移；Core 仅保留延迟绑定控制面、窄 runtime host、通用 `ToolHost` adapter 和文件存储 adapter |
+| SWE app-server `memories.*`、旧 Memory REST 与持久 citation/thread mode | Memory compatibility adapters / Core persistence contract | 暂保留外部协议与历史数据读取义务；全部委托同一 `MemoryControl` 或 Feature-owned store contract，不形成第二真源 |
 
 如果一个 Adapter 开始需要第二份缓存、双向同步、Feature ID switch 或复杂状态机，说明业务尚未真正迁移，必须停止并重新划分 owner。
 
@@ -1508,7 +1538,7 @@ pnpm build
 - Feature settings 按 document 强类型，并覆盖 management/execution plane、诊断重置、migration、revision、secret crash recovery、sync、retention 和 apply；cache 不是 settings。
 - degraded、disabled 和 definition 有效的 failed Feature 仍按策略备份 portable settings；损坏/未知 schema fail closed 且本地原文保留。
 - Registry 只在 Image Generation/Goal 真实切片中按需建立，没有由 Kernel fixture 预造的空扩展面。
-- 内置 Feature 可注册 React 视图和作用域样式；外部 Plugin 只能走受限 declarative gateway。
+- 内置 Feature 可注册 React 业务视图和作用域样式，标准设置控件由宿主 `SettingsViewUi` 提供；外部 Plugin 只能走复用同一宿主渲染器的受限 declarative gateway。
 - Image Generation 不再泄漏到根 Config、统一 client、全局 runtime hook 和中央 Tool Result switch。
 - Goal 私有状态有 Feature-owned event/query/reducer，通用 turn 语义仍由 Core 所有。
 - Vision Recognition 不再泄漏到根 Config、统一 client、全局 config hook 和 Capabilities 业务分支；旧设置只通过单向 decoder 导入。
@@ -1548,7 +1578,7 @@ pnpm build
 - 不为每个按钮、endpoint 或 hook 建 Feature/package。
 - 不为了文件扩散指标隐藏必要的安全 contract。
 - 不保留永久兼容 shim，也不在迁移期间双写。
-- 不在两个正交试点前设计 Page/Panel/Theme/Sidebar 等推测性 Registry。
+- 不建设 Page/Panel/Theme/Sidebar 等推测性或可动态覆盖的 Registry；已经有多个真实消费者的 Settings 表单复用以显式 host props 解决。
 
 ## 25. 长期实现入口与维护规则
 
@@ -1560,6 +1590,7 @@ pnpm build
 | Feature Kernel | `packages/feature-core/*` | definition、module factory、Capability、scope、composition、status 与稳定 identifier 检查；不含具体业务语义 |
 | Runtime composition | `packages/desktop-runtime/src/composition/builtin-runtime-features.ts` | runtime 唯一内置 Feature 安装 catalog、execution mount policy 和依赖图入口 |
 | Renderer composition | `apps/desktop/renderer/src/composition/builtin-renderer-features.ts` | renderer 唯一内置 Feature catalog、message metadata 和依赖图入口 |
+| Renderer Settings UI | `apps/desktop/renderer/src/shared/ui/SettingsViewUi.tsx`、`shared/styles/tokens.css` | 宿主标准表单组件、设置页密度与公开语义主题 token；通过 View Host Contract 显式传入 Feature |
 | Main composition | `apps/desktop/main/src/composition/builtin-main-features.ts` | main 唯一 native Feature execution mount、Capability adapter 与生命周期入口 |
 | Main settings composition | `apps/desktop/main/src/composition/builtin-feature-settings.ts` | runtime 停止期间仍可枚举 portable settings definition |
 | Preload composition | `apps/desktop/preload/src/composition/builtin-preload-features.ts` | 收集 typed bridge contribution，校验重复/缺失 key 后统一 expose |
@@ -1572,6 +1603,7 @@ pnpm build
 | Terminal owner | `packages/features/terminal/*` | Terminal DTO、PTY/session、IPC、preload bridge、xterm presentation 与 scoped resources 的纵向 owner |
 | Browser owner | `packages/features/browser/*` | Control/UI DTO、runtime 工具语义、guest/CDP/loopback/IPC、preload bridge、tab/webview presentation、文案与样式的纵向 owner |
 | Collaboration owner | `packages/features/collaboration/*` | 协作工具、子任务事件/投影、typed query/client、任务概览/子会话 UI、Tool Result contribution、文案与样式的纵向 owner；Core 仅提供通用 thread/turn/mailbox host port |
+| Memory owner | `packages/features/memory/*` | 偏好/管理 contracts、portable settings、typed operations/client、Settings View、记忆工具、上下文、抽取、整理与引用过滤的纵向 owner；Core 仅提供延迟绑定 control、通用 runtime host 和持久 adapter |
 
 任何 Feature 新增、迁移、降级处理或删除评审都使用同一组问题：
 
@@ -1581,7 +1613,7 @@ pnpm build
 4. Settings definition、诊断、确认重置和 portable backup 是否独立于 execution scope，未知或损坏数据是否 fail closed 且本地保留？
 5. 持久/协议标识是否保持稳定；重命名是否有 alias/decoder、单向 migration 和 reserved 记录？
 6. 持久 Feature state 是否只有一个 replay/live reducer；runtime 和 renderer 是否都观察全局 throughSeq，同时不泄露无关 payload？
-7. Renderer messages、views 和 styles 是否由 Feature 静态入口拥有，并保留 namespace 冲突、fallback、error boundary 和 CSS scope 约束？
+7. Renderer messages、业务 views 和作用域 styles 是否由 Feature 静态入口拥有；标准表单是否复用宿主 `SettingsViewUi` 与公开 token，并保留 namespace 冲突、fallback、error boundary 和 CSS scope 约束？
 8. 迁移是否单写新真源；最后一个旧消费者移除时，旧 contract、adapter、mock、测试和文档是否同批删除？
 
 如果实现需要给 Kernel 添加具体 Feature 字段、让组件读取全局 runtime state、让外部 Plugin 获得任意 renderer/native 能力、同时维护新旧两份可写状态、在 setup 中隐藏依赖/provider、用无水位缓存或第二套 reducer 拼投影，或用补偿回滚冒充 secret crash consistency，应回到本文重新确认 owner 和边界，不能继续增加兼容分支。

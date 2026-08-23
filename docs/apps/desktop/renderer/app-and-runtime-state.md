@@ -131,7 +131,7 @@ Renderer 的薄 runtime facade，只持有：
 - Projects。
 - Turn 完成后的跨 capability/usage 刷新桥。
 
-它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts`、`useRuntimeMemoryUsageState.ts` 和 `useRuntimeThreadState.ts`，保持 72 项上层调用面不变。
+它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts`、`useRuntimeUsageState.ts` 和 `useRuntimeThreadState.ts`，对上层提供稳定的宿主状态面。Feature 私有状态由 renderer contribution 自己持有，不再汇入该 facade。
 
 ### `useRuntimeThreadState.ts`
 
@@ -144,7 +144,7 @@ Renderer 的薄 runtime facade，只持有：
 
 该 hook 只依赖 12 个 thread/review/approval client 方法。一个 bridge batch 只提交一次 current-thread React state；batch 内的 SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
 
-纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade，再由 facade 刷新 capability/usage，避免 thread hook 与 memory hook 形成循环依赖。
+纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade，再由 facade 刷新 capability/usage，避免 domain hook 形成循环依赖。
 
 ### `useRuntimeConfigState.ts`
 
@@ -166,18 +166,15 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 - Hooks 与当前 project cwd 的 latest-request guard。
 - Plugins、marketplace 和跨 Skill/MCP/config/Hook 的安装后刷新。
 
-该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、usage、memory 或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
+该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、usage、Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
 
-### `useRuntimeMemoryUsageState.ts`
+### `useRuntimeUsageState.ts`
 
-Memory/usage 域 owner，持有：
+Usage 域 owner，持有：
 
 - Global usage 与当前 thread usage。
-- 当前 project 的 memory list。
-- Memory preview 与 loading。
-- Delete/clear 后的 list + preview 收敛。
 
-Project memory 使用 project identity guard，thread usage 使用 thread identity guard，preview/global usage 使用 latest-request guard。Turn completed 仍会刷新全局 usage 和对应 thread usage，但迟到结果不能写入已经切换的 owner。该 hook 的 client contract 只包含 memory/usage 所需的 5 个方法。
+Thread usage 使用 thread identity guard，global usage 使用 latest-request guard。Turn completed 仍会刷新全局 usage 和对应 thread usage，但迟到结果不能写入已经切换的 owner。Memory 设置、preview、delete/clear 由 `packages/features/memory/renderer` 的 typed client 与 Settings View 按需持有。
 
 ## Bootstrap
 
@@ -249,7 +246,7 @@ snapshot 把完成 turn 恢复成 active。Snapshot、usage、capability 等后�
 - `useRuntimeClientState.test.ts`
 - `useRuntimeCapabilityState.test.ts`
 - `useRuntimeConfigState.test.ts`
-- `useRuntimeMemoryUsageState.test.ts`
+- `useRuntimeUsageState.test.ts`
 - `test/unit/app/controller/`
 - `test/unit/app/layout/`
 - `test/unit/app/sidebar/`

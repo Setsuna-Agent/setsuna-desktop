@@ -1,34 +1,36 @@
 import type {
-  RuntimeConfigState,
   RuntimeMemoryCitation,
-  RuntimeMemoryRecord,
-  RuntimeMemorySourceLocation,
   RuntimeMessage,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolCall,
   RuntimeUsage,
 } from '@setsuna-desktop/contracts';
-import type { Clock } from '../../ports/clock.js';
-import type { ConfigStore } from '../../ports/config-store.js';
-import type { IdGenerator } from '../../ports/id-generator.js';
-import type { MemoryStore } from '../../ports/memory-store.js';
-import type { ModelClient } from '../../ports/model-client.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
-import type { ToolExecutionResult } from '../../ports/tool-host.js';
-import type { UsageStore } from '../../ports/usage-store.js';
-import { errorMessage } from '../../shared/node-errors.js';
+import type { RuntimeFeatureSettingsDocumentHandle } from '@setsuna-desktop/feature-core/settings';
+import type {
+  MemoryControl,
+  MemoryRuntimeHost,
+  MemorySettingsState,
+  MemorySettingsUpdate,
+  MemoryToolContext,
+  MemoryToolExecutionResult,
+} from '../contracts/capabilities.js';
+import type { MemoryPreferences, MemoryPreferencesPatch } from '../contracts/settings.js';
+import type {
+  RuntimeMemoryPreview,
+  RuntimeMemoryRecord,
+  RuntimeMemorySourceLocation,
+} from '../contracts/types.js';
 import {
+  addRuntimeUsage,
   compactForPrompt,
+  errorMessage,
   escapeSkillAttribute,
+  MemoryBackgroundTaskQueue,
   neutralizeMemoryTags,
   neutralizePromptClosingTags,
-} from '../context/prompt-utils.js';
-import { throwIfAborted } from '../core/runtime-turn-errors.js';
-import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
-import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
-import { addRuntimeUsage } from '../core/runtime-usage.js';
-import { RuntimeBackgroundTaskQueue } from '../lifecycle/runtime-background-task-queue.js';
+  throwIfAborted,
+} from './runtime-helpers.js';
 import {
   MEMORY_CONSOLIDATION_MODEL,
   runMemoryConsolidationAgent,
@@ -43,6 +45,8 @@ import {
   passiveMemoryExtractionFromModelText,
   stage1RolloutSummaryFromCandidates,
 } from './passive-memory-extraction.js';
+import { MemoryCitationStreamParser, parseMemoryCitationBodies } from './memory-citation.js';
+import { MemoryRuntimeTools } from './memory-runtime-tools.js';
 
 const PASSIVE_MEMORY_MODEL = 'passive-memory-extraction';
 const PASSIVE_MEMORY_MAX_OUTPUT_TOKENS = 900;
@@ -58,53 +62,85 @@ const MEMORY_PHASE2_JOB_RETRY_DELAY_SECONDS = 3_600;
 const HOURS_TO_MS = 60 * 60 * 1000;
 const DAYS_TO_MS = 24 * HOURS_TO_MS;
 const REMEMBER_MEMORY_TOOL_NAME = 'remember_memory';
-const SHARED_MEMORY_FILES_FEATURE = 'memory_unscoped_files';
-
 export type ExplicitMemoryInput = {
   alreadySaved: boolean;
-  config: RuntimeConfigState | null | undefined;
   projectId?: string;
   userContent: string;
 };
 
 type RuntimeMemoryCoordinatorOptions = {
-  clock: Clock;
-  configStore?: ConfigStore;
-  ids: IdGenerator;
-  memoryStore?: MemoryStore;
-  modelClient: ModelClient;
-  threadStore: ThreadStore;
-  usageStore?: UsageStore;
-  appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
+  host: MemoryRuntimeHost;
+  settings: RuntimeFeatureSettingsDocumentHandle<
+    MemoryPreferences,
+    MemoryPreferences,
+    MemoryPreferencesPatch,
+    undefined
+  >;
 };
 
 /**
  * 集中管理长期记忆的读取、生成和污染策略。
  * AgentLoop 只决定这些动作在 turn 生命周期中的调用时机。
  */
-export class RuntimeMemoryCoordinator {
-  private readonly backgroundTasks = new RuntimeBackgroundTaskQueue('memory');
+export class RuntimeMemoryCoordinator implements MemoryControl {
+  readonly available = true;
+  private readonly backgroundTasks = new MemoryBackgroundTaskQueue();
   private readonly passiveTasks = new Map<string, Promise<void>>();
+  private readonly tools: MemoryRuntimeTools;
   private shuttingDown = false;
 
-  constructor(private readonly options: RuntimeMemoryCoordinatorOptions) {}
+  constructor(private readonly options: RuntimeMemoryCoordinatorOptions) {
+    this.tools = new MemoryRuntimeTools(options.host.store, () => this.preferences());
+  }
+
+  async readSettings(): Promise<MemorySettingsState> {
+    const [settings, availableModels] = await Promise.all([
+      this.options.settings.readPublic(),
+      this.options.host.listModelOptions(),
+    ]);
+    return Object.freeze({
+      value: settings.value,
+      revision: settings.revision,
+      availableModels,
+    });
+  }
+
+  async updateSettings(input: MemorySettingsUpdate): Promise<MemorySettingsState> {
+    await this.options.settings.update({
+      expectedRevision: input.expectedRevision,
+      patch: input.patch,
+    });
+    return this.readSettings();
+  }
+
+  preview(): Promise<RuntimeMemoryPreview> {
+    return this.options.host.store.previewMemories();
+  }
+
+  delete(memoryId: string): Promise<void> {
+    return this.options.host.store.deleteMemory(memoryId);
+  }
+
+  clear(): Promise<void> {
+    return this.options.host.store.clearMemories();
+  }
+
+  updateThreadMode(threadId: string, mode: Parameters<MemoryRuntimeHost['updateThreadMode']>[1], reason?: string) {
+    return this.options.host.updateThreadMode(threadId, mode, reason);
+  }
 
   async runStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
     return this.backgroundTasks.enqueue((signal) => this.runStartupExtractionNow(signal));
   }
 
   private async runStartupExtractionNow(signal: AbortSignal): Promise<{ claimed: number; extracted: number }> {
-    const memoryStore = this.options.memoryStore;
-    if (!memoryStore) return { claimed: 0, extracted: 0 };
+    const memoryStore = this.options.host.store;
     throwIfAborted(signal);
-    const configStore = this.options.configStore;
-    const config = configStore
-      ? await runMemoryBestEffort('startup.read_config', null, () => configStore.getConfig())
-      : null;
-    if (!canGenerateMemories(config)) return { claimed: 0, extracted: 0 };
+    const preferences = await this.preferences();
+    if (!preferences.generateMemories) return { claimed: 0, extracted: 0 };
 
-    const now = this.options.clock.now();
-    const summaries = await this.options.threadStore.listThreads({ includeArchived: true });
+    const now = this.options.host.now();
+    const summaries = await this.options.host.listThreads({ includeArchived: true });
     const existing = await runMemoryBestEffort(
       'startup.list_memories',
       { memories: [] },
@@ -123,16 +159,16 @@ export class RuntimeMemoryCoordinator {
     }
     const candidates = memoryStartupExtractionCandidates(
       summaries,
-      config,
+      preferences,
       now,
-      memoryMaxRolloutsPerStartup(config),
+      memoryMaxRolloutsPerStartup(preferences),
     );
 
     let claimed = 0;
     let extracted = 0;
     for (const summary of candidates) {
       throwIfAborted(signal);
-      const thread = await this.options.threadStore.getThread(summary.id);
+      const thread = await this.options.host.getThread(summary.id);
       if (!thread || !threadAllowsMemoryGeneration(thread)) continue;
       const messages = startupMemorySourceMessages(thread.messages);
       if (!messages.length) continue;
@@ -144,7 +180,7 @@ export class RuntimeMemoryCoordinator {
         'startup.extract_passive_memories',
         0,
         () => this.extractPassiveMemoriesFromMessages({
-          config,
+          preferences,
           sourceLabel: '历史线程内容：',
           sourceTurnId,
           thread,
@@ -162,12 +198,11 @@ export class RuntimeMemoryCoordinator {
   }
 
   async recordCitationUsage(citation: RuntimeMemoryCitation | undefined): Promise<void> {
-    const memoryStore = this.options.memoryStore;
-    if (!citation || !memoryStore) return;
+    if (!citation) return;
     await runMemoryBestEffort(
       'citation.record_usage',
       undefined,
-      () => memoryStore.recordMemoryCitationUsage(citation).then(() => undefined),
+      () => this.options.host.store.recordMemoryCitationUsage(citation).then(() => undefined),
     );
   }
 
@@ -205,26 +240,17 @@ export class RuntimeMemoryCoordinator {
   }
 
   private async extractPassiveMemoriesForTurn(threadId: string, turnId: string, signal: AbortSignal): Promise<void> {
-    if (!this.options.memoryStore) return;
     throwIfAborted(signal);
-    const configStore = this.options.configStore;
-    const config = configStore
-      ? await runMemoryBestEffort(
-          'turn.read_config',
-          null,
-          () => configStore.getConfig(),
-          { threadId, turnId },
-        )
-      : null;
-    if (!canGenerateMemories(config)) return;
+    const preferences = await this.preferences();
+    if (!preferences.generateMemories) return;
 
-    const thread = await this.options.threadStore.getThread(threadId);
+    const thread = await this.options.host.getThread(threadId);
     if (!thread || !threadAllowsMemoryGeneration(thread) || turnAlreadySavedMemory(thread.messages, turnId)) return;
     const messages = passiveMemorySourceMessages(thread.messages, turnId);
     if (!messages.length) return;
 
     await this.extractPassiveMemoriesFromMessages({
-      config,
+      preferences,
       sourceLabel: '当前完成的一轮对话：',
       sourceTurnId: turnId,
       thread,
@@ -234,13 +260,13 @@ export class RuntimeMemoryCoordinator {
   }
 
   async rememberExplicitUserMemory(threadId: string, turnId: string, input?: ExplicitMemoryInput): Promise<void> {
-    if (!input || input.alreadySaved || !canGenerateMemories(input.config) || !this.options.memoryStore) return;
-    const thread = await this.options.threadStore.getThread(threadId);
+    if (!input || input.alreadySaved || !(await this.preferences()).generateMemories) return;
+    const thread = await this.options.host.getThread(threadId);
     if (thread && !threadAllowsMemoryGeneration(thread)) return;
     const content = explicitMemoryContentFromUserText(input.userContent);
     if (!content) return;
     try {
-      await this.options.memoryStore.rememberMemory({
+      await this.options.host.store.rememberMemory({
         content,
         scope: input.projectId ? 'project' : 'global',
         projectId: input.projectId,
@@ -252,9 +278,9 @@ export class RuntimeMemoryCoordinator {
     }
   }
 
-  async contextMessages(projectId: string | undefined, config: RuntimeConfigState | null | undefined): Promise<RuntimeMessage[]> {
-    const memoryStore = this.options.memoryStore;
-    if (!canUseMemories(config) || !memoryStore) return [];
+  async contextMessages(projectId?: string): Promise<RuntimeMessage[]> {
+    const memoryStore = this.options.host.store;
+    if (!(await this.preferences()).useMemories) return [];
     const memories = await runMemoryBestEffort(
       'context.list_memories',
       { memories: [] },
@@ -263,7 +289,7 @@ export class RuntimeMemoryCoordinator {
     if (!memories.memories.length) return [];
     // 第二阶段摘要文件会合并所有项目，因此只能通过显式调试标志启用；普通全局线程和
     // 项目线程只接收经过结构化过滤的记录。
-    const allowSharedMemoryFiles = !projectId && config?.features?.[SHARED_MEMORY_FILES_FEATURE] === true;
+    const allowSharedMemoryFiles = !projectId && await this.options.host.sharedMemoryFilesEnabled();
     const memorySummary = allowSharedMemoryFiles
       ? await runMemoryBestEffort(
           'context.read_memory_summary',
@@ -285,15 +311,15 @@ export class RuntimeMemoryCoordinator {
         '',
         ...memoryReadPathInstructions(memorySummary, projectId, allowSharedMemoryFiles),
       ].join('\n'),
-      createdAt: this.options.clock.now().toISOString(),
+      createdAt: this.options.host.now().toISOString(),
       status: 'complete',
     }];
   }
 
-  async toolBlockForCall(toolCall: RuntimeToolCall, threadId: string, config: RuntimeConfigState | null | undefined): Promise<string | null> {
+  async toolBlockForCall(toolCall: RuntimeToolCall, threadId: string): Promise<string | null> {
     if (toolCall.name !== REMEMBER_MEMORY_TOOL_NAME) return null;
-    if (!canGenerateMemories(config)) return 'Memory generation is disabled for this runtime.';
-    const thread = await this.options.threadStore.getThread(threadId);
+    if (!(await this.preferences()).generateMemories) return 'Memory generation is disabled for this runtime.';
+    const thread = await this.options.host.getThread(threadId);
     if (thread && !threadAllowsMemoryGeneration(thread)) {
       return `Memory generation is disabled for this thread (${thread.memoryMode}).`;
     }
@@ -304,18 +330,17 @@ export class RuntimeMemoryCoordinator {
     threadId: string,
     turnId: string,
     toolCall: RuntimeToolCall,
-    result: ToolExecutionResult,
-    config: RuntimeConfigState | null | undefined,
+    result: Readonly<{ containsExternalContext?: boolean }>,
   ): Promise<void> {
-    if (!shouldDisableMemoryOnExternalContext(config) || !toolCallPollutesMemory(toolCall, result)) return;
-    const thread = await this.options.threadStore.getThread(threadId);
+    if (!(await this.preferences()).disableOnExternalContext || !toolCallPollutesMemory(toolCall, result)) return;
+    const thread = await this.options.host.getThread(threadId);
     if (!thread || !threadAllowsMemoryGeneration(thread)) return;
-    await this.options.appendEvent(threadId, {
-      id: this.options.ids.id('event'),
+    await this.options.host.appendEvent(threadId, {
+      id: this.options.host.id('event'),
       threadId,
       turnId,
       type: 'thread.memory_mode_updated',
-      createdAt: this.options.clock.now().toISOString(),
+      createdAt: this.options.host.now().toISOString(),
       payload: {
         mode: 'polluted',
         reason: `external_context:${toolCall.name}`,
@@ -323,23 +348,63 @@ export class RuntimeMemoryCoordinator {
     });
   }
 
+  isSuccessfulRememberMessage(message: RuntimeMessage): boolean {
+    return isSuccessfulRememberMemoryMessage(message);
+  }
+
+  createCitationOutputFilter() {
+    const parser = new MemoryCitationStreamParser();
+    const bodies: string[] = [];
+    return {
+      push(delta: string) {
+        const parsed = parser.push(delta);
+        bodies.push(...parsed.citations);
+        return { visibleText: parsed.visibleText };
+      },
+      finish() {
+        const parsed = parser.finish();
+        bodies.push(...parsed.citations);
+        return {
+          visibleText: parsed.visibleText,
+          citation: parseMemoryCitationBodies(bodies),
+        };
+      },
+    };
+  }
+
+  systemPrompt(context: MemoryToolContext): Promise<string | null> {
+    return this.tools.systemPrompt(context);
+  }
+
+  listTools(context: MemoryToolContext) {
+    return this.tools.listTools(context);
+  }
+
+  toolRuntimeProfile(name: string) {
+    return this.tools.toolRuntimeProfile(name);
+  }
+
+  runTool(name: string, input: unknown, context: MemoryToolContext): Promise<MemoryToolExecutionResult> {
+    return this.tools.runTool(name, input, context);
+  }
+
   private async extractPassiveMemoriesFromMessages({
-    config,
+    preferences,
     sourceLabel,
     sourceTurnId,
     thread,
     messages,
     signal,
   }: {
-    config: RuntimeConfigState | null | undefined;
+    preferences: MemoryPreferences;
     sourceLabel: string;
     sourceTurnId?: string;
     thread: RuntimeThread;
     messages: RuntimeMessage[];
     signal: AbortSignal;
   }): Promise<number> {
-    const memoryStore = this.options.memoryStore;
-    if (!memoryStore || !messages.length) return 0;
+    const memoryStore = this.options.host.store;
+    if (!messages.length) return 0;
     throwIfAborted(signal);
     await runMemoryBestEffort(
       'phase2.prepare_workspace',
@@ -347,21 +412,16 @@ export class RuntimeMemoryCoordinator {
       () => memoryStore.preparePhase2Workspace().then(() => undefined),
       { threadId: thread.id, turnId: sourceTurnId },
     );
-    const conversationModel = resolveRuntimeTurnModel(config, thread);
-    const extractionModel = runtimeTaskModelRequest(
-      config,
-      'memoryExtraction',
-      PASSIVE_MEMORY_MODEL,
-      conversationModel
-        ? {
-            providerId: conversationModel.binding.providerId,
-            model: conversationModel.binding.modelCode,
-          }
-        : undefined,
-    );
+    const extractionModel = await this.options.host.resolveModel({
+      selection: preferences.extractionModel,
+      legacyModelCode: preferences.extractionModelCode,
+      fallbackModel: PASSIVE_MEMORY_MODEL,
+      thread,
+      preferThreadModel: true,
+    });
     let text = '';
     let usage: RuntimeUsage | undefined;
-    for await (const item of this.options.modelClient.stream({
+    for await (const item of this.options.host.streamModel({
       ...extractionModel,
       messages: this.passiveMemoryPromptMessages(thread, messages, sourceLabel),
       maxOutputTokens: PASSIVE_MEMORY_MAX_OUTPUT_TOKENS,
@@ -374,10 +434,10 @@ export class RuntimeMemoryCoordinator {
       if (item.type === 'usage') usage = addRuntimeUsage(usage, item.usage);
     }
     if (usage) {
-      await this.options.usageStore?.recordUsage({
+      await this.options.host.recordUsage({
         threadId: thread.id,
         turnId: sourceTurnId ?? 'memory_startup',
-        createdAt: this.options.clock.now().toISOString(),
+        createdAt: this.options.host.now().toISOString(),
         ...usage,
       });
     }
@@ -412,7 +472,7 @@ export class RuntimeMemoryCoordinator {
       await runMemoryBestEffort(
         'phase2.dispatch',
         undefined,
-        () => this.runPhase2Dispatch(config, thread.id, sourceTurnId, signal),
+        () => this.runPhase2Dispatch(preferences, thread.id, sourceTurnId, signal),
         { threadId: thread.id, turnId: sourceTurnId },
       );
     }
@@ -451,13 +511,12 @@ export class RuntimeMemoryCoordinator {
   }
 
   private async runPhase2Dispatch(
-    config: RuntimeConfigState | null | undefined,
+    preferences: MemoryPreferences,
     ownerId: string,
     sourceTurnId: string | undefined,
     signal: AbortSignal,
   ): Promise<void> {
-    const memoryStore = this.options.memoryStore;
-    if (!memoryStore) return;
+    const memoryStore = this.options.host.store;
     // Phase 2 is optional background work. A shutdown before the lease is
     // claimed is an expected cancellation, not a failed memory operation.
     if (signal.aborted) return;
@@ -478,16 +537,7 @@ export class RuntimeMemoryCoordinator {
         });
         return;
       }
-      const configStore = this.options.configStore;
-      const activeProvider = configStore
-        ? await runMemoryBestEffort(
-            'phase2.read_active_provider',
-            null,
-            () => configStore.getActiveProviderConfig(),
-            { threadId: ownerId, turnId: sourceTurnId },
-          )
-        : null;
-      if (!activeProvider?.activeModel) {
+      if (!await this.options.host.hasActiveModel()) {
         await memoryStore.markPhase2JobFailed({
           ownershipToken,
           reason: 'consolidation_agent_unavailable',
@@ -495,16 +545,16 @@ export class RuntimeMemoryCoordinator {
         });
         return;
       }
-      const consolidationModel = runtimeTaskModelRequest(
-        config,
-        'memoryConsolidation',
-        MEMORY_CONSOLIDATION_MODEL,
-      );
+      const consolidationModel = await this.options.host.resolveModel({
+        selection: preferences.consolidationModel,
+        legacyModelCode: preferences.consolidationModelCode,
+        fallbackModel: MEMORY_CONSOLIDATION_MODEL,
+      });
       const consolidation = await runMemoryConsolidationAgent({
-        modelClient: this.options.modelClient,
+        streamModel: (request) => this.options.host.streamModel(request),
         ...consolidationModel,
         root: workspace.root,
-        now: () => this.options.clock.now(),
+        now: () => this.options.host.now(),
         signal,
         heartbeat: () => memoryStore.heartbeatPhase2Job({
           ownershipToken,
@@ -512,10 +562,10 @@ export class RuntimeMemoryCoordinator {
         }),
       });
       if (consolidation.usage) {
-        await this.options.usageStore?.recordUsage({
+        await this.options.host.recordUsage({
           threadId: ownerId,
           turnId: sourceTurnId ?? 'memory_startup',
-          createdAt: this.options.clock.now().toISOString(),
+          createdAt: this.options.host.now().toISOString(),
           ...consolidation.usage,
         });
       }
@@ -545,7 +595,7 @@ export class RuntimeMemoryCoordinator {
   }
 
   private passiveMemoryPromptMessages(thread: RuntimeThread, messages: RuntimeMessage[], sourceLabel: string): RuntimeMessage[] {
-    const now = this.options.clock.now().toISOString();
+    const now = this.options.host.now().toISOString();
     const rolloutContext = [
       `线程标题：${thread.title}`,
       `项目 ID：${thread.projectId || '(none)'}`,
@@ -584,23 +634,14 @@ export class RuntimeMemoryCoordinator {
       },
     ];
   }
+
+  private async preferences(): Promise<MemoryPreferences> {
+    return (await this.options.settings.read()).value;
+  }
 }
 
 export function isSuccessfulRememberMemoryMessage(message: RuntimeMessage): boolean {
   return message.role === 'tool' && message.toolName === REMEMBER_MEMORY_TOOL_NAME && message.content.startsWith('Saved memory ');
-}
-
-function canUseMemories(config: RuntimeConfigState | null | undefined): boolean {
-  return config?.memory?.useMemories ?? config?.memoryEnabled ?? true;
-}
-
-function canGenerateMemories(config: RuntimeConfigState | null | undefined): boolean {
-  return config?.memory?.generateMemories ?? config?.memoryEnabled ?? true;
-}
-
-function shouldDisableMemoryOnExternalContext(config: RuntimeConfigState | null | undefined): boolean {
-  if (!config) return false;
-  return config.memory?.disableOnExternalContext ?? true;
 }
 
 function threadAllowsMemoryGeneration(thread: RuntimeThread): boolean {
@@ -696,25 +737,25 @@ function passiveTaskKey(threadId: string, turnId: string): string {
   return `${threadId}\u0000${turnId}`;
 }
 
-function memoryMaxRolloutsPerStartup(config: RuntimeConfigState | null | undefined): number {
-  return clampInteger(config?.memory?.maxRolloutsPerStartup, DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP, 1, MAX_MEMORIES_MAX_ROLLOUTS_PER_STARTUP);
+function memoryMaxRolloutsPerStartup(preferences: MemoryPreferences): number {
+  return clampInteger(preferences.maxRolloutsPerStartup, DEFAULT_MEMORIES_MAX_ROLLOUTS_PER_STARTUP, 1, MAX_MEMORIES_MAX_ROLLOUTS_PER_STARTUP);
 }
 
-function memoryMaxRolloutAgeDays(config: RuntimeConfigState | null | undefined): number {
-  return clampInteger(config?.memory?.maxRolloutAgeDays, DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS, 0, MAX_MEMORIES_MAX_ROLLOUT_AGE_DAYS);
+function memoryMaxRolloutAgeDays(preferences: MemoryPreferences): number {
+  return clampInteger(preferences.maxRolloutAgeDays, DEFAULT_MEMORIES_MAX_ROLLOUT_AGE_DAYS, 0, MAX_MEMORIES_MAX_ROLLOUT_AGE_DAYS);
 }
 
-function memoryMinRolloutIdleHours(config: RuntimeConfigState | null | undefined): number {
-  return clampInteger(config?.memory?.minRolloutIdleHours, DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS, 1, MAX_MEMORIES_MIN_ROLLOUT_IDLE_HOURS);
+function memoryMinRolloutIdleHours(preferences: MemoryPreferences): number {
+  return clampInteger(preferences.minRolloutIdleHours, DEFAULT_MEMORIES_MIN_ROLLOUT_IDLE_HOURS, 1, MAX_MEMORIES_MIN_ROLLOUT_IDLE_HOURS);
 }
 
-function memoryStartupThreadEligible(thread: RuntimeThreadSummary, config: RuntimeConfigState | null | undefined, now: Date): boolean {
+function memoryStartupThreadEligible(thread: RuntimeThreadSummary, preferences: MemoryPreferences, now: Date): boolean {
   const updatedAt = Date.parse(thread.updatedAt);
   if (!Number.isFinite(updatedAt)) return false;
   const ageMs = now.getTime() - updatedAt;
   if (ageMs < 0) return false;
-  return ageMs >= memoryMinRolloutIdleHours(config) * HOURS_TO_MS
-    && ageMs <= memoryMaxRolloutAgeDays(config) * DAYS_TO_MS;
+  return ageMs >= memoryMinRolloutIdleHours(preferences) * HOURS_TO_MS
+    && ageMs <= memoryMaxRolloutAgeDays(preferences) * DAYS_TO_MS;
 }
 
 /**
@@ -724,12 +765,12 @@ function memoryStartupThreadEligible(thread: RuntimeThreadSummary, config: Runti
  */
 export function memoryStartupExtractionCandidates(
   summaries: readonly RuntimeThreadSummary[],
-  config: RuntimeConfigState | null | undefined,
+  preferences: MemoryPreferences,
   now: Date,
   limit: number,
 ): RuntimeThreadSummary[] {
   return summaries
-    .filter((summary) => memoryStartupThreadEligible(summary, config, now))
+    .filter((summary) => memoryStartupThreadEligible(summary, preferences, now))
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.id.localeCompare(right.id))
     .slice(0, limit);
 }
@@ -739,7 +780,7 @@ function clampInteger(value: unknown, fallback: number, min: number, max: number
   return Math.max(min, Math.min(max, numeric));
 }
 
-function toolCallPollutesMemory(toolCall: RuntimeToolCall, result: ToolExecutionResult): boolean {
+function toolCallPollutesMemory(toolCall: RuntimeToolCall, result: Readonly<{ containsExternalContext?: boolean }>): boolean {
   return result.containsExternalContext === true || toolCall.name.startsWith('mcp__');
 }
 

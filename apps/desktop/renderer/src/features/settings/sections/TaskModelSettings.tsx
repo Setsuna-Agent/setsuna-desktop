@@ -2,20 +2,18 @@ import type {
   RuntimeConfigState,
   RuntimeTaskModelId,
 } from '@setsuna-desktop/contracts';
-import { Combine, Heading1, Minimize2, ScanSearch, SearchCheck, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../../shared/i18n/messages.js';
 import { SelectField } from '../../../shared/ui/primitives.js';
+import { SettingsRow } from '../../../shared/ui/SettingsViewUi.js';
 import {
   configuredTaskModelOptions,
   configuredTaskModelReferenceValue,
 } from '../providers/provider-model.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
-import { TaskModelOptionLabel } from './TaskModelOptionLabel.js';
 
 type TaskModelField = {
   descriptionKey: MessageKey;
-  icon: LucideIcon;
   id: RuntimeTaskModelId;
   labelKey: MessageKey;
 };
@@ -32,7 +30,6 @@ const taskModelGroups: Array<{
       id: 'threadTitle',
       labelKey: 'settings.taskModels.threadTitle',
       descriptionKey: 'settings.taskModels.threadTitleDescription',
-      icon: Heading1,
     }],
   },
   {
@@ -43,37 +40,22 @@ const taskModelGroups: Array<{
         id: 'review',
         labelKey: 'settings.taskModels.review',
         descriptionKey: 'settings.taskModels.reviewDescription',
-        icon: ScanSearch,
       },
       {
         id: 'approvalReview',
         labelKey: 'settings.taskModels.approvalReview',
         descriptionKey: 'settings.taskModels.approvalReviewDescription',
-        icon: ShieldCheck,
       },
     ],
   },
   {
-    id: 'memory-context',
-    labelKey: 'settings.taskModels.groupMemoryContext',
+    id: 'context',
+    labelKey: 'settings.taskModels.groupContext',
     fields: [
-      {
-        id: 'memoryExtraction',
-        labelKey: 'settings.taskModels.memoryExtraction',
-        descriptionKey: 'settings.taskModels.memoryExtractionDescription',
-        icon: SearchCheck,
-      },
-      {
-        id: 'memoryConsolidation',
-        labelKey: 'settings.taskModels.memoryConsolidation',
-        descriptionKey: 'settings.taskModels.memoryConsolidationDescription',
-        icon: Combine,
-      },
       {
         id: 'contextCompaction',
         labelKey: 'settings.taskModels.contextCompaction',
         descriptionKey: 'settings.taskModels.contextCompactionDescription',
-        icon: Minimize2,
       },
     ],
   },
@@ -107,52 +89,35 @@ export function TaskModelSettings({
               </h3>
               <div className="chat-user-settings__group task-model-settings__card">
                 {group.fields.map((field) => {
-                  const Icon = field.icon;
                   const selectedValue = configuredTaskModelReferenceValue(config.taskModels?.[field.id]);
                   const selectionAvailable = !selectedValue || options.some((option) => option.value === selectedValue);
                   return (
-                    <div className="chat-user-settings__row task-model-settings__row" key={field.id}>
-                      <span className="chat-user-settings__row-label task-model-settings__label">
-                        <Icon size={14} />
-                        <span className="task-model-settings__copy">
-                          <span>{t(field.labelKey)}</span>
-                          <small>{t(field.descriptionKey)}</small>
-                        </span>
-                      </span>
+                    <SettingsRow
+                      key={field.id}
+                      label={t(field.labelKey)}
+                      description={t(field.descriptionKey)}
+                    >
                       <SelectField
                         aria-label={t(field.labelKey)}
-                        className="settings-local-control task-model-settings__select"
                         value={selectedValue}
                         onValueChange={(nextValue) => {
                           const selection = options.find((option) => option.value === nextValue)?.reference ?? null;
                           void onSave({ taskModels: { [field.id]: selection } });
                         }}
                       >
-                        <option value="">
-                          <TaskModelOptionLabel
-                            label={t('settings.taskModels.followCurrent')}
-                            variant="follow-current"
-                          />
-                        </option>
+                        <option value="">{t('settings.taskModels.followCurrent')}</option>
                         {!selectionAvailable ? (
                           <option value={selectedValue} disabled>
-                            <TaskModelOptionLabel
-                              label={t('settings.taskModels.unavailable')}
-                              variant="unavailable"
-                            />
+                            {t('settings.taskModels.unavailable')}
                           </option>
                         ) : null}
                         {options.map((option) => (
                           <option key={option.value} value={option.value}>
-                            <TaskModelOptionLabel
-                              label={option.label}
-                              model={option.model}
-                              provider={option.provider}
-                            />
+                            {option.label}
                           </option>
                         ))}
                       </SelectField>
-                    </div>
+                    </SettingsRow>
                   );
                 })}
               </div>

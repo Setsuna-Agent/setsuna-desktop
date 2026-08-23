@@ -20,19 +20,29 @@ describe('TaskModelSettings', () => {
     ]);
   });
 
-  it('renders all six task-model selectors with configured choices', () => {
+  it('renders every host-owned task-model selector with configured choices', () => {
     const html = renderToStaticMarkup(
       <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
     );
 
-    expect(html.match(/task-model-settings__select/gu)).toHaveLength(6);
+    expect(html.match(/\bsd-settings-row\b/gu)).toHaveLength(4);
+    expect(html.match(/\bsd-select-field\b/gu)).toHaveLength(4);
     expect(html.match(/task-model-settings__card/gu)).toHaveLength(3);
-    for (const groupLabel of ['对话辅助', '审查与安全', '记忆与上下文']) {
+    expect(html).not.toContain('task-model-option-label');
+    for (const groupLabel of ['对话辅助', '审查与安全', '上下文']) {
       expect(html).toContain(`>${groupLabel}</h3>`);
     }
     expect(html).not.toContain('专用任务模型');
-    for (const label of ['标题生成', '代码审查', '审批审查', '记忆提取', '记忆整理', '上下文压缩']) {
+    for (const label of ['标题生成', '代码审查', '审批审查', '上下文压缩']) {
       expect(html).toContain(`aria-label="${label}"`);
+    }
+    for (const description of [
+      '根据新对话的首条用户消息生成简洁标题。',
+      '审查工作区更改、分支或提交；建议选择擅长代码分析和工具调用的模型。',
+      '独立审查需要越过当前权限边界的操作，并决定允许或拒绝。',
+      '接近上下文上限时，把较早的对话整理成可继续使用的摘要。',
+    ]) {
+      expect(html).toContain(description);
     }
     expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
     expect(html).toContain('火山方舟 · Kimi K2.7 (kimi-k2.7)');
@@ -95,12 +105,6 @@ const configFixture: RuntimeConfigState = {
     },
   ],
   globalPrompt: '',
-  memory: {
-    useMemories: true,
-    generateMemories: true,
-    disableOnExternalContext: false,
-  },
-  memoryEnabled: true,
   taskModels: {
     threadTitle: {
       providerId: 'provider-kimi',
@@ -111,14 +115,6 @@ const configFixture: RuntimeConfigState = {
       modelId: 'kimi-k2',
     },
     approvalReview: {
-      providerId: 'provider-kimi',
-      modelId: 'kimi-k2',
-    },
-    memoryExtraction: {
-      providerId: 'provider-minimax',
-      modelId: 'minimax-m3',
-    },
-    memoryConsolidation: {
       providerId: 'provider-kimi',
       modelId: 'kimi-k2',
     },

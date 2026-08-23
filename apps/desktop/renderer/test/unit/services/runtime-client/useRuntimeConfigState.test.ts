@@ -224,12 +224,6 @@ function runtimeConfig(providers: ProviderConfigState[]): RuntimeConfigState {
     storagePath: '/data/storage',
     providers,
     globalPrompt: '',
-    memory: {
-      useMemories: true,
-      generateMemories: true,
-      disableOnExternalContext: true,
-    },
-    memoryEnabled: true,
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',

@@ -41,7 +41,7 @@ Factory 当前按顺序组合：
 8. `ArtifactToolHost`
 9. `PcLocalToolHost`
 10. `SkillManagementToolHost`
-11. `MemoryToolHost`
+11. `MemoryToolHost`（绑定 `memory.control` 的通用 adapter）
 
 顺序影响模型看到的定义和 system prompt。新增 host 时检查：
 
@@ -291,11 +291,11 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 
 ## Memory 与 artifacts
 
-- `MemoryToolHost`：`remember_memory` / `recall_memory`。
+- Memory Feature：拥有 `remember_memory` / `recall_memory` 的定义、prompt、策略与执行；`MemoryToolHost` 只把通用 ToolHost 调用转发给已绑定的 `memory.control`。
 - `WorkspaceImageToolHost`：读取 workspace 内受支持图片。
 - `ArtifactToolHost`：发布成品文件。
 
-Memory 写入带 thread/turn 来源。图片/artifact 路径必须基于当前 `RuntimeEnvironment`。
+Memory 写入带 thread/turn 来源，PC-local host 不再保存第二份 Memory 工具实现。图片/artifact 路径必须基于当前 `RuntimeEnvironment`。
 
 ## Hooks
 

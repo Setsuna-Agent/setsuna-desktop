@@ -126,28 +126,10 @@ export function normalizePythonPackageIndexUrl(value: unknown): string | null {
   return normalizePackageSourceUrl(value);
 }
 
-export type RuntimeMemorySettings = {
-  useMemories: boolean;
-  generateMemories: boolean;
-  disableOnExternalContext: boolean;
-  /** @deprecated Use taskModels.memoryExtraction. */
-  extractModel?: string;
-  /** @deprecated Use taskModels.memoryConsolidation. */
-  consolidationModel?: string;
-  minRateLimitRemainingPercent?: number;
-  maxRolloutsPerStartup?: number;
-  maxRolloutAgeDays?: number;
-  minRolloutIdleHours?: number;
-  maxUnusedDays?: number;
-  maxRawMemoriesForConsolidation?: number;
-};
-
 export const RUNTIME_TASK_MODEL_IDS = [
   'threadTitle',
   'review',
   'approvalReview',
-  'memoryExtraction',
-  'memoryConsolidation',
   'contextCompaction',
 ] as const;
 
@@ -175,8 +157,6 @@ export type RuntimeConfigState = {
   activeProviderId?: string;
   providers: ProviderConfigState[];
   globalPrompt: string;
-  memory: RuntimeMemorySettings;
-  memoryEnabled: boolean;
   taskModels?: RuntimeTaskModelSettings;
   setsunaStyle: RuntimeSetsunaStyle;
   approvalPolicy: 'strict' | 'on-request' | 'full';
@@ -294,8 +274,6 @@ export type RuntimeConfigInput = {
   activeProviderId?: string;
   globalPrompt?: string;
   storagePath?: string;
-  memory?: Partial<RuntimeMemorySettings>;
-  memoryEnabled?: boolean;
   taskModels?: RuntimeTaskModelSettingsInput;
   setsunaStyle?: RuntimeSetsunaStyle | string;
   approvalPolicy?: RuntimeConfigState['approvalPolicy'];

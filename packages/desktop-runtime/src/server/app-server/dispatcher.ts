@@ -54,6 +54,7 @@ import {
   appServerConfigReadResponse,
   appServerConfigWriteResponse,
   appServerRuntimeConfigInputFromEdits,
+  type AppServerConfigMutation,
   sweClientUserMessageId,
   sweCollaborationModeListResponse,
   sweExperimentalFeatureListResponse,
@@ -108,8 +109,11 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'config/read') {
     const input = recordInput(params);
-    const config = await runtime.configStore.getConfig();
-    return appServerConfigReadResponse(config, input);
+    const [config, memory] = await Promise.all([
+      runtime.configStore.getConfig(),
+      runtime.agentLoop.memoryControl().readSettings(),
+    ]);
+    return appServerConfigReadResponse(config, memory.value, input);
   }
 
   if (method === 'configRequirements/read') {
@@ -121,7 +125,8 @@ export async function dispatchAppServerRpcRequest(
     const config = await runtime.configStore.getConfig();
     sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
     const edit = appServerConfigEdit(input);
-    const saved = await runtime.configStore.saveConfig(appServerRuntimeConfigInputFromEdits(config, [edit]));
+    const mutation = appServerRuntimeConfigInputFromEdits(config, [edit]);
+    const saved = await commitAppServerConfigMutation(runtime, config, mutation);
     return appServerConfigWriteResponse(saved);
   }
 
@@ -130,7 +135,8 @@ export async function dispatchAppServerRpcRequest(
     const config = await runtime.configStore.getConfig();
     sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
     const edits = requiredArray(input.edits, 'edits').map((edit, index) => appServerConfigEdit(recordInput(edit), index));
-    const saved = await runtime.configStore.saveConfig(appServerRuntimeConfigInputFromEdits(config, edits));
+    const mutation = appServerRuntimeConfigInputFromEdits(config, edits);
+    const saved = await commitAppServerConfigMutation(runtime, config, mutation);
     return appServerConfigWriteResponse(saved);
   }
 
@@ -502,13 +508,13 @@ export async function dispatchAppServerRpcRequest(
     const input = sweThreadMemoryModeSetInput(params);
     return runtime.agentLoop.withThreadMutation(input.threadId, async () => {
       await requireRuntimeThread(runtime, input.threadId);
-      await runtime.threadStore.updateThreadMemoryMode(input.threadId, input.mode, 'user_request');
+      await runtime.agentLoop.memoryControl().updateThreadMode(input.threadId, input.mode, 'user_request');
       return {};
     });
   }
 
   if (method === 'memory/reset') {
-    await runtime.memoryStore.clearMemories();
+    await runtime.agentLoop.memoryControl().clear();
     return {};
   }
 
@@ -713,6 +719,32 @@ export async function dispatchAppServerRpcRequest(
   }
 
   throw new AppServerRpcError(-32601, `Method not found: ${method}`);
+}
+
+async function commitAppServerConfigMutation(
+  runtime: RuntimeFactory,
+  config: Awaited<ReturnType<RuntimeFactory['configStore']['getConfig']>>,
+  mutation: AppServerConfigMutation,
+) {
+  const writesMemory = Object.keys(mutation.memoryPatch).length > 0;
+  if (mutation.writesConfig && writesMemory) {
+    throw new AppServerRpcError(
+      -32602,
+      'Core config and Memory settings must be written in separate requests.',
+      { config_write_error_code: 'configValidationError' },
+    );
+  }
+  if (writesMemory) {
+    const memory = await runtime.agentLoop.memoryControl().readSettings();
+    await runtime.agentLoop.memoryControl().updateSettings({
+      expectedRevision: memory.revision,
+      patch: mutation.memoryPatch,
+    });
+    return config;
+  }
+  return mutation.writesConfig
+    ? runtime.configStore.saveConfig(mutation.config)
+    : config;
 }
 
 function hasAppServerDynamicToolsInput(input: Record<string, unknown>): boolean {
