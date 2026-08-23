@@ -16,7 +16,7 @@ Browser 是纵向内置 Feature：共享 contract、runtime 工具语义、main 
 | `preload/feature.ts` | Typed Browser bridge contribution |
 | `runtime/browser-runtime-tools.ts` | 工具 schema、审批、外部上下文与结果格式化 |
 | `runtime/http-browser-control-client.ts` | runtime 到 main loopback 控制面的窄 client |
-| `renderer/Browser*.tsx` | Tab/webview、地址栏、设备模拟、favicon、截图与菜单 |
+| `renderer/Browser*.tsx` | 内部首页、Tab/webview、地址栏、收藏、设备模拟、favicon、截图与菜单 |
 | `renderer/browser.css` | Browser 作用域样式 |
 
 四端注册入口分别位于 runtime、main、preload、renderer 的 `composition/builtin-*-features.ts`。Renderer 宿主适配器是 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx`；runtime 的 `apps` 外适配器 `packages/desktop-runtime/src/adapters/tool/browser-tool-host.ts` 只把 Feature 服务接入通用工具路由，不拥有 Browser 业务规则。
@@ -24,6 +24,8 @@ Browser 是纵向内置 Feature：共享 contract、runtime 工具语义、main 
 ## Tab 注册
 
 Renderer 创建 `<webview>` 后，把自身 tab ID 和 guest `webContents.id` 交给 preload/main。
+
+默认内部首页完全由 renderer 渲染，不创建 `<webview>`；只有用户打开 HTTP(S) 页面后才进入下面的 guest 注册链路。
 
 Main 注册时校验：
 

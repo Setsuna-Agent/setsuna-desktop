@@ -5,8 +5,17 @@ import userEvent from '@testing-library/user-event';
 import type { WebviewTag } from 'electron';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { BrowserDesktopBridge } from '../../src/contracts/index.js';
+import { DEFAULT_BROWSER_URL, type BrowserDesktopBridge } from '../../src/contracts/index.js';
 import { BrowserPanel } from '../../src/renderer/BrowserPanel.js';
+import {
+  BROWSER_BOOKMARKS_STORAGE_KEY,
+  readBrowserBookmarks,
+} from '../../src/renderer/browserBookmarks.js';
+import {
+  BROWSER_HISTORY_STORAGE_KEY,
+  readBrowserHistory,
+  writeBrowserHistory,
+} from '../../src/renderer/browserHistory.js';
 import { translateBrowserMessage } from '../../src/renderer/messages.js';
 
 const translate = (key: Parameters<typeof translateBrowserMessage>[1]) => (
@@ -17,10 +26,78 @@ let browserBridge = createBrowserBridge();
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  window.localStorage.removeItem(BROWSER_BOOKMARKS_STORAGE_KEY);
+  window.localStorage.removeItem(BROWSER_HISTORY_STORAGE_KEY);
   browserBridge = createBrowserBridge();
 });
 
 describe('BrowserPanel interactions', () => {
+  it('opens a recent page from the internal home', async () => {
+    writeBrowserHistory([{
+      title: 'Example documentation',
+      url: 'https://example.com/docs',
+      visitedAt: Date.now(),
+    }]);
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+
+    expect(document.querySelector('webview')).toBeNull();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Open Example documentation' }));
+
+    expect(document.querySelector('webview')?.getAttribute('src')).toBe('https://example.com/docs');
+  });
+
+  it('deletes an individual recent visit without navigating', async () => {
+    writeBrowserHistory([{
+      title: 'Example documentation',
+      url: 'https://example.com/docs',
+      visitedAt: Date.now(),
+    }]);
+    renderBrowserPanel(DEFAULT_BROWSER_URL);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Delete recent visit Example documentation' }));
+
+    expect(screen.queryByRole('button', { name: 'Open Example documentation' })).toBeNull();
+    expect(readBrowserHistory()).toEqual([]);
+    expect(document.querySelector('webview')).toBeNull();
+  });
+
+  it('toggles the current page bookmark and exposes it on the home page', async () => {
+    renderBrowserPanel();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole('button', { name: 'Bookmark current page' }));
+    expect(readBrowserBookmarks()).toMatchObject([{
+      title: 'New tab',
+      url: 'https://example.com/',
+    }]);
+
+    await user.click(screen.getByRole('button', { name: 'Home' }));
+    expect(screen.getByRole('button', { name: 'Open New tab' })).toBeTruthy();
+  });
+
+  it('records successful main-frame navigations with their page title', async () => {
+    renderBrowserPanel();
+    const webview = document.querySelector('webview') as unknown as WebviewTag;
+    Object.assign(webview, {
+      canGoBack: () => false,
+      canGoForward: () => false,
+      getURL: () => 'https://example.com/docs',
+      getZoomFactor: () => 1,
+    });
+
+    webview.dispatchEvent(new Event('did-navigate'));
+    webview.dispatchEvent(Object.assign(new Event('page-title-updated'), {
+      title: 'Example documentation',
+    }));
+
+    await waitFor(() => expect(readBrowserHistory()[0]).toMatchObject({
+      title: 'Example documentation',
+      url: 'https://example.com/docs',
+    }));
+  });
+
   it('commits the requested zoom only after the webview accepts it', async () => {
     const setZoomFactor = vi.fn();
     renderBrowserPanel();
@@ -94,11 +171,11 @@ describe('BrowserPanel interactions', () => {
   });
 });
 
-function renderBrowserPanel() {
-  return render(<BrowserPanelHarness />);
+function renderBrowserPanel(url = 'https://example.com') {
+  return render(<BrowserPanelHarness url={url} />);
 }
 
-function BrowserPanelHarness() {
+function BrowserPanelHarness({ url }: { url: string }) {
   const [notification, setNotification] = useState<string | null>(null);
   const notify = useCallback((_tone: string, message: string) => setNotification(message), []);
   return (
@@ -108,7 +185,7 @@ function BrowserPanelHarness() {
         hidden={false}
         notify={notify}
         panel={{
-          browser: { faviconUrl: null, loading: false, url: 'https://example.com' },
+          browser: { faviconUrl: null, loading: false, url },
           id: 'browser-interaction',
           title: 'New tab',
         }}

@@ -86,13 +86,17 @@ UI resize 要与 pty cols/rows 同步，但不能在每个像素变化中无节�
 
 Browser presentation 位于 `packages/features/browser/src/renderer/`，主要文件：
 
-- `BrowserPanel.tsx`：Tab/webview 编排。
+- `BrowserPanel.tsx`：首页/网页状态与 webview 生命周期编排。
+- `BrowserHomePage.tsx`：收藏和最近访问的内部首页；默认首页不创建 guest webview。
 - `BrowserAddressBar.tsx`：受控导航输入。
 - `BrowserDeviceToolbar.tsx` / `BrowserDeviceViewport.tsx`：设备模拟。
 - `BrowserWindowMenu.tsx`：标签/窗口动作。
 - `BrowserFavicon.tsx` / `browserFaviconCoordinator.ts`：favicon 状态。
 - `browser/runtimeBrowserActions.ts`：runtime 请求引起的 tab 动作。
 - `useBrowserScreenshot.ts`：截图。
+- `browserBookmarks.ts` / `browserHistory.ts`：版本化、限量的 renderer 本地投影；只接收 HTTP(S) 页面。
+
+新建浏览器 panel 以内部 `about:blank` 标识首页，但实际内容由 React 渲染，不会默认请求外部搜索站点。成功的主页面导航会更新最近访问；首页允许逐条删除。地址栏旁的星标负责收藏/取消收藏；首页重新激活时会从本地投影恢复收藏与历史。
 
 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx` 只注入 preload bridge、i18n、通知、外链、Select 和 Workspace resize handle。Feature renderer 负责可见 tab UI；可信 guest registry 和 CDP 由同一 Feature 的 main 入口持有。详情见 [main 浏览器文档](../main/browser.md)。
 

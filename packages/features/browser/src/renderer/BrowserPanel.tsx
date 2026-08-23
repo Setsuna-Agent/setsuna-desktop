@@ -1,16 +1,28 @@
 import {
+  BROWSER_HOME_URL,
   DEFAULT_BROWSER_URL,
   DESKTOP_BROWSER_PARTITION,
   type BrowserDesktopBridge,
   type BrowserPanelDescriptor,
   type BrowserPanelMetadataPatch,
 } from '../contracts/index.js';
-import { ArrowLeft, ArrowRight, RefreshCw, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, House, RefreshCw, Star, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrowserAddressBar } from './BrowserAddressBar.js';
 import { BrowserDeviceToolbar } from './BrowserDeviceToolbar.js';
 import { BrowserDeviceViewport } from './BrowserDeviceViewport.js';
+import { BrowserHomePage } from './BrowserHomePage.js';
 import { BrowserWindowMenu } from './BrowserWindowMenu.js';
+import { isBrowserBookmarked } from './browserBookmarks.js';
+import type { BrowserHistoryVisit } from './browserHistory.js';
+import {
+  browserHostLabel,
+  isAbortedNavigationError,
+  isBrowserHomeUrl,
+  nextBrowserZoomFactor,
+  normalizeBrowserInput,
+  type BrowserZoomDirection,
+} from './browserNavigation.js';
 import {
   createDefaultBrowserDeviceEmulation,
   toDesktopBrowserDeviceEmulation,
@@ -27,10 +39,13 @@ import type {
   BrowserScreenshotAttachmentHandler,
   BrowserSelectFieldComponent,
 } from './types.js';
+import { useBrowserBookmarks } from './useBrowserBookmarks.js';
+import { useBrowserHistory } from './useBrowserHistory.js';
 import { useBrowserScreenshot } from './useBrowserScreenshot.js';
 import './browser.css';
 
 export { resolveBrowserFaviconUrl, resolveBrowserFaviconUrls };
+export { nextBrowserZoomFactor, normalizeBrowserInput };
 
 // Electron 根据属性是否存在来解析 webview 布尔属性，而 React 只有在运行时值为字符串时
 // 才能可靠地输出自定义元素属性。
@@ -46,6 +61,7 @@ type BrowserTab = {
   id: string;
   initialUrl: string;
   loading: boolean;
+  showingHome: boolean;
   title: string;
   url: string;
   zoomFactor: number;
@@ -112,6 +128,18 @@ export function BrowserPanel({
   const registeredTabIdRef = useRef<string | null>(null);
   const [tab, setTab] = useState<BrowserTab>(() => createBrowserTab(panel, translate));
   const {
+    entries: browserHistory,
+    recordVisit: recordBrowserVisit,
+    refresh: refreshBrowserHistory,
+    removeEntry: removeBrowserHistoryEntry,
+  } = useBrowserHistory();
+  const {
+    entries: browserBookmarks,
+    refresh: refreshBrowserBookmarks,
+    toggle: toggleBrowserBookmark,
+  } = useBrowserBookmarks();
+  const activePageBookmarked = !tab.showingHome && isBrowserBookmarked(browserBookmarks, tab.url);
+  const {
     captureScreenshot,
     capturing: screenshotCapturing,
   } = useBrowserScreenshot({
@@ -161,11 +189,17 @@ export function BrowserPanel({
 
   useEffect(() => {
     if (hidden) return undefined;
-    void bridge?.setActiveTab(tab.id);
+    void bridge?.setActiveTab(tab.showingHome ? null : tab.id);
     return () => {
       void bridge?.setActiveTab(null);
     };
-  }, [bridge, hidden, tab.id]);
+  }, [bridge, hidden, tab.id, tab.showingHome]);
+
+  useEffect(() => {
+    if (hidden || !tab.showingHome) return;
+    refreshBrowserBookmarks();
+    refreshBrowserHistory();
+  }, [hidden, refreshBrowserBookmarks, refreshBrowserHistory, tab.showingHome]);
 
   useEffect(() => {
     onPanelMetadataChange(panel.id, {
@@ -178,14 +212,36 @@ export function BrowserPanel({
     });
   }, [onPanelMetadataChange, panel.id, tab.faviconUrl, tab.loading, tab.title, tab.url]);
 
-  const navigate = () => {
-    const url = normalizeBrowserInput(tab.draftUrl);
+  const showBrowserHome = () => {
+    refreshBrowserHistory();
+    refreshBrowserBookmarks();
+    updateTab(tab.id, {
+      canGoBack: false,
+      canGoForward: false,
+      draftUrl: '',
+      error: null,
+      faviconUrl: null,
+      initialUrl: BROWSER_HOME_URL,
+      loading: false,
+      showingHome: true,
+      title: translate('feature.browser.newTab'),
+      url: BROWSER_HOME_URL,
+      zoomFactor: 1,
+    });
+  };
+
+  const navigateToUrl = (url: string) => {
+    if (isBrowserHomeUrl(url)) {
+      showBrowserHome();
+      return;
+    }
     const webview = webviewRef.current;
     updateTab(tab.id, {
       draftUrl: url,
       error: null,
       ...(webview ? {} : { initialUrl: url }),
       loading: true,
+      showingHome: false,
       url,
     });
     if (webview) {
@@ -199,6 +255,16 @@ export function BrowserPanel({
         }
       })();
     }
+  };
+
+  const navigate = () => navigateToUrl(normalizeBrowserInput(tab.draftUrl));
+
+  const toggleActivePageBookmark = () => {
+    if (tab.showingHome) return;
+    toggleBrowserBookmark({
+      title: tab.title || browserHostLabel(tab.url, translate),
+      url: tab.url,
+    });
   };
 
   const navigateHistory = (direction: 'back' | 'forward') => {
@@ -291,21 +357,42 @@ export function BrowserPanel({
         <button className="desktop-browser-navigation__button" type="button" disabled={!tab.canGoForward} aria-label={translate('feature.browser.forward')} onClick={() => navigateHistory('forward')}>
           <ArrowRight size={14} />
         </button>
-        <button className="desktop-browser-navigation__button" type="button" aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload}>
+        <button className="desktop-browser-navigation__button" type="button" disabled={tab.showingHome} aria-label={translate(tab.loading ? 'feature.browser.stop' : 'feature.browser.refresh')} onClick={reload}>
           {tab.loading ? <X size={13} /> : <RefreshCw size={13} />}
         </button>
+        <button
+          aria-label={translate('feature.browser.home')}
+          aria-pressed={tab.showingHome}
+          className={`desktop-browser-navigation__button ${tab.showingHome ? 'is-active' : ''}`}
+          title={translate('feature.browser.home')}
+          type="button"
+          onClick={showBrowserHome}
+        >
+          <House size={13} />
+        </button>
         <BrowserAddressBar
-          externalUrl={tab.url}
+          externalUrl={tab.showingHome ? null : tab.url}
           value={tab.draftUrl}
           translate={translate}
           onChange={(value) => updateTab(tab.id, { draftUrl: value })}
           onNavigate={navigate}
           onOpenExternal={(url) => openExternal?.(url)}
         />
+        <button
+          aria-label={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
+          aria-pressed={activePageBookmarked}
+          className={`desktop-browser-navigation__button ${activePageBookmarked ? 'is-active' : ''}`}
+          disabled={tab.showingHome}
+          title={translate(activePageBookmarked ? 'feature.browser.removeBookmark' : 'feature.browser.addBookmark')}
+          type="button"
+          onClick={toggleActivePageBookmark}
+        >
+          <Star fill={activePageBookmarked ? 'currentColor' : 'none'} size={13} />
+        </button>
         <BrowserWindowMenu
           capturingScreenshot={screenshotCapturing}
           deviceToolbarVisible={tab.deviceEmulation.enabled}
-          disabled={false}
+          disabled={tab.showingHome}
           key={tab.id}
           loading={tab.loading}
           zoomFactor={tab.zoomFactor}
@@ -320,7 +407,7 @@ export function BrowserPanel({
           translate={translate}
         />
       </div>
-      {tab.deviceEmulation.enabled ? (
+      {!tab.showingHome && tab.deviceEmulation.enabled ? (
         <BrowserDeviceToolbar
           selectField={selectField}
           translate={translate}
@@ -328,17 +415,28 @@ export function BrowserPanel({
           onChange={updateActiveDeviceEmulation}
         />
       ) : null}
-      <div className={`desktop-browser-content ${tab.deviceEmulation.enabled ? 'is-device-emulation' : ''}`}>
-        <BrowserWebview
-          active={!hidden}
-          bridge={bridge}
-          tab={tab}
-          onDeviceEmulationFailure={reportDeviceEmulationFailure}
-          onRegistrationChange={updateBrowserRegistration}
-          onRef={setWebview}
-          onUpdate={updateTab}
-          translate={translate}
-        />
+      <div className={`desktop-browser-content${tab.showingHome ? ' is-home' : tab.deviceEmulation.enabled ? ' is-device-emulation' : ''}`}>
+        {tab.showingHome ? (
+          <BrowserHomePage
+            bookmarks={browserBookmarks}
+            entries={browserHistory}
+            onNavigate={navigateToUrl}
+            onRemoveHistory={removeBrowserHistoryEntry}
+            translate={translate}
+          />
+        ) : (
+          <BrowserWebview
+            active={!hidden}
+            bridge={bridge}
+            tab={tab}
+            onDeviceEmulationFailure={reportDeviceEmulationFailure}
+            onRegistrationChange={updateBrowserRegistration}
+            onRef={setWebview}
+            onUpdate={updateTab}
+            onVisit={recordBrowserVisit}
+            translate={translate}
+          />
+        )}
         {tab.error ? <div className="desktop-browser-error"><strong>{translate('feature.browser.loadFailed')}</strong><span>{tab.error}</span></div> : null}
       </div>
     </aside>
@@ -352,6 +450,7 @@ function BrowserWebview({
   onRegistrationChange,
   onRef,
   onUpdate,
+  onVisit,
   tab,
   translate,
 }: {
@@ -361,6 +460,7 @@ function BrowserWebview({
   onRegistrationChange: (tabId: string, registered: boolean) => void;
   onRef: (node: BrowserWebviewElement | null) => void;
   onUpdate: (tabId: string, patch: Partial<BrowserTab>) => void;
+  onVisit: (visit: BrowserHistoryVisit) => void;
   tab: BrowserTab;
   translate: BrowserTranslate;
 }) {
@@ -372,8 +472,16 @@ function BrowserWebview({
   useEffect(() => {
     const node = nodeRef.current;
     if (!node) return undefined;
+    let currentUrl = tab.initialUrl;
+    let currentTitle = browserHostLabel(currentUrl, translate);
+    let currentVisitedAt = Date.now();
     const syncNavigation = () => {
       const url = node.getURL() || tab.initialUrl;
+      if (url !== currentUrl) {
+        currentUrl = url;
+        currentTitle = browserHostLabel(url, translate);
+        currentVisitedAt = Date.now();
+      }
       onUpdate(tab.id, {
         canGoBack: node.canGoBack(),
         canGoForward: node.canGoForward(),
@@ -382,6 +490,11 @@ function BrowserWebview({
         zoomFactor: node.getZoomFactor(),
       });
     };
+    const recordCurrentPage = () => onVisit({
+      title: currentTitle,
+      url: currentUrl,
+      visitedAt: currentVisitedAt,
+    });
     const faviconCoordinator = createBrowserFaviconCoordinator({
       onChange: (faviconUrl) => onUpdate(tab.id, { faviconUrl }),
       resolve: (faviconUrls) => requestBrowserFavicon(bridge, node, faviconUrls),
@@ -395,7 +508,16 @@ function BrowserWebview({
       onUpdate(tab.id, { loading: false });
       faviconCoordinator.loadingStopped();
     };
-    const handleTitle = (event: BrowserPageTitleUpdatedEvent) => onUpdate(tab.id, { title: event.title || browserHostLabel(node.getURL(), translate) });
+    const handleNavigate = () => {
+      syncNavigation();
+      recordCurrentPage();
+    };
+    const handleTitle = (event: BrowserPageTitleUpdatedEvent) => {
+      syncNavigation();
+      currentTitle = event.title || browserHostLabel(currentUrl, translate);
+      onUpdate(tab.id, { title: currentTitle });
+      recordCurrentPage();
+    };
     const handleFavicon = (event: BrowserPageFaviconUpdatedEvent) => faviconCoordinator.faviconUpdated(resolveBrowserFaviconUrls(event.favicons));
     const handleFailure = (event: BrowserDidFailLoadEvent) => {
       if (event.errorCode === -3) return;
@@ -404,8 +526,8 @@ function BrowserWebview({
     node.addEventListener('did-start-navigation', handleNavigationStart);
     node.addEventListener('did-start-loading', handleStart);
     node.addEventListener('did-stop-loading', handleStop);
-    node.addEventListener('did-navigate', syncNavigation);
-    node.addEventListener('did-navigate-in-page', syncNavigation);
+    node.addEventListener('did-navigate', handleNavigate);
+    node.addEventListener('did-navigate-in-page', handleNavigate);
     node.addEventListener('page-title-updated', handleTitle);
     node.addEventListener('page-favicon-updated', handleFavicon);
     node.addEventListener('did-fail-load', handleFailure);
@@ -414,13 +536,13 @@ function BrowserWebview({
       node.removeEventListener('did-start-navigation', handleNavigationStart);
       node.removeEventListener('did-start-loading', handleStart);
       node.removeEventListener('did-stop-loading', handleStop);
-      node.removeEventListener('did-navigate', syncNavigation);
-      node.removeEventListener('did-navigate-in-page', syncNavigation);
+      node.removeEventListener('did-navigate', handleNavigate);
+      node.removeEventListener('did-navigate-in-page', handleNavigate);
       node.removeEventListener('page-title-updated', handleTitle);
       node.removeEventListener('page-favicon-updated', handleFavicon);
       node.removeEventListener('did-fail-load', handleFailure);
     };
-  }, [bridge, onUpdate, tab.id, tab.initialUrl, translate]);
+  }, [bridge, onUpdate, onVisit, tab.id, tab.initialUrl, translate]);
 
   useEffect(() => {
     const node = nodeRef.current;
@@ -512,18 +634,23 @@ function BrowserWebview({
 }
 
 function createBrowserTab(panel: BrowserPanelDescriptor, translate: BrowserTranslate): BrowserTab {
-  const url = panel.browser?.url ?? DEFAULT_BROWSER_URL;
+  const requestedUrl = panel.browser?.url?.trim();
+  const url = requestedUrl || DEFAULT_BROWSER_URL;
+  const showingHome = isBrowserHomeUrl(url);
   return {
     canGoBack: false,
     canGoForward: false,
     deviceEmulation: createDefaultBrowserDeviceEmulation(),
-    draftUrl: url,
+    draftUrl: showingHome ? '' : url,
     error: null,
-    faviconUrl: panel.browser?.faviconUrl ?? null,
+    faviconUrl: showingHome ? null : panel.browser?.faviconUrl ?? null,
     id: panel.id,
     initialUrl: url,
-    loading: panel.browser?.loading ?? true,
-    title: !panel.title || panel.title === '新标签页' ? translate('feature.browser.newTab') : panel.title,
+    loading: showingHome ? false : panel.browser?.loading ?? true,
+    showingHome,
+    title: showingHome || !panel.title || panel.title === '新标签页'
+      ? translate('feature.browser.newTab')
+      : panel.title,
     url,
     zoomFactor: 1,
   };
@@ -553,25 +680,6 @@ function runAttachedWebviewAction(
   }
 }
 
-const browserZoomFactors = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
-
-export type BrowserZoomDirection = 'in' | 'out' | 'reset';
-
-export function nextBrowserZoomFactor(current: number, direction: BrowserZoomDirection): number {
-  if (direction === 'reset') return 1;
-  if (direction === 'in') return browserZoomFactors.find((factor) => factor > current + 0.001) ?? browserZoomFactors.at(-1)!;
-  for (let index = browserZoomFactors.length - 1; index >= 0; index -= 1) {
-    const factor = browserZoomFactors[index];
-    if (factor < current - 0.001) return factor;
-  }
-  return browserZoomFactors[0];
-}
-
-function isAbortedNavigationError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /ERR_ABORTED|\(-3\)/.test(message);
-}
-
 function requestBrowserFavicon(
   bridge: BrowserDesktopBridge | null,
   webview: BrowserWebviewElement,
@@ -584,22 +692,5 @@ function requestBrowserFavicon(
       .catch(() => resolveBrowserFaviconUrl(faviconUrls));
   } catch {
     return Promise.resolve(resolveBrowserFaviconUrl(faviconUrls));
-  }
-}
-
-export function normalizeBrowserInput(input: string): string {
-  const value = input.trim();
-  if (!value) return DEFAULT_BROWSER_URL;
-  if (/^https?:\/\//i.test(value)) return value;
-  if (/^(localhost|\d{1,3}(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i.test(value)) return `http://${value}`;
-  if (/^[\w.-]+\.[a-z]{2,}(?::\d+)?(?:\/|$)/i.test(value)) return `https://${value}`;
-  return `https://www.bing.com/search?q=${encodeURIComponent(value)}`;
-}
-
-function browserHostLabel(rawUrl: string, translate: BrowserTranslate): string {
-  try {
-    return new URL(rawUrl).hostname || translate('feature.browser.newTab');
-  } catch {
-    return translate('feature.browser.newTab');
   }
 }
