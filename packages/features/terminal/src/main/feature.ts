@@ -23,6 +23,6 @@ export const terminalMainFeature = defineMainFeature({
     );
     // Stop accepting renderer work before closing every native PTY during drain.
     context.scope.add(() => terminal.closeAll());
-    context.scope.add(registerTerminalIpc(terminal));
+    context.scope.add(registerTerminalIpc(context.scope, terminal));
   },
 });

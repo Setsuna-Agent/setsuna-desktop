@@ -224,7 +224,7 @@ packages/feature-core/ — 5 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 117 total files
+packages/features/ — 0 direct / 118 total files
 ├── goal/ — 2 direct / 32 total files
 │   ├── src/ — 25 files
 │   │   ├── contracts/ — 6 direct / 6 total files
@@ -252,16 +252,17 @@ packages/features/ — 0 direct / 117 total files
 │       ├── integration/ — 2 files
 │       │   └── main/ — 2 direct / 2 total files
 │       └── main/ — 2 direct / 2 total files
-├── terminal/ — 2 direct / 24 total files
+├── terminal/ — 2 direct / 25 total files
 │   ├── src/ — 19 files
 │   │   ├── contracts/ — 3 direct / 3 total files
 │   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── main/ — 5 direct / 5 total files
 │   │   ├── preload/ — 2 direct / 2 total files
 │   │   └── renderer/ — 8 direct / 8 total files
-│   └── test/ — 3 files
+│   └── test/ — 4 files
 │       ├── integration/ — 1 files
 │       │   └── main/ — 1 direct / 1 total files
+│       ├── main/ — 1 direct / 1 total files
 │       └── renderer/ — 2 direct / 2 total files
 └── vision-recognition/ — 2 direct / 19 total files
     ├── src/ — 15 files
@@ -276,9 +277,9 @@ packages/features/ — 0 direct / 117 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 572 total files
-├── src/ — 2 direct / 335 total files
-│   ├── adapters/ — 139 files
+packages/desktop-runtime/ — 4 direct / 574 total files
+├── src/ — 2 direct / 336 total files
+│   ├── adapters/ — 140 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── browser/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -294,7 +295,7 @@ packages/desktop-runtime/ — 4 direct / 572 total files
 │   │   │   └── windows-native/ — 1 direct / 1 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 4 direct / 4 total files
-│   │   ├── store/ — 30 direct / 30 total files
+│   │   ├── store/ — 31 direct / 31 total files
 │   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
@@ -321,7 +322,7 @@ packages/desktop-runtime/ — 4 direct / 572 total files
 │   │   └── app-server/ — 22 direct / 22 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 233 files
+└── test/ — 234 files
     ├── adapters/ — 69 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── browser/ — 1 direct / 1 total files
@@ -341,7 +342,8 @@ packages/desktop-runtime/ — 4 direct / 572 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 6 direct / 6 total files
     ├── extensions/ — 7 direct / 7 total files
-    ├── features/ — 2 files
+    ├── features/ — 3 files
+    │   ├── events/ — 1 direct / 1 total files
     │   ├── routes/ — 1 direct / 1 total files
     │   └── settings/ — 1 direct / 1 total files
     ├── fixtures/ — 7 files

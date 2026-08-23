@@ -45,8 +45,9 @@ export class DesktopTerminalStore {
     private readonly resolveEnvironment: () => Promise<TerminalEnvironmentPatch> = async () => ({}),
   ) {}
 
-  async open(input: TerminalOpenInput): Promise<DesktopTerminalSession> {
+  async open(input: TerminalOpenInput, signal?: AbortSignal): Promise<DesktopTerminalSession> {
     const workspaceRoot = await resolveWorkspaceRoot(input.workspaceRoot);
+    signal?.throwIfAborted();
     const shell = defaultShellSpec();
     const sessionId = `terminal-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
     const session: TerminalSession = {
@@ -67,7 +68,7 @@ export class DesktopTerminalStore {
     };
     this.sessions.set(sessionId, session);
     try {
-      await this.startSessionProcess(session);
+      await this.startSessionProcess(session, signal);
     } catch (error) {
       this.sessions.delete(sessionId);
       throw error;
@@ -105,14 +106,14 @@ export class DesktopTerminalStore {
     return true;
   }
 
-  async restart(sessionId: string, cols?: number, rows?: number): Promise<boolean> {
+  async restart(sessionId: string, cols?: number, rows?: number, signal?: AbortSignal): Promise<boolean> {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
     session.cols = terminalDimension(cols, session.cols);
     session.rows = terminalDimension(rows, session.rows);
     if (session.restartPromise) return session.restartPromise;
     if (!session.exited) return false;
-    const restartPromise = this.startSessionProcess(session);
+    const restartPromise = this.startSessionProcess(session, signal);
     session.restartPromise = restartPromise;
     try {
       return await restartPromise;
@@ -140,8 +141,10 @@ export class DesktopTerminalStore {
     for (const sessionId of this.sessions.keys()) this.close(sessionId);
   }
 
-  private async startSessionProcess(session: TerminalSession): Promise<boolean> {
+  private async startSessionProcess(session: TerminalSession, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
     const environmentPatch = await this.resolveEnvironment();
+    signal?.throwIfAborted();
     if (this.sessions.get(session.sessionId) !== session) return false;
     session.dataDisposable.dispose();
     session.exitDisposable.dispose();

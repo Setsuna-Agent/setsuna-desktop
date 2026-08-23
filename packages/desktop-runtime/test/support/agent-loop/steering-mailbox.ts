@@ -13,7 +13,11 @@ import type {
   ThreadQuery
 } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../../../src/ports/model-client.js';
-import type { ThreadStore, ThreadStorePatch } from '../../../src/ports/thread-store.js';
+import type {
+  ThreadEventPageQuery,
+  ThreadStore,
+  ThreadStorePatch,
+} from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
 
 
@@ -185,6 +189,10 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
 
   listEvents(threadId: string, sinceSeq?: number): Promise<StoredThreadEvent[]> {
     return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]> {
+    return this.inner.readEventPage(threadId, query);
   }
 
   replayEvents(threadId: string, sinceSeq?: number) {

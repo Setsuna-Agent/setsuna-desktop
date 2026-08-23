@@ -73,29 +73,37 @@ export function readArchivedEvents(
     WHERE thread_id = ? AND end_seq > ?
     ORDER BY start_seq ASC
   `).all(threadId, sinceSeq);
-  return rows.flatMap((row) => {
-    const startSeq = numberColumn(row, 'start_seq');
-    const endSeq = numberColumn(row, 'end_seq');
-    let events: StoredThreadEvent[];
-    try {
-      const parsed = JSON.parse(gunzipSync(blobColumn(row, 'events_gzip')).toString('utf8')) as unknown;
-      if (!Array.isArray(parsed)) throw new Error('Archive payload is not an array.');
-      events = parsed as StoredThreadEvent[];
-    } catch (error) {
-      throw new Error(`Invalid SQLite runtime event archive for ${threadId}:${startSeq}-${endSeq}`, {
-        cause: error,
-      });
+  return rows.flatMap((row) => (
+    archivedEventsFromRow(row, threadId).filter((event) => event.seq > sinceSeq)
+  ));
+}
+
+export function readArchivedEventPage(
+  database: DatabaseSync,
+  threadId: string,
+  afterSeq: number,
+  throughSeq: number,
+  limit: number,
+): StoredThreadEvent[] {
+  // Blocks can contain sparse transient seq values because durable events stay
+  // in runtime_events. They are non-empty and non-overlapping, so limiting block
+  // rows by the event limit still supplies enough candidates without scanning the tail.
+  const rows = database.prepare(`
+    SELECT start_seq, end_seq, events_gzip
+    FROM runtime_event_archives
+    WHERE thread_id = ? AND end_seq > ? AND start_seq <= ?
+    ORDER BY start_seq ASC
+    LIMIT ?
+  `).all(threadId, afterSeq, throughSeq, limit);
+  const events: StoredThreadEvent[] = [];
+  for (const row of rows) {
+    for (const event of archivedEventsFromRow(row, threadId)) {
+      if (event.seq <= afterSeq || event.seq > throughSeq) continue;
+      events.push(event);
+      if (events.length === limit) return events;
     }
-    if (
-      !events.length
-      || events[0]?.seq !== startSeq
-      || events.at(-1)?.seq !== endSeq
-      || events.some((event) => event.threadId !== threadId)
-    ) {
-      throw new Error(`Invalid SQLite runtime event archive range for ${threadId}:${startSeq}-${endSeq}`);
-    }
-    return events.filter((event) => event.seq > sinceSeq);
-  });
+  }
+  return events;
 }
 
 export function readRawEvents(
@@ -109,24 +117,24 @@ export function readRawEvents(
     WHERE thread_id = ? AND seq > ?
     ORDER BY seq ASC
   `).all(threadId, sinceSeq);
-  return rows.map((row) => {
-    const seq = numberColumn(row, 'seq');
-    let event: StoredThreadEvent;
-    try {
-      event = JSON.parse(stringColumn(row, 'event_json')) as StoredThreadEvent;
-    } catch (error) {
-      throw new Error(`Invalid SQLite runtime event JSON for ${threadId}:${seq}`, { cause: error });
-    }
-    if (
-      !event
-      || event.threadId !== threadId
-      || event.seq !== seq
-      || event.id !== stringColumn(row, 'event_id')
-    ) {
-      throw new Error(`Invalid SQLite runtime event record for ${threadId}:${seq}`);
-    }
-    return event;
-  });
+  return rows.map((row) => rawEventFromRow(row, threadId));
+}
+
+export function readRawEventPage(
+  database: DatabaseSync,
+  threadId: string,
+  afterSeq: number,
+  throughSeq: number,
+  limit: number,
+): StoredThreadEvent[] {
+  const rows = database.prepare(`
+    SELECT seq, event_id, event_json
+    FROM runtime_events
+    WHERE thread_id = ? AND seq > ? AND seq <= ?
+    ORDER BY seq ASC
+    LIMIT ?
+  `).all(threadId, afterSeq, throughSeq, limit);
+  return rows.map((row) => rawEventFromRow(row, threadId));
 }
 
 export function readEventArchiveState(
@@ -141,6 +149,49 @@ export function readEventArchiveState(
     archivedThroughSeq: numberColumn(row, 'events_archived_through_seq'),
     lastSeq: numberColumn(row, 'last_seq'),
   };
+}
+
+function archivedEventsFromRow(row: SqliteRow, threadId: string): StoredThreadEvent[] {
+  const startSeq = numberColumn(row, 'start_seq');
+  const endSeq = numberColumn(row, 'end_seq');
+  let events: StoredThreadEvent[];
+  try {
+    const parsed = JSON.parse(gunzipSync(blobColumn(row, 'events_gzip')).toString('utf8')) as unknown;
+    if (!Array.isArray(parsed)) throw new Error('Archive payload is not an array.');
+    events = parsed as StoredThreadEvent[];
+  } catch (error) {
+    throw new Error(`Invalid SQLite runtime event archive for ${threadId}:${startSeq}-${endSeq}`, {
+      cause: error,
+    });
+  }
+  if (
+    !events.length
+    || events[0]?.seq !== startSeq
+    || events.at(-1)?.seq !== endSeq
+    || events.some((event) => event.threadId !== threadId)
+  ) {
+    throw new Error(`Invalid SQLite runtime event archive range for ${threadId}:${startSeq}-${endSeq}`);
+  }
+  return events;
+}
+
+function rawEventFromRow(row: SqliteRow, threadId: string): StoredThreadEvent {
+  const seq = numberColumn(row, 'seq');
+  let event: StoredThreadEvent;
+  try {
+    event = JSON.parse(stringColumn(row, 'event_json')) as StoredThreadEvent;
+  } catch (error) {
+    throw new Error(`Invalid SQLite runtime event JSON for ${threadId}:${seq}`, { cause: error });
+  }
+  if (
+    !event
+    || event.threadId !== threadId
+    || event.seq !== seq
+    || event.id !== stringColumn(row, 'event_id')
+  ) {
+    throw new Error(`Invalid SQLite runtime event record for ${threadId}:${seq}`);
+  }
+  return event;
 }
 
 function blobColumn(row: SqliteRow | undefined, column: string): Uint8Array {

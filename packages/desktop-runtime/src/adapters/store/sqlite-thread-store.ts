@@ -16,15 +16,24 @@ import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { ThreadStore, ThreadStoreCreateInput, ThreadStorePatch, ThreadStoreQuery } from '../../ports/thread-store.js';
+import type {
+  ThreadEventPageQuery,
+  ThreadStore,
+  ThreadStoreCreateInput,
+  ThreadStorePatch,
+  ThreadStoreQuery,
+} from '../../ports/thread-store.js';
 import { assertSafeRuntimeId } from '../../security/runtime-id.js';
 import { readLegacyJsonThreads } from './legacy-json-thread-reader.js';
 import {
   archiveTransientEvents,
-  readArchivedEvents,
   readEventArchiveState,
-  readRawEvents,
 } from './sqlite-thread-event-archive.js';
+import {
+  readAllThreadEvents,
+  readHotThreadEvents,
+  readThreadEventPage,
+} from './sqlite-thread-event-reader.js';
 import { normalizeRuntimeMessagePatch } from './runtime-message-patch.js';
 import {
   insertRuntimeEvent,
@@ -413,7 +422,14 @@ export class SqliteThreadStore implements ThreadStore {
     const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
     await this.ensureReady();
     this.assertOwnership();
-    return this.readEvents(safeThreadId, Math.max(0, Math.floor(sinceSeq)));
+    return readAllThreadEvents(this.requireDatabase(), safeThreadId, Math.max(0, Math.floor(sinceSeq)));
+  }
+
+  async readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]> {
+    const safeThreadId = assertSafeRuntimeId(threadId, 'Thread id');
+    await this.ensureReady();
+    this.assertOwnership();
+    return readThreadEventPage(this.requireDatabase(), safeThreadId, query);
   }
 
   async replayEvents(threadId: string, sinceSeq = 0) {
@@ -425,7 +441,8 @@ export class SqliteThreadStore implements ThreadStore {
     const retainedFromSeq = state.archivedThroughSeq + 1;
     const requiresResync = requestedSinceSeq < retainedFromSeq - 1;
     return {
-      events: this.readHotEvents(
+      events: readHotThreadEvents(
+        this.requireDatabase(),
         safeThreadId,
         requiresResync ? retainedFromSeq - 1 : requestedSinceSeq,
       ),
@@ -602,7 +619,7 @@ export class SqliteThreadStore implements ThreadStore {
 
     const normalized = normalizeThreadSnapshot(snapshot);
     let thread = normalized.thread;
-    const events = this.readEvents(threadId, snapshotSeq);
+    const events = readAllThreadEvents(this.requireDatabase(), threadId, snapshotSeq);
     let expectedSeq = snapshotSeq + 1;
     for (const event of events) {
       if (event.seq !== expectedSeq) throw new Error(`Invalid SQLite runtime event sequence for ${threadId}: ${event.seq}`);
@@ -622,41 +639,6 @@ export class SqliteThreadStore implements ThreadStore {
       this.repairLoadedThread(thread, messageIndexStale || normalized.changed || replayNormalized.changed);
     }
     return thread;
-  }
-
-  private readEvents(threadId: string, sinceSeq: number): StoredThreadEvent[] {
-    const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
-    const events = [
-      ...readArchivedEvents(this.requireDatabase(), threadId, sinceSeq),
-      ...readRawEvents(this.requireDatabase(), threadId, sinceSeq),
-    ].sort((left, right) => left.seq - right.seq);
-    let expectedSeq = sinceSeq + 1;
-    for (const event of events) {
-      if (event.seq !== expectedSeq) {
-        throw new Error(`Invalid SQLite runtime event sequence for ${threadId}: expected ${expectedSeq}, got ${event.seq}`);
-      }
-      expectedSeq += 1;
-    }
-    if (sinceSeq < lastSeq && events.at(-1)?.seq !== lastSeq) {
-      throw new Error(`SQLite runtime event tail does not reach last_seq for ${threadId}.`);
-    }
-    return events;
-  }
-
-  private readHotEvents(threadId: string, sinceSeq: number): StoredThreadEvent[] {
-    const { lastSeq } = readEventArchiveState(this.requireDatabase(), threadId);
-    const events = readRawEvents(this.requireDatabase(), threadId, sinceSeq);
-    let expectedSeq = sinceSeq + 1;
-    for (const event of events) {
-      if (event.seq !== expectedSeq) {
-        throw new Error(`Invalid SQLite hot runtime event sequence for ${threadId}: expected ${expectedSeq}, got ${event.seq}`);
-      }
-      expectedSeq += 1;
-    }
-    if (sinceSeq < lastSeq && events.at(-1)?.seq !== lastSeq) {
-      throw new Error(`SQLite hot runtime event tail does not reach last_seq for ${threadId}.`);
-    }
-    return events;
   }
 
   private repairLoadedThread(thread: RuntimeThread, rebuildMessageIndex: boolean): void {

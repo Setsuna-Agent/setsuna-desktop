@@ -82,6 +82,37 @@ describe('desktop terminal store', () => {
     expect(store.close(session.sessionId)).toBe(true);
   });
 
+  it('does not spawn a PTY when an opening operation is aborted during environment resolution', async () => {
+    const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-abort-test-'));
+    const events: DesktopTerminalEventPayload[] = [];
+    let markEnvironmentStarted!: () => void;
+    let releaseEnvironment!: () => void;
+    const environmentStarted = new Promise<void>((resolve) => {
+      markEnvironmentStarted = resolve;
+    });
+    const environmentPending = new Promise<void>((resolve) => {
+      releaseEnvironment = resolve;
+    });
+    const store = new DesktopTerminalStore(
+      (event) => events.push(event),
+      async () => {
+        markEnvironmentStarted();
+        await environmentPending;
+        return {};
+      },
+    );
+    const controller = new AbortController();
+    const opening = store.open({ workspaceRoot }, controller.signal);
+    await environmentStarted;
+
+    controller.abort(new Error('Terminal Feature is draining.'));
+    releaseEnvironment();
+
+    await expect(opening).rejects.toThrow('Terminal Feature is draining.');
+    expect(events).toEqual([]);
+    store.closeAll();
+  });
+
   it('applies the host environment when starting a session', async () => {
     const workspaceRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-terminal-proxy-test-'));
     const events: DesktopTerminalEventPayload[] = [];

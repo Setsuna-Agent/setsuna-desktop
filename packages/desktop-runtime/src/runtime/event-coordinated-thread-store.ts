@@ -10,6 +10,7 @@ import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type {
   ThreadStore,
   ThreadStoreCreateInput,
+  ThreadEventPageQuery,
   ThreadStorePatch,
   ThreadStoreQuery,
 } from '../ports/thread-store.js';
@@ -105,6 +106,10 @@ export class EventCoordinatedThreadStore implements ThreadStore {
 
   listEvents(threadId: string, sinceSeq?: number) {
     return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  readEventPage(threadId: string, query: ThreadEventPageQuery) {
+    return this.inner.readEventPage(threadId, query);
   }
 
   replayEvents(threadId: string, sinceSeq?: number) {

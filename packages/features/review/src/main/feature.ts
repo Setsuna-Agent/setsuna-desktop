@@ -18,6 +18,6 @@ export const reviewMainFeature = defineMainFeature({
   definition: reviewFeature,
   dependencies,
   setup(context) {
-    context.scope.add(registerReviewIpc(context.dependencies));
+    context.scope.add(registerReviewIpc(context.scope, context.dependencies));
   },
 });

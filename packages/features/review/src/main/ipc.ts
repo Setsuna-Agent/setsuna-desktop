@@ -1,5 +1,6 @@
+import type { Awaitable, FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { randomUUID } from 'node:crypto';
-import { ipcMain, type WebContents } from 'electron';
+import { ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import {
   REVIEW_IPC_CHANNELS,
   type ReviewCommitMessageGenerator,
@@ -42,7 +43,7 @@ const handlerChannels = [
   REVIEW_IPC_CHANNELS.generateCommitMessage,
 ] as const;
 
-export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => void {
+export function registerReviewIpc(scope: FeatureScope, dependencies: ReviewIpcDependencies): () => void {
   const monitor = new DesktopReviewChangeMonitor();
   const subscriptions = new Map<string, {
     dispose: () => void;
@@ -67,28 +68,31 @@ export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => vo
     }
   };
 
-  ipcMain.handle(REVIEW_IPC_CHANNELS.getState, async (_event, input) =>
-    getDesktopReviewState(String(input?.workspaceRoot ?? ''), {
-      baseRef: typeof input?.baseRef === 'string' ? input.baseRef : null,
-      includeBranchSummary: input?.includeBranchSummary !== false,
-    }),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.createImagePreview, async (event, input) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.getState, (_event, value) => {
+    const input = inputRecord(value);
+    return getDesktopReviewState(String(input.workspaceRoot ?? ''), {
+      baseRef: typeof input.baseRef === 'string' ? input.baseRef : null,
+      includeBranchSummary: input.includeBranchSummary !== false,
+    });
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.createImagePreview, (event, value) => {
+    const input = inputRecord(value);
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) {
       return { ok: false, error: 'Desktop renderer is unavailable.' };
     }
     return createReviewImagePreviewUrl(
-      input?.workspaceRoot,
-      input?.preview,
+      input.workspaceRoot,
+      input.preview,
       dependencies.previews,
     );
   });
-  ipcMain.handle(REVIEW_IPC_CHANNELS.releaseImagePreview, (event, rawPreviewId) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.releaseImagePreview, (event, rawPreviewId) => {
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) return false;
     const previewId = String(rawPreviewId ?? '');
     return /^[a-f0-9]{48}$/u.test(previewId) && dependencies.previews.release(previewId);
   });
-  ipcMain.handle(REVIEW_IPC_CHANNELS.subscribeChanges, async (event, input) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.subscribeChanges, async (event, value) => {
+    const input = inputRecord(value);
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) {
       throw new Error('Desktop renderer is unavailable.');
     }
@@ -97,7 +101,7 @@ export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => vo
     latestSubscriptionRequestBySender.set(sender, subscriptionId);
     let dispose: () => void;
     try {
-      dispose = await monitor.subscribe(String(input?.workspaceRoot ?? ''), () => {
+      dispose = await monitor.subscribe(String(input.workspaceRoot ?? ''), () => {
         if (!sender.isDestroyed()) sender.send(REVIEW_IPC_CHANNELS.changed, { subscriptionId });
       });
     } catch (error) {
@@ -121,7 +125,7 @@ export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => vo
     sender.once('destroyed', handleDestroyed);
     return subscriptionId;
   });
-  ipcMain.handle(REVIEW_IPC_CHANNELS.unsubscribeChanges, (event, rawSubscriptionId) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.unsubscribeChanges, (event, rawSubscriptionId) => {
     if (!dependencies.rendererSender.isAllowed(event.sender.id)) {
       throw new Error('Desktop renderer is unavailable.');
     }
@@ -129,31 +133,41 @@ export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => vo
     const subscription = subscriptions.get(subscriptionId);
     if (subscription?.sender === event.sender) disposeSubscription(subscriptionId);
   });
-  ipcMain.handle(REVIEW_IPC_CHANNELS.discardUnstaged, async (_event, input) =>
-    discardUnstagedReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.stageFiles, async (_event, input) =>
-    stageReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.unstageFiles, async (_event, input) =>
-    unstageReviewFiles(String(input?.workspaceRoot ?? ''), normalizeFilePathList(input?.filePaths)),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.checkoutBranch, async (_event, input) =>
-    checkoutReviewBranch(String(input?.workspaceRoot ?? ''), String(input?.branchName ?? '')),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.createBranch, async (_event, input) =>
-    createAndCheckoutReviewBranch(String(input?.workspaceRoot ?? ''), String(input?.branchName ?? ''), {
-      allowUnstaged: Boolean(input?.allowUnstaged),
-    }),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.commit, async (_event, input) =>
-    commitReviewChanges(String(input?.workspaceRoot ?? ''), normalizeCommitInput(input)),
-  );
-  ipcMain.handle(REVIEW_IPC_CHANNELS.push, async (_event, input) => pushReviewBranch(String(input?.workspaceRoot ?? '')));
-  ipcMain.handle(REVIEW_IPC_CHANNELS.generateCommitMessage, async (_event, input) => {
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.discardUnstaged, (_event, value) => {
+    const input = inputRecord(value);
+    return discardUnstagedReviewFiles(String(input.workspaceRoot ?? ''), normalizeFilePathList(input.filePaths));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.stageFiles, (_event, value) => {
+    const input = inputRecord(value);
+    return stageReviewFiles(String(input.workspaceRoot ?? ''), normalizeFilePathList(input.filePaths));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.unstageFiles, (_event, value) => {
+    const input = inputRecord(value);
+    return unstageReviewFiles(String(input.workspaceRoot ?? ''), normalizeFilePathList(input.filePaths));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.checkoutBranch, (_event, value) => {
+    const input = inputRecord(value);
+    return checkoutReviewBranch(String(input.workspaceRoot ?? ''), String(input.branchName ?? ''));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.createBranch, (_event, value) => {
+    const input = inputRecord(value);
+    return createAndCheckoutReviewBranch(String(input.workspaceRoot ?? ''), String(input.branchName ?? ''), {
+      allowUnstaged: Boolean(input.allowUnstaged),
+    });
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.commit, (_event, value) => {
+    const input = inputRecord(value);
+    return commitReviewChanges(String(input.workspaceRoot ?? ''), normalizeCommitInput(input));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.push, (_event, value) => {
+    const input = inputRecord(value);
+    return pushReviewBranch(String(input.workspaceRoot ?? ''));
+  });
+  registerScopedIpcHandler(scope, REVIEW_IPC_CHANNELS.generateCommitMessage, async (_event, value) => {
+    const input = inputRecord(value);
     const source = await getCommitMessageGenerationSource(
-      String(input?.workspaceRoot ?? ''),
-      input?.includeUnstaged !== false,
+      String(input.workspaceRoot ?? ''),
+      input.includeUnstaged !== false,
     );
     return { message: await dependencies.commitMessages.generate(source) };
   });
@@ -164,6 +178,28 @@ export function registerReviewIpc(dependencies: ReviewIpcDependencies): () => vo
     for (const subscriptionId of [...subscriptions.keys()]) disposeSubscription(subscriptionId);
     monitor.close();
   };
+}
+
+type ScopedIpcHandler = (
+  event: IpcMainInvokeEvent,
+  input: unknown,
+  signal: AbortSignal,
+) => Awaitable<unknown>;
+
+function registerScopedIpcHandler(
+  scope: FeatureScope,
+  channel: string,
+  handler: ScopedIpcHandler,
+): void {
+  ipcMain.handle(channel, (event, input: unknown) => (
+    scope.runOperation((signal) => handler(event, input, signal))
+  ));
+}
+
+function inputRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Readonly<Record<string, unknown>>
+    : {};
 }
 
 function normalizeFilePathList(value: unknown): string[] {

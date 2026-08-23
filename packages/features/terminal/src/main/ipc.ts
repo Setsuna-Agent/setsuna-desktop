@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron';
+import type { Awaitable, FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { TERMINAL_IPC_CHANNELS } from '../contracts/index.js';
 import type { DesktopTerminalStore } from './sessions.js';
 
@@ -11,26 +12,26 @@ const handlerChannels = [
   TERMINAL_IPC_CHANNELS.close,
 ] as const;
 
-export function registerTerminalIpc(terminal: DesktopTerminalStore): () => void {
+export function registerTerminalIpc(scope: FeatureScope, terminal: DesktopTerminalStore): () => void {
   for (const channel of handlerChannels) ipcMain.removeHandler(channel);
 
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.open, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.open, (_event, value, signal) => {
     const input = inputRecord(value);
     return terminal.open({
       workspaceRoot: typeof input.workspaceRoot === 'string' ? input.workspaceRoot : null,
       cols: optionalNumber(input.cols),
       rows: optionalNumber(input.rows),
-    });
+    }, signal);
   });
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.write, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.write, (_event, value) => {
     const input = inputRecord(value);
     return terminal.write(String(input.sessionId ?? ''), String(input.input ?? ''));
   });
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.read, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.read, (_event, value) => {
     const input = inputRecord(value);
     return terminal.read(String(input.sessionId ?? ''));
   });
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.resize, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.resize, (_event, value) => {
     const input = inputRecord(value);
     return terminal.resize(
       String(input.sessionId ?? ''),
@@ -38,15 +39,16 @@ export function registerTerminalIpc(terminal: DesktopTerminalStore): () => void 
       Number(input.rows ?? 24),
     );
   });
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.restart, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.restart, (_event, value, signal) => {
     const input = inputRecord(value);
     return terminal.restart(
       String(input.sessionId ?? ''),
       optionalNumber(input.cols),
       optionalNumber(input.rows),
+      signal,
     );
   });
-  ipcMain.handle(TERMINAL_IPC_CHANNELS.close, async (_event, value) => {
+  registerScopedIpcHandler(scope, TERMINAL_IPC_CHANNELS.close, (_event, value) => {
     const input = inputRecord(value);
     return terminal.close(String(input.sessionId ?? ''));
   });
@@ -54,6 +56,22 @@ export function registerTerminalIpc(terminal: DesktopTerminalStore): () => void 
   return () => {
     for (const channel of handlerChannels) ipcMain.removeHandler(channel);
   };
+}
+
+type ScopedIpcHandler = (
+  event: IpcMainInvokeEvent,
+  input: unknown,
+  signal: AbortSignal,
+) => Awaitable<unknown>;
+
+function registerScopedIpcHandler(
+  scope: FeatureScope,
+  channel: string,
+  handler: ScopedIpcHandler,
+): void {
+  ipcMain.handle(channel, (event, input: unknown) => (
+    scope.runOperation((signal) => handler(event, input, signal))
+  ));
 }
 
 function inputRecord(value: unknown): Readonly<Record<string, unknown>> {

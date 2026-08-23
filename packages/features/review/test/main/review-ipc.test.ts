@@ -1,9 +1,12 @@
+import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { FeatureScopeUnavailableError } from '@setsuna-desktop/feature-core/status';
 import { EventEmitter } from 'node:events';
 import type { WebContents } from 'electron';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const reviewIpcMocks = vi.hoisted(() => ({
   close: vi.fn(),
+  getState: vi.fn(),
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   subscribe: vi.fn(),
 }));
@@ -32,7 +35,7 @@ vi.mock('../../src/main/state.js', () => ({
   createAndCheckoutReviewBranch: vi.fn(),
   discardUnstagedReviewFiles: vi.fn(),
   getCommitMessageGenerationSource: vi.fn(),
-  getDesktopReviewState: vi.fn(),
+  getDesktopReviewState: reviewIpcMocks.getState,
   pushReviewBranch: vi.fn(),
   stageReviewFiles: vi.fn(),
   unstageReviewFiles: vi.fn(),
@@ -45,7 +48,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('review IPC subscriptions', () => {
+describe('review IPC lifecycle', () => {
   it('keeps the newest watcher when concurrent subscription requests finish out of order', async () => {
     const firstSubscription = deferred<() => void>();
     const secondSubscription = deferred<() => void>();
@@ -55,7 +58,8 @@ describe('review IPC subscriptions', () => {
       .mockReturnValueOnce(firstSubscription.promise)
       .mockReturnValueOnce(secondSubscription.promise);
     const sender = new FakeWebContents();
-    const unregister = registerReviewIpc({
+    const scope = createFeatureScope({ featureId: 'review', process: 'main', scopeId: 'review-test' });
+    scope.scope.add(registerReviewIpc(scope.scope, {
       commitMessages: { generate: vi.fn() },
       previews: {
         createWorkspacePreview: vi.fn(),
@@ -63,7 +67,8 @@ describe('review IPC subscriptions', () => {
         release: vi.fn(),
       },
       rendererSender: { isAllowed: () => true },
-    });
+    }));
+    scope.activate();
     const subscribe = ipcHandler('desktop-review:subscribe-changes');
     const unsubscribe = ipcHandler('desktop-review:unsubscribe-changes');
 
@@ -84,10 +89,42 @@ describe('review IPC subscriptions', () => {
     unsubscribe({ sender: asWebContents(sender) }, firstSubscriptionId);
     expect(disposeSecond).not.toHaveBeenCalled();
 
-    unregister();
+    await scope.finishDispose();
     expect(disposeSecond).toHaveBeenCalledOnce();
     expect(reviewIpcMocks.close).toHaveBeenCalledOnce();
     expect(reviewIpcMocks.handlers.size).toBe(0);
+  });
+
+  it('drains an active handler before unregistering Review IPC', async () => {
+    const stateResult = deferred<unknown>();
+    reviewIpcMocks.getState.mockReturnValue(stateResult.promise);
+    const scope = createFeatureScope({ featureId: 'review', process: 'main', scopeId: 'review-drain-test' });
+    scope.scope.add(registerReviewIpc(scope.scope, {
+      commitMessages: { generate: vi.fn() },
+      previews: {
+        createWorkspacePreview: vi.fn(),
+        registerContentPreview: vi.fn(),
+        release: vi.fn(),
+      },
+      rendererSender: { isAllowed: () => true },
+    }));
+    scope.activate();
+    const getState = ipcHandler('desktop-review:get-state');
+
+    const request = getState({}, { workspaceRoot: '/workspace' });
+    const disposal = scope.finishDispose();
+
+    expect(scope.scope.state).toBe('draining');
+    expect(reviewIpcMocks.handlers.has('desktop-review:get-state')).toBe(true);
+    await expect(getState({}, { workspaceRoot: '/late' })).rejects.toBeInstanceOf(
+      FeatureScopeUnavailableError,
+    );
+
+    stateResult.resolve({ branch: 'main' });
+    await expect(request).resolves.toEqual({ branch: 'main' });
+    await disposal;
+    expect(reviewIpcMocks.handlers.size).toBe(0);
+    expect(reviewIpcMocks.close).toHaveBeenCalledOnce();
   });
 });
 

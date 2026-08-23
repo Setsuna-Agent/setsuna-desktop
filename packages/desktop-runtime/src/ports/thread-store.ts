@@ -37,6 +37,12 @@ export type RuntimeEventReplay = {
   requiresResync: boolean;
 };
 
+export type ThreadEventPageQuery = Readonly<{
+  afterSeq: number;
+  throughSeq: number;
+  limit: number;
+}>;
+
 /** Small live-turn projection used by frequent runtime activity reads. */
 export type RuntimeTurnActivityProjection = {
   queuedInputCount: number;
@@ -64,6 +70,7 @@ export type ThreadStore = {
     threadId: string,
     events: readonly PendingStoredThreadEvent[],
   ): Promise<StoredThreadEvent[]>;
+  readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]>;
   listEvents(threadId: string, sinceSeq?: number): Promise<StoredThreadEvent[]>;
   replayEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEventReplay>;
 };

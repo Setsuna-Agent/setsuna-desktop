@@ -3,7 +3,7 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 
 /** Fixed-watermark adapter over the append-only Core ThreadStore. */
 export class ThreadStoreEventReader implements ThreadEventReader {
-  constructor(private readonly store: Pick<ThreadStore, 'getThread' | 'listEvents'>) {}
+  constructor(private readonly store: Pick<ThreadStore, 'getThread' | 'readEventPage'>) {}
 
   async highWater(threadId: string): Promise<number> {
     const thread = await this.store.getThread(threadId);
@@ -15,9 +15,7 @@ export class ThreadStoreEventReader implements ThreadEventReader {
     threadId: string,
     input: Readonly<{ afterSeq: number; throughSeq: number; limit: number }>,
   ) {
-    const records = (await this.store.listEvents(threadId, input.afterSeq))
-      .filter((record) => record.seq <= input.throughSeq)
-      .slice(0, input.limit);
+    const records = await this.store.readEventPage(threadId, input);
     return Object.freeze({ records, throughSeq: input.throughSeq });
   }
 }

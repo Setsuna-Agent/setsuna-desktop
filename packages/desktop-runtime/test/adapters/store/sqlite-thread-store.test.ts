@@ -381,6 +381,13 @@ describe('sqlite thread store', () => {
     });
     await store.flush();
 
+    const firstPage = await store.readEventPage(thread.id, { afterSeq: 0, throughSeq: 5, limit: 2 });
+    const archivedBoundaryPage = await store.readEventPage(thread.id, { afterSeq: 2, throughSeq: 5, limit: 2 });
+    const finalPage = await store.readEventPage(thread.id, { afterSeq: 4, throughSeq: 5, limit: 2 });
+    expect(firstPage.map((event) => event.seq)).toEqual([1, 2]);
+    expect(archivedBoundaryPage.map((event) => event.seq)).toEqual([3, 4]);
+    expect(finalPage.map((event) => event.seq)).toEqual([5]);
+
     const replay = await store.replayEvents(thread.id, 0);
     expect(replay).toMatchObject({ requiresResync: true, retainedFromSeq: 4, latestSeq: 5 });
     expect(replay.events.map((event) => event.seq)).toEqual([4, 5]);
