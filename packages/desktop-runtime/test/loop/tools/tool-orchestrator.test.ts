@@ -149,7 +149,8 @@ describe('ToolOrchestrator terminal and retry handling', () => {
       strict_auto_review: true,
     });
     expect(approvalStore.strictAutoReviewEnabled('turn_1')).toBe(true);
-    expect(approvalStore.sandboxWorkspaceWriteFor('turn_1', 'local').writableRoots).toContain(requestedRoot);
+    expect(approvalStore.sandboxWorkspaceWriteFor('turn_1', 'local').writableRoots)
+      .toContain(path.resolve(requestedRoot));
 
     await expect(fixture.orchestrator.runToolCall(
       { id: 'call_after_permissions_override', name: 'local_tool', arguments: '{}' },

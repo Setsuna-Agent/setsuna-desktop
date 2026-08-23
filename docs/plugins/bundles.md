@@ -108,7 +108,7 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 需要 runtime 凭据或受管附件的第一方插件也必须由 Bundle extension 注册和实现工具，不能在 runtime 里配一套隐藏 ToolHost。`openai-image-generation` 的 `generate_image` schema、输入校验、结果格式位于插件 `extension/`，只通过 marketplace 专用的 `image-generation` bridge 请求 host 使用私有 Images API 配置并保存受管资产；`openai-vision-recognition` 同样在 Bundle 内实现 `analyze_image`，通过 `vision-recognition` bridge 传递附件 ID 和问题。host 只负责密钥、代理、provider adapter、thread 归属校验和二进制落盘，不持有工具定义或面向模型的结果语义。
 
-这两个 bridge 只能由随应用发布的受控 marketplace Bundle 声明，本地侧载和 Agent 创建的 Bundle 会在安装阶段被拒绝。视觉插件详情页只选择“模型服务”中已启用且标记为支持图片的模型，runtime 保存 provider/model 引用并复用已有协议、服务地址、API key 和代理设置；扩展 worker 不会得到这些凭据或附件路径。
+这两个 bridge 只能由随应用发布的受控 marketplace Bundle 声明，本地侧载和 Agent 创建的 Bundle 会在安装阶段被拒绝。视觉插件详情页由 Vision Recognition Feature contribution 提供，只选择“模型服务”中已启用且标记为支持图片的模型；provider/model 引用保存在该 Feature 的 portable `model-selection` document，并复用已有协议、服务地址、API key 和代理设置。扩展 worker 不会得到这些凭据或附件路径。
 
 `web-search` 已是完整可执行扩展：Bundle 内实现 `web_search` 的输入校验、Tavily keyless 请求、结果归一化和外部上下文格式化；runtime 只提供通用的精确 origin allowlist、代理、取消、超时和响应大小限制。它不需要用户配置 API key，但受匿名额度限制；查询会发给外部搜索服务，结果按不可信外部上下文处理。插件默认不安装，卸载后 worker 与工具都会立即消失。
 

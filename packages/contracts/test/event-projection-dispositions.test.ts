@@ -57,7 +57,7 @@ const ACTIVITY_INCLUDED_EVENT_TYPES = [
 
 describe('runtime event projection dispositions', () => {
   it('classifies every runtime event exactly once for each consumer', () => {
-    expect(RUNTIME_EVENT_TYPES).toHaveLength(48);
+    expect(RUNTIME_EVENT_TYPES).toHaveLength(46);
 
     for (const dispositions of [
       RUNTIME_THREAD_EVENT_DISPOSITIONS,

@@ -1,6 +1,8 @@
 import type { RuntimeHealth } from '@setsuna-desktop/contracts';
 import http from 'node:http';
 import { URL } from 'node:url';
+import type { RuntimeFeatureComposition } from '@setsuna-desktop/feature-core/runtime';
+import { activateBuiltinRuntimeFeatures } from '../composition/runtime-feature-composition.js';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
 import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
 import { cleanupRuntimeSideConversations } from '../runtime/use-cases/side-conversation.js';
@@ -34,6 +36,7 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     builtinPluginsDir: options.builtinPluginsDir,
     nativeBridge: options.nativeBridge,
   });
+  let featureComposition: RuntimeFeatureComposition | null = null;
   try {
     await runtime.mcpStore.migrateLegacySecrets();
     await runtime.threadStore.recover();
@@ -48,9 +51,11 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await settleStaleRuntimeTurns(runtime);
     // 结算完成后，把账本上仍非终态但 child 已无活动 turn 的协作任务修正为 interrupted。
     await runtime.agentLoop.reconcileCollaborationTasks();
+    featureComposition = await activateBuiltinRuntimeFeatures(runtime);
     // 持久 Goal 在 runtime 重启后必须显式恢复，避免打开应用即静默继续自治执行。
     await runtime.agentLoop.reconcileRestoredGoals();
   } catch (error) {
+    await featureComposition?.dispose().catch(() => undefined);
     await runtime.extensionManager.shutdown().catch(() => undefined);
     await runtime.mcpConnections.shutdown().catch(() => undefined);
     await runtime.networkProxyFetch.close().catch(() => undefined);
@@ -187,24 +192,28 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
           if (!drained) throw new Error('Runtime tasks did not drain before shutdown timeout.');
         } finally {
           try {
-            await runtime.extensionManager.shutdown();
+            await featureComposition?.dispose();
           } finally {
             try {
-              await runtime.backgroundShellProcesses.shutdown();
+              await runtime.extensionManager.shutdown();
             } finally {
               try {
-                await runtime.mcpConnections.shutdown();
+                await runtime.backgroundShellProcesses.shutdown();
               } finally {
                 try {
-                  await runtime.networkProxyFetch.close();
+                  await runtime.mcpConnections.shutdown();
                 } finally {
                   try {
-                    await runtime.nativeBridge.close();
+                    await runtime.networkProxyFetch.close();
                   } finally {
                     try {
-                      await runtime.threadStore.close();
+                      await runtime.nativeBridge.close();
                     } finally {
-                      await serverClosed;
+                      try {
+                        await runtime.threadStore.close();
+                      } finally {
+                        await serverClosed;
+                      }
                     }
                   }
                 }

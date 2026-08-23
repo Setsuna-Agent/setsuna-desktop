@@ -6,7 +6,6 @@ import type {
   RuntimeMessageAttachment,
   RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
-import { OPENAI_IMAGE_GENERATION_TOOL_NAME } from '@setsuna-desktop/contracts';
 import {
   DEFAULT_APP_LOCALE,
   translate,
@@ -102,8 +101,15 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       // tool 消息本身不渲染成独立气泡，只并入同 turn 的 assistant run 复制/删除范围。
       if (assistantRun.length && sameTurn(message.turnId, assistantRunTurnId)) {
         assistantRunMessageIds.push(message.id);
-        if (message.toolName === OPENAI_IMAGE_GENERATION_TOOL_NAME && message.attachments?.length) {
-          assistantRunToolAttachments.push(...message.attachments);
+        // Tool-owned attachments use the same generic transcript channel;
+        // presentation no longer switches on a concrete Feature tool name.
+        if (message.attachments?.length) {
+          // Model-visible media from view_image/browser inspection is context transport,
+          // not a second user-facing result. Explicit output attachments opt out of model
+          // visibility; keep undefined visible for persisted legacy tool messages.
+          assistantRunToolAttachments.push(...message.attachments.filter(
+            (attachment) => attachment.modelVisible !== true,
+          ));
         }
       }
       continue;

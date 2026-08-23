@@ -4,15 +4,20 @@ import type {
   MessagePatch,
   ModelRequest,
   ModelStreamEvent,
-  RuntimeEvent,
+  PendingStoredThreadEvent,
   RuntimeMessagePageQuery,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolDefinition,
+  StoredThreadEvent,
   ThreadQuery
 } from '@setsuna-desktop/contracts';
 import type { ModelClient } from '../../../src/ports/model-client.js';
-import type { ThreadStore, ThreadStorePatch } from '../../../src/ports/thread-store.js';
+import type {
+  ThreadEventPageQuery,
+  ThreadStore,
+  ThreadStorePatch,
+} from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost } from '../../../src/ports/tool-host.js';
 
 
@@ -173,7 +178,7 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
     return this.inner.clearThreadMessages(threadId);
   }
 
-  async appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>): Promise<RuntimeEvent> {
+  async appendEvent(threadId: string, event: PendingStoredThreadEvent): Promise<StoredThreadEvent> {
     const payload = event.payload as { message?: { clientId?: string } };
     if (event.type === 'message.created' && payload.message?.clientId === this.delayedClientId) {
       this.markStarted();
@@ -182,8 +187,12 @@ export class DelayedSteerAppendThreadStore implements ThreadStore {
     return this.inner.appendEvent(threadId, event);
   }
 
-  listEvents(threadId: string, sinceSeq?: number): Promise<RuntimeEvent[]> {
+  listEvents(threadId: string, sinceSeq?: number): Promise<StoredThreadEvent[]> {
     return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  readEventPage(threadId: string, query: ThreadEventPageQuery): Promise<StoredThreadEvent[]> {
+    return this.inner.readEventPage(threadId, query);
   }
 
   replayEvents(threadId: string, sinceSeq?: number) {

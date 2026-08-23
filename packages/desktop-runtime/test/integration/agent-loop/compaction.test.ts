@@ -372,7 +372,7 @@ describe('agent loop context compaction', () => {
         toolChoice: request.toolChoice,
       }))).toEqual([
         { model: 'local-runtime-smoke', toolChoice: 'none' },
-        { model: 'local-runtime-smoke', toolChoice: 'auto' },
+        { model: 'local-runtime-smoke', toolChoice: undefined },
       ]);
       expect(events.some((event) => event.type === 'thread.context_compacting' && event.turnId)).toBe(true);
       expect(compactedEvent?.turnId).toBeTruthy();

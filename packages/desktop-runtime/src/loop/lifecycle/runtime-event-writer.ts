@@ -1,13 +1,18 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type {
+  PendingRuntimeEvent as PendingCoreRuntimeEvent,
+  PendingStoredThreadEvent,
+  RuntimeEvent,
+  StoredThreadEvent,
+} from '@setsuna-desktop/contracts';
 import type { EventBus } from '../../ports/event-bus.js';
 import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { RuntimeStreamMetricsCollector } from './runtime-stream-metrics.js';
 
-type PendingRuntimeEvent = Omit<RuntimeEvent, 'seq'>;
+type PendingEvent = PendingStoredThreadEvent;
 
 type PendingBatch = {
-  events: PendingRuntimeEvent[];
+  events: PendingEvent[];
   lastMergeKey?: string;
   mergeIndexes: Map<string, number>;
   lastTypeIndexes: Map<string, number>;
@@ -22,6 +27,9 @@ const DEFAULT_DELTA_FLUSH_MS = 25;
  */
 export class RuntimeEventWriter {
   private readonly batches = new Map<string, PendingBatch>();
+  private readonly persistedObservers = new Set<(
+    event: StoredThreadEvent,
+  ) => void | PromiseLike<void>>();
   private readonly streamMetrics: RuntimeStreamMetricsCollector;
   private readonly writeQueues = new Map<string, Promise<void>>();
   private fatalError: Error | null = null;
@@ -35,7 +43,16 @@ export class RuntimeEventWriter {
     this.streamMetrics = new RuntimeStreamMetricsCollector(debugTrace);
   }
 
-  async append(threadId: string, event: PendingRuntimeEvent): Promise<RuntimeEvent | null> {
+  subscribePersisted(
+    observer: (event: StoredThreadEvent) => void | PromiseLike<void>,
+  ): () => void {
+    this.persistedObservers.add(observer);
+    return () => this.persistedObservers.delete(observer);
+  }
+
+  append(threadId: string, event: PendingCoreRuntimeEvent): Promise<RuntimeEvent | null>;
+  append(threadId: string, event: PendingStoredThreadEvent): Promise<StoredThreadEvent | null>;
+  async append(threadId: string, event: PendingStoredThreadEvent): Promise<StoredThreadEvent | null> {
     this.throwIfFailed();
     const mergeKey = mergeKeyForEvent(event);
     this.streamMetrics.recordReceived(event, Boolean(mergeKey));
@@ -45,12 +62,35 @@ export class RuntimeEventWriter {
       return null;
     }
     const pending = this.takeBatch(threadId);
-    let savedEvent: RuntimeEvent | null = null;
+    let savedEvent: StoredThreadEvent | null = null;
     await this.enqueueWrite(threadId, async () => {
       await this.persistAndPublish(pending);
       savedEvent = await this.persistAndPublishOne(event);
     });
     return savedEvent;
+  }
+
+  /** Persists a small domain transaction before publishing any member. */
+  async appendBatch(
+    threadId: string,
+    events: readonly PendingEvent[],
+  ): Promise<StoredThreadEvent[]> {
+    this.throwIfFailed();
+    if (!events.length) return [];
+    const pending = this.takeBatch(threadId);
+    let savedEvents: StoredThreadEvent[] = [];
+    await this.enqueueWrite(threadId, async () => {
+      await this.persistAndPublish(pending);
+      if (this.threadStore.appendEvents) {
+        savedEvents = await this.threadStore.appendEvents(threadId, events);
+        for (const saved of savedEvents) await this.publishPersisted(saved);
+        return;
+      }
+      for (const event of events) {
+        savedEvents.push(await this.persistAndPublishOne(event));
+      }
+    });
+    return savedEvents;
   }
 
   async flushThread(threadId: string): Promise<void> {
@@ -71,7 +111,7 @@ export class RuntimeEventWriter {
   private enqueueDelta(
     threadId: string,
     mergeKey: string,
-    event: PendingRuntimeEvent,
+    event: PendingEvent,
   ): { coalesced: boolean; eventCount: number } {
     let batch = this.batches.get(threadId);
     if (!batch) {
@@ -103,7 +143,7 @@ export class RuntimeEventWriter {
     return { coalesced: false, eventCount: batch.events.length };
   }
 
-  private takeBatch(threadId: string): PendingRuntimeEvent[] {
+  private takeBatch(threadId: string): PendingEvent[] {
     const batch = this.batches.get(threadId);
     if (!batch) return [];
     clearTimeout(batch.timer);
@@ -126,16 +166,21 @@ export class RuntimeEventWriter {
     }
   }
 
-  private async persistAndPublish(events: PendingRuntimeEvent[]): Promise<void> {
+  private async persistAndPublish(events: PendingEvent[]): Promise<void> {
     this.streamMetrics.recordBatchFlushed(events);
     for (const event of events) await this.persistAndPublishOne(event);
   }
 
-  private async persistAndPublishOne(event: PendingRuntimeEvent): Promise<RuntimeEvent> {
+  private async persistAndPublishOne(event: PendingEvent): Promise<StoredThreadEvent> {
     const saved = await this.threadStore.appendEvent(event.threadId, event);
+    await this.publishPersisted(saved);
+    return saved;
+  }
+
+  private async publishPersisted(saved: StoredThreadEvent): Promise<void> {
+    await Promise.all([...this.persistedObservers].map((observer) => observer(saved)));
     this.eventBus.publish(saved);
     this.streamMetrics.recordPersisted(saved);
-    return saved;
   }
 
   private recordFailure(error: unknown): void {
@@ -147,7 +192,7 @@ export class RuntimeEventWriter {
   }
 }
 
-function mergeKeyForEvent(event: PendingRuntimeEvent): string {
+function mergeKeyForEvent(event: PendingEvent): string {
   const payload = event.payload as Record<string, unknown>;
   if (event.type === 'message.delta') return mergeKey(event, payload.messageId, payload.channel ?? 'content');
   if (event.type === 'item.delta' || event.type === 'plan.delta') {
@@ -166,7 +211,7 @@ function mergeKeyForEvent(event: PendingRuntimeEvent): string {
   return '';
 }
 
-function mergeKey(event: PendingRuntimeEvent, ...identity: unknown[]): string {
+function mergeKey(event: PendingEvent, ...identity: unknown[]): string {
   // NUL cannot occur in runtime IDs, so unlike a visible delimiter this cannot
   // alias IDs that themselves contain punctuation (for example `${turnId}:plan`).
   return [event.turnId, event.type, ...identity]
@@ -174,7 +219,7 @@ function mergeKey(event: PendingRuntimeEvent, ...identity: unknown[]): string {
     .join('\u0000');
 }
 
-function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEvent): boolean {
+function mergeBufferedEvent(target: PendingEvent, next: PendingEvent): boolean {
   if (target.type !== next.type) return false;
   if (target.type === 'tool.preview') {
     // 工具参数预览只需要最新状态；中间 token 预览没有独立的审计价值。
@@ -189,7 +234,7 @@ function mergeBufferedEvent(target: PendingRuntimeEvent, next: PendingRuntimeEve
   return true;
 }
 
-function clonePendingEvent(event: PendingRuntimeEvent): PendingRuntimeEvent {
+function clonePendingEvent(event: PendingEvent): PendingEvent {
   return structuredClone(event);
 }
 

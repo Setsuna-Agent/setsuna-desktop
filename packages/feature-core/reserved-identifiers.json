@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "features": [
+    "goal",
+    "image-generation",
+    "desktop-review",
+    "terminal",
+    "vision-recognition"
+  ],
+  "capabilities": [
+    "runtime.feature-routes@1",
+    "runtime.feature-settings@1",
+    "image-generation.asset-store@1",
+    "image-generation.legacy-settings@1",
+    "image-generation.network@1",
+    "image-generation.reference-reader@1",
+    "image-generation.renderer-assets@1",
+    "image-generation.service@1",
+    "image-generation.workspace-files@1",
+    "goal.control@1",
+    "goal.runtime-host@1",
+    "renderer.feature-operation-transport@1",
+    "renderer.feature-event-feed@1",
+    "renderer.composer-status-views@1",
+    "renderer.settings-views@1",
+    "renderer.tool-result-views@1",
+    "runtime.feature-events@1",
+    "runtime.thread-event-reader@1",
+    "desktop-review.commit-message@1",
+    "desktop-review.file-previews@1",
+    "desktop-review.renderer-sender@1",
+    "terminal.environment@1",
+    "terminal.event-publisher@1",
+    "vision-recognition.runtime-host@1",
+    "vision-recognition.service@1"
+  ],
+  "settingsDocuments": [
+    "image-generation/connection",
+    "vision-recognition/model-selection"
+  ],
+  "featureEvents": [
+    "goal/goal.state-replaced@1"
+  ],
+  "toolResults": [
+    "image-generation.result@1"
+  ],
+  "operations": [
+    "goal.state.clear",
+    "goal.state.read",
+    "goal.state.update",
+    "image-generation.connection.test",
+    "image-generation.settings.read",
+    "image-generation.settings.update",
+    "vision-recognition.model.test",
+    "vision-recognition.settings.read",
+    "vision-recognition.settings.update"
+  ]
+}

@@ -1,5 +1,10 @@
 lockfileVersion: 5.4
 
+patchedDependencies:
+  node-pty@1.1.0:
+    hash: ehtrmlw75n3v2ehcvwsdrctske
+    path: patches/node-pty@1.1.0.patch
+
 importers:
 
   .:
@@ -9,6 +14,12 @@ importers:
       '@fontsource/geist-sans': ^5.2.5
       '@pierre/diffs': 1.3.3
       '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/feature-goal': workspace:*
+      '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-review': workspace:*
+      '@setsuna-desktop/feature-terminal': workspace:*
+      '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@testing-library/react': ^16.3.2
       '@testing-library/user-event': ^14.6.3
       '@types/node': ^22.10.2
@@ -52,6 +63,12 @@ importers:
       '@fontsource/geist-sans': 5.3.0
       '@pierre/diffs': 1.3.3_nnrd3gsncyragczmpvfhocinkq
       '@setsuna-desktop/contracts': link:packages/contracts
+      '@setsuna-desktop/feature-core': link:packages/feature-core
+      '@setsuna-desktop/feature-goal': link:packages/features/goal
+      '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
+      '@setsuna-desktop/feature-review': link:packages/features/review
+      '@setsuna-desktop/feature-terminal': link:packages/features/terminal
+      '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
@@ -59,7 +76,7 @@ importers:
       katex: 0.16.47
       lucide-react: 0.468.0_react@18.3.1
       marked: 17.0.6
-      node-pty: 1.1.0
+      node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
       proxy-chain: 3.0.0
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
@@ -101,6 +118,10 @@ importers:
       '@ai-sdk/openai-compatible': ^3.0.0
       '@modelcontextprotocol/sdk': ^1.30.0
       '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/feature-goal': workspace:*
+      '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-vision-recognition': workspace:*
       ai: ^7.0.0
       node-pty: ^1.1.0
       undici: 7.29.0
@@ -112,11 +133,89 @@ importers:
       '@ai-sdk/openai-compatible': 3.0.22_zod@4.4.3
       '@modelcontextprotocol/sdk': 1.30.0_zod@4.4.3
       '@setsuna-desktop/contracts': link:../contracts
+      '@setsuna-desktop/feature-core': link:../feature-core
+      '@setsuna-desktop/feature-goal': link:../features/goal
+      '@setsuna-desktop/feature-image-generation': link:../features/image-generation
+      '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       ai: 7.0.51_zod@4.4.3
-      node-pty: 1.1.0
+      node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
       undici: 7.29.0
       yaml: 2.9.0
       zod: 4.4.3
+
+  packages/feature-core:
+    specifiers:
+      react: ^18.3.1
+    dependencies:
+      react: 18.3.1
+
+  packages/features/goal:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      antd: ^6.3.6
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/image-generation:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      antd: ^6.3.6
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/review:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      electron: '>=30'
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      electron: 43.2.0
+
+  packages/features/terminal:
+    specifiers:
+      '@setsuna-desktop/feature-core': workspace:*
+      '@xterm/addon-fit': ^0.11.0
+      '@xterm/xterm': ^6.0.0
+      electron: '>=30'
+      lucide-react: ^0.468.0
+      node-pty: ^1.1.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@xterm/addon-fit': 0.11.0
+      '@xterm/xterm': 6.0.0
+      electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
+      react: 18.3.1
+
+  packages/features/vision-recognition:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
 
 packages:
 
@@ -487,7 +586,6 @@ packages:
   /@electron-internal/extract-zip/1.0.5:
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
     engines: {node: '>=22.12.0'}
-    dev: true
 
   /@electron/asar/3.4.1:
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -539,7 +637,6 @@ packages:
       undici: 7.29.0
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /@electron/notarize/2.5.0:
     resolution: {integrity: sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A==}
@@ -1508,11 +1605,11 @@ packages:
       react-dom: 18.3.1_react@18.3.1
     dev: false
 
-  /@rc-component/context/2.0.2_nnrd3gsncyragczmpvfhocinkq:
-    resolution: {integrity: sha512-uiGpAlblCNlziHPwj4S4Iy/oemeuz/hR03mbiEjTCXwsqOIN3BOzsRMyDwpyO5Fm0vIEEJRUf9ZtbRLbhksuTA==}
+  /@rc-component/context/2.0.1_nnrd3gsncyragczmpvfhocinkq:
+    resolution: {integrity: sha512-HyZbYm47s/YqtP6pKXNMjPEMaukyg7P0qVfgMLzr7YiFNMHbK2fKTAGzms9ykfGHSfyf75nBbgWw+hHkp+VImw==}
     peerDependencies:
-      react: '>=18.0.0'
-      react-dom: '>=18.0.0'
+      react: '>=16.9.0'
+      react-dom: '>=16.9.0'
     dependencies:
       '@rc-component/util': 1.12.0_nnrd3gsncyragczmpvfhocinkq
       react: 18.3.1
@@ -1594,7 +1691,7 @@ packages:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
-      '@rc-component/mini-decimal': 1.1.4
+      '@rc-component/mini-decimal': 1.1.3
       '@rc-component/util': 1.12.0_nnrd3gsncyragczmpvfhocinkq
       clsx: 2.1.1
       react: 18.3.1
@@ -1644,8 +1741,8 @@ packages:
       react-dom: 18.3.1_react@18.3.1
     dev: false
 
-  /@rc-component/mini-decimal/1.1.4:
-    resolution: {integrity: sha512-xiuXcaCwyOWpD8a8scdExFl+bntNphAW8XeenL1ig2en0AAZY0Pcp4pC0dI22qJ+NvxKn9RoNIoRdqYU3BLH4w==}
+  /@rc-component/mini-decimal/1.1.3:
+    resolution: {integrity: sha512-bk/FJ09fLf+NLODMAFll6CfYrHPBioTedhW6lxDBuuWucJEqFUd4l/D/5JgIi3dina6sYahB8iuPAZTNz2pMxw==}
     engines: {node: '>=8.x'}
     dependencies:
       '@babel/runtime': 7.29.7
@@ -1881,7 +1978,7 @@ packages:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
     dependencies:
-      '@rc-component/context': 2.0.2_nnrd3gsncyragczmpvfhocinkq
+      '@rc-component/context': 2.0.1_nnrd3gsncyragczmpvfhocinkq
       '@rc-component/resize-observer': 1.1.2_nnrd3gsncyragczmpvfhocinkq
       '@rc-component/util': 1.12.0_nnrd3gsncyragczmpvfhocinkq
       '@rc-component/virtual-list': 1.5.1_nnrd3gsncyragczmpvfhocinkq
@@ -2654,7 +2751,6 @@ packages:
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
     dependencies:
       undici-types: 7.18.2
-    dev: true
 
   /@types/prismjs/1.26.6:
     resolution: {integrity: sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw==}
@@ -4206,7 +4302,6 @@ packages:
       '@types/node': 24.13.3
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /emoji-regex/10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -4245,7 +4340,6 @@ packages:
   /env-paths/3.0.0:
     resolution: {integrity: sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
-    dev: true
 
   /err-code/2.0.3:
     resolution: {integrity: sha512-2bmlRpNKBxT/CRmPOlyISQpNj+qSeYvcym/uT0Jx2bMOlKLtSy1ZmLuVxSEKKyor/N5yhvp/ZiG1oE3DEYMSFA==}
@@ -4867,7 +4961,6 @@ packages:
 
   /graceful-fs/4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
-    dev: true
 
   /hachure-fill/0.5.2:
     resolution: {integrity: sha512-3GKBOn+m2LX9iq+JC1064cSFprJY4jL1jCXTcpnfER5HYE2l/4EfWSGzkPa/ZDBmYI0ZOEj5VHV/eKnPGkHuOg==}
@@ -6126,7 +6219,7 @@ packages:
     resolution: {integrity: sha512-vLBWCKb+7LWsX+TbfzWOkw0W81m377tyx3hOweBTjO43CXZnRGS1/JPWs20fr0PgZyDXk6ROYrylsEycK8raDA==}
     engines: {node: '>=22.12.0'}
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
     dev: true
 
   /node-addon-api/7.1.1:
@@ -6136,7 +6229,7 @@ packages:
   /node-api-version/0.2.1:
     resolution: {integrity: sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==}
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
     dev: true
 
   /node-gyp/12.4.0:
@@ -6149,7 +6242,7 @@ packages:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
       undici: 6.28.0
@@ -6160,12 +6253,13 @@ packages:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
     dev: true
 
-  /node-pty/1.1.0:
+  /node-pty/1.1.0_ehtrmlw75n3v2ehcvwsdrctske:
     resolution: {integrity: sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==}
     requiresBuild: true
     dependencies:
       node-addon-api: 7.1.1
     dev: false
+    patched: true
 
   /node-releases/2.0.52:
     resolution: {integrity: sha512-MRlTqhAfoMx/4mhEbPo3Hi02g9LJZaJkka69V6h67Cb1gjrAG0jsTE4CZX1eptNx+VCAwJmfpnDIF4P0Nh1A7A==}
@@ -6421,7 +6515,6 @@ packages:
   /progress/2.0.3:
     resolution: {integrity: sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==}
     engines: {node: '>=0.4.0'}
-    dev: true
 
   /promise-retry/2.0.1:
     resolution: {integrity: sha512-y+WKFlBR8BGXnsNlIHFGPZmyDf3DFMoLhaflAnyZgV6rG6xu+JwesTo2Q9R6XwYmtmwAFCkAk3e35jEdoeh/3g==}
@@ -6883,7 +6976,6 @@ packages:
     resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
     hasBin: true
-    dev: true
 
   /send/1.2.1:
     resolution: {integrity: sha512-1gnZf7DFcoIcajTjTwjwuDjzuz4PPcY2StKPlsGAQ1+YH20IRVrBaXSWmdjowTJ6u8Rc01PoYOGHXfP1mYcZNQ==}
@@ -7167,7 +7259,6 @@ packages:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
-    dev: true
 
   /supports-color/10.2.2:
     resolution: {integrity: sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g==}
@@ -7350,7 +7441,6 @@ packages:
 
   /undici-types/7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
-    dev: true
 
   /undici/6.28.0:
     resolution: {integrity: sha512-LIY910g9TI13YS95lrMFrs8Rm/u/irgHeTWoKCoteeJ04CUJ92eEfj0rVn+7VKMPBpUPiUoBKfhNyLI23EE/KA==}

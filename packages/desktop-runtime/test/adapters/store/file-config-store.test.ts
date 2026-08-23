@@ -515,57 +515,26 @@ describe('file config store', () => {
     expect((await store.getConfig()).providers[0]?.models[0]).not.toHaveProperty('icon');
   });
 
-  it('stores the image generation API key only in secrets and supports clearing it', async () => {
+  it('exposes and retires the legacy vision model selection without projecting it into root config', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);
+    await store.saveConfig({});
+    const configPath = path.join(dataDir, 'config.json');
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    stored.visionRecognition = {
+      providerId: ' vision-provider ',
+      modelId: ' vision-model ',
+    };
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
 
-    await expect(store.saveConfig({
-      imageGeneration: {
-        baseUrl: '  http://127.0.0.1:8000  ',
-        model: ' image-model ',
-        apiKey: ' image-secret ',
-      },
-    })).resolves.toMatchObject({
-      imageGeneration: {
-        baseUrl: 'http://127.0.0.1:8000',
-        model: 'image-model',
-        apiKeySet: true,
-      },
+    const adapter = store.visionRecognitionLegacySettingsAdapter();
+    await expect(adapter.read()).resolves.toEqual({
+      providerId: 'vision-provider',
+      modelId: 'vision-model',
     });
-    await expect(store.getImageGenerationConfig()).resolves.toEqual({
-      baseUrl: 'http://127.0.0.1:8000',
-      model: 'image-model',
-      apiKey: 'image-secret',
-    });
-    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).not.toContain('image-secret');
-    expect(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')).toContain('image-secret');
-
-    await expect(store.saveConfig({ imageGeneration: { clearApiKey: true } })).resolves.toMatchObject({
-      imageGeneration: { apiKeySet: false },
-    });
-    await expect(store.getImageGenerationConfig()).resolves.toMatchObject({ apiKey: '' });
-  });
-
-  it('stores only the selected configured model reference for vision recognition', async () => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
-    const store = new FileConfigStore(dataDir);
-
-    await expect(store.saveConfig({
-      visionRecognition: {
-        providerId: ' vision-provider ',
-        modelId: ' vision-model ',
-      },
-    })).resolves.toMatchObject({
-      visionRecognition: {
-        providerId: 'vision-provider',
-        modelId: 'vision-model',
-      },
-    });
-    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).toContain('"visionRecognition"');
+    expect(await store.getConfig()).not.toHaveProperty('visionRecognition');
     expect(await readFile(path.join(dataDir, 'secrets.json'), 'utf8')).not.toContain('vision');
-
-    const cleared = await store.saveConfig({ visionRecognition: null });
-    expect(cleared.visionRecognition).toBeUndefined();
-    expect(await readFile(path.join(dataDir, 'config.json'), 'utf8')).not.toContain('"visionRecognition"');
+    await adapter.retire();
+    expect(await readFile(configPath, 'utf8')).not.toContain('"visionRecognition"');
   });
 });

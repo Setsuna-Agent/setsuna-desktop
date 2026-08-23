@@ -7,6 +7,8 @@ import type { RuntimeFactory } from './types.js';
 
 const DATA_MIGRATION_PREPARE_PATH = '/v1/data-migration/prepare';
 const WEBDAV_SYNC_PREPARE_PATH = '/internal/webdav-sync/prepare';
+const WEBDAV_SYNC_FEATURE_SETTINGS_PATH = '/internal/webdav-sync/feature-settings';
+const WEBDAV_SYNC_FEATURE_CREDENTIALS_PATH = '/internal/webdav-sync/feature-credentials';
 
 /**
  * Closes the runtime's HTTP admission boundary while a consistent on-disk snapshot is staged.
@@ -25,6 +27,20 @@ export class RuntimeMaintenanceGate {
     response: ServerResponse,
     url: URL,
   ): Promise<boolean> {
+    if (url.pathname === WEBDAV_SYNC_FEATURE_SETTINGS_PATH) {
+      if (request.method !== 'GET') return false;
+      sendJson(response, 200, {
+        documents: await this.runtime.featureSettings.exportPortableDocuments(),
+      });
+      return true;
+    }
+    if (url.pathname === WEBDAV_SYNC_FEATURE_CREDENTIALS_PATH) {
+      if (request.method !== 'GET') return false;
+      sendJson(response, 200, {
+        credentials: await this.runtime.featureSettings.exportCredentialBackups(),
+      });
+      return true;
+    }
     if (!isPreparePath(url.pathname)) return false;
 
     if (request.method === 'DELETE') {

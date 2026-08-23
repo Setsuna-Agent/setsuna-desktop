@@ -1,15 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import {
-  clearRuntimeThreadGoal,
   deleteRuntimeThread,
-  runtimeThreadGoalPatchFromInput,
-  setRuntimeThreadGoal,
   startRuntimeReview,
 } from '../runtime/use-cases/thread-operations.js';
 import { decodeRuntimeId, readBody, sendJson } from './http-utils.js';
 import { resolveRuntimeModelSelectionInput } from './runtime-model-selection-input.js';
-import { runtimeThreadResponse } from './runtime-thread-response.js';
 import type { RuntimeFactory } from './types.js';
 
 /**
@@ -26,29 +22,6 @@ export async function handleRuntimeThreadCommandRequest(
     const threadId = decodeRuntimeId(threadMatch[1], 'Thread id');
     await deleteRuntimeThread(runtime, threadId);
     sendJson(response, 200, { ok: true });
-    return true;
-  }
-
-  const goalMatch = url.pathname.match(/^\/v1\/threads\/([^/]+)\/goal$/u);
-  if (goalMatch && request.method === 'PUT') {
-    const threadId = decodeRuntimeId(goalMatch[1], 'Thread id');
-    const patch = runtimeThreadGoalPatchFromInput(
-      await readBody<unknown>(request),
-    );
-    const result = await setRuntimeThreadGoal(runtime, threadId, patch);
-    sendJson(response, 200, {
-      ...result,
-      thread: await runtimeThreadResponse(runtime, result.thread),
-    });
-    return true;
-  }
-  if (goalMatch && request.method === 'DELETE') {
-    const threadId = decodeRuntimeId(goalMatch[1], 'Thread id');
-    const result = await clearRuntimeThreadGoal(runtime, threadId);
-    sendJson(response, 200, {
-      ...result,
-      thread: await runtimeThreadResponse(runtime, result.thread),
-    });
     return true;
   }
 

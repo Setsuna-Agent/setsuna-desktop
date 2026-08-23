@@ -283,7 +283,7 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 
 - `web-search` 使用通用 allowlist network bridge，Bundle 自己实现 Tavily 协议和结果格式。
 - `openai-image-generation` 使用 marketplace 专用 image-generation bridge；Bundle 实现 `generate_image`，host 只处理私有配置、代理、二进制校验、受管 asset 和 workspace 写入。
-- `openai-vision-recognition` 使用 marketplace 专用 vision-recognition bridge；Bundle 实现 `analyze_image`，host 只处理 provider 凭据、模型调用、usage 和 thread 附件归属。
+- `openai-vision-recognition` 使用 marketplace 专用 vision-recognition bridge；Bundle 实现 `analyze_image`，`packages/features/vision-recognition` 拥有模型选择、识别 use case、健康状态和 typed operations，desktop runtime adapter 只提供 provider/model 调用、usage、Plugin 来源校验与 thread 附件安全读取。
 
 私有 bridge 能力在安装阶段限制为应用内置 marketplace 来源，worker 只收到调用结果，不会获得 API key、provider 配置、本地附件路径或原始运行环境。
 

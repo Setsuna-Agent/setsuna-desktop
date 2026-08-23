@@ -66,13 +66,16 @@ export function imageGenerationToolResult(value) {
     ].join('\n'),
     attachments,
     preview: `已生成 ${attachments.length} 张图片`,
-    data: compactObject({
-      pluginId: 'openai-image-generation',
-      imageCount: attachments.length,
-      workspaceFiles: workspaceFiles.length ? workspaceFiles : undefined,
-      model,
-      size,
-    }),
+    data: {
+      resultKind: 'image-generation.result',
+      resultMajor: 1,
+      payload: compactObject({
+        imageCount: attachments.length,
+        workspaceFiles: workspaceFiles.length ? workspaceFiles : undefined,
+        model,
+        size,
+      }),
+    },
     containsExternalContext: true,
   };
 }

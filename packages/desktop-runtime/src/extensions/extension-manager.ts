@@ -91,8 +91,8 @@ export class ExtensionManager implements ExtensionRuntime {
   private readonly visionRecognitionToolTimeoutMs: number;
   private readonly eventTimeoutMs: number;
   private readonly network: ExtensionNetworkCoordinator;
-  private readonly imageGeneration?: ExtensionManagerOptions['imageGeneration'];
-  private readonly visionRecognition?: ExtensionManagerOptions['visionRecognition'];
+  private imageGeneration?: ExtensionManagerOptions['imageGeneration'];
+  private visionRecognition?: ExtensionManagerOptions['visionRecognition'];
   private shuttingDown = false;
 
   constructor(
@@ -113,6 +113,14 @@ export class ExtensionManager implements ExtensionRuntime {
     this.network = new ExtensionNetworkCoordinator(options.networkFetch);
     this.imageGeneration = options.imageGeneration;
     this.visionRecognition = options.visionRecognition;
+  }
+
+  setImageGenerationService(service: NonNullable<ExtensionManagerOptions['imageGeneration']>): void {
+    this.imageGeneration = service;
+  }
+
+  setVisionRecognitionService(service: NonNullable<ExtensionManagerOptions['visionRecognition']>): void {
+    this.visionRecognition = service;
   }
 
   async listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {

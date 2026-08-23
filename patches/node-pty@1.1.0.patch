@@ -1,0 +1,40 @@
+diff --git a/lib/conpty_console_list_agent.js b/lib/conpty_console_list_agent.js
+index 11ab2cf..41c3afd 100644
+--- a/lib/conpty_console_list_agent.js
++++ b/lib/conpty_console_list_agent.js
+@@ -10,7 +10,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ var utils_1 = require("./utils");
+ var getConsoleProcessList = utils_1.loadNativeModule('conpty_console_list').module.getConsoleProcessList;
+ var shellPid = parseInt(process.argv[2], 10);
+-var consoleProcessList = getConsoleProcessList(shellPid);
+-process.send({ consoleProcessList: consoleProcessList });
++try {
++    var consoleProcessList = getConsoleProcessList(shellPid);
++    process.send({ consoleProcessList: consoleProcessList });
++}
++catch (_a) {
++    // AttachConsole can fail if the shell process has already exited. Match
++    // WindowsPtyAgent's timeout fallback instead of crashing this helper.
++    process.send({ consoleProcessList: [shellPid] });
++}
+ process.exit(0);
+ //# sourceMappingURL=conpty_console_list_agent.js.map
+\ No newline at end of file
+diff --git a/src/conpty_console_list_agent.ts b/src/conpty_console_list_agent.ts
+index bf922f4..f5b58aa 100644
+--- a/src/conpty_console_list_agent.ts
++++ b/src/conpty_console_list_agent.ts
+@@ -12,5 +12,11 @@
+ const getConsoleProcessList = loadNativeModule('conpty_console_list').module.getConsoleProcessList;
+ const shellPid = parseInt(process.argv[2], 10);
+-const consoleProcessList = getConsoleProcessList(shellPid);
+-process.send!({ consoleProcessList });
++try {
++  const consoleProcessList = getConsoleProcessList(shellPid);
++  process.send!({ consoleProcessList });
++} catch {
++  // AttachConsole can fail if the shell process has already exited. Match
++  // WindowsPtyAgent's timeout fallback instead of crashing this helper.
++  process.send!({ consoleProcessList: [shellPid] });
++}
+ process.exit(0);

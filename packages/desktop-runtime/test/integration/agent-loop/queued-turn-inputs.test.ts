@@ -3,6 +3,8 @@ import type {
   ModelStreamEvent,
   RuntimeConfigState,
 } from '@setsuna-desktop/contracts';
+import { isFeatureEventEnvelope } from '@setsuna-desktop/feature-core/events';
+import { goalStateReplacedEvent } from '@setsuna-desktop/feature-goal/contracts';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
@@ -12,6 +14,7 @@ import { systemClock } from '../../../src/ports/clock.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { ImageCapabilityConfigStore } from '../../support/agent-loop/attachments.js';
+import { createGoalEnabledAgentLoop } from '../../support/agent-loop/goal-feature.js';
 import {
   ContextWindowConfigStore,
   mkDataDir,
@@ -383,7 +386,7 @@ describe('agent loop queued turn inputs', () => {
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Queued goal test' });
     const modelClient = new QueuedGoalModelClient();
-    const loop = new AgentLoop({
+    const loop = createGoalEnabledAgentLoop({
       threadStore,
       modelClient,
       eventBus: new InMemoryEventBus(),
@@ -410,18 +413,21 @@ describe('agent loop queued turn inputs', () => {
 
     modelClient.releaseFirstResponse();
     const completed = await waitForTestState(
-      () => threadStore.getThread(thread.id),
-      (snapshot) => Boolean(
+      async () => ({
+        goal: await loop.getThreadGoal(thread.id),
+        thread: await threadStore.getThread(thread.id),
+      }),
+      ({ goal, thread: snapshot }) => Boolean(
         snapshot
         && snapshot.activeTurnId === null
         && !snapshot.queuedTurnInputs?.length
-        && snapshot.goal?.status === 'complete'
+        && goal?.status === 'complete'
       ),
-      (snapshot) => `Timed out waiting for queued goal; snapshot=${JSON.stringify(snapshot)}`,
+      (state) => `Timed out waiting for queued goal; state=${JSON.stringify(state)}`,
     );
     const events = await threadStore.listEvents(thread.id);
 
-    expect(completed?.goal).toMatchObject({
+    expect(completed.goal).toMatchObject({
       objective: 'Finish the queued goal safely.',
       status: 'complete',
       execution: {
@@ -432,12 +438,12 @@ describe('agent loop queued turn inputs', () => {
         thinkingEffort: 'high',
       },
     });
-    const visibleGoalMessage = completed?.messages.find((message) => (
+    const visibleGoalMessage = completed.thread?.messages.find((message) => (
       message.role === 'user'
       && message.content === 'Finish the queued goal safely.'
     ));
     expect(visibleGoalMessage).toMatchObject({
-      id: completed?.goal?.execution?.sourceMessageId,
+      id: completed.goal?.execution?.sourceMessageId,
       inputKind: 'goal',
       skillIds: ['skill_step'],
       attachments: [expect.objectContaining({ id: 'attachment_goal' })],
@@ -460,16 +466,24 @@ describe('agent loop queued turn inputs', () => {
       message.attachments?.some((attachment) => attachment.id === 'attachment_goal')
     ))).toHaveLength(1);
     expect(events).toContainEqual(expect.objectContaining({
-      type: 'thread.goal_updated',
+      type: 'message.created',
       turnId: visibleGoalMessage?.turnId,
       payload: expect.objectContaining({
         queuedInputId: queued.queuedInputId,
-        sourceMessage: expect.objectContaining({
+        message: expect.objectContaining({
           id: visibleGoalMessage?.id,
           inputKind: 'goal',
         }),
       }),
     }));
+    expect(events.some((event) => (
+      isFeatureEventEnvelope(event)
+      && event.featureId === goalStateReplacedEvent.featureId
+      && event.eventType === goalStateReplacedEvent.eventType
+      && event.turnId === visibleGoalMessage?.turnId
+      && (event.payload as { goal?: { execution?: { sourceMessageId?: string } } })
+        .goal?.execution?.sourceMessageId === visibleGoalMessage?.id
+    ))).toBe(true);
     expect(events).toContainEqual(expect.objectContaining({
       type: 'turn.started',
       payload: expect.objectContaining({ taskKind: 'goal' }),
@@ -477,7 +491,7 @@ describe('agent loop queued turn inputs', () => {
   });
 
   it('rejects invalid or duplicate Goal items before writing a queue event', async () => {
-    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop();
+    const { loop, modelClient, threadStore, threadId } = await createBlockedLoop(false, true);
     await loop.startTurn(threadId, { input: 'Keep validation test active.' });
     await waitForModelRequestCount(modelClient, 1);
 
@@ -514,7 +528,7 @@ describe('agent loop queued turn inputs', () => {
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Existing goal validation' });
     const modelClient = new QueuedGoalModelClient();
-    const loop = new AgentLoop({
+    const loop = createGoalEnabledAgentLoop({
       threadStore,
       modelClient,
       eventBus: new InMemoryEventBus(),
@@ -528,7 +542,7 @@ describe('agent loop queued turn inputs', () => {
     });
     await waitForModelRequestCount(modelClient, 1);
 
-    const previousGoalId = (await threadStore.getThread(thread.id))?.goal?.id;
+    const previousGoalId = (await loop.getThreadGoal(thread.id))?.id;
     const queued = await loop.queueTurnInput(thread.id, {
       input: 'Replace the current goal when its turn finishes.',
       kind: 'goal',
@@ -541,13 +555,16 @@ describe('agent loop queued turn inputs', () => {
 
     modelClient.releaseFirstResponse();
     await waitForTestState(
-      () => threadStore.getThread(thread.id),
-      (snapshot) => snapshot?.goal?.status === 'complete'
-        && snapshot.goal.objective === 'Replace the current goal when its turn finishes.'
-        && snapshot.activeTurnId === null,
-      (snapshot) => `Timed out waiting for replacement goal completion; snapshot=${JSON.stringify(snapshot)}`,
+      async () => ({
+        goal: await loop.getThreadGoal(thread.id),
+        thread: await threadStore.getThread(thread.id),
+      }),
+      ({ goal, thread: snapshot }) => goal?.status === 'complete'
+        && goal.objective === 'Replace the current goal when its turn finishes.'
+        && snapshot?.activeTurnId === null,
+      (state) => `Timed out waiting for replacement goal completion; state=${JSON.stringify(state)}`,
     );
-    expect((await threadStore.getThread(thread.id))?.goal?.id).not.toBe(previousGoalId);
+    expect((await loop.getThreadGoal(thread.id))?.id).not.toBe(previousGoalId);
   });
 
   it('returns queued success when an edit claim prevents immediate scheduling', async () => {
@@ -645,12 +662,12 @@ describe('agent loop queued turn inputs', () => {
   });
 });
 
-async function createBlockedLoop(withModelConfig = false) {
+async function createBlockedLoop(withModelConfig = false, withGoal = false) {
   const ids = new RandomIdGenerator();
   const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
   const thread = await threadStore.createThread({ title: 'Queued input test' });
   const modelClient = new SteerableModelClient();
-  const loop = new AgentLoop({
+  const options = {
     threadStore,
     modelClient,
     eventBus: new InMemoryEventBus(),
@@ -658,7 +675,10 @@ async function createBlockedLoop(withModelConfig = false) {
     ...(withModelConfig ? { configStore: new ContextWindowConfigStore(256_000) } : {}),
     ids,
     skillRegistry: stepSnapshotSkillRegistry(),
-  });
+  };
+  const loop = withGoal
+    ? createGoalEnabledAgentLoop(options)
+    : new AgentLoop(options);
   return { loop, modelClient, threadId: thread.id, threadStore };
 }
 

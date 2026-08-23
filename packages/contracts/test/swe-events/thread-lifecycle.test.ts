@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { RuntimeEvent } from '../../src/events.js';
+import type { LegacyRuntimeGoalEvent, RuntimeEvent } from '../../src/events.js';
 import {
   createSweNotificationMapper,
   runtimeEventToSweNotifications
@@ -86,7 +86,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
       }]);
     });
   
-  it('maps thread goal events to AppServer goal notifications', () => {
+  it('maps legacy thread goal records for historical AppServer replay', () => {
       const goal = {
         version: 1 as const,
         id: 'goal_1',
@@ -99,7 +99,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: 1782432001,
         updatedAt: 1782432001,
       };
-      const updated: RuntimeEvent = {
+      const updated: LegacyRuntimeGoalEvent = {
         id: 'event_goal_1',
         seq: 1,
         threadId: 'thread_1',
@@ -108,7 +108,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: '2026-06-27T00:00:00.000Z',
         payload: { goal },
       };
-      const queuedUpdated: RuntimeEvent = {
+      const queuedUpdated: LegacyRuntimeGoalEvent = {
         ...updated,
         id: 'event_goal_queued',
         payload: {
@@ -125,7 +125,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
           },
         },
       };
-      const cleared: RuntimeEvent = {
+      const cleared: LegacyRuntimeGoalEvent = {
         id: 'event_goal_2',
         seq: 2,
         threadId: 'thread_1',
@@ -133,7 +133,7 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         createdAt: '2026-06-27T00:00:01.000Z',
         payload: { cleared: true },
       };
-      const clearNoop: RuntimeEvent = {
+      const clearNoop: LegacyRuntimeGoalEvent = {
         id: 'event_goal_3',
         seq: 3,
         threadId: 'thread_1',
@@ -184,6 +184,62 @@ describe('runtime AppServer SWE thread lifecycle', () => {
         params: { threadId: 'thread_1' },
       }]);
       expect(runtimeEventToSweNotifications(clearNoop)).toEqual([]);
+    });
+
+  it('keeps a queued Goal source item behind its turn start notification', () => {
+      const mapEvent = createSweNotificationMapper();
+      const sourceMessage: RuntimeEvent = {
+        id: 'event_goal_source',
+        seq: 1,
+        threadId: 'thread_1',
+        turnId: 'turn_goal_1',
+        type: 'message.created',
+        createdAt: '2026-06-27T00:00:00.000Z',
+        payload: {
+          queuedInputId: 'queued_goal_1',
+          message: {
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            turnId: 'turn_goal_1',
+            role: 'user',
+            inputKind: 'goal',
+            content: 'Ship the Feature migration.',
+            createdAt: '2026-06-27T00:00:00.000Z',
+            status: 'complete',
+          },
+        },
+      };
+
+      expect(mapEvent(sourceMessage)).toEqual([]);
+      const startedNotifications = mapEvent({
+        id: 'event_goal_turn_started',
+        seq: 2,
+        threadId: 'thread_1',
+        turnId: 'turn_goal_1',
+        type: 'turn.started',
+        createdAt: '2026-06-27T00:00:01.000Z',
+        payload: { input: 'Continue the active goal.', taskKind: 'goal' },
+      });
+
+      expect(startedNotifications.map((notification) => notification.method)).toEqual([
+        'thread/status/changed',
+        'turn/started',
+        'item/started',
+      ]);
+      expect(startedNotifications[2]).toEqual({
+        method: 'item/started',
+        params: {
+          threadId: 'thread_1',
+          turnId: 'turn_goal_1',
+          item: {
+            type: 'userMessage',
+            id: 'message_goal_source',
+            clientId: 'client_goal',
+            content: [{ type: 'text', text: 'Ship the Feature migration.' }],
+          },
+          startedAtMs: Date.parse('2026-06-27T00:00:00.000Z'),
+        },
+      });
     });
   
   it('maps context compaction events to AppServer contextCompaction item lifecycle notifications', () => {

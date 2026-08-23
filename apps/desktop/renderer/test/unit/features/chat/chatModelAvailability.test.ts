@@ -69,7 +69,6 @@ function configWith(providers: ProviderConfigState[]): RuntimeConfigState {
     bypassHookTrust: false,
     features: {},
     desktopSettings: {},
-    imageGeneration: { baseUrl: '', model: '', apiKeySet: false, apiKeyPreview: '' },
   };
 }
 

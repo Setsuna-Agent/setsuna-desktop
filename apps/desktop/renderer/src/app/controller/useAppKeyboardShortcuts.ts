@@ -101,5 +101,5 @@ function hasVisibleModalDialog(): boolean {
 
 function isTerminalEventTarget(target: EventTarget | null): boolean {
   return target instanceof Element
-    && Boolean(target.closest('.desktop-terminal-xterm, .xterm'));
+    && Boolean(target.closest('[data-feature-id="terminal"], .xterm'));
 }

@@ -1,5 +1,6 @@
 import {
   isActiveToolRun,
+  type PendingRuntimeEvent,
   type RuntimeEvent,
   type RuntimeMessage,
   type RuntimeThread,
@@ -85,7 +86,7 @@ export async function runAppServerThreadShellCommand(
 export async function appendAndPublishRuntimeEvent(
   runtime: RuntimeFactory,
   threadId: string,
-  event: Omit<RuntimeEvent, 'seq'>,
+  event: PendingRuntimeEvent,
 ): Promise<RuntimeEvent> {
   const saved = await runtime.eventWriter.append(threadId, event);
   if (!saved) throw new Error('Lifecycle events must not be buffered.');

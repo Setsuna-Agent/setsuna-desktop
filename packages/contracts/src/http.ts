@@ -36,8 +36,6 @@ import type {
   RuntimeMemoryQuery,
 } from './memory.js';
 import type {
-  RuntimeImageGenerationTestInput,
-  RuntimeImageGenerationTestResult,
   RuntimeExtensionStatusList,
   RuntimeExtensionTrustInput,
   RuntimePluginInstallResult,
@@ -46,8 +44,6 @@ import type {
   RuntimePluginList,
   RuntimePluginMarketplaceList,
   RuntimePluginRemoveResult,
-  RuntimeVisionRecognitionTestInput,
-  RuntimeVisionRecognitionTestResult,
 } from './plugins.js';
 import type {
   RuntimeSkillDetail,
@@ -72,8 +68,6 @@ import type {
   RegenerateMessageInput,
   RuntimeReviewTarget,
   RuntimeThread,
-  RuntimeThreadGoal,
-  RuntimeThreadGoalPatch,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -112,23 +106,29 @@ export type RuntimeRequestInput = {
   path: string;
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
+  /** Correlates a renderer AbortSignal with the private localhost request in main. */
+  requestId?: string;
+  /** Preserves typed Feature failures across Electron IPC. */
+  responseMode?: 'body' | 'feature-operation';
 };
+
+export type RuntimeFeatureOperationResponse<TValue = unknown> =
+  | Readonly<{ ok: true; value: TValue }>
+  | Readonly<{
+      ok: false;
+      status: number;
+      error: Readonly<{
+        code: string;
+        message: string;
+        retryable: boolean;
+        details?: unknown;
+      }>;
+    }>;
 
 export type RuntimeReviewStartInput = {
   language?: RuntimeInterfaceLanguage;
   modelSelection?: RuntimeConfiguredModelReference;
   target: RuntimeReviewTarget;
-};
-
-/** Goal command responses include a sequenced snapshot so REST cannot regress newer SSE state. */
-export type RuntimeThreadGoalSetResponse = {
-  goal: RuntimeThreadGoal;
-  thread: RuntimeThread;
-};
-
-export type RuntimeThreadGoalClearResponse = {
-  cleared: boolean;
-  thread: RuntimeThread;
 };
 
 export type DesktopRuntimeClient = {
@@ -145,8 +145,6 @@ export type DesktopRuntimeClient = {
   deleteThread(threadId: string): Promise<void>;
   listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcessList>;
   terminateBackgroundShellProcess(threadId: string, processId: string): Promise<RuntimeBackgroundShellProcessTermination>;
-  setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoalSetResponse>;
-  clearThreadGoal(threadId: string): Promise<RuntimeThreadGoalClearResponse>;
   updateThreadMemoryMode(threadId: string, patch: ThreadMemoryModePatch): Promise<RuntimeThread>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
@@ -192,8 +190,6 @@ export type DesktopRuntimeClient = {
   removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
   listExtensionStatuses(): Promise<RuntimeExtensionStatusList>;
   setPluginExtensionTrust(pluginId: string, input: RuntimeExtensionTrustInput): Promise<RuntimePluginList>;
-  testImageGeneration(input: RuntimeImageGenerationTestInput): Promise<RuntimeImageGenerationTestResult>;
-  testVisionRecognition(input: RuntimeVisionRecognitionTestInput): Promise<RuntimeVisionRecognitionTestResult>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;

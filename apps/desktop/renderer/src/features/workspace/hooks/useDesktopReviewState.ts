@@ -2,6 +2,7 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
 import type { DesktopReviewState } from '../model.js';
+import type { DesktopReviewSource } from '../review-types.js';
 import {
   normalizeReviewBaseRefPreference,
   readReviewBaseRefPreference,
@@ -16,6 +17,7 @@ type DesktopReviewStateOptions = {
 type ReviewLoadRequest = {
   baseRef: string | null;
   foreground: boolean;
+  includeBranchSummary: boolean;
   preferenceMode: 'none' | 'restore' | 'select';
 };
 
@@ -24,6 +26,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const reviewRequests = useLatestRequestGuard();
+  const branchSummaryRequestedRef = useRef(false);
   const preferredBaseRefRef = useRef<string | null>(null);
   const reviewStateRef = useRef<DesktopReviewState | null>(null);
   const loadingRef = useRef(false);
@@ -40,7 +43,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     targetPreferenceKey: string,
     request: ReviewLoadRequest,
   ) => {
-    const { baseRef, foreground, preferenceMode } = request;
+    const { baseRef, foreground, includeBranchSummary, preferenceMode } = request;
     const api = window.setsunaDesktop?.desktopReview;
     if (!api) {
       setReviewError('Desktop review bridge is unavailable.');
@@ -51,7 +54,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     if (foreground) setReviewLoading(true);
     setReviewError(null);
     try {
-      let state = await api.getState(targetProjectPath, { baseRef });
+      let state = await api.getState(targetProjectPath, { baseRef, includeBranchSummary });
       if (!isLatest()) return;
       if (preferenceMode !== 'none') {
         // Stored preferences may need migration to a remote counterpart, while
@@ -60,7 +63,10 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
           ? normalizeReviewBaseRefPreference(baseRef, state.baseRefs)
           : baseRef;
         if (preferenceMode === 'restore' && preferredBaseRef && preferredBaseRef !== state.baseRef) {
-          state = await api.getState(targetProjectPath, { baseRef: preferredBaseRef });
+          state = await api.getState(targetProjectPath, {
+            baseRef: preferredBaseRef,
+            includeBranchSummary,
+          });
           if (!isLatest()) return;
         }
         preferredBaseRefRef.current = state.baseRef === preferredBaseRef ? preferredBaseRef : null;
@@ -90,6 +96,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: true,
+      includeBranchSummary: branchSummaryRequestedRef.current,
       preferenceMode: 'none',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
@@ -99,18 +106,48 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: false,
+      includeBranchSummary: branchSummaryRequestedRef.current,
       preferenceMode: 'none',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
 
   const selectReviewBaseRef = useCallback(async (baseRef: string) => {
     if (!projectPath || !preferenceKey) return;
+    branchSummaryRequestedRef.current = true;
     await runReviewLoad(projectPath, preferenceKey, {
       baseRef,
       foreground: true,
+      includeBranchSummary: true,
       preferenceMode: 'select',
     });
   }, [preferenceKey, projectPath, runReviewLoad]);
+
+  const setReviewSource = useCallback((source: DesktopReviewSource) => {
+    const includeBranchSummary = source === 'branch';
+    if (branchSummaryRequestedRef.current === includeBranchSummary) return;
+    branchSummaryRequestedRef.current = includeBranchSummary;
+    if (includeBranchSummary) {
+      refreshCurrentRef.current();
+      return;
+    }
+
+    // Switching away from a branch comparison should immediately release its
+    // potentially very large payload. In-flight branch loads are invalidated so
+    // they cannot reintroduce the discarded snapshot after this source change.
+    reviewRequests.invalidate();
+    pendingRefreshRef.current = false;
+    loadingRef.current = false;
+    setReviewLoading(false);
+    const current = reviewStateRef.current;
+    if (!current?.branchSummary && !current?.currentRemoteSummary) return;
+    const next = {
+      ...current,
+      branchSummary: null,
+      currentRemoteSummary: null,
+    };
+    reviewStateRef.current = next;
+    setReviewState(next);
+  }, [reviewRequests]);
 
   refreshCurrentRef.current = () => {
     if (!projectPath) return;
@@ -123,6 +160,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
 
   useEffect(() => {
     reviewRequests.invalidate();
+    branchSummaryRequestedRef.current = false;
     pendingRefreshRef.current = false;
     loadingRef.current = false;
     reviewStateRef.current = null;
@@ -138,6 +176,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     void runReviewLoad(projectPath, preferenceKey, {
       baseRef: preferredBaseRefRef.current,
       foreground: true,
+      includeBranchSummary: false,
       preferenceMode: preferredBaseRefRef.current === null ? 'none' : 'restore',
     });
     const handleWindowFocus = () => refreshCurrentRef.current();
@@ -163,5 +202,6 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     reviewLoading,
     reviewState,
     selectReviewBaseRef,
+    setReviewSource,
   };
 }

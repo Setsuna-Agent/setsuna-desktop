@@ -2,13 +2,15 @@ import type {
   DesktopDiffFile,
   DesktopDiffLine,
   DesktopDiffSummary,
-  DesktopReviewState,
-  DesktopTerminalEvent,
-  DesktopTerminalSession,
   DesktopWorkspaceApp,
   RuntimeReviewFinding,
   WorkspaceEntry,
 } from '@setsuna-desktop/contracts';
+import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
+import type {
+  DesktopTerminalEvent,
+  DesktopTerminalSession,
+} from '@setsuna-desktop/feature-terminal/contracts';
 
 export type {
   DesktopDiffFile,

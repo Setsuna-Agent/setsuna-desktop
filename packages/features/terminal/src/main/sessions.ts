@@ -1,0 +1,242 @@
+import type { IDisposable, IPty } from 'node-pty';
+import { randomUUID } from 'node:crypto';
+import { realpath, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
+import { homedir } from 'node:os';
+import path from 'node:path';
+import type {
+  DesktopTerminalEvent,
+  DesktopTerminalEventPayload,
+  DesktopTerminalSession,
+  TerminalEnvironmentPatch,
+} from '../contracts/index.js';
+import { terminalProcessOptions } from './process-options.js';
+
+const require = createRequire(import.meta.url);
+const pty = require('node-pty') as typeof import('node-pty');
+
+type TerminalSession = DesktopTerminalSession & {
+  cols: number;
+  dataDisposable: IDisposable;
+  events: DesktopTerminalEventPayload[];
+  exited: boolean;
+  exitDisposable: IDisposable;
+  ptyProcess: IPty | null;
+  restartPromise: Promise<boolean> | null;
+  rows: number;
+  seq: number;
+  shellArgs: string[];
+  shellCommand: string;
+};
+
+export type TerminalOpenInput = Readonly<{
+  workspaceRoot?: string | null;
+  cols?: number;
+  rows?: number;
+}>;
+
+const MAX_EVENT_QUEUE = 2_000;
+
+export class DesktopTerminalStore {
+  private readonly sessions = new Map<string, TerminalSession>();
+
+  constructor(
+    private readonly publish: (event: DesktopTerminalEventPayload) => void,
+    private readonly resolveEnvironment: () => Promise<TerminalEnvironmentPatch> = async () => ({}),
+  ) {}
+
+  async open(input: TerminalOpenInput, signal?: AbortSignal): Promise<DesktopTerminalSession> {
+    const workspaceRoot = await resolveWorkspaceRoot(input.workspaceRoot);
+    signal?.throwIfAborted();
+    const shell = defaultShellSpec();
+    const sessionId = `terminal-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
+    const session: TerminalSession = {
+      sessionId,
+      workspaceRoot,
+      shell: shell.displayName,
+      cols: terminalDimension(input.cols, 100),
+      dataDisposable: { dispose: () => undefined },
+      events: [],
+      exited: false,
+      exitDisposable: { dispose: () => undefined },
+      ptyProcess: null,
+      restartPromise: null,
+      rows: terminalDimension(input.rows, 24),
+      seq: 0,
+      shellArgs: shell.args,
+      shellCommand: shell.command,
+    };
+    this.sessions.set(sessionId, session);
+    try {
+      await this.startSessionProcess(session, signal);
+    } catch (error) {
+      this.sessions.delete(sessionId);
+      throw error;
+    }
+
+    return { sessionId, workspaceRoot, shell: shell.displayName };
+  }
+
+  write(sessionId: string, input: string): boolean {
+    const session = this.sessions.get(sessionId);
+    // Renderer input can already be queued when a panel closes. Treat that
+    // lifecycle race as stale while preserving the explicit restart signal for
+    // a session whose shell exited but whose panel is still open.
+    if (!session) return false;
+    if (!session.ptyProcess || session.exited) {
+      throw new Error('终端进程已退出，请重新启动。');
+    }
+    session.ptyProcess.write(input);
+    return true;
+  }
+
+  read(sessionId: string): DesktopTerminalEventPayload[] {
+    const session = this.sessions.get(sessionId);
+    if (!session) return [];
+    return session.events.splice(0, session.events.length);
+  }
+
+  resize(sessionId: string, cols: number, rows: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.cols = terminalDimension(cols, 100);
+    session.rows = terminalDimension(rows, 24);
+    if (!session.ptyProcess || session.exited) return false;
+    session.ptyProcess.resize(session.cols, session.rows);
+    return true;
+  }
+
+  async restart(sessionId: string, cols?: number, rows?: number, signal?: AbortSignal): Promise<boolean> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    session.cols = terminalDimension(cols, session.cols);
+    session.rows = terminalDimension(rows, session.rows);
+    if (session.restartPromise) return session.restartPromise;
+    if (!session.exited) return false;
+    const restartPromise = this.startSessionProcess(session, signal);
+    session.restartPromise = restartPromise;
+    try {
+      return await restartPromise;
+    } finally {
+      if (session.restartPromise === restartPromise) session.restartPromise = null;
+    }
+  }
+
+  close(sessionId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    this.sessions.delete(sessionId);
+    session.dataDisposable.dispose();
+    session.exitDisposable.dispose();
+    try {
+      session.ptyProcess?.kill();
+    } catch {
+      // A restored renderer panel may outlive its already-terminated native PTY.
+    }
+    this.publish({ sessionId, seq: session.seq + 1, event: 'closed', data: {} });
+    return true;
+  }
+
+  closeAll(): void {
+    for (const sessionId of this.sessions.keys()) this.close(sessionId);
+  }
+
+  private async startSessionProcess(session: TerminalSession, signal?: AbortSignal): Promise<boolean> {
+    signal?.throwIfAborted();
+    const environmentPatch = await this.resolveEnvironment();
+    signal?.throwIfAborted();
+    if (this.sessions.get(session.sessionId) !== session) return false;
+    session.dataDisposable.dispose();
+    session.exitDisposable.dispose();
+    const ptyProcess = pty.spawn(
+      session.shellCommand,
+      session.shellArgs,
+      terminalProcessOptions({
+        cols: session.cols,
+        cwd: session.workspaceRoot,
+        env: terminalEnvironment(environmentPatch),
+        rows: session.rows,
+      }),
+    );
+    session.ptyProcess = ptyProcess;
+    session.exited = false;
+    session.dataDisposable = ptyProcess.onData((text) => {
+      if (session.ptyProcess !== ptyProcess) return;
+      this.emit(session.sessionId, 'output', { text });
+    });
+    session.exitDisposable = ptyProcess.onExit(({ exitCode, signal }) => {
+      if (this.sessions.get(session.sessionId) !== session || session.ptyProcess !== ptyProcess) return;
+      session.exited = true;
+      session.ptyProcess = null;
+      this.emit(session.sessionId, 'exit', { exitCode, signal });
+    });
+    this.emit(session.sessionId, 'ready', {
+      shell: session.shell,
+      workspaceRoot: session.workspaceRoot,
+      cols: session.cols,
+      rows: session.rows,
+    });
+    return true;
+  }
+
+  private emit(
+    sessionId: string,
+    event: DesktopTerminalEvent['event'],
+    data: Readonly<Record<string, unknown>>,
+  ): void {
+    const session = this.sessions.get(sessionId);
+    const seq = session ? ++session.seq : 0;
+    const payload: DesktopTerminalEventPayload = { sessionId, seq, event, data };
+    if (session) {
+      session.events.push(payload);
+      if (session.events.length > MAX_EVENT_QUEUE) {
+        session.events.splice(0, session.events.length - MAX_EVENT_QUEUE);
+      }
+    }
+    this.publish(payload);
+  }
+}
+
+async function resolveWorkspaceRoot(workspaceRoot?: string | null): Promise<string> {
+  const candidate = workspaceRoot?.trim() || homedir();
+  const resolved = await realpath(path.resolve(candidate));
+  const targetStat = await stat(resolved);
+  if (!targetStat.isDirectory()) throw new Error('终端工作目录必须是文件夹。');
+  return resolved;
+}
+
+function defaultShellSpec(): { command: string; args: string[]; displayName: string } {
+  if (process.platform === 'win32') {
+    const command = process.env.ComSpec || 'cmd.exe';
+    return { command, args: ['/Q', '/K'], displayName: path.basename(command) };
+  }
+  const command = process.env.SHELL || (process.platform === 'darwin' ? '/bin/zsh' : '/bin/sh');
+  return { command, args: ['-i'], displayName: path.basename(command) };
+}
+
+function terminalEnvironment(patch: TerminalEnvironmentPatch = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    TERM: 'xterm-256color',
+    COLORTERM: 'truecolor',
+    CLICOLOR: '1',
+    CLICOLOR_FORCE: '1',
+    FORCE_COLOR: '3',
+    GIT_PAGER: 'cat',
+    LESS: '-FRX',
+    PAGER: 'cat',
+    PROMPT_EOL_MARK: '',
+    npm_config_color: 'always',
+  };
+  delete env.NO_COLOR;
+  delete env.CI;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete env[key];
+    else env[key] = value;
+  }
+  return env;
+}
+
+function terminalDimension(value: number | undefined, fallback: number): number {
+  return Math.max(1, Math.round(value ?? fallback));
+}

@@ -1,4 +1,5 @@
 import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
+import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
   app,
   BrowserWindow,
@@ -30,9 +31,7 @@ import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
 import { registerPluginIpc } from './ipc/plugin-ipc.js';
-import { registerReviewIpc } from './ipc/review-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
-import { registerTerminalIpc } from './ipc/terminal-ipc.js';
 import { registerUpdaterIpc } from './ipc/updater-ipc.js';
 import { registerWebDavSyncIpc } from './ipc/webdav-sync-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
@@ -75,8 +74,8 @@ import {
   rollbackCommittedWebDavRestore,
 } from './webdav-sync/restore-journal.js';
 import { WebDavSyncService } from './webdav-sync/service.js';
-import { DesktopTerminalStore } from './terminal/sessions.js';
 import { DesktopUpdater } from './updater/updater.js';
+import { activateBuiltinMainFeatures } from './composition/builtin-main-features.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { showStartupSplash, waitForRendererFirstPaint } from './window/splash/window.js';
 import { loadDesktopWindowState, trackDesktopWindowState } from './window/state.js';
@@ -96,7 +95,7 @@ let runtimeHost: RuntimeHost | null = null;
 let browserController: DesktopBrowserController | null = null;
 let browserControlServer: BrowserControlServer | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
-let terminalStore: DesktopTerminalStore | null = null;
+let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdater: DesktopUpdater | null = null;
 let networkProxyService: DesktopNetworkProxyService | null = null;
 let browserProxyController: DesktopBrowserProxyController | null = null;
@@ -318,6 +317,8 @@ async function createWindow(): Promise<void> {
       release: () => currentRuntimeHost.releaseWebDavSyncPreparation(),
       stop: () => currentRuntimeHost.stop(),
       start: () => currentRuntimeHost.start(),
+      exportPortableFeatureSettings: () => currentRuntimeHost.exportPortableFeatureSettings(),
+      exportFeatureCredentialBackups: () => currentRuntimeHost.exportFeatureCredentialBackups(),
     },
     requestRelaunch: requestDesktopRelaunch,
   });
@@ -337,9 +338,13 @@ async function createWindow(): Promise<void> {
     fetch: (input, init) => currentNetworkProxyFetch.fetch('updater', input, init),
   });
   await desktopUpdater.initialize();
-  terminalStore = new DesktopTerminalStore((payload) => {
-    mainWindow?.webContents.send('terminal:event', payload);
-  }, () => currentNetworkProxyService.environmentFor('terminal'));
+  const currentMainFeatureComposition = await activateBuiltinMainFeatures({
+    mainWindow: currentMainWindow,
+    nativeBridge: currentDesktopNativeBridgeServer,
+    networkProxyService: currentNetworkProxyService,
+    runtimeHost: currentRuntimeHost,
+  });
+  mainFeatureComposition = currentMainFeatureComposition;
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
@@ -356,13 +361,7 @@ async function createWindow(): Promise<void> {
     new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
     currentMainWindow,
   );
-  const unregisterReviewChanges = registerReviewIpc(
-    currentRuntimeHost,
-    currentMainWindow,
-    currentDesktopNativeBridgeServer,
-  );
   registerWorkspaceIpc();
-  registerTerminalIpc(terminalStore);
   registerBrowserIpc(currentBrowserController, currentMainWindow);
   const unregisterNetworkProxyState = registerNetworkProxyIpc(
     currentNetworkProxyService,
@@ -375,7 +374,6 @@ async function createWindow(): Promise<void> {
   );
 
   currentMainWindow.on('closed', () => {
-    unregisterReviewChanges();
     unregisterNetworkProxyState();
     unregisterWebDavSyncState();
     currentWebDavSyncService.close();
@@ -600,7 +598,7 @@ function shutdownDesktopServices(
   const currentBrowserController = browserController;
   const currentBrowserControlServer = browserControlServer;
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
-  const currentTerminalStore = terminalStore;
+  const currentMainFeatureComposition = mainFeatureComposition;
   const currentDesktopUpdater = desktopUpdater;
   const currentNetworkProxyService = networkProxyService;
   const currentBrowserProxyController = browserProxyController;
@@ -608,12 +606,17 @@ function shutdownDesktopServices(
   const currentWebDavSyncService = webdavSyncService;
 
   currentDesktopUpdater?.stop();
-  currentTerminalStore?.closeAll();
   currentBrowserController?.clear();
   currentBrowserProxyController?.stop();
   currentWebDavSyncService?.close();
 
   desktopServicesShutdownPromise = (async () => {
+    try {
+      await currentMainFeatureComposition?.dispose();
+    } catch (error) {
+      console.error('[desktop] main Feature shutdown failed', error);
+    }
+
     let runtimeStopError: unknown;
     try {
       await currentRuntimeHost?.stop();
@@ -636,7 +639,7 @@ function shutdownDesktopServices(
     if (browserController === currentBrowserController) browserController = null;
     if (browserControlServer === currentBrowserControlServer) browserControlServer = null;
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
-    if (terminalStore === currentTerminalStore) terminalStore = null;
+    if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;
     if (networkProxyService === currentNetworkProxyService) networkProxyService = null;
     if (browserProxyController === currentBrowserProxyController) browserProxyController = null;

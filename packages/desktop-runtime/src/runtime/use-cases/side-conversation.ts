@@ -1,4 +1,4 @@
-import type { RuntimeEvent, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { PendingRuntimeEvent, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { randomRuntimeId } from '../runtime-id.js';
 import { RuntimeUseCaseError } from './errors.js';
@@ -123,7 +123,7 @@ async function appendModelMessage(
 async function appendSideEvent(
   runtime: RuntimeContainer,
   threadId: string,
-  event: Omit<RuntimeEvent, 'seq'>,
+  event: PendingRuntimeEvent,
 ): Promise<void> {
   await runtime.threadStore.appendEvent(threadId, event);
 }

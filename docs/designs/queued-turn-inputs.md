@@ -42,7 +42,7 @@ turn.input_updated
 turn.input_deleted
 ```
 
-队列项开始发送时不额外写“dequeued”事件。普通项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项由 `thread.goal_updated` 同时写入目标状态、`sourceMessage` 和 `queuedInputId`。因此 Goal 目标、可见用户消息和队列消费不会出现部分提交，也不会在进程崩溃时丢失任一语义。
+队列项开始发送时不额外写“dequeued”事件。普通项的初始用户消息通过 `message.created.queuedInputId` 原子消费；Goal 项在同一个 `appendEvents` 批次中写入带 `queuedInputId` 的 Core `message.created` 和 `goal.state-replaced@1` Feature envelope。前者原子消费队列并建立可见用户消息，后者建立 Goal 私有状态，因此不会双写旧事件或留下部分语义。
 
 典型自动发送序列：
 
@@ -64,7 +64,7 @@ message.created(user_steer, turn_1, queuedInputId=queue_1)
 turn.completed(turn_1)
 ```
 
-普通队列项在这两条路径中都只由对应的 `message.created` 消费。Goal 不走 steer；其自动发送序列由 `thread.goal_updated(..., sourceMessage=user_goal, queuedInputId=queue_1)` 原子投影目标消息后，启动同一真实 `turnId` 的 `taskKind=goal` turn。
+普通队列项在这两条路径中都只由对应的 `message.created` 消费。Goal 不走 steer；其自动发送序列先原子提交 `message.created(user_goal, queuedInputId=queue_1)` 与同 `turnId` 的 Goal Feature state envelope，再启动 `taskKind=goal` turn。通用 thread snapshot 只投影前者，Goal 状态由 FeatureProjectionStore 投影。
 
 ## Contract 和 API
 

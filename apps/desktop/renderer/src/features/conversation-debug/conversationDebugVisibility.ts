@@ -1,7 +1,7 @@
 import type {
   RuntimeDebugTraceEvent,
-  RuntimeEvent,
   RuntimeMessage,
+  StoredThreadEvent,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 
@@ -139,9 +139,9 @@ export function createConversationDebugVisibility(
  * reappear merely because they still exist in the append-only event log.
  */
 export function filterConversationDebugEvents(
-  events: RuntimeEvent[],
+  events: StoredThreadEvent[],
   visibility: ConversationDebugVisibility,
-): RuntimeEvent[] {
+): StoredThreadEvent[] {
   const relations = collectEventRelations(events);
   return events.filter((event) => conversationDebugEventIsVisible(event, visibility, relations));
 }
@@ -166,7 +166,7 @@ export function filterConversationDebugTraces(
  * available.
  */
 export function conversationDebugEventMayBeVisible(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   visibility: ConversationDebugVisibility,
 ): boolean {
   if (event.seq > visibility.lastSeq) return true;
@@ -182,7 +182,7 @@ export function conversationDebugEventMayBeVisible(
 }
 
 function conversationDebugEventIsVisible(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   visibility: ConversationDebugVisibility,
   relations: EventRelations,
 ): boolean {
@@ -244,7 +244,7 @@ function conversationDebugEventIsVisible(
   return visibleTurn(event, visibility);
 }
 
-function collectEventRelations(events: RuntimeEvent[]): EventRelations {
+function collectEventRelations(events: StoredThreadEvent[]): EventRelations {
   const relations: EventRelations = {
     approvalToolCallIds: new Map(),
     itemMessageIds: new Map(),
@@ -268,7 +268,7 @@ function collectEventRelations(events: RuntimeEvent[]): EventRelations {
   return relations;
 }
 
-function runtimeEventMessageId(event: RuntimeEvent): string | undefined {
+function runtimeEventMessageId(event: StoredThreadEvent): string | undefined {
   switch (event.type) {
     case 'message.created':
       return event.payload.message.id;
@@ -282,7 +282,7 @@ function runtimeEventMessageId(event: RuntimeEvent): string | undefined {
   }
 }
 
-function runtimeEventItemId(event: RuntimeEvent): string | undefined {
+function runtimeEventItemId(event: StoredThreadEvent): string | undefined {
   switch (event.type) {
     case 'item.started':
     case 'item.completed':
@@ -300,7 +300,7 @@ function runtimeEventItemId(event: RuntimeEvent): string | undefined {
 
 function visibleToolCall(
   toolCallId: string,
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   visibility: ConversationDebugVisibility,
 ): boolean {
   if (visibility.toolCallIds.has(toolCallId)) return true;
@@ -321,7 +321,7 @@ function projectedMessageIsVisible(
 }
 
 function visibleTurn(
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
   visibility: ConversationDebugVisibility,
 ): boolean {
   return Boolean(event.turnId && visibility.turnIds.has(event.turnId));

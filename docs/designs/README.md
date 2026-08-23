@@ -11,6 +11,7 @@
 
 ## 评审与治理
 
+- [Feature Composition Architecture](feature-composition-architecture.md)：把跨 contracts、runtime、main/preload、renderer 的功能收敛为独立 Feature Module，定义 Capability、事件、设置、Registry、生命周期、Plugin Adapter 和实施验收边界。
 - [架构复杂度收敛评审](architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点和分阶段治理计划。
 - [Runtime 边界与事件去向](runtime-boundary-matrix.md)：`DesktopRuntimeClient` 的传输规则和 RuntimeEvent 的显式投影边界。
 

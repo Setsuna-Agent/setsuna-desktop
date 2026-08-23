@@ -1,9 +1,9 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { StoredThreadEvent } from '@setsuna-desktop/contracts';
 
-export type RuntimeEventSubscriber = (event: RuntimeEvent) => void;
+export type RuntimeEventSubscriber = (event: StoredThreadEvent) => void;
 
 export type EventBus = {
-  publish(event: RuntimeEvent): void;
+  publish(event: StoredThreadEvent): void;
   subscribe(threadId: string, subscriber: RuntimeEventSubscriber): () => void;
 };
 

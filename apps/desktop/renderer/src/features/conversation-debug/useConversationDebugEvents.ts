@@ -1,4 +1,4 @@
-import type { DesktopRuntimeClient, RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeClient, RuntimeThread, StoredThreadEvent } from '@setsuna-desktop/contracts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   conversationDebugEventMayBeVisible,
@@ -7,13 +7,13 @@ import {
 } from './conversationDebugVisibility.js';
 
 type DebugEventSnapshot = {
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   highestObservedSeq: number;
   threadId: string | null;
 };
 
 export type ConversationDebugEventsState = {
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   highestSeq: number;
   syncing: boolean;
 };
@@ -47,7 +47,7 @@ export function useConversationDebugEvents(
       return undefined;
     }
 
-    const eventsBySequence = new Map<number, RuntimeEvent>();
+    const eventsBySequence = new Map<number, StoredThreadEvent>();
     let flushTimerId: number | null = null;
     let replayIdleTimerId: number | null = null;
     let disposed = false;

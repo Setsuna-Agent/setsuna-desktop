@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '../events.js';
+import type { CoreRuntimeEvent, LegacyRuntimeGoalEvent } from '../events.js';
 import { isRuntimeSweProjectionIgnoredEvent } from '../event-projections/dispositions.js';
 import {
   cloneRuntimeThreadGoal,
@@ -78,7 +78,9 @@ import {
 } from './turn-mapper.js';
 import type { SweNotification, SweTurn } from './types.js';
 
-export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotification[] {
+type SweMappableRuntimeEvent = CoreRuntimeEvent | LegacyRuntimeGoalEvent;
+
+export function createSweNotificationMapper(): (event: SweMappableRuntimeEvent) => SweNotification[] {
   const state: SweMapperState = {
     assistantStreams: new Map(),
     itemTranscriptMessageIds: new Set(),
@@ -98,7 +100,7 @@ export function createSweNotificationMapper(): (event: RuntimeEvent) => SweNotif
   return (event) => runtimeEventToSweNotifications(event, state);
 }
 
-export function runtimeEventsToSweNotifications(events: RuntimeEvent[]): SweNotification[] {
+export function runtimeEventsToSweNotifications(events: SweMappableRuntimeEvent[]): SweNotification[] {
   const mapEvent = createSweNotificationMapper();
   return events.flatMap((event) => mapEvent(event));
 }
@@ -142,7 +144,7 @@ export function runtimeThreadToSweTurns(thread: RuntimeThread): SweTurn[] {
     .map(({ turnId, entries }) => runtimeEntriesToSweTurn(thread.id, turnId, entries));
 }
 
-export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweMapperState): SweNotification[] {
+export function runtimeEventToSweNotifications(event: SweMappableRuntimeEvent, state?: SweMapperState): SweNotification[] {
   const turnId = event.turnId ?? '';
 
   if (event.type === 'thread.created') {
@@ -370,6 +372,20 @@ export function runtimeEventToSweNotifications(event: RuntimeEvent, state?: SweM
     const message = event.payload.message;
     if (message.visibility === 'model') return [];
     if (!turnId || message.role === 'tool') return [];
+    const turnKey = turnDiffKey(event.threadId, turnId);
+    if (
+      state
+      && event.payload.queuedInputId
+      && message.role === 'user'
+      && message.inputKind === 'goal'
+      && !state.turnStartedAtMs.has(turnKey)
+    ) {
+      // A queued Goal persists its visible source message before Core starts the
+      // continuation. Keep the SWE item behind turn/started while preserving
+      // that durable ordering for Goal attachment and replay semantics.
+      state.pendingGoalSourceMessages.set(turnKey, event);
+      return [];
+    }
     if (message.role === 'system' || message.role === 'developer') {
       if (!message.reviewMode) return [];
       const item = reviewModeItem(turnId, message.reviewMode);

@@ -10,10 +10,16 @@ import {
   type RuntimeEvent,
   type RuntimeEventResync,
   type RuntimePluginInstallResult,
+  type RuntimeFeatureOperationResponse,
   type RuntimeRequestInput,
   type RuntimeStoredMessageAttachment,
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
+import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
+import type {
+  FeatureCredentialBackup,
+  PortableFeatureSettingsDocument,
+} from '@setsuna-desktop/feature-core/settings';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -78,6 +84,7 @@ export class RuntimeHost {
   // 每次启动生成独立 token，避免任意 localhost 调用者绕过 Electron main 访问 runtime。
   private readonly token = randomBytes(32).toString('hex');
   private readonly subscriptions = new Map<string, Subscription>();
+  private readonly rendererRequests = new Map<string, AbortController>();
 
   constructor(private readonly options: RuntimeHostOptions) {}
 
@@ -152,7 +159,23 @@ export class RuntimeHost {
    */
   async request<T = unknown>(input: RuntimeRequestInput): Promise<T> {
     const safePath = normalizeRuntimePath(input.path);
-    return this.sendRequest(input, safePath);
+    if (!input.requestId) return this.sendRequest(input, safePath);
+    const requestId = normalizeRendererRequestId(input.requestId);
+    if (this.rendererRequests.has(requestId)) throw new Error('Runtime request ID is already active.');
+    const controller = new AbortController();
+    this.rendererRequests.set(requestId, controller);
+    try {
+      return await this.sendRequest(input, safePath, controller.signal);
+    } finally {
+      if (this.rendererRequests.get(requestId) === controller) this.rendererRequests.delete(requestId);
+    }
+  }
+
+  cancelRequest(requestId: string): boolean {
+    const controller = this.rendererRequests.get(normalizeRendererRequestId(requestId));
+    if (!controller) return false;
+    controller.abort(new Error('Renderer cancelled the runtime request.'));
+    return true;
   }
 
   /** Installs a native-picker-selected bundle through a main-only runtime route. */
@@ -165,27 +188,43 @@ export class RuntimeHost {
     }, RUNTIME_LOCAL_PLUGIN_INSTALL_PATH);
   }
 
-  private async sendRequest<T>(input: RuntimeRequestInput, safePath: string): Promise<T> {
+  private async sendRequest<T>(
+    input: RuntimeRequestInput,
+    safePath: string,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const method = input.method ?? 'GET';
     const requestLabel = `${method} ${safePath}`;
     // Main keeps the runtime token and port private for both renderer-proxied and internal requests.
-    const response = await fetchRuntimeResponse(
-      `http://127.0.0.1:${this.port}${safePath}`,
-      {
-        method,
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          'Content-Type': 'application/json',
+    let response: Response;
+    try {
+      response = await fetchRuntimeResponse(
+        `http://127.0.0.1:${this.port}${safePath}`,
+        {
+          method,
+          headers: {
+            Authorization: `Bearer ${this.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: input.body === undefined ? undefined : JSON.stringify(input.body),
+          signal,
         },
-        body: input.body === undefined ? undefined : JSON.stringify(input.body),
-      },
-      {
-        label: requestLabel,
-        retryDelayMs: this.options.runtimeRequestRetryDelayMs,
-        retryOnce: method === 'GET',
-        runtimeState: () => this.runtimeProcessState(),
-      },
-    );
+        {
+          label: requestLabel,
+          retryDelayMs: this.options.runtimeRequestRetryDelayMs,
+          retryOnce: method === 'GET',
+          runtimeState: () => this.runtimeProcessState(),
+        },
+      );
+    } catch (error) {
+      if (signal?.aborted && input.responseMode === 'feature-operation') {
+        return runtimeFeatureOperationCancelledResponse() as T;
+      }
+      throw error;
+    }
+    if (input.responseMode === 'feature-operation') {
+      return runtimeFeatureOperationResponse(response) as Promise<T>;
+    }
     return runtimeJsonResponse<T>(response, requestLabel);
   }
 
@@ -212,6 +251,24 @@ export class RuntimeHost {
   async releaseWebDavSyncPreparation(): Promise<void> {
     const requestPath = '/internal/webdav-sync/prepare';
     await this.sendRequest({ path: requestPath, method: 'DELETE' }, requestPath);
+  }
+
+  /** Reads schema-validated portable Feature documents while the WebDAV gate is held. */
+  async exportPortableFeatureSettings(): Promise<readonly PortableFeatureSettingsDocument[]> {
+    const requestPath = '/internal/webdav-sync/feature-settings';
+    const response = await this.sendRequest<Readonly<{
+      documents: readonly PortableFeatureSettingsDocument[];
+    }>>({ path: requestPath, method: 'GET' }, requestPath);
+    return response.documents;
+  }
+
+  /** Exports only Feature secrets explicitly opted into encrypted credential backup. */
+  async exportFeatureCredentialBackups(): Promise<readonly FeatureCredentialBackup[]> {
+    const requestPath = '/internal/webdav-sync/feature-credentials';
+    const response = await this.sendRequest<Readonly<{
+      credentials: readonly FeatureCredentialBackup[];
+    }>>({ path: requestPath, method: 'GET' }, requestPath);
+    return response.credentials;
   }
 
   /** Registers a renderer-selected local file without copying its bytes into runtime storage. */
@@ -473,6 +530,43 @@ async function runtimeJsonResponse<T>(response: Response, requestLabel: string):
     throw new Error(`${reason} (${requestLabel})`);
   }
   return body as T;
+}
+
+async function runtimeFeatureOperationResponse(
+  response: Response,
+): Promise<RuntimeFeatureOperationResponse> {
+  const text = await response.text();
+  const body = text ? JSON.parse(text) as unknown : null;
+  if (response.ok) return Object.freeze({ ok: true, value: body });
+  const record = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  return Object.freeze({
+    ok: false,
+    status: response.status,
+    error: Object.freeze({
+      code: typeof record.code === 'string' ? record.code : 'INTERNAL',
+      message: typeof record.error === 'string' ? record.error : 'Feature operation failed.',
+      retryable: record.retryable === true,
+      ...('details' in record ? { details: record.details } : {}),
+    }),
+  });
+}
+
+function runtimeFeatureOperationCancelledResponse(): RuntimeFeatureOperationResponse {
+  return Object.freeze({
+    ok: false,
+    status: KERNEL_FEATURE_OPERATION_ERRORS.OPERATION_CANCELLED.status,
+    error: Object.freeze({
+      code: 'OPERATION_CANCELLED',
+      message: 'Feature operation was cancelled.',
+      retryable: false,
+    }),
+  });
+}
+
+function normalizeRendererRequestId(value: string): string {
+  const requestId = value.trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/u.test(requestId)) throw new Error('Runtime request ID is invalid.');
+  return requestId;
 }
 
 const runtimeImageMimeTypes = new Set(['image/gif', 'image/jpeg', 'image/png', 'image/webp']);

@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { imageGenerationFeature } from '@setsuna-desktop/feature-image-generation/contracts';
 import {
   categoryTargetPaths,
   createSqliteSnapshot,
@@ -35,6 +36,8 @@ describe('WebDAV portable snapshot data', () => {
       dataRoot: root,
       stagingRoot,
       categories: ['preferences', 'model_credentials', 'user_skills'],
+      portableFeatureSettings: [portableImageSettings()],
+      featureCredentialBackups: [featureImageCredential('sk-feature-image-secret')],
     });
     const providerKey = sources.find((source) => source.kind === 'provider-key');
     const imageKey = sources.find((source) => source.kind === 'image-generation-key');
@@ -51,18 +54,31 @@ describe('WebDAV portable snapshot data', () => {
     });
     expect(providerKey?.sourcePath).toBeUndefined();
     expect(providerKey?.data?.toString('utf8')).toBe('sk-provider-secret');
-    expect(imageKey?.data?.toString('utf8')).toBe('sk-image-secret');
+    expect(imageKey).toMatchObject({
+      category: 'model_credentials',
+      kind: 'image-generation-key',
+      label: '图片生成服务',
+    });
+    expect(imageKey?.sourcePath).toBeUndefined();
+    expect(imageKey?.data?.toString('utf8')).toBe('sk-feature-image-secret');
     expect(sources.some((source) => source.sourcePath?.endsWith('secrets.json'))).toBe(false);
     const portableConfig = JSON.parse(await readFile(config!.sourcePath!, 'utf8')) as {
       approvalPolicy?: string;
       hooks?: unknown;
       storagePath?: string;
       providers: Array<{ proxyRoute?: { mode: string } }>;
+      imageGeneration?: unknown;
     };
     expect(portableConfig.storagePath).toBeUndefined();
     expect(portableConfig.approvalPolicy).toBeUndefined();
     expect(portableConfig.hooks).toBeUndefined();
     expect(portableConfig.providers[0]?.proxyRoute).toBeUndefined();
+    expect(portableConfig.imageGeneration).toBeUndefined();
+    const featureSettings = sources.find((source) => (
+      source.logicalPath === 'runtime/portable-feature-settings/image-generation/connection.json'
+    ));
+    expect(JSON.parse(await readFile(featureSettings!.sourcePath!, 'utf8'))).toEqual(portableImageSettings());
+    expect(await readFile(featureSettings!.sourcePath!, 'utf8')).not.toContain('sk-image-secret');
     expect(JSON.parse(await readFile(skillState!.sourcePath!, 'utf8'))).toEqual({
       version: 1,
       states: { demo: { enabled: true } },
@@ -73,6 +89,10 @@ describe('WebDAV portable snapshot data', () => {
     const inventory = await inventorySnapshotSources(sources);
     expect(inventory.find((item) => item.credentialId === 'provider-openai')).toMatchObject({
       size: Buffer.byteLength('sk-provider-secret'),
+      sha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
+    });
+    expect(inventory.find((item) => item.kind === 'image-generation-key')).toMatchObject({
+      size: Buffer.byteLength('sk-feature-image-secret'),
       sha256: expect.stringMatching(/^[0-9a-f]{64}$/u),
     });
     expect(providerKey?.data?.every((byte) => byte === 0)).toBe(true);
@@ -130,8 +150,9 @@ describe('WebDAV portable snapshot data', () => {
     }
 
     await symlink(
-      path.join(root, 'runtime', 'config.json'),
+      path.join(root, 'runtime'),
       path.join(root, 'runtime', 'attachments', 'unsafe-link'),
+      process.platform === 'win32' ? 'junction' : 'dir',
     );
     await expect(prepareLocalSnapshotSources({
       dataRoot: root,
@@ -201,6 +222,8 @@ describe('WebDAV portable snapshot data', () => {
         'user_skills',
         'usage',
       ],
+      portableFeatureSettings: [portableImageSettings()],
+      featureCredentialBackups: [featureImageCredential('sk-feature-image-secret')],
     });
     const byCategory = new Map(summaries.map((summary) => [summary.id, summary]));
 
@@ -217,13 +240,14 @@ describe('WebDAV portable snapshot data', () => {
       totalBytes: expect.any(Number),
     }));
     expect(byCategory.get('preferences')).toEqual(expect.objectContaining({
-      itemCount: 1,
+      itemCount: 2,
       totalBytes: expect.any(Number),
     }));
     expect(byCategory.get('model_credentials')).toEqual({
       id: 'model_credentials',
       itemCount: 2,
-      totalBytes: Buffer.byteLength('sk-provider-secret') + Buffer.byteLength('sk-image-secret'),
+      totalBytes: Buffer.byteLength('sk-provider-secret')
+        + Buffer.byteLength('sk-feature-image-secret'),
     });
     expect(byCategory.get('user_skills')?.itemCount).toBe(2);
     expect(byCategory.get('memories')).toEqual({ id: 'memories', itemCount: 0, totalBytes: 0 });
@@ -299,6 +323,7 @@ async function createDataRoot(): Promise<string> {
     approvalPolicy: 'full',
     permissionProfile: 'danger-full-access',
     hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: 'unsafe-local-hook' }] }] },
+    imageGeneration: { baseUrl: 'https://legacy-images.test', model: 'legacy' },
     providers: [{
       id: 'provider-openai',
       name: 'OpenAI',
@@ -313,4 +338,22 @@ async function createDataRoot(): Promise<string> {
   database.exec('CREATE TABLE sample (value TEXT); INSERT INTO sample VALUES (\'saved\');');
   database.close();
   return root;
+}
+
+function portableImageSettings() {
+  return {
+    featureId: imageGenerationFeature.id,
+    documentId: 'connection',
+    schemaVersion: 1,
+    data: { baseUrl: 'https://portable-images.test', model: 'portable' },
+  } as const;
+}
+
+function featureImageCredential(value: string) {
+  return {
+    featureId: imageGenerationFeature.id,
+    documentId: 'connection',
+    secretName: 'api-key',
+    value,
+  } as const;
 }

@@ -12,6 +12,8 @@ import {
   type SyntheticEvent,
 } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { FeatureContributionBoundary } from '../../../composition/FeatureContributionBoundary.js';
+import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
 import type {
   AnswerApprovalHandler,
@@ -195,6 +197,7 @@ function ToolRunDisplayPanel({
   collaborationTasks?: RuntimeCollaborationTask[];
 }): JSX.Element {
   const { t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   // 当流式运行项从单项变为分组或混合分组时，保持此组件及其根 DOM 节点稳定。
   // 展开状态只在本地保存；新的待授权请求会自动展开，普通流式更新不会覆盖用户选择。
   if (group.type === 'mixed') {
@@ -208,6 +211,31 @@ function ToolRunDisplayPanel({
         collaborationTasks={collaborationTasks}
       />
     );
+  }
+  if (group.type === 'single') {
+    const featureResult = featureViews.toolResults.resolve(group.run.data);
+    if (featureResult) {
+      const FeatureResultView = featureResult.contribution.render;
+      return (
+        <FlatToolRunRow
+          run={group.run}
+          nestedDetails={(
+            <FeatureContributionBoundary
+              fallback={(reset) => (
+                <div className="chat-tool-run__preview" role="alert">
+                  <p>{t('featureRecovery.toolResultFailed')}</p>
+                  <button type="button" onClick={reset}>{t('common.retry')}</button>
+                </div>
+              )}
+              featureId={featureResult.featureId}
+              resetKey={`${group.run.id}:${featureResult.contribution.resultKind}:${featureResult.contribution.major}`}
+            >
+              <FeatureResultView payload={featureResult.payload} translate={t} />
+            </FeatureContributionBoundary>
+          )}
+        />
+      );
+    }
   }
   if (group.type === 'single' && isFileOperationRun(group.run) && !hasHookRuns(group.run)) {
     if (fileOperationEntries([group.run]).length > 1) {

@@ -789,30 +789,6 @@
     gap: 0;
   }
 
-  .desktop-image-generation-settings__form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-image-generation-settings > footer {
-    flex-wrap: wrap;
-  }
-
-  .desktop-image-generation-settings__status {
-    flex-basis: 100%;
-  }
-
-  .desktop-image-generation-test__controls {
-    flex-wrap: wrap;
-  }
-
-  .desktop-image-generation-test__status {
-    flex-basis: 100%;
-  }
-
-  .desktop-image-generation-test__results {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .desktop-plugin-item-dialog__metadata {
     grid-template-columns: minmax(0, 1fr);
   }

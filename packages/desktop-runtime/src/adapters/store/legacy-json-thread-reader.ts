@@ -1,4 +1,4 @@
-import type { RuntimeEvent, RuntimeThread } from '@setsuna-desktop/contracts';
+import type { RuntimeThread, StoredThreadEvent } from '@setsuna-desktop/contracts';
 import { applyRuntimeEventToThread } from '@setsuna-desktop/contracts';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import {
 
 export type LegacyJsonThreadRecord = {
   duplicateSequenceRecoveries: LegacyJsonDuplicateSequenceRecovery[];
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
   thread: RuntimeThread;
 };
 
@@ -27,7 +27,7 @@ export type LegacyJsonDuplicateSequenceRecovery = {
 
 type LegacyJsonEventLog = {
   duplicateSequenceRecoveries: LegacyJsonDuplicateSequenceRecovery[];
-  events: RuntimeEvent[];
+  events: StoredThreadEvent[];
 };
 
 /** Reads the legacy snapshot/JSONL store without mutating it. */
@@ -124,16 +124,16 @@ async function readLegacyEventLog(filePath: string, threadId: string): Promise<L
   }
 
   const lines = text.split('\n');
-  const events: RuntimeEvent[] = [];
+  const events: StoredThreadEvent[] = [];
   const eventLines: number[] = [];
   const eventIds = new Set<string>();
   const duplicateSequenceRecoveries: LegacyJsonDuplicateSequenceRecovery[] = [];
   for (const [index, line] of lines.entries()) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    let event: RuntimeEvent;
+    let event: StoredThreadEvent;
     try {
-      event = JSON.parse(trimmed) as RuntimeEvent;
+      event = JSON.parse(trimmed) as StoredThreadEvent;
     } catch (error) {
       if (index === lines.length - 1 && !text.endsWith('\n')) break;
       throw new Error(`Invalid runtime event JSON at ${filePath}:${index + 1}`, { cause: error });

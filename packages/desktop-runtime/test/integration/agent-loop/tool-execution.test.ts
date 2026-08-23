@@ -189,13 +189,13 @@ describe('agent loop tool execution', () => {
   
       expect(modelClient.requests).toHaveLength(2);
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
-        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result', 'create_goal',
+        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result',
       ]);
       expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([
-        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result', 'create_goal',
+        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result',
       ]);
       expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([
-        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result', 'create_goal',
+        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result',
       ]);
       expect(modelClient.requests[0].stepSnapshot?.toolRuntimes).toEqual([
         {
@@ -222,13 +222,6 @@ describe('agent loop tool execution', () => {
         {
           name: 'read_tool_result',
           source: 'host',
-          exposure: 'direct',
-          supportsParallel: false,
-          waitsForRuntimeCancellation: true,
-        },
-        {
-          name: 'create_goal',
-          source: 'goal',
           exposure: 'direct',
           supportsParallel: false,
           waitsForRuntimeCancellation: true,
@@ -274,13 +267,13 @@ describe('agent loop tool execution', () => {
       const events = await threadStore.listEvents(thread.id, 0);
   
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
-        'workspace_read_file', 'tool_search', 'read_tool_result', 'create_goal', 'tickets__lookup_ticket',
+        'workspace_read_file', 'tool_search', 'read_tool_result', 'tickets__lookup_ticket',
       ]);
       expect(modelClient.requests[0].stepSnapshot?.toolNames).toEqual([
-        'workspace_read_file', 'tool_search', 'read_tool_result', 'create_goal', 'tickets__lookup_ticket',
+        'workspace_read_file', 'tool_search', 'read_tool_result', 'tickets__lookup_ticket',
       ]);
       expect(modelClient.requests[0].stepSnapshot?.advertisedToolNames).toEqual([
-        'workspace_read_file', 'tool_search', 'read_tool_result', 'create_goal', 'tickets__lookup_ticket',
+        'workspace_read_file', 'tool_search', 'read_tool_result', 'tickets__lookup_ticket',
       ]);
       expect(toolHost.calls).toEqual([]);
       expect(events).toContainEqual(expect.objectContaining({
@@ -527,7 +520,7 @@ describe('agent loop tool execution', () => {
       ]);
       expect(events.some((event) => event.type === 'tool.preview' && event.payload.toolName === 'project_lookup')).toBe(true);
       expect(modelClient.requests[0].tools?.map((tool) => tool.name)).toEqual([
-        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result', 'create_goal',
+        'direct_tool', 'project_lookup', 'tool_search', 'read_tool_result',
       ]);
     });
 });

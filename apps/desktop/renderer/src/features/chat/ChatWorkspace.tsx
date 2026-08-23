@@ -8,7 +8,6 @@ import type {
   RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
-  RuntimeThreadGoalPatch,
   RuntimeUsageResponse,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
@@ -77,8 +76,6 @@ export function ChatWorkspace({
   onFocusComposerRequestConsumed,
   onCompactContext,
   onClearContext,
-  onClearThreadGoal,
-  onUpdateThreadGoal,
   onDeleteMessages,
   onDiscardFileChanges,
   onDraftChange,
@@ -128,8 +125,6 @@ export function ChatWorkspace({
   onFocusComposerRequestConsumed?: (requestId: number) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
-  onClearThreadGoal: () => void | Promise<unknown>;
-  onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onDraftChange: (value: string) => void;
@@ -254,8 +249,6 @@ export function ChatWorkspace({
       onAccessModeChange={onAccessModeChange}
       onCompactContext={onCompactContext}
       onClearContext={onClearContext}
-      onClearThreadGoal={onClearThreadGoal}
-      onUpdateThreadGoal={onUpdateThreadGoal}
       onDraftChange={onDraftChange}
       onSelectModel={onSelectModel}
       onSearchProjectEntries={onSearchProjectEntries}

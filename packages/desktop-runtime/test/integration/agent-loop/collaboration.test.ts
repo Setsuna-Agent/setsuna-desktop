@@ -43,7 +43,6 @@ describe('agent loop collaboration tools', () => {
         'resume_agent',
         'wait',
         'close_agent',
-        'create_goal',
       ]);
       expect(modelClient.requests[0].messages.find((message) => message.id === 'desktop_collaboration_mode')).toMatchObject({
         role: 'developer',

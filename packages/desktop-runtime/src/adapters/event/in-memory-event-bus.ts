@@ -1,10 +1,10 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { EventBus, RuntimeEventSubscriber } from '../../ports/event-bus.js';
 
 export class InMemoryEventBus implements EventBus {
   private subscribers = new Map<string, Set<RuntimeEventSubscriber>>();
 
-  publish(event: RuntimeEvent): void {
+  publish(event: StoredThreadEvent): void {
     const subscribers = this.subscribers.get(event.threadId);
     if (!subscribers) return;
     for (const subscriber of subscribers) subscriber(event);

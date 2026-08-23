@@ -21,8 +21,6 @@
 | Client 方法 | 第一方 REST | SWE adapter | 共享业务所有者 |
 | --- | --- | --- | --- |
 | `deleteThread` | `DELETE /v1/threads/:id` | `thread/delete` | `thread-operations.ts` |
-| `setThreadGoal` | `PUT /v1/threads/:id/goal` | `thread/goal/set` | `thread-operations.ts` |
-| `clearThreadGoal` | `DELETE /v1/threads/:id/goal` | `thread/goal/clear` | `thread-operations.ts` |
 | `startReview` | `POST /v1/threads/:id/reviews` | `review/start` | `thread-operations.ts` |
 | `listHooks` | `GET /v1/hooks` | `hooks/list` | `capability-operations.ts` |
 | `listMcpServerStatuses` | `GET /v1/mcp/statuses` | `mcpServerStatus/list` | `capability-operations.ts` |
@@ -31,6 +29,8 @@
 | `setSkillExtraRoots` | `PUT /v1/skills/extra-roots` | `skills/extraRoots/set` | `capability-operations.ts` |
 
 `appServerRequest` 和公开 raw `request` 已从 renderer business client 删除。底层 request closure 只存在于 client adapter 内部。架构检查会拒绝 renderer 源码重新引用 `/v1/swe/app-server`；app-server 自身仍作为 SWE 客户端兼容协议保留。
+
+Goal 已退出 `DesktopRuntimeClient`：renderer 使用 `@setsuna-desktop/feature-goal/renderer` 的 typed client，经 `GET/PATCH/DELETE /v1/features/goal/threads/:threadId/state` 调用同一个 `GoalControl`。现有 SWE `thread/goal/set` / `thread/goal/clear` 作为协议 adapter 保留，也只转发该 capability，不再拥有另一份业务实现或旧 REST 真源。
 
 ### 双协议能力的准入规则
 
@@ -49,9 +49,9 @@
 4. 是否有取消、审批、恢复、连接级 capability 或事务语义。
 5. 最后才选择 transport 和 DTO。
 
-## RuntimeEvent 投影边界
+## Core RuntimeEvent 与 Feature Event 投影边界
 
-每个事件的完整去向由 `packages/contracts/src/event-projections/dispositions.ts` 的穷尽 record 持有：
+封闭的 Core `RuntimeEvent` 的完整去向由 `packages/contracts/src/event-projections/dispositions.ts` 的穷尽 record 持有：
 
 | 消费者 | 显式动作 | 作用 |
 | --- | --- | --- |
@@ -60,6 +60,8 @@
 | Activity list | `include` / `ignore(reason)` | 选择高层运行活动 |
 
 `project` 表示消费者明确拥有该事件类型，但具体 payload 仍可能合法地产生空通知。`RUNTIME_EVENT_TYPES` 与三个 disposition record 由 TypeScript 校验完整键集合；thread reducer 和 SWE mapper 还使用 ignore type guard 与 `never` fallback，防止新增事件静默落空。
+
+Feature 持久状态使用 opaque `feature.event` envelope。Core 只持久化、排序、转发并推进全局 `seq`，不解析 Feature payload；所属 Feature 注册 codec/migration/reducer，并用同一 reducer 处理 replay 与 live。历史 Goal 事件仍可读取，但不属于可写 `RuntimeEvent`。
 
 ### 显式边界
 
@@ -105,7 +107,7 @@ Activity list：
 
 ## 更新规则
 
-- 新增 `DesktopRuntimeClient` 方法时更新 contract、adapter 和真实消费者；本文只在传输规则变化时更新。
+- Core 新增 `DesktopRuntimeClient` 方法时更新 contract、adapter 和真实消费者；Feature operation 必须进入 Feature typed client，不扩充统一 client。
 - 新增 `RuntimeEventType` 时更新编译期 disposition；本文只在投影边界或不变量变化时更新。
 - 协议迁移完成后保留历史决策，但删除已经失效的“当前实现”描述和数字。
 - 详细成员、事件和请求类型始终以 contracts 与对应 adapter 源码为准。

@@ -3,6 +3,7 @@ import {
   runtimeDeveloperFeaturesEnabled,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
+  type PendingRuntimeEvent,
   type ModelRequest,
   type RuntimeCompactionDebugPayload,
   type RuntimeConfigState,
@@ -23,7 +24,6 @@ import {
   appendRuntimeDebugTraceSafely,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageStore } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
@@ -70,7 +70,7 @@ type RuntimeContextCompactorOptions = {
   usageStore?: UsageStore;
   appendEvent(
     threadId: string,
-    event: Parameters<ThreadStore['appendEvent']>[1],
+    event: PendingRuntimeEvent,
   ): Promise<RuntimeEvent | null | void>;
   onCompacted(threadId: string): void;
   runCompactHooks(input: {

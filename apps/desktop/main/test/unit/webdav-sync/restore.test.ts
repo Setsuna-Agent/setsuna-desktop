@@ -189,6 +189,14 @@ describe('WebDAV restore planning and commit', () => {
         approvalPolicy: 'strict',
         hooks: {},
         desktopSettings: { interfaceLanguage: 'zh-CN' },
+        imageGeneration: {
+          baseUrl: 'https://legacy-images.example.test',
+          model: 'legacy-restored',
+        },
+        visionRecognition: {
+          providerId: 'openai',
+          modelId: 'legacy-vision-model',
+        },
         providers: [
           {
             id: 'openai',
@@ -224,6 +232,8 @@ describe('WebDAV restore planning and commit', () => {
       hooks: { PreToolUse: [{ hooks: [{ command: 'local-hook' }] }] },
       desktopSettings: { interfaceLanguage: 'zh-CN' },
     });
+    expect(restoredConfig).not.toHaveProperty('imageGeneration');
+    expect(restoredConfig).not.toHaveProperty('visionRecognition');
     expect(restoredConfig.providers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'openai',
@@ -240,7 +250,38 @@ describe('WebDAV restore planning and commit', () => {
       old: 'old-key',
       openai: 'sk-restored',
     });
-    expect(restoredSecrets.imageGenerationApiKey).toBe('local-image-key');
+    expect(restoredSecrets.imageGenerationApiKey).toBeUndefined();
+    const restoredImageSettings = JSON.parse(await readFile(
+      path.join(dataRoot, 'runtime', 'features', 'image-generation', 'settings', 'connection.json'),
+      'utf8',
+    )) as { secretRevision: string; data: unknown };
+    expect(restoredImageSettings.data).toEqual({
+      baseUrl: 'https://legacy-images.example.test',
+      model: 'legacy-restored',
+    });
+    expect(JSON.parse(await readFile(path.join(
+      dataRoot,
+      'runtime',
+      'secrets',
+      'image-generation',
+      'connection',
+      `${restoredImageSettings.secretRevision}.json`,
+    ), 'utf8'))).toEqual({ 'api-key': 'local-image-key' });
+    const restoredVisionSettings = JSON.parse(await readFile(
+      path.join(
+        dataRoot,
+        'runtime',
+        'features',
+        'vision-recognition',
+        'settings',
+        'model-selection.json',
+      ),
+      'utf8',
+    )) as { data: unknown };
+    expect(restoredVisionSettings.data).toEqual({
+      providerId: 'openai',
+      modelId: 'legacy-vision-model',
+    });
     expect(JSON.parse(await readFile(path.join(dataRoot, 'runtime', 'skills.json'), 'utf8')))
       .toEqual({
         version: 1,
@@ -253,6 +294,75 @@ describe('WebDAV restore planning and commit', () => {
       expect((await stat(path.join(dataRoot, 'runtime', 'secrets.json'))).mode & 0o777).toBe(0o600);
     }
     expect(await readFile(path.join(dataRoot, 'runtime', 'memories', 'keep.md'), 'utf8')).toBe('keep me');
+  });
+
+  it('imports a portable Feature document as a new local revision while retaining the local secret', async () => {
+    const dataRoot = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-feature-restore-'));
+    temporaryRoots.push(dataRoot);
+    const stagingRoot = path.join(dataRoot, '.webdav-sync-work', 'restored');
+    const localSettingsPath = path.join(
+      dataRoot,
+      'runtime',
+      'features',
+      'image-generation',
+      'settings',
+      'connection.json',
+    );
+    const localSecretPath = path.join(
+      dataRoot,
+      'runtime',
+      'secrets',
+      'image-generation',
+      'connection',
+      'secret-00000000-0000-4000-8000-000000000000.json',
+    );
+    const portablePath = path.join(
+      stagingRoot,
+      'runtime',
+      'portable-feature-settings',
+      'image-generation',
+      'connection.json',
+    );
+    await Promise.all([
+      mkdir(path.dirname(localSettingsPath), { recursive: true }),
+      mkdir(path.dirname(localSecretPath), { recursive: true }),
+      mkdir(path.dirname(portablePath), { recursive: true }),
+      mkdir(path.join(stagingRoot, 'runtime'), { recursive: true }),
+    ]);
+    await writeFile(path.join(dataRoot, 'runtime', 'config.json'), '{}\n');
+    await writeFile(path.join(stagingRoot, 'runtime', 'config.json'), '{}\n');
+    await writeFile(localSettingsPath, JSON.stringify({
+      featureId: 'image-generation',
+      documentId: 'connection',
+      schemaVersion: 1,
+      revision: 7,
+      secretRevision: 'secret-00000000-0000-4000-8000-000000000000',
+      data: { baseUrl: 'https://local.example.test', model: 'local' },
+    }));
+    await writeFile(localSecretPath, '{"api-key":"local-only-secret"}\n');
+    await writeFile(portablePath, JSON.stringify({
+      featureId: 'image-generation',
+      documentId: 'connection',
+      schemaVersion: 1,
+      data: { baseUrl: 'https://remote.example.test', model: 'remote' },
+    }));
+
+    await applyRestoredSnapshot({
+      dataRoot,
+      stagingRoot,
+      sourceDataRoot: dataRoot,
+      categories: ['preferences'],
+    });
+
+    expect(JSON.parse(await readFile(localSettingsPath, 'utf8'))).toEqual({
+      featureId: 'image-generation',
+      documentId: 'connection',
+      schemaVersion: 1,
+      revision: 8,
+      secretRevision: 'secret-00000000-0000-4000-8000-000000000000',
+      data: { baseUrl: 'https://remote.example.test', model: 'remote' },
+    });
+    expect(await readFile(localSecretPath, 'utf8')).toContain('local-only-secret');
   });
 
   it('reuses same-name local projects, creates unbound projects, and remaps restored chats', async () => {

@@ -8,6 +8,8 @@ import {
   consumeReviewFocusRequest,
   reviewFilePathParts,
   reviewWorkspaceFilePath,
+  shouldAutoExpandReviewSummary,
+  shouldUseReviewFileBrowser,
 } from '../../../../src/features/workspace/ReviewPanel.js';
 import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
 
@@ -77,6 +79,54 @@ describe('DesktopReviewPanel', () => {
     }));
 
     expect(html).toContain('line 40 full diff');
+  });
+
+  it('renders one selected diff beside a file tree for a large change set', () => {
+    const templateFile = latestSummary.files[0];
+    if (!templateFile) throw new Error('Expected a review file fixture');
+    const largeSummary: DesktopDiffSummary = {
+      additions: 25,
+      deletions: 0,
+      files: Array.from({ length: 25 }, (_, index) => ({
+        ...templateFile,
+        path: `src/file-${index}.ts`,
+        lines: [{
+          type: 'added' as const,
+          lineNumber: 1,
+          newLine: 1,
+          content: `large change ${index}`,
+        }],
+      })),
+    };
+
+    const html = renderToStaticMarkup(createElement(DesktopReviewPanel, {
+      activeProject: project,
+      error: null,
+      latestSummary: largeSummary,
+      loading: false,
+      reviewState: null,
+      onExternalOpenFile: () => undefined,
+      onOpenProjectFile: () => undefined,
+      onRefresh: () => undefined,
+      onSelectBaseRef: () => undefined,
+    }));
+
+    expect(shouldAutoExpandReviewSummary(largeSummary)).toBe(false);
+    expect(shouldUseReviewFileBrowser(largeSummary)).toBe(true);
+    expect(html).toContain('desktop-review-file-browser');
+    expect(html).toContain('src/file-0.ts');
+    expect(html).toContain('src/file-24.ts');
+    expect(html).toContain('large change 0');
+    expect(html).not.toContain('large change 1');
+    expect(html.match(/class="desktop-review-diff desktop-review-diff--/gu)).toHaveLength(1);
+    expect(html).not.toContain('desktop-review-panel__file-expansion-toggle');
+  });
+
+  it('uses the single-file browser for a line-heavy review with few files', () => {
+    const lineHeavySummary = largeWrappedReviewSummary('src/line-heavy.ts', 3_001);
+
+    expect(shouldAutoExpandReviewSummary(lineHeavySummary)).toBe(false);
+    expect(shouldUseReviewFileBrowser(lineHeavySummary)).toBe(true);
   });
 
   it('restores every selected review source with its own diff totals', () => {

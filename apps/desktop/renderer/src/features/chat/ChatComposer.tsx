@@ -8,11 +8,11 @@ import type {
   RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
-  RuntimeThreadGoalPatch,
   WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ComposerActiveTurn } from '@setsuna-desktop/feature-core/renderer';
 import {
   useCallback,
   useEffect,
@@ -28,11 +28,12 @@ import type {
   ChatSkillSelectionRequest,
   ChatWorkspaceMentionRequest,
 } from '../../app/types.js';
+import { FeatureContributionBoundary } from '../../composition/FeatureContributionBoundary.js';
+import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import { ChatAttachmentTray } from './composer/ChatAttachmentTray.js';
 import { ChatComposerFooter } from './composer/ChatComposerFooter.js';
-import { ChatGoalStatusBar } from './composer/ChatGoalStatusBar.js';
 import { ChatComposerOverlays } from './composer/ChatComposerOverlays.js';
 import { ChatSendQueue } from './composer/ChatSendQueue.js';
 import type { SlashCommandMenuItem } from './composer/ChatSlashCommandMenu.js';
@@ -80,19 +81,17 @@ export function applyChatComposerFocusRequest(
   if (focusRequest !== 0) onConsumed?.(focusRequest);
 }
 
-export function goalActiveTurnStartedAt(
+export function composerActiveTurn(
   thread: RuntimeThread | null | undefined,
   activeTurnId: string | null,
-  goalId: string | undefined,
-): string | undefined {
-  if (!thread || !activeTurnId || !goalId) return undefined;
+): ComposerActiveTurn | undefined {
+  if (!thread || !activeTurnId) return undefined;
   const turn = thread.turns?.find((candidate) => candidate.id === activeTurnId);
-  if (!turn?.startedAt) return undefined;
-  const belongsToGoal = turn.taskKind === 'goal' || thread.messages.some((message) => (
-    message.turnId === activeTurnId
-    && message.goalMode?.goal.id === goalId
-  ));
-  return belongsToGoal ? turn.startedAt : undefined;
+  if (!turn) return undefined;
+  return {
+    ...(turn.startedAt ? { startedAt: turn.startedAt } : {}),
+    ...(turn.taskKind ? { taskKind: turn.taskKind } : {}),
+  };
 }
 
 export function ChatComposer({
@@ -118,8 +117,6 @@ export function ChatComposer({
   onAccessModeChange,
   onCompactContext,
   onClearContext,
-  onClearThreadGoal,
-  onUpdateThreadGoal = () => undefined,
   onDraftChange,
   onFocusRequestConsumed,
   onSelectModel,
@@ -155,8 +152,6 @@ export function ChatComposer({
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onCompactContext: () => void;
   onClearContext: () => void;
-  onClearThreadGoal: () => void | Promise<unknown>;
-  onUpdateThreadGoal?: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDraftChange: (value: string) => void;
   onFocusRequestConsumed?: (requestId: number) => void;
   onSelectModel: ChatModelSelectionHandler;
@@ -174,6 +169,7 @@ export function ChatComposer({
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
 }) {
   const { t } = useI18n();
+  const featureViews = useRendererFeatureViews();
   const [selectedSkills, setSelectedSkills] = useState<RuntimeSkillSummary[]>([]);
   const [pendingModelSelection, setPendingModelSelection] = useState<{
     reference: RuntimeConfiguredModelReference;
@@ -206,9 +202,6 @@ export function ChatComposer({
   const sendQueuedTurnInputNow = queuedTurnActions.sendQueuedTurnInputNow;
   const getComposerEditor = useCallback(() => senderRef.current, []);
   const getComposerInputElement = useCallback(() => getComposerEditor()?.inputElement ?? null, [getComposerEditor]);
-  const currentGoal = currentThread?.goal?.status === 'complete'
-    ? null
-    : currentThread?.goal ?? null;
   const persistedThreadModel = useMemo(
     () => chatThreadModelSelection(config, currentThread),
     [config, currentThread],
@@ -238,16 +231,14 @@ export function ChatComposer({
   useEffect(() => {
     if (pendingMatchesPersisted) setPendingModelSelection(null);
   }, [pendingMatchesPersisted]);
-  const activeGoalTurnStartedAt = useMemo(
-    () => goalActiveTurnStartedAt(currentThread, activeTurnId, currentGoal?.id),
-    [activeTurnId, currentGoal?.id, currentThread?.messages, currentThread?.turns],
+  const activeComposerTurn = useMemo(
+    () => composerActiveTurn(currentThread, activeTurnId),
+    [activeTurnId, currentThread?.turns],
   );
   const modeController = useChatComposerModeController({
-    activeGoal: currentGoal,
     currentThreadId: currentThread?.id,
     model: selectedThreadModel.model,
     provider: selectedThreadModel.provider,
-    onClearThreadGoal,
   });
   const clipboardHandlers = useChatComposerClipboard({
     allowStructuredPaste: !modeController.reviewModeEnabled,
@@ -333,7 +324,6 @@ export function ChatComposer({
     t,
   });
   const slashEntries = useMemo(() => createChatSlashCommandItems({
-    activeGoal: currentGoal,
     activeModelName: modeController.activeModelName,
     activeProjectSelected: Boolean(activeProject),
     activeTurnId,
@@ -356,7 +346,6 @@ export function ChatComposer({
     commandController.slashQuery,
     contextCompactPercent,
     contextCompacting,
-    currentGoal,
     attachmentItems.length,
     modeController.activeModelName,
     modeController.goalModeEnabled,
@@ -722,15 +711,32 @@ export function ChatComposer({
         onEdit={queuedTurnEdit.edit}
         onSendNow={sendQueuedTurnInputNow}
       />
-      {currentGoal ? (
-        <ChatGoalStatusBar
-          key={`${currentGoal.threadId}:${currentGoal.id}`}
-          activeTurnStartedAt={activeGoalTurnStartedAt}
-          goal={currentGoal}
-          onClearGoal={onClearThreadGoal}
-          onUpdateGoal={onUpdateThreadGoal}
-        />
-      ) : null}
+      {currentThread ? featureViews.composerStatuses.list().map((contribution) => {
+        const StatusView = contribution.render;
+        return (
+          <FeatureContributionBoundary
+            key={`${contribution.featureId}:${contribution.id}:${currentThread.id}`}
+            featureId={contribution.featureId}
+            resetKey={`${currentThread.id}:${activeTurnId ?? ''}`}
+            fallback={(reset) => (
+              <button
+                type="button"
+                className="chat-composer-status-fallback"
+                data-composer-status-view={contribution.id}
+                onClick={reset}
+              >
+                {t('common.retry')}
+              </button>
+            )}
+          >
+            <StatusView
+              activeTurn={activeComposerTurn}
+              threadId={currentThread.id}
+              translate={t}
+            />
+          </FeatureContributionBoundary>
+        );
+      }) : null}
       <Sender
         ref={senderRef}
         value={draft}

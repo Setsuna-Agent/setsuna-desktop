@@ -410,43 +410,42 @@ describe('runtime server REST skills and capabilities', () => {
       expect(response.status).toBe(404);
     });
 
-  it('does not run media quick tests when their marketplace plugins are not installed', async () => {
-      for (const pluginId of ['openai-image-generation', 'openai-vision-recognition']) {
-        const response = await fetch(`${harness.baseUrl}/v1/plugins/${pluginId}/test`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${harness.token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ prompt: 'quick test' }),
-        });
-        expect(response.status).toBe(404);
-        await expect(response.json()).resolves.toMatchObject({ code: 'plugin_not_installed' });
-      }
+  it('does not run the vision Feature test when its marketplace plugin is not installed', async () => {
+      const response = await fetch(`${harness.baseUrl}/v1/features/vision-recognition/test`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${harness.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt: 'quick test' }),
+      });
+      expect(response.status).toBe(404);
+      await expect(response.json()).resolves.toMatchObject({ code: 'PLUGIN_NOT_INSTALLED' });
     });
   
   it('tests the installed image plugin through its configured private provider', async () => {
       const imageServer = await createImageGenerationCaptureServer();
       try {
         await harness.runtimeFetch('/v1/plugin-marketplace/openai-image-generation/install', { method: 'POST' });
-        const savedConfig = await harness.runtimeFetch('/v1/config', {
-          method: 'PUT',
+        const savedConfig = await harness.runtimeFetch('/v1/features/image-generation/settings', {
+          method: 'PATCH',
           body: JSON.stringify({
-            imageGeneration: {
+            expectedRevision: 1,
+            patch: {
               baseUrl: imageServer.baseUrl,
               model: 'test-image-model',
-              apiKey: 'private-image-key',
             },
+            secretPatch: { apiKey: 'private-image-key' },
           }),
         });
-        expect(savedConfig.imageGeneration).toMatchObject({
+        expect(savedConfig.value).toMatchObject({
           baseUrl: imageServer.baseUrl,
           model: 'test-image-model',
           apiKeySet: true,
         });
         expect(JSON.stringify(savedConfig)).not.toContain('private-image-key');
   
-        const result = await harness.runtimeFetch('/v1/plugins/openai-image-generation/test', {
+        const result = await harness.runtimeFetch('/v1/features/image-generation/test', {
           method: 'POST',
           body: JSON.stringify({ prompt: 'a tiny moon above a quiet lake' }),
         });
@@ -474,6 +473,47 @@ describe('runtime server REST skills and capabilities', () => {
       } finally {
         await imageServer.close();
       }
+    });
+
+  it('keeps image settings and test operations reachable while the Feature is degraded', async () => {
+      const initialStatus = await harness.runtimeFetch('/v1/feature-management/status');
+      expect(initialStatus.features).toContainEqual(expect.objectContaining({
+        featureId: 'image-generation',
+        status: 'degraded',
+      }));
+
+      const initial = await harness.runtimeFetch('/v1/features/image-generation/settings');
+      expect(initial).toMatchObject({
+        value: { apiKeySet: false },
+        health: 'not-configured',
+        revision: expect.any(Number),
+      });
+
+      const updated = await harness.runtimeFetch('/v1/features/image-generation/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          expectedRevision: initial.revision,
+          patch: { baseUrl: 'https://images.invalid/v1', model: 'fixture-image-model' },
+        }),
+      });
+      expect(updated).toMatchObject({
+        value: {
+          baseUrl: 'https://images.invalid/v1',
+          model: 'fixture-image-model',
+        },
+        health: 'credentials-missing',
+      });
+
+      await expect(harness.runtimeFetch('/v1/features/image-generation/test', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: 'a small paper moon' }),
+      })).rejects.toThrow('CREDENTIALS_MISSING');
+
+      const degradedStatus = await harness.runtimeFetch('/v1/feature-management/status');
+      expect(degradedStatus.features).toContainEqual(expect.objectContaining({
+        featureId: 'image-generation',
+        status: 'degraded',
+      }));
     });
 
   it('tests the installed vision plugin through a selected configured model', async () => {
@@ -504,19 +544,37 @@ describe('runtime server REST skills and capabilities', () => {
                 supportsImages: true,
               }],
             }],
-            visionRecognition: { providerId: 'vision-provider', modelId: 'vision-model' },
           }),
         });
-        expect(savedConfig.visionRecognition).toEqual({
-          providerId: 'vision-provider',
-          modelId: 'vision-model',
-        });
+        expect(savedConfig).not.toHaveProperty('visionRecognition');
         expect(savedConfig.providers).toEqual(expect.arrayContaining([
           expect.objectContaining({ id: 'vision-provider', apiKeySet: true }),
         ]));
         expect(JSON.stringify(savedConfig)).not.toContain('private-vision-key');
 
-        const result = await harness.runtimeFetch('/v1/plugins/openai-vision-recognition/test', {
+        const initialSettings = await harness.runtimeFetch('/v1/features/vision-recognition/settings');
+        expect(initialSettings).toMatchObject({
+          selection: null,
+          health: 'not-configured',
+          revision: expect.any(Number),
+        });
+        const updatedSettings = await harness.runtimeFetch('/v1/features/vision-recognition/settings', {
+          method: 'PATCH',
+          body: JSON.stringify({
+            expectedRevision: initialSettings.revision,
+            selection: { providerId: 'vision-provider', modelId: 'vision-model' },
+          }),
+        });
+        expect(updatedSettings).toMatchObject({
+          selection: { providerId: 'vision-provider', modelId: 'vision-model' },
+          health: 'ready',
+          availableModels: [expect.objectContaining({
+            providerId: 'vision-provider',
+            modelId: 'vision-model',
+          })],
+        });
+
+        const result = await harness.runtimeFetch('/v1/features/vision-recognition/test', {
           method: 'POST',
           body: JSON.stringify({ prompt: 'Describe the test image.' }),
         });

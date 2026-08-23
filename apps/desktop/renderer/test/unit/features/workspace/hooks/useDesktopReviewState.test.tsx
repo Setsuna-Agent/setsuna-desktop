@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 
-import type { DesktopReviewState, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useDesktopReviewState } from '../../../../../src/features/workspace/hooks/useDesktopReviewState.js';
@@ -29,13 +30,19 @@ describe('useDesktopReviewState', () => {
 
     const view = render(<ReviewStateProbe project={project} />);
 
-    await waitFor(() => expect(getState).toHaveBeenCalledWith(project.path, { baseRef: 'origin/master' }));
+    await waitFor(() => expect(getState).toHaveBeenCalledWith(project.path, {
+      baseRef: 'origin/master',
+      includeBranchSummary: false,
+    }));
     expect(screen.getByTestId('additions').textContent).toBe('1');
 
     act(() => notifyWorkspaceChange?.());
 
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    expect(getState).toHaveBeenLastCalledWith(project.path, { baseRef: 'origin/master' });
+    expect(getState).toHaveBeenLastCalledWith(project.path, {
+      baseRef: 'origin/master',
+      includeBranchSummary: false,
+    });
     await waitFor(() => expect(screen.getByTestId('additions').textContent).toBe('2'));
 
     view.unmount();
@@ -83,8 +90,14 @@ describe('useDesktopReviewState', () => {
     render(<ReviewStateProbe project={project} />);
 
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    expect(getState).toHaveBeenNthCalledWith(1, project.path, { baseRef: 'master' });
-    expect(getState).toHaveBeenNthCalledWith(2, project.path, { baseRef: 'origin/master' });
+    expect(getState).toHaveBeenNthCalledWith(1, project.path, {
+      baseRef: 'master',
+      includeBranchSummary: false,
+    });
+    expect(getState).toHaveBeenNthCalledWith(2, project.path, {
+      baseRef: 'origin/master',
+      includeBranchSummary: false,
+    });
     expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBe('origin/master');
   });
 
@@ -97,12 +110,18 @@ describe('useDesktopReviewState', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'refresh review' }));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    expect(getState).toHaveBeenLastCalledWith(project.path, { baseRef: null });
+    expect(getState).toHaveBeenLastCalledWith(project.path, {
+      baseRef: null,
+      includeBranchSummary: false,
+    });
     expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'select base ref' }));
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(3));
-    expect(getState).toHaveBeenLastCalledWith(project.path, { baseRef: 'origin/master' });
+    expect(getState).toHaveBeenLastCalledWith(project.path, {
+      baseRef: 'origin/master',
+      includeBranchSummary: true,
+    });
     expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBe('origin/master');
   });
 
@@ -123,7 +142,10 @@ describe('useDesktopReviewState', () => {
     fireEvent.click(screen.getByRole('button', { name: 'select local base ref' }));
 
     await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
-    expect(getState).toHaveBeenLastCalledWith(project.path, { baseRef: 'master' });
+    expect(getState).toHaveBeenLastCalledWith(project.path, {
+      baseRef: 'master',
+      includeBranchSummary: true,
+    });
     expect(window.localStorage.getItem('setsuna-desktop:review-base-ref:project-review')).toBe('master');
   });
 
@@ -147,6 +169,33 @@ describe('useDesktopReviewState', () => {
 
     await waitFor(() => expect(screen.getByTestId('error').textContent).toBe('refresh failed'));
     expect(screen.getByTestId('additions').textContent).toBe('4');
+  });
+
+  it('loads branch details on demand and releases them after leaving the branch source', async () => {
+    const withoutBranch = {
+      ...reviewState(0),
+      branchSummary: null,
+      currentRemoteSummary: null,
+    };
+    const getState = vi.fn()
+      .mockResolvedValueOnce(withoutBranch)
+      .mockResolvedValueOnce(reviewState(7));
+    installReviewBridge({ getState, watchChanges: () => () => undefined });
+
+    render(<ReviewStateProbe project={project} />);
+    await waitFor(() => expect(getState).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: 'show branch' }));
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+    expect(getState).toHaveBeenLastCalledWith(project.path, {
+      baseRef: null,
+      includeBranchSummary: true,
+    });
+    await waitFor(() => expect(screen.getByTestId('additions').textContent).toBe('7'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'show unstaged' }));
+    expect(screen.getByTestId('additions').textContent).toBe('0');
+    expect(getState).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces a foreground refresh failure instead of silently retaining stale data', async () => {
@@ -198,6 +247,8 @@ function ReviewStateProbe({ project: activeProject }: { project: WorkspaceProjec
       <button type="button" onClick={() => void review.loadReviewState()}>refresh review</button>
       <button type="button" onClick={() => void review.selectReviewBaseRef('origin/master')}>select base ref</button>
       <button type="button" onClick={() => void review.selectReviewBaseRef('master')}>select local base ref</button>
+      <button type="button" onClick={() => review.setReviewSource('branch')}>show branch</button>
+      <button type="button" onClick={() => review.setReviewSource('unstaged')}>show unstaged</button>
     </>
   );
 }
@@ -206,7 +257,10 @@ function installReviewBridge({
   getState,
   watchChanges,
 }: {
-  getState: (workspaceRoot: string, options?: { baseRef?: string | null }) => Promise<DesktopReviewState>;
+  getState: (workspaceRoot: string, options?: {
+    baseRef?: string | null;
+    includeBranchSummary?: boolean;
+  }) => Promise<DesktopReviewState>;
   watchChanges: (workspaceRoot: string, callback: () => void) => () => void;
 }): void {
   Object.defineProperty(window, 'setsunaDesktop', {

@@ -38,6 +38,12 @@ export function createVitestConfig(test: VitestTestConfig = {}) {
       alias: {
         '@renderer': resolve(rootDir, 'apps/desktop/renderer/src'),
         '@setsuna-desktop/contracts': resolve(rootDir, 'packages/contracts/src/index.ts'),
+        '@setsuna-desktop/feature-core': resolve(rootDir, 'packages/feature-core/src'),
+        '@setsuna-desktop/feature-image-generation': resolve(rootDir, 'packages/features/image-generation/src'),
+        '@setsuna-desktop/feature-goal': resolve(rootDir, 'packages/features/goal/src'),
+        '@setsuna-desktop/feature-review': resolve(rootDir, 'packages/features/review/src'),
+        '@setsuna-desktop/feature-terminal': resolve(rootDir, 'packages/features/terminal/src'),
+        '@setsuna-desktop/feature-vision-recognition': resolve(rootDir, 'packages/features/vision-recognition/src'),
       },
     },
     test: {

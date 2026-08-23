@@ -1,5 +1,6 @@
 import type {
   ModelStreamEvent,
+  PendingRuntimeEvent,
   RuntimeEvent,
   RuntimeMemoryCitation,
   RuntimeMessage,
@@ -11,7 +12,6 @@ import type {
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { MemoryStore } from '../../ports/memory-store.js';
-import type { ThreadStore } from '../../ports/thread-store.js';
 import { mergeToolArgumentDelta } from './agent-loop-tool-utils.js';
 import type { LegacyModelStreamMirrorState } from './model-stream-output.js';
 
@@ -35,7 +35,7 @@ type RuntimeModelStreamEventPublisherOptions = {
   memoryStore?: MemoryStore;
   appendEvent(
     threadId: string,
-    event: Parameters<ThreadStore['appendEvent']>[1],
+    event: PendingRuntimeEvent,
   ): Promise<RuntimeEvent | null>;
 };
 

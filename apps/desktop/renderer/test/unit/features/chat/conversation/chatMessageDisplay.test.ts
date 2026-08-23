@@ -38,7 +38,7 @@ describe('createChatDisplayItems', () => {
     expect(chatDisplayItemRenderKey(streamedItem!)).toBe('assistant:assistant_first');
   });
 
-  it('projects tool image attachments into the matching assistant run', () => {
+  it('projects display outputs without echoing model-only inspection images', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'assistant_generate',
@@ -68,6 +68,34 @@ describe('createChatDisplayItems', () => {
         }],
       },
       {
+        id: 'assistant_inspect',
+        turnId: 'turn_image',
+        role: 'assistant',
+        content: '',
+        createdAt: '2026-07-17T00:00:01.500Z',
+        status: 'complete',
+        toolCalls: [{ id: 'call_view', name: 'view_image', arguments: '{"path":"generated.png"}' }],
+      },
+      {
+        id: 'tool_view',
+        turnId: 'turn_image',
+        role: 'tool',
+        toolCallId: 'call_view',
+        toolName: 'view_image',
+        content: 'Loaded workspace image generated.png.',
+        createdAt: '2026-07-17T00:00:01.750Z',
+        status: 'complete',
+        attachments: [{
+          id: 'inspected_1',
+          name: 'generated.png',
+          type: 'image/png',
+          size: 12,
+          source: 'generated',
+          assetId: 'generated_image_inspected',
+          modelVisible: true,
+        }],
+      },
+      {
         id: 'assistant_done',
         turnId: 'turn_image',
         role: 'assistant',
@@ -80,7 +108,7 @@ describe('createChatDisplayItems', () => {
     expect(createChatDisplayItems(messages)).toEqual([
       expect.objectContaining({
         type: 'assistant',
-        messageIds: ['assistant_generate', 'tool_generate', 'assistant_done'],
+        messageIds: ['assistant_generate', 'tool_generate', 'assistant_inspect', 'tool_view', 'assistant_done'],
         toolAttachments: [expect.objectContaining({ id: 'generated_1', modelVisible: false })],
       }),
     ]);

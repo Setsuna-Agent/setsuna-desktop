@@ -122,14 +122,12 @@ Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `Shell
 
 本地 Plugin Bundle 通过右上角“创建”菜单导入；不属于默认市场的已安装 Plugin 单独标识。
 
-图片生成和视觉识别第一方 Plugin 还有：
+图片生成和视觉识别第一方 Plugin 的配置不在 `CapabilitiesPluginDetail` 中硬编码。各自的 renderer Feature 通过 `SettingsViewRegistry` 向对应 Plugin 详情贡献设置与测试视图：
 
-- `ImageGenerationPluginSettings`
-- `ImageGenerationPluginTest`
-- `VisionRecognitionPluginSettings`
-- `VisionRecognitionPluginTest`
+- `packages/features/image-generation/src/renderer/`
+- `packages/features/vision-recognition/src/renderer/`
 
-两个插件都默认不安装，只有用户从市场安装后详情页才显示配置。图片生成插件维护自己的 Images API 服务配置；视觉识别插件只列出“模型服务”中已启用且标记为支持图片的模型，保存 provider/model 引用并复用现有服务地址、API key、协议和代理设置。
+两个插件都默认不安装，只有用户从市场安装后详情页才显示 contribution。图片生成 Feature 维护自己的 Images API 服务配置；视觉识别 Feature 只列出“模型服务”中已启用且标记为支持图片的模型，在自己的 `model-selection` document 保存 provider/model 引用，并复用 provider 的服务地址、API key、协议和代理设置。组件只调用各自 typed Feature client，不读取根 Config，也不调用统一 `DesktopRuntimeClient` 的业务方法。
 
 Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
@@ -163,9 +161,10 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
 ## State 与 refresh
 
-Settings/Capabilities 继续通过 `useRuntimeClientState` facade 取数，实际能力状态由 `useRuntimeCapabilityState` 持有：
+宿主 Settings/Capabilities 继续通过 `useRuntimeClientState` facade 获取通用 Config 和目录数据，实际能力状态由 `useRuntimeCapabilityState` 持有；Feature-owned 设置则由 renderer composition 注入的 typed client/controller 独立读取：
 
 - Config save 后更新统一 config state。
+- Image Generation 与 Vision Recognition 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
 - Capabilities refresh 使用 `Promise.allSettled`，单个 Skill/MCP/Hook/Plugin 请求失败不抹掉其他成功数据。
 - Hook 请求受当前 project cwd 影响，使用 latest request guard。
 - Install/remove 后重新拉取 Plugin、Skill、MCP、Hook，而不是靠局部猜测所有权变化。

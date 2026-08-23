@@ -1,0 +1,104 @@
+.feature-recovery {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--app-warning) 32%, var(--app-border));
+  border-radius: var(--app-radius-lg);
+  color: var(--app-text);
+  background: color-mix(in srgb, var(--app-warning-bg) 56%, var(--app-surface));
+}
+
+.feature-recovery__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.feature-recovery__header h3,
+.feature-recovery__header p,
+.feature-recovery__notice,
+.feature-recovery__list p,
+.feature-recovery__confirmation p {
+  margin: 0;
+}
+
+.feature-recovery__header h3 {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.feature-recovery__header p,
+.feature-recovery__list p,
+.feature-recovery__notice {
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.feature-recovery__icon {
+  display: inline-flex;
+  padding: 7px;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-warning);
+  background: var(--app-warning-bg);
+}
+
+.feature-recovery__notice.is-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-danger);
+}
+
+.feature-recovery__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.feature-recovery__list > li {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+}
+
+.feature-recovery__list > li > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.feature-recovery__list strong,
+.feature-recovery__list span,
+.feature-recovery__list code {
+  font-size: 12px;
+}
+
+.feature-recovery__list span {
+  color: var(--app-text-muted);
+}
+
+.feature-recovery__confirmation,
+.feature-recovery__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feature-recovery__confirmation p {
+  flex: 1 1 100%;
+  color: var(--app-danger);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.feature-recovery__actions {
+  justify-content: flex-end;
+}

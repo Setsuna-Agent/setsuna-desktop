@@ -10,7 +10,6 @@ const PORTABLE_ROOT_KEYS = [
   'memoryEnabled',
   'taskModels',
   'setsunaStyle',
-  'visionRecognition',
 ] as const;
 
 const PORTABLE_PROVIDER_KEYS = [
@@ -80,7 +79,11 @@ export async function mergePortableConfigForRestore(input: {
 
   merged.providers = mergeProviders(arrayRecords(local.providers), arrayRecords(backup.providers));
   mergeRecordField(merged, local, backup, 'desktopSettings');
-  mergeRecordField(merged, local, backup, 'imageGeneration');
+  // Legacy imageGeneration is consumed by the Feature restore decoder before
+  // this merge. It must not be written back as a second configuration source.
+  delete merged.imageGeneration;
+  // Legacy visionRecognition follows the same one-way Feature import path.
+  delete merged.visionRecognition;
 
   await writeFile(input.portablePath, `${JSON.stringify(merged, null, 2)}\n`, {
     mode: 0o600,
@@ -116,10 +119,6 @@ function portableConfig(value: Record<string, unknown>): Record<string, unknown>
       'showThinkingInTranscript',
     ] as const);
     if (Object.keys(exported).length) portable.desktopSettings = exported;
-  }
-  const imageGeneration = recordValue(value.imageGeneration);
-  if (imageGeneration) {
-    portable.imageGeneration = pick(imageGeneration, ['baseUrl', 'model'] as const);
   }
   return portable;
 }
@@ -159,7 +158,7 @@ function mergeRecordField(
   output: Record<string, unknown>,
   local: Record<string, unknown>,
   backup: Record<string, unknown>,
-  key: 'desktopSettings' | 'imageGeneration',
+  key: 'desktopSettings',
 ): void {
   const localRecord = recordValue(local[key]);
   const backupRecord = recordValue(backup[key]);

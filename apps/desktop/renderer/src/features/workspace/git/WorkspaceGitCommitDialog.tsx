@@ -1,4 +1,5 @@
-import type { DesktopReviewCommitResult, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { DesktopReviewCommitResult } from '@setsuna-desktop/feature-review/contracts';
 import {
   Check,
   ChevronDown,

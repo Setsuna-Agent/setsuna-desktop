@@ -1,8 +1,8 @@
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeApprovalStatus,
-  RuntimeEvent,
   RuntimeEventBatch,
+  StoredThreadEvent,
   RuntimeThread,
   RuntimeThreadSummary,
   RuntimeToolRun,
@@ -38,14 +38,14 @@ export function selectInitialThreadSummary(
  */
 export function applyCurrentThreadEvent(
   thread: RuntimeThread | null,
-  event: RuntimeEvent,
+  event: StoredThreadEvent,
 ): RuntimeThread | null {
   if (!thread || thread.id !== event.threadId || event.seq <= thread.lastSeq) return thread;
   return applyRuntimeEventToThread(thread, event);
 }
 
 export type CurrentThreadEventBatchProjection = {
-  acceptedEvents: RuntimeEvent[];
+  acceptedEvents: StoredThreadEvent[];
   resynced: boolean;
   thread: RuntimeThread | null;
 };
@@ -55,7 +55,7 @@ export function applyCurrentThreadEventBatch(
   thread: RuntimeThread | null,
   batch: RuntimeEventBatch,
 ): CurrentThreadEventBatchProjection {
-  const acceptedEvents: RuntimeEvent[] = [];
+  const acceptedEvents: StoredThreadEvent[] = [];
   let projected = thread;
   let resynced = false;
   if (

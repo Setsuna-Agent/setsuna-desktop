@@ -17,6 +17,7 @@ import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import type { AttachmentStore, RuntimeResolvedAttachment } from '../../../src/ports/attachment-store.js';
 import { systemClock } from '../../../src/ports/clock.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
+import { createGoalEnabledAgentLoop } from '../../support/agent-loop/goal-feature.js';
 
 describe('agent loop thread deletion barrier', () => {
   const roots: string[] = [];
@@ -33,7 +34,7 @@ describe('agent loop thread deletion barrier', () => {
     const threadStore = createTestThreadStore(root, systemClock, ids);
     const thread = await threadStore.createThread({ title: 'Delete active goal' });
     const modelClient = new AbortIgnoringModelClient();
-    const loop = new AgentLoop({
+    const loop = createGoalEnabledAgentLoop({
       threadStore,
       modelClient,
       eventBus: new InMemoryEventBus(),

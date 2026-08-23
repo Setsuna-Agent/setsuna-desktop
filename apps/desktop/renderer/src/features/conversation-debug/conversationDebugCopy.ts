@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '@setsuna-desktop/contracts';
+import type { StoredThreadEvent } from '@setsuna-desktop/contracts';
 import type { Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type {
@@ -65,7 +65,7 @@ export function conversationDebugStatusLabel(
   return t(statusLabelKeys[status]);
 }
 
-function debugNodeTitleDetail(events: RuntimeEvent[]): string {
+function debugNodeTitleDetail(events: StoredThreadEvent[]): string {
   for (const event of events) {
     switch (event.type) {
       case 'tool.preview':

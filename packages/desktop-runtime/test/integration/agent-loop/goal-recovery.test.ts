@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { createFeatureEvent } from '@setsuna-desktop/feature-core/events';
+import {
+  goalStateReplacedEvent,
+  type Goal,
+} from '@setsuna-desktop/feature-goal/contracts';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
-import { AgentLoop } from '../../../src/loop/core/agent-loop.js';
 import { systemClock } from '../../../src/ports/clock.js';
+import { createGoalEnabledAgentLoop } from '../../support/agent-loop/goal-feature.js';
 import { CancellableModelClient, mkDataDir } from '../../support/agent-loop/shared.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 
@@ -13,26 +18,18 @@ describe('agent loop Goal recovery', () => {
     const thread = await threadStore.createThread({ title: 'Restored goal' });
     const modelClient = new CancellableModelClient();
     const replacedTurnId = 'turn_replaced_goal';
-    await threadStore.appendEvent(thread.id, {
-      id: ids.id('event'),
+    await threadStore.appendEvent(thread.id, goalStateEvent(ids, thread.id, {
+      version: 1,
+      id: 'goal_replaced',
       threadId: thread.id,
-      type: 'thread.goal_updated',
-      createdAt: systemClock.now().toISOString(),
-      payload: {
-        goal: {
-          version: 1,
-          id: 'goal_replaced',
-          threadId: thread.id,
-          objective: 'Do not charge this work to the replacement',
-          status: 'active',
-          tokenBudget: null,
-          tokensUsed: 0,
-          timeUsedSeconds: 0,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      },
-    });
+      objective: 'Do not charge this work to the replacement',
+      status: 'active',
+      tokenBudget: null,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      createdAt: 1,
+      updatedAt: 2,
+    }));
     await threadStore.appendEvent(thread.id, {
       id: ids.id('event'),
       threadId: thread.id,
@@ -49,27 +46,19 @@ describe('agent loop Goal recovery', () => {
       createdAt: '2026-08-10T00:00:01.000Z',
       payload: { usage: { inputTokens: 50, outputTokens: 49, totalTokens: 99 } },
     });
-    await threadStore.appendEvent(thread.id, {
-      id: ids.id('event'),
+    await threadStore.appendEvent(thread.id, goalStateEvent(ids, thread.id, {
+      version: 1,
+      id: 'goal_restored',
       threadId: thread.id,
-      type: 'thread.goal_updated',
-      createdAt: systemClock.now().toISOString(),
-      payload: {
-        goal: {
-          version: 1,
-          id: 'goal_restored',
-          threadId: thread.id,
-          objective: 'Resume only when the user asks',
-          status: 'active',
-          tokenBudget: null,
-          tokensUsed: 12,
-          timeUsedSeconds: 8,
-          accountedThroughSeq: 0,
-          createdAt: 1,
-          updatedAt: 2,
-        },
-      },
-    });
+      objective: 'Resume only when the user asks',
+      status: 'active',
+      tokenBudget: null,
+      tokensUsed: 12,
+      timeUsedSeconds: 8,
+      accountedThroughSeq: 0,
+      createdAt: 1,
+      updatedAt: 2,
+    }));
     // The replaced turn can finish after the current Goal is installed.
     await threadStore.appendEvent(thread.id, {
       id: ids.id('event'),
@@ -105,28 +94,20 @@ describe('agent loop Goal recovery', () => {
       payload: { reason: 'Turn cancelled because the desktop runtime restarted.', taskKind: 'goal' },
     });
     // An edit/control write can follow the terminal event while turn cleanup is still running.
-    await threadStore.appendEvent(thread.id, {
-      id: ids.id('event'),
+    await threadStore.appendEvent(thread.id, goalStateEvent(ids, thread.id, {
+      version: 1,
+      id: 'goal_restored',
       threadId: thread.id,
-      type: 'thread.goal_updated',
-      createdAt: systemClock.now().toISOString(),
-      payload: {
-        goal: {
-          version: 1,
-          id: 'goal_restored',
-          threadId: thread.id,
-          objective: 'Resume only when the user asks',
-          status: 'active',
-          tokenBudget: null,
-          tokensUsed: 12,
-          timeUsedSeconds: 8,
-          accountedThroughSeq: 0,
-          createdAt: 1,
-          updatedAt: 3,
-        },
-      },
-    });
-    const loop = new AgentLoop({
+      objective: 'Resume only when the user asks',
+      status: 'active',
+      tokenBudget: null,
+      tokensUsed: 12,
+      timeUsedSeconds: 8,
+      accountedThroughSeq: 0,
+      createdAt: 1,
+      updatedAt: 3,
+    }));
+    const loop = createGoalEnabledAgentLoop({
       threadStore,
       modelClient,
       eventBus: new InMemoryEventBus(),
@@ -137,8 +118,9 @@ describe('agent loop Goal recovery', () => {
     await loop.reconcileRestoredGoals();
     await loop.reconcileRestoredGoals();
     const restored = await threadStore.getThread(thread.id);
+    const restoredGoal = await loop.getThreadGoal(thread.id);
 
-    expect(restored?.goal).toMatchObject({
+    expect(restoredGoal).toMatchObject({
       id: 'goal_restored',
       status: 'paused',
       tokensUsed: 17,
@@ -150,3 +132,15 @@ describe('agent loop Goal recovery', () => {
   });
 
 });
+
+function goalStateEvent(ids: RandomIdGenerator, threadId: string, goal: Goal) {
+  return createFeatureEvent(
+    goalStateReplacedEvent,
+    {
+      id: ids.id('event'),
+      threadId,
+      createdAt: systemClock.now().toISOString(),
+    },
+    { goal },
+  );
+}

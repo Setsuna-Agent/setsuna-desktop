@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - packages/features/*
 allowBuilds:
   electron: true
   esbuild: true

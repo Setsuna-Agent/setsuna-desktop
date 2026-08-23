@@ -10,7 +10,6 @@ import {
   type RuntimeReviewTarget,
   type RuntimeSkillSummary,
   type RuntimeThread,
-  type RuntimeThreadGoalPatch,
   type RuntimeThreadSummary,
   type RuntimeUsageResponse,
   type WorkspaceEntry,
@@ -66,6 +65,7 @@ import type {
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
 import { latestCompletedReview } from '../../features/workspace/review-findings.js';
+import type { DesktopReviewSource } from '../../features/workspace/review-types.js';
 import { workspaceFileMentionEntry } from '../../features/workspace/workspaceFileMention.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
@@ -143,8 +143,6 @@ export function AppChatSurface({
   onAnswerApproval,
   onCompactContext,
   onClearContext,
-  onClearThreadGoal,
-  onUpdateThreadGoal,
   onDeleteMessages,
   onDiscardFileChanges,
   onClosePanel,
@@ -175,6 +173,7 @@ export function AppChatSurface({
   onReloadThreads,
   onReviewBaseRefChange,
   onReviewRefresh,
+  onReviewSourceChange,
   onRevealFile,
   onSideChatError,
   onSetMultiAgentEnabled,
@@ -239,8 +238,6 @@ export function AppChatSurface({
   onAnswerApproval: AnswerApprovalHandler;
   onCompactContext: () => void;
   onClearContext: () => void;
-  onClearThreadGoal: () => void | Promise<unknown>;
-  onUpdateThreadGoal: (patch: RuntimeThreadGoalPatch) => void | Promise<unknown>;
   onDeleteMessages: (messageIds: string[]) => void | Promise<void>;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
   onClosePanel: (placement: DesktopPanelSlot, panelId: string) => void;
@@ -276,6 +273,7 @@ export function AppChatSurface({
   onReloadThreads: () => Promise<unknown>;
   onReviewBaseRefChange: (baseRef: string) => void | Promise<void>;
   onReviewRefresh: () => void | Promise<void>;
+  onReviewSourceChange: (source: DesktopReviewSource) => void;
   onRevealFile: (filePath: string) => void;
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
@@ -393,6 +391,7 @@ export function AppChatSurface({
     onTerminalTitleChange: (panelId: string, title: string) => onUpdateDesktopPanel(panelId, { title }),
     onReviewBaseRefChange,
     onReviewRefresh,
+    onReviewSourceChange,
     onRevealFile,
     onResizeStep: onWorkspaceResizeStep,
     onResizeStart: onWorkspaceResizeStart,
@@ -446,8 +445,6 @@ export function AppChatSurface({
             onAnswerApproval={onAnswerApproval}
             onCompactContext={onCompactContext}
             onClearContext={onClearContext}
-            onClearThreadGoal={onClearThreadGoal}
-            onUpdateThreadGoal={onUpdateThreadGoal}
             onDeleteMessages={onDeleteMessages}
             onDiscardFileChanges={onDiscardFileChanges}
             onDraftChange={onDraftChange}

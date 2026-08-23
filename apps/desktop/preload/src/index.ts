@@ -1,16 +1,16 @@
 import type {
-  DesktopReviewChangeEvent,
   DesktopRuntimeBridge,
   DesktopRuntimeEventPayload,
-  DesktopTerminalEvent,
   DesktopUpdateState,
   RuntimeRequestInput,
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
+import { composeBuiltinPreloadBridge } from './composition/builtin-preload-features.js';
 
 const runtime: DesktopRuntimeBridge = {
   request: <T = unknown>(input: RuntimeRequestInput): Promise<T> => ipcRenderer.invoke('runtime:request', input),
+  cancelRequest: (requestId) => ipcRenderer.invoke('runtime:cancel-request', { requestId }),
   linkAttachment: (file) => {
     const filePath = webUtils.getPathForFile(file);
     return filePath
@@ -214,98 +214,25 @@ const webdavSync: SetsunaDesktopBridge['webdavSync'] = {
   },
 };
 
-const desktopReview: SetsunaDesktopBridge['desktopReview'] = {
-  getState: (workspaceRoot, options) =>
-    ipcRenderer.invoke('desktop-review:get-state', { workspaceRoot, baseRef: options?.baseRef ?? null }),
-  createImagePreview: (workspaceRoot, input) =>
-    ipcRenderer.invoke('desktop-review:create-image-preview', { workspaceRoot, preview: input }),
-  releaseImagePreview: (previewId) =>
-    ipcRenderer.invoke('desktop-review:release-image-preview', previewId),
-  watchChanges(workspaceRoot, callback) {
-    let cancelled = false;
-    let subscriptionId: string | null = null;
-    const queuedEvents: DesktopReviewChangeEvent[] = [];
-    const deliver = (event: DesktopReviewChangeEvent) => {
-      if (event.subscriptionId === subscriptionId) callback();
-    };
-    const listener = (_event: Electron.IpcRendererEvent, payload: DesktopReviewChangeEvent) => {
-      if (subscriptionId === null) queuedEvents.push(payload);
-      else deliver(payload);
-    };
-    ipcRenderer.on('desktop-review:changed', listener);
-    void ipcRenderer.invoke('desktop-review:subscribe-changes', { workspaceRoot }).then((id) => {
-      const resolvedSubscriptionId = String(id);
-      if (cancelled) {
-        void ipcRenderer.invoke('desktop-review:unsubscribe-changes', resolvedSubscriptionId);
-        return;
-      }
-      subscriptionId = resolvedSubscriptionId;
-      for (const event of queuedEvents.splice(0, queuedEvents.length)) deliver(event);
-    }).catch((error: unknown) => {
-      if (!cancelled) console.error(error);
-    });
-    return () => {
-      cancelled = true;
-      ipcRenderer.off('desktop-review:changed', listener);
-      if (subscriptionId) void ipcRenderer.invoke('desktop-review:unsubscribe-changes', subscriptionId);
-    };
-  },
-  discardUnstaged: (workspaceRoot, filePaths) =>
-    ipcRenderer.invoke('desktop-review:discard-unstaged', { workspaceRoot, filePaths }),
-  stageFiles: (workspaceRoot, filePaths) =>
-    ipcRenderer.invoke('desktop-review:stage-files', { workspaceRoot, filePaths }),
-  unstageFiles: (workspaceRoot, filePaths) =>
-    ipcRenderer.invoke('desktop-review:unstage-files', { workspaceRoot, filePaths }),
-  checkoutBranch: (workspaceRoot, branchName) =>
-    ipcRenderer.invoke('desktop-review:checkout-branch', { workspaceRoot, branchName }),
-  createBranch: (workspaceRoot, branchName, options) =>
-    ipcRenderer.invoke('desktop-review:create-branch', { workspaceRoot, branchName, allowUnstaged: options?.allowUnstaged ?? false }),
-  commit: (workspaceRoot, input) =>
-    ipcRenderer.invoke('desktop-review:commit', { workspaceRoot, ...input }),
-  push: (workspaceRoot) =>
-    ipcRenderer.invoke('desktop-review:push', { workspaceRoot }),
-  generateCommitMessage: (workspaceRoot, input) =>
-    ipcRenderer.invoke('desktop-review:generate-commit-message', { workspaceRoot, includeUnstaged: input?.includeUnstaged ?? true }),
-};
-
 const workspaceApps: SetsunaDesktopBridge['workspaceApps'] = {
   list: (workspaceRoot) => ipcRenderer.invoke('workspace-apps:list', { workspaceRoot }),
   open: (workspaceRoot, appId, filePath, line) =>
     ipcRenderer.invoke('workspace-apps:open', { workspaceRoot, appId, filePath, line }),
 };
 
-const terminal: SetsunaDesktopBridge['terminal'] = {
-  open: (workspaceRoot, cols, rows) =>
-    ipcRenderer.invoke('terminal:open', { workspaceRoot, cols, rows }),
-  write: (sessionId, input) => ipcRenderer.invoke('terminal:write', { sessionId, input }),
-  read: (sessionId) => ipcRenderer.invoke('terminal:read', { sessionId }),
-  resize: (sessionId, cols, rows) => ipcRenderer.invoke('terminal:resize', { sessionId, cols, rows }),
-  restart: (sessionId, cols, rows) => ipcRenderer.invoke('terminal:restart', { sessionId, cols, rows }),
-  close: (sessionId) => ipcRenderer.invoke('terminal:close', { sessionId }),
-  onEvent(sessionId: string, callback: (event: DesktopTerminalEvent) => void): () => void {
-    const listener = (_event: Electron.IpcRendererEvent, payload: DesktopTerminalEvent & { sessionId: string }) => {
-      if (payload.sessionId !== sessionId) return;
-      callback({ seq: payload.seq, event: payload.event, data: payload.data });
-    };
-    ipcRenderer.on('terminal:event', listener);
-    return () => ipcRenderer.off('terminal:event', listener);
-  },
-};
-
-const bridge: SetsunaDesktopBridge = {
+const hostBridge: SetsunaDesktopBridge = {
   browser,
   dataRoot,
   desktop,
-  desktopReview,
   links,
   networkProxy,
   plugins,
   runtime,
-  terminal,
   updater,
   webdavSync,
   windowControls,
   windowsSandbox,
   workspaceApps,
 };
+const bridge = composeBuiltinPreloadBridge(hostBridge);
 contextBridge.exposeInMainWorld('setsunaDesktop', bridge);

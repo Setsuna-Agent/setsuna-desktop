@@ -14,6 +14,7 @@ import type {
   RuntimeToolCall,
   RuntimeToolCallDelta,
 } from '@setsuna-desktop/contracts';
+import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import { createRuntimeToolHookRunner } from '../../hooks/runtime-hooks.js';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
@@ -46,8 +47,6 @@ import {
   isCollaborationToolName,
   type RuntimeCollaborationCoordinator,
 } from '../lifecycle/collaboration-coordinator.js';
-import type { RuntimeGoalCoordinator } from '../lifecycle/runtime-goal-coordinator.js';
-import { isGoalToolName } from '../lifecycle/runtime-goal-tools.js';
 import type { RuntimeMemoryCoordinator } from '../memory/runtime-memory-coordinator.js';
 import { externalizeToolImageAttachments } from './runtime-tool-image-assets.js';
 import { FILE_MUTATION_TOOL_NAMES, ToolApprovalStore, ToolOrchestrator } from './tool-orchestrator.js';
@@ -101,7 +100,7 @@ type RuntimeToolCallExecutorOptions = {
   toolHost?: ToolHost;
   toolResultStore?: ToolResultStore;
   collaborationCoordinator(): RuntimeCollaborationCoordinator;
-  goalCoordinator(): RuntimeGoalCoordinator;
+  goalCoordinator(): GoalControl;
   threadStore: Pick<ThreadStore, 'getThread'>;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
   publishMessage(threadId: string, turnId: string, message: RuntimeMessage): Promise<void>;
@@ -220,7 +219,7 @@ export class RuntimeToolCallExecutor {
       throwIfAborted(context.signal);
       parsedArguments = parseToolArguments(toolCall.arguments);
       if (
-        (isCollaborationToolName(toolCall.name) || isGoalToolName(toolCall.name))
+        (isCollaborationToolName(toolCall.name) || this.options.goalCoordinator().isToolName(toolCall.name))
         && (await this.options.threadStore.getThread(context.threadId))?.kind === 'side'
       ) {
         content = `Tool ${toolCall.name} is unavailable in a side conversation.`;
@@ -236,7 +235,7 @@ export class RuntimeToolCallExecutor {
         const execution = await this.runCollaborationToolCall(toolCall, parsedArguments, context);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }
-      if (isGoalToolName(toolCall.name)) {
+      if (this.options.goalCoordinator().isToolName(toolCall.name)) {
         const execution = await this.runGoalToolCall(toolCall, parsedArguments, context);
         return this.publishToolMessage(context.threadId, context.turnId, toolCall, execution.content, undefined, toolRouter);
       }

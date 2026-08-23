@@ -1,4 +1,8 @@
-import type { RuntimeEvent, RuntimeEventType } from '../events.js';
+import type {
+  CoreRuntimeEvent,
+  CoreRuntimeEventType,
+  StoredThreadEvent,
+} from '../events.js';
 
 export type RuntimeEventProjectionDisposition =
   | { action: 'project' }
@@ -34,8 +38,6 @@ export const RUNTIME_THREAD_EVENT_DISPOSITIONS = {
   'thread.deleted': IGNORE_THREAD_DELETION,
   'thread.metadata_updated': PROJECT,
   'thread.memory_mode_updated': PROJECT,
-  'thread.goal_updated': PROJECT,
-  'thread.goal_cleared': PROJECT,
   'thread.context_cleared': PROJECT,
   'thread.context_compacting': PROJECT,
   'thread.context_compacted': PROJECT,
@@ -77,7 +79,7 @@ export const RUNTIME_THREAD_EVENT_DISPOSITIONS = {
   'turn.cancelled': PROJECT,
   'runtime.warning': IGNORE_THREAD_WARNING,
   'runtime.error': PROJECT,
-} as const satisfies Record<RuntimeEventType, RuntimeEventProjectionDisposition>;
+} as const satisfies Record<CoreRuntimeEventType, RuntimeEventProjectionDisposition>;
 
 const IGNORE_SWE_THREAD_REFRESH = ignore(
   'The SWE protocol has no matching live notification; thread/read returns the current state.',
@@ -98,8 +100,6 @@ export const RUNTIME_SWE_EVENT_DISPOSITIONS = {
   'thread.deleted': PROJECT,
   'thread.metadata_updated': IGNORE_SWE_THREAD_REFRESH,
   'thread.memory_mode_updated': IGNORE_SWE_THREAD_REFRESH,
-  'thread.goal_updated': PROJECT,
-  'thread.goal_cleared': PROJECT,
   'thread.context_cleared': IGNORE_SWE_THREAD_REFRESH,
   'thread.context_compacting': PROJECT,
   'thread.context_compacted': PROJECT,
@@ -141,7 +141,7 @@ export const RUNTIME_SWE_EVENT_DISPOSITIONS = {
   'turn.cancelled': PROJECT,
   'runtime.warning': IGNORE_SWE_WARNING,
   'runtime.error': PROJECT,
-} as const satisfies Record<RuntimeEventType, RuntimeEventProjectionDisposition>;
+} as const satisfies Record<CoreRuntimeEventType, RuntimeEventProjectionDisposition>;
 
 const IGNORE_ACTIVITY_THREAD_STATE = ignore(
   'Thread state is rendered by its owning UI instead of being duplicated in the activity feed.',
@@ -168,8 +168,6 @@ export const RUNTIME_ACTIVITY_EVENT_DISPOSITIONS = {
   'thread.deleted': IGNORE_ACTIVITY_THREAD_STATE,
   'thread.metadata_updated': IGNORE_ACTIVITY_THREAD_STATE,
   'thread.memory_mode_updated': IGNORE_ACTIVITY_THREAD_STATE,
-  'thread.goal_updated': IGNORE_ACTIVITY_THREAD_STATE,
-  'thread.goal_cleared': IGNORE_ACTIVITY_THREAD_STATE,
   'thread.context_cleared': INCLUDE,
   'thread.context_compacting': INCLUDE,
   'thread.context_compacted': INCLUDE,
@@ -211,46 +209,51 @@ export const RUNTIME_ACTIVITY_EVENT_DISPOSITIONS = {
   'turn.cancelled': INCLUDE,
   'runtime.warning': INCLUDE,
   'runtime.error': INCLUDE,
-} as const satisfies Record<RuntimeEventType, RuntimeEventActivityDisposition>;
+} as const satisfies Record<CoreRuntimeEventType, RuntimeEventActivityDisposition>;
 
 type EventTypesWithAction<
-  TDispositions extends Record<RuntimeEventType, { action: string }>,
+  TDispositions extends Record<CoreRuntimeEventType, { action: string }>,
   TAction extends string,
 > = {
-  [TType in RuntimeEventType]: TDispositions[TType]['action'] extends TAction
+  [TType in CoreRuntimeEventType]: TDispositions[TType]['action'] extends TAction
     ? TType
     : never;
-}[RuntimeEventType];
+}[CoreRuntimeEventType];
 
 export type RuntimeThreadProjectionIgnoredEvent = Extract<
-  RuntimeEvent,
+  CoreRuntimeEvent,
   { type: EventTypesWithAction<typeof RUNTIME_THREAD_EVENT_DISPOSITIONS, 'ignore'> }
 >;
 
 export type RuntimeSweProjectionIgnoredEvent = Extract<
-  RuntimeEvent,
+  CoreRuntimeEvent,
   { type: EventTypesWithAction<typeof RUNTIME_SWE_EVENT_DISPOSITIONS, 'ignore'> }
 >;
 
 export type RuntimeActivityEvent = Extract<
-  RuntimeEvent,
+  CoreRuntimeEvent,
   { type: EventTypesWithAction<typeof RUNTIME_ACTIVITY_EVENT_DISPOSITIONS, 'include'> }
 >;
 
 export function isRuntimeThreadProjectionIgnoredEvent(
-  event: RuntimeEvent,
+  event: CoreRuntimeEvent,
 ): event is RuntimeThreadProjectionIgnoredEvent {
   return RUNTIME_THREAD_EVENT_DISPOSITIONS[event.type].action === 'ignore';
 }
 
+/** Classify an opaque stored record without naming any Feature-owned event. */
+export function isCoreRuntimeEvent(event: StoredThreadEvent): event is CoreRuntimeEvent {
+  return Object.hasOwn(RUNTIME_THREAD_EVENT_DISPOSITIONS, event.type);
+}
+
 export function isRuntimeSweProjectionIgnoredEvent(
-  event: RuntimeEvent,
+  event: CoreRuntimeEvent,
 ): event is RuntimeSweProjectionIgnoredEvent {
   return RUNTIME_SWE_EVENT_DISPOSITIONS[event.type].action === 'ignore';
 }
 
 export function isRuntimeActivityEvent(
-  event: RuntimeEvent,
+  event: CoreRuntimeEvent,
 ): event is RuntimeActivityEvent {
   return RUNTIME_ACTIVITY_EVENT_DISPOSITIONS[event.type].action === 'include';
 }

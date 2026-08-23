@@ -2,7 +2,7 @@ import {
   type MessageDeleteInput,
   type MessagePatch,
   type RuntimeMessagePageQuery,
-  type RuntimeEvent,
+  type PendingStoredThreadEvent,
   type RuntimeThreadMemoryMode,
 } from '@setsuna-desktop/contracts';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
@@ -10,6 +10,7 @@ import type { GeneratedImageStore } from '../ports/generated-image-store.js';
 import type {
   ThreadStore,
   ThreadStoreCreateInput,
+  ThreadEventPageQuery,
   ThreadStorePatch,
   ThreadStoreQuery,
 } from '../ports/thread-store.js';
@@ -90,12 +91,25 @@ export class EventCoordinatedThreadStore implements ThreadStore {
     return this.afterPendingEventsWithImageCleanup(threadId, () => this.inner.clearThreadMessages(threadId));
   }
 
-  appendEvent(threadId: string, event: Omit<RuntimeEvent, 'seq'>) {
+  appendEvent(threadId: string, event: PendingStoredThreadEvent) {
     return this.afterPendingEvents(threadId, () => this.inner.appendEvent(threadId, event));
+  }
+
+  appendEvents(threadId: string, events: readonly PendingStoredThreadEvent[]) {
+    return this.afterPendingEvents(threadId, async () => {
+      if (this.inner.appendEvents) return this.inner.appendEvents(threadId, events);
+      const saved = [];
+      for (const event of events) saved.push(await this.inner.appendEvent(threadId, event));
+      return saved;
+    });
   }
 
   listEvents(threadId: string, sinceSeq?: number) {
     return this.inner.listEvents(threadId, sinceSeq);
+  }
+
+  readEventPage(threadId: string, query: ThreadEventPageQuery) {
+    return this.inner.readEventPage(threadId, query);
   }
 
   replayEvents(threadId: string, sinceSeq?: number) {

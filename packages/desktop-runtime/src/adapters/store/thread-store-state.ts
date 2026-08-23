@@ -1,11 +1,10 @@
 import type {
-  RuntimeEvent,
+  StoredThreadEvent,
   RuntimeThread,
   RuntimeThreadMemoryMode,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
 import {
-  cloneRuntimeThreadGoal,
   normalizeLegacyAssistantPhases,
   normalizeRuntimeMessageProviderMetadata,
 } from '@setsuna-desktop/contracts';
@@ -57,7 +56,7 @@ export function projectRuntimeTurnActivity(
   };
 }
 
-export function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
+export function eventCanUseDelayedCheckpoint(event: StoredThreadEvent): boolean {
   return event.type === 'message.delta'
     || event.type === 'item.delta'
     || event.type === 'reasoning.summary_delta'
@@ -68,9 +67,6 @@ export function eventCanUseDelayedCheckpoint(event: RuntimeEvent): boolean {
 }
 
 export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
-  const goal = thread.goal ? cloneRuntimeThreadGoal(thread.goal) : undefined;
-  // 列表摘要不携带 Goal 的图片数据或执行选项，避免内联附件放大每次线程列表响应。
-  if (goal) delete goal.execution;
   const kind = normalizeThreadKind(thread.kind);
   return {
     id: thread.id,
@@ -85,7 +81,6 @@ export function toSummary(thread: RuntimeThread): RuntimeThreadSummary {
     archived: thread.archived,
     memoryMode: normalizeThreadMemoryMode(thread.memoryMode),
     gitInfo: thread.gitInfo ? { ...thread.gitInfo } : thread.gitInfo,
-    goal,
     messageCount: thread.messageCount,
     lastMessagePreview: thread.lastMessagePreview,
   };
@@ -100,13 +95,17 @@ export function normalizeThreadSnapshot(thread: RuntimeThread): { changed: boole
   const persistedKind = kind === 'side' ? kind : undefined;
   let changed = parentThreadId !== thread.parentThreadId
     || memoryMode !== thread.memoryMode
-    || persistedKind !== thread.kind;
+    || persistedKind !== thread.kind
+    || Object.prototype.hasOwnProperty.call(thread, 'goal');
   let normalized: RuntimeThread = changed ? {
     ...thread,
     kind: persistedKind,
     parentThreadId,
     memoryMode,
   } : thread;
+  // Old snapshots may embed Goal state. Keep the event history for the Goal
+  // legacy decoder, but never expose that stale second projection to Core consumers.
+  delete (normalized as RuntimeThread & { goal?: unknown }).goal;
   if (normalized.contextCompaction?.status === 'running') {
     // Model requests cannot survive a storage rebuild, so a persisted running compaction is stale.
     normalized = { ...normalized, contextCompaction: undefined };
@@ -216,7 +215,7 @@ export function normalizeThreadMemoryMode(mode: unknown): RuntimeThreadMemoryMod
 
 export function hydrateMessageCompletionTimesFromEvents(
   thread: RuntimeThread,
-  events: RuntimeEvent[],
+  events: StoredThreadEvent[],
 ): RuntimeThread {
   const completedAtByMessageId = new Map<string, string>();
   for (const event of events) {

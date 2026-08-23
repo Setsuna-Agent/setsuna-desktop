@@ -1383,3 +1383,13 @@
     transform: rotate(360deg);
   }
 }
+.chat-composer-status-fallback {
+  width: min(var(--chat-content-max-width), 100%);
+  min-height: 32px;
+  margin-bottom: -5px;
+  border: 1px solid var(--app-border);
+  border-radius: 16px;
+  color: var(--app-text-muted);
+  background: var(--desktop-agent-main-surface);
+  font-size: 12px;
+}

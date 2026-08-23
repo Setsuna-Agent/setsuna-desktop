@@ -4,7 +4,7 @@ import tsParser from '@typescript-eslint/parser';
 
 export default [
   {
-    ignores: ['dist/**', 'node_modules/**', 'packages/*/dist/**', 'release-artifacts/**', '*.timestamp-*.mjs'],
+    ignores: ['dist/**', 'node_modules/**', 'packages/**/dist/**', 'release-artifacts/**', '*.timestamp-*.mjs'],
   },
   js.configs.recommended,
   {

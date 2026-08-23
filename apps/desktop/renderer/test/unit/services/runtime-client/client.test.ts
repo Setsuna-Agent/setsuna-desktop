@@ -233,46 +233,10 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({ path: '/v1/attachments/attachment%20%2F%201', method: 'DELETE' });
   });
 
-  it('routes thread deletion, goals, and reviews through first-party REST', async () => {
-    const goal = {
-      version: 1 as const,
-      id: 'goal_1',
-      threadId: 'thread / 1',
-      objective: 'Ship it',
-      status: 'active' as const,
-      tokenBudget: null,
-      tokensUsed: 0,
-      timeUsedSeconds: 0,
-      createdAt: 1,
-      updatedAt: 1,
-    };
-    const activeThread = {
-      id: 'thread / 1',
-      title: 'Goal thread',
-      createdAt: '2026-08-10T00:00:00.000Z',
-      updatedAt: '2026-08-10T00:00:01.000Z',
-      archived: false,
-      messageCount: 0,
-      lastMessagePreview: '',
-      lastSeq: 1,
-      messages: [],
-      goal,
-    };
-    const clearedThread = {
-      ...activeThread,
-      updatedAt: '2026-08-10T00:00:02.000Z',
-      lastSeq: 2,
-      goal: undefined,
-    };
+  it('routes thread deletion and reviews through first-party REST', async () => {
     const request = installRuntimeBridge((input) => {
-      if (input.method === 'PUT' && input.path.endsWith('/goal')) {
-        return { goal, thread: activeThread };
-      }
       if (input.path.endsWith('/reviews')) {
         return { accepted: true, turnId: 'turn_review' };
-      }
-      if (input.path.endsWith('/goal')) {
-        return { cleared: true, thread: clearedThread };
       }
       return { ok: true };
     });
@@ -284,16 +248,6 @@ describe('desktop runtime client advanced thread methods', () => {
     };
 
     await client.deleteThread('thread / 1');
-    await expect(client.setThreadGoal('thread / 1', {
-      objective: 'Ship it',
-    })).resolves.toMatchObject({
-      goal: { objective: 'Ship it', tokenBudget: null },
-      thread: { id: 'thread / 1', lastSeq: 1 },
-    });
-    await expect(client.clearThreadGoal('thread / 1')).resolves.toMatchObject({
-      cleared: true,
-      thread: { id: 'thread / 1', lastSeq: 2, goal: undefined },
-    });
     await expect(client.startReview('thread / 1', reviewInput)).resolves.toEqual({
       accepted: true,
       turnId: 'turn_review',
@@ -302,15 +256,6 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       {
         path: '/v1/threads/thread%20%2F%201',
-        method: 'DELETE',
-      },
-      {
-        path: '/v1/threads/thread%20%2F%201/goal',
-        method: 'PUT',
-        body: { objective: 'Ship it' },
-      },
-      {
-        path: '/v1/threads/thread%20%2F%201/goal',
         method: 'DELETE',
       },
       {
@@ -451,32 +396,6 @@ describe('desktop runtime client advanced thread methods', () => {
       { path: '/v1/workspace-dependencies/diagnose', method: 'POST' },
       { path: '/v1/workspace-dependencies/repair', method: 'POST' },
     ]);
-  });
-
-  it('sends only the prompt when testing the configured image generation plugin', async () => {
-    const request = installRuntimeBridge(() => ({ images: [], durationMs: 12 }));
-    const client = createDesktopRuntimeClient();
-
-    await client.testImageGeneration({ prompt: 'a tiny moon' });
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/plugins/openai-image-generation/test',
-      method: 'POST',
-      body: { prompt: 'a tiny moon' },
-    });
-  });
-
-  it('sends only the prompt when testing the configured vision recognition plugin', async () => {
-    const request = installRuntimeBridge(() => ({ content: 'Image received.', durationMs: 8 }));
-    const client = createDesktopRuntimeClient();
-
-    await client.testVisionRecognition({ prompt: 'Describe the test image.' });
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/plugins/openai-vision-recognition/test',
-      method: 'POST',
-      body: { prompt: 'Describe the test image.' },
-    });
   });
 
   it('requests the workspace scoped to a conversation thread', async () => {

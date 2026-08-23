@@ -13,13 +13,13 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `desktop` | 平台、目录选择、profile、图片、workspace 文件、本地路径 | `ipc/desktop-ipc.ts` |
 | `links` | 打开受控外链 | `ipc/desktop-ipc.ts` |
 | `browser` | tab 注册、截图、favicon、设备模拟、新标签事件 | `ipc/browser-ipc.ts` |
-| `desktopReview` | review state、stage、unstage、discard | `ipc/review-ipc.ts` |
-| `terminal` | session open/write/read/resize/close、事件 | `ipc/terminal-ipc.ts` |
+| `desktopReview` | review state、stage、unstage、discard | `packages/features/review/{preload,main}` |
+| `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/{preload,main}` |
 | `workspaceApps` | 应用列表与打开 workspace/file | `ipc/workspace-ipc.ts` |
 | `updater` | 状态、检查、下载源、下载和打开 | `ipc/updater-ipc.ts` |
 | `windowControls` | minimize/maximize/close/scale 与状态事件 | `ipc/window-ipc.ts` |
 
-准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关领域 contract 定义。
+准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
 
 ## Runtime SSE 的细节
 
@@ -60,10 +60,10 @@ unsubscribe();
 
 ## 新增 API
 
-1. 在 contracts 扩展 `SetsunaDesktopBridge` 或领域类型。
+1. 在共享 contracts 或 Feature contracts 声明窄子对象。
 2. 在 main domain 模块实现能力。
 3. 在 main `src/ipc/` 注册固定 handler/event。
-4. 在 preload namespace 添加一行明确映射。
+4. 在 host preload namespace 添加明确映射，或由 Feature preload module 向 `PreloadBridgeBuilder` 贡献子对象。
 5. 在 renderer 增加 hook/helper。
 6. 测试 main 行为和 renderer 调用。
 
@@ -73,7 +73,7 @@ unsubscribe();
 
 ## 类型来源
 
-Renderer 的 `window.setsunaDesktop` 类型来自 contracts，不应在 renderer 另写全局声明副本。修改 preload 方法后如果类型检查没有同时影响 main/renderer，通常说明 contract 没有处于正确边界。
+Renderer 的 `window.setsunaDesktop` 类型来自 host contract 与已安装 Feature bridge contribution 的显式组合，不应另写重复方法签名；preload builder 会在 expose 前拒绝重复 key 和缺失实现。
 
 ## 验证
 

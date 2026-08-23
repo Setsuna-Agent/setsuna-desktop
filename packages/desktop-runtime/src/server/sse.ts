@@ -1,10 +1,11 @@
 import type {
-  RuntimeEvent,
   RuntimeEventResync,
+  StoredThreadEvent,
   SweNotification,
 } from '@setsuna-desktop/contracts';
 import { createSweNotificationMapper, filterSweNotificationsForClientCapabilities } from '@setsuna-desktop/contracts';
 import type { ServerResponse } from 'node:http';
+import { mapBuiltinFeatureEventToSweCompatibilityEvent } from '../composition/builtin-swe-feature-event-adapters.js';
 import { runtimeThreadResponse } from './runtime-thread-response.js';
 import type { RuntimeFactory } from './types.js';
 
@@ -35,7 +36,7 @@ export async function handleSse({
   response.flushHeaders?.();
 
   const sweMapEvent = format === 'swe' ? createSweNotificationMapper() : null;
-  const pending: RuntimeEvent[] = [];
+  const pending: StoredThreadEvent[] = [];
   let replaying = true;
   let pumping = false;
   let heartbeatBlocked = false;
@@ -46,10 +47,13 @@ export async function handleSse({
     closed = true;
     response.destroy(error);
   };
-  const writeEvent = async (event: RuntimeEvent) => {
+  const writeEvent = async (event: StoredThreadEvent) => {
     if (closed || !responseCanWrite(response)) return;
     if (format === 'swe' && sweMapEvent) {
-      const notifications = sweMapEvent(event);
+      const compatibilityEvent = event.type === 'feature.event'
+        ? mapBuiltinFeatureEventToSweCompatibilityEvent(event)
+        : event;
+      const notifications = compatibilityEvent ? sweMapEvent(compatibilityEvent) : [];
       if (event.seq > sinceSeq) {
         await writeSweSse(response, notifications, { experimentalApi });
       }
@@ -201,7 +205,7 @@ export function runtimeEventStreamExperimentalApi(value: string | null): boolean
   return value === 'true' || value === '1';
 }
 
-async function writeRuntimeSse(response: ServerResponse, event: RuntimeEvent): Promise<void> {
+async function writeRuntimeSse(response: ServerResponse, event: StoredThreadEvent): Promise<void> {
   if (!responseCanWrite(response)) return;
   return writeSseFrame(response, 'runtime-event', event);
 }

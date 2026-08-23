@@ -2,6 +2,10 @@ import type {
   DesktopWebDavSyncCategoryId,
   DesktopWebDavSyncSnapshotSummary,
 } from '@setsuna-desktop/contracts';
+import type {
+  FeatureCredentialBackup,
+  PortableFeatureSettingsDocument,
+} from '@setsuna-desktop/feature-core/settings';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
@@ -46,6 +50,8 @@ export async function materializeSnapshotForUpload(input: {
   dataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
   workRoot: string;
+  portableFeatureSettings?: readonly PortableFeatureSettingsDocument[];
+  featureCredentialBackups?: readonly FeatureCredentialBackup[];
   signal?: AbortSignal;
   onProgress?: (progress: WebDavTransferProgress) => void;
 }): Promise<LocalSnapshotSource[]> {
@@ -55,6 +61,8 @@ export async function materializeSnapshotForUpload(input: {
     categories: input.categories,
     stagingRoot: path.join(input.workRoot, 'local-snapshot'),
     signal: input.signal,
+    portableFeatureSettings: input.portableFeatureSettings,
+    featureCredentialBackups: input.featureCredentialBackups,
   });
 }
 
@@ -189,6 +197,8 @@ export async function createLocalInventory(input: {
   dataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
   workRoot: string;
+  portableFeatureSettings?: readonly PortableFeatureSettingsDocument[];
+  featureCredentialBackups?: readonly FeatureCredentialBackup[];
   signal?: AbortSignal;
   onProgress?: (progress: WebDavTransferProgress) => void;
 }): Promise<LocalSnapshotInventoryItem[]> {
@@ -198,6 +208,8 @@ export async function createLocalInventory(input: {
     categories: input.categories,
     stagingRoot: path.join(input.workRoot, 'local-snapshot'),
     signal: input.signal,
+    portableFeatureSettings: input.portableFeatureSettings,
+    featureCredentialBackups: input.featureCredentialBackups,
   });
   input.onProgress?.({ phase: 'inspecting', totalItems: sources.length, completedItems: 0 });
   return inventorySnapshotSources(sources, input.signal);

@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyChatComposerFocusRequest,
   ChatComposer,
-  goalActiveTurnStartedAt,
+  composerActiveTurn,
 } from '../../../../src/features/chat/ChatComposer.js';
 
 const composerHarness = vi.hoisted(() => ({
@@ -127,15 +127,16 @@ describe('ChatComposer view state characterization', () => {
     expect(consume).toHaveBeenCalledTimes(1);
   });
 
-  it('times a regular turn after it binds itself to the current Goal', () => {
+  it('exposes neutral active turn metadata to composer contributions', () => {
     const thread = {
-      messages: [{ turnId: 'turn-1', goalMode: { goal: { id: 'goal-1' } } }],
       turns: [{ id: 'turn-1', items: [], startedAt: '2026-08-10T00:00:00.000Z', taskKind: 'regular' }],
     } as unknown as RuntimeThread;
 
-    expect(goalActiveTurnStartedAt(thread, 'turn-1', 'goal-1'))
-      .toBe('2026-08-10T00:00:00.000Z');
-    expect(goalActiveTurnStartedAt(thread, 'turn-1', 'goal-2')).toBeUndefined();
+    expect(composerActiveTurn(thread, 'turn-1')).toEqual({
+      startedAt: '2026-08-10T00:00:00.000Z',
+      taskKind: 'regular',
+    });
+    expect(composerActiveTurn(thread, 'turn-2')).toBeUndefined();
   });
 
   beforeEach(() => {
@@ -379,7 +380,6 @@ function composerElement(
       onAccessModeChange={vi.fn()}
       onCancelActiveTurn={vi.fn()}
       onClearContext={vi.fn()}
-      onClearThreadGoal={vi.fn()}
       onCompactContext={vi.fn()}
       onDraftChange={vi.fn()}
       onSearchProjectEntries={vi.fn(async () => ({

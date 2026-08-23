@@ -308,6 +308,55 @@ describe('runtime host packaging paths', () => {
     );
   });
 
+  it('returns renderer cancellation without retrying or reporting a transport failure', async () => {
+    const fetchMock = vi.fn((
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ) => new Promise<Response>((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new Error('Expected a renderer request signal.'));
+        return;
+      }
+      const rejectCancellation = () => reject(
+        signal.reason ?? new Error('Runtime request was cancelled.'),
+      );
+      if (signal.aborted) {
+        rejectCancellation();
+        return;
+      }
+      signal.addEventListener('abort', rejectCancellation, { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const host = new RuntimeHost({
+      appRoot: '/tmp/setsuna',
+      dataDir: '/tmp/setsuna-data',
+      runtimeRequestRetryDelayMs: 0,
+    });
+
+    const request = host.request({
+      path: '/v1/features/goal/threads/thread_1/state',
+      requestId: 'request_1',
+      responseMode: 'feature-operation',
+    });
+    await waitFor(() => fetchMock.mock.calls.length === 1);
+
+    expect(host.cancelRequest('request_1')).toBe(true);
+    await expect(request).resolves.toEqual({
+      ok: false,
+      status: 499,
+      error: {
+        code: 'OPERATION_CANCELLED',
+        message: 'Feature operation was cancelled.',
+        retryable: false,
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(warning).not.toHaveBeenCalled();
+    expect(host.cancelRequest('request_1')).toBe(false);
+  });
+
   it('keeps local plugin path installation on the main-only runtime route', async () => {
     const bundlePath = path.resolve('/tmp/local-plugin');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
