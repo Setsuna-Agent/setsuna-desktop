@@ -81,7 +81,19 @@ export function parseJsonArrayFromText(value: string): unknown[] {
 }
 
 export function stripMarkdownFence(value: string): string {
-  return value.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let text = value;
+  if (text.startsWith('```')) {
+    let start = 3;
+    if (text.slice(start, start + 4).toLowerCase() === 'json') start += 4;
+    while (start < text.length && isWhitespace(text[start])) start += 1;
+    text = text.slice(start);
+  }
+  if (text.endsWith('```')) {
+    let end = text.length - 3;
+    while (end > 0 && isWhitespace(text[end - 1])) end -= 1;
+    text = text.slice(0, end);
+  }
+  return text;
 }
 
 export function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -172,6 +184,10 @@ function tryParseJsonArray(value: string): unknown[] | null {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isWhitespace(value: string | undefined): boolean {
+  return value !== undefined && value.trim() === '';
 }
 
 function reportedRuntimeUsageTokenCount(usage: RuntimeUsage): number | undefined {
