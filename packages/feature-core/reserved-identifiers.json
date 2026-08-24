@@ -8,7 +8,8 @@
     "memory",
     "desktop-review",
     "terminal",
-    "vision-recognition"
+    "vision-recognition",
+    "webdav-sync"
   ],
   "capabilities": [
     "browser.control-connection@1",
@@ -44,7 +45,10 @@
     "terminal.environment@1",
     "terminal.event-publisher@1",
     "vision-recognition.runtime-host@1",
-    "vision-recognition.service@1"
+    "vision-recognition.service@1",
+    "webdav-sync.lifecycle@1",
+    "webdav-sync.main-host@1",
+    "webdav-sync.renderer-host@1"
   ],
   "settingsDocuments": [
     "image-generation/connection",

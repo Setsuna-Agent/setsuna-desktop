@@ -13,7 +13,6 @@ import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { usageEnUS, usageZhCN } from './usageMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 import { windowsSandboxEnUS, windowsSandboxZhCN } from './windowsSandboxMessages.js';
-import { webDavSyncEnUS, webDavSyncZhCN } from './webDavSyncMessages.js';
 
 const zhCN = {
   'common.back': '返回',
@@ -532,7 +531,6 @@ const zhCN = {
   ...taskModelZhCN,
   ...networkProxyZhCN,
   ...projectZhCN,
-  ...webDavSyncZhCN,
   ...toolRunZhCN,
   ...usageZhCN,
 } as const;
@@ -1055,7 +1053,6 @@ const enUS = {
   ...taskModelEnUS,
   ...networkProxyEnUS,
   ...projectEnUS,
-  ...webDavSyncEnUS,
   ...toolRunEnUS,
   ...usageEnUS,
 } satisfies Record<MessageKey, string>;

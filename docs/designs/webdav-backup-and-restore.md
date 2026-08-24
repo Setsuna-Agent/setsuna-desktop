@@ -1,6 +1,6 @@
 # WebDAV 自动备份与手动还原
 
-状态：已在 `codex/webdav-sync` 实施
+状态：已实施，并迁移为内置 `webdav-sync` Feature
 
 基线：`master@38d575646`
 
@@ -18,7 +18,7 @@
 - 还原前必须生成新增、覆盖、删除和保留清单，用户确认后才执行。
 - 正常状态下服务器只保留最新一份完整备份；多台设备共用仓库时，以最新完成且可验证的备份为准，并显示来源设备。
 
-设置页继续使用“同步”页签，但产品文案使用“自动备份”“立即备份”“手动还原”，避免让用户误以为两台设备会自动合并修改。
+设置页继续在“模型与服务”分组使用“同步”入口，但入口和完整页面由 renderer Feature contribution 注册；产品文案使用“自动备份”“立即备份”“手动还原”，避免让用户误以为两台设备会自动合并修改。
 
 ## 目标与非目标
 
@@ -189,13 +189,16 @@ Restore plan 有 10 分钟有效期，并保存本地 inventory fingerprint。�
 
 | 层 | 职责 |
 | --- | --- |
-| `packages/contracts` | WebDAV config/state、category、snapshot summary、restore plan/diff 和 preload bridge contract。 |
-| `packages/desktop-runtime` | Main-only quiescence route，关闭 turn/thread mutation admission并 flush thread store。 |
-| Electron main | WebDAV config/credential vault、客户端、加密仓库、数据白名单、调度、restore plan、回滚日志和 relaunch。 |
-| Preload | 只暴露 get/configure/test/backup/list/inspect/restore/cancel/disconnect/subscribe 等窄方法。 |
-| Renderer | “同步”页签、连接表单、数据域选择、进度、当前备份和模态还原损失清单。 |
+| `packages/features/webdav-sync/contracts` | WebDAV config/state、category、snapshot summary、restore plan/diff、固定 IPC channel 和 preload bridge contract。 |
+| `packages/features/webdav-sync/main` | 配置、客户端、加密仓库、数据白名单、调度、restore plan、回滚日志、IPC 与 relaunch 编排。 |
+| `packages/features/webdav-sync/preload` | 固定 IPC 方法和 state-change subscription；不暴露 raw `ipcRenderer`。 |
+| `packages/features/webdav-sync/renderer` | “同步”设置 contribution、连接表单、数据域选择、进度、当前备份、还原损失清单、文案与作用域样式。 |
+| `packages/desktop-runtime` | 提供 quiescence gate 和 portable Feature settings/credentials projection；还原时由 main 停止并重启 Runtime。 |
+| Electron main 宿主 | 注入 credential vault、network proxy fetch、data-root layout/持久化事务、Runtime 生命周期和窗口；Runtime 启动前执行崩溃恢复，启动成功后确认提交。 |
 
 Renderer 不获得 WebDAV Authorization、密码、本地恢复密钥、Runtime token/port 或 staging 路径。
+
+Feature 通过四个显式进程入口参与组合，不再向共享 `SetsunaDesktopBridge`、`SettingsPage` 或宿主 i18n catalog 回填 WebDAV 分支。宿主只保留无法下沉的安全能力和启动顺序。
 
 ## 当前限制与后续
 

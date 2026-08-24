@@ -23,6 +23,7 @@ importers:
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
+      '@setsuna-desktop/feature-webdav-sync': workspace:*
       '@testing-library/react': ^16.3.2
       '@testing-library/user-event': ^14.6.3
       '@types/node': ^22.10.2
@@ -75,6 +76,7 @@ importers:
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
+      '@setsuna-desktop/feature-webdav-sync': link:packages/features/webdav-sync
       '@xterm/addon-fit': 0.11.0
       '@xterm/xterm': 6.0.0
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
@@ -264,6 +266,28 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
+
+  packages/features/webdav-sync:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-memory': workspace:*
+      '@setsuna-desktop/feature-vision-recognition': workspace:*
+      electron: '>=30'
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+      react-dom: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      '@setsuna-desktop/feature-image-generation': link:../image-generation
+      '@setsuna-desktop/feature-memory': link:../memory
+      '@setsuna-desktop/feature-vision-recognition': link:../vision-recognition
+      electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+      react-dom: 18.3.1_react@18.3.1
 
 packages:
 

@@ -20,6 +20,7 @@ import {
   type CollaborationRendererStateService,
 } from '@setsuna-desktop/feature-collaboration/contracts';
 import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/feature-image-generation/contracts';
+import { webDavSyncRendererHostCapability } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { builtinRendererFeatures } from './builtin-renderer-features.js';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
 import {
@@ -81,6 +82,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
           copy: (input: { assetId: string; name: string }) => desktop.copyImageToClipboard(input),
           reveal: (input: { assetId: string; name: string }) => desktop.revealImageInFolder(input),
         }),
+      ),
+      provideHostCapability(
+        declareCapabilityProvider(webDavSyncRendererHostCapability),
+        Object.freeze({ bridge: window.setsunaDesktop?.webdavSync ?? null }),
       ),
     ],
   });

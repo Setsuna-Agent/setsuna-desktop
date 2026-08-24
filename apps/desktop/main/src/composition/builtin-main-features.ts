@@ -33,6 +33,13 @@ import {
   terminalEventPublisherCapability,
 } from '@setsuna-desktop/feature-terminal/contracts';
 import { terminalMainFeature } from '@setsuna-desktop/feature-terminal/main';
+import {
+  webDavSyncLifecycleCapability,
+  webDavSyncMainFeature,
+  webDavSyncMainHostCapability,
+  type WebDavSyncLifecycle,
+  type WebDavSyncMainHost,
+} from '@setsuna-desktop/feature-webdav-sync/main';
 import type { BrowserWindow } from 'electron';
 import type { DesktopNetworkProxyService } from '../network-proxy/service.js';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
@@ -44,11 +51,13 @@ export const builtinMainFeatures = [
   mountMainFeature(browserMainFeature, { criticality: 'required' }),
   mountMainFeature(reviewMainFeature, { criticality: 'required' }),
   mountMainFeature(terminalMainFeature, { criticality: 'required' }),
+  mountMainFeature(webDavSyncMainFeature, { criticality: 'required' }),
 ] as const satisfies readonly MainFeatureMount[];
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;
   composition: MainFeatureComposition;
+  webDavSync: WebDavSyncLifecycle;
 }>;
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
@@ -58,6 +67,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   nativeBridge: DesktopNativeBridgeServer;
   networkProxyService: DesktopNetworkProxyService;
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
+  webDavSyncHost: WebDavSyncMainHost;
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await composeMainFeatures({
     mounts: builtinMainFeatures,
@@ -141,13 +151,19 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
           },
         }),
       ),
+      provideHostCapability(
+        declareCapabilityProvider(webDavSyncMainHostCapability),
+        input.webDavSyncHost,
+      ),
     ],
   });
   const dependencies = composition.resolveHostDependencies({
     browserControl: requiredCapability(browserControlConnectionCapability),
+    webDavSync: requiredCapability(webDavSyncLifecycleCapability),
   });
   return Object.freeze({
     browserControl: dependencies.browserControl,
     composition,
+    webDavSync: dependencies.webDavSync,
   });
 }

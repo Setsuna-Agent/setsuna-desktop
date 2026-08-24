@@ -7,6 +7,7 @@ import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
+import { webDavSyncRendererFeature } from '@setsuna-desktop/feature-webdav-sync/renderer';
 
 /** Renderer Features are intentionally explicit so bundling and ownership stay reviewable. */
 export const builtinRendererFeatures = [
@@ -17,4 +18,5 @@ export const builtinRendererFeatures = [
   mountRendererFeature(memoryRendererFeature, { criticality: 'optional' }),
   mountRendererFeature(terminalRendererFeature, { criticality: 'required' }),
   mountRendererFeature(visionRecognitionRendererFeature, { criticality: 'optional' }),
+  mountRendererFeature(webDavSyncRendererFeature, { criticality: 'optional' }),
 ] as const satisfies readonly RendererFeatureMount[];

@@ -26,6 +26,7 @@ export default defineConfig({
       '@setsuna-desktop/feature-review': resolve(rootDir, 'packages/features/review/src'),
       '@setsuna-desktop/feature-terminal': resolve(rootDir, 'packages/features/terminal/src'),
       '@setsuna-desktop/feature-vision-recognition': resolve(rootDir, 'packages/features/vision-recognition/src'),
+      '@setsuna-desktop/feature-webdav-sync': resolve(rootDir, 'packages/features/webdav-sync/src'),
     },
   },
   build: {

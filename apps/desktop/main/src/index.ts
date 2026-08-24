@@ -4,6 +4,12 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
+  finalizeCommittedWebDavRestore,
+  recoverInterruptedWebDavRestore,
+  rollbackCommittedWebDavRestore,
+  type WebDavSyncLifecycle,
+} from '@setsuna-desktop/feature-webdav-sync/main';
+import {
   app,
   BrowserWindow,
   Menu,
@@ -27,7 +33,6 @@ import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
 import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerUpdaterIpc } from './ipc/updater-ipc.js';
-import { registerWebDavSyncIpc } from './ipc/webdav-sync-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import { registerWindowsSandboxIpc } from './ipc/windows-sandbox-ipc.js';
 import { registerWorkspaceIpc } from './ipc/workspace-ipc.js';
@@ -61,18 +66,13 @@ import { DesktopBrowserProxyController } from './network-proxy/browser.js';
 import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from './network-proxy/service.js';
 import { DesktopNetworkProxyStore } from './network-proxy/store.js';
-import { WebDavSyncConfigStore } from './webdav-sync/config-store.js';
-import {
-  finalizeCommittedWebDavRestore,
-  recoverInterruptedWebDavRestore,
-  rollbackCommittedWebDavRestore,
-} from './webdav-sync/restore-journal.js';
-import { WebDavSyncService } from './webdav-sync/service.js';
 import { DesktopUpdater } from './updater/updater.js';
 import {
   activateBuiltinMainFeatures,
   type ActivatedBuiltinMainFeatures,
 } from './composition/builtin-main-features.js';
+import { builtinFeatureSettingsDocuments } from './composition/builtin-feature-settings.js';
+import { desktopWebDavSyncStorageHost } from './composition/webdav-sync-storage-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
@@ -101,7 +101,7 @@ let desktopUpdater: DesktopUpdater | null = null;
 let networkProxyService: DesktopNetworkProxyService | null = null;
 let browserProxyController: DesktopBrowserProxyController | null = null;
 let networkProxyFetch: DesktopNetworkProxyFetch | null = null;
-let webdavSyncService: WebDavSyncService | null = null;
+let webDavSyncLifecycle: WebDavSyncLifecycle | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
@@ -161,7 +161,11 @@ async function createWindow(): Promise<void> {
   }
 
   const dataLayout = desktopDataLayout(app.getPath('userData'));
-  const webDavRestoreRecovery = await recoverInterruptedWebDavRestore(dataLayout.root);
+  const webDavRestoreRecovery = await recoverInterruptedWebDavRestore(
+    dataLayout.root,
+    desktopWebDavSyncStorageHost,
+    builtinFeatureSettingsDocuments,
+  );
   const windowStateFilePath = dataLayout.windowStatePath;
   const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
     defaultHeight: mainWindowDefaultHeight,
@@ -265,6 +269,10 @@ async function createWindow(): Promise<void> {
   networkProxyService = currentNetworkProxyService;
   browserProxyController = currentBrowserProxyController;
   await currentBrowserProxyController.start();
+  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService, {
+    systemFetch: fetchWithElectronSystemProxy,
+  });
+  networkProxyFetch = currentNetworkProxyFetch;
 
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
@@ -291,15 +299,40 @@ async function createWindow(): Promise<void> {
       nativeBridge: currentDesktopNativeBridgeServer,
       networkProxyService: currentNetworkProxyService,
       requestRuntime: (input) => requestRuntime(input),
+      webDavSyncHost: Object.freeze({
+        appVersion: app.getVersion(),
+        configPath: dataLayout.webDavSyncConfigPath,
+        credentialVault,
+        dataRoot: dataLayout.root,
+        featureSettingsDocuments: builtinFeatureSettingsDocuments,
+        mainWindow: currentMainWindow,
+        requestRelaunch: requestDesktopRelaunch,
+        runtime: Object.freeze({
+          prepare: () => requireRuntimeHost().prepareWebDavSync(),
+          release: () => requireRuntimeHost().releaseWebDavSyncPreparation(),
+          stop: () => requireRuntimeHost().stop(),
+          start: () => requireRuntimeHost().start(),
+          exportPortableFeatureSettings: () => requireRuntimeHost().exportPortableFeatureSettings(),
+          exportFeatureCredentialBackups: () => requireRuntimeHost().exportFeatureCredentialBackups(),
+        }),
+        storage: desktopWebDavSyncStorageHost,
+        fetch: (
+          input: Parameters<typeof globalThis.fetch>[0],
+          init?: RequestInit,
+        ) => currentNetworkProxyFetch.fetch('sync', input, init),
+      }),
     });
   } catch (error) {
     await currentDesktopNativeBridgeServer.stop();
+    await currentNetworkProxyFetch.close();
     currentBrowserProxyController.stop();
     await currentNetworkProxyService.close();
     throw error;
   }
   const currentMainFeatureComposition = activatedMainFeatures.composition;
   mainFeatureComposition = currentMainFeatureComposition;
+  const currentWebDavSyncLifecycle = activatedMainFeatures.webDavSync;
+  webDavSyncLifecycle = currentWebDavSyncLifecycle;
 
   const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
@@ -324,49 +357,32 @@ async function createWindow(): Promise<void> {
       if (webDavRestoreRecovery !== 'awaiting-validation') throw error;
       console.error('[webdav-sync] restored data failed Runtime startup; rolling back', error);
       await currentRuntimeHost.stop().catch(() => undefined);
-      await rollbackCommittedWebDavRestore(dataLayout.root);
+      await rollbackCommittedWebDavRestore(
+        dataLayout.root,
+        desktopWebDavSyncStorageHost,
+        builtinFeatureSettingsDocuments,
+      );
       await currentRuntimeHost.start();
     }
     if (webDavRestoreRecovery === 'awaiting-validation') {
-      await finalizeCommittedWebDavRestore(dataLayout.root);
+      await finalizeCommittedWebDavRestore(
+        dataLayout.root,
+        desktopWebDavSyncStorageHost,
+        builtinFeatureSettingsDocuments,
+      );
     }
   } catch (error) {
     await currentMainFeatureComposition.dispose().catch(() => undefined);
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     await currentDesktopNativeBridgeServer.stop();
+    await currentNetworkProxyFetch.close();
     currentBrowserProxyController.stop();
     await currentNetworkProxyService.close();
     throw error;
   }
   registerRuntimeIpc(currentRuntimeHost);
   if (startupClosedBeforeHandoff) return;
-
-  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService, {
-    systemFetch: fetchWithElectronSystemProxy,
-  });
-  networkProxyFetch = currentNetworkProxyFetch;
-
-  const currentWebDavSyncService = new WebDavSyncService({
-    dataRoot: dataLayout.root,
-    appVersion: app.getVersion(),
-    configStore: new WebDavSyncConfigStore(dataLayout.webDavSyncConfigPath, credentialVault),
-    fetch: (input, init) => currentNetworkProxyFetch.fetch('sync', input, init),
-    runtime: {
-      prepare: () => currentRuntimeHost.prepareWebDavSync(),
-      release: () => currentRuntimeHost.releaseWebDavSyncPreparation(),
-      stop: () => currentRuntimeHost.stop(),
-      start: () => currentRuntimeHost.start(),
-      exportPortableFeatureSettings: () => currentRuntimeHost.exportPortableFeatureSettings(),
-      exportFeatureCredentialBackups: () => currentRuntimeHost.exportFeatureCredentialBackups(),
-    },
-    requestRelaunch: requestDesktopRelaunch,
-  });
-  webdavSyncService = currentWebDavSyncService;
-  await currentWebDavSyncService.initialize().catch((error) => {
-    // Sync is optional. Preserve access to the rest of the application when
-    // only its local metadata is damaged; the settings page will expose the error.
-    console.error('[webdav-sync] unable to initialize sync service', error);
-  });
+  await currentWebDavSyncLifecycle.start();
 
   desktopUpdater = new DesktopUpdater({
     currentVersion: app.getVersion(),
@@ -409,15 +425,9 @@ async function createWindow(): Promise<void> {
     currentRuntimeHost,
     currentMainWindow,
   );
-  const unregisterWebDavSyncState = registerWebDavSyncIpc(
-    currentWebDavSyncService,
-    currentMainWindow,
-  );
-
   currentMainWindow.on('closed', () => {
     unregisterNetworkProxyState();
-    unregisterWebDavSyncState();
-    currentWebDavSyncService.close();
+    currentWebDavSyncLifecycle.close();
     void shutdownDesktopServices();
     if (mainWindow === currentMainWindow) mainWindow = null;
   });
@@ -583,6 +593,11 @@ function fetchWithElectronSystemProxy(
   return session.defaultSession.fetch(input instanceof URL ? input.href : input, init);
 }
 
+function requireRuntimeHost(): RuntimeHost {
+  if (!runtimeHost) throw new Error('Desktop runtime is not available.');
+  return runtimeHost;
+}
+
 function shutdownDesktopServices(
   options: { requireRuntimeExit?: boolean } = {},
 ): Promise<void> {
@@ -595,11 +610,11 @@ function shutdownDesktopServices(
   const currentNetworkProxyService = networkProxyService;
   const currentBrowserProxyController = browserProxyController;
   const currentNetworkProxyFetch = networkProxyFetch;
-  const currentWebDavSyncService = webdavSyncService;
+  const currentWebDavSyncLifecycle = webDavSyncLifecycle;
 
   currentDesktopUpdater?.stop();
   currentBrowserProxyController?.stop();
-  currentWebDavSyncService?.close();
+  currentWebDavSyncLifecycle?.close();
 
   desktopServicesShutdownPromise = (async () => {
     let runtimeStopError: unknown;
@@ -633,7 +648,7 @@ function shutdownDesktopServices(
     if (networkProxyService === currentNetworkProxyService) networkProxyService = null;
     if (browserProxyController === currentBrowserProxyController) browserProxyController = null;
     if (networkProxyFetch === currentNetworkProxyFetch) networkProxyFetch = null;
-    if (webdavSyncService === currentWebDavSyncService) webdavSyncService = null;
+    if (webDavSyncLifecycle === currentWebDavSyncLifecycle) webDavSyncLifecycle = null;
     if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();
   return desktopServicesShutdownPromise;

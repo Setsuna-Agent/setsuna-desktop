@@ -118,6 +118,7 @@ export type {
   SettingsToggleProps,
   SettingsViewContribution,
   SettingsViewHostProps,
+  SettingsViewIconProps,
   SettingsViewLocation,
   SettingsViewRegistry,
   SettingsViewUi,
