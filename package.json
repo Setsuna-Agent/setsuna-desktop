@@ -59,6 +59,7 @@
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
+    "@setsuna-desktop/feature-network-proxy": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",
     "@setsuna-desktop/feature-updater": "workspace:*",

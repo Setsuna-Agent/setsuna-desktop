@@ -1,7 +1,7 @@
 import { createServer, request as httpRequest, type Server } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SandboxEgressGateway } from '../../../src/network-proxy/sandbox-egress-gateway.js';
-import { assertSandboxEgressHostname } from '../../../src/network-proxy/sandbox-egress-policy.js';
+import { SandboxEgressGateway } from '../../src/main/sandbox-egress-gateway.js';
+import { assertSandboxEgressHostname } from '../../src/main/sandbox-egress-policy.js';
 
 const gateways: SandboxEgressGateway[] = [];
 const servers: Server[] = [];

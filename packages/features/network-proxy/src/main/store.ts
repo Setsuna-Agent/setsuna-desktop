@@ -12,8 +12,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import type { CredentialVault } from '../security/credential-vault.js';
-import { writeJsonAtomically } from '../data-root/atomic-json.js';
+import type { NetworkProxyCredentialVault, NetworkProxyJsonWriter } from './capabilities.js';
 
 const STORE_VERSION = 1;
 const MAX_PROXY_NAME_CHARS = 80;
@@ -38,7 +37,7 @@ type StoredNetworkProxyConfig = {
 };
 
 type DesktopNetworkProxyStoreOptions = {
-  writeConfig?: typeof writeJsonAtomically;
+  writeConfig: NetworkProxyJsonWriter;
 };
 
 export type ResolvedUpstreamProxy = {
@@ -57,8 +56,8 @@ export class DesktopNetworkProxyStore {
 
   constructor(
     readonly configPath: string,
-    private readonly credentialVault: CredentialVault,
-    private readonly options: DesktopNetworkProxyStoreOptions = {},
+    private readonly credentialVault: NetworkProxyCredentialVault,
+    private readonly options: DesktopNetworkProxyStoreOptions,
   ) {}
 
   async getState(): Promise<DesktopNetworkProxyState> {
@@ -235,7 +234,7 @@ export class DesktopNetworkProxyStore {
   }
 
   private async persist(config: StoredNetworkProxyConfig): Promise<void> {
-    await (this.options.writeConfig ?? writeJsonAtomically)(this.configPath, config);
+    await this.options.writeConfig(this.configPath, config);
     this.config = config;
   }
 

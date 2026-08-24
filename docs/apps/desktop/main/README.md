@@ -51,9 +51,9 @@ Windows 任务栏和系统托盘使用无透明外边距的 `assets/build/icon-w
 按依赖顺序启动：
 
 1. Desktop 环境与 bundled ripgrep。
-2. `DesktopNativeBridgeServer` / credential vault 与网络代理。
-3. Main Feature composition；Browser Feature 启动 controller 和独立 control server，Terminal、Updater、WebDAV 等 Feature 注册服务与 IPC。
-4. `RuntimeHost`，注入 Browser Feature 与 native bridge 的地址/token。
+2. Credential vault 与 `DesktopNativeBridgeServer` 容器。
+3. Main Feature composition；Network Proxy Feature 启动代理服务与浏览器路由，Browser Feature 启动 controller 和独立 control server，Terminal、Updater、WebDAV 等 Feature 注册服务与 IPC。
+4. 启动 native bridge，再创建 `RuntimeHost`，注入 Browser Feature 与 native bridge 的地址/token。
 5. Runtime 成功打开数据后确认待验证的 WebDAV 还原，并启动自动备份调度。
 6. 初始化 Updater 的持久下载源和其余宿主 IPC；renderer 首帧后才启动自动检查。
 

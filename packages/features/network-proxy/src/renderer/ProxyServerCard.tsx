@@ -1,13 +1,14 @@
 import type { DesktopNetworkProxyServerState } from '@setsuna-desktop/contracts';
+import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
 import { Popconfirm } from 'antd';
 import { Pencil, Server, Trash2 } from 'lucide-react';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { IconButton } from '../../../shared/ui/primitives.js';
 
 type ProxyServerCardProps = {
   disabled: boolean;
   referenced: boolean;
   server: DesktopNetworkProxyServerState;
+  translate: RendererTranslate;
+  ui: SettingsViewUi;
   onDelete: () => Promise<void>;
   onEdit: () => void;
 };
@@ -16,10 +17,12 @@ export function ProxyServerCard({
   disabled,
   referenced,
   server,
+  translate,
+  ui,
   onDelete,
   onEdit,
 }: ProxyServerCardProps) {
-  const { t } = useI18n();
+  const { IconButton } = ui;
   const credentialsConfigured = Boolean(server.username || server.passwordSet);
   const protocol = proxyProtocol(server.url);
 
@@ -36,36 +39,36 @@ export function ProxyServerCard({
 
       <div className="settings-network-proxy__server-card-meta">
         <span>{protocol}</span>
-        <span>{t(credentialsConfigured
-          ? 'settings.proxy.credentialsConfigured'
-          : 'settings.proxy.noCredentials')}</span>
+        <span>{translate(credentialsConfigured
+          ? 'feature.networkProxy.settings.credentialsConfigured'
+          : 'feature.networkProxy.settings.noCredentials')}</span>
         {referenced ? (
-          <span className="is-referenced">{t('settings.proxy.inUse')}</span>
+          <span className="is-referenced">{translate('feature.networkProxy.settings.inUse')}</span>
         ) : null}
       </div>
 
       <div className="settings-network-proxy__server-card-actions">
         <IconButton
           className="settings-network-proxy__server-card-edit"
-          label={t('settings.proxy.editServer')}
+          label={translate('feature.networkProxy.settings.editServer')}
           disabled={disabled}
           onClick={onEdit}
         >
           <Pencil size={13} />
         </IconButton>
         <Popconfirm
-          title={t('settings.proxy.deleteTitle', { name: server.name })}
+          title={translate('feature.networkProxy.settings.deleteTitle', { name: server.name })}
           description={referenced
-            ? t('settings.proxy.deleteReferenced')
-            : t('settings.proxy.deleteDescription')}
-          okText={t('common.delete')}
-          cancelText={t('common.cancel')}
+            ? translate('feature.networkProxy.settings.deleteReferenced')
+            : translate('feature.networkProxy.settings.deleteDescription')}
+          okText={translate('feature.networkProxy.common.delete')}
+          cancelText={translate('feature.networkProxy.common.cancel')}
           okButtonProps={{ danger: true }}
           onConfirm={onDelete}
         >
           <IconButton
             className="settings-network-proxy__server-card-delete"
-            label={t('settings.proxy.deleteServer')}
+            label={translate('feature.networkProxy.settings.deleteServer')}
             disabled={disabled}
           >
             <Trash2 size={13} />

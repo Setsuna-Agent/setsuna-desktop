@@ -18,6 +18,13 @@ import {
   browserMainHostCapability,
 } from '@setsuna-desktop/feature-browser/main';
 import {
+  networkProxyMainFeature,
+  networkProxyMainHostCapability,
+  networkProxyMainServiceCapability,
+  type NetworkProxyMainHost,
+  type NetworkProxyMainService,
+} from '@setsuna-desktop/feature-network-proxy/main';
+import {
   reviewCommitMessageCapability,
   reviewFilePreviewCapability,
   reviewRendererSenderCapability,
@@ -46,7 +53,6 @@ import {
   type WebDavSyncMainHost,
 } from '@setsuna-desktop/feature-webdav-sync/main';
 import type { BrowserWindow } from 'electron';
-import type { DesktopNetworkProxyService } from '../network-proxy/service.js';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
@@ -54,6 +60,7 @@ import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 const mainFeatures = defineMainFeatureHost({
   required: [
     browserMainFeature,
+    networkProxyMainFeature,
     reviewMainFeature,
     terminalMainFeature,
     updaterMainFeature,
@@ -65,6 +72,7 @@ const mainFeatures = defineMainFeatureHost({
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;
   composition: MainFeatureComposition;
+  networkProxy: NetworkProxyMainService;
   updater: UpdaterLifecycle;
   webDavSync: WebDavSyncLifecycle;
 }>;
@@ -74,7 +82,8 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   interfaceLanguage(): RuntimeInterfaceLanguage;
   mainWindow: BrowserWindow;
   nativeBridge: DesktopNativeBridgeServer;
-  networkProxyService: DesktopNetworkProxyService;
+  networkProxy(): NetworkProxyMainService;
+  networkProxyHost: NetworkProxyMainHost;
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
   updaterHost: UpdaterMainHost;
   webDavSyncHost: WebDavSyncMainHost;
@@ -88,6 +97,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
           interfaceLanguage: input.interfaceLanguage,
           mainWindow: input.mainWindow,
         }),
+      ),
+      provideHostCapability(
+        networkProxyMainHostCapability,
+        input.networkProxyHost,
       ),
       provideHostCapability(
         reviewCommitMessageCapability,
@@ -146,7 +159,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         Object.freeze({
           resolve: async () => Object.freeze({
             PATH: desktopShellPath(process.env.PATH),
-            ...await input.networkProxyService.environmentFor('terminal'),
+            ...await input.networkProxy().environmentFor('terminal'),
           }),
         }),
       ),
@@ -173,12 +186,14 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   return completeFeatureHostActivation(composition, (host) => {
     const dependencies = host.composition.resolveHostDependencies({
       browserControl: requiredCapability(browserControlConnectionCapability),
+      networkProxy: requiredCapability(networkProxyMainServiceCapability),
       updater: requiredCapability(updaterLifecycleCapability),
       webDavSync: requiredCapability(webDavSyncLifecycleCapability),
     });
     return Object.freeze({
       browserControl: dependencies.browserControl,
       composition: host.composition,
+      networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,
       webDavSync: dependencies.webDavSync,
     });

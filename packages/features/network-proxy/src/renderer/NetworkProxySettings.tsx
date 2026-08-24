@@ -4,42 +4,42 @@ import type {
   DesktopNetworkProxyServerInput,
   DesktopNetworkProxyServerState,
 } from '@setsuna-desktop/contracts';
+import type {
+  RendererTranslate,
+  SettingsViewUi,
+} from '@setsuna-desktop/feature-core/renderer';
 import { Plus, Server } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { DesktopNetworkProxyStateView } from '../../../app/controller/useDesktopNetworkProxy.js';
-import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { Button, EmptyState, SelectField } from '../../../shared/ui/primitives.js';
+import type { NetworkProxyRendererView } from './context.js';
 import { ProxyServerCard } from './ProxyServerCard.js';
 import { ProxyServerDialog } from './ProxyServerDialog.js';
 
 const scopeRows: Array<{ scope: DesktopNetworkProxyScope; labelKey: ScopeLabelKey; detailKey: ScopeDetailKey }> = [
-  { scope: 'browser', labelKey: 'settings.proxy.scope.browser', detailKey: 'settings.proxy.scope.browserDetail' },
-  { scope: 'terminal', labelKey: 'settings.proxy.scope.terminal', detailKey: 'settings.proxy.scope.terminalDetail' },
-  { scope: 'updater', labelKey: 'settings.proxy.scope.updater', detailKey: 'settings.proxy.scope.updaterDetail' },
-  { scope: 'runtime', labelKey: 'settings.proxy.scope.runtime', detailKey: 'settings.proxy.scope.runtimeDetail' },
-  { scope: 'sync', labelKey: 'settings.proxy.scope.sync', detailKey: 'settings.proxy.scope.syncDetail' },
+  { scope: 'browser', labelKey: 'feature.networkProxy.settings.scope.browser', detailKey: 'feature.networkProxy.settings.scope.browserDetail' },
+  { scope: 'terminal', labelKey: 'feature.networkProxy.settings.scope.terminal', detailKey: 'feature.networkProxy.settings.scope.terminalDetail' },
+  { scope: 'updater', labelKey: 'feature.networkProxy.settings.scope.updater', detailKey: 'feature.networkProxy.settings.scope.updaterDetail' },
+  { scope: 'runtime', labelKey: 'feature.networkProxy.settings.scope.runtime', detailKey: 'feature.networkProxy.settings.scope.runtimeDetail' },
+  { scope: 'sync', labelKey: 'feature.networkProxy.settings.scope.sync', detailKey: 'feature.networkProxy.settings.scope.syncDetail' },
 ];
 
-type ScopeLabelKey =
-  | 'settings.proxy.scope.browser'
-  | 'settings.proxy.scope.terminal'
-  | 'settings.proxy.scope.updater'
-  | 'settings.proxy.scope.runtime'
-  | 'settings.proxy.scope.sync';
-type ScopeDetailKey =
-  | 'settings.proxy.scope.browserDetail'
-  | 'settings.proxy.scope.terminalDetail'
-  | 'settings.proxy.scope.updaterDetail'
-  | 'settings.proxy.scope.runtimeDetail'
-  | 'settings.proxy.scope.syncDetail';
+type ScopeLabelKey = `feature.networkProxy.settings.scope.${DesktopNetworkProxyScope}`;
+type ScopeDetailKey = `feature.networkProxy.settings.scope.${DesktopNetworkProxyScope}Detail`;
 
 type ProxyEditorTarget =
   | { kind: 'create' }
   | { kind: 'edit'; serverId: string }
   | null;
 
-export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStateView }) {
-  const { t } = useI18n();
+export function NetworkProxySettings({
+  proxy,
+  translate,
+  ui,
+}: Readonly<{
+  proxy: NetworkProxyRendererView;
+  translate: RendererTranslate;
+  ui: SettingsViewUi;
+}>) {
+  const { Button, EmptyState } = ui;
   const [editorTarget, setEditorTarget] = useState<ProxyEditorTarget>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const state = proxy.state;
@@ -50,9 +50,14 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
     return new Set(routes.flatMap((route) => route.mode === 'proxy' ? [route.proxyServerId] : []));
   }, [state]);
 
-  if (proxy.loading) return <EmptyState title={t('common.loading')} />;
+  if (proxy.loading) return <EmptyState title={translate('feature.networkProxy.common.loading')} />;
   if (!state) {
-    return <EmptyState title={t('settings.proxy.unavailable')} body={proxy.error ?? undefined} />;
+    return (
+      <EmptyState
+        title={translate('feature.networkProxy.settings.unavailable')}
+        body={proxy.error ?? undefined}
+      />
+    );
   }
 
   const editingServer = editorTarget?.kind === 'edit'
@@ -99,18 +104,20 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
       <section className="settings-network-proxy__routing settings-form-section">
         <header className="settings-network-proxy__section-head">
           <div>
-            <strong>{t('settings.proxy.routingTitle')}</strong>
-            <span>{t('settings.proxy.routingDescription')}</span>
+            <strong>{translate('feature.networkProxy.settings.routingTitle')}</strong>
+            <span>{translate('feature.networkProxy.settings.routingDescription')}</span>
           </div>
         </header>
         <div className="settings-network-proxy__route-list">
           <ProxyRouteRow
             allowInherit={false}
             disabled={proxy.busy}
-            detail={t('settings.proxy.globalDetail')}
-            label={t('settings.proxy.global')}
+            detail={translate('feature.networkProxy.settings.globalDetail')}
+            label={translate('feature.networkProxy.settings.global')}
             route={state.routing.global}
             servers={state.servers}
+            translate={translate}
+            ui={ui}
             onChange={(value) => void updateRoute('global', value)}
           />
           {scopeRows.map((row) => (
@@ -118,10 +125,12 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
               key={row.scope}
               allowInherit
               disabled={proxy.busy}
-              detail={t(row.detailKey)}
-              label={t(row.labelKey)}
+              detail={translate(row.detailKey)}
+              label={translate(row.labelKey)}
               route={state.routing.scopes[row.scope]}
               servers={state.servers}
+              translate={translate}
+              ui={ui}
               onChange={(value) => void updateRoute(row.scope, value)}
             />
           ))}
@@ -131,11 +140,11 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
       <section className="settings-network-proxy__servers settings-form-section">
         <header className="settings-network-proxy__section-head">
           <div>
-            <strong>{t('settings.proxy.serversTitle')}</strong>
-            <span>{t('settings.proxy.serversDescription')}</span>
+            <strong>{translate('feature.networkProxy.settings.serversTitle')}</strong>
+            <span>{translate('feature.networkProxy.settings.serversDescription')}</span>
           </div>
           <Button icon={<Plus size={13} />} disabled={proxy.busy} onClick={openCreateDialog}>
-            {t('settings.proxy.addServer')}
+            {translate('feature.networkProxy.settings.addServer')}
           </Button>
         </header>
 
@@ -147,6 +156,8 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
                 disabled={proxy.busy}
                 referenced={referencedServerIds.has(server.id)}
                 server={server}
+                translate={translate}
+                ui={ui}
                 onDelete={() => deleteServer(server)}
                 onEdit={() => {
                   setActionError(null);
@@ -158,8 +169,8 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
         ) : (
           <div className="settings-network-proxy__server-empty">
             <span aria-hidden="true"><Server size={18} /></span>
-            <strong>{t('settings.proxy.noServers')}</strong>
-            <small>{t('settings.proxy.noServersDescription')}</small>
+            <strong>{translate('feature.networkProxy.settings.noServers')}</strong>
+            <small>{translate('feature.networkProxy.settings.noServersDescription')}</small>
           </div>
         )}
 
@@ -167,13 +178,17 @@ export function NetworkProxySettings({ proxy }: { proxy: DesktopNetworkProxyStat
           <div className="settings-network-proxy__error" role="alert">{actionError ?? proxy.error}</div>
         ) : null}
       </section>
-      <p className="settings-network-proxy__footnote">{t('settings.proxy.applyNote')}</p>
+      <p className="settings-network-proxy__footnote">
+        {translate('feature.networkProxy.settings.applyNote')}
+      </p>
 
       {editorOpen ? (
         <ProxyServerDialog
           key={editingServer?.id ?? 'new'}
           busy={proxy.busy}
           server={editingServer}
+          translate={translate}
+          ui={ui}
           onClose={() => setEditorTarget(null)}
           onSave={saveServer}
         />
@@ -189,6 +204,8 @@ function ProxyRouteRow({
   label,
   route,
   servers,
+  translate,
+  ui,
   onChange,
 }: {
   allowInherit: boolean;
@@ -197,9 +214,11 @@ function ProxyRouteRow({
   label: string;
   route: DesktopNetworkProxyRoute;
   servers: DesktopNetworkProxyServerState[];
+  translate: RendererTranslate;
+  ui: SettingsViewUi;
   onChange: (value: string) => void;
 }) {
-  const { t } = useI18n();
+  const { SelectField } = ui;
   return (
     <div className="settings-network-proxy__route-row">
       <span>
@@ -207,9 +226,11 @@ function ProxyRouteRow({
         <small>{detail}</small>
       </span>
       <SelectField disabled={disabled} value={routeValue(route)} onValueChange={onChange}>
-        {allowInherit ? <option value="inherit">{t('settings.proxy.route.inherit')}</option> : null}
-        <option value="system">{t('settings.proxy.route.system')}</option>
-        <option value="direct">{t('settings.proxy.route.direct')}</option>
+        {allowInherit ? (
+          <option value="inherit">{translate('feature.networkProxy.settings.route.inherit')}</option>
+        ) : null}
+        <option value="system">{translate('feature.networkProxy.settings.route.system')}</option>
+        <option value="direct">{translate('feature.networkProxy.settings.route.direct')}</option>
         {servers.map((server) => (
           <option key={server.id} value={`proxy:${server.id}`}>{server.name}</option>
         ))}

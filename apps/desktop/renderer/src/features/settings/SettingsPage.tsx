@@ -16,14 +16,13 @@ import {
   HardDrive,
   Info,
   Keyboard,
-  Network,
   Puzzle,
   SlidersHorizontal,
   Sparkles,
   Wrench,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { DesktopNetworkProxyStateView } from '../../app/controller/useDesktopNetworkProxy.js';
+import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
@@ -46,7 +45,6 @@ import type {
   SettingsSectionId,
 } from './settings-types.js';
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
-import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
 import { SettingsPageHeading } from './SettingsPageHeading.js';
 import { SettingsSectionExtensionOutlet } from './SettingsSectionExtensionOutlet.js';
@@ -57,6 +55,7 @@ type SettingsSidebarSection = {
   id: SettingsSectionId;
   labelKey: MessageKey;
   icon: ReactNode;
+  order: number;
 };
 
 type SettingsSidebarGroup = {
@@ -70,28 +69,27 @@ const settingsSectionGroups = [
     id: 'preferences',
     labelKey: 'settings.group.preferences',
     sections: [
-      { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} /> },
-      { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} /> },
-      { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} /> },
+      { id: 'general', labelKey: 'settings.section.general', icon: <SlidersHorizontal size={14} />, order: 100 },
+      { id: 'shortcuts', labelKey: 'settings.section.shortcuts', icon: <Keyboard size={14} />, order: 200 },
+      { id: 'personalization', labelKey: 'settings.section.personalization', icon: <Sparkles size={14} />, order: 300 },
     ],
   },
   {
     id: 'models-and-services',
     labelKey: 'settings.group.modelsAndServices',
     sections: [
-      { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
-      { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
-      { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
-      { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
+      { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} />, order: 100 },
+      { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} />, order: 200 },
+      { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} />, order: 300 },
     ],
   },
   {
     id: 'data-and-system',
     labelKey: 'settings.group.dataAndSystem',
     sections: [
-      { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} /> },
-      { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} /> },
-      { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} /> },
+      { id: 'archives', labelKey: 'settings.section.archives', icon: <Archive size={14} />, order: 100 },
+      { id: 'runtime', labelKey: 'settings.section.runtime', icon: <Wrench size={14} />, order: 200 },
+      { id: 'about', labelKey: 'settings.section.about', icon: <Info size={14} />, order: 300 },
     ],
   },
 ] satisfies readonly SettingsSidebarGroup[];
@@ -101,7 +99,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
   shortcuts: 'settings.section.shortcuts',
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
-  networkProxy: 'settings.section.networkProxy',
   taskModels: 'settings.section.taskModels',
   usage: 'settings.section.usage',
   archives: 'settings.section.archives',
@@ -112,7 +109,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
 const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, MessageKey>> = {
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
-  networkProxy: 'settings.section.networkProxyDescription',
   taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
 };
@@ -141,7 +137,7 @@ export function SettingsPage({
   initialSection?: SettingsSectionId;
   skillExtraRoots: string[];
   usage: RuntimeUsageResponse | null;
-  networkProxy: DesktopNetworkProxyStateView;
+  networkProxy: NetworkProxyFeatureView;
   onBack: () => void;
   onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
   onSaveProviders: (
@@ -199,8 +195,6 @@ export function SettingsPage({
         usage={usage}
         onQueryUsage={onQueryUsage}
       />
-    ) : activeSection === 'networkProxy' ? (
-      <NetworkProxySettings proxy={networkProxy} />
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
@@ -325,25 +319,26 @@ export function SettingsSidebar({
               <div id={titleId} className="chat-user-settings__tab-group-title">
                 {t(group.labelKey)}
               </div>
-              {group.sections.map((section) => (
-                <button
-                  key={section.id}
-                  className={activeSection === section.id ? 'is-active' : ''}
-                  type="button"
-                  onClick={() => onSelectSection(section.id)}
-                >
-                  {section.icon}
-                  <span>{t(section.labelKey)}</span>
-                </button>
-              ))}
-              {(byGroup.get(group.id) ?? []).map((section) => (
-                <SettingsFeatureSectionButton
-                  key={section.sectionId}
-                  active={activeSection === section.sectionId}
-                  section={section}
-                  translate={t}
-                  onSelect={() => onSelectSection(section.sectionId)}
-                />
+              {mergeSettingsGroupSections(group.sections, byGroup.get(group.id) ?? []).map((item) => (
+                item.kind === 'core' ? (
+                  <button
+                    key={item.section.id}
+                    className={activeSection === item.section.id ? 'is-active' : ''}
+                    type="button"
+                    onClick={() => onSelectSection(item.section.id)}
+                  >
+                    {item.section.icon}
+                    <span>{t(item.section.labelKey)}</span>
+                  </button>
+                ) : (
+                  <SettingsFeatureSectionButton
+                    key={item.section.sectionId}
+                    active={activeSection === item.section.sectionId}
+                    section={item.section}
+                    translate={t}
+                    onSelect={() => onSelectSection(item.section.sectionId)}
+                  />
+                )
               ))}
             </div>
           );
@@ -408,6 +403,16 @@ function partitionFeatureSections(featureSections: readonly RegisteredSettingsVi
     byGroup.set(groupId, group);
   }
   return { byGroup, ungrouped };
+}
+
+function mergeSettingsGroupSections(
+  coreSections: readonly SettingsSidebarSection[],
+  featureSections: readonly RegisteredSettingsView[],
+) {
+  return [
+    ...coreSections.map((section) => ({ kind: 'core' as const, order: section.order, section })),
+    ...featureSections.map((section) => ({ kind: 'feature' as const, order: section.order, section })),
+  ].sort((left, right) => left.order - right.order);
 }
 
 function translateFeatureTitle(translate: ReturnType<typeof useI18n>['t'], key: string): string {

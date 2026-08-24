@@ -5,7 +5,6 @@ export type CoreSettingsSectionId =
   | 'shortcuts'
   | 'personalization'
   | 'localLlm'
-  | 'networkProxy'
   | 'taskModels'
   | 'usage'
   | 'archives'

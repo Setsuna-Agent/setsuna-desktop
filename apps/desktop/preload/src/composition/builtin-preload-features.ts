@@ -4,6 +4,8 @@ import {
 } from '@setsuna-desktop/feature-core/preload';
 import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-browser/contracts';
 import { browserPreloadFeature } from '@setsuna-desktop/feature-browser/preload';
+import type { NetworkProxyPreloadBridgeContribution } from '@setsuna-desktop/feature-network-proxy/contracts';
+import { networkProxyPreloadFeature } from '@setsuna-desktop/feature-network-proxy/preload';
 import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-review/contracts';
 import { reviewPreloadFeature } from '@setsuna-desktop/feature-review/preload';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
@@ -15,6 +17,7 @@ import { webDavSyncPreloadFeature } from '@setsuna-desktop/feature-webdav-sync/p
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & BrowserPreloadBridgeContribution
+  & NetworkProxyPreloadBridgeContribution
   & ReviewPreloadBridgeContribution
   & TerminalPreloadBridgeContribution
   & UpdaterPreloadBridgeContribution
@@ -41,6 +44,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
   bridgeKeys: desktopPreloadBridgeKeys,
   features: [
     browserPreloadFeature,
+    networkProxyPreloadFeature,
     reviewPreloadFeature,
     terminalPreloadFeature,
     updaterPreloadFeature,

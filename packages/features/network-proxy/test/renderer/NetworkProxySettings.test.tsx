@@ -1,9 +1,10 @@
 import type { DesktopNetworkProxyServerState, DesktopNetworkProxyState } from '@setsuna-desktop/contracts';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { DesktopNetworkProxyStateView } from '../../../../src/app/controller/useDesktopNetworkProxy.js';
-import { NetworkProxySettings } from '../../../../src/features/settings/network-proxy/NetworkProxySettings.js';
-import { ProxyServerDialog } from '../../../../src/features/settings/network-proxy/ProxyServerDialog.js';
+import type { NetworkProxyRendererView } from '../../src/renderer/context.js';
+import { NetworkProxySettings } from '../../src/renderer/NetworkProxySettings.js';
+import { ProxyServerDialog } from '../../src/renderer/ProxyServerDialog.js';
+import { testSettingsViewUi, translateNetworkProxyForTest } from '../support/renderer-view.js';
 
 describe('network proxy settings', () => {
   it('shows the active configured proxy and preserves its credential controls', () => {
@@ -28,7 +29,8 @@ describe('network proxy settings', () => {
         },
       },
     };
-    const proxy: DesktopNetworkProxyStateView = {
+    const proxy: NetworkProxyRendererView = {
+      available: true,
       busy: false,
       deleteServer: vi.fn(),
       error: null,
@@ -38,11 +40,19 @@ describe('network proxy settings', () => {
       upsertServer: vi.fn(),
     };
 
-    const summaryHtml = renderToStaticMarkup(<NetworkProxySettings proxy={proxy} />);
+    const summaryHtml = renderToStaticMarkup(
+      <NetworkProxySettings
+        proxy={proxy}
+        translate={translateNetworkProxyForTest}
+        ui={testSettingsViewUi}
+      />,
+    );
     const html = renderToStaticMarkup(
       <ProxyServerDialog
         busy={false}
         server={server}
+        translate={translateNetworkProxyForTest}
+        ui={testSettingsViewUi}
         onClose={() => undefined}
         onSave={async () => undefined}
       />,

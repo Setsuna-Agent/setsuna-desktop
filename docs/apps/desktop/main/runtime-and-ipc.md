@@ -107,6 +107,8 @@ Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` �
 
 Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径、代理 fetch、窗口与语言；Feature scope 排空在途检查后撤销全部 handler。
 
+Network Proxy 的固定 handler 和 channel contract 由 `packages/features/network-proxy/{contracts,main}` 拥有。Main composition 注入配置、凭据、系统 fetch 与 runtime 删除入口；Feature scope 负责撤销 handler、停止 browser proxy 更新并关闭 fetch dispatcher 与 relay。
+
 ## IPC 设计规则
 
 ### 固定命名

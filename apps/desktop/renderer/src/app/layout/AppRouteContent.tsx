@@ -19,6 +19,7 @@ import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActio
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
+import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {
@@ -27,7 +28,6 @@ import type {
 } from '../../features/workspace/model.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import type { DesktopNetworkProxyStateView } from '../controller/useDesktopNetworkProxy.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
 
@@ -88,7 +88,7 @@ export function AppRouteContent({
   focusComposerRequest: number;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
-  networkProxy: DesktopNetworkProxyStateView;
+  networkProxy: NetworkProxyFeatureView;
   selectedCapabilitiesPluginId: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
