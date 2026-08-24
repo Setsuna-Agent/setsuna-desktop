@@ -26,7 +26,6 @@ import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
 import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
-import { registerUpdaterIpc } from './ipc/updater-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import { registerWindowsSandboxIpc } from './ipc/windows-sandbox-ipc.js';
 import { registerWorkspaceIpc } from './ipc/workspace-ipc.js';
@@ -60,7 +59,6 @@ import { DesktopBrowserProxyController } from './network-proxy/browser.js';
 import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
 import { DesktopNetworkProxyService } from './network-proxy/service.js';
 import { DesktopNetworkProxyStore } from './network-proxy/store.js';
-import { DesktopUpdater } from './updater/updater.js';
 import {
   activateBuiltinMainFeatures,
   type ActivatedBuiltinMainFeatures,
@@ -96,7 +94,7 @@ let mainWindow: BrowserWindow | null = null;
 let runtimeHost: RuntimeHost | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
-let desktopUpdater: DesktopUpdater | null = null;
+let desktopUpdaterLifecycle: ActivatedBuiltinMainFeatures['updater'] | null = null;
 let networkProxyService: DesktopNetworkProxyService | null = null;
 let browserProxyController: DesktopBrowserProxyController | null = null;
 let networkProxyFetch: DesktopNetworkProxyFetch | null = null;
@@ -297,6 +295,19 @@ async function createWindow(): Promise<void> {
       nativeBridge: currentDesktopNativeBridgeServer,
       networkProxyService: currentNetworkProxyService,
       requestRuntime: (input) => requestRuntime(input),
+      updaterHost: Object.freeze({
+        currentVersion: app.getVersion(),
+        repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
+        downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
+        sourceConfigPath: dataLayout.updateSourcesPath,
+        enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
+        fetch: (
+          input: Parameters<typeof globalThis.fetch>[0],
+          init?: RequestInit,
+        ) => currentNetworkProxyFetch.fetch('updater', input, init),
+        interfaceLanguage: () => interfaceLanguage,
+        mainWindow: currentMainWindow,
+      }),
       webDavSyncHost: Object.freeze({
         appVersion: app.getVersion(),
         configPath: dataLayout.webDavSyncConfigPath,
@@ -335,6 +346,8 @@ async function createWindow(): Promise<void> {
   mainFeatureComposition = currentMainFeatureComposition;
   const currentWebDavSyncLifecycle = activatedMainFeatures.webDavSync;
   webDavSyncLifecycle = currentWebDavSyncLifecycle;
+  const currentDesktopUpdaterLifecycle = activatedMainFeatures.updater;
+  desktopUpdaterLifecycle = currentDesktopUpdaterLifecycle;
 
   const currentRuntimeHost = new RuntimeHost({
     appRoot: app.getAppPath(),
@@ -374,6 +387,7 @@ async function createWindow(): Promise<void> {
   } catch (error) {
     await currentMainFeatureComposition.dispose().catch(() => undefined);
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
+    if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     await currentDesktopNativeBridgeServer.stop();
     await currentNetworkProxyFetch.close();
     currentBrowserProxyController.stop();
@@ -383,16 +397,7 @@ async function createWindow(): Promise<void> {
   registerRuntimeIpc(currentRuntimeHost);
   if (startupClosedBeforeHandoff) return;
   await currentWebDavSyncLifecycle.start();
-
-  desktopUpdater = new DesktopUpdater({
-    currentVersion: app.getVersion(),
-    repository: process.env.SETSUNA_DESKTOP_UPDATE_REPOSITORY ?? 'Setsuna-Agent/setsuna-desktop',
-    downloadsDir: path.join(app.getPath('downloads'), 'Setsuna Desktop Updates'),
-    sourceConfigPath: dataLayout.updateSourcesPath,
-    enabled: app.isPackaged || process.env.SETSUNA_DESKTOP_ENABLE_UPDATES === '1',
-    fetch: (input, init) => currentNetworkProxyFetch.fetch('updater', input, init),
-  });
-  await desktopUpdater.initialize();
+  await currentDesktopUpdaterLifecycle.initialize();
   registerDesktopIpc({
     mainWindow: currentMainWindow,
     nativeBridge: currentDesktopNativeBridgeServer,
@@ -405,7 +410,6 @@ async function createWindow(): Promise<void> {
     },
     userDataPath: dataLayout.root,
   });
-  registerUpdaterIpc(desktopUpdater, currentMainWindow, () => interfaceLanguage);
   registerPluginIpc(currentRuntimeHost, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({
     mainWindow: currentMainWindow,
@@ -456,7 +460,7 @@ async function createWindow(): Promise<void> {
   await waitForRendererFirstPaint(currentMainWindow);
   startupInProgress = false;
   startupSplashLayer.reveal();
-  desktopUpdater.start();
+  currentDesktopUpdaterLifecycle.start();
 }
 
 async function createDataRootMaintenanceWindow(): Promise<void> {
@@ -606,13 +610,13 @@ function shutdownDesktopServices(
   const currentRuntimeHost = runtimeHost;
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
   const currentMainFeatureComposition = mainFeatureComposition;
-  const currentDesktopUpdater = desktopUpdater;
+  const currentDesktopUpdaterLifecycle = desktopUpdaterLifecycle;
   const currentNetworkProxyService = networkProxyService;
   const currentBrowserProxyController = browserProxyController;
   const currentNetworkProxyFetch = networkProxyFetch;
   const currentWebDavSyncLifecycle = webDavSyncLifecycle;
 
-  currentDesktopUpdater?.stop();
+  currentDesktopUpdaterLifecycle?.stop();
   currentBrowserProxyController?.stop();
   currentWebDavSyncLifecycle?.close();
 
@@ -644,7 +648,7 @@ function shutdownDesktopServices(
     if (!runtimeStopError && runtimeHost === currentRuntimeHost) runtimeHost = null;
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
-    if (desktopUpdater === currentDesktopUpdater) desktopUpdater = null;
+    if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     if (networkProxyService === currentNetworkProxyService) networkProxyService = null;
     if (browserProxyController === currentBrowserProxyController) browserProxyController = null;
     if (networkProxyFetch === currentNetworkProxyFetch) networkProxyFetch = null;

@@ -262,7 +262,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           ) : null}
           <AppTopbarActions
             activeView={activeView}
-            updater={controller.updater}
             bottomPanelVisible={workspacePanels.bottomPanelVisible}
             bottomTerminalPanelActive={workspacePanels.bottomTerminalPanelActive}
             conversationOverviewAvailable={Boolean(runtime.currentThread)}
@@ -315,7 +314,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         setDraft={setDraft}
         skillSelectionRequest={skillSelectionRequest}
         startCurrentThreadReview={startCurrentThreadReview}
-        updater={controller.updater}
         workspacePanels={workspacePanels}
         onSelectSkillForChat={selectSkillForChat}
         onOpenPlugin={openCapabilitiesPlugin}

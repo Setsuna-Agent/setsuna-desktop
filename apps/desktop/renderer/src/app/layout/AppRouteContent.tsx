@@ -27,7 +27,6 @@ import type {
 } from '../../features/workspace/model.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
 import type { DesktopNetworkProxyStateView } from '../controller/useDesktopNetworkProxy.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
@@ -59,7 +58,6 @@ export function AppRouteContent({
   setDraft,
   skillSelectionRequest,
   startCurrentThreadReview,
-  updater,
   workspacePanels,
   onSelectSkillForChat,
   onConversationOverviewRenderedChange,
@@ -100,7 +98,6 @@ export function AppRouteContent({
     target: RuntimeReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
-  updater: DesktopUpdaterStateView;
   workspacePanels: DesktopWorkspacePanelsState;
   onSelectSkillForChat: (skillId: string) => void;
   onConversationOverviewRenderedChange: (visible: boolean) => void;
@@ -214,7 +211,6 @@ export function AppRouteContent({
           config={runtime.config}
           initialSection={settingsInitialSection ?? undefined}
           skillExtraRoots={runtime.skillExtraRoots}
-          updater={updater}
           usage={runtime.usage}
           networkProxy={networkProxy}
           onBack={() => setActiveView('chat')}

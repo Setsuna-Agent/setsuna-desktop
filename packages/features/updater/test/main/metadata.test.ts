@@ -6,7 +6,7 @@ import {
   parseSha256Sums,
   selectUpdateAsset,
   type ReleaseAsset,
-} from '../../../src/updater/metadata.js';
+} from '../../src/main/metadata.js';
 
 const assets: ReleaseAsset[] = [
   { name: 'Setsuna-Desktop-0.2.0-mac-arm64.zip', browser_download_url: 'https://example.com/mac-arm64.zip' },

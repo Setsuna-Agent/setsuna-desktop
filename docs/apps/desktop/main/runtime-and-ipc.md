@@ -97,7 +97,6 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `data-root-ipc.ts` | 数据根状态、扫描、迁移、恢复、旧根清理 |
 | `desktop-ipc.ts` | 目录选择、profile、clipboard、图片、本地路径与外链 |
 | `browser-ipc.ts` | browser tab 注册、active tab、截图、favicon、设备模拟 |
-| `updater-ipc.ts` | update state、check、download source、download/open |
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `workspace-ipc.ts` | 外部 workspace app 列表与打开 |
 | `sender.ts` | 可信主窗口 sender 校验 |
@@ -105,6 +104,8 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 Review 的固定 handler、Git 状态和变更监控已由 `packages/features/review/src/main/` 拥有。它监听 worktree、worktree Git 目录及共享 Git 目录，合并事件并过滤 ignored 文件后，只向 renderer 发布失效通知；具体 diff 仍由带当前比较基准的 `get-state` 请求生成。宿主 composition 只注入 commit-message、preview registry 与 sender policy。
 
 Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` 拥有，并通过 Main Feature scope 注册/撤销；app main 的 composition root 只提供环境与 renderer event 出口。
+
+Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径、代理 fetch、窗口与语言；Feature scope 排空在途检查后撤销全部 handler。
 
 ## IPC 设计规则
 

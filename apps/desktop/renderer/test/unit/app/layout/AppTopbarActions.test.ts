@@ -1,7 +1,11 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { DesktopUpdaterStateView } from '../../../../src/app/controller/useDesktopUpdater.js';
+
+vi.mock('../../../../src/composition/UpdaterFeatureBoundary.js', () => ({
+  UpdaterFeatureTopbarAction: () => null,
+}));
+
 import { AppTopbarActions } from '../../../../src/app/layout/AppTopbarActions.js';
 import { AppWorkspaceToolbar } from '../../../../src/app/layout/AppWorkspaceToolbar.js';
 import type { DesktopWorkspacePanelsState } from '../../../../src/features/workspace/hooks/useDesktopWorkspacePanels.js';
@@ -101,6 +105,5 @@ function renderActions({
     onToggleBottomTerminal: vi.fn(),
     onToggleSidePanel: vi.fn(),
     sidePanelVisible,
-    updater: { ready: false } as DesktopUpdaterStateView,
   }));
 }

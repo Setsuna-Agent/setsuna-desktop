@@ -23,7 +23,6 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import type { DesktopUpdaterStateView } from '../../app/controller/useDesktopUpdater.js';
 import type { DesktopNetworkProxyStateView } from '../../app/controller/useDesktopNetworkProxy.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
@@ -36,7 +35,6 @@ import {
   idleSaveState,
   type SaveState,
 } from './providers/ProviderSettings.js';
-import { AboutSettings } from './sections/AboutSettings.js';
 import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
@@ -126,7 +124,6 @@ export function SettingsPage({
   config,
   initialSection,
   skillExtraRoots,
-  updater,
   usage,
   networkProxy,
   onBack,
@@ -143,7 +140,6 @@ export function SettingsPage({
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
   skillExtraRoots: string[];
-  updater: DesktopUpdaterStateView;
   usage: RuntimeUsageResponse | null;
   networkProxy: DesktopNetworkProxyStateView;
   onBack: () => void;
@@ -225,7 +221,7 @@ export function SettingsPage({
         <EmptyState title={t('settings.configUnavailable')} />
       )
     ) : activeSection === 'about' ? (
-      <AboutSettings updater={updater} />
+      null
     ) : activeSection === 'runtime' && config ? (
       <RuntimePolicySettings
         config={config}

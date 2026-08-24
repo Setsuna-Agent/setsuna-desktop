@@ -77,7 +77,7 @@ React renderer
 
 ### 启动
 
-Electron main 在创建 Chromium profile 前解析数据根和迁移状态；正常模式才启动浏览器控制、原生桥、runtime、terminal 和 updater。runtime ready 后 renderer 才进入正常工作台。
+Electron main 在创建 Chromium profile 前解析数据根和迁移状态；正常模式才激活 Main Feature composition（browser、terminal、updater 等）、原生桥和 runtime。runtime ready 后 renderer 才进入正常工作台。
 
 ### 请求
 

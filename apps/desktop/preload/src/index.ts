@@ -1,7 +1,6 @@
 import type {
   DesktopRuntimeBridge,
   DesktopRuntimeEventPayload,
-  DesktopUpdateState,
   RuntimeRequestInput,
   SetsunaDesktopBridge,
 } from '@setsuna-desktop/contracts';
@@ -156,22 +155,6 @@ const windowsSandbox: SetsunaDesktopBridge['windowsSandbox'] = {
   runAction: (action) => ipcRenderer.invoke('windows-sandbox:run-action', action),
 };
 
-const updater: SetsunaDesktopBridge['updater'] = {
-  getState: () => ipcRenderer.invoke('desktop-updater:get-state'),
-  checkForUpdates: () => ipcRenderer.invoke('desktop-updater:check'),
-  downloadUpdate: () => ipcRenderer.invoke('desktop-updater:download'),
-  addDownloadSource: (input) => ipcRenderer.invoke('desktop-updater:add-download-source', input),
-  selectDownloadSource: (sourceId) => ipcRenderer.invoke('desktop-updater:select-download-source', sourceId),
-  removeDownloadSource: (sourceId) => ipcRenderer.invoke('desktop-updater:remove-download-source', sourceId),
-  quitAndInstall: () => ipcRenderer.invoke('desktop-updater:quit-and-install'),
-  promptReadyUpdate: () => ipcRenderer.invoke('desktop-updater:prompt-ready'),
-  onStateChange(callback: (state: DesktopUpdateState) => void): () => void {
-    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => callback(state);
-    ipcRenderer.on('desktop-updater:state-change', listener);
-    return () => ipcRenderer.off('desktop-updater:state-change', listener);
-  },
-};
-
 const workspaceApps: SetsunaDesktopBridge['workspaceApps'] = {
   list: (workspaceRoot) => ipcRenderer.invoke('workspace-apps:list', { workspaceRoot }),
   open: (workspaceRoot, appId, filePath, line) =>
@@ -185,7 +168,6 @@ const hostBridge: SetsunaDesktopBridge = {
   networkProxy,
   plugins,
   runtime,
-  updater,
   windowControls,
   windowsSandbox,
   workspaceApps,

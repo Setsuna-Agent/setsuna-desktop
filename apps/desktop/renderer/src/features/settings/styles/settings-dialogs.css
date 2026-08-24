@@ -853,31 +853,6 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .desktop-settings-panel .chat-user-settings__update-panel,
-  .desktop-settings-panel .chat-user-settings__download-source-main {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .desktop-settings-panel .chat-user-settings__update-actions,
-  .desktop-settings-panel .chat-user-settings__download-source-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .desktop-settings-panel .chat-user-settings__download-source-actions .settings-local-control {
-    flex: 1 1 180px;
-    width: auto;
-  }
-
-  .desktop-settings-panel .chat-user-settings__download-source-form {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-settings-panel .chat-user-settings__download-source-help {
-    grid-column: auto;
-  }
-
   .desktop-settings-panel .chat-user-settings__font-preview {
     grid-template-columns: minmax(0, 1fr);
   }

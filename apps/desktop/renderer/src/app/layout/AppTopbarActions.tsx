@@ -1,13 +1,12 @@
-import { Bell, CircleGauge } from 'lucide-react';
+import { CircleGauge } from 'lucide-react';
+import { UpdaterFeatureTopbarAction } from '../../composition/UpdaterFeatureBoundary.js';
 import { PanelPlacementIcon } from '../../features/workspace/PanelPlacementIcon.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton } from '../../shared/ui/primitives.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
-import type { DesktopUpdaterStateView } from '../controller/useDesktopUpdater.js';
 import type { MainView } from '../types.js';
 
 export function AppTopbarActions({
-  updater,
   activeView,
   bottomPanelVisible,
   bottomTerminalPanelActive,
@@ -18,7 +17,6 @@ export function AppTopbarActions({
   onToggleSidePanel,
   onToggleBottomTerminal,
 }: {
-  updater: DesktopUpdaterStateView;
   activeView: MainView;
   bottomPanelVisible: boolean;
   bottomTerminalPanelActive: boolean;
@@ -33,17 +31,7 @@ export function AppTopbarActions({
 
   return (
     <>
-      {updater.ready ? (
-        <IconButton
-          label={updater.state?.manualInstall ? t('topbar.openInstaller') : t('topbar.restartUpdate')}
-          className="app-topbar-update-alert"
-          disabled={updater.installing}
-          onClick={() => void updater.promptReadyUpdate()}
-        >
-          <Bell size={15} />
-          <span className="app-topbar-update-alert__badge" aria-hidden="true" />
-        </IconButton>
-      ) : null}
+      <UpdaterFeatureTopbarAction />
       {activeView === 'chat' && conversationOverviewAvailable ? (
         <ShortcutTooltip
           commandId="chat.toggleOverview"
