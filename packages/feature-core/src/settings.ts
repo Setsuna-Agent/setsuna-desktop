@@ -152,6 +152,16 @@ export type FeatureCredentialBackup = Readonly<{
   value: string;
 }>;
 
+/**
+ * A restore transaction always replaces the settings envelope. Secret storage
+ * is replaced only when the backup supplied credentials for this document.
+ */
+export type PortableFeatureSettingsRestoreTarget = Readonly<{
+  featureId: FeatureId;
+  documentId: string;
+  includesSecrets: boolean;
+}>;
+
 export class FeatureSettingsRevisionConflictError extends Error {
   readonly code = 'REVISION_CONFLICT' as const;
 

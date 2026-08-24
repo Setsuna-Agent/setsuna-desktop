@@ -42,7 +42,6 @@ import { WorkspaceImageToolHost } from '../adapters/tool/workspace-image-tool-ho
 import { FileProjectInstructionLoader } from '../adapters/workspace/file-project-instruction-loader.js';
 import { FileProjectWorkflowResolver } from '../adapters/workspace/file-project-workflow-resolver.js';
 import { FileWorkspaceProjectStore } from '../adapters/workspace/file-workspace-project-store.js';
-import { ManagedWorkspaceDependencyManager } from '../adapters/workspace/managed-workspace-dependency-manager.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../adapters/workspace/workspace-runtime-environment-resolver.js';
 import { ExtensionManager } from '../extensions/extension-manager.js';
 import { RuntimeRouteRegistry } from '../features/routes/runtime-route-registry.js';
@@ -142,10 +141,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     requireBundledRipgrep: options.requireBundledRipgrep,
   });
   const workspaceProjects = new FileWorkspaceProjectStore(runtimeDataDir, clock, { searchEngine: workspaceSearchEngine });
-  const workspaceDependencies = new ManagedWorkspaceDependencyManager(runtimeDataDir, configStore, {
-    fetchImpl: networkProxyFetch.forRoute(),
-    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
-  });
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
@@ -174,7 +169,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const backgroundShellProcesses = new PcLocalToolHost(
     workspaceProjects,
     policyAmendmentStore,
-    workspaceDependencies,
+    undefined,
     workspaceSearchEngine,
     {
       globalPolicyPaths: [
@@ -239,6 +234,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     backgroundShellProcesses,
     browserToolHost,
     configStore,
+    dataDir: runtimeDataDir,
     debugTraceStore,
     eventBus,
     eventWriter,
@@ -268,7 +264,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     threadStore,
     threadEventReader,
     usageStore,
-    workspaceDependencies,
     workspaceProjects,
     workspaceSearchEngine,
   };

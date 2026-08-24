@@ -1,28 +1,25 @@
 import type {
   RuntimeWorkspaceDependenciesStatus,
   RuntimeWorkspaceDependencyToolStatus,
-} from '@setsuna-desktop/contracts';
+  PrepareShellToolchainInput,
+  ShellToolchain,
+  WorkspaceDependenciesControl,
+  WorkspaceDependencyPromptContext,
+  WorkspaceDependencySettings,
+} from '../contracts/index.js';
 import {
   DEFAULT_NPM_REGISTRY_URL,
   DEFAULT_PYTHON_PACKAGE_INDEX_URL,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/index.js';
 import { randomUUID } from 'node:crypto';
 import {
   mkdir,
+  readFile,
   rename,
   rm,
   writeFile,
 } from 'node:fs/promises';
 import path from 'node:path';
-import type { ConfigStore } from '../../ports/config-store.js';
-import type {
-  PrepareShellToolchainInput,
-  ShellToolchain,
-  WorkspaceDependencyManager,
-  WorkspaceDependencyPromptContext,
-} from '../../ports/workspace-dependency-manager.js';
-import { errorMessage } from '../../shared/node-errors.js';
-import { readJsonFile, writeJsonFile } from '../store/json-file.js';
 import {
   runManagedWorkspaceCommand as runCommand,
 } from './managed-workspace-command.js';
@@ -92,7 +89,7 @@ type PackageManagerShims = {
  * 在不修改用户 Shell 配置的前提下提供确定的工作区二进制文件。可用的主机安装会通过
  * 私有 PATH 封装；只有缺失或过时的工具才会配置到 runtime 数据目录下。
  */
-export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyManager {
+export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesControl {
   private readonly cacheRoot: string;
   private readonly installRoot: string;
   private readonly nodeBinDir: string;
@@ -106,7 +103,8 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
 
   constructor(
     runtimeDataDir: string,
-    private readonly configStore: ConfigStore,
+    private readonly readSettings: () => Promise<WorkspaceDependencySettings>,
+    private readonly sandboxNetworkAccessEnabled: () => Promise<boolean>,
     networkOptions: ManagedWorkspaceDependencyNetworkOptions = {},
   ) {
     this.workspaceDependencyRoot = path.join(runtimeDataDir, 'workspace-dependencies');
@@ -138,11 +136,12 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
   }
 
   async prepareShellToolchain({ command, environment }: PrepareShellToolchainInput): Promise<ShellToolchain> {
-    const config = await this.configStore.getConfig();
-    const packageIndexUrl = config.desktopSettings?.pythonPackageIndexUrl?.trim()
-      || DEFAULT_PYTHON_PACKAGE_INDEX_URL;
-    const npmRegistryUrl = config.desktopSettings?.npmRegistryUrl?.trim()
-      || DEFAULT_NPM_REGISTRY_URL;
+    const settings = await this.readSettings().catch(() => ({
+      npmRegistryUrl: DEFAULT_NPM_REGISTRY_URL,
+      pythonPackageIndexUrl: DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+    }));
+    const packageIndexUrl = settings.pythonPackageIndexUrl;
+    const npmRegistryUrl = settings.npmRegistryUrl;
     const hints = await projectToolchainHints(environment);
     const hostNode = await this.findSystemNode();
     const bundledNode = await this.resolveNode();
@@ -222,7 +221,7 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
     verifyManifest: boolean,
     inspectHostWhenMissing = verifyManifest,
   ): Promise<RuntimeWorkspaceDependenciesStatus> {
-    const config = await this.configStore.getConfig();
+    const sandboxNetworkAccess = await this.sandboxNetworkAccessEnabled().catch(() => false);
     const manifest = await this.readManifest();
     const installing = Boolean(this.installPromise);
     const tools = manifest
@@ -237,10 +236,10 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       {
         id: 'sandbox' as const,
         label: '沙箱网络',
-        message: config.sandboxWorkspaceWrite?.networkAccess === true
+        message: sandboxNetworkAccess
           ? 'workspace-write 沙箱默认允许联网。'
           : 'workspace-write 沙箱联网已被关闭；工作区命令将无法访问网络。',
-        status: config.sandboxWorkspaceWrite?.networkAccess === true ? 'ok' as const : 'warning' as const,
+        status: sandboxNetworkAccess ? 'ok' as const : 'warning' as const,
       },
     ];
     // 诊断可以在懒初始化清单落盘前确认本机工具链可用；只有已存在的清单
@@ -443,7 +442,11 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
       // uv 在 Unix 安装根目录内创建绝对链接。原子重命名前先转换这些链接，
       // 确保它们仍指向最终目录树内部。
       await rewriteInternalAbsoluteSymlinks(stagingRoot);
-      await writeJsonFile(path.join(stagingRoot, MANIFEST_FILE_NAME), manifest);
+      await writeFile(
+        path.join(stagingRoot, MANIFEST_FILE_NAME),
+        `${JSON.stringify(manifest, null, 2)}\n`,
+        'utf8',
+      );
       if (await pathExists(this.installRoot)) {
         await rename(this.installRoot, backupRoot);
         previousMoved = true;
@@ -619,8 +622,16 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependencyMan
 
   private async readManifest(): Promise<WorkspaceDependencyManifest | null> {
     const manifestPath = path.join(this.installRoot, MANIFEST_FILE_NAME);
-    return readJsonFile<WorkspaceDependencyManifest | null>(manifestPath, null).catch(() => null);
+    try {
+      return JSON.parse(await readFile(manifestPath, 'utf8')) as WorkspaceDependencyManifest;
+    } catch {
+      return null;
+    }
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function usesPnpmCommand(command: string): boolean {

@@ -1,0 +1,140 @@
+[data-feature-id='workspace-dependencies'].feature-workspace-dependencies {
+  color: var(--sd-color-text, CanvasText);
+}
+
+[data-feature-id='workspace-dependencies'] .sd-settings-row > .sd-settings-row__label > svg {
+  flex: 0 0 15px;
+  width: 15px;
+  height: 15px;
+  color: var(--sd-color-text-muted, GrayText);
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row {
+  min-height: 62px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form,
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-display,
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-editor {
+  min-width: 0;
+  width: 100%;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-display {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-display code {
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 7px;
+  overflow: hidden;
+  border-radius: var(--sd-radius-sm, 7px);
+  color: var(--sd-color-text-muted, GrayText);
+  background: var(--sd-color-surface-muted, #f5f5f5);
+  font-family: var(--app-code-font-family, monospace);
+  font-size: 11px;
+  line-height: 17px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form > small,
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__error {
+  color: var(--sd-color-danger, #d92d20);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-row form > small {
+  display: block;
+  margin-top: 4px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__status-row {
+  min-height: 62px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__environment-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__status {
+  display: inline-block;
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  color: var(--sd-color-text-muted, GrayText);
+  background: currentColor;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__status.is-success {
+  color: var(--sd-color-success, #16a34a);
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__status.is-warning {
+  color: var(--sd-color-warning, #ea580c);
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__status.is-danger {
+  color: var(--sd-color-danger, #dc2626);
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__repair-tooltip-target {
+  display: inline-flex;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__repair-tooltip-target > button:disabled {
+  pointer-events: none;
+}
+
+[data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__error {
+  margin: 0 14px 12px;
+}
+
+[data-feature-id='workspace-dependencies'] .is-spinning {
+  animation: feature-workspace-dependencies-spin 0.9s linear infinite;
+}
+
+@keyframes feature-workspace-dependencies-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 720px) {
+  [data-feature-id='workspace-dependencies'].feature-workspace-dependencies .feature-workspace-dependencies__source-row,
+  [data-feature-id='workspace-dependencies'].feature-workspace-dependencies .feature-workspace-dependencies__status-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  [data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-display,
+  [data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__actions {
+    justify-content: flex-start;
+  }
+
+  [data-feature-id='workspace-dependencies'] .feature-workspace-dependencies__source-display code {
+    text-align: left;
+  }
+}

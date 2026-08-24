@@ -1,13 +1,18 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
+import type {
+  FeatureCredentialBackup,
+  PortableFeatureSettingsDocument,
+} from '@setsuna-desktop/feature-core/settings';
 import { RuntimeHttpError } from './http-error.js';
-import { sendJson } from './http-utils.js';
+import { readBody, sendJson } from './http-utils.js';
 import type { InFlightRequestTracker } from './in-flight-requests.js';
 import type { RuntimeFactory } from './types.js';
 
 const DATA_MIGRATION_PREPARE_PATH = '/v1/data-migration/prepare';
 const WEBDAV_SYNC_PREPARE_PATH = '/internal/webdav-sync/prepare';
 const WEBDAV_SYNC_FEATURE_SETTINGS_PATH = '/internal/webdav-sync/feature-settings';
+const WEBDAV_SYNC_FEATURE_SETTINGS_RESTORE_PATH = '/internal/webdav-sync/feature-settings/restore-stage';
 const WEBDAV_SYNC_FEATURE_CREDENTIALS_PATH = '/internal/webdav-sync/feature-credentials';
 
 /**
@@ -39,6 +44,40 @@ export class RuntimeMaintenanceGate {
       sendJson(response, 200, {
         credentials: await this.runtime.featureSettings.exportCredentialBackups(),
       });
+      return true;
+    }
+    if (url.pathname === WEBDAV_SYNC_FEATURE_SETTINGS_RESTORE_PATH) {
+      if (request.method !== 'POST') return false;
+      if (!this.preparing) {
+        throw new RuntimeHttpError(
+          409,
+          'Portable Feature settings restore requires the WebDAV preparation gate.',
+          'webdav_sync_not_preparing',
+        );
+      }
+      const body = await readBody<{
+        documents?: unknown;
+        credentials?: unknown;
+        stagingRoot?: unknown;
+      }>(request);
+      if (
+        !Array.isArray(body.documents)
+        || !Array.isArray(body.credentials)
+        || typeof body.stagingRoot !== 'string'
+        || !body.stagingRoot
+      ) {
+        throw new RuntimeHttpError(
+          400,
+          'Portable Feature settings restore payload is invalid.',
+          'invalid_webdav_feature_settings_restore',
+        );
+      }
+      const targets = await this.runtime.featureSettings.stagePortableDocumentsRestore({
+        documents: body.documents as PortableFeatureSettingsDocument[],
+        credentials: body.credentials as FeatureCredentialBackup[],
+        stagingRoot: body.stagingRoot,
+      });
+      sendJson(response, 200, { targets });
       return true;
     }
     if (!isPreparePath(url.pathname)) return false;

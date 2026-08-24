@@ -2,6 +2,10 @@
   align-items: stretch;
 }
 
+.desktop-settings-panel .chat-user-settings__runtime-advanced-section {
+  margin-top: 20px;
+}
+
 .desktop-settings-panel .chat-user-settings__advanced-disclosure {
   display: grid;
   gap: 0;
@@ -235,10 +239,6 @@
   }
 }
 
-.desktop-settings-panel .workspace-dependencies-settings__card {
-  display: grid;
-}
-
 .desktop-settings-panel .windows-sandbox-settings__card {
   display: grid;
 }
@@ -304,142 +304,17 @@
   margin: 10px 14px 12px;
 }
 
-.desktop-settings-panel .workspace-dependencies-settings .workspace-dependencies-settings__leading-icon {
-  flex: 0 0 16px;
-  width: 16px;
-  height: 16px;
-  margin-top: 1px;
-  color: var(--app-text-muted);
-}
-
-.desktop-settings-panel .workspace-dependencies-settings .workspace-dependencies-settings__source-icon {
-  flex-basis: 18px;
-  width: 18px;
-  height: 18px;
-  margin-top: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-row {
-  min-height: 58px;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  row-gap: 6px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__status-row {
-  min-height: 72px;
-  padding-top: 10px;
-  padding-bottom: 10px;
-  row-gap: 6px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-display,
-.desktop-settings-panel .workspace-dependencies-settings__source-editor {
-  align-items: center;
-  min-width: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-display {
-  display: flex;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-display code {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-edit,
-.desktop-settings-panel .workspace-dependencies-settings__source-reset {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-editor {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-editor .sd-field {
-  min-width: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-cancel {
-  min-width: 68px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__source-error {
-  grid-column: 2;
-  color: var(--app-danger);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__status-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__status-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  margin-top: 5px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__status-tags .sd-status {
-  height: 20px;
-  padding: 0 6px;
-  font-size: 11px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__repair-description {
-  margin-top: 2px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__action-buttons {
-  display: flex;
-  align-items: center;
-  justify-self: end;
-  gap: 8px;
-  min-width: 0;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__action-buttons .sd-button {
-  min-height: 30px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings__card > .chat-user-settings__runtime-error {
-  margin: 10px 14px 12px;
-}
-
-.desktop-settings-panel .workspace-dependencies-settings .is-spinning,
 .desktop-settings-panel .windows-sandbox-settings .is-spinning {
-  animation: workspace-dependencies-spin 0.9s linear infinite;
+  animation: windows-sandbox-spin 0.9s linear infinite;
 }
 
-@keyframes workspace-dependencies-spin {
+@keyframes windows-sandbox-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 @media (max-width: 780px) {
-  .desktop-settings-panel .workspace-dependencies-settings__source-row,
-  .desktop-settings-panel .workspace-dependencies-settings__status-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-
   .desktop-settings-panel .windows-sandbox-settings__status-row {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -448,34 +323,4 @@
     justify-self: start;
     justify-content: flex-start;
   }
-
-  .desktop-settings-panel .workspace-dependencies-settings__source-display {
-    justify-content: flex-start;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__source-display code {
-    text-align: left;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__source-error {
-    grid-column: 1;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
-    justify-self: start;
-  }
-}
-
-@media (max-width: 560px) {
-  .desktop-settings-panel .workspace-dependencies-settings__action-buttons {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    justify-self: stretch;
-    width: 100%;
-  }
-
-  .desktop-settings-panel .workspace-dependencies-settings__action-buttons .sd-button {
-    width: 100%;
-  }
-
 }

@@ -9,10 +9,7 @@ import {
   webDavRestoreJournalPath,
   writeWebDavRestoreJournal,
 } from '../../src/main/restore-journal.js';
-import {
-  testWebDavSyncFeatureSettingsDocuments,
-  testWebDavSyncStorageHost,
-} from '../support/feature-host.js';
+import { testWebDavSyncStorageHost } from '../support/feature-host.js';
 
 const temporaryRoots: string[] = [];
 
@@ -77,13 +74,13 @@ describe('WebDAV restore crash recovery', () => {
     const featureTarget = path.join(
       'runtime',
       'features',
-      'memory',
+      'workspace-dependencies',
       'settings',
       'preferences.json',
     );
     await Promise.all([
-      mkdir(path.join(root, 'runtime', 'features', 'memory', 'settings'), { recursive: true }),
-      mkdir(path.join(root, rollbackDirectory, 'runtime', 'features', 'memory', 'settings'), {
+      mkdir(path.join(root, 'runtime', 'features', 'workspace-dependencies', 'settings'), { recursive: true }),
+      mkdir(path.join(root, rollbackDirectory, 'runtime', 'features', 'workspace-dependencies', 'settings'), {
         recursive: true,
       }),
     ]);
@@ -102,16 +99,31 @@ describe('WebDAV restore crash recovery', () => {
       existingTargets: [configTarget, featureTarget],
     }, testWebDavSyncStorageHost);
 
-    await expect(recoverInterruptedWebDavRestore(
-      root,
-      testWebDavSyncStorageHost,
-      testWebDavSyncFeatureSettingsDocuments,
-    )).resolves.toBe('awaiting-validation');
-    await expect(finalizeCommittedWebDavRestore(
-      root,
-      testWebDavSyncStorageHost,
-      testWebDavSyncFeatureSettingsDocuments,
-    )).resolves.toBe(true);
+    await expect(recoverInterruptedWebDavRestore(root, testWebDavSyncStorageHost))
+      .resolves.toBe('awaiting-validation');
+    await expect(finalizeCommittedWebDavRestore(root, testWebDavSyncStorageHost))
+      .resolves.toBe(true);
+  });
+
+  it('rejects Feature secret targets outside a model-credential restore', async () => {
+    const root = await temporaryRoot();
+    const rollbackDirectory = '.webdav-sync-rollback-8e4e40cd-92c2-4dd8-a020-5928f579113b';
+    await mkdir(path.join(root, 'runtime'), { recursive: true });
+    await writeFile(path.join(root, 'runtime', 'config.json'), '{"value":"restored"}\n');
+    await writeWebDavRestoreJournal(root, {
+      version: 1,
+      phase: 'committed',
+      rollbackDirectory,
+      categories: ['preferences'],
+      targets: [
+        path.join('runtime', 'config.json'),
+        path.join('runtime', 'secrets', 'workspace-dependencies', 'preferences'),
+      ],
+      existingTargets: [path.join('runtime', 'config.json')],
+    }, testWebDavSyncStorageHost);
+
+    await expect(recoverInterruptedWebDavRestore(root, testWebDavSyncStorageHost))
+      .rejects.toThrow('恢复日志无效');
   });
 
   it('finishes cleanup instead of rolling back after Runtime validation was journaled', async () => {

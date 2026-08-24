@@ -500,7 +500,7 @@ const rendererFeatures = defineRendererFeatureHost({
 
 | 需求 | 正确接缝 | 关键责任 |
 | --- | --- | --- |
-| Feature settings | contracts 定义 settings bundle；runtime Feature 声明 `settings` 并注入 settings registry | schema、defaults、revision、migration、public/secret projection、syncPolicy |
+| Feature settings | contracts 定义 settings bundle；runtime Feature 声明 `settings` 并注入 settings registry | schema、defaults、revision、migration、public/secret projection；`syncPolicy: 'portable'` 自动参与 WebDAV，secret backup 名称必须显式 opt in |
 | 私有持久事件 | contracts 定义 `feature.event` contract；runtime owner 建 projection | 每个历史 schema version 有 codec；未知 owner 不阻塞 Core，已知 owner 未知版本 fail closed |
 | 工具结果专属 UI | contracts 定义稳定 `resultKind + major + payload codec`；renderer 返回 `toolResultViews` | 未注册或解码失败时保留通用 fallback |
 | Feature 间调用 | provider 暴露窄 Capability，consumer 只导入 provider `/contracts` | 不导入实现，不使用全局 service locator |

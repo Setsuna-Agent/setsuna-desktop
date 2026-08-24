@@ -96,35 +96,7 @@ export type RuntimeDesktopSettings = {
   interfaceLanguage?: RuntimeInterfaceLanguage;
   markdownLinkOpenMode?: RuntimeMarkdownLinkOpenMode;
   showThinkingInTranscript?: boolean;
-  npmRegistryUrl?: string;
-  pythonPackageIndexUrl?: string;
 };
-
-export const DEFAULT_NPM_REGISTRY_URL = 'https://registry.npmmirror.com';
-export const DEFAULT_PYTHON_PACKAGE_INDEX_URL = 'https://pypi.tuna.tsinghua.edu.cn/simple';
-
-/** 空值返回空字符串，无效 URL 返回 null。 */
-function normalizePackageSourceUrl(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const normalized = value.trim();
-  if (!normalized) return '';
-  try {
-    const url = new URL(normalized);
-    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname)
-      ? normalized
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-export function normalizeNpmRegistryUrl(value: unknown): string | null {
-  return normalizePackageSourceUrl(value);
-}
-
-export function normalizePythonPackageIndexUrl(value: unknown): string | null {
-  return normalizePackageSourceUrl(value);
-}
 
 export const RUNTIME_TASK_MODEL_IDS = [
   'threadTitle',

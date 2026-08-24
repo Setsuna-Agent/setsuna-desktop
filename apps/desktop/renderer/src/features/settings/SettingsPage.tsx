@@ -40,7 +40,7 @@ import { AboutSettings } from './sections/AboutSettings.js';
 import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
-import { RuntimePolicySettings } from './sections/RuntimeSettings.js';
+import { RuntimeAdvancedSettings, RuntimePolicySettings } from './sections/RuntimeSettings.js';
 import { TaskModelSettings } from './sections/TaskModelSettings.js';
 import type {
   CoreSettingsSectionId,
@@ -229,15 +229,22 @@ export function SettingsPage({
     ) : activeSection === 'runtime' && config ? (
       <RuntimePolicySettings
         config={config}
-        skillExtraRoots={skillExtraRoots}
         onSave={onSaveRuntimePreferences}
-        onSetSkillExtraRoots={onSetSkillExtraRoots}
       />
     ) : activeSection === 'runtime' ? (
       <EmptyState title={t('settings.configUnavailable')} />
     ) : (
       <EmptyState title={t('settings.configUnavailable')} />
     );
+
+  const trailingContent = activeSection === 'runtime' && config ? (
+    <RuntimeAdvancedSettings
+      config={config}
+      skillExtraRoots={skillExtraRoots}
+      onSave={onSaveRuntimePreferences}
+      onSetSkillExtraRoots={onSetSkillExtraRoots}
+    />
+  ) : null;
 
   const coreSection = activeSection as CoreSettingsSectionId;
   const coreDescriptionKey = settingsSectionDescriptionKeys[coreSection];
@@ -275,6 +282,7 @@ export function SettingsPage({
             key={activeSection}
             extensions={activeSectionExtensions}
             sectionId={activeSection}
+            trailingContent={trailingContent}
             translate={translateFeature}
             ui={settingsViewUi}
           >

@@ -71,7 +71,6 @@ import {
   recoverInterruptedWebDavRestore,
   rollbackCommittedWebDavRestore,
   type DesktopWebDavSyncLifecycle,
-  webDavSyncFeatureSettingsDocuments,
 } from './composition/webdav-sync-storage-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
@@ -164,7 +163,6 @@ async function createWindow(): Promise<void> {
   const webDavRestoreRecovery = await recoverInterruptedWebDavRestore(
     dataLayout.root,
     desktopWebDavSyncStorageHost,
-    webDavSyncFeatureSettingsDocuments,
   );
   const windowStateFilePath = dataLayout.windowStatePath;
   const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
@@ -304,7 +302,6 @@ async function createWindow(): Promise<void> {
         configPath: dataLayout.webDavSyncConfigPath,
         credentialVault,
         dataRoot: dataLayout.root,
-        featureSettingsDocuments: webDavSyncFeatureSettingsDocuments,
         mainWindow: currentMainWindow,
         requestRelaunch: requestDesktopRelaunch,
         runtime: Object.freeze({
@@ -314,6 +311,11 @@ async function createWindow(): Promise<void> {
           start: () => requireRuntimeHost().start(),
           exportPortableFeatureSettings: () => requireRuntimeHost().exportPortableFeatureSettings(),
           exportFeatureCredentialBackups: () => requireRuntimeHost().exportFeatureCredentialBackups(),
+          stagePortableFeatureSettingsRestore: (
+            input: Parameters<RuntimeHost['stagePortableFeatureSettingsRestore']>[0],
+          ) => (
+            requireRuntimeHost().stagePortableFeatureSettingsRestore(input)
+          ),
         }),
         storage: desktopWebDavSyncStorageHost,
         fetch: (
@@ -360,7 +362,6 @@ async function createWindow(): Promise<void> {
       await rollbackCommittedWebDavRestore(
         dataLayout.root,
         desktopWebDavSyncStorageHost,
-        webDavSyncFeatureSettingsDocuments,
       );
       await currentRuntimeHost.start();
     }
@@ -368,7 +369,6 @@ async function createWindow(): Promise<void> {
       await finalizeCommittedWebDavRestore(
         dataLayout.root,
         desktopWebDavSyncStorageHost,
-        webDavSyncFeatureSettingsDocuments,
       );
     }
   } catch (error) {

@@ -20,6 +20,7 @@ import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/o
 import type {
   FeatureCredentialBackup,
   PortableFeatureSettingsDocument,
+  PortableFeatureSettingsRestoreTarget,
 } from '@setsuna-desktop/feature-core/settings';
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -267,6 +268,23 @@ export class RuntimeHost {
       credentials: readonly FeatureCredentialBackup[];
     }>>({ path: requestPath, method: 'GET' }, requestPath);
     return response.credentials;
+  }
+
+  /** Lets the live Runtime validate and stage Feature-owned settings before it is stopped. */
+  async stagePortableFeatureSettingsRestore(input: Readonly<{
+    documents: readonly PortableFeatureSettingsDocument[];
+    credentials: readonly FeatureCredentialBackup[];
+    stagingRoot: string;
+  }>): Promise<readonly PortableFeatureSettingsRestoreTarget[]> {
+    const requestPath = '/internal/webdav-sync/feature-settings/restore-stage';
+    const response = await this.sendRequest<Readonly<{
+      targets: readonly PortableFeatureSettingsRestoreTarget[];
+    }>>({
+      path: requestPath,
+      method: 'POST',
+      body: input,
+    }, requestPath);
+    return response.targets;
   }
 
   /** Registers a renderer-selected local file without copying its bytes into runtime storage. */

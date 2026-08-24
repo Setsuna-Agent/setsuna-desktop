@@ -3,7 +3,6 @@ import type {
   DesktopWebDavSyncSnapshotSummary,
 } from '../contracts/index.js';
 import type {
-  WebDavSyncMainHost,
   WebDavSyncStorageHost,
 } from './capabilities.js';
 import type {
@@ -53,7 +52,6 @@ export type WebDavTransferProgress = {
 export async function materializeSnapshotForUpload(input: {
   dataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
-  featureSettingsDocuments: WebDavSyncMainHost['featureSettingsDocuments'];
   workRoot: string;
   storage: WebDavSyncStorageHost;
   portableFeatureSettings?: readonly PortableFeatureSettingsDocument[];
@@ -65,7 +63,6 @@ export async function materializeSnapshotForUpload(input: {
   return prepareLocalSnapshotSources({
     dataRoot: input.dataRoot,
     categories: input.categories,
-    featureSettingsDocuments: input.featureSettingsDocuments,
     stagingRoot: path.join(input.workRoot, 'local-snapshot'),
     storage: input.storage,
     signal: input.signal,
@@ -204,7 +201,6 @@ export async function createAndUploadSnapshot(input: {
 export async function createLocalInventory(input: {
   dataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
-  featureSettingsDocuments: WebDavSyncMainHost['featureSettingsDocuments'];
   workRoot: string;
   storage: WebDavSyncStorageHost;
   portableFeatureSettings?: readonly PortableFeatureSettingsDocument[];
@@ -216,7 +212,6 @@ export async function createLocalInventory(input: {
   const sources = await prepareLocalSnapshotSources({
     dataRoot: input.dataRoot,
     categories: input.categories,
-    featureSettingsDocuments: input.featureSettingsDocuments,
     stagingRoot: path.join(input.workRoot, 'local-snapshot'),
     storage: input.storage,
     signal: input.signal,

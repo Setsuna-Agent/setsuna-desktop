@@ -51,7 +51,6 @@ import type {
   RuntimeThread,
   RuntimeUsageQuery,
   RuntimeUsageResponse,
-  RuntimeWorkspaceDependenciesStatus,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -266,15 +265,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     saveConfig(input: RuntimeConfigInput) {
       return request<RuntimeConfigState>({ path: '/v1/config', method: 'PUT', body: input });
-    },
-    getWorkspaceDependencies() {
-      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies' });
-    },
-    diagnoseWorkspaceDependencies() {
-      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/diagnose', method: 'POST' });
-    },
-    repairWorkspaceDependencies() {
-      return request<RuntimeWorkspaceDependenciesStatus>({ path: '/v1/workspace-dependencies/repair', method: 'POST' });
     },
     fetchProviderModels(input: RuntimeFetchModelsInput) {
       return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });

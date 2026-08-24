@@ -101,7 +101,9 @@ renderer 只负责范围选择与展示，不重新计算计费真源。年度 A
 
 ### Workspace dependencies
 
-`WorkspaceDependenciesSettings.tsx` 展示 runtime 管理的 Node.js/Python/uv 状态，支持诊断与修复缺失项。修复会复用健康的本机或托管工具，只补齐缺失、损坏或版本过低的环境；实际下载、校验和安装在 runtime adapter，不在 renderer 执行进程。
+Workspace Dependencies 是独立纵向 Feature，源码位于 `packages/features/workspace-dependencies/`。renderer setup 通过 `settingsSectionExtensions` 把设置追加到“运行时”区域；设置视图、controller、文案和 scoped CSS 都由 Feature 自己持有，宿主页不读取包源或工具链状态。
+
+Feature 的 typed operations 读取 Node.js/Python/uv 状态、更新 npm/Python 包源，并执行诊断或修复。修复会复用健康的本机或托管工具，只补齐缺失、损坏或版本过低的环境；实际下载、校验和安装在 Feature runtime，不在 renderer 执行进程。旧 `config.json.desktopSettings` 包源字段只作为一次性迁移输入，迁移成功后退役，不再通过统一 `DesktopRuntimeClient` 或根 Config 修改。
 
 ## Capabilities
 
@@ -170,7 +172,7 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 宿主 Settings/Capabilities 继续通过 `useRuntimeClientState` facade 获取通用 Config 和目录数据，实际能力状态由 `useRuntimeCapabilityState` 持有；Feature-owned 设置则由 renderer composition 注入的 typed client/controller 独立读取：
 
 - Config save 后更新统一 config state。
-- Image Generation 与 Vision Recognition 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
+- Image Generation、Vision Recognition 与 Workspace Dependencies 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
 - Capabilities refresh 使用 `Promise.allSettled`，单个 Skill/MCP/Hook/Plugin 请求失败不抹掉其他成功数据。
 - Hook 请求受当前 project cwd 影响，使用 latest request guard。
 - Install/remove 后重新拉取 Plugin、Skill、MCP、Hook，而不是靠局部猜测所有权变化。
@@ -192,6 +194,7 @@ Settings：
 
 - `test/unit/features/settings/SettingsPage.test.ts`
 - `packages/features/webdav-sync/test/renderer/`
+- `packages/features/workspace-dependencies/test/renderer/`
 - Provider/model replacement、brand icon upload。
 - Data-root issue/backup UI。
 - Usage calendar/branding/page。

@@ -16,7 +16,10 @@ import {
   type ToolRuntimeProfile,
   type ToolTurnCleanupOutcome,
 } from '../../../ports/tool-host.js';
-import type { ShellToolchain, WorkspaceDependencyManager } from '../../../ports/workspace-dependency-manager.js';
+import type {
+  ShellToolchain,
+  WorkspaceDependenciesControl,
+} from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { WorkspaceProjectStore } from '../../../ports/workspace-project-store.js';
 import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
 import { recordInput } from '../../../shared/unknown.js';
@@ -223,15 +226,25 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   // shell process store 跨项目状态复用，但执行目录和权限仍由每个 toolState 控制。
   private readonly shellProcessStore = pcTools.createShellProcessStore();
   private readonly environmentResolver: WorkspaceRuntimeEnvironmentResolver;
+  private workspaceDependencies?: WorkspaceDependenciesControl;
 
   constructor(
     projects: WorkspaceProjectStore,
     private readonly policyAmendmentStore?: PolicyAmendmentStore,
-    private readonly workspaceDependencies?: WorkspaceDependencyManager,
+    workspaceDependencies?: WorkspaceDependenciesControl,
     private readonly workspaceSearchEngine: WorkspaceSearchEngine = new JavaScriptWorkspaceSearchEngine(),
     private readonly options: PcLocalToolHostOptions = {},
   ) {
     this.environmentResolver = new WorkspaceRuntimeEnvironmentResolver(projects);
+    this.workspaceDependencies = workspaceDependencies;
+  }
+
+  bindWorkspaceDependencies(control: WorkspaceDependenciesControl): () => void {
+    const previous = this.workspaceDependencies;
+    this.workspaceDependencies = control;
+    return () => {
+      if (this.workspaceDependencies === control) this.workspaceDependencies = previous;
+    };
   }
 
   /**

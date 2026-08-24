@@ -18,6 +18,7 @@ describe('SettingsSectionExtensionOutlet', () => {
       <SettingsSectionExtensionOutlet
         extensions={extensions}
         sectionId="personalization"
+        trailingContent={<div>Advanced settings</div>}
         translate={translate}
         ui={settingsViewUi}
       >
@@ -28,11 +29,13 @@ describe('SettingsSectionExtensionOutlet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open memory preview' }));
 
     expect(screen.queryByText('Personalization overview')).toBeNull();
+    expect(screen.queryByText('Advanced settings')).toBeNull();
     expect(screen.getByText('Memory preview page')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to personalization' }));
 
     expect(screen.getByText('Personalization overview')).toBeTruthy();
+    expect(screen.getByText('Advanced settings')).toBeTruthy();
     expect(screen.queryByText('Memory preview page')).toBeNull();
   });
 });

@@ -5,9 +5,6 @@ import type {
   WebDavSyncStorageHost,
 } from '../../src/main/capabilities.js';
 import { WebDavSyncConfigStore } from '../../src/main/config-store.js';
-import { webDavSyncFeatureSettingsDocuments } from '../../src/main/portable-feature-settings.js';
-
-export const testWebDavSyncFeatureSettingsDocuments = webDavSyncFeatureSettingsDocuments;
 
 export const testWebDavSyncStorageHost: WebDavSyncStorageHost = Object.freeze({
   dataLayout(dataRoot: string) {

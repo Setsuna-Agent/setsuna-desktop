@@ -30,7 +30,6 @@ export const webDavSyncMainFeature = defineMainFeature({
         { writeConfig: (filePath, value) => host.storage.writeJsonAtomically(filePath, value) },
       ),
       dataRoot: host.dataRoot,
-      featureSettingsDocuments: host.featureSettingsDocuments,
       fetch: (input, init) => host.fetch(input, init),
       runtime: host.runtime,
       storage: host.storage,

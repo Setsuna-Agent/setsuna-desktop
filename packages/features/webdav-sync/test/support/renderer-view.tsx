@@ -45,6 +45,7 @@ export const testSettingsViewUi: SettingsViewUi = Object.freeze({
       onChange={(event) => onChange(event.currentTarget.checked)}
     /></label>
   ),
+  Tooltip: ({ children }) => children,
 });
 
 const translate: RendererTranslate = (key, params) => {

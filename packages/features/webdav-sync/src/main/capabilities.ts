@@ -1,9 +1,9 @@
 import type { RuntimeDataMigrationReadiness } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type {
-  ErasedFeatureSettingsDocumentDefinition,
   FeatureCredentialBackup,
   PortableFeatureSettingsDocument,
+  PortableFeatureSettingsRestoreTarget,
 } from '@setsuna-desktop/feature-core/settings';
 import type { BrowserWindow } from 'electron';
 
@@ -38,6 +38,11 @@ export interface WebDavSyncRuntimeCoordinator {
   start(): Promise<void>;
   exportPortableFeatureSettings(): Promise<readonly PortableFeatureSettingsDocument[]>;
   exportFeatureCredentialBackups(): Promise<readonly FeatureCredentialBackup[]>;
+  stagePortableFeatureSettingsRestore(input: Readonly<{
+    documents: readonly PortableFeatureSettingsDocument[];
+    credentials: readonly FeatureCredentialBackup[];
+    stagingRoot: string;
+  }>): Promise<readonly PortableFeatureSettingsRestoreTarget[]>;
 }
 
 export interface WebDavSyncMainHost {
@@ -45,7 +50,6 @@ export interface WebDavSyncMainHost {
   readonly configPath: string;
   readonly credentialVault: WebDavSyncCredentialVault;
   readonly dataRoot: string;
-  readonly featureSettingsDocuments: readonly ErasedFeatureSettingsDocumentDefinition[];
   readonly mainWindow: BrowserWindow;
   readonly runtime: WebDavSyncRuntimeCoordinator;
   readonly storage: WebDavSyncStorageHost;

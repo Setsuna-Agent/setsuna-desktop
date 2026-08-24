@@ -1,13 +1,13 @@
-import type { FetchImpl } from '../model/provider-http.js';
+import type { WorkspaceDependenciesFetch } from '../contracts/index.js';
 
 export type ManagedWorkspaceDependencyNetworkOptions = {
-  fetchImpl?: FetchImpl;
+  fetchImpl?: WorkspaceDependenciesFetch;
   resolveNetworkEnvironment?: () => Promise<Record<string, string | null>>;
 };
 
 /** Keeps managed dependency downloads and their child installers on the same route. */
 export class ManagedWorkspaceDependencyNetwork {
-  private readonly fetchImpl: FetchImpl;
+  private readonly fetchImpl: WorkspaceDependenciesFetch;
 
   constructor(private readonly options: ManagedWorkspaceDependencyNetworkOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;

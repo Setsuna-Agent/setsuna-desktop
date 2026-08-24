@@ -1,7 +1,7 @@
 export type PackageSourceSavePlan =
   | { kind: 'invalid' }
   | { kind: 'unchanged'; displayValue: string }
-  | { kind: 'persist'; displayValue: string; persistedValue: string | undefined };
+  | { kind: 'persist'; displayValue: string; persistedValue: string };
 
 type PackageSourceSavePlanInput = {
   defaultValue: string;
@@ -25,6 +25,6 @@ export function planPackageSourceSave({
   return {
     kind: 'persist',
     displayValue,
-    persistedValue: displayValue === defaultValue ? undefined : displayValue,
+    persistedValue: displayValue,
   };
 }

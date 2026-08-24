@@ -24,7 +24,6 @@ import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import type {
-  WebDavSyncMainHost,
   WebDavSyncRuntimeCoordinator,
   WebDavSyncStorageHost,
 } from './capabilities.js';
@@ -44,6 +43,7 @@ import {
   normalizeWebDavUsername,
 } from './normalization.js';
 import { EncryptedWebDavRepository } from './repository.js';
+import { readPortableFeatureSettingsRestorePayload } from './portable-feature-settings.js';
 import { readLocalProjects } from './portable-projects.js';
 import { summarizeLocalSnapshotCategories } from './snapshot-data.js';
 import {
@@ -78,7 +78,6 @@ type WebDavSyncServiceOptions = {
   dataRoot: string;
   appVersion: string;
   configStore: WebDavSyncConfigStore;
-  featureSettingsDocuments: WebDavSyncMainHost['featureSettingsDocuments'];
   fetch: typeof globalThis.fetch;
   runtime: WebDavSyncRuntimeCoordinator;
   storage: WebDavSyncStorageHost;
@@ -158,7 +157,6 @@ export class WebDavSyncService {
       return await summarizeLocalSnapshotCategories({
         dataRoot: this.options.dataRoot,
         categories: DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
-        featureSettingsDocuments: this.options.featureSettingsDocuments,
         stagingRoot: path.join(workRoot, 'local-snapshot'),
         storage: this.options.storage,
         ...featureData,
@@ -298,7 +296,6 @@ export class WebDavSyncService {
         const localItems = await createLocalInventory({
           dataRoot: this.options.dataRoot,
           categories,
-          featureSettingsDocuments: this.options.featureSettingsDocuments,
           workRoot,
           storage: this.options.storage,
           ...featureData,
@@ -366,6 +363,17 @@ export class WebDavSyncService {
         });
         secretsBuffer = downloaded.secretsBuffer;
         runtimePrepared = await this.prepareRuntime(false, signal);
+        const restorePayload = await readPortableFeatureSettingsRestorePayload({
+          dataRoot: this.options.dataRoot,
+          stagingRoot,
+          preferencesSelected: plan.publicPlan.categories.includes('preferences'),
+          modelCredentialsSelected: plan.publicPlan.categories.includes('model_credentials'),
+          ...(secretsBuffer ? { restoredSecretsBuffer: secretsBuffer } : {}),
+        });
+        const featureSettingsTargets = await this.options.runtime.stagePortableFeatureSettingsRestore({
+          ...restorePayload,
+          stagingRoot,
+        });
         const featureData = await this.exportSnapshotFeatureData(plan.publicPlan.categories);
         this.updateOperation('preparing-restore', { cancellable: false });
         // Stopping the runtime before the final inventory closes every local
@@ -377,7 +385,6 @@ export class WebDavSyncService {
         const localItems = await createLocalInventory({
           dataRoot: this.options.dataRoot,
           categories: plan.publicPlan.categories,
-          featureSettingsDocuments: this.options.featureSettingsDocuments,
           workRoot: path.join(workRoot, 'current'),
           storage: this.options.storage,
           ...featureData,
@@ -394,7 +401,7 @@ export class WebDavSyncService {
           stagingRoot,
           sourceDataRoot: remote.manifest.sourceDataRoot,
           categories: plan.publicPlan.categories,
-          featureSettingsDocuments: this.options.featureSettingsDocuments,
+          featureSettingsTargets,
           portableProjects: downloaded.portableProjects,
           storage: this.options.storage,
           ...(secretsBuffer ? { secretsBuffer } : {}),
@@ -411,7 +418,6 @@ export class WebDavSyncService {
               await finalizeCommittedWebDavRestore(
                 this.options.dataRoot,
                 this.options.storage,
-                this.options.featureSettingsDocuments,
               );
             }
           } catch (restartError) {
@@ -420,7 +426,6 @@ export class WebDavSyncService {
                 await rollbackCommittedWebDavRestore(
                   this.options.dataRoot,
                   this.options.storage,
-                  this.options.featureSettingsDocuments,
                 );
                 await this.options.runtime.start();
               } catch (rollbackError) {
@@ -490,7 +495,6 @@ export class WebDavSyncService {
             sources = await materializeSnapshotForUpload({
               dataRoot: this.options.dataRoot,
               categories: config.categories,
-              featureSettingsDocuments: this.options.featureSettingsDocuments,
               workRoot,
               storage: this.options.storage,
               ...featureData,

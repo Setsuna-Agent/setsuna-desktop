@@ -4,17 +4,19 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
+import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
+import { memorySettings } from '@setsuna-desktop/feature-memory/contracts';
+import { visionRecognitionSettings } from '@setsuna-desktop/feature-vision-recognition/contracts';
+import { FileFeatureSettingsRegistry } from '../../../../desktop-runtime/src/features/settings/file-feature-settings-registry.js';
 import type { WebDavSnapshotManifest } from '../../src/main/model.js';
+import { readPortableFeatureSettingsRestorePayload } from '../../src/main/portable-feature-settings.js';
 import { snapshotSummary } from '../../src/main/repository.js';
 import {
   applyRestoredSnapshot,
   assertRestorePlanCurrent,
   buildWebDavRestorePlan,
 } from '../../src/main/restore.js';
-import {
-  testWebDavSyncFeatureSettingsDocuments,
-  testWebDavSyncStorageHost,
-} from '../support/feature-host.js';
+import { testWebDavSyncStorageHost } from '../support/feature-host.js';
 
 const temporaryRoots: string[] = [];
 
@@ -65,6 +67,12 @@ describe('WebDAV restore planning and commit', () => {
     const snapshot = { manifest, summary: snapshotSummary(manifest) };
     const localItems = [
       inventory('preferences', 'runtime/config.json', 'local-config', 'Current config'),
+      inventory(
+        'preferences',
+        'runtime/portable-feature-settings/workspace-dependencies/preferences.json',
+        'local-feature-settings',
+        'Workspace dependency settings',
+      ),
       inventory('model_credentials', 'model-credentials/providers/openai', 'same-key', 'OpenAI'),
       inventory('model_credentials', 'model-credentials/providers/local-only', 'local-key', 'Local only'),
       inventory('user_skills', 'runtime/user-skills/local/SKILL.md', 'local-skill', 'Local Skill'),
@@ -80,6 +88,8 @@ describe('WebDAV restore planning and commit', () => {
     expect(plan.publicPlan.removedCount).toBe(1);
     expect(plan.publicPlan.diffs.find((diff) => diff.category === 'preferences')?.overwritten)
       .toEqual([expect.objectContaining({ id: 'runtime/config.json' })]);
+    expect(plan.publicPlan.diffs.find((diff) => diff.category === 'preferences')?.preserved)
+      .toContainEqual(expect.objectContaining({ label: 'Workspace dependency settings' }));
     expect(plan.publicPlan.diffs.find((diff) => diff.category === 'model_credentials')?.removed)
       .toEqual([]);
     expect(plan.publicPlan.diffs.find((diff) => diff.category === 'model_credentials')?.preserved)
@@ -92,6 +102,13 @@ describe('WebDAV restore planning and commit', () => {
       plan,
       localItems.map((item) => item.logicalPath === 'runtime/config.json'
         ? { ...item, sha256: 'newer-local-config' }
+        : item),
+      new Date('2026-08-10T10:31:00.000Z'),
+    )).not.toThrow();
+    expect(() => assertRestorePlanCurrent(
+      plan,
+      localItems.map((item) => item.logicalPath.includes('portable-feature-settings')
+        ? { ...item, sha256: 'newer-local-feature-settings' }
         : item),
       new Date('2026-08-10T10:31:00.000Z'),
     )).not.toThrow();
@@ -253,11 +270,18 @@ describe('WebDAV restore planning and commit', () => {
       }),
     );
     const secrets = Buffer.from('{"providerApiKeys":{"openai":"sk-restored"}}\n');
+    const featureSettingsTargets = await stageFeatureSettingsRestore({
+      dataRoot,
+      stagingRoot,
+      preferencesSelected: true,
+      modelCredentialsSelected: true,
+      restoredSecretsBuffer: secrets,
+    });
 
     await applyRestoredSnapshot({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
+      featureSettingsTargets,
       storage: testWebDavSyncStorageHost,
-dataRoot,
+      dataRoot,
       stagingRoot,
       sourceDataRoot: '/different/device/root',
       categories: ['preferences', 'model_credentials', 'user_skills'],
@@ -420,11 +444,17 @@ dataRoot,
       schemaVersion: 1,
       data: { baseUrl: 'https://remote.example.test', model: 'remote' },
     }));
+    const featureSettingsTargets = await stageFeatureSettingsRestore({
+      dataRoot,
+      stagingRoot,
+      preferencesSelected: true,
+      modelCredentialsSelected: false,
+    });
 
     await applyRestoredSnapshot({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
+      featureSettingsTargets,
       storage: testWebDavSyncStorageHost,
-dataRoot,
+      dataRoot,
       stagingRoot,
       sourceDataRoot: dataRoot,
       categories: ['preferences'],
@@ -548,9 +578,8 @@ dataRoot,
     database.close();
 
     await applyRestoredSnapshot({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
-dataRoot,
+      dataRoot,
       stagingRoot,
       sourceDataRoot: dataRoot,
       categories: ['conversations'],
@@ -679,7 +708,6 @@ dataRoot,
     database.close();
 
     await applyRestoredSnapshot({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
 dataRoot,
       stagingRoot,
@@ -705,6 +733,26 @@ dataRoot,
     }
   });
 });
+
+async function stageFeatureSettingsRestore(input: Readonly<{
+  dataRoot: string;
+  stagingRoot: string;
+  preferencesSelected: boolean;
+  modelCredentialsSelected: boolean;
+  restoredSecretsBuffer?: Buffer;
+}>) {
+  const payload = await readPortableFeatureSettingsRestorePayload(input);
+  const registry = new FileFeatureSettingsRegistry(path.join(input.dataRoot, 'runtime'));
+  registry.registerBundles([
+    imageGenerationSettings,
+    memorySettings,
+    visionRecognitionSettings,
+  ]);
+  return registry.stagePortableDocumentsRestore({
+    ...payload,
+    stagingRoot: input.stagingRoot,
+  });
+}
 
 function projectRecord(id: string, name: string, projectPath?: string) {
   return {

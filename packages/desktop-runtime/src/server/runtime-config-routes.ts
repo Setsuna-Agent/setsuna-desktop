@@ -41,27 +41,6 @@ export async function handleRuntimeConfigRequest(
     return true;
   }
 
-  if (request.method === 'GET' && url.pathname === '/v1/workspace-dependencies') {
-    sendJson(response, 200, await runtime.workspaceDependencies.getStatus());
-    return true;
-  }
-
-  if (
-    request.method === 'POST'
-    && url.pathname === '/v1/workspace-dependencies/diagnose'
-  ) {
-    sendJson(response, 200, await runtime.workspaceDependencies.diagnose());
-    return true;
-  }
-
-  if (
-    request.method === 'POST'
-    && url.pathname === '/v1/workspace-dependencies/repair'
-  ) {
-    sendJson(response, 200, await runtime.workspaceDependencies.repair());
-    return true;
-  }
-
   if (request.method === 'POST' && url.pathname === '/v1/config/models') {
     const input = await readBody<RuntimeFetchModelsInput>(request, {});
     const savedProvider = input.providerId
