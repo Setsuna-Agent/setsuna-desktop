@@ -91,7 +91,6 @@ export interface MemoryControl {
 
 export const memoryControlCapability: CapabilityToken<MemoryControl> = defineCapability({
   id: 'memory.control',
-  major: 1,
   description: 'Long-term memory lifecycle, context, tools, settings, and management operations',
 });
 
@@ -119,7 +118,6 @@ export interface MemoryRuntimeHost {
 
 export const memoryRuntimeHostCapability: CapabilityToken<MemoryRuntimeHost> = defineCapability({
   id: 'memory.runtime-host',
-  major: 1,
   description: 'Narrow model, thread, event, usage, and persistence services required by Memory',
 });
 
@@ -131,7 +129,6 @@ export interface MemoryLegacySettingsAdapter {
 
 export const memoryLegacySettingsCapability: CapabilityToken<MemoryLegacySettingsAdapter> = defineCapability({
   id: 'memory.legacy-settings',
-  major: 1,
   description: 'One-way reader and cleanup adapter for pre-Feature memory settings',
 });
 

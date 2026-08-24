@@ -4,11 +4,12 @@
 
 ## 分层方向
 
-`contracts -> runtime -> Electron main/preload -> renderer`
+- Core 技术层：`contracts -> runtime -> Electron main/preload -> renderer`。
+- 纵向业务层：`feature-core + packages/features/*/{contracts,runtime,renderer,main,preload} -> 各进程显式 composition root`。
 
 - 生产代码只放在各模块的 `src/`。
 - 测试只放在独立的 `test/`，并镜像生产目录。
-- renderer 按 `app / features / services / shared` 组织。
+- renderer 按 `app / features / services / shared` 组织；纵向 Feature presentation 由对应 package 拥有。
 - runtime 的 Agent loop 按 `core / context / lifecycle / memory / tools` 组织，实现通过 ports/adapters 隔离。
 
 ## 常用入口
@@ -37,9 +38,9 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 96 total files
-├── src/ — 2 direct / 62 total files
-│   ├── composition/ — 3 direct / 3 total files
+apps/desktop/main/ — 0 direct / 95 total files
+├── src/ — 2 direct / 61 total files
+│   ├── composition/ — 2 direct / 2 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
 │   ├── ipc/ — 10 direct / 10 total files
@@ -76,15 +77,15 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 649 total files
-├── src/ — 2 direct / 470 total files
+apps/desktop/renderer/ — 0 direct / 651 total files
+├── src/ — 2 direct / 472 total files
 │   ├── app/ — 2 direct / 39 total files
 │   │   ├── controller/ — 7 direct / 7 total files
 │   │   ├── layout/ — 15 direct / 15 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 11 direct / 11 total files
+│   ├── composition/ — 13 direct / 13 total files
 │   ├── features/ — 329 files
 │   │   ├── capabilities/ — 21 direct / 31 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
@@ -182,13 +183,13 @@ apps/desktop/renderer/ — 0 direct / 649 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 74 total files
+packages/contracts/ — 4 direct / 75 total files
 ├── src/ — 33 direct / 48 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── review/ — 1 direct / 1 total files
 │   └── swe/ — 10 direct / 10 total files
-└── test/ — 13 direct / 22 total files
+└── test/ — 14 direct / 23 total files
     ├── support/ — 1 direct / 1 total files
     ├── swe/ — 1 direct / 1 total files
     └── swe-events/ — 7 direct / 7 total files
@@ -197,9 +198,9 @@ packages/contracts/ — 4 direct / 74 total files
 ### `packages/feature-core/`
 
 ```text
-packages/feature-core/ — 5 direct / 30 total files
-├── src/ — 8 direct / 21 total files
-│   ├── internal/ — 2 direct / 2 total files
+packages/feature-core/ — 4 direct / 30 total files
+├── src/ — 8 direct / 22 total files
+│   ├── internal/ — 3 direct / 3 total files
 │   ├── main/ — 1 direct / 1 total files
 │   ├── preload/ — 1 direct / 1 total files
 │   ├── renderer/ — 5 direct / 5 total files
@@ -214,11 +215,10 @@ packages/feature-core/ — 5 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 332 total files
-├── browser/ — 2 direct / 71 total files
-│   ├── src/ — 52 files
+packages/features/ — 0 direct / 321 total files
+├── browser/ — 2 direct / 70 total files
+│   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── main/ — 13 direct / 16 total files
 │   │   │   └── cdp/ — 3 direct / 3 total files
 │   │   ├── preload/ — 2 direct / 2 total files
@@ -229,56 +229,50 @@ packages/features/ — 0 direct / 332 total files
 │       │   └── cdp/ — 2 direct / 2 total files
 │       ├── renderer/ — 7 direct / 7 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── collaboration/ — 2 direct / 50 total files
-│   ├── src/ — 43 files
+├── collaboration/ — 2 direct / 48 total files
+│   ├── src/ — 41 files
 │   │   ├── contracts/ — 7 direct / 7 total files
-│   │   ├── generated/ — 1 direct / 1 total files
-│   │   ├── renderer/ — 14 direct / 30 total files
+│   │   ├── renderer/ — 13 direct / 29 total files
 │   │   │   └── avatars/ — 16 direct / 16 total files
 │   │   └── runtime/ — 5 direct / 5 total files
 │   └── test/ — 5 files
 │       ├── contracts/ — 1 direct / 1 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── goal/ — 2 direct / 32 total files
-│   ├── src/ — 25 files
+├── goal/ — 2 direct / 30 total files
+│   ├── src/ — 23 files
 │   │   ├── contracts/ — 6 direct / 6 total files
-│   │   ├── generated/ — 1 direct / 1 total files
-│   │   ├── renderer/ — 9 direct / 9 total files
+│   │   ├── renderer/ — 8 direct / 8 total files
 │   │   └── runtime/ — 9 direct / 9 total files
 │   └── test/ — 5 files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── runtime/ — 3 direct / 3 total files
-├── image-generation/ — 3 direct / 21 total files
-│   ├── src/ — 16 files
+├── image-generation/ — 3 direct / 20 total files
+│   ├── src/ — 15 files
 │   │   ├── contracts/ — 5 direct / 5 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── renderer/ — 7 direct / 7 total files
 │   │   └── runtime/ — 3 direct / 3 total files
 │   └── test/ — 2 files
 │       └── runtime/ — 2 direct / 2 total files
-├── memory/ — 2 direct / 30 total files
-│   ├── src/ — 24 files
+├── memory/ — 2 direct / 29 total files
+│   ├── src/ — 23 files
 │   │   ├── contracts/ — 7 direct / 7 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── renderer/ — 6 direct / 6 total files
 │   │   └── runtime/ — 10 direct / 10 total files
 │   └── test/ — 4 files
 │       └── runtime/ — 4 direct / 4 total files
-├── review/ — 2 direct / 21 total files
-│   ├── src/ — 15 files
+├── review/ — 2 direct / 20 total files
+│   ├── src/ — 14 files
 │   │   ├── contracts/ — 4 direct / 4 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── main/ — 8 direct / 8 total files
 │   │   └── preload/ — 2 direct / 2 total files
 │   └── test/ — 4 files
 │       ├── integration/ — 2 files
 │       │   └── main/ — 2 direct / 2 total files
 │       └── main/ — 2 direct / 2 total files
-├── terminal/ — 2 direct / 25 total files
-│   ├── src/ — 19 files
+├── terminal/ — 2 direct / 24 total files
+│   ├── src/ — 18 files
 │   │   ├── contracts/ — 3 direct / 3 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── main/ — 5 direct / 5 total files
 │   │   ├── preload/ — 2 direct / 2 total files
 │   │   └── renderer/ — 8 direct / 8 total files
@@ -287,18 +281,16 @@ packages/features/ — 0 direct / 332 total files
 │       │   └── main/ — 1 direct / 1 total files
 │       ├── main/ — 1 direct / 1 total files
 │       └── renderer/ — 2 direct / 2 total files
-├── vision-recognition/ — 2 direct / 19 total files
-│   ├── src/ — 15 files
+├── vision-recognition/ — 2 direct / 18 total files
+│   ├── src/ — 14 files
 │   │   ├── contracts/ — 5 direct / 5 total files
-│   │   ├── generated/ — 1 direct / 1 total files
 │   │   ├── renderer/ — 6 direct / 6 total files
 │   │   └── runtime/ — 3 direct / 3 total files
 │   └── test/ — 2 files
 │       └── runtime/ — 2 direct / 2 total files
-└── webdav-sync/ — 2 direct / 63 total files
-    ├── src/ — 43 files
+└── webdav-sync/ — 2 direct / 62 total files
+    ├── src/ — 42 files
     │   ├── contracts/ — 4 direct / 4 total files
-    │   ├── generated/ — 1 direct / 1 total files
     │   ├── main/ — 21 direct / 21 total files
     │   ├── preload/ — 2 direct / 2 total files
     │   └── renderer/ — 15 direct / 15 total files
@@ -311,8 +303,8 @@ packages/features/ — 0 direct / 332 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 565 total files
-├── src/ — 2 direct / 332 total files
+packages/desktop-runtime/ — 4 direct / 563 total files
+├── src/ — 2 direct / 330 total files
 │   ├── adapters/ — 140 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── debug/ — 1 direct / 1 total files
@@ -332,10 +324,10 @@ packages/desktop-runtime/ — 4 direct / 565 total files
 │   │   ├── tool/ — 15 direct / 37 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 10 direct / 10 total files
-│   ├── composition/ — 3 direct / 3 total files
+│   ├── composition/ — 2 direct / 2 total files
 │   ├── extensions/ — 7 direct / 7 total files
-│   ├── features/ — 6 files
-│   │   ├── events/ — 2 direct / 2 total files
+│   ├── features/ — 5 files
+│   │   ├── events/ — 1 direct / 1 total files
 │   │   ├── management/ — 1 direct / 1 total files
 │   │   ├── routes/ — 1 direct / 1 total files
 │   │   └── settings/ — 2 direct / 2 total files
@@ -410,9 +402,9 @@ packages/desktop-runtime/ — 4 direct / 565 total files
 ### `scripts/`
 
 ```text
-scripts/ — 21 direct / 33 total files
+scripts/ — 22 direct / 35 total files
 ├── ripgrep/ — 3 direct / 3 total files
-├── test/ — 3 direct / 5 total files
+├── test/ — 4 direct / 6 total files
 │   ├── ripgrep/ — 1 direct / 1 total files
 │   └── windows-sandbox/ — 1 direct / 1 total files
 └── windows-sandbox/ — 4 direct / 4 total files
@@ -508,13 +500,13 @@ plugins/ — 1 direct / 61 total files
 ### `docs/`
 
 ```text
-docs/ — 1 direct / 46 total files
+docs/ — 1 direct / 48 total files
 ├── apps/ — 13 files
 │   └── desktop/ — 1 direct / 13 total files
 │       ├── main/ — 5 direct / 5 total files
 │       ├── preload/ — 1 direct / 1 total files
 │       └── renderer/ — 6 direct / 6 total files
-├── architecture/ — 4 direct / 4 total files
+├── architecture/ — 6 direct / 6 total files
 ├── designs/ — 8 direct / 8 total files
 ├── development/ — 3 direct / 3 total files
 ├── packages/ — 12 files

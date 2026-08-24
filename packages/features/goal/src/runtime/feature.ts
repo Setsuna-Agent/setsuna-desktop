@@ -4,7 +4,6 @@ import {
   createFeatureProjectionStore,
   defineRuntimeDependencies,
   defineRuntimeFeature,
-  runtimeFeatureEventRegistrarCapability,
   runtimeRouteRegistrarCapability,
   threadEventReaderCapability,
 } from '@setsuna-desktop/feature-core/runtime';
@@ -23,7 +22,6 @@ import { GoalConflictError, GoalThreadNotFoundError } from './runtime-goal-error
 
 const dependencies = defineRuntimeDependencies({
   routes: requiredCapability(runtimeRouteRegistrarCapability),
-  events: requiredCapability(runtimeFeatureEventRegistrarCapability),
   threadEvents: requiredCapability(threadEventReaderCapability),
   host: requiredCapability(goalRuntimeHostCapability),
 });
@@ -33,22 +31,18 @@ export const goalRuntimeFeature = defineRuntimeFeature({
   provides: [declareCapabilityProvider(goalControlCapability)],
   dependencies,
   setup(context) {
-    const unhealthyThreads = new Set<string>();
     const registry = createRuntimeGoalEventRegistry();
     const projection = createFeatureProjectionStore<GoalState>({
-      featureId: goalFeature.id,
       eventReader: context.dependencies.threadEvents,
       initialState: () => Object.freeze({ goal: null }),
       reduce: (state, record) => registry.reduce(state, record),
     });
     context.scope.track(projection, (store) => store.dispose());
-    context.dependencies.events.registerProjection(context.scope, projection);
 
     const control = new RuntimeGoalCoordinator({
       host: context.dependencies.host,
       onProjectionFailure(threadId) {
-        unhealthyThreads.add(threadId);
-        context.health.markDegraded({
+        context.health.setCondition(`projection:${threadId}`, {
           code: 'GOAL_PROJECTION_UNAVAILABLE',
           message: 'Goal state could not be reconstructed for one or more threads.',
         });
@@ -60,14 +54,12 @@ export const goalRuntimeFeature = defineRuntimeFeature({
     const readHealthyState = async (threadId: string) => {
       try {
         const state = await control.readState(threadId);
-        unhealthyThreads.delete(threadId);
-        if (!unhealthyThreads.size) context.health.markActive();
+        context.health.setCondition(`projection:${threadId}`, null);
         return state;
       } catch (error) {
         const domainFailure = goalDomainFailure(error);
         if (domainFailure) throw domainFailure;
-        unhealthyThreads.add(threadId);
-        context.health.markDegraded({
+        context.health.setCondition(`projection:${threadId}`, {
           code: 'GOAL_PROJECTION_UNAVAILABLE',
           message: 'Goal state could not be reconstructed for a thread.',
         });

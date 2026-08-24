@@ -19,6 +19,14 @@ import path from 'node:path';
 
 const PORTABLE_FEATURE_SETTINGS_ROOT = 'runtime/portable-feature-settings';
 const MAX_DOCUMENT_BYTES = 1024 * 1024;
+
+/** Settings schemas explicitly supported by WebDAV backup and restore. */
+export const webDavSyncFeatureSettingsDocuments = Object.freeze([
+  ...imageGenerationSettings.erasedDocuments,
+  ...memorySettings.erasedDocuments,
+  ...visionRecognitionSettings.erasedDocuments,
+] satisfies readonly ErasedFeatureSettingsDocumentDefinition[]);
+
 export type PortableFeatureSettingsFile = Readonly<{
   sourcePath: string;
   logicalPath: string;

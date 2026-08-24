@@ -7,9 +7,9 @@ import 'katex/dist/katex.min.css';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
+import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
 import { RendererFeatureViewsProvider } from './composition/feature-view-registries.js';
-import { CollaborationRendererProvider } from '@setsuna-desktop/feature-collaboration/renderer';
 import { CodeAppearanceProvider } from './shared/code/CodeAppearanceProvider.js';
 import { applyDesktopPlatformAttribute } from './shared/lib/desktopPlatform.js';
 import { I18nProvider, initializeLocalePreference } from './shared/i18n/I18nProvider.js';
@@ -61,13 +61,13 @@ async function bootstrapRenderer(): Promise<void> {
     <React.StrictMode>
       <I18nProvider messageCatalog={features.messages}>
         <RendererFeatureViewsProvider views={features.views}>
-          <CollaborationRendererProvider service={features.collaboration}>
+          <CollaborationFeatureServiceBoundary service={features.collaboration}>
             <KeyboardShortcutsProvider>
               <CodeAppearanceProvider>
                 <App />
               </CodeAppearanceProvider>
             </KeyboardShortcutsProvider>
-          </CollaborationRendererProvider>
+          </CollaborationFeatureServiceBoundary>
         </RendererFeatureViewsProvider>
       </I18nProvider>
     </React.StrictMode>,

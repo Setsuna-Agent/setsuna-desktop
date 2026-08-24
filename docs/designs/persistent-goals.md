@@ -48,7 +48,7 @@
 - `safety`：自动轮次数、连续无进展次数和最近进展指纹。
 - `execution`：初始附件、Skill、thinking 配置和 source message，供后续续轮复用。
 
-真源是 append-only `feature.event` envelope 中的 `goal/goal.state-replaced@1`；payload 是 `{ goal: Goal | null }`。runtime 与 renderer 都通过同一个 reducer 构建 `{ state, throughSeq }` 投影，无关 Core 事件只推进全局水位。旧 `thread.goal_updated` / `thread.goal_cleared` 只保留读取 decoder，新代码不再写入。`goal.id` 与 objective revision binding 共同阻止旧 turn 的迟到结算覆盖新版 Goal。
+真源是 append-only `feature.event` envelope 中的 `goal/goal.state-replaced@1`；payload 是 `{ goal: Goal | null }`。runtime projection 使用 Goal reducer 从持久日志增量构建 `{ state, throughSeq }`，renderer 只读取这份 typed snapshot，不维护第二套 live reducer。旧 `thread.goal_updated` / `thread.goal_cleared` 只保留读取 decoder，新代码不再写入。`goal.id` 与 objective revision binding 共同阻止旧 turn 的迟到结算覆盖新版 Goal。
 
 ## 生命周期
 
@@ -98,7 +98,7 @@
 
 ## Renderer 交互
 
-Goal renderer controller 先订阅当前线程的全局 `advance/event` feed，再读取强类型 state snapshot。当前 Goal（除 `complete`）通过 composer-status contribution 显示在输入框上方：
+Goal renderer controller 先订阅当前线程的刷新信号，再读取强类型 state snapshot。Core sequence gate 接受 Goal event 时只传递最低 `throughSeq`，SSE resync 时也触发重读；controller 不接收 Goal payload。当前 Goal（除 `complete`）通过静态 composer-status contribution 显示在输入框上方：
 
 - 状态与单行 objective；
 - 累计耗时，active turn 期间每秒更新；
@@ -119,9 +119,9 @@ Goal renderer controller 先订阅当前线程的全局 `advance/event` feed，�
 
 ## 验证覆盖
 
-- Feature event/projection：live/replay 同 reducer、固定高水位、duplicate/gap、cache dispose、旧事件 decoder 和未知版本诊断。
+- Feature event/projection：runtime 固定高水位 replay、增量 cache、cache dispose、旧事件 decoder 和未知版本诊断。
 - runtime integration：自动续轮与最终计量、取消/clear 迟到结算、用户 steer、编辑保留状态、restart reconcile、无进展保护、队列 Goal 替换与单写 envelope。
-- renderer unit：subscribe-before-query、`snapshot 10 → advance 11 → Goal event 12`、gap refetch、迟到 snapshot、状态栏操作和退出数据展示。
+- renderer unit：subscribe-before-query、请求期间到达刷新信号、迟到 snapshot、resync 重读、状态栏操作和退出数据展示。
 - Skill：`quick_validate.py` 校验 frontmatter 和 interface metadata；registry integration 负责实际发现与加载。
 
 ## 相关文件
@@ -130,7 +130,7 @@ Goal renderer controller 先订阅当前线程的全局 `advance/event` feed，�
 - `packages/features/goal/src/runtime/`
 - `packages/features/goal/src/renderer/`
 - `packages/feature-core/src/runtime/events.ts`
-- `packages/desktop-runtime/src/composition/builtin-runtime-features.ts`
-- `apps/desktop/renderer/src/composition/builtin-renderer-features.ts`
+- `packages/desktop-runtime/src/composition/runtime-feature-composition.ts`
+- `apps/desktop/renderer/src/composition/renderer-feature-composition.ts`
 - `apps/desktop/renderer/src/features/chat/conversation/chatMessageDisplay.ts`
 - `skills/goal-writer/SKILL.md`

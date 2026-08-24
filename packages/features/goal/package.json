@@ -4,9 +4,6 @@
   "description": "Persistent multi-turn Goal Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "goal"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

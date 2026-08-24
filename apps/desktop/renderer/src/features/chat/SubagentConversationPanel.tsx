@@ -6,10 +6,10 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import {
-  AgentAvatar,
-  SubagentTaskStatus,
-  useCollaborationState,
-} from '@setsuna-desktop/feature-collaboration/renderer';
+  CollaborationFeatureAgentAvatar,
+  CollaborationFeatureTaskStatus,
+  useCollaborationFeatureState,
+} from '../../composition/CollaborationFeatureBoundary.js';
 import { X } from 'lucide-react';
 import { useCallback, useRef, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -73,7 +73,7 @@ export function SubagentConversationPanel({
     onError,
     threadId: childThreadId,
   });
-  const collaboration = useCollaborationState(parentThreadId);
+  const collaboration = useCollaborationFeatureState(parentThreadId);
   const task = collaboration.state.tasks.find((candidate) => candidate.childThreadId === childThreadId)
     ?? fallbackTask(childThreadId, initialDisplayName, child.currentThread?.title, t);
   const messageHistory = useThreadMessageHistory(client, child.currentThread);
@@ -152,11 +152,11 @@ function SubagentHeader({
   return (
     <header className="subagent-panel-header">
       <div className="subagent-panel-header__identity">
-        <AgentAvatar identity={task.identity} size={32} />
+        <CollaborationFeatureAgentAvatar identity={task.identity} size={32} />
         <div className="subagent-panel-header__text">
           <div className="subagent-panel-header__name-row">
             <strong className="subagent-panel-header__name">{task.identity.displayName}</strong>
-            <SubagentTaskStatus status={task.status} translate={t} />
+            <CollaborationFeatureTaskStatus status={task.status} translate={t} />
           </div>
           <div className="subagent-panel-header__title" title={title ?? task.title}>
             {title ?? task.title}

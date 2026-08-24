@@ -64,7 +64,7 @@ async function setupFeature(options: Readonly<{ failure: 'document' | 'secret' |
         retire,
       },
     },
-    health: { markActive() {}, markDegraded() {} },
+    health: { setCondition() {} },
     provide() {},
   });
   await scope.finishDispose();

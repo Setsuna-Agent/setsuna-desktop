@@ -579,7 +579,7 @@ class TestImageGenerationService {
       options.threadStore ?? { async listThreads() { return []; }, async getThread() { return null; } },
       { fetch: options.fetchImpl ?? fetch },
       options.workspaceProjects ?? null,
-      { markActive() {}, markDegraded() {} },
+      { setCondition() {} },
       async () => ({
         featureId: imageGenerationFeature.id,
         documentId: 'connection',

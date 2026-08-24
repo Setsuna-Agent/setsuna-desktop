@@ -100,6 +100,8 @@ dev 启动流程：
 - alias：
   - `@renderer`
   - `@setsuna-desktop/contracts`
+  - `@setsuna-desktop/feature-core`
+  - `packages/features/*` 的 source alias 由 `scripts/feature-package-aliases.ts` 派生，并与 Vitest 共用
 - output：`dist/renderer`。
 - `emptyOutDir: false`，避免删掉 Electron/runtime 构建产物。
 

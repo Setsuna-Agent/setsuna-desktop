@@ -1,4 +1,11 @@
-import type { WebDavSyncStorageHost } from '@setsuna-desktop/feature-webdav-sync/main';
+import {
+  finalizeCommittedWebDavRestore,
+  recoverInterruptedWebDavRestore,
+  rollbackCommittedWebDavRestore,
+  webDavSyncFeatureSettingsDocuments,
+  type WebDavSyncLifecycle,
+  type WebDavSyncStorageHost,
+} from '@setsuna-desktop/feature-webdav-sync/main';
 import {
   removeFileDurably,
   syncDirectoryDurably,
@@ -25,3 +32,11 @@ export const desktopWebDavSyncStorageHost: WebDavSyncStorageHost = Object.freeze
   syncDirectoryDurably,
   writeJsonAtomically,
 });
+
+export {
+  finalizeCommittedWebDavRestore,
+  recoverInterruptedWebDavRestore,
+  rollbackCommittedWebDavRestore,
+  webDavSyncFeatureSettingsDocuments,
+};
+export type DesktopWebDavSyncLifecycle = WebDavSyncLifecycle;

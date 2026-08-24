@@ -22,6 +22,5 @@ export interface RuntimeRouteRegistrar {
 
 export const runtimeRouteRegistrarCapability: CapabilityToken<RuntimeRouteRegistrar> = defineCapability({
   id: 'runtime.feature-routes',
-  major: 1,
   description: 'Register codec-validated Feature routes on the authenticated runtime server',
 });

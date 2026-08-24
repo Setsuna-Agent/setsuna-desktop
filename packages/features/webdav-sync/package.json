@@ -4,9 +4,6 @@
   "description": "Encrypted WebDAV backup and restore Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "webdav-sync"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

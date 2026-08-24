@@ -9,7 +9,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | 源码 | 职责 | 详细文档 |
 | --- | --- | --- |
 | `src/index.ts` | 启动模式判定、窗口和服务组装、生命周期 | 本文 |
-| `src/composition/` | Main Feature mount、宿主 Capability adapter、静态 settings catalog | [Feature Composition](../../../designs/feature-composition-architecture.md) |
+| `src/composition/` | Main FeatureHost、宿主 Capability adapter、静态 settings catalog | [Feature Composition](../../../architecture/feature-composition.md) |
 | `src/data-root/` | 数据根定位、迁移、恢复、旧根清理 | [数据根](data-root.md) |
 | `src/runtime/` | RuntimeHost、bundled tools、native bridge、进程环境 | [Runtime 与 IPC](runtime-and-ipc.md) |
 | `src/ipc/` | 按能力注册 main IPC 与 sender 校验 | [Runtime 与 IPC](runtime-and-ipc.md) |

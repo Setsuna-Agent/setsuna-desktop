@@ -2,7 +2,6 @@ import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import {
   defineRendererDependencies,
   defineRendererFeature,
-  rendererSettingsViewRegistryCapability,
   type SettingsViewHostProps,
 } from '@setsuna-desktop/feature-core/renderer';
 import { CloudCog } from 'lucide-react';
@@ -15,7 +14,6 @@ import { WebDavSyncSettings } from './WebDavSyncSettings.js';
 
 const dependencies = defineRendererDependencies({
   host: requiredCapability(webDavSyncRendererHostCapability),
-  settingsViews: requiredCapability(rendererSettingsViewRegistryCapability),
 });
 
 export const webDavSyncRendererFeature = defineRendererFeature({
@@ -24,16 +22,18 @@ export const webDavSyncRendererFeature = defineRendererFeature({
   messages: [webDavSyncMessages],
   setup(context) {
     const { bridge } = context.dependencies.host;
-    context.dependencies.settingsViews.register(context.scope, {
-      icon: CloudCog,
-      sectionId: 'webdav-sync',
-      location: 'settings',
-      navigationGroupId: 'models-and-services',
-      order: 350,
-      titleKey: 'feature.webdavSync.settings.title',
-      descriptionKey: 'feature.webdavSync.settings.description',
-      render: (props) => <WebDavSyncSettingsView bridge={bridge} {...props} />,
-    });
+    return {
+      settingsViews: [{
+        icon: CloudCog,
+        sectionId: 'webdav-sync',
+        location: 'settings',
+        navigationGroupId: 'models-and-services',
+        order: 350,
+        titleKey: 'feature.webdavSync.settings.title',
+        descriptionKey: 'feature.webdavSync.settings.description',
+        render: (props) => <WebDavSyncSettingsView bridge={bridge} {...props} />,
+      }],
+    };
   },
 });
 

@@ -3,7 +3,6 @@ import {
   defineRendererDependencies,
   defineRendererFeature,
   rendererFeatureOperationTransportCapability,
-  rendererSettingsViewRegistryCapability,
 } from '@setsuna-desktop/feature-core/renderer';
 import { visionRecognitionFeature } from '../contracts/index.js';
 import { createVisionRecognitionClient } from './client.js';
@@ -12,7 +11,6 @@ import { VisionRecognitionSettingsView } from './VisionRecognitionSettingsView.j
 
 const dependencies = defineRendererDependencies({
   transport: requiredCapability(rendererFeatureOperationTransportCapability),
-  settingsViews: requiredCapability(rendererSettingsViewRegistryCapability),
 });
 
 export const visionRecognitionRendererFeature = defineRendererFeature({
@@ -21,14 +19,16 @@ export const visionRecognitionRendererFeature = defineRendererFeature({
   messages: [visionRecognitionMessages],
   setup(context) {
     const client = createVisionRecognitionClient(context.dependencies.transport);
-    context.dependencies.settingsViews.register(context.scope, {
-      sectionId: 'openai-vision-recognition',
-      location: 'capabilities',
-      order: 110,
-      titleKey: 'feature.visionRecognition.settings.title',
-      render: ({ translate, ui }) => (
-        <VisionRecognitionSettingsView client={client} translate={translate} ui={ui} />
-      ),
-    });
+    return {
+      settingsViews: [{
+        sectionId: 'openai-vision-recognition',
+        location: 'capabilities',
+        order: 110,
+        titleKey: 'feature.visionRecognition.settings.title',
+        render: ({ translate, ui }) => (
+          <VisionRecognitionSettingsView client={client} translate={translate} ui={ui} />
+        ),
+      }],
+    };
   },
 });

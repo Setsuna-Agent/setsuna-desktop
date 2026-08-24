@@ -44,7 +44,7 @@ export const memoryRuntimeFeature = defineRuntimeFeature({
       await preferences.read();
       settingsReady = true;
     } catch {
-      context.health.markDegraded({
+      context.health.setCondition('settings', {
         code: 'MEMORY_SETTINGS_INVALID',
         message: 'Memory settings could not be applied.',
       });
@@ -73,7 +73,7 @@ export const memoryRuntimeFeature = defineRuntimeFeature({
     context.provide(declareCapabilityProvider(memoryControlCapability), control);
     if (settingsReady) {
       await context.dependencies.legacySettings.retire();
-      context.health.markActive();
+      context.health.setCondition('settings', null);
     }
   },
 });

@@ -553,28 +553,29 @@ export class AgentLoop {
   activeTurnId(threadId: string): string | null {
     return this.turnTasks.activeForThread(threadId)?.turnId ?? null;
   }
-
   /** Binds the optional Goal Feature after runtime composition has activated it. */
-  bindGoalControl(control: GoalControl): void {
+  bindGoalControl(control: GoalControl): () => void {
     if (this.goals.available && this.goals !== control) {
       throw new Error('Goal control is already bound.');
     }
     this.goals = control;
+    return () => { if (this.goals === control) this.goals = createNoopGoalControl(); };
   }
-
   /** Binds the optional Collaboration Feature after runtime composition activates it. */
-  bindCollaborationControl(control: CollaborationControl): void {
+  bindCollaborationControl(control: CollaborationControl): () => void {
     if (this.collaboration.available && this.collaboration !== control) {
       throw new Error('Collaboration control is already bound.');
     }
     this.collaboration = control;
+    return () => { if (this.collaboration === control) this.collaboration = createNoopCollaborationControl(); };
   }
   /** Binds the optional Memory Feature after runtime composition activates it. */
-  bindMemoryControl(control: MemoryControl): void {
+  bindMemoryControl(control: MemoryControl): () => void {
     if (this.memory.available && this.memory !== control) {
       throw new Error('Memory control is already bound.');
     }
     this.memory = control;
+    return () => { if (this.memory === control) this.memory = createNoopMemoryControl(); };
   }
   memoryControl(): MemoryControl {
     return this.memory;
@@ -896,5 +897,4 @@ export class AgentLoop {
     const events = await this.options.threadStore.listEvents(threadId, sinceSeq);
     for (const event of events) this.options.eventBus.publish(event);
   }
-
 }

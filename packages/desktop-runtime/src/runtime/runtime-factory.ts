@@ -48,7 +48,6 @@ import { ExtensionManager } from '../extensions/extension-manager.js';
 import { RuntimeRouteRegistry } from '../features/routes/runtime-route-registry.js';
 import { FileFeatureSettingsRegistry } from '../features/settings/file-feature-settings-registry.js';
 import { RuntimeFeatureManagement } from '../features/management/runtime-feature-management.js';
-import { RuntimeFeatureEventRegistry } from '../features/events/runtime-feature-event-registry.js';
 import { ThreadStoreEventReader } from '../features/events/thread-store-event-reader.js';
 import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
@@ -90,7 +89,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const approvalGate = new InMemoryApprovalGate(clock, ids);
   // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
   const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
-  const featureEvents = new RuntimeFeatureEventRegistry();
   const threadEventReader = new ThreadStoreEventReader(persistedThreadStore);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
   const generatedImageStore = new FileGeneratedImageStore(runtimeDataDir, ids);
@@ -101,7 +99,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     undefined,
     debugTraceStore,
   );
-  eventWriter.subscribePersisted((event) => featureEvents.accept(event));
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
   const configStore = new FileConfigStore(runtimeDataDir, {
@@ -246,7 +243,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventBus,
     eventWriter,
     featureRoutes,
-    featureEvents,
     featureSettings,
     featureManagement,
     environmentResolver,

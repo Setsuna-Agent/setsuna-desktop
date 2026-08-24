@@ -7,6 +7,5 @@ export type WebDavSyncRendererHost = Readonly<{
 
 export const webDavSyncRendererHostCapability: CapabilityToken<WebDavSyncRendererHost> = defineCapability({
   id: 'webdav-sync.renderer-host',
-  major: 1,
   description: 'Desktop preload bridge used by the WebDAV sync settings view',
 });

@@ -4,7 +4,6 @@ import type {
   RuntimeMessage
 } from '@setsuna-desktop/contracts';
 import {
-  collaborationFeature,
   createInitialCollaborationState,
   type CollaborationState,
 } from '@setsuna-desktop/feature-collaboration/contracts';
@@ -22,7 +21,6 @@ import type { ThreadStore } from '../../../src/ports/thread-store.js';
 export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: ThreadStore): void {
   const registry = createRuntimeCollaborationEventRegistry();
   const projection: FeatureProjectionStore<CollaborationState> = {
-    featureId: collaborationFeature.id,
     async read(threadId) {
       const events = await threadStore.listEvents(threadId, 0);
       let state = createInitialCollaborationState();
@@ -33,8 +31,6 @@ export function bindTestCollaborationFeature(loop: AgentLoop, threadStore: Threa
       }
       return { state, throughSeq };
     },
-    accept: async () => undefined,
-    invalidate: () => undefined,
     dispose: async () => undefined,
   };
   loop.bindCollaborationControl(new RuntimeCollaborationCoordinator({

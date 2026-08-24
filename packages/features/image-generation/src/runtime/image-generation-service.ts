@@ -223,13 +223,13 @@ export class RuntimeImageGenerationService implements ImageGenerationService {
   private setUnavailable(health: ImageGenerationHealth, code: string, message: string): void {
     this.applied = null;
     this.health = health;
-    this.healthReporter.markDegraded({ code, message });
+    this.healthReporter.setCondition('availability', { code, message });
   }
 
   private markProviderUnavailable(revision: number, message: string): void {
     if (this.applied?.revision !== revision) return;
     this.health = 'provider-unavailable';
-    this.healthReporter.markDegraded({
+    this.healthReporter.setCondition('availability', {
       code: 'IMAGE_GENERATION_PROVIDER_UNAVAILABLE',
       message,
     });
@@ -237,7 +237,7 @@ export class RuntimeImageGenerationService implements ImageGenerationService {
 
   private markReady(): void {
     this.health = 'ready';
-    this.healthReporter.markActive();
+    this.healthReporter.setCondition('availability', null);
   }
 
   private markReadyForRevision(revision: number): void {

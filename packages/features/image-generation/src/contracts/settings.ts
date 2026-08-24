@@ -108,8 +108,6 @@ const connectionDocument = defineFeatureSettingsDocument<
       : {}),
   }),
   syncPolicy: 'portable',
-  retentionPolicy: 'retain-until-explicit-delete',
-  applyPolicy: 'immediate',
 });
 
 export const imageGenerationSettings = defineFeatureSettingsBundle({

@@ -115,12 +115,32 @@ export class ExtensionManager implements ExtensionRuntime {
     this.visionRecognition = options.visionRecognition;
   }
 
-  setImageGenerationService(service: NonNullable<ExtensionManagerOptions['imageGeneration']>): void {
+  setImageGenerationService(
+    service: NonNullable<ExtensionManagerOptions['imageGeneration']>,
+  ): () => void {
+    if (this.imageGeneration && this.imageGeneration !== service) {
+      throw new Error('Image generation service is already bound.');
+    }
     this.imageGeneration = service;
+    return bindingDisposer(
+      () => this.imageGeneration,
+      (value) => { this.imageGeneration = value; },
+      service,
+    );
   }
 
-  setVisionRecognitionService(service: NonNullable<ExtensionManagerOptions['visionRecognition']>): void {
+  setVisionRecognitionService(
+    service: NonNullable<ExtensionManagerOptions['visionRecognition']>,
+  ): () => void {
+    if (this.visionRecognition && this.visionRecognition !== service) {
+      throw new Error('Vision recognition service is already bound.');
+    }
     this.visionRecognition = service;
+    return bindingDisposer(
+      () => this.visionRecognition,
+      (value) => { this.visionRecognition = value; },
+      service,
+    );
   }
 
   async listTools(context: ToolExecutionContext): Promise<ExtensionRegisteredTool[]> {
@@ -734,4 +754,17 @@ function cloneStatus(status: RuntimeExtensionStatus): RuntimeExtensionStatus {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function bindingDisposer<T>(
+  read: () => T | undefined,
+  write: (value: T | undefined) => void,
+  bound: T,
+): () => void {
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    if (read() === bound) write(undefined);
+  };
 }

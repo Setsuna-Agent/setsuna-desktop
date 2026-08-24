@@ -141,7 +141,7 @@ export function useSideChat({
 
       if (projection.resynced) {
         if (projection.thread) {
-          featureViews.events.advance(projection.thread.id, projection.thread.lastSeq);
+          featureViews.events.resync(projection.thread.id, projection.thread.lastSeq);
         }
         terminalTurnIdsRef.current.clear();
         setActiveTurnId(activeTurnIdFromThreadSnapshot(

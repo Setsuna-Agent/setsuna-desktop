@@ -2,21 +2,27 @@
 
 Setsuna Desktop 的关键功能通常跨越多个模块。这篇文档列出常见改动的最短完整链路，用来避免只改一层后留下协议漂移。
 
-## 新增 Runtime REST API
+## 新增 Runtime query 或 command
 
-按下面的顺序：
+先判定业务 owner：
 
-1. 在 `packages/contracts/src/` 定义输入、输出和错误所需类型。
-2. 在 `packages/contracts/src/http.ts` 扩展 `DesktopRuntimeClient`。
-3. 在 `packages/desktop-runtime/src/server/runtime-rest-routes.ts` 增加 route。
-4. 把业务逻辑落到已有 store、AgentLoop facade、port 或 adapter；route 只做协议解析。
-5. 在 `apps/desktop/renderer/src/services/runtime-client/client.ts` 实现方法。
-6. 在 hook/feature 中调用方法，不直接拼 path。
-7. 添加 server integration、client 和 feature 测试。
+- Feature 专用行为：在 `packages/features/<feature>/contracts` 定义 typed operation，由同 Feature runtime module 注册 route，renderer 使用 Feature-owned typed client/controller。不要扩充 `DesktopRuntimeClient`。
+- Core 通用行为：在 `packages/contracts` 定义 DTO/client contract，由 runtime Core route 调用现有 use case/port，renderer domain client 实现对应方法。
+
+两类路径都要求 transport adapter 只解析协议、调用业务 owner 并映射错误；事务、取消、资源清理和并发协调不能留在 route。
 
 如果 API 是 SWE 客户端专用，优先走 `server/app-server/*`，不要同时增加相同语义的 renderer REST，除非两个调用方都确实需要。
 
-## 新增 Runtime event
+详细选择规则见 [Feature Composition 决策概览](feature-composition.md)。
+
+## 新增持久事件
+
+先分类：
+
+- 所有消费者都必须理解的 thread、turn、message、queue、cancel、tool 或 approval 语义属于 Core `RuntimeEvent`。
+- 只有一个 Feature 解释的私有持久状态属于 `feature.event` envelope。
+
+Core Event：
 
 1. 在 `packages/contracts/src/events.ts` 扩展 event union。
 2. 在 `thread-events.ts` 或 `thread-event-projection.ts` 定义可重放投影。
@@ -26,15 +32,22 @@ Setsuna Desktop 的关键功能通常跨越多个模块。这篇文档列出常�
 6. 如果 app-server 需要感知，再更新 `packages/contracts/src/swe/` mapper。
 7. 先补 contracts reducer 测试，再补 runtime 与 renderer 测试。
 
+Feature Event：
+
+1. 在 owner Feature contracts 定义 event codec、当前版本和连续 migration。
+2. runtime projection 使用 owner reducer，从缓存位置增量 replay 到查询时固定的 durable high water。
+3. renderer 的 Core sequence owner 在接受匹配事件或完成 resync 后通知 Feature controller 重读 typed snapshot；controller 不解码 live payload。
+4. 覆盖固定高水位 replay、增量 cache、请求期间到达通知、迟到 snapshot、unknown version 和 legacy decoder。
+
 不要为了 debug 信息新增持久化事件；只读内部诊断优先使用 `RuntimeDebugTraceSink`。
 
 ## 新增 Electron / preload 能力
 
-1. 在 contracts 的 `desktop.ts` 或对应领域文件定义 bridge 类型。
-2. 在 `apps/desktop/main/src/ipc/` 增加或扩展注册模块。
-3. 使用 `ipc/sender.ts` 校验可信 sender。
-4. 在 `apps/desktop/preload/src/index.ts` 暴露固定方法。
-5. 在 renderer 通过 bridge 调用。
+1. 先判断能力是否有独立业务 owner；Feature 专用 DTO/channel 放入该 Feature `/contracts`，通用桌面能力才进入 Core contracts。
+2. Feature handler/resource 放在 `/main` entry；Core handler 放在 app main 对应模块。
+3. 使用 host sender policy 校验可信 sender，并保持路径、凭据和 guest WebContents 边界。
+4. Feature `/preload` 只向 builder 贡献固定子桥；Core preload 也只暴露固定方法。任何入口都不得提供泛型 dispatch。
+5. renderer 通过注入的窄 bridge 或 host adapter 调用。
 6. 补 main 单元/集成测试和 renderer helper 测试。
 
 涉及路径、外链、凭据、clipboard 或 guest `WebContents` 时，必须写清输入边界和失败语义。
@@ -97,15 +110,21 @@ threads.ts / events.ts
 
 ## 新增 Renderer feature
 
-1. 在 `features/<name>/` 建立业务闭环。
-2. 页面编排留在 feature 根；复杂状态下沉到 `hooks/`。
-3. 纯转换放同 feature 的 `.ts` helper。
-4. 跨 feature runtime 状态仍由 `services/runtime-client` 持有。
-5. 真正无业务归属的 primitive 才进入 `shared/`。
-6. 样式建立 `styles/<feature>.css` 稳定入口，再按职责拆分。
-7. 测试镜像到 `test/unit/features/<name>/`。
+先区分页面内局部模块与纵向 Feature：
 
-如果 feature 需要 main 能力，先完成 contract → IPC → preload 链路。
+- 只有 renderer 局部交互、没有跨层状态和中央扩散的模块留在 `apps/desktop/renderer/src/features/<name>/`。
+- 拥有独立 contracts/use case/settings/event、可独立删除的业务能力进入 `packages/features/<name>/renderer`。
+
+纵向 renderer Feature：
+
+1. 通过 `defineRendererFeature` 声明依赖、messages 和 setup。
+2. 用 typed Feature client/controller 持有业务状态，不进入全局 runtime facade。
+3. 通过 Settings、Tool Result、Composer Status 等已有 Registry 贡献业务视图。
+4. 只接收明确 host props；不得 raw fetch、访问 runtime URL/token、完整 App store 或 `window.setsunaDesktop`。
+5. 文案、业务 view 与 scoped styles 留在 Feature；标准控件和主题由宿主提供。
+6. 在 renderer composition root 的 `defineRendererFeatureHost` 中登记一次，并把测试放在 Feature package 的镜像 `test/renderer`。
+
+如果 Feature 需要 native 能力，按 contracts → main handler → preload contribution → renderer host adapter 完成窄桥链路。
 
 ## 修改聊天行为
 

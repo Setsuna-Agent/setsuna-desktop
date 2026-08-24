@@ -1,7 +1,3 @@
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
-import { FEATURE_PACKAGE_VERSION } from '../generated/package-version.js';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 
-export const visionRecognitionFeature = defineFeatureDefinition({
-  id: 'vision-recognition',
-  version: FEATURE_PACKAGE_VERSION,
-});
+export const visionRecognitionFeature = defineFeature('vision-recognition');

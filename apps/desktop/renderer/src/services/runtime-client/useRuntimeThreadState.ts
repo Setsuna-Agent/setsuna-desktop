@@ -271,7 +271,7 @@ export function useRuntimeThreadState({
 
         if (projection.resynced) {
           if (projection.thread) {
-            featureViews.events.advance(projection.thread.id, projection.thread.lastSeq);
+            featureViews.events.resync(projection.thread.id, projection.thread.lastSeq);
           }
           setActivityEvents([]);
           terminalTurnIdsRef.current.clear();

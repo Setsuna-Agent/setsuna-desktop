@@ -89,7 +89,6 @@ export interface ImageGenerationService {
 
 export const imageGenerationServiceCapability: CapabilityToken<ImageGenerationService> = defineCapability({
   id: 'image-generation.service',
-  major: 1,
   description: 'Stable image generation execution and settings facade',
 });
 
@@ -100,7 +99,6 @@ export interface ImageGenerationGeneratedImageStore {
 
 export const imageGenerationAssetStoreCapability: CapabilityToken<ImageGenerationGeneratedImageStore> = defineCapability({
   id: 'image-generation.asset-store',
-  major: 1,
   description: 'Host-managed generated image asset persistence',
 });
 
@@ -113,7 +111,6 @@ export type ImageGenerationReferenceReader = Readonly<{
 
 export const imageGenerationReferenceReaderCapability: CapabilityToken<ImageGenerationReferenceReader> = defineCapability({
   id: 'image-generation.reference-reader',
-  major: 1,
   description: 'Read generated image references retained by thread snapshots',
 });
 
@@ -124,7 +121,6 @@ export type ImageGenerationWorkspaceFiles = Readonly<{
 
 export const imageGenerationWorkspaceFilesCapability: CapabilityToken<ImageGenerationWorkspaceFiles | null> = defineCapability({
   id: 'image-generation.workspace-files',
-  major: 1,
   description: 'Optional workspace file persistence for generated images',
 });
 
@@ -134,7 +130,6 @@ export type ImageGenerationNetwork = Readonly<{
 
 export const imageGenerationNetworkCapability: CapabilityToken<ImageGenerationNetwork> = defineCapability({
   id: 'image-generation.network',
-  major: 1,
   description: 'Host-routed network transport for image providers',
 });
 
@@ -150,7 +145,6 @@ export type ImageGenerationLegacySettingsAdapter = Readonly<{
 
 export const imageGenerationLegacySettingsCapability: CapabilityToken<ImageGenerationLegacySettingsAdapter> = defineCapability({
   id: 'image-generation.legacy-settings',
-  major: 1,
   description: 'One-way reader and cleanup adapter for pre-Feature image settings',
 });
 
@@ -162,6 +156,5 @@ export type ImageGenerationRendererAssets = Readonly<{
 
 export const imageGenerationRendererAssetsCapability: CapabilityToken<ImageGenerationRendererAssets> = defineCapability({
   id: 'image-generation.renderer-assets',
-  major: 1,
   description: 'Narrow renderer bridge for generated image preview and desktop actions',
 });

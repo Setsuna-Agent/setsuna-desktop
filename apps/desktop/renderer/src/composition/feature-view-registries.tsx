@@ -1,19 +1,17 @@
 import type {
-  ComposerStatusViewContribution,
-  ComposerStatusViewRegistry,
+  ComposerStatusViewCatalog,
   ErasedToolResultViewContribution,
   RegisteredComposerStatusView,
   RegisteredSettingsSectionExtension,
   RegisteredSettingsView,
+  RendererFeatureActivation,
   ResolvedToolResultView,
-  SettingsViewContribution,
+  SettingsViewCatalog,
   SettingsViewLocation,
-  SettingsViewRegistry,
-  SettingsSectionExtensionContribution,
+  ToolResultViewCatalog,
   ToolResultViewContribution,
-  ToolResultViewRegistry,
 } from '@setsuna-desktop/feature-core/renderer';
-import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { FeatureCompositionValidationError } from '@setsuna-desktop/feature-core/status';
 import { createContext, useContext, type ReactNode } from 'react';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
 
@@ -21,32 +19,30 @@ const SECTION_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const HOST_SECTION_ID_PATTERN = /^[a-z][A-Za-z0-9]*(?:-[a-z0-9]+)*$/u;
 const RESULT_ID_PATTERN = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/u;
 
-export class RendererComposerStatusViewRegistry implements ComposerStatusViewRegistry {
+/** Immutable view catalogs assembled once from successfully activated modules. */
+export class RendererComposerStatusViewCatalog implements ComposerStatusViewCatalog {
   private readonly contributions = new Map<string, RegisteredComposerStatusView>();
 
-  register(
-    scope: FeatureScope,
-    contribution: ComposerStatusViewContribution,
-  ): Readonly<{ dispose(): void }> {
-    if (!RESULT_ID_PATTERN.test(contribution.id)) {
-      throw new Error(`Invalid composer status contribution id: ${contribution.id}`);
-    }
-    if (!Number.isFinite(contribution.order)) throw new Error('Composer status view order must be finite.');
-    if (this.contributions.has(contribution.id)) {
-      throw new Error(`Composer status view conflict for ${contribution.id}.`);
-    }
-    const registered = Object.freeze({ ...contribution, featureId: scope.owner.featureId });
-    this.contributions.set(contribution.id, registered);
-    let disposed = false;
-    const dispose = () => {
-      if (disposed) return;
-      disposed = true;
-      if (this.contributions.get(contribution.id) === registered) {
-        this.contributions.delete(contribution.id);
+  constructor(activations: readonly RendererFeatureActivation[] = []) {
+    for (const { featureId, value } of activations) {
+      for (const contribution of value.composerStatusViews) {
+        if (!RESULT_ID_PATTERN.test(contribution.id)) {
+          throw invalidContributionError(`Invalid composer status contribution id: ${contribution.id}`, featureId);
+        }
+        if (!Number.isFinite(contribution.order)) {
+          throw invalidContributionError('Composer status view order must be finite.', featureId);
+        }
+        const existing = this.contributions.get(contribution.id);
+        if (existing) {
+          throw duplicateContributionError(
+            `composer status view "${contribution.id}"`,
+            existing.featureId,
+            featureId,
+          );
+        }
+        this.contributions.set(contribution.id, Object.freeze({ ...contribution, featureId }));
       }
-    };
-    scope.add(dispose);
-    return Object.freeze({ dispose });
+    }
   }
 
   list(): readonly RegisteredComposerStatusView[] {
@@ -55,71 +51,74 @@ export class RendererComposerStatusViewRegistry implements ComposerStatusViewReg
   }
 }
 
-export class RendererSettingsViewRegistry implements SettingsViewRegistry {
+export class RendererSettingsViewCatalog implements SettingsViewCatalog {
   private readonly contributions = new Map<string, RegisteredSettingsView>();
   private readonly sectionExtensions = new Map<string, RegisteredSettingsSectionExtension>();
 
-  register(scope: FeatureScope, contribution: SettingsViewContribution): Readonly<{ dispose(): void }> {
-    if (!SECTION_ID_PATTERN.test(contribution.sectionId)) {
-      throw new Error(`Invalid settings sectionId: ${contribution.sectionId}`);
-    }
-    if (!Number.isFinite(contribution.order)) throw new Error('Settings view order must be finite.');
-    const key = settingsKey(contribution.location, contribution.sectionId);
-    if (this.contributions.has(key)) throw new Error(`Settings view conflict for ${key}.`);
-    const registered = Object.freeze({ ...contribution, featureId: scope.owner.featureId });
-    this.contributions.set(key, registered);
-    let disposed = false;
-    const dispose = () => {
-      if (disposed) return;
-      disposed = true;
-      if (this.contributions.get(key) === registered) this.contributions.delete(key);
-    };
-    scope.add(dispose);
-    return Object.freeze({ dispose });
-  }
+  constructor(activations: readonly RendererFeatureActivation[] = []) {
+    for (const { featureId, value } of activations) {
+      for (const contribution of value.settingsViews) {
+        if (!SECTION_ID_PATTERN.test(contribution.sectionId)) {
+          throw invalidContributionError(`Invalid settings sectionId: ${contribution.sectionId}`, featureId);
+        }
+        if (!Number.isFinite(contribution.order)) {
+          throw invalidContributionError('Settings view order must be finite.', featureId);
+        }
+        const key = settingsKey(contribution.location, contribution.sectionId);
+        const existing = this.contributions.get(key);
+        if (existing) {
+          throw duplicateContributionError(
+            `settings view "${contribution.location}/${contribution.sectionId}"`,
+            existing.featureId,
+            featureId,
+          );
+        }
+        this.contributions.set(key, Object.freeze({ ...contribution, featureId }));
+      }
 
-  registerSectionExtension(
-    scope: FeatureScope,
-    contribution: SettingsSectionExtensionContribution,
-  ): Readonly<{ dispose(): void }> {
-    if (!SECTION_ID_PATTERN.test(contribution.id)) {
-      throw new Error(`Invalid settings section extension id: ${contribution.id}`);
-    }
-    if (!HOST_SECTION_ID_PATTERN.test(contribution.targetSectionId)) {
-      throw new Error(`Invalid settings extension targetSectionId: ${contribution.targetSectionId}`);
-    }
-    if (!Number.isFinite(contribution.order)) {
-      throw new Error('Settings section extension order must be finite.');
-    }
-    const subpageIds = new Set<string>();
-    const subpages = Object.freeze((contribution.subpages ?? []).map((subpage) => {
-      if (!SECTION_ID_PATTERN.test(subpage.id)) {
-        throw new Error(`Invalid settings section subpage id: ${subpage.id}`);
+      for (const contribution of value.settingsSectionExtensions) {
+        if (!SECTION_ID_PATTERN.test(contribution.id)) {
+          throw invalidContributionError(`Invalid settings section extension id: ${contribution.id}`, featureId);
+        }
+        if (!HOST_SECTION_ID_PATTERN.test(contribution.targetSectionId)) {
+          throw invalidContributionError(
+            `Invalid settings extension targetSectionId: ${contribution.targetSectionId}`,
+            featureId,
+          );
+        }
+        if (!Number.isFinite(contribution.order)) {
+          throw invalidContributionError('Settings section extension order must be finite.', featureId);
+        }
+        const subpageIds = new Set<string>();
+        const subpages = Object.freeze((contribution.subpages ?? []).map((subpage) => {
+          if (!SECTION_ID_PATTERN.test(subpage.id)) {
+            throw invalidContributionError(`Invalid settings section subpage id: ${subpage.id}`, featureId);
+          }
+          if (subpageIds.has(subpage.id)) {
+            throw invalidContributionError(
+              `Settings section subpage conflict for ${contribution.id}:${subpage.id}.`,
+              featureId,
+            );
+          }
+          subpageIds.add(subpage.id);
+          return Object.freeze({ ...subpage });
+        }));
+        const key = settingsSectionExtensionKey(contribution.targetSectionId, contribution.id);
+        const existing = this.sectionExtensions.get(key);
+        if (existing) {
+          throw duplicateContributionError(
+            `settings section extension "${contribution.targetSectionId}/${contribution.id}"`,
+            existing.featureId,
+            featureId,
+          );
+        }
+        this.sectionExtensions.set(key, Object.freeze({
+          ...contribution,
+          featureId,
+          subpages,
+        }));
       }
-      if (subpageIds.has(subpage.id)) {
-        throw new Error(`Settings section subpage conflict for ${contribution.id}:${subpage.id}.`);
-      }
-      subpageIds.add(subpage.id);
-      return Object.freeze({ ...subpage });
-    }));
-    const key = settingsSectionExtensionKey(contribution.targetSectionId, contribution.id);
-    if (this.sectionExtensions.has(key)) {
-      throw new Error(`Settings section extension conflict for ${key}.`);
     }
-    const registered = Object.freeze({
-      ...contribution,
-      featureId: scope.owner.featureId,
-      subpages,
-    });
-    this.sectionExtensions.set(key, registered);
-    let disposed = false;
-    const dispose = () => {
-      if (disposed) return;
-      disposed = true;
-      if (this.sectionExtensions.get(key) === registered) this.sectionExtensions.delete(key);
-    };
-    scope.add(dispose);
-    return Object.freeze({ dispose });
   }
 
   list(location: SettingsViewLocation): readonly RegisteredSettingsView[] {
@@ -139,50 +138,39 @@ export class RendererSettingsViewRegistry implements SettingsViewRegistry {
   }
 }
 
-export class RendererToolResultViewRegistry implements ToolResultViewRegistry {
+export class RendererToolResultViewCatalog implements ToolResultViewCatalog {
   private readonly contributions = new Map<string, Readonly<{
-    featureId: FeatureScope['owner']['featureId'];
+    featureId: RendererFeatureActivation['featureId'];
     contribution: ErasedToolResultViewContribution;
   }>>();
 
-  register<TPayload>(
-    scope: FeatureScope,
-    contribution: ToolResultViewContribution<TPayload>,
-  ): Readonly<{ dispose(): void }> {
-    if (!RESULT_ID_PATTERN.test(contribution.id) || !RESULT_ID_PATTERN.test(contribution.resultKind)) {
-      throw new Error('Tool result contribution identifiers must be stable dotted identifiers.');
+  constructor(activations: readonly RendererFeatureActivation[] = []) {
+    for (const { featureId, value } of activations) {
+      for (const contribution of value.toolResultViews) {
+        if (!RESULT_ID_PATTERN.test(contribution.id) || !RESULT_ID_PATTERN.test(contribution.resultKind)) {
+          throw invalidContributionError(
+            'Tool result contribution identifiers must be stable dotted identifiers.',
+            featureId,
+          );
+        }
+        if (!Number.isSafeInteger(contribution.major) || contribution.major < 1) {
+          throw invalidContributionError('Tool result contribution major must be a positive integer.', featureId);
+        }
+        const key = resultKey(contribution.resultKind, contribution.major);
+        const existing = this.contributions.get(key);
+        if (existing) {
+          throw duplicateContributionError(
+            `tool result view "${contribution.resultKind}@${contribution.major}"`,
+            existing.featureId,
+            featureId,
+          );
+        }
+        this.contributions.set(key, Object.freeze({
+          featureId,
+          contribution: eraseToolResultContribution(contribution),
+        }));
+      }
     }
-    if (!Number.isSafeInteger(contribution.major) || contribution.major < 1) {
-      throw new Error('Tool result contribution major must be a positive integer.');
-    }
-    const key = resultKey(contribution.resultKind, contribution.major);
-    if (this.contributions.has(key)) throw new Error(`Tool result view conflict for ${key}.`);
-    const legacy = contribution.legacy;
-    const erased: ErasedToolResultViewContribution = Object.freeze({
-      ...contribution,
-      payload: Object.freeze({ parse: (value: unknown) => contribution.payload.parse(value) as unknown }),
-      ...(legacy
-        ? {
-            legacy: Object.freeze({
-              matches: legacy.matches,
-              payload: Object.freeze({
-                parse: (value: unknown) => legacy.payload.parse(value) as unknown,
-              }),
-            }),
-          }
-        : {}),
-      render: contribution.render as ErasedToolResultViewContribution['render'],
-    });
-    const registered = Object.freeze({ featureId: scope.owner.featureId, contribution: erased });
-    this.contributions.set(key, registered);
-    let disposed = false;
-    const dispose = () => {
-      if (disposed) return;
-      disposed = true;
-      if (this.contributions.get(key) === registered) this.contributions.delete(key);
-    };
-    scope.add(dispose);
-    return Object.freeze({ dispose });
   }
 
   resolve(value: unknown): ResolvedToolResultView | null {
@@ -211,9 +199,30 @@ export class RendererToolResultViewRegistry implements ToolResultViewRegistry {
   }
 }
 
+function eraseToolResultContribution<TPayload>(
+  contribution: ToolResultViewContribution<TPayload>,
+): ErasedToolResultViewContribution {
+  const legacy = contribution.legacy;
+  return Object.freeze({
+    ...contribution,
+    payload: Object.freeze({ parse: (value: unknown) => contribution.payload.parse(value) as unknown }),
+    ...(legacy
+      ? {
+          legacy: Object.freeze({
+            matches: legacy.matches,
+            payload: Object.freeze({
+              parse: (value: unknown) => legacy.payload.parse(value) as unknown,
+            }),
+          }),
+        }
+      : {}),
+    render: contribution.render as ErasedToolResultViewContribution['render'],
+  });
+}
+
 function resolvedToolResult(
   registered: Readonly<{
-    featureId: FeatureScope['owner']['featureId'];
+    featureId: RendererFeatureActivation['featureId'];
     contribution: ErasedToolResultViewContribution;
   }>,
   payload: unknown,
@@ -226,19 +235,25 @@ function resolvedToolResult(
 }
 
 export type RendererFeatureViews = Readonly<{
-  composerStatuses: RendererComposerStatusViewRegistry;
+  composerStatuses: RendererComposerStatusViewCatalog;
   events: RendererFeatureEventHub;
-  settings: RendererSettingsViewRegistry;
-  toolResults: RendererToolResultViewRegistry;
+  settings: RendererSettingsViewCatalog;
+  toolResults: RendererToolResultViewCatalog;
 }>;
 
-const EMPTY_FEATURE_VIEWS: RendererFeatureViews = Object.freeze({
-  composerStatuses: new RendererComposerStatusViewRegistry(),
-  events: new RendererFeatureEventHub(),
-  settings: new RendererSettingsViewRegistry(),
-  toolResults: new RendererToolResultViewRegistry(),
-});
+export function createRendererFeatureViews(
+  activations: readonly RendererFeatureActivation[],
+  events = new RendererFeatureEventHub(),
+): RendererFeatureViews {
+  return Object.freeze({
+    composerStatuses: new RendererComposerStatusViewCatalog(activations),
+    events,
+    settings: new RendererSettingsViewCatalog(activations),
+    toolResults: new RendererToolResultViewCatalog(activations),
+  });
+}
 
+const EMPTY_FEATURE_VIEWS = createRendererFeatureViews([]);
 const FeatureViewsContext = createContext<RendererFeatureViews>(EMPTY_FEATURE_VIEWS);
 
 export function RendererFeatureViewsProvider({
@@ -262,6 +277,29 @@ function settingsSectionExtensionKey(targetSectionId: string, id: string): strin
 
 function resultKey(resultKind: string, major: number): string {
   return `${resultKind}\u0000${major}`;
+}
+
+function duplicateContributionError(
+  contribution: string,
+  firstFeatureId: RendererFeatureActivation['featureId'],
+  secondFeatureId: RendererFeatureActivation['featureId'],
+): FeatureCompositionValidationError {
+  return new FeatureCompositionValidationError([{
+    code: 'DUPLICATE_RENDERER_CONTRIBUTION',
+    message: `Renderer ${contribution} is contributed by both "${firstFeatureId}" and "${secondFeatureId}".`,
+    featureIds: Object.freeze([...new Set([firstFeatureId, secondFeatureId])]),
+  }]);
+}
+
+function invalidContributionError(
+  message: string,
+  featureId: RendererFeatureActivation['featureId'],
+): FeatureCompositionValidationError {
+  return new FeatureCompositionValidationError([{
+    code: 'INVALID_RENDERER_CONTRIBUTION',
+    message,
+    featureIds: [featureId],
+  }]);
 }
 
 function toolResultEnvelope(value: unknown): Readonly<{

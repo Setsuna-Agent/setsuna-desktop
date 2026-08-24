@@ -4,7 +4,6 @@ import {
   defineRendererFeature,
   rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
-  rendererToolResultViewRegistryCapability,
 } from '@setsuna-desktop/feature-core/renderer';
 import {
   collaborationFeature,
@@ -21,7 +20,6 @@ import { RendererCollaborationStateService } from './service.js';
 const dependencies = defineRendererDependencies({
   transport: requiredCapability(rendererFeatureOperationTransportCapability),
   eventFeed: requiredCapability(rendererFeatureEventFeedCapability),
-  toolResults: requiredCapability(rendererToolResultViewRegistryCapability),
 });
 
 export const collaborationRendererFeature = defineRendererFeature({
@@ -35,19 +33,21 @@ export const collaborationRendererFeature = defineRendererFeature({
       feed: context.dependencies.eventFeed,
       scope: context.scope,
     });
-    context.dependencies.toolResults.register(context.scope, {
-      id: 'collaboration.spawn-result-view',
-      resultKind: 'collaboration.spawn-result',
-      major: 1,
-      payload: collaborationSpawnResultCodec,
-      legacy: {
-        matches: isLegacyCollaborationSpawnResult,
-        payload: collaborationLegacySpawnResultCodec,
-      },
-      presentation: 'replace',
-      workHistoryPresentation: 'persistent',
-      render: CollaborationSpawnResultView,
-    });
     context.provide(declareCapabilityProvider(collaborationRendererStateCapability), service);
+    return {
+      toolResultViews: [{
+        id: 'collaboration.spawn-result-view',
+        resultKind: 'collaboration.spawn-result',
+        major: 1,
+        payload: collaborationSpawnResultCodec,
+        legacy: {
+          matches: isLegacyCollaborationSpawnResult,
+          payload: collaborationLegacySpawnResultCodec,
+        },
+        presentation: 'replace',
+        workHistoryPresentation: 'persistent',
+        render: CollaborationSpawnResultView,
+      }],
+    };
   },
 });

@@ -290,18 +290,18 @@ export class RuntimeVisionRecognitionService implements VisionRecognitionService
   private setUnavailable(health: VisionRecognitionHealth, code: string, message: string): void {
     this.applied = null;
     this.health = health;
-    this.healthReporter.markDegraded({ code, message });
+    this.healthReporter.setCondition('availability', { code, message });
   }
 
   private markReady(): void {
     this.health = 'ready';
-    this.healthReporter.markActive();
+    this.healthReporter.setCondition('availability', null);
   }
 
   private markProviderUnavailable(selection: AppliedVisionModel): void {
     if (this.applied?.signature !== selection.signature) return;
     this.health = 'provider-unavailable';
-    this.healthReporter.markDegraded({
+    this.healthReporter.setCondition('availability', {
       code: 'VISION_RECOGNITION_PROVIDER_UNAVAILABLE',
       message: 'Vision recognition provider is unavailable.',
     });

@@ -1,7 +1,6 @@
 import type { SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
 import {
-  createPreloadBridgeBuilder,
-  type PreloadFeatureModule,
+  definePreloadFeatureHost,
 } from '@setsuna-desktop/feature-core/preload';
 import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-browser/contracts';
 import { browserPreloadFeature } from '@setsuna-desktop/feature-browser/preload';
@@ -35,16 +34,16 @@ const desktopPreloadBridgeKeys = [
   'workspaceApps',
 ] as const satisfies readonly (keyof DesktopPreloadBridge)[];
 
-export const builtinPreloadFeatures = [
-  browserPreloadFeature,
-  reviewPreloadFeature,
-  terminalPreloadFeature,
-  webDavSyncPreloadFeature,
-] as const satisfies readonly PreloadFeatureModule[];
+const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
+  bridgeKeys: desktopPreloadBridgeKeys,
+  features: [
+    browserPreloadFeature,
+    reviewPreloadFeature,
+    terminalPreloadFeature,
+    webDavSyncPreloadFeature,
+  ],
+});
 
 export function composeBuiltinPreloadBridge(hostBridge: SetsunaDesktopBridge): DesktopPreloadBridge {
-  const builder = createPreloadBridgeBuilder<DesktopPreloadBridge>(desktopPreloadBridgeKeys);
-  builder.addHost(hostBridge);
-  for (const feature of builtinPreloadFeatures) builder.addFeature(feature);
-  return builder.build();
+  return preloadFeatures.compose(hostBridge);
 }

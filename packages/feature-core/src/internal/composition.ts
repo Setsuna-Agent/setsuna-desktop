@@ -7,7 +7,7 @@ import {
   type HostCapabilityProvider,
   type ResolveDependencies,
 } from '../capability.js';
-import type { FeatureDefinition, FeatureId } from '../definition.js';
+import type { FeatureId } from '../definition.js';
 import { createFeatureScope, type FeatureScopeController } from '../scope.js';
 import {
   FeatureCompositionValidationError,
@@ -17,7 +17,6 @@ import {
   type FeatureCriticality,
   type FeatureDiagnostic,
   type FeatureHealthReporter,
-  type FeatureLifecycleState,
   type FeatureStatusSnapshot,
 } from '../status.js';
 import type {
@@ -29,11 +28,29 @@ import type {
 export type FeatureMount<TModule> = Readonly<{
   module: TModule;
   criticality: FeatureCriticality;
-  enabled: boolean;
 }>;
 
-export type FeatureComposition = Readonly<{
-  installed: readonly FeatureDefinition[];
+export type FeatureHostDefinition<TModule> = Readonly<{
+  required: readonly TModule[];
+  optional: readonly TModule[];
+}>;
+
+export function createFeatureMounts<TModule>(
+  definition: FeatureHostDefinition<TModule>,
+): readonly FeatureMount<TModule>[] {
+  return Object.freeze([
+    ...definition.required.map((module) => Object.freeze({ module, criticality: 'required' as const })),
+    ...definition.optional.map((module) => Object.freeze({ module, criticality: 'optional' as const })),
+  ]);
+}
+
+export type FeatureActivation<TActivation> = Readonly<{
+  featureId: FeatureId;
+  value: TActivation;
+}>;
+
+export type FeatureComposition<TActivation = void> = Readonly<{
+  activations(): readonly FeatureActivation<TActivation>[];
   statuses(): readonly FeatureStatusSnapshot[];
   status(featureId: FeatureId): FeatureStatusSnapshot | undefined;
   resolveHostDependencies<const TSpec extends DependencySpec>(spec: TSpec): ResolveDependencies<TSpec>;
@@ -42,17 +59,14 @@ export type FeatureComposition = Readonly<{
 
 type MutableFeatureStatus = {
   featureId: FeatureId;
-  version: FeatureDefinition['version'];
   criticality: FeatureCriticality;
   status: FeatureActivationStatus | null;
-  lifecycle: FeatureLifecycleState;
   diagnostic?: FeatureDiagnostic;
 };
 
-type ActivatedFeature = {
-  module: ProcessFeatureModule<FeatureProcess>;
+type ActivatedFeature<TActivation> = {
+  activation: FeatureActivation<TActivation>;
   scope: FeatureScopeController;
-  status: MutableFeatureStatus;
   closeHealth(): void;
 };
 
@@ -63,28 +77,28 @@ type ProviderOwner = Readonly<{
 
 export async function composeFeatureModules<
   TProcess extends FeatureProcess,
-  TModule extends ProcessFeatureModule<TProcess>,
+  TActivation,
+  TModule extends ProcessFeatureModule<TProcess, TActivation>,
 >(input: Readonly<{
   process: TProcess;
   mounts: readonly FeatureMount<TModule>[];
   hostCapabilities?: readonly HostCapabilityProvider[];
-}>): Promise<FeatureComposition> {
-  const installed = Object.freeze(input.mounts.map(({ module }) => module.definition));
-  const enabledMounts = input.mounts.filter(({ enabled }) => enabled);
+  /** Runs only after the static graph is proven valid and before any Feature setup. */
+  beforeActivation?: () => void;
+}>): Promise<FeatureComposition<TActivation>> {
   const hostCapabilities = input.hostCapabilities ?? [];
-  const validation = validateComposition(input.mounts, enabledMounts, hostCapabilities);
+  const validation = validateComposition(input.mounts, hostCapabilities);
   if (validation.issues.length) {
     throw new FeatureCompositionValidationError(validation.issues);
   }
+  input.beforeActivation?.();
 
   const statuses = new Map<FeatureId, MutableFeatureStatus>();
-  for (const mount of enabledMounts) {
+  for (const mount of input.mounts) {
     statuses.set(mount.module.definition.id, {
       featureId: mount.module.definition.id,
-      version: mount.module.definition.version,
       criticality: mount.criticality,
       status: null,
-      lifecycle: 'declared',
     });
   }
 
@@ -96,26 +110,24 @@ export async function composeFeatureModules<
     });
   }
 
-  const activated: ActivatedFeature[] = [];
+  const activated: ActivatedFeature<TActivation>[] = [];
   let scopeSequence = 0;
   for (const module of validation.order) {
-    const mount = enabledMounts.find((candidate) => candidate.module === module);
+    const mount = input.mounts.find((candidate) => candidate.module === module);
     if (!mount) throw new Error(`Missing mount for Feature "${module.definition.id}".`);
     const status = statuses.get(module.definition.id);
     if (!status) throw new Error(`Missing status for Feature "${module.definition.id}".`);
 
-    const blockedBy = requiredDependencyFailure(module.dependencies, validation.providerOwners, statuses);
-    if (blockedBy) {
-      status.status = 'blocked';
-      status.lifecycle = 'stopped';
+    const unavailableDependency = requiredDependencyFailure(module.dependencies, validation.providerOwners, statuses);
+    if (unavailableDependency) {
+      status.status = 'failed';
       status.diagnostic = {
         code: 'REQUIRED_DEPENDENCY_FAILED',
-        message: `Required dependency ${blockedBy.token.id}@${blockedBy.token.major} from Feature "${blockedBy.providerFeatureId}" is unavailable.`,
+        message: `Required dependency ${unavailableDependency.token.id} from Feature "${unavailableDependency.providerFeatureId}" is unavailable.`,
       };
       continue;
     }
 
-    status.lifecycle = 'starting';
     status.status = 'active';
     const scope = createFeatureScope({
       featureId: module.definition.id,
@@ -150,7 +162,7 @@ export async function composeFeatureModules<
         },
       });
 
-      await module.setup(setupContext);
+      const activation = await module.setup(setupContext);
       const missingProviders = [...declaredProviderKeys].filter((key) => !stagedProviders.has(key));
       if (missingProviders.length) {
         throw new Error(
@@ -168,12 +180,14 @@ export async function composeFeatureModules<
         }
       });
       scope.activate();
-      status.lifecycle = activationStatus(status) === 'degraded' ? 'degraded' : 'active';
-      activated.push({ module, scope, status, closeHealth: health.close });
+      activated.push({
+        activation: Object.freeze({ featureId: module.definition.id, value: activation }),
+        scope,
+        closeHealth: health.close,
+      });
     } catch (error) {
       health.close();
       status.status = 'failed';
-      status.lifecycle = 'draining';
       status.diagnostic = {
         code: 'ACTIVATION_FAILED',
         message: errorMessage(error),
@@ -186,11 +200,10 @@ export async function composeFeatureModules<
           message: `${errorMessage(error)} Rollback: ${errorMessage(disposeError)}`,
         };
       }
-      status.lifecycle = 'stopped';
     }
   }
 
-  const orderedStatuses = () => enabledMounts.map(({ module }) => {
+  const orderedStatuses = () => input.mounts.map(({ module }) => {
     const status = statuses.get(module.definition.id);
     if (!status || !status.status) {
       throw new Error(`Feature "${module.definition.id}" did not reach an activation result.`);
@@ -198,9 +211,9 @@ export async function composeFeatureModules<
     return snapshotStatus(status);
   });
 
-  if (enabledMounts.some(({ module, criticality }) => {
+  if (input.mounts.some(({ module, criticality }) => {
     const result = statuses.get(module.definition.id)?.status;
-    return criticality === 'required' && (result === 'failed' || result === 'blocked');
+    return criticality === 'required' && result === 'failed';
   })) {
     await disposeActivatedFeatures(activated);
     throw new FeatureReadinessError(orderedStatuses());
@@ -208,8 +221,8 @@ export async function composeFeatureModules<
 
   let disposePromise: Promise<void> | null = null;
   let disposed = false;
-  const composition: FeatureComposition = Object.freeze({
-    installed,
+  const composition: FeatureComposition<TActivation> = Object.freeze({
+    activations: () => Object.freeze(activated.map(({ activation }) => activation)),
     statuses: () => Object.freeze(orderedStatuses()),
     status: (featureId: FeatureId) => {
       const status = statuses.get(featureId);
@@ -233,9 +246,11 @@ export async function composeFeatureModules<
   return composition;
 }
 
-function validateComposition<TModule extends ProcessFeatureModule<FeatureProcess>>(
-  allMounts: readonly FeatureMount<TModule>[],
-  enabledMounts: readonly FeatureMount<TModule>[],
+function validateComposition<
+  TActivation,
+  TModule extends ProcessFeatureModule<FeatureProcess, TActivation>,
+>(
+  mounts: readonly FeatureMount<TModule>[],
   hostCapabilities: readonly HostCapabilityProvider[],
 ): Readonly<{
   issues: readonly FeatureCompositionIssue[];
@@ -244,53 +259,48 @@ function validateComposition<TModule extends ProcessFeatureModule<FeatureProcess
 }> {
   const issues: FeatureCompositionIssue[] = [];
   const featureIds = new Set<FeatureId>();
-  for (const { module } of allMounts) {
+  for (const { module } of mounts) {
     if (featureIds.has(module.definition.id)) {
       issues.push({
         code: 'DUPLICATE_FEATURE_ID',
         message: `FeatureId "${module.definition.id}" is mounted more than once.`,
+        featureIds: [module.definition.id],
       });
     }
     featureIds.add(module.definition.id);
   }
 
   const providerOwners = new Map<string, FeatureId | null>();
-  const providerTokens = new Map<string, CapabilityToken<unknown>>();
   for (const provider of hostCapabilities) {
-    registerStaticProvider(provider.declaration.token, null, providerOwners, providerTokens, issues);
+    registerStaticProvider(provider.declaration.token, null, providerOwners, issues);
   }
-  for (const { module } of enabledMounts) {
+  for (const { module } of mounts) {
     for (const declaration of module.provides) {
       registerStaticProvider(
         declaration.token,
         module.definition.id,
         providerOwners,
-        providerTokens,
         issues,
       );
     }
   }
 
   const adjacency = new Map<FeatureId, Set<FeatureId>>(
-    enabledMounts.map(({ module }) => [module.definition.id, new Set()]),
+    mounts.map(({ module }) => [module.definition.id, new Set()]),
   );
   const indegree = new Map<FeatureId, number>(
-    enabledMounts.map(({ module }) => [module.definition.id, 0]),
+    mounts.map(({ module }) => [module.definition.id, 0]),
   );
-  for (const { module } of enabledMounts) {
+  for (const { module } of mounts) {
     for (const requirement of module.dependencies) {
       const key = capabilityKey(requirement.token);
       const owner = providerOwners.get(key);
       if (owner === undefined) {
         if (requirement.kind === 'required') {
-          const incompatible = [...providerTokens.values()].filter(
-            (token) => token.id === requirement.token.id && token.major !== requirement.token.major,
-          );
           issues.push({
-            code: incompatible.length ? 'CAPABILITY_MAJOR_MISMATCH' : 'MISSING_CAPABILITY',
-            message: incompatible.length
-              ? `Feature "${module.definition.id}" requires ${key}, but available major versions are ${incompatible.map((token) => token.major).join(', ')}.`
-              : `Feature "${module.definition.id}" requires missing Capability ${key}.`,
+            code: 'MISSING_CAPABILITY',
+            message: `Feature "${module.definition.id}" requires missing Capability ${key}.`,
+            featureIds: [module.definition.id],
           });
         }
         continue;
@@ -305,8 +315,8 @@ function validateComposition<TModule extends ProcessFeatureModule<FeatureProcess
     }
   }
 
-  const mountOrder = new Map(enabledMounts.map(({ module }, index) => [module.definition.id, index]));
-  const ready = enabledMounts
+  const mountOrder = new Map(mounts.map(({ module }, index) => [module.definition.id, index]));
+  const ready = mounts
     .map(({ module }) => module.definition.id)
     .filter((featureId) => indegree.get(featureId) === 0);
   const orderedIds: FeatureId[] = [];
@@ -321,17 +331,18 @@ function validateComposition<TModule extends ProcessFeatureModule<FeatureProcess
       if (nextIndegree === 0) ready.push(consumer);
     }
   }
-  if (orderedIds.length !== enabledMounts.length) {
-    const cycleMembers = enabledMounts
+  if (orderedIds.length !== mounts.length) {
+    const cycleMembers = mounts
       .map(({ module }) => module.definition.id)
       .filter((featureId) => !orderedIds.includes(featureId));
     issues.push({
       code: 'DEPENDENCY_CYCLE',
       message: `Feature dependency cycle detected: ${cycleMembers.join(' -> ')}.`,
+      featureIds: cycleMembers,
     });
   }
 
-  const moduleById = new Map(enabledMounts.map(({ module }) => [module.definition.id, module]));
+  const moduleById = new Map(mounts.map(({ module }) => [module.definition.id, module]));
   const order = orderedIds.map((featureId) => {
     const module = moduleById.get(featureId);
     if (!module) throw new Error(`Missing Feature module "${featureId}" after graph validation.`);
@@ -348,7 +359,6 @@ function registerStaticProvider(
   token: CapabilityToken<unknown>,
   featureId: FeatureId | null,
   owners: Map<string, FeatureId | null>,
-  tokens: Map<string, CapabilityToken<unknown>>,
   issues: FeatureCompositionIssue[],
 ): void {
   const key = capabilityKey(token);
@@ -357,11 +367,11 @@ function registerStaticProvider(
     issues.push({
       code: 'DUPLICATE_CAPABILITY_PROVIDER',
       message: `Capability ${key} is provided by both "${previousOwner ?? 'host'}" and "${featureId ?? 'host'}".`,
+      featureIds: [previousOwner, featureId].filter((owner): owner is FeatureId => owner != null),
     });
     return;
   }
   owners.set(key, featureId);
-  tokens.set(key, token);
 }
 
 function requiredDependencyFailure(
@@ -374,7 +384,7 @@ function requiredDependencyFailure(
     const providerFeatureId = providerOwners.get(capabilityKey(requirement.token));
     if (!providerFeatureId) continue;
     const providerStatus = statuses.get(providerFeatureId)?.status;
-    if (providerStatus === 'failed' || providerStatus === 'blocked') {
+    if (providerStatus === 'failed') {
       return { token: requirement.token, providerFeatureId };
     }
   }
@@ -414,19 +424,42 @@ function createHealthReporter(status: MutableFeatureStatus): Readonly<{
   close(): void;
 }> {
   let closed = false;
+  const conditions = new Map<string, FeatureDiagnostic>();
+  let primaryConditionId: string | undefined;
+  const publish = () => {
+    // The public snapshot carries one safe diagnostic; stable condition ordering
+    // prevents concurrent owners from making that summary depend on timing.
+    if (primaryConditionId === undefined) {
+      status.status = 'active';
+      status.diagnostic = undefined;
+      return;
+    }
+    status.status = 'degraded';
+    status.diagnostic = conditions.get(primaryConditionId);
+  };
+  const recomputePrimaryCondition = () => {
+    primaryConditionId = undefined;
+    for (const conditionId of conditions.keys()) {
+      if (primaryConditionId === undefined || conditionId < primaryConditionId) {
+        primaryConditionId = conditionId;
+      }
+    }
+  };
   return Object.freeze({
     reporter: Object.freeze({
-      markActive: () => {
-        if (closed || status.lifecycle === 'draining' || status.lifecycle === 'stopped') return;
-        status.status = 'active';
-        status.diagnostic = undefined;
-        if (status.lifecycle !== 'starting') status.lifecycle = 'active';
-      },
-      markDegraded: (diagnostic: FeatureDiagnostic) => {
-        if (closed || status.lifecycle === 'draining' || status.lifecycle === 'stopped') return;
-        status.status = 'degraded';
-        status.diagnostic = Object.freeze({ ...diagnostic });
-        if (status.lifecycle !== 'starting') status.lifecycle = 'degraded';
+      setCondition: (conditionId: string, diagnostic: FeatureDiagnostic | null) => {
+        if (closed) return;
+        if (diagnostic) {
+          conditions.set(conditionId, Object.freeze({ ...diagnostic }));
+          if (primaryConditionId === undefined || conditionId < primaryConditionId) {
+            primaryConditionId = conditionId;
+          }
+        } else if (conditions.delete(conditionId) && conditionId === primaryConditionId) {
+          // Only removing the selected diagnostic needs a linear rescan. Adds,
+          // updates, and removal of other conditions remain allocation-free O(1).
+          recomputePrimaryCondition();
+        }
+        publish();
       },
     }),
     close: () => {
@@ -435,11 +468,12 @@ function createHealthReporter(status: MutableFeatureStatus): Readonly<{
   });
 }
 
-async function disposeActivatedFeatures(activated: readonly ActivatedFeature[]): Promise<void> {
+async function disposeActivatedFeatures<TActivation>(
+  activated: readonly ActivatedFeature<TActivation>[],
+): Promise<void> {
   const reversed = [...activated].reverse();
   for (const feature of reversed) {
     feature.closeHealth();
-    feature.status.lifecycle = 'draining';
     feature.scope.beginDrain();
   }
 
@@ -449,8 +483,6 @@ async function disposeActivatedFeatures(activated: readonly ActivatedFeature[]):
       await feature.scope.finishDispose();
     } catch (error) {
       errors.push(error);
-    } finally {
-      feature.status.lifecycle = 'stopped';
     }
   }
   if (errors.length) throw new AggregateError(errors, 'One or more Feature scopes failed to dispose.');
@@ -460,18 +492,12 @@ function snapshotStatus(status: MutableFeatureStatus): FeatureStatusSnapshot {
   if (!status.status) throw new Error(`Feature "${status.featureId}" has no activation status.`);
   return Object.freeze({
     featureId: status.featureId,
-    version: status.version,
     criticality: status.criticality,
     status: status.status,
-    lifecycle: status.lifecycle,
     ...(status.diagnostic ? { diagnostic: Object.freeze({ ...status.diagnostic }) } : {}),
   });
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function activationStatus(status: MutableFeatureStatus): FeatureActivationStatus | null {
-  return status.status;
 }

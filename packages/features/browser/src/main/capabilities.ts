@@ -11,12 +11,10 @@ export interface BrowserMainHost {
 
 export const browserMainHostCapability: CapabilityToken<BrowserMainHost> = defineCapability({
   id: 'browser.main-host',
-  major: 1,
   description: 'Desktop window state required by the embedded browser native boundary',
 });
 
 export const browserControlConnectionCapability: CapabilityToken<BrowserControlConnection> = defineCapability({
   id: 'browser.control-connection',
-  major: 1,
   description: 'Authenticated loopback connection exposed to the desktop runtime',
 });

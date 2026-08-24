@@ -1,8 +1,9 @@
 import type { HostCapabilityProvider } from '../capability.js';
 import {
   composeFeatureModules,
+  createFeatureMounts,
   type FeatureComposition,
-  type FeatureMount,
+  type FeatureHostDefinition,
 } from '../internal/composition.js';
 import {
   defineDependencies,
@@ -11,17 +12,27 @@ import {
   type ProcessFeatureModule,
 } from '../internal/module.js';
 import type { DependencySpec } from '../capability.js';
-import type { FeatureCriticality } from '../status.js';
 import type {
   ErasedFeatureSettingsBundle,
   RuntimeFeatureSettingsRegistry,
 } from '../settings.js';
 
+export { completeFeatureHostActivation } from '../internal/host-bindings.js';
+export type { FeatureHostBindingContext } from '../internal/host-bindings.js';
+
 export type RuntimeFeatureModule = ProcessFeatureModule<'runtime'> & Readonly<{
   settings: readonly ErasedFeatureSettingsBundle[];
 }>;
-export type RuntimeFeatureMount = FeatureMount<RuntimeFeatureModule>;
 export type RuntimeFeatureComposition = FeatureComposition;
+export type RuntimeFeatureHostDefinition = FeatureHostDefinition<RuntimeFeatureModule>;
+export type RuntimeFeatureHostActivationInput = Readonly<{
+  hostCapabilities?: readonly HostCapabilityProvider[];
+  settingsRegistry?: RuntimeFeatureSettingsRegistry;
+}>;
+
+export interface RuntimeFeatureHost {
+  activate(input?: RuntimeFeatureHostActivationInput): Promise<RuntimeFeatureComposition>;
+}
 
 export function defineRuntimeDependencies<const TSpec extends DependencySpec>(spec: TSpec): TSpec {
   return defineDependencies(spec);
@@ -38,31 +49,25 @@ export function defineRuntimeFeature<const TSpec extends DependencySpec>(
   });
 }
 
-export function mountRuntimeFeature(
-  module: RuntimeFeatureModule,
-  options: Readonly<{ criticality: FeatureCriticality; enabled?: boolean }>,
-): RuntimeFeatureMount {
+export function defineRuntimeFeatureHost(
+  definition: RuntimeFeatureHostDefinition,
+): RuntimeFeatureHost {
+  const mounts = createFeatureMounts(definition);
   return Object.freeze({
-    module,
-    criticality: options.criticality,
-    enabled: options.enabled ?? true,
+    activate(input: RuntimeFeatureHostActivationInput = {}) {
+      const settingsRegistry = input.settingsRegistry;
+      return composeFeatureModules<'runtime', void, RuntimeFeatureModule>({
+        process: 'runtime',
+        mounts,
+        hostCapabilities: input.hostCapabilities,
+        // Recovery metadata remains available after setup failures, but an
+        // invalid graph must not publish any part of the settings catalog.
+        beforeActivation: settingsRegistry
+          ? () => settingsRegistry.registerBundles(mounts.flatMap(({ module }) => module.settings))
+          : undefined,
+      });
+    },
   });
-}
-
-export function composeRuntimeFeatures(input: Readonly<{
-  mounts: readonly RuntimeFeatureMount[];
-  hostCapabilities?: readonly HostCapabilityProvider[];
-  settingsRegistry?: RuntimeFeatureSettingsRegistry;
-}>): Promise<RuntimeFeatureComposition> {
-  if (input.settingsRegistry) {
-    // Settings definitions belong to the installed host catalog, not an
-    // execution scope. Register every installed module before graph activation
-    // so disabled, degraded, or failed Features retain their recovery plane.
-    for (const mount of input.mounts) {
-      for (const bundle of mount.module.settings) input.settingsRegistry.register(bundle);
-    }
-  }
-  return composeFeatureModules({ process: 'runtime', ...input });
 }
 
 export type {
@@ -88,12 +93,10 @@ export {
 export { runtimeFeatureSettingsRegistryCapability } from './settings.js';
 export {
   createFeatureProjectionStore,
-  runtimeFeatureEventRegistrarCapability,
   threadEventReaderCapability,
 } from './events.js';
 export type {
   FeatureProjectionStore,
-  RuntimeFeatureEventRegistrar,
   ThreadEventReader,
   ThreadEventReadPage,
 } from './events.js';

@@ -118,7 +118,11 @@ export function nextGoalState(
     tokenBudget: null,
     tokensUsed: replacesGoal ? 0 : previous.tokensUsed,
     timeUsedSeconds: replacesGoal ? 0 : previous.timeUsedSeconds,
-    accountedThroughSeq: replacesGoal ? 0 : previous.accountedThroughSeq,
+    ...(replacesGoal
+      ? { accountedThroughSeq: 0 }
+      : previous.accountedThroughSeq === undefined
+        ? {}
+        : { accountedThroughSeq: previous.accountedThroughSeq }),
     createdAt: replacesGoal ? now : previous.createdAt,
     updatedAt: now,
     stopReason: status === 'active' || status === 'complete'

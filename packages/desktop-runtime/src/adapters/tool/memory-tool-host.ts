@@ -13,11 +13,17 @@ import type {
 export class MemoryToolHost implements ToolHost {
   private control: MemoryControl = createNoopMemoryControl();
 
-  bind(control: MemoryControl): void {
+  bind(control: MemoryControl): () => void {
     if (this.control.available && this.control !== control) {
       throw new Error('Memory tool service is already bound.');
     }
     this.control = control;
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      if (this.control === control) this.control = createNoopMemoryControl();
+    };
   }
 
   systemPrompt(context: ToolExecutionContext): Promise<string | null> {

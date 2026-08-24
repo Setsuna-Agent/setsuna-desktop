@@ -4,9 +4,6 @@
   "description": "Native terminal Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "terminal"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

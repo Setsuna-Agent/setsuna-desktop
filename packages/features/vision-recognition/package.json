@@ -4,9 +4,6 @@
   "description": "Vision recognition Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "vision-recognition"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

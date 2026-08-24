@@ -5,10 +5,8 @@ import type {
   ReactNode,
   TextareaHTMLAttributes,
 } from 'react';
-import { defineCapability, type CapabilityToken } from '../capability.js';
 import type { RuntimeCodec } from '../codec.js';
 import type { FeatureId } from '../definition.js';
-import type { FeatureScope } from '../scope.js';
 import type { RendererTranslate } from './messages.js';
 
 export type SettingsViewLocation = 'settings' | 'capabilities';
@@ -34,19 +32,9 @@ export type RegisteredComposerStatusView = ComposerStatusViewContribution & Read
   featureId: FeatureId;
 }>;
 
-export interface ComposerStatusViewRegistry {
-  register(
-    scope: FeatureScope,
-    contribution: ComposerStatusViewContribution,
-  ): Readonly<{ dispose(): void }>;
+export interface ComposerStatusViewCatalog {
   list(): readonly RegisteredComposerStatusView[];
 }
-
-export const rendererComposerStatusViewRegistryCapability: CapabilityToken<ComposerStatusViewRegistry> = defineCapability({
-  id: 'renderer.composer-status-views',
-  major: 1,
-  description: 'Owned and ordered status views rendered above the chat composer',
-});
 
 export type SettingsButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & Readonly<{
   icon?: ReactNode;
@@ -186,22 +174,11 @@ export type RegisteredSettingsSectionExtension = SettingsSectionExtensionContrib
   featureId: FeatureId;
 }>;
 
-export interface SettingsViewRegistry {
-  register(scope: FeatureScope, contribution: SettingsViewContribution): Readonly<{ dispose(): void }>;
-  registerSectionExtension(
-    scope: FeatureScope,
-    contribution: SettingsSectionExtensionContribution,
-  ): Readonly<{ dispose(): void }>;
+export interface SettingsViewCatalog {
   list(location: SettingsViewLocation): readonly RegisteredSettingsView[];
   listSectionExtensions(targetSectionId: string): readonly RegisteredSettingsSectionExtension[];
   find(location: SettingsViewLocation, sectionId: string): RegisteredSettingsView | undefined;
 }
-
-export const rendererSettingsViewRegistryCapability: CapabilityToken<SettingsViewRegistry> = defineCapability({
-  id: 'renderer.settings-views',
-  major: 1,
-  description: 'Owned and ordered renderer settings view contributions',
-});
 
 export type ToolResultViewProps<TPayload> = Readonly<{
   payload: TPayload;
@@ -250,16 +227,20 @@ export type ResolvedToolResultView = Readonly<{
   featureId: FeatureId;
 }>;
 
-export interface ToolResultViewRegistry {
-  register<TPayload>(
-    scope: FeatureScope,
-    contribution: ToolResultViewContribution<TPayload>,
-  ): Readonly<{ dispose(): void }>;
+export interface ToolResultViewCatalog {
   resolve(value: unknown): ResolvedToolResultView | null;
 }
 
-export const rendererToolResultViewRegistryCapability: CapabilityToken<ToolResultViewRegistry> = defineCapability({
-  id: 'renderer.tool-result-views',
-  major: 1,
-  description: 'Exact resultKind and major renderer tool result views',
-});
+export type RendererFeatureContributionInput = Readonly<{
+  composerStatusViews?: readonly ComposerStatusViewContribution[];
+  settingsViews?: readonly SettingsViewContribution[];
+  settingsSectionExtensions?: readonly SettingsSectionExtensionContribution[];
+  toolResultViews?: readonly ToolResultViewContribution<any>[];
+}>;
+
+export type RendererFeatureContributions = Readonly<{
+  composerStatusViews: readonly ComposerStatusViewContribution[];
+  settingsViews: readonly SettingsViewContribution[];
+  settingsSectionExtensions: readonly SettingsSectionExtensionContribution[];
+  toolResultViews: readonly ToolResultViewContribution<any>[];
+}>;

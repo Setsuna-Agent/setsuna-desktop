@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { isFeatureEventEnvelope, type SequencedThreadEventRecord } from '../../src/events.js';
-import { defineFeatureDefinition } from '../../src/definition.js';
+import { defineFeature } from '../../src/definition.js';
 import {
   createFeatureProjectionStore,
   type ThreadEventReader,
 } from '../../src/runtime/events.js';
 
-const featureId = defineFeatureDefinition({ id: 'fixture-state', version: '1.0.0' }).id;
+const featureId = defineFeature('fixture-state').id;
 
 describe('FeatureProjectionStore', () => {
-  it('uses one reducer for replay and live records while advancing over unrelated seqs', async () => {
+  it('extends its cached projection only when the durable high water advances', async () => {
     const reader = new MemoryEventReader([
       coreEvent(1),
       featureEvent(2, 2),
@@ -18,39 +18,45 @@ describe('FeatureProjectionStore', () => {
     const store = projection(reader);
 
     await expect(store.read('thread_1')).resolves.toEqual({ state: 2, throughSeq: 3 });
-    await store.accept(coreEvent(3));
-    await store.accept(featureEvent(4, 3));
+    await expect(store.read('thread_1')).resolves.toEqual({ state: 2, throughSeq: 3 });
+    reader.records.push(featureEvent(4, 3));
 
     await expect(store.read('thread_1')).resolves.toEqual({ state: 5, throughSeq: 4 });
+    expect(reader.pageReads).toBe(3);
   });
 
-  it('shares a lazy replay and drains live records above its fixed high water', async () => {
+  it('rechecks high water after sharing an in-flight load', async () => {
     const highWater = deferred<number>();
-    const reader = new MemoryEventReader([coreEvent(1)], () => highWater.promise);
+    let highWaterReads = 0;
+    const records = [coreEvent(1)];
+    const reader = new MemoryEventReader(records, (): Promise<number> => {
+      highWaterReads += 1;
+      return highWaterReads === 1
+        ? highWater.promise
+        : Promise.resolve(records.at(-1)?.seq ?? 0);
+    });
     const store = projection(reader);
 
     const first = store.read('thread_1');
     const second = store.read('thread_1');
-    await store.accept(featureEvent(2, 4));
+    records.push(featureEvent(2, 4));
     highWater.resolve(1);
 
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      { state: 4, throughSeq: 2 },
-      { state: 4, throughSeq: 2 },
-    ]);
-    expect(reader.highWaterReads).toBe(1);
+    await expect(first).resolves.toEqual({ state: 0, throughSeq: 1 });
+    await expect(second).resolves.toEqual({ state: 4, throughSeq: 2 });
+    expect(reader.highWaterReads).toBe(2);
   });
 
-  it('invalidates a live gap and rebuilds from the durable event source', async () => {
+  it('rejects a durable sequence gap without corrupting the last valid cache', async () => {
     const reader = new MemoryEventReader([coreEvent(1)]);
     const store = projection(reader);
-    await store.read('thread_1');
+    await expect(store.read('thread_1')).resolves.toEqual({ state: 0, throughSeq: 1 });
 
-    reader.records.push(featureEvent(2, 2), featureEvent(3, 5));
-    await store.accept(reader.records[2]!);
+    reader.records.push(featureEvent(3, 5));
+    await expect(store.read('thread_1')).rejects.toThrow('expected 2, got 3');
 
+    reader.records.splice(1, 0, featureEvent(2, 2));
     await expect(store.read('thread_1')).resolves.toEqual({ state: 7, throughSeq: 3 });
-    expect(reader.highWaterReads).toBe(2);
   });
 
   it('drops its cache on dispose without touching the durable records', async () => {
@@ -59,7 +65,6 @@ describe('FeatureProjectionStore', () => {
     await store.read('thread_1');
 
     await store.dispose();
-    await store.accept(featureEvent(2, 4));
 
     await expect(store.read('thread_1')).rejects.toThrow('disposed');
     expect(reader.records).toHaveLength(1);
@@ -68,7 +73,6 @@ describe('FeatureProjectionStore', () => {
 
 function projection(reader: ThreadEventReader) {
   return createFeatureProjectionStore<number>({
-    featureId,
     eventReader: reader,
     initialState: () => 0,
     reduce: (state, record) => (
@@ -82,6 +86,7 @@ function projection(reader: ThreadEventReader) {
 
 class MemoryEventReader implements ThreadEventReader {
   highWaterReads = 0;
+  pageReads = 0;
 
   constructor(
     readonly records: SequencedThreadEventRecord[],
@@ -99,9 +104,11 @@ class MemoryEventReader implements ThreadEventReader {
     _threadId: string,
     input: Readonly<{ afterSeq: number; throughSeq: number; limit: number }>,
   ) {
+    this.pageReads += 1;
     return {
-      records: this.records
+      records: [...this.records]
         .filter((record) => record.seq > input.afterSeq && record.seq <= input.throughSeq)
+        .sort((left, right) => left.seq - right.seq)
         .slice(0, input.limit),
       throughSeq: input.throughSeq,
     };

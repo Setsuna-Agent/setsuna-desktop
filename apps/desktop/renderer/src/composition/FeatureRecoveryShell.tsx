@@ -182,8 +182,7 @@ function createClient(): FeatureManagementClient | null {
 function statusLabel(status: FeatureStatusSnapshot['status'], t: Translate): string {
   if (status === 'active') return t('featureRecovery.status.active');
   if (status === 'degraded') return t('featureRecovery.status.degraded');
-  if (status === 'failed') return t('featureRecovery.status.failed');
-  return t('featureRecovery.status.blocked');
+  return t('featureRecovery.status.failed');
 }
 
 function diagnosisLabel(status: FeatureSettingsDiagnosis['status'], t: Translate): string {

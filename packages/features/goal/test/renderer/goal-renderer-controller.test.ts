@@ -1,10 +1,8 @@
-import { createFeatureEvent, type FeatureEventFeedItem } from '@setsuna-desktop/feature-core/events';
 import type { RendererFeatureEventFeed } from '@setsuna-desktop/feature-core/renderer';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
 import {
   goalFeature,
-  goalStateReplacedEvent,
   type Goal,
   type GoalStateSnapshot,
 } from '../../src/contracts/index.js';
@@ -12,21 +10,27 @@ import type { GoalClient } from '../../src/renderer/client.js';
 import { GoalRendererController } from '../../src/renderer/controller.js';
 
 describe('GoalRendererController', () => {
-  it('subscribes before querying and reduces advance 11 before Goal event 12', async () => {
+  it('subscribes before querying and refetches when a change arrives during that query', async () => {
     const order: string[] = [];
     const feed = new TestFeed(() => order.push('subscribe'));
+    const first = deferred<GoalStateSnapshot>();
+    let reads = 0;
     const client = clientWithReads(async () => {
-      order.push('read');
-      return snapshot(null, 10);
+      reads += 1;
+      order.push(`read:${reads}`);
+      return reads === 1
+        ? first.promise
+        : snapshot(goal({ objective: 'Apply the new architecture' }), 12);
     });
     const controller = createController(client, feed);
 
     controller.start();
-    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(10));
-    feed.emit({ kind: 'advance', seq: 11 });
-    feed.emit(goalFeedItem(12, goal({ objective: 'Apply the new architecture' })));
+    expect(order).toEqual(['subscribe', 'read:1']);
+    feed.emit(12);
+    first.resolve(snapshot(null, 10));
+    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(12));
 
-    expect(order).toEqual(['subscribe', 'read']);
+    expect(order).toEqual(['subscribe', 'read:1', 'read:2']);
     expect(controller.snapshot()).toMatchObject({
       goal: { objective: 'Apply the new architecture' },
       stale: false,
@@ -47,7 +51,7 @@ describe('GoalRendererController', () => {
 
     controller.start();
     await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(10));
-    feed.emit(goalFeedItem(12, goal({ objective: 'Live event after a gap' })));
+    feed.emit(12);
     await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(12));
 
     await controller.update({ objective: 'Late response' });
@@ -72,7 +76,7 @@ describe('GoalRendererController', () => {
 
     controller.start();
     controller.dispose();
-    feed.emit({ kind: 'advance', seq: 1 });
+    feed.emit(1);
     pending.resolve(snapshot(goal(), 1));
     await Promise.resolve();
 
@@ -94,14 +98,14 @@ function createController(client: GoalClient, feed: RendererFeatureEventFeed) {
 
 class TestFeed implements RendererFeatureEventFeed {
   disposed = false;
-  private listener: ((item: FeatureEventFeedItem) => void) | null = null;
+  private listener: ((minimumThroughSeq: number) => void) | null = null;
 
   constructor(private readonly onSubscribe: () => void = () => undefined) {}
 
   subscribe(
     _scope: Parameters<RendererFeatureEventFeed['subscribe']>[0],
     _threadId: string,
-    listener: (item: FeatureEventFeedItem) => void,
+    listener: (minimumThroughSeq: number) => void,
   ) {
     this.onSubscribe();
     this.listener = listener;
@@ -113,8 +117,8 @@ class TestFeed implements RendererFeatureEventFeed {
     };
   }
 
-  emit(item: FeatureEventFeedItem): void {
-    this.listener?.(item);
+  emit(minimumThroughSeq: number): void {
+    this.listener?.(minimumThroughSeq);
   }
 }
 
@@ -127,19 +131,6 @@ function clientWithReads(
     updateState: vi.fn(update),
     clearState: vi.fn(async () => snapshot(null, 0)),
   };
-}
-
-function goalFeedItem(seq: number, value: Goal): FeatureEventFeedItem {
-  const pending = createFeatureEvent(
-    goalStateReplacedEvent,
-    {
-      id: `event_${seq}`,
-      threadId: 'thread_1',
-      createdAt: '2026-08-22T00:00:00.000Z',
-    },
-    { goal: value },
-  );
-  return { kind: 'event', seq, event: { ...pending, seq } };
 }
 
 function snapshot(value: Goal | null, throughSeq: number): GoalStateSnapshot {

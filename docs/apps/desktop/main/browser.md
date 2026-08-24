@@ -19,7 +19,7 @@ Browser 是纵向内置 Feature：共享 contract、runtime 工具语义、main 
 | `renderer/Browser*.tsx` | 内部首页、Tab/webview、地址栏、收藏、设备模拟、favicon、截图与菜单 |
 | `renderer/browser.css` | Browser 作用域样式 |
 
-四端注册入口分别位于 runtime、main、preload、renderer 的 `composition/builtin-*-features.ts`。Renderer 宿主适配器是 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx`；runtime 的 `apps` 外适配器 `packages/desktop-runtime/src/adapters/tool/browser-tool-host.ts` 只把 Feature 服务接入通用工具路由，不拥有 Browser 业务规则。
+四端分别在各自唯一 composition root 的 `define*FeatureHost` 中登记。Renderer 宿主适配器是 `apps/desktop/renderer/src/composition/BrowserFeaturePane.tsx`；runtime 的 `apps` 外适配器 `packages/desktop-runtime/src/adapters/tool/browser-tool-host.ts` 只把 Feature 服务接入通用工具路由，不拥有 Browser 业务规则。
 
 ## Tab 注册
 
@@ -160,4 +160,3 @@ Renderer（`packages/features/browser/test/renderer/`）：
 - `BrowserDeviceToolbar.test.tsx`
 - `browserDeviceEmulation.test.ts`
 - `runtimeBrowserActions.test.ts`
-

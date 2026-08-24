@@ -50,10 +50,8 @@ describe('Feature recovery UI', () => {
         return success({
           features: [{
             featureId: 'image-generation',
-            version: '1.0.0',
             criticality: 'optional',
             status: 'degraded',
-            lifecycle: 'degraded',
           }],
           settings: [{ featureId: 'image-generation', documentId: 'connection' }],
         });

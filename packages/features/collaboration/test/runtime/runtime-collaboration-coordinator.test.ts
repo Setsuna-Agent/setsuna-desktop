@@ -7,7 +7,6 @@ import type {
 import type { FeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  collaborationFeature,
   createInitialCollaborationState,
   type CollaborationRuntimeHost,
   type CollaborationState,
@@ -422,7 +421,6 @@ function createHarness(options: HarnessOptions = {}): Readonly<{
   let idIndex = 0;
 
   const projection: FeatureProjectionStore<CollaborationState> = {
-    featureId: collaborationFeature.id,
     async read(threadId) {
       let state: CollaborationState = threadId === 'thread_parent' && options.initialTasks
         ? Object.freeze({ tasks: Object.freeze([...options.initialTasks]) })
@@ -434,8 +432,6 @@ function createHarness(options: HarnessOptions = {}): Readonly<{
       }
       return { state, throughSeq };
     },
-    accept: async () => undefined,
-    invalidate: () => undefined,
     dispose: async () => undefined,
   };
 

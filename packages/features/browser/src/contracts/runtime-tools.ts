@@ -52,6 +52,5 @@ export interface BrowserRuntimeToolService {
 
 export const browserRuntimeToolServiceCapability: CapabilityToken<BrowserRuntimeToolService> = defineCapability({
   id: 'browser.runtime-tools',
-  major: 1,
   description: 'Browser-owned runtime tool definitions and execution service',
 });

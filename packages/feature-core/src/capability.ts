@@ -1,12 +1,10 @@
 const CAPABILITY_ID_PATTERN = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$/u;
 
-declare const capabilityValueBrand: unique symbol;
-
 export type CapabilityToken<TValue> = Readonly<{
   id: string;
-  major: number;
   description: string;
-  readonly [capabilityValueBrand]?: TValue;
+  /** Type-only marker; no runtime value is stored. */
+  readonly __type?: TValue;
 }>;
 
 export type CapabilityDeclaration<TValue = unknown> = Readonly<{
@@ -41,14 +39,10 @@ export type HostCapabilityProvider<TValue = unknown> = Readonly<{
 
 export function defineCapability<TValue>(input: Readonly<{
   id: string;
-  major: number;
   description: string;
 }>): CapabilityToken<TValue> {
   if (!CAPABILITY_ID_PATTERN.test(input.id)) {
     throw new Error(`Invalid Capability id "${input.id}". Expected a dotted lowercase namespace.`);
-  }
-  if (!Number.isSafeInteger(input.major) || input.major < 1) {
-    throw new Error(`Capability "${input.id}" must declare a positive integer major version.`);
   }
   if (!input.description.trim()) {
     throw new Error(`Capability "${input.id}" must include a description.`);
@@ -76,14 +70,14 @@ export function optionalCapability<TValue>(
 }
 
 export function provideHostCapability<TValue>(
-  declaration: CapabilityDeclaration<TValue>,
+  token: CapabilityToken<TValue>,
   value: TValue,
 ): HostCapabilityProvider<TValue> {
-  return Object.freeze({ declaration, value });
+  return Object.freeze({ declaration: declareCapabilityProvider(token), value });
 }
 
 export function capabilityKey(token: CapabilityToken<unknown>): string {
-  return `${token.id}@${token.major}`;
+  return token.id;
 }
 
 export function eraseDependencySpec(spec: DependencySpec): readonly CapabilityRequirementDeclaration[] {
