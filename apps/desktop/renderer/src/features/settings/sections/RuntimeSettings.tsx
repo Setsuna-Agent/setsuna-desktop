@@ -2,7 +2,6 @@ import {
   RUNTIME_DEVELOPER_FEATURES_FLAG,
   runtimeDeveloperFeaturesEnabled,
   type RuntimeConfigState,
-  type RuntimeDesktopSettings,
 } from '@setsuna-desktop/contracts';
 import { ChevronRight, FileCog, FileJson2, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
@@ -15,7 +14,6 @@ import {
 import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.js';
 import { SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
-import { WorkspaceDependenciesSettings } from '../WorkspaceDependenciesSettings.js';
 import { WindowsSandboxSettings } from '../windows-sandbox/WindowsSandboxSettings.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
@@ -24,14 +22,10 @@ import { errorMessage } from '../settings-utils.js';
 
 export function RuntimePolicySettings({
   config,
-  skillExtraRoots,
   onSave,
-  onSetSkillExtraRoots,
 }: {
   config: RuntimeConfigState;
-  skillExtraRoots: string[];
   onSave: (input: RuntimePreferenceInput) => Promise<void>;
-  onSetSkillExtraRoots: (roots: string[]) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [openingPath, setOpeningPath] = useState<string | null>(null);
@@ -65,15 +59,6 @@ export function RuntimePolicySettings({
   const accessMode = runtimeAccessModeForConfig(config);
   const accessModeOptions = localizedRuntimeAccessModeOptions(t);
   const accessModeOption = accessModeOptions.find((option) => option.value === accessMode) ?? accessModeOptions[1];
-  const persistWorkspaceDependencySettings = (
-    settings: Partial<Pick<RuntimeDesktopSettings, 'npmRegistryUrl' | 'pythonPackageIndexUrl'>>,
-  ) => onSave({
-    desktopSettings: {
-      ...(config.desktopSettings ?? {}),
-      ...settings,
-    },
-  });
-
   return (
     <div className="chat-user-settings__section chat-user-settings__section--stacked chat-user-settings__runtime-section">
       <div className="chat-user-settings__section-block">
@@ -95,13 +80,6 @@ export function RuntimePolicySettings({
           </label>
         </div>
       </div>
-
-      <WorkspaceDependenciesSettings
-        npmRegistryUrl={typeof config.desktopSettings?.npmRegistryUrl === 'string' ? config.desktopSettings.npmRegistryUrl : ''}
-        pythonPackageIndexUrl={typeof config.desktopSettings?.pythonPackageIndexUrl === 'string' ? config.desktopSettings.pythonPackageIndexUrl : ''}
-        onNpmRegistryUrlPersist={(npmRegistryUrl) => persistWorkspaceDependencySettings({ npmRegistryUrl })}
-        onPythonPackageIndexUrlPersist={(pythonPackageIndexUrl) => persistWorkspaceDependencySettings({ pythonPackageIndexUrl })}
-      />
 
       {window.setsunaDesktop?.desktop.platform === 'win32' ? <WindowsSandboxSettings /> : null}
 
@@ -129,17 +107,11 @@ export function RuntimePolicySettings({
         </div>
         {localPathError ? <div className="chat-user-settings__runtime-error">{localPathError}</div> : null}
       </div>
-
-      <RuntimeAdvancedSettings
-        config={config}
-        skillExtraRoots={skillExtraRoots}
-        onSave={onSave}
-        onSetSkillExtraRoots={onSetSkillExtraRoots}
-      />
     </div>
   );
 }
-function RuntimeAdvancedSettings({
+
+export function RuntimeAdvancedSettings({
   config,
   skillExtraRoots,
   onSave,
@@ -159,102 +131,104 @@ function RuntimeAdvancedSettings({
   }, [config.features]);
 
   return (
-    <details className="chat-user-settings__section-block chat-user-settings__advanced-disclosure">
-      <summary className="chat-user-settings__advanced-summary">
-        <span className="chat-user-settings__advanced-icon" aria-hidden="true">
-          <ShieldCheck size={16} />
-        </span>
-        <span className="chat-user-settings__advanced-copy">
-          <strong>{t('settings.runtime.advanced')}</strong>
-          <small>{t('settings.runtime.advancedDescription')}</small>
-        </span>
-        <span className="chat-user-settings__advanced-toggle" aria-hidden="true">
-          <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
-        </span>
-      </summary>
-      <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
-        <SettingsToggle
-          checked={runtimeDeveloperFeaturesEnabled(config)}
-          description={t('settings.runtime.developerFeaturesDescription')}
-          label={t('settings.runtime.developerFeatures')}
-          onChange={(enabled) => void onSave({
-            features: {
-              ...(config.features ?? {}),
-              [RUNTIME_DEVELOPER_FEATURES_FLAG]: enabled,
-            },
-          })}
-        />
-        <SettingsToggle
-          checked={config.desktopSettings?.showThinkingInTranscript === true}
-          description={t('settings.runtime.showThinkingDescription')}
-          label={t('settings.runtime.showThinking')}
-          onChange={(showThinkingInTranscript) => void onSave({
-            desktopSettings: {
-              ...(config.desktopSettings ?? {}),
-              showThinkingInTranscript,
-            },
-          })}
-        />
-        <SettingsToggle
-          checked={config.sandboxWorkspaceWrite?.networkAccess === true}
-          description={t('settings.runtime.sandboxNetworkDescription')}
-          label={t('settings.runtime.sandboxNetwork')}
-          onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
-        />
-        <SettingsToggle
-          checked={config.bypassHookTrust === true}
-          description={t('settings.runtime.bypassHookTrustDescription')}
-          label={t('settings.runtime.bypassHookTrust')}
-          onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
-        />
-        <RuntimeDirectoryListField
-          description={t('settings.runtime.readableRootsDescription')}
-          label={t('settings.runtime.readableRoots')}
-          value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
-          onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
-        />
-        <RuntimeDirectoryListField
-          description={t('settings.runtime.writableRootsDescription')}
-          label={t('settings.runtime.writableRoots')}
-          value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
-          onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
-        />
-        <RuntimeDirectoryListField
-          description={t('settings.runtime.deniedRootsDescription')}
-          label={t('settings.runtime.deniedRoots')}
-          value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
-          onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
-        />
-        <RuntimeTextListField
-          description={t('settings.runtime.deniedGlobDescription')}
-          label={t('settings.runtime.deniedGlob')}
-          value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
-          onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
-        />
-        <RuntimeDirectoryListField
-          description={t('settings.runtime.skillRootsDescription')}
-          label={t('settings.runtime.skillRoots')}
-          value={skillExtraRoots}
-          onSave={onSetSkillExtraRoots}
-        />
-        <div className="chat-user-settings__runtime-json-field">
-          <span>{t('settings.runtime.featureFlags')}</span>
-          <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
-          <Button onClick={() => {
-            try {
-              const parsed = JSON.parse(featureFlagsDraft) as unknown;
-              if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(t('settings.runtime.featureFlagsObject'));
-              const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
-              setAdvancedError(null);
-              void onSave({ features: flags });
-            } catch (unknownError) {
-              setAdvancedError(errorMessage(unknownError, t('settings.runtime.featureFlagsInvalid')));
-            }
-          }}>{t('settings.runtime.saveFeatureFlags')}</Button>
+    <div className="chat-user-settings__section chat-user-settings__runtime-advanced-section">
+      <details className="chat-user-settings__section-block chat-user-settings__advanced-disclosure">
+        <summary className="chat-user-settings__advanced-summary">
+          <span className="chat-user-settings__advanced-icon" aria-hidden="true">
+            <ShieldCheck size={16} />
+          </span>
+          <span className="chat-user-settings__advanced-copy">
+            <strong>{t('settings.runtime.advanced')}</strong>
+            <small>{t('settings.runtime.advancedDescription')}</small>
+          </span>
+          <span className="chat-user-settings__advanced-toggle" aria-hidden="true">
+            <ChevronRight className="chat-user-settings__advanced-chevron" size={15} />
+          </span>
+        </summary>
+        <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
+          <SettingsToggle
+            checked={runtimeDeveloperFeaturesEnabled(config)}
+            description={t('settings.runtime.developerFeaturesDescription')}
+            label={t('settings.runtime.developerFeatures')}
+            onChange={(enabled) => void onSave({
+              features: {
+                ...(config.features ?? {}),
+                [RUNTIME_DEVELOPER_FEATURES_FLAG]: enabled,
+              },
+            })}
+          />
+          <SettingsToggle
+            checked={config.desktopSettings?.showThinkingInTranscript === true}
+            description={t('settings.runtime.showThinkingDescription')}
+            label={t('settings.runtime.showThinking')}
+            onChange={(showThinkingInTranscript) => void onSave({
+              desktopSettings: {
+                ...(config.desktopSettings ?? {}),
+                showThinkingInTranscript,
+              },
+            })}
+          />
+          <SettingsToggle
+            checked={config.sandboxWorkspaceWrite?.networkAccess === true}
+            description={t('settings.runtime.sandboxNetworkDescription')}
+            label={t('settings.runtime.sandboxNetwork')}
+            onChange={(networkAccess) => void onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), networkAccess } })}
+          />
+          <SettingsToggle
+            checked={config.bypassHookTrust === true}
+            description={t('settings.runtime.bypassHookTrustDescription')}
+            label={t('settings.runtime.bypassHookTrust')}
+            onChange={(bypassHookTrust) => void onSave({ bypassHookTrust })}
+          />
+          <RuntimeDirectoryListField
+            description={t('settings.runtime.readableRootsDescription')}
+            label={t('settings.runtime.readableRoots')}
+            value={config.sandboxWorkspaceWrite?.readableRoots ?? []}
+            onSave={(readableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), readableRoots } })}
+          />
+          <RuntimeDirectoryListField
+            description={t('settings.runtime.writableRootsDescription')}
+            label={t('settings.runtime.writableRoots')}
+            value={config.sandboxWorkspaceWrite?.writableRoots ?? []}
+            onSave={(writableRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), writableRoots } })}
+          />
+          <RuntimeDirectoryListField
+            description={t('settings.runtime.deniedRootsDescription')}
+            label={t('settings.runtime.deniedRoots')}
+            value={config.sandboxWorkspaceWrite?.deniedRoots ?? []}
+            onSave={(deniedRoots) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedRoots } })}
+          />
+          <RuntimeTextListField
+            description={t('settings.runtime.deniedGlobDescription')}
+            label={t('settings.runtime.deniedGlob')}
+            value={config.sandboxWorkspaceWrite?.deniedGlobPatterns ?? []}
+            onSave={(deniedGlobPatterns) => onSave({ sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}), deniedGlobPatterns } })}
+          />
+          <RuntimeDirectoryListField
+            description={t('settings.runtime.skillRootsDescription')}
+            label={t('settings.runtime.skillRoots')}
+            value={skillExtraRoots}
+            onSave={onSetSkillExtraRoots}
+          />
+          <div className="chat-user-settings__runtime-json-field">
+            <span>{t('settings.runtime.featureFlags')}</span>
+            <TextArea rows={6} value={featureFlagsDraft} onChange={(event) => setFeatureFlagsDraft(event.currentTarget.value)} />
+            <Button onClick={() => {
+              try {
+                const parsed = JSON.parse(featureFlagsDraft) as unknown;
+                if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error(t('settings.runtime.featureFlagsObject'));
+                const flags = Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean'));
+                setAdvancedError(null);
+                void onSave({ features: flags });
+              } catch (unknownError) {
+                setAdvancedError(errorMessage(unknownError, t('settings.runtime.featureFlagsInvalid')));
+              }
+            }}>{t('settings.runtime.saveFeatureFlags')}</Button>
+          </div>
         </div>
-      </div>
-      {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
-    </details>
+        {advancedError ? <div className="chat-user-settings__runtime-error">{advancedError}</div> : null}
+      </details>
+    </div>
   );
 }
 

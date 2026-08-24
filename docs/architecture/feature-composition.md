@@ -146,7 +146,7 @@ FeatureScope 本身不设置独立超时：它先 abort，再等待已进入的�
 4. 只创建有真实 setup/contribution 的 process entry；跨 Feature 只依赖对方 `/contracts`。
 5. 把 package 加入根 `tsconfig.json` reference；有 renderer entry 时同步 `tsconfig.renderer.json` 的 path/reference，有 desktop main/preload/renderer entry 时加入根 workspace dependency，有 runtime entry 时加入 `packages/desktop-runtime/package.json` 与 `tsconfig.build.json`。`build:features` 和 Vite/Vitest source alias 会从 workspace package 自动覆盖；最后用 pnpm 更新 lockfile。
 6. 在每个参与进程唯一 composition root 登记一次，并明确 `required` 或 `optional`。宿主能力在同一根通过窄 Capability 注入；Feature 专属的 provider/context adapter 放 composition 目录，不回流到通用页面。
-7. settings/event/tool-result 一旦持久化，提交 owner-local schema、migration/legacy decoder 和未知版本失败语义；需要 WebDAV portable/credential backup 时，显式加入 WebDAV owner 的恢复目录。禁止只写最新 happy path。
+7. settings/event/tool-result 一旦持久化，提交 owner-local schema、migration/legacy decoder 和未知版本失败语义。设置文档声明 `syncPolicy: 'portable'` 后会由 Runtime catalog 自动进入 WebDAV 导出与恢复 staging，不要再向 WebDAV 维护业务 Feature 清单；secret 仍须通过显式的 credential backup contract opt in。禁止只写最新 happy path。
 8. setup 内所有订阅、进程、监听器和可取消操作都交给 `FeatureScope`；setup 外的宿主绑定必须返回幂等 disposer，并由 composition root 通过 `completeFeatureHostActivation` 事务管理。
 9. 测试至少覆盖本次真实风险：静态冲突或原子注册、required/optional 失败语义、setup/host-binding 回滚、持久回放/迁移，以及一个真实 builtin composition smoke path。不要为每个 DTO 写低收益镜像测试。
 10. 更新对应 `docs/` 与 `Tree.md`，依次运行定向测试、architecture/typecheck/test/lint/build 和 `git diff --check`。

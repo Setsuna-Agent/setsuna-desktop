@@ -1,4 +1,8 @@
-import type { RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment, RuntimeWorkspaceDependenciesStatus } from '@setsuna-desktop/contracts';
+import type { RuntimeExecPolicyAmendment, RuntimeNetworkPolicyAmendment } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeWorkspaceDependenciesStatus,
+  WorkspaceDependenciesControl,
+} from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp } from 'node:fs/promises';
@@ -11,7 +15,6 @@ import { shellSandboxCapability, shellSandboxUnavailableReason } from '../../../
 import { FileWorkspaceProjectStore } from '../../../../src/adapters/workspace/file-workspace-project-store.js';
 import { systemClock } from '../../../../src/ports/clock.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../../../src/ports/policy-amendment-store.js';
-import type { WorkspaceDependencyManager } from '../../../../src/ports/workspace-dependency-manager.js';
 
 export const execFileAsync = promisify(execFile);
 
@@ -32,7 +35,7 @@ export async function createHost(options: {
   policyAmendmentStore?: PolicyAmendmentStore;
   projectDirName?: string;
   shellSandboxCapability?: () => ReturnType<typeof shellSandboxCapability>;
-  workspaceDependencies?: WorkspaceDependencyManager;
+  workspaceDependencies?: WorkspaceDependenciesControl;
 } = {}): Promise<{ fixtureRoot: string; host: PcLocalToolHost; projectDir: string; projectId: string }> {
   const fixtureRootParent = options.fixtureRootParent ?? tmpdir();
   const root = await mkdtemp(path.join(fixtureRootParent, 'setsuna-pc-toolhost-test-'));
@@ -61,8 +64,8 @@ export async function createHost(options: {
 }
 
 export function stubWorkspaceDependencyManager(
-  overrides: Partial<WorkspaceDependencyManager> = {},
-): WorkspaceDependencyManager {
+  overrides: Partial<WorkspaceDependenciesControl> = {},
+): WorkspaceDependenciesControl {
   const status: RuntimeWorkspaceDependenciesStatus = {
     bundleVersion: 'test',
     checks: [],

@@ -2,6 +2,7 @@ import type {
   ButtonHTMLAttributes,
   ComponentType,
   InputHTMLAttributes,
+  ReactElement,
   ReactNode,
   TextareaHTMLAttributes,
 } from 'react';
@@ -45,6 +46,11 @@ export type SettingsIconButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElemen
   children: ReactNode;
   label: string;
   variant?: 'secondary' | 'ghost' | 'danger';
+}>;
+
+export type SettingsTooltipProps = Readonly<{
+  children: ReactElement;
+  title: ReactNode;
 }>;
 
 export type SettingsSelectFieldProps = Readonly<{
@@ -116,6 +122,7 @@ export type SettingsViewUi = Readonly<{
   TextArea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>;
   TextField: ComponentType<InputHTMLAttributes<HTMLInputElement>>;
   Toggle: ComponentType<SettingsToggleProps>;
+  Tooltip: ComponentType<SettingsTooltipProps>;
 }>;
 
 export type SettingsViewHostProps = Readonly<{

@@ -72,9 +72,6 @@ import type {
 } from './threads.js';
 import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
-  RuntimeWorkspaceDependenciesStatus,
-} from './workspace-dependencies.js';
-import type {
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
   WorkspaceEntryList,
@@ -161,9 +158,6 @@ export type DesktopRuntimeClient = {
   listDebugTraces(threadId: string, afterSeq?: number): Promise<RuntimeDebugTraceList>;
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
-  getWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  diagnoseWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
-  repairWorkspaceDependencies(): Promise<RuntimeWorkspaceDependenciesStatus>;
   fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;
   listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listSkills(): Promise<RuntimeSkillList>;

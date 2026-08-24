@@ -13,9 +13,7 @@ import {
   defaultModelMaxOutputTokens,
   normalizeDesktopNetworkProxyRoute,
   normalizeModelIconConfig,
-  normalizeNpmRegistryUrl,
   normalizeProviderIconConfig,
-  normalizePythonPackageIndexUrl,
   normalizeRuntimeAccessModeConfig,
 } from '@setsuna-desktop/contracts';
 import {
@@ -26,6 +24,10 @@ import type {
   MemoryLegacySettingsAdapter,
   MemoryPreferences,
 } from '@setsuna-desktop/feature-memory/contracts';
+import type {
+  WorkspaceDependenciesLegacySettingsAdapter,
+  WorkspaceDependencySettings,
+} from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type {
   VisionRecognitionLegacySettingsAdapter,
   VisionRecognitionModelSelection,
@@ -38,6 +40,13 @@ import type {
 } from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
+import {
+  legacyWorkspaceDependencySettingsForSave,
+  retireLegacyWorkspaceDependencySettings,
+  stripLegacyWorkspaceDependencySettings,
+  workspaceDependencySettingsFromLegacy,
+  type StoredDesktopSettings,
+} from './legacy-workspace-dependency-config.js';
 import {
   copyOptionalMemoryLimits,
   legacyMemoryTaskModels,
@@ -80,7 +89,7 @@ type StoredImageGenerationConfig = Readonly<{
 
 type StoredConfig = Omit<
   RuntimeConfigState,
-  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'taskModels'
+  'configPath' | 'dataPath' | 'storagePath' | 'providers' | 'taskModels' | 'desktopSettings'
 > & {
   schemaVersion?: number;
   /** Pre-v3 compatibility input. It is consumed once and never written again. */
@@ -91,6 +100,7 @@ type StoredConfig = Omit<
   imageGeneration?: StoredImageGenerationConfig;
   /** Compatibility input consumed once by the Vision Recognition Feature. */
   visionRecognition?: VisionRecognitionModelSelection;
+  desktopSettings?: StoredDesktopSettings;
   providers: Omit<ProviderConfigState, 'apiKeySet' | 'apiKeyPreview'>[];
 };
 
@@ -151,6 +161,13 @@ export class FileConfigStore implements ConfigStore {
     return Object.freeze({
       read: () => this.readLegacyVisionRecognitionSelection(),
       retire: () => this.retireLegacyVisionRecognitionSelection(),
+    });
+  }
+
+  workspaceDependenciesLegacySettingsAdapter(): WorkspaceDependenciesLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyWorkspaceDependencySettings(),
+      retire: () => this.retireLegacyWorkspaceDependencySettings(),
     });
   }
 
@@ -229,7 +246,11 @@ export class FileConfigStore implements ConfigStore {
         hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
         features: normalizeFeatureFlags(input.features ?? previous.features),
-        desktopSettings: normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
+        desktopSettings: {
+          ...normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
+          // A config save must not erase unconsumed Feature migration input.
+          ...legacyWorkspaceDependencySettingsForSave(previous.desktopSettings),
+        },
         providers: providers.map(({ apiKey: _apiKey, ...provider }) => provider),
         // Preserve unconsumed legacy fields until the owning Feature commits its migration.
         ...(previous.memory === undefined ? {} : { memory: previous.memory }),
@@ -320,6 +341,23 @@ export class FileConfigStore implements ConfigStore {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
       if (!Object.hasOwn(stored, 'visionRecognition')) return;
       delete stored.visionRecognition;
+      await writeJsonFile(this.configPath, stored);
+    });
+  }
+
+  private async readLegacyWorkspaceDependencySettings(): Promise<WorkspaceDependencySettings> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return workspaceDependencySettingsFromLegacy(stored.desktopSettings);
+    });
+  }
+
+  private async retireLegacyWorkspaceDependencySettings(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const retired = retireLegacyWorkspaceDependencySettings(stored.desktopSettings);
+      if (!retired.changed) return;
+      stored.desktopSettings = retired.value;
       await writeJsonFile(this.configPath, stored);
     });
   }
@@ -827,14 +865,7 @@ function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {
   if (typeof settings.showThinkingInTranscript !== 'boolean') {
     delete settings.showThinkingInTranscript;
   }
-  const npmRegistryUrl = normalizeNpmRegistryUrl(settings.npmRegistryUrl);
-  if (npmRegistryUrl) settings.npmRegistryUrl = npmRegistryUrl;
-  else delete settings.npmRegistryUrl;
-  const pythonPackageIndexUrl = normalizePythonPackageIndexUrl(settings.pythonPackageIndexUrl);
-  if (pythonPackageIndexUrl) settings.pythonPackageIndexUrl = pythonPackageIndexUrl;
-  else delete settings.pythonPackageIndexUrl;
-  delete settings.workspaceDependenciesEnabled;
-  return settings;
+  return stripLegacyWorkspaceDependencySettings(settings);
 }
 
 function maskApiKey(apiKey: string): string {

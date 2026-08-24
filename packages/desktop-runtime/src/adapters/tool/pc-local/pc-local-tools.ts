@@ -6,7 +6,7 @@ import type {
   RuntimeSandboxWorkspaceWrite,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
-import type { ShellToolchain } from '../../../ports/workspace-dependency-manager.js';
+import type { ShellToolchain } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
 import { isFileMutationToolName, protectedWorkspaceMetadataPathForTool } from '../../../security/file-system-policy.js';
 import { errorMessage } from '../../../shared/node-errors.js';

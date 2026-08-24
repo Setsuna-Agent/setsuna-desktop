@@ -36,9 +36,10 @@ const PORTABLE_MODEL_KEYS = [
 ] as const;
 
 /**
- * Exports only settings that have portable meaning. In particular, permission
- * profiles, Hook trust, developer flags, proxy routes, package sources and
- * workspace dependency settings remain owned by the current device.
+ * Exports only portable fields that still live in the legacy root config.
+ * Permission profiles, Hook trust, developer flags and proxy routes remain
+ * device-local. Workspace package-source URLs travel through portable Feature
+ * settings instead; toolchain caches and install paths never enter this view.
  */
 export async function createPortableConfigSnapshot(
   sourcePath: string,

@@ -1,14 +1,12 @@
 import type {
-  ErasedFeatureSettingsDocumentDefinition,
+  FeatureCredentialBackup,
   PortableFeatureSettingsDocument,
+  PortableFeatureSettingsRestoreTarget,
 } from '@setsuna-desktop/feature-core/settings';
-import type { DesktopWebDavSyncCategoryId } from '../contracts/index.js';
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
 import { memorySettings } from '@setsuna-desktop/feature-memory/contracts';
 import { visionRecognitionSettings } from '@setsuna-desktop/feature-vision-recognition/contracts';
-import { randomUUID } from 'node:crypto';
 import {
-  copyFile,
   lstat,
   mkdir,
   readFile,
@@ -19,13 +17,7 @@ import path from 'node:path';
 
 const PORTABLE_FEATURE_SETTINGS_ROOT = 'runtime/portable-feature-settings';
 const MAX_DOCUMENT_BYTES = 1024 * 1024;
-
-/** Settings schemas explicitly supported by WebDAV backup and restore. */
-export const webDavSyncFeatureSettingsDocuments = Object.freeze([
-  ...imageGenerationSettings.erasedDocuments,
-  ...memorySettings.erasedDocuments,
-  ...visionRecognitionSettings.erasedDocuments,
-] satisfies readonly ErasedFeatureSettingsDocumentDefinition[]);
+const SAFE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
 export type PortableFeatureSettingsFile = Readonly<{
   sourcePath: string;
@@ -38,56 +30,49 @@ export function isPortableFeatureSettingsLogicalPath(logicalPath: string): boole
   if (!logicalPath.startsWith(prefix)) return false;
   const components = logicalPath.slice(prefix.length).split('/');
   return components.length === 2
-    && components[0]!.length > 0
-    && components[1]!.length > '.json'.length
+    && SAFE_ID_PATTERN.test(components[0]!)
+    && SAFE_ID_PATTERN.test(components[1]!.slice(0, -'.json'.length))
     && components[1]!.endsWith('.json');
 }
 
-/** Exact installed Feature paths that a restore transaction may move or replace. */
+/** Exact Runtime-staged Feature paths that a restore transaction may replace. */
 export function featureSettingsRestoreTargetPaths(
   dataRoot: string,
-  definitions: readonly ErasedFeatureSettingsDocumentDefinition[],
-  categories: readonly DesktopWebDavSyncCategoryId[],
+  targets: readonly PortableFeatureSettingsRestoreTarget[],
 ): string[] {
-  const selected = new Set(categories);
-  const targets: string[] = [];
-  for (const definition of definitions) {
-    if (selected.has('preferences')) targets.push(localDocumentPath(dataRoot, definition));
-    if (selected.has('model_credentials') && definition.credentialBackupSecretNames.length) {
-      targets.push(path.join(
+  const paths: string[] = [];
+  for (const target of targets) {
+    assertPortableIdentity(target.featureId, target.documentId);
+    paths.push(localDocumentPath(dataRoot, target));
+    if (target.includesSecrets) {
+      paths.push(path.join(
         dataRoot,
         'runtime',
         'secrets',
-        definition.featureId,
-        definition.documentId,
+        target.featureId,
+        target.documentId,
       ));
     }
   }
-  return targets;
+  return [...new Set(paths)];
 }
 
 /**
- * Revalidates the runtime catalog projection at the process boundary and
- * materializes only installed, explicitly portable documents.
+ * Revalidates the serializable runtime projection at the process boundary.
+ * Feature schema and migration ownership remains in Runtime.
  */
 export async function materializePortableFeatureSettings(input: Readonly<{
-  definitions: readonly ErasedFeatureSettingsDocumentDefinition[];
   documents: readonly PortableFeatureSettingsDocument[];
   stagingRoot: string;
 }>): Promise<readonly PortableFeatureSettingsFile[]> {
-  const byKey = definitionMap(input.definitions);
   const seen = new Set<string>();
   const files: PortableFeatureSettingsFile[] = [];
   for (const document of input.documents) {
-    const key = documentKey(document.featureId, document.documentId);
+    const normalized = normalizePortableDocumentEnvelope(document);
+    const key = documentKey(normalized.featureId, normalized.documentId);
     if (seen.has(key)) throw new Error(`Portable Feature settings document is duplicated: ${key}`);
     seen.add(key);
-    const definition = byKey.get(key);
-    if (!definition || definition.syncPolicy !== 'portable') {
-      throw new Error(`Portable Feature settings document is not installed: ${key}`);
-    }
-    const normalized = normalizePortableDocument(definition, document);
-    const logicalPath = portableLogicalPath(definition);
+    const logicalPath = portableLogicalPath(normalized);
     const sourcePath = path.join(input.stagingRoot, ...logicalPath.split('/'));
     await mkdir(path.dirname(sourcePath), { recursive: true });
     await writeFile(sourcePath, `${JSON.stringify(normalized, null, 2)}\n`, {
@@ -97,28 +82,28 @@ export async function materializePortableFeatureSettings(input: Readonly<{
     files.push(Object.freeze({
       sourcePath,
       logicalPath,
-      label: `Feature 设置：${definition.featureId}/${definition.documentId}`,
+      label: `Feature 设置：${normalized.featureId}/${normalized.documentId}`,
     }));
   }
   return Object.freeze(files);
 }
 
 /**
- * Converts downloaded portable documents into local envelopes before the
- * restore commit. Local revision and secret references never come from the
- * remote snapshot. The runtime is stopped while this runs, which is the
- * restore transaction's exclusive local write boundary.
+ * Reads the generic portable payload and projects the three pre-Feature legacy
+ * config shapes. Runtime validates and stages the resulting documents.
  */
-export async function preparePortableFeatureSettingsRestore(input: Readonly<{
+export async function readPortableFeatureSettingsRestorePayload(input: Readonly<{
   dataRoot: string;
-  definitions: readonly ErasedFeatureSettingsDocumentDefinition[];
   stagingRoot: string;
   preferencesSelected: boolean;
   modelCredentialsSelected: boolean;
   restoredSecretsBuffer?: Buffer;
-}>): Promise<readonly string[]> {
+}>): Promise<Readonly<{
+  documents: readonly PortableFeatureSettingsDocument[];
+  credentials: readonly FeatureCredentialBackup[];
+}>> {
   const portable = input.preferencesSelected
-    ? await readDownloadedPortableDocuments(input.stagingRoot, input.definitions)
+    ? await readDownloadedPortableDocuments(input.stagingRoot)
     : new Map<string, PortableFeatureSettingsDocument>();
   const legacyConnection = input.preferencesSelected
     ? await readLegacyImageConnection(path.join(input.stagingRoot, 'runtime', 'config.json'))
@@ -135,140 +120,79 @@ export async function preparePortableFeatureSettingsRestore(input: Readonly<{
         path.join(input.dataRoot, 'runtime', 'secrets.json'),
       )
     : undefined;
-  const targets: string[] = [];
+  appendLegacyDocument(
+    portable,
+    imageGenerationSettings.documents.connection,
+    legacyConnection ?? undefined,
+  );
+  appendLegacyDocument(
+    portable,
+    visionRecognitionSettings.documents['model-selection'],
+    legacyVisionSelection,
+  );
+  appendLegacyDocument(
+    portable,
+    memorySettings.documents.preferences,
+    legacyMemoryPreferences,
+  );
 
-  for (const definition of input.definitions) {
-    const key = documentKey(definition.featureId, definition.documentId);
-    const remoteDocument = portable.get(key);
-    const isImageConnection = key === documentKey(
-      imageGenerationSettings.documents.connection.featureId,
-      imageGenerationSettings.documents.connection.documentId,
-    );
-    const isVisionSelection = key === documentKey(
-      visionRecognitionSettings.documents['model-selection'].featureId,
-      visionRecognitionSettings.documents['model-selection'].documentId,
-    );
-    const isMemoryPreferences = key === documentKey(
-      memorySettings.documents.preferences.featureId,
-      memorySettings.documents.preferences.documentId,
-    );
-    let importedData: unknown;
-    if (remoteDocument) {
-      importedData = normalizePortableDocument(definition, remoteDocument).data;
-    } else if (isImageConnection && legacyConnection) {
-      importedData = definition.schema.parse(legacyConnection);
-    } else if (isVisionSelection && legacyVisionSelection !== undefined) {
-      importedData = definition.schema.parse(legacyVisionSelection);
-    } else if (isMemoryPreferences && legacyMemoryPreferences !== undefined) {
-      importedData = definition.schema.parse(legacyMemoryPreferences);
-    }
-    const importedSecret = isImageConnection ? legacyApiKey : undefined;
-    const localPath = localDocumentPath(input.dataRoot, definition);
-    const stagedPath = stagedDocumentPath(input.stagingRoot, definition);
-
-    if (importedData === undefined && importedSecret === undefined) {
-      if (input.preferencesSelected && await isRegularFile(localPath)) {
-        await mkdir(path.dirname(stagedPath), { recursive: true });
-        await copyFile(localPath, stagedPath);
-        targets.push(localPath);
-      }
-      continue;
-    }
-
-    const local = await readLocalEnvelope(localPath, definition);
-    const data = importedData ?? local?.data ?? definition.schema.parse(definition.defaults());
-    let secretRevision = local?.secretRevision;
-    if (importedSecret !== undefined) {
-      secretRevision = await stageRestoredImageSecret({
-        dataRoot: input.dataRoot,
-        stagingRoot: input.stagingRoot,
-        apiKey: importedSecret,
-      });
-      targets.push(path.join(
-        input.dataRoot,
-        'runtime',
-        'secrets',
-        definition.featureId,
-        definition.documentId,
-      ));
-    }
-    await mkdir(path.dirname(stagedPath), { recursive: true });
-    await writeFile(stagedPath, `${JSON.stringify({
-      featureId: definition.featureId,
-      documentId: definition.documentId,
-      schemaVersion: definition.currentVersion,
-      revision: Math.max(1, (local?.revision ?? 0) + 1),
-      ...(secretRevision ? { secretRevision } : {}),
-      data,
-    }, null, 2)}\n`, { mode: 0o600 });
-    targets.push(localPath);
-  }
-
-  if (portable.size) {
-    const importedKeys = new Set(input.definitions.map((definition) => (
-      documentKey(definition.featureId, definition.documentId)
-    )));
-    for (const key of portable.keys()) {
-      if (!importedKeys.has(key)) throw new Error(`Portable Feature settings document is not installed: ${key}`);
-    }
-  }
-  return Object.freeze([...new Set(targets)]);
-}
-
-function definitionMap(
-  definitions: readonly ErasedFeatureSettingsDocumentDefinition[],
-): ReadonlyMap<string, ErasedFeatureSettingsDocumentDefinition> {
-  return new Map(definitions.map((definition) => [
-    documentKey(definition.featureId, definition.documentId),
-    definition,
-  ]));
-}
-
-function normalizePortableDocument(
-  definition: ErasedFeatureSettingsDocumentDefinition,
-  document: PortableFeatureSettingsDocument,
-): PortableFeatureSettingsDocument {
-  if (!Number.isSafeInteger(document.schemaVersion) || document.schemaVersion < 1) {
-    throw new Error('Portable Feature settings schemaVersion is invalid.');
-  }
-  if (document.schemaVersion > definition.currentVersion) {
-    throw new Error(`Unsupported portable settings schema version ${document.schemaVersion}.`);
-  }
-  let data = document.data;
-  for (let version = document.schemaVersion; version < definition.currentVersion; version += 1) {
-    data = definition.migrations[version](data);
-  }
+  const credentials = legacyApiKey === undefined
+    ? []
+    : [Object.freeze({
+        featureId: imageGenerationSettings.documents.connection.featureId,
+        documentId: imageGenerationSettings.documents.connection.documentId,
+        secretName: 'api-key',
+        value: legacyApiKey,
+      })];
   return Object.freeze({
+    documents: Object.freeze([...portable.values()]),
+    credentials: Object.freeze(credentials),
+  });
+}
+
+function appendLegacyDocument(
+  documents: Map<string, PortableFeatureSettingsDocument>,
+  definition: Readonly<{
+    featureId: PortableFeatureSettingsDocument['featureId'];
+    documentId: string;
+    currentVersion: number;
+  }>,
+  data: unknown | undefined,
+): void {
+  if (data === undefined) return;
+  const key = documentKey(definition.featureId, definition.documentId);
+  if (documents.has(key)) return;
+  documents.set(key, Object.freeze({
     featureId: definition.featureId,
     documentId: definition.documentId,
     schemaVersion: definition.currentVersion,
-    data: definition.schema.parse(data),
-  });
+    data,
+  }));
 }
 
 async function readDownloadedPortableDocuments(
   stagingRoot: string,
-  definitions: readonly ErasedFeatureSettingsDocumentDefinition[],
 ): Promise<Map<string, PortableFeatureSettingsDocument>> {
   const root = path.join(stagingRoot, ...PORTABLE_FEATURE_SETTINGS_ROOT.split('/'));
   const files = await regularFilesRecursively(root);
-  const allowedPaths = new Map(definitions.map((definition) => [
-    path.resolve(stagingRoot, ...portableLogicalPath(definition).split('/')),
-    definition,
-  ]));
   const documents = new Map<string, PortableFeatureSettingsDocument>();
   for (const filePath of files) {
-    const definition = allowedPaths.get(path.resolve(filePath));
-    if (!definition) throw new Error('备份包含未知的 portable Feature settings document。');
+    const components = path.relative(root, filePath).split(path.sep);
+    if (components.length !== 2 || !components[1]!.endsWith('.json')) {
+      throw new Error('备份包含无效的 portable Feature settings document 路径。');
+    }
+    const pathFeatureId = components[0]!;
+    const pathDocumentId = components[1]!.slice(0, -'.json'.length);
+    assertPortableIdentity(pathFeatureId, pathDocumentId);
     const raw = await readBoundedJson(filePath, 'portable Feature settings document');
     if (!isRecord(raw)) throw new Error('Portable Feature settings document 格式无效。');
-    const document = normalizePortableDocument(definition, {
+    const document = normalizePortableDocumentEnvelope({
       featureId: raw.featureId as PortableFeatureSettingsDocument['featureId'],
       documentId: String(raw.documentId ?? ''),
       schemaVersion: Number(raw.schemaVersion),
       data: raw.data,
     });
-    if (raw.featureId !== definition.featureId || raw.documentId !== definition.documentId) {
+    if (document.featureId !== pathFeatureId || document.documentId !== pathDocumentId) {
       throw new Error('Portable Feature settings document 身份不匹配。');
     }
     const key = documentKey(document.featureId, document.documentId);
@@ -276,66 +200,6 @@ async function readDownloadedPortableDocuments(
     documents.set(key, document);
   }
   return documents;
-}
-
-async function readLocalEnvelope(
-  filePath: string,
-  definition: ErasedFeatureSettingsDocumentDefinition,
-): Promise<Readonly<{
-  revision: number;
-  secretRevision?: string;
-  data: unknown;
-}> | null> {
-  if (!await isRegularFile(filePath)) return null;
-  const raw = await readBoundedJson(filePath, 'local Feature settings document');
-  if (!isRecord(raw) || raw.featureId !== definition.featureId || raw.documentId !== definition.documentId) {
-    return null;
-  }
-  if (!Number.isSafeInteger(raw.revision) || (raw.revision as number) < 1) return null;
-  try {
-    return {
-      revision: raw.revision as number,
-      ...(typeof raw.secretRevision === 'string' ? { secretRevision: raw.secretRevision } : {}),
-      data: definition.schema.parse(raw.data),
-    };
-  } catch {
-    return {
-      revision: raw.revision as number,
-      ...(typeof raw.secretRevision === 'string' ? { secretRevision: raw.secretRevision } : {}),
-      data: definition.schema.parse(definition.defaults()),
-    };
-  }
-}
-
-async function stageRestoredImageSecret(input: Readonly<{
-  dataRoot: string;
-  stagingRoot: string;
-  apiKey: string;
-}>): Promise<string> {
-  const definition = imageGenerationSettings.documents.connection;
-  const localDirectory = path.join(
-    input.dataRoot,
-    'runtime',
-    'secrets',
-    definition.featureId,
-    definition.documentId,
-  );
-  const stagedDirectory = path.join(
-    input.stagingRoot,
-    'runtime',
-    'secrets',
-    definition.featureId,
-    definition.documentId,
-  );
-  await copyRegularDirectory(localDirectory, stagedDirectory);
-  await mkdir(stagedDirectory, { recursive: true, mode: 0o700 });
-  const revision = `secret-${randomUUID()}`;
-  await writeFile(
-    path.join(stagedDirectory, `${revision}.json`),
-    `${JSON.stringify({ 'api-key': input.apiKey }, null, 2)}\n`,
-    { flag: 'wx', mode: 0o600 },
-  );
-  return revision;
 }
 
 async function readLegacyImageConnection(filePath: string): Promise<unknown | null> {
@@ -444,48 +308,45 @@ function legacyImageApiKey(value: unknown): string | undefined {
   return normalized;
 }
 
-function portableLogicalPath(definition: ErasedFeatureSettingsDocumentDefinition): string {
-  return `${PORTABLE_FEATURE_SETTINGS_ROOT}/${definition.featureId}/${definition.documentId}.json`;
+function normalizePortableDocumentEnvelope(
+  document: PortableFeatureSettingsDocument,
+): PortableFeatureSettingsDocument {
+  assertPortableIdentity(document.featureId, document.documentId);
+  if (!Number.isSafeInteger(document.schemaVersion) || document.schemaVersion < 1) {
+    throw new Error('Portable Feature settings schemaVersion is invalid.');
+  }
+  return Object.freeze({
+    featureId: document.featureId,
+    documentId: document.documentId,
+    schemaVersion: document.schemaVersion,
+    data: document.data,
+  });
 }
 
-function localDocumentPath(dataRoot: string, definition: ErasedFeatureSettingsDocumentDefinition): string {
+function assertPortableIdentity(featureId: string, documentId: string): void {
+  if (!SAFE_ID_PATTERN.test(featureId) || !SAFE_ID_PATTERN.test(documentId)) {
+    throw new Error('Portable Feature settings identity is invalid.');
+  }
+}
+
+function portableLogicalPath(
+  document: Pick<PortableFeatureSettingsDocument, 'featureId' | 'documentId'>,
+): string {
+  return `${PORTABLE_FEATURE_SETTINGS_ROOT}/${document.featureId}/${document.documentId}.json`;
+}
+
+function localDocumentPath(
+  dataRoot: string,
+  target: Pick<PortableFeatureSettingsRestoreTarget, 'featureId' | 'documentId'>,
+): string {
   return path.join(
     dataRoot,
     'runtime',
     'features',
-    definition.featureId,
+    target.featureId,
     'settings',
-    `${definition.documentId}.json`,
+    `${target.documentId}.json`,
   );
-}
-
-function stagedDocumentPath(stagingRoot: string, definition: ErasedFeatureSettingsDocumentDefinition): string {
-  return path.join(
-    stagingRoot,
-    'runtime',
-    'features',
-    definition.featureId,
-    'settings',
-    `${definition.documentId}.json`,
-  );
-}
-
-async function copyRegularDirectory(source: string, destination: string): Promise<void> {
-  const sourceStats = await lstat(source).catch((error) => {
-    if (isMissingFileError(error)) return null;
-    throw error;
-  });
-  if (!sourceStats) return;
-  if (!sourceStats.isDirectory() || sourceStats.isSymbolicLink()) {
-    throw new Error('Feature secret namespace is not a regular directory.');
-  }
-  await mkdir(destination, { recursive: true, mode: 0o700 });
-  for (const entry of await readdir(source, { withFileTypes: true })) {
-    if (!entry.isFile() || entry.isSymbolicLink()) {
-      throw new Error('Feature secret namespace contains an unsupported entry.');
-    }
-    await copyFile(path.join(source, entry.name), path.join(destination, entry.name));
-  }
 }
 
 async function regularFilesRecursively(root: string): Promise<string[]> {

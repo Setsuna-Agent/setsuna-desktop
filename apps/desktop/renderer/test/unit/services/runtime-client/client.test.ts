@@ -383,21 +383,6 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('routes workspace dependency status, diagnosis, and repair requests', async () => {
-    const request = installRuntimeBridge(() => ({ state: 'ready' }));
-    const client = createDesktopRuntimeClient();
-
-    await client.getWorkspaceDependencies();
-    await client.diagnoseWorkspaceDependencies();
-    await client.repairWorkspaceDependencies();
-
-    expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/v1/workspace-dependencies' },
-      { path: '/v1/workspace-dependencies/diagnose', method: 'POST' },
-      { path: '/v1/workspace-dependencies/repair', method: 'POST' },
-    ]);
-  });
-
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();

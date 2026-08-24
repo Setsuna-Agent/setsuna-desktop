@@ -61,7 +61,6 @@ const legacyHotspotLineBudgets = new Map([
   ['packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts', 974],
   ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-policy.ts', 1_009],
   ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-process.ts', 1_070],
-  ['packages/desktop-runtime/src/adapters/workspace/managed-workspace-dependency-manager.ts', 1_181],
   ['packages/desktop-runtime/src/loop/tools/tool-orchestrator-policy.ts', 939],
 ]);
 const legacyTestHotspotLineBudgets = new Map([

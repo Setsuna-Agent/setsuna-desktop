@@ -1,7 +1,7 @@
 import type {
   RuntimeWorkspaceDependencySource,
   RuntimeWorkspaceDependencyToolStatus,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/index.js';
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import {

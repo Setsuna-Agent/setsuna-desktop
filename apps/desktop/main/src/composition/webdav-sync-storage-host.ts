@@ -2,7 +2,6 @@ import {
   finalizeCommittedWebDavRestore,
   recoverInterruptedWebDavRestore,
   rollbackCommittedWebDavRestore,
-  webDavSyncFeatureSettingsDocuments,
   type WebDavSyncLifecycle,
   type WebDavSyncStorageHost,
 } from '@setsuna-desktop/feature-webdav-sync/main';
@@ -37,6 +36,5 @@ export {
   finalizeCommittedWebDavRestore,
   recoverInterruptedWebDavRestore,
   rollbackCommittedWebDavRestore,
-  webDavSyncFeatureSettingsDocuments,
 };
 export type DesktopWebDavSyncLifecycle = WebDavSyncLifecycle;

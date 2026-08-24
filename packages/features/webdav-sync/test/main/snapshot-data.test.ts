@@ -12,6 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import { imageGenerationFeature } from '@setsuna-desktop/feature-image-generation/contracts';
 import {
   categoryTargetPaths,
@@ -21,12 +22,10 @@ import {
   summarizeLocalSnapshotCategories,
 } from '../../src/main/snapshot-data.js';
 import { parsePortableProjectCatalog } from '../../src/main/portable-projects.js';
-import {
-  testWebDavSyncFeatureSettingsDocuments,
-  testWebDavSyncStorageHost,
-} from '../support/feature-host.js';
+import { testWebDavSyncStorageHost } from '../support/feature-host.js';
 
 const temporaryRoots: string[] = [];
+const syntheticPortableFeature = defineFeature('workspace-dependencies');
 
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -37,12 +36,11 @@ describe('WebDAV portable snapshot data', () => {
     const root = await createDataRoot();
     const stagingRoot = path.join(root, '.webdav-sync-work', 'snapshot');
     const sources = await prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot,
       categories: ['preferences', 'model_credentials', 'user_skills'],
-      portableFeatureSettings: [portableImageSettings()],
+      portableFeatureSettings: [portableImageSettings(), portableWorkspaceSettings()],
       featureCredentialBackups: [featureImageCredential('sk-feature-image-secret')],
     });
     const providerKey = sources.find((source) => source.kind === 'provider-key');
@@ -85,6 +83,9 @@ describe('WebDAV portable snapshot data', () => {
     ));
     expect(JSON.parse(await readFile(featureSettings!.sourcePath!, 'utf8'))).toEqual(portableImageSettings());
     expect(await readFile(featureSettings!.sourcePath!, 'utf8')).not.toContain('sk-image-secret');
+    expect(sources).toContainEqual(expect.objectContaining({
+      logicalPath: 'runtime/portable-feature-settings/workspace-dependencies/preferences.json',
+    }));
     expect(JSON.parse(await readFile(skillState!.sourcePath!, 'utf8'))).toEqual({
       version: 1,
       states: { demo: { enabled: true } },
@@ -114,7 +115,6 @@ describe('WebDAV portable snapshot data', () => {
     await chmod(scriptPath, 0o755);
 
     const sources = await prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: path.join(root, '.webdav-sync-work', 'executable'),
@@ -135,7 +135,6 @@ describe('WebDAV portable snapshot data', () => {
     const root = await createDataRoot();
     const firstStaging = path.join(root, '.webdav-sync-work', 'conversation');
     const sources = await prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: firstStaging,
@@ -165,7 +164,6 @@ describe('WebDAV portable snapshot data', () => {
       process.platform === 'win32' ? 'junction' : 'dir',
     );
     await expect(prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: path.join(root, '.webdav-sync-work', 'unsafe'),
@@ -186,7 +184,6 @@ describe('WebDAV portable snapshot data', () => {
     }));
 
     const sources = await prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: path.join(root, '.webdav-sync-work', 'portable-attachments'),
@@ -226,7 +223,6 @@ describe('WebDAV portable snapshot data', () => {
   it('summarizes the current local size of every sync category', async () => {
     const root = await createDataRoot();
     const summaries = await summarizeLocalSnapshotCategories({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: path.join(root, '.webdav-sync-work', 'summary'),
@@ -287,7 +283,6 @@ describe('WebDAV portable snapshot data', () => {
     }));
 
     const sources = await prepareLocalSnapshotSources({
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       dataRoot: root,
       stagingRoot: path.join(root, '.webdav-sync-work', 'projects'),
@@ -364,6 +359,18 @@ function portableImageSettings() {
     documentId: 'connection',
     schemaVersion: 1,
     data: { baseUrl: 'https://portable-images.test', model: 'portable' },
+  } as const;
+}
+
+function portableWorkspaceSettings() {
+  return {
+    featureId: syntheticPortableFeature.id,
+    documentId: 'preferences',
+    schemaVersion: 1,
+    data: {
+      npmRegistryUrl: 'https://registry.example.test',
+      pythonPackageIndexUrl: 'https://python.example.test/simple',
+    },
   } as const;
 }
 

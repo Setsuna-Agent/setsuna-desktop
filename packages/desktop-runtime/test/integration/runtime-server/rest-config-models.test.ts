@@ -78,8 +78,9 @@ describe('runtime server REST config and model discovery', () => {
     });
   
   it('returns real host dependency status without provisioning during startup', async () => {
-      const status = await harness.runtimeFetch('/v1/workspace-dependencies');
-      const diagnosed = await harness.runtimeFetch('/v1/workspace-dependencies/diagnose', { method: 'POST' });
+      const snapshot = await harness.runtimeFetch('/v1/features/workspace-dependencies');
+      const status = snapshot.status;
+      const diagnosed = await harness.runtimeFetch('/v1/features/workspace-dependencies/diagnose', { method: 'POST' });
   
       expect(status).toMatchObject({
         checks: expect.arrayContaining([

@@ -14,17 +14,20 @@ type ActiveSubpage = Readonly<{
  * Keeps nested Feature settings in the host page lifecycle. Opening a subpage
  * replaces the parent section content and back restores it, matching native
  * settings navigation without giving Features control of the app router.
+ * Host-owned trailing content stays after every Feature extension.
  */
 export function SettingsSectionExtensionOutlet({
   children,
   extensions,
   sectionId,
+  trailingContent,
   translate,
   ui,
 }: Readonly<{
   children: ReactNode;
   extensions: readonly RegisteredSettingsSectionExtension[];
   sectionId: string;
+  trailingContent?: ReactNode;
   translate: RendererTranslate;
   ui: SettingsViewUi;
 }>) {
@@ -70,6 +73,7 @@ export function SettingsSectionExtensionOutlet({
           })}
         </div>
       ) : null}
+      {trailingContent}
     </>
   );
 }

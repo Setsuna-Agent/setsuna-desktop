@@ -16,6 +16,7 @@ Desktop runtime 是本地 Agent service。它通过认证的 HTTP/SSE 服务 Ele
 | `src/loop/lifecycle/` | Queue、hook、title、finalize、terminate | [Agent loop](agent-loop.md) |
 | `src/loop/tools/` | Tool router/orchestrator/executor/user shell | [工具与能力](tools-and-capabilities.md) |
 | `../features/memory/` | Memory contracts、runtime coordinator、typed operations 与 renderer 设置 | [Feature Composition](../../designs/feature-composition-architecture.md) |
+| `../features/workspace-dependencies/` | Node.js/Python/uv 工具链、包源 settings、typed operations 与 renderer 设置 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/ports/` | Runtime 内部抽象 | [Ports 与 adapters](ports-and-adapters.md) |
 | `src/adapters/store/` | SQLite、JSON、附件、memory、usage | [存储](storage.md) |
 | `src/adapters/model/` | Provider、stream、metadata、discovery | [模型适配器](model-providers.md) |
@@ -46,11 +47,11 @@ cli
 Factory 返回的 container 包含：
 
 - `agentLoop`
-- Thread/event/config/usage/MCP/plugin/skill stores，以及注入 Memory Feature 的文件存储 adapter
+- Thread/event/config/usage/MCP/plugin/skill stores、Feature settings registry，以及注入 Memory Feature 的文件存储 adapter
 - Approval 与 event buses
 - Model client
 - Composite tool host
-- Workspace project/search/dependency services
+- Workspace project/search services，以及通过 Capability 绑定的 Workspace Dependencies Feature
 - Browser/native bridge clients
 - Debug trace store
 

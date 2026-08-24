@@ -6,12 +6,14 @@ import type {
   SettingsRowProps,
   SettingsSectionProps,
   SettingsSelectFieldProps,
+  SettingsTooltipProps,
   SettingsToggleProps,
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
 import { ChevronRight } from 'lucide-react';
 import {
   Button,
+  AppTooltip,
   EmptyState,
   IconButton,
   SelectField,
@@ -36,6 +38,7 @@ export const settingsViewUi = Object.freeze({
   TextArea,
   TextField,
   Toggle: SettingsToggle,
+  Tooltip: SettingsTooltip,
 }) satisfies SettingsViewUi;
 
 export function SettingsSection({ children, className = '', featureId }: SettingsSectionProps) {
@@ -150,6 +153,10 @@ function SettingsIconButton(props: SettingsIconButtonProps) {
 
 function SettingsSelectField(props: SettingsSelectFieldProps) {
   return <SelectField {...props} />;
+}
+
+function SettingsTooltip(props: SettingsTooltipProps) {
+  return <AppTooltip {...props} />;
 }
 
 function classNames(...values: string[]): string {

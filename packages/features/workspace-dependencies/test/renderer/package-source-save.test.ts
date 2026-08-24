@@ -1,9 +1,9 @@
 import {
   DEFAULT_NPM_REGISTRY_URL,
   normalizeNpmRegistryUrl,
-} from '@setsuna-desktop/contracts';
+} from '../../src/contracts/index.js';
 import { describe, expect, it } from 'vitest';
-import { planPackageSourceSave } from '../../../../src/features/settings/packageSourceEditor.js';
+import { planPackageSourceSave } from '../../src/renderer/package-source-save.js';
 
 describe('planPackageSourceSave', () => {
   it('does not persist when Enter is pressed without changing the source', () => {
@@ -40,7 +40,7 @@ describe('planPackageSourceSave', () => {
     })).toEqual({
       kind: 'persist',
       displayValue: DEFAULT_NPM_REGISTRY_URL,
-      persistedValue: undefined,
+      persistedValue: DEFAULT_NPM_REGISTRY_URL,
     });
   });
 

@@ -62,7 +62,8 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 - `runtime-config-routes.ts`：Config 与 provider model discovery。
 - `runtime-activity-routes.ts`：跨线程 active turn 与后台服务投影。
 - `runtime-extension-routes.ts`：Skills、MCP、Hooks、Plugins 和 Approvals。
-- `runtime-resource-routes.ts`：数据迁移 readiness 与 workspace dependencies。
+- `runtime-resource-routes.ts`：Attachment 创建、读取与清理。
+- `RuntimeRouteRegistry`：由各 runtime Feature setup 登记的 typed operations；在中央 route family 之前分发。
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel、review 与 commit message。
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
@@ -79,7 +80,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 - Data migration readiness。
 - Config。
 - Provider model discovery。
-- Workspace dependencies。
+- Feature management 与 Feature-owned typed operations；Workspace Dependencies 使用 `/v1/features/workspace-dependencies*`。
 
 ### Threads
 
@@ -127,6 +128,13 @@ Route 应：
 - Background memory/tool/process。
 
 “active task registry 已空”不等于所有写入已经落盘；shutdown 还要等待 `InFlightRequestTracker` idle。
+
+WebDAV 使用同一套准入边界，但不会把 Feature schema 复制到 Electron main：
+
+- `POST /internal/webdav-sync/prepare` 关闭 turn 和普通 REST mutation admission，并 flush thread store。
+- gate 持有期间，main 可读取 Runtime catalog 导出的 portable settings 与显式 opt-in credentials。
+- `POST /internal/webdav-sync/feature-settings/restore-stage` 只在 gate 持有期间接受恢复 payload；settings registry 校验已注册 owner、sync policy、credential opt-in 和 schema version，在 data root 的 `.webdav-sync-work` 内生成可原子提交的本地 envelope/secret revision，不修改活动 settings store。
+- main 随后停止 Runtime，再把 Runtime 返回的精确目标纳入恢复 journal。启动前恢复只校验受限路径语法，不能依赖尚未启动的 Feature catalog。
 
 ## Thread SSE
 
@@ -200,14 +208,14 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 
 ## 新增 route
 
-1. 先扩展 contracts `DesktopRuntimeClient`。
+1. 宿主公共领域先扩展 contracts `DesktopRuntimeClient`；单一 owner 的业务路由在对应 Feature contracts 定义 typed operation。
 2. 在 route 中解析并立即拒绝非法输入。
 3. 复用现有 container service；必要时先加 port/adapter。
 4. 不在 route 内直接读取私有 JSON 文件。
 5. 确认 shutdown/data migration 准入语义。
 6. 添加对应 `test/server/runtime-*-routes.test.ts` 的边界测试。
 7. 添加 `test/integration/runtime-server/` 的协议场景。
-8. 更新 renderer client。
+8. 更新宿主 renderer client 或 Feature-owned typed client。
 
 ## 测试
 

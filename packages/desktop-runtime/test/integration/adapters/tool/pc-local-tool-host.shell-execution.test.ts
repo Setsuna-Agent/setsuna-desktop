@@ -3,10 +3,10 @@ import { chmod, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FileConfigStore } from '../../../../src/adapters/store/file-config-store.js';
+import { DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
+import { ManagedWorkspaceDependencyManager } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
 import { PcLocalToolHost } from '../../../../src/adapters/tool/pc-local/pc-local-tool-host.js';
 import { shellCommandHiddenBySandbox } from '../../../../src/adapters/tool/pc-local/pc-local-tool-shell-process.js';
-import { ManagedWorkspaceDependencyManager } from '../../../../src/adapters/workspace/managed-workspace-dependency-manager.js';
 import { createHost, stubWorkspaceDependencyManager, commandAvailableOnPath, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local shell execution', () => {
@@ -265,8 +265,7 @@ describe('pc local shell execution', () => {
       .split(path.delimiter)
       .filter((entry) => entry && path.resolve(entry) !== runtimePackageBin)
       .join(path.delimiter);
-    const configStore = new FileConfigStore(dependencyDataDir);
-    const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+    const workspaceDependencies = createManagedWorkspaceDependencies(dependencyDataDir);
     const { host } = await createHost({ workspaceDependencies });
 
     try {
@@ -305,8 +304,7 @@ describe('pc local shell execution', () => {
       || !commandAvailableOnPath('node'),
   )('allows the active macOS temp directory when the workspace is elsewhere', async () => {
     const dependencyDataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-temp-sandbox-'));
-    const configStore = new FileConfigStore(dependencyDataDir);
-    const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+    const workspaceDependencies = createManagedWorkspaceDependencies(dependencyDataDir);
     const { host, projectDir, fixtureRoot } = await createHost({
       fixtureRootParent: homedir(),
       workspaceDependencies,
@@ -360,8 +358,7 @@ describe('pc local shell execution', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const configStore = new FileConfigStore(dependencyDataDir);
-      const workspaceDependencies = new ManagedWorkspaceDependencyManager(dependencyDataDir, configStore);
+      const workspaceDependencies = createManagedWorkspaceDependencies(dependencyDataDir);
       const created = await createHost({ workspaceDependencies });
       host = created.host;
       const result = await host.runTool('run_shell_command', {
@@ -555,3 +552,11 @@ describe('pc local shell execution', () => {
     expect(polled.content).toContain('stdin:hello');
   });
 });
+
+function createManagedWorkspaceDependencies(dataDir: string): ManagedWorkspaceDependencyManager {
+  return new ManagedWorkspaceDependencyManager(
+    dataDir,
+    async () => DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS,
+    async () => true,
+  );
+}

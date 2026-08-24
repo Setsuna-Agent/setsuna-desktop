@@ -1,4 +1,9 @@
-import { DEFAULT_NPM_REGISTRY_URL, DEFAULT_PYTHON_PACKAGE_INDEX_URL } from '@setsuna-desktop/contracts';
+import {
+  DEFAULT_NPM_REGISTRY_URL,
+  DEFAULT_PYTHON_PACKAGE_INDEX_URL,
+  DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS,
+  type WorkspaceDependencySettings,
+} from '../../src/contracts/index.js';
 import { execFile } from 'node:child_process';
 import {
   access,
@@ -17,12 +22,11 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { describe, expect, it } from 'vitest';
-import { FileConfigStore } from '../../../src/adapters/store/file-config-store.js';
 import {
   ManagedWorkspaceDependencyManager,
   runtimeExecutableReadRoot,
-} from '../../../src/adapters/workspace/managed-workspace-dependency-manager.js';
-import { resolveShellToolchain } from '../../../src/adapters/workspace/managed-workspace-toolchain.js';
+} from '../../src/runtime/managed-workspace-dependency-manager.js';
+import { resolveShellToolchain } from '../../src/runtime/managed-workspace-toolchain.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -36,8 +40,7 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const configStore = new FileConfigStore(dataDir);
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      const manager = createManager(dataDir);
 
       await expect(manager.getStatus()).resolves.toMatchObject({
         state: 'ready',
@@ -75,14 +78,10 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const configStore = new FileConfigStore(dataDir);
-      await configStore.saveConfig({
-        desktopSettings: {
-          npmRegistryUrl: 'https://registry.example/npm/',
-          pythonPackageIndexUrl: 'https://mirror.example/simple',
-        },
+      const manager = createManager(dataDir, {
+        npmRegistryUrl: 'https://registry.example/npm/',
+        pythonPackageIndexUrl: 'https://mirror.example/simple',
       });
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
       await expect(manager.getPromptContext()).resolves.toEqual({ enabled: true });
       const status = await manager.repair();
 
@@ -167,8 +166,7 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const configStore = new FileConfigStore(dataDir);
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      const manager = createManager(dataDir);
       const status = await manager.repair();
       const dependencyRoot = path.join(dataDir, 'workspace-dependencies');
       const installBin = path.join(dependencyRoot, 'toolchain', 'bin');
@@ -210,7 +208,7 @@ describe('managed workspace dependency manager', () => {
     let requestedUrl = '';
 
     try {
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir), {
+      const manager = createManager(dataDir, DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS, {
         fetchImpl: async (input) => {
           requestedUrl = String(input);
           return new Response([
@@ -245,8 +243,7 @@ describe('managed workspace dependency manager', () => {
   it('does not provision Python for an unrelated first shell command', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-workspace-dependencies-lazy-'));
     try {
-      const configStore = new FileConfigStore(dataDir);
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      const manager = createManager(dataDir);
 
       const shell = await manager.prepareShellToolchain({
         command: 'git status --short',
@@ -285,7 +282,7 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir));
+      const manager = createManager(dataDir);
       const shell = await manager.prepareShellToolchain({
         command: 'pnpm --version',
         environment: testEnvironment(dataDir),
@@ -316,7 +313,7 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, new FileConfigStore(dataDir));
+      const manager = createManager(dataDir);
       const shell = await manager.prepareShellToolchain({
         command: 'corepack --version',
         environment: testEnvironment(dataDir),
@@ -353,8 +350,7 @@ describe('managed workspace dependency manager', () => {
     process.env.PATH = fakeBin;
 
     try {
-      const configStore = new FileConfigStore(dataDir);
-      const manager = new ManagedWorkspaceDependencyManager(dataDir, configStore);
+      const manager = createManager(dataDir);
       const shell = await manager.prepareShellToolchain({
         command: 'setsuna-explicit-tool --version',
         environment: testEnvironment(dataDir),
@@ -484,6 +480,19 @@ function testEnvironment(root: string) {
     workspaceRoots: [root],
     shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : '/bin/sh',
   };
+}
+
+function createManager(
+  dataDir: string,
+  settings: WorkspaceDependencySettings = DEFAULT_WORKSPACE_DEPENDENCY_SETTINGS,
+  networkOptions: ConstructorParameters<typeof ManagedWorkspaceDependencyManager>[3] = {},
+) {
+  return new ManagedWorkspaceDependencyManager(
+    dataDir,
+    async () => settings,
+    async () => true,
+    networkOptions,
+  );
 }
 
 async function writeExecutable(filePath: string, content: string): Promise<void> {

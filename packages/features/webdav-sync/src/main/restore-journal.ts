@@ -2,17 +2,16 @@ import {
   DESKTOP_WEBDAV_SYNC_CATEGORY_IDS,
   type DesktopWebDavSyncCategoryId,
 } from '../contracts/index.js';
-import type { ErasedFeatureSettingsDocumentDefinition } from '@setsuna-desktop/feature-core/settings';
 import { lstat, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { WebDavSyncStorageHost } from './capabilities.js';
-import { featureSettingsRestoreTargetPaths } from './portable-feature-settings.js';
 import { categoryTargetPaths } from './snapshot-data.js';
 
 const JOURNAL_FILE = '.webdav-sync-restore.json';
 const JOURNAL_VERSION = 1;
 const MAX_JOURNAL_BYTES = 64 * 1024;
 const ROLLBACK_NAME_PATTERN = /^\.webdav-sync-rollback-[0-9a-f-]{36}$/u;
+const SAFE_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
 export type WebDavRestoreJournal = {
   version: 1;
@@ -77,9 +76,8 @@ export async function syncWebDavRestorePathParents(
 export async function recoverInterruptedWebDavRestore(
   dataRoot: string,
   storage: WebDavSyncStorageHost,
-  featureSettingsDocuments: readonly ErasedFeatureSettingsDocumentDefinition[] = [],
 ): Promise<WebDavRestoreRecovery> {
-  const journal = await readJournal(dataRoot, storage, featureSettingsDocuments);
+  const journal = await readJournal(dataRoot, storage);
   if (!journal) return 'none';
   if (journal.phase === 'validated') {
     await discardValidatedJournal(dataRoot, journal, storage);
@@ -93,9 +91,8 @@ export async function recoverInterruptedWebDavRestore(
 export async function finalizeCommittedWebDavRestore(
   dataRoot: string,
   storage: WebDavSyncStorageHost,
-  featureSettingsDocuments: readonly ErasedFeatureSettingsDocumentDefinition[] = [],
 ): Promise<boolean> {
-  const journal = await readJournal(dataRoot, storage, featureSettingsDocuments);
+  const journal = await readJournal(dataRoot, storage);
   if (!journal) return false;
   if (journal.phase !== 'committed') {
     throw new Error('WebDAV 还原尚未提交，不能清理回滚数据。');
@@ -118,9 +115,8 @@ async function discardValidatedJournal(
 export async function rollbackCommittedWebDavRestore(
   dataRoot: string,
   storage: WebDavSyncStorageHost,
-  featureSettingsDocuments: readonly ErasedFeatureSettingsDocumentDefinition[] = [],
 ): Promise<boolean> {
-  const journal = await readJournal(dataRoot, storage, featureSettingsDocuments);
+  const journal = await readJournal(dataRoot, storage);
   if (!journal) return false;
   await rollbackJournal(dataRoot, journal, storage);
   return true;
@@ -169,7 +165,6 @@ async function rollbackJournal(
 async function readJournal(
   dataRoot: string,
   storage: WebDavSyncStorageHost,
-  featureSettingsDocuments: readonly ErasedFeatureSettingsDocumentDefinition[],
 ): Promise<WebDavRestoreJournal | null> {
   let raw: unknown;
   try {
@@ -197,15 +192,7 @@ async function readJournal(
   const requiredTargets = new Set(categoryTargetPaths(dataRoot, categories, storage).map((target) => (
     safeRelativePath(dataRoot, target)
   )));
-  const allowedTargets = new Set([
-    ...requiredTargets,
-    ...featureSettingsRestoreTargetPaths(
-      dataRoot,
-      featureSettingsDocuments,
-      categories,
-    ).map((target) => safeRelativePath(dataRoot, target)),
-  ]);
-  const targets = normalizeRelativePaths(raw.targets, allowedTargets);
+  const targets = normalizeRestoreTargets(raw.targets, dataRoot, requiredTargets, categories);
   if ([...requiredTargets].some((target) => !targets.includes(target))) throw invalidJournal();
   const existingTargets = normalizeRelativePaths(raw.existingTargets, new Set(targets));
   if (!phase || !ROLLBACK_NAME_PATTERN.test(rollbackDirectory) || !targets.length) {
@@ -230,6 +217,59 @@ function normalizeCategories(value: unknown): DesktopWebDavSyncCategoryId[] {
     throw invalidJournal();
   }
   return categories;
+}
+
+function normalizeRestoreTargets(
+  value: unknown,
+  dataRoot: string,
+  required: ReadonlySet<string>,
+  categories: readonly DesktopWebDavSyncCategoryId[],
+): string[] {
+  if (!Array.isArray(value)) throw invalidJournal();
+  const targets = value.map((item) => normalizeJournalRelativePath(dataRoot, item));
+  if (
+    new Set(targets).size !== targets.length
+    || targets.some((target) => (
+      !required.has(target) && !isFeatureSettingsRestoreTarget(target, categories)
+    ))
+  ) throw invalidJournal();
+  return targets;
+}
+
+function normalizeJournalRelativePath(dataRoot: string, value: unknown): string {
+  if (typeof value !== 'string' || !value || path.isAbsolute(value)) throw invalidJournal();
+  const normalized = path.normalize(value);
+  try {
+    const resolved = path.resolve(dataRoot, normalized);
+    if (safeRelativePath(dataRoot, resolved) !== normalized) throw invalidJournal();
+    return normalized;
+  } catch {
+    throw invalidJournal();
+  }
+}
+
+function isFeatureSettingsRestoreTarget(
+  relative: string,
+  categories: readonly DesktopWebDavSyncCategoryId[],
+): boolean {
+  const components = relative.split(path.sep);
+  const canReplaceEnvelope = categories.includes('preferences') || categories.includes('model_credentials');
+  if (
+    canReplaceEnvelope
+    && components.length === 5
+    && components[0] === 'runtime'
+    && components[1] === 'features'
+    && SAFE_ID_PATTERN.test(components[2]!)
+    && components[3] === 'settings'
+    && components[4]!.endsWith('.json')
+    && SAFE_ID_PATTERN.test(components[4]!.slice(0, -'.json'.length))
+  ) return true;
+  return categories.includes('model_credentials')
+    && components.length === 4
+    && components[0] === 'runtime'
+    && components[1] === 'secrets'
+    && SAFE_ID_PATTERN.test(components[2]!)
+    && SAFE_ID_PATTERN.test(components[3]!);
 }
 
 function normalizeRelativePaths(value: unknown, allowed: ReadonlySet<string>): string[] {

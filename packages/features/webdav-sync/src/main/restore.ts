@@ -4,15 +4,18 @@ import type {
   DesktopWebDavSyncRestoreDiffItem,
   DesktopWebDavSyncRestorePlan,
 } from '../contracts/index.js';
+import type { PortableFeatureSettingsRestoreTarget } from '@setsuna-desktop/feature-core/settings';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
-  WebDavSyncMainHost,
   WebDavSyncStorageHost,
 } from './capabilities.js';
 import { mergePortableConfigForRestore } from './portable-config.js';
-import { preparePortableFeatureSettingsRestore } from './portable-feature-settings.js';
+import {
+  featureSettingsRestoreTargetPaths,
+  isPortableFeatureSettingsLogicalPath,
+} from './portable-feature-settings.js';
 import { mergePortableSkillStateForRestore } from './portable-skill-state.js';
 import {
   buildProjectRestoreActions,
@@ -122,7 +125,7 @@ export async function applyRestoredSnapshot(input: {
   stagingRoot: string;
   sourceDataRoot: string;
   categories: DesktopWebDavSyncCategoryId[];
-  featureSettingsDocuments: WebDavSyncMainHost['featureSettingsDocuments'];
+  featureSettingsTargets?: readonly PortableFeatureSettingsRestoreTarget[];
   storage: WebDavSyncStorageHost;
   portableProjects?: PortableProjectRecord[];
   secretsBuffer?: Buffer;
@@ -132,14 +135,10 @@ export async function applyRestoredSnapshot(input: {
     input.sourceDataRoot,
     input.dataRoot,
   );
-  const featureSettingsTargets = await preparePortableFeatureSettingsRestore({
-    dataRoot: input.dataRoot,
-    definitions: input.featureSettingsDocuments,
-    stagingRoot: input.stagingRoot,
-    preferencesSelected: input.categories.includes('preferences'),
-    modelCredentialsSelected: input.categories.includes('model_credentials'),
-    ...(input.secretsBuffer ? { restoredSecretsBuffer: input.secretsBuffer } : {}),
-  });
+  const featureSettingsTargets = featureSettingsRestoreTargetPaths(
+    input.dataRoot,
+    input.featureSettingsTargets ?? [],
+  );
   const localConfigPath = path.join(input.dataRoot, 'runtime', 'config.json');
   const stagedConfigPath = path.join(input.stagingRoot, 'runtime', 'config.json');
   if (input.categories.includes('preferences') && await pathExists(stagedConfigPath)) {
@@ -325,7 +324,10 @@ function categoryDiff(
   }
   for (const local of localItems) {
     if (backupByPath.has(local.logicalPath)) continue;
-    if (category === 'model_credentials') preserved.push(diffItem(local));
+    if (
+      category === 'model_credentials'
+      || (category === 'preferences' && isPortableFeatureSettingsLogicalPath(local.logicalPath))
+    ) preserved.push(diffItem(local));
     else removed.push(diffItem(local));
   }
   const warnings: string[] = [];
@@ -391,6 +393,10 @@ function restoreImpactFingerprint(
     if (
       !selected.has(local.category)
       || local.category === 'model_credentials'
+      || (
+        local.category === 'preferences'
+        && isPortableFeatureSettingsLogicalPath(local.logicalPath)
+      )
       || local.kind === 'project-catalog'
     ) continue;
     const key = `${local.category}\0${local.logicalPath}`;

@@ -31,10 +31,9 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 - Threads、messages、turns、queue、goal、review、context。
 - Attachments、background shell process 与跨线程运行活动列表。
 - Config、provider models、task models。
-- Workspace dependencies。
 - Hooks、Skills、Plugins、marketplace。
 - Projects、files、search、workspace status。
-- Usage；Memory 管理通过独立 typed Feature operations，不扩展统一 client。
+- Usage；Memory、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
 - MCP server/tool/resource/OAuth。
 - Approvals。
 - Debug traces。
@@ -97,7 +96,7 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/threads/:id/queued-turn-inputs
 /v1/threads/:id/events
 /v1/threads/:id/debug-traces
-/v1/workspace-dependencies
+/v1/features/workspace-dependencies
 /v1/projects
 /v1/skills
 /v1/mcp/servers
@@ -109,6 +108,8 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 ```
 
 不要把这份概览当路由注册真源。
+
+`/v1/features/*` 由对应 Feature contracts 声明 operation，并在 runtime Feature setup 时登记；它们不应回流为 `DesktopRuntimeClient` 的全局业务方法。
 
 `GET /v1/usage` 支持 `threadId`、`limit`、`offset` 以及 ISO-8601 `from`/`to` 查询参数；
 `limit`/`offset` 只分页明细，汇总仍覆盖完整筛选结果。时间范围采用 inclusive start、exclusive end，

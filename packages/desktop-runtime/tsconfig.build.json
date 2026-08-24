@@ -22,6 +22,7 @@
     { "path": "../features/image-generation/tsconfig.build.json" },
     { "path": "../features/goal/tsconfig.build.json" },
     { "path": "../features/memory/tsconfig.build.json" },
-    { "path": "../features/vision-recognition/tsconfig.build.json" }
+    { "path": "../features/vision-recognition/tsconfig.build.json" },
+    { "path": "../features/workspace-dependencies/tsconfig.build.json" }
   ]
 }

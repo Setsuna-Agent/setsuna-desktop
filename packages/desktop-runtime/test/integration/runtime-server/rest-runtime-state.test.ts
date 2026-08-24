@@ -26,9 +26,34 @@ describe('runtime server REST runtime state', () => {
       method: 'POST',
       body: JSON.stringify({ name: 'Before snapshot' }),
     });
+    const stagingRoot = path.join(
+      harness.runtimeDataDir,
+      '.webdav-sync-work',
+      'restore-fixture',
+      'restored-data',
+    );
+    const stageBeforePreparation = await fetch(
+      `${harness.baseUrl}/internal/webdav-sync/feature-settings/restore-stage`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${harness.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ documents: [], credentials: [], stagingRoot }),
+      },
+    );
+    expect(stageBeforePreparation.status).toBe(409);
+    await expect(stageBeforePreparation.json()).resolves.toMatchObject({
+      code: 'webdav_sync_not_preparing',
+    });
     const readiness = await waitForWebDavPreparation(harness);
 
     expect(readiness).toEqual({ ready: true, registeredTasks: 0, pendingMutations: 0 });
+    await expect(harness.runtimeFetch('/internal/webdav-sync/feature-settings/restore-stage', {
+      method: 'POST',
+      body: JSON.stringify({ documents: [], credentials: [], stagingRoot }),
+    })).resolves.toEqual({ targets: [] });
     const blocked = await fetch(`${harness.baseUrl}/v1/projects/${encodeURIComponent(project.id)}`, {
       method: 'PATCH',
       headers: {

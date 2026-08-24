@@ -23,7 +23,6 @@ import path from 'node:path';
 import { DatabaseSync, backup } from 'node:sqlite';
 import { pipeline } from 'node:stream/promises';
 import type {
-  WebDavSyncMainHost,
   WebDavSyncStorageHost,
 } from './capabilities.js';
 import { sha256Buffer } from './crypto.js';
@@ -48,7 +47,6 @@ const MAX_MODEL_CREDENTIAL_BYTES = 64 * 1024;
 type SnapshotSourceInput = {
   dataRoot: string;
   categories: readonly DesktopWebDavSyncCategoryId[];
-  featureSettingsDocuments: WebDavSyncMainHost['featureSettingsDocuments'];
   stagingRoot: string;
   storage: WebDavSyncStorageHost;
   signal?: AbortSignal;
@@ -191,7 +189,6 @@ async function collectLocalSnapshotSources(
   }
   if (categories.has('preferences')) {
     const featureSettings = await materializePortableFeatureSettings({
-      definitions: input.featureSettingsDocuments,
       documents: input.portableFeatureSettings ?? [],
       stagingRoot: input.stagingRoot,
     });

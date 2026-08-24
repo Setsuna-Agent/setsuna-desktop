@@ -48,6 +48,13 @@ import {
   visionRecognitionServiceCapability,
 } from '@setsuna-desktop/feature-vision-recognition/contracts';
 import { visionRecognitionRuntimeFeature } from '@setsuna-desktop/feature-vision-recognition/runtime';
+import {
+  workspaceDependenciesControlCapability,
+  workspaceDependenciesFeature,
+  workspaceDependenciesLegacySettingsCapability,
+  workspaceDependenciesRuntimeHostCapability,
+} from '@setsuna-desktop/feature-workspace-dependencies/contracts';
+import { workspaceDependenciesRuntimeFeature } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
@@ -58,6 +65,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     goalRuntimeFeature,
     memoryRuntimeFeature,
     visionRecognitionRuntimeFeature,
+    workspaceDependenciesRuntimeFeature,
   ],
 });
 
@@ -116,6 +124,21 @@ export async function activateBuiltinRuntimeFeatures(
         visionRecognitionRuntimeHostCapability,
         runtime.visionRecognitionHost,
       ),
+      provideHostCapability(
+        workspaceDependenciesRuntimeHostCapability,
+        Object.freeze({
+          dataDir: runtime.dataDir,
+          fetch: runtime.networkProxyFetch.forRoute(),
+          resolveNetworkEnvironment: () => runtime.networkProxyFetch.environmentForRoute(),
+          sandboxNetworkAccessEnabled: async () => (
+            (await runtime.configStore.getConfig()).sandboxWorkspaceWrite?.networkAccess === true
+          ),
+        }),
+      ),
+      provideHostCapability(
+        workspaceDependenciesLegacySettingsCapability,
+        runtime.configStore.workspaceDependenciesLegacySettingsAdapter(),
+      ),
     ],
   });
 
@@ -145,6 +168,12 @@ export async function activateBuiltinRuntimeFeatures(
     host.bindWhenFeatureAvailable(visionRecognitionFeature.id, {
       visionRecognition: requiredCapability(visionRecognitionServiceCapability),
     }, ({ visionRecognition }) => runtime.extensionManager.setVisionRecognitionService(visionRecognition));
+
+    host.bindWhenFeatureAvailable(workspaceDependenciesFeature.id, {
+      workspaceDependencies: requiredCapability(workspaceDependenciesControlCapability),
+    }, ({ workspaceDependencies }) => (
+      runtime.backgroundShellProcesses.bindWorkspaceDependencies(workspaceDependencies)
+    ));
 
     host.add(runtime.featureManagement.attach(host.composition));
     return host.composition;

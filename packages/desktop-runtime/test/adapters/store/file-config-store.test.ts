@@ -399,28 +399,36 @@ describe('file config store', () => {
     expect(normalized.desktopSettings?.interfaceLanguage).toBeUndefined();
   });
 
-  it('persists only valid HTTP package source URLs', async () => {
-    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+  it('preserves hidden workspace dependency settings until the Feature retires them', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({});
+    const configPath = path.join(dataDir, 'config.json');
+    const legacy = JSON.parse(await readFile(configPath, 'utf8')) as {
+      desktopSettings?: Record<string, unknown>;
+    };
+    legacy.desktopSettings = {
+      npmRegistryUrl: '  https://registry.example/npm/  ',
+      pythonPackageIndexUrl: '  https://mirror.example/simple  ',
+      workspaceDependenciesEnabled: true,
+    };
+    await writeFile(configPath, `${JSON.stringify(legacy, null, 2)}\n`, 'utf8');
 
-    await expect(store.saveConfig({
-      desktopSettings: {
-        npmRegistryUrl: '  https://registry.example/npm/  ',
-        pythonPackageIndexUrl: '  https://mirror.example/simple  ',
-      },
-    })).resolves.toMatchObject({
-      desktopSettings: {
-        npmRegistryUrl: 'https://registry.example/npm/',
-        pythonPackageIndexUrl: 'https://mirror.example/simple',
-      },
+    await expect(store.getConfig()).resolves.toMatchObject({ desktopSettings: {} });
+    await store.saveConfig({ globalPrompt: 'preserve pending migration' });
+    await expect(store.workspaceDependenciesLegacySettingsAdapter().read()).resolves.toEqual({
+      npmRegistryUrl: 'https://registry.example/npm/',
+      pythonPackageIndexUrl: 'https://mirror.example/simple',
     });
-    await expect(store.saveConfig({
-      desktopSettings: {
-        npmRegistryUrl: 'file:///tmp/registry',
-        pythonPackageIndexUrl: 'file:///tmp/simple',
-      },
-    })).resolves.toMatchObject({
-      desktopSettings: {},
-    });
+
+    await store.workspaceDependenciesLegacySettingsAdapter().retire();
+    await store.saveConfig({ globalPrompt: 'do not resurrect retired settings' });
+    const retired = JSON.parse(await readFile(configPath, 'utf8')) as {
+      desktopSettings?: Record<string, unknown>;
+    };
+    expect(retired.desktopSettings).not.toHaveProperty('npmRegistryUrl');
+    expect(retired.desktopSettings).not.toHaveProperty('pythonPackageIndexUrl');
+    expect(retired.desktopSettings).not.toHaveProperty('workspaceDependenciesEnabled');
   });
 
   it('removes API keys for providers deleted from config', async () => {

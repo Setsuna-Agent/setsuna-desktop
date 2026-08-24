@@ -151,6 +151,7 @@ export type {
   SettingsSectionSubpageContribution,
   SettingsSectionSubpageHostProps,
   SettingsSelectFieldProps,
+  SettingsTooltipProps,
   SettingsToggleProps,
   SettingsViewContribution,
   SettingsViewHostProps,

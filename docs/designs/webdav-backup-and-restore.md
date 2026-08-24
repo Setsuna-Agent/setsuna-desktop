@@ -47,7 +47,7 @@
 | --- | --- | --- | --- |
 | 对话与附件 | 开 | 整域替换 + 项目关联 | `threads.sqlite` 的一致性副本、attachments、generated images，以及不含目录路径的加密项目清单。SQLite 使用 backup API，不直接拷贝活动 WAL 组合。 |
 | 长期记忆 | 开 | 整域替换 | Runtime memory store 及其 baseline/rollout 等恢复所需文件。 |
-| 偏好与模型配置 | 开 | 白名单覆盖 + 安全合并 | Global prompt、memory 设置、task model、Setsuna style、provider/model 非敏感元数据、image generation 元数据、vision reference、界面语言和 Markdown 链接打开方式。 |
+| 偏好与模型配置 | 开 | 白名单覆盖 + 安全合并 | Global prompt、memory 设置、task model、Setsuna style、provider/model 非敏感元数据、image generation 元数据、vision reference、Workspace Dependencies 的 npm/Python 包源、界面语言和 Markdown 链接打开方式。 |
 | 模型 API Key | 开 | 同 ID 覆盖，仅本机 Key 保留 | Provider API key 和 image generation API key。每个 Key 是独立清单条目，不上传整个 `secrets.json`。 |
 | 用户 Skill | 开 | 用户 Skill 整域替换 | `user-skills/` 内容和这些用户 Skill 的 enabled 状态。Bundled、Plugin 和 external Skill 状态保留本机值。 |
 | Usage 历史 | 关 | 整域替换 | `usage.jsonl`。它主要用于本地统计且持续增长，因此默认不选。 |
@@ -57,7 +57,7 @@
 - 不包含 provider proxy route；同 ID provider 还原时保留目标设备的代理路由。
 - 不包含 `approvalPolicy`、`permissionProfile`、sandbox network/workspace roots。
 - 不包含 Hook command、trusted hash、`bypassHookTrust` 或 developer feature flags。
-- 不包含 workspace dependencies、npm/Python registry、cache 和安装路径。
+- Workspace Dependencies 只包含其 portable Feature settings 中的 npm/Python 包源 URL；不包含工具链、cache 和安装路径。
 - 远端 provider 按稳定 ID 覆盖可移植字段；目标设备独有 provider 保留。
 
 ### 明确不备份
@@ -72,7 +72,7 @@
 | 项目关联的外部 workspace/Git 内容及其绝对路径 | 不属于 Setsuna managed data root，应由 Git 或用户备份方案管理；只备份项目名称与内部 ID。 |
 | Chromium profile、Cookies、Local/Session Storage、浏览器登录态 | 体积大、格式不稳定且包含敏感 session。 |
 | Window state、当前 thread、review layout、terminal/process 状态 | 设备相关或短生命周期，恢复价值低。 |
-| Workspace dependencies、Python/Node toolchain、cache、logs、debug trace | 可重建且跨操作系统不兼容。 |
+| Workspace Dependencies 的 Python/Node/uv toolchain、cache、安装目录，以及 logs、debug trace | 可重建且跨操作系统不兼容。包源 URL 已随 portable Feature settings 备份。 |
 
 ## API Key 的换机体验
 
@@ -179,21 +179,22 @@ Restore plan 有 10 分钟有效期，并保存本地 inventory fingerprint。�
 提交流程：
 
 1. 下载选中对象，在非活动 staging 完成认证解密、size/hash 和路径校验。
-2. 再次锁定 Runtime 并复核本地指纹，然后停止 Runtime。
-3. 对项目清单、可移植配置、API Key 和用户 Skill 状态执行安全合并，并在 staging 重写项目引用；未选数据域完全不动。
-4. 将当前目标 rename 到 data root 内的随机 rollback 目录，再安装已验证数据。
-5. 每次提交先原子写入 `.webdav-sync-restore.json`。进程在 rename 中崩溃时，下次 Runtime 启动前根据受校验的 target 清单自动回滚。
-6. 提交完成后 relaunch。新 Runtime 能正常启动后才清理 rollback；如果恢复后的数据导致 Runtime 启动失败，先回滚到原本地数据再重试启动。
+2. 再次锁定 Runtime；Runtime 根据当前已注册 Feature catalog 校验、迁移 portable settings，并在 staging 生成新的本地 revision/secret reference。未知、未 opt in 或过新 schema 会在停进程前失败。
+3. 在锁内导出最终 Feature 投影，然后停止 Runtime，重建本地 inventory 并复核用户确认过的影响集合。旧快照中不存在的新 portable Feature 设置按本地保留项处理。
+4. 对项目清单、可移植配置、API Key 和用户 Skill 状态执行安全合并，并在 staging 重写项目引用；未选数据域完全不动。
+5. 将当前目标 rename 到 data root 内的随机 rollback 目录，再安装已验证数据。
+6. 每次提交先原子写入 `.webdav-sync-restore.json`。进程在 rename 中崩溃时，下次 Runtime 启动前根据受校验的数据域目标和严格 Feature settings 路径语法自动回滚，不依赖业务 Feature 白名单。
+7. 提交完成后 relaunch。新 Runtime 能正常启动后才清理 rollback；如果恢复后的数据导致 Runtime 启动失败，先回滚到原本地数据再重试启动。
 
 ## 分层与边界
 
 | 层 | 职责 |
 | --- | --- |
 | `packages/features/webdav-sync/contracts` | WebDAV config/state、category、snapshot summary、restore plan/diff、固定 IPC channel 和 preload bridge contract。 |
-| `packages/features/webdav-sync/main` | 配置、客户端、加密仓库、数据白名单、调度、restore plan、回滚日志、IPC 与 relaunch 编排。 |
+| `packages/features/webdav-sync/main` | 配置、客户端、加密仓库、数据域/路径边界、调度、restore plan、回滚日志、IPC 与 relaunch 编排；不持有业务 Feature settings schema 清单。 |
 | `packages/features/webdav-sync/preload` | 固定 IPC 方法和 state-change subscription；不暴露 raw `ipcRenderer`。 |
 | `packages/features/webdav-sync/renderer` | “同步”设置 contribution、连接表单、数据域选择、进度、当前备份、还原损失清单、文案与作用域样式。 |
-| `packages/desktop-runtime` | 提供 quiescence gate 和 portable Feature settings/credentials projection；还原时由 main 停止并重启 Runtime。 |
+| `packages/desktop-runtime` | 提供 quiescence gate、已注册 portable Feature settings/credentials projection，以及恢复校验、schema migration 和隔离 staging；还原时由 main 停止并重启 Runtime。 |
 | Electron main 宿主 | 注入 credential vault、network proxy fetch、data-root layout/持久化事务、Runtime 生命周期和窗口；Runtime 启动前执行崩溃恢复，启动成功后确认提交。 |
 
 Renderer 不获得 WebDAV Authorization、密码、本地恢复密钥、Runtime token/port 或 staging 路径。
@@ -207,7 +208,7 @@ Feature 通过四个显式进程入口参与组合，不再向共享 `SetsunaDes
 - 只支持 Basic Auth，不支持 Digest/OAuth 式 WebDAV 登录。
 - 还原破坏性清单暂无“导出完整文本”功能；大于 100 项时 UI 显示完整数量和前 100 项。
 - 还原后不自动调用模型服务检查 API Key 有效性；受 IP 限制、已撤销或过期的 Key 仍需用户在模型设置中处理。
-- 当前可移植导出代码位于 Electron main 的独立 helper；如果数据域继续增长，应逐步下沉为 Runtime port/exporter，避免 main 了解更多 store 格式。
+- portable Feature settings 的解释权已归 Runtime catalog；WebDAV main 只保留冻结的旧 config 兼容投影和快照传输。Feature credential 的 manifest transport 目前仍只覆盖现有图片生成凭据，扩展新凭据类型时需要先把该 transport identity 泛化。
 
 ## 验证覆盖
 

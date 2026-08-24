@@ -1,7 +1,9 @@
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
+import { visionRecognitionSettings } from '@setsuna-desktop/feature-vision-recognition/contracts';
+import { workspaceDependencyFeatureSettings } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import { FeatureCompositionValidationError } from '@setsuna-desktop/feature-core/status';
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -174,6 +176,157 @@ describe('FileFeatureSettingsRegistry', () => {
       revision: 2,
     });
     await expect(handle.readSecret('api-key')).resolves.toBe('device-secret');
+  });
+
+  it('stages a newly registered portable Feature without mutating the active settings store', async () => {
+    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'setsuna-feature-settings-'));
+    const dataDir = path.join(temporaryRoot, 'runtime');
+    const stagingRoot = path.join(
+      temporaryRoot,
+      '.webdav-sync-work',
+      'restore-fixture',
+      'restored-data',
+    );
+    const registry = new FileFeatureSettingsRegistry(dataDir);
+    registry.registerBundles([workspaceDependencyFeatureSettings]);
+    const definition = workspaceDependencyFeatureSettings.documents.preferences;
+    const handle = registry.open(definition);
+    await handle.initialize({
+      value: {
+        npmRegistryUrl: 'https://local.example.test',
+        pythonPackageIndexUrl: 'https://local.example.test/simple',
+      },
+    });
+
+    const targets = await registry.stagePortableDocumentsRestore({
+      stagingRoot,
+      credentials: [],
+      documents: [{
+        featureId: definition.featureId,
+        documentId: definition.documentId,
+        schemaVersion: 1,
+        data: {
+          npmRegistryUrl: 'https://remote.example.test',
+          pythonPackageIndexUrl: 'https://remote.example.test/simple',
+        },
+      }],
+    });
+
+    expect(targets).toEqual([{
+      featureId: 'workspace-dependencies',
+      documentId: 'preferences',
+      includesSecrets: false,
+    }]);
+    await expect(handle.read()).resolves.toMatchObject({
+      revision: 1,
+      value: { npmRegistryUrl: 'https://local.example.test' },
+    });
+    expect(JSON.parse(await readFile(path.join(
+      stagingRoot,
+      'runtime',
+      'features',
+      'workspace-dependencies',
+      'settings',
+      'preferences.json',
+    ), 'utf8'))).toMatchObject({
+      revision: 2,
+      data: { npmRegistryUrl: 'https://remote.example.test' },
+    });
+  });
+
+  it('stages an explicit null portable value instead of retaining the active value', async () => {
+    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'setsuna-feature-settings-'));
+    const dataDir = path.join(temporaryRoot, 'runtime');
+    const stagingRoot = path.join(
+      temporaryRoot,
+      '.webdav-sync-work',
+      'restore-fixture',
+      'restored-data',
+    );
+    const registry = new FileFeatureSettingsRegistry(dataDir);
+    registry.registerBundles([visionRecognitionSettings]);
+    const definition = visionRecognitionSettings.documents['model-selection'];
+    const handle = registry.open(definition);
+    await handle.initialize({
+      value: { providerId: 'local-provider', modelId: 'local-model' },
+    });
+
+    const targets = await registry.stagePortableDocumentsRestore({
+      stagingRoot,
+      credentials: [],
+      documents: [{
+        featureId: definition.featureId,
+        documentId: definition.documentId,
+        schemaVersion: 1,
+        data: null,
+      }],
+    });
+
+    expect(targets).toEqual([{
+      featureId: 'vision-recognition',
+      documentId: 'model-selection',
+      includesSecrets: false,
+    }]);
+    await expect(handle.read()).resolves.toMatchObject({
+      revision: 1,
+      value: { providerId: 'local-provider', modelId: 'local-model' },
+    });
+    expect(JSON.parse(await readFile(path.join(
+      stagingRoot,
+      'runtime',
+      'features',
+      'vision-recognition',
+      'settings',
+      'model-selection.json',
+    ), 'utf8'))).toMatchObject({
+      revision: 2,
+      data: null,
+    });
+  });
+
+  it('rejects the complete restore payload before staging when one document is unregistered', async () => {
+    temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'setsuna-feature-settings-'));
+    const dataDir = path.join(temporaryRoot, 'runtime');
+    const stagingRoot = path.join(
+      temporaryRoot,
+      '.webdav-sync-work',
+      'restore-fixture',
+      'restored-data',
+    );
+    const registry = new FileFeatureSettingsRegistry(dataDir);
+    registry.registerBundles([workspaceDependencyFeatureSettings]);
+    const definition = workspaceDependencyFeatureSettings.documents.preferences;
+    const unknownFeature = defineFeature('unregistered-portable');
+
+    await expect(registry.stagePortableDocumentsRestore({
+      stagingRoot,
+      credentials: [],
+      documents: [
+        {
+          featureId: definition.featureId,
+          documentId: definition.documentId,
+          schemaVersion: 1,
+          data: {
+            npmRegistryUrl: 'https://remote.example.test',
+            pythonPackageIndexUrl: 'https://remote.example.test/simple',
+          },
+        },
+        {
+          featureId: unknownFeature.id,
+          documentId: 'preferences',
+          schemaVersion: 1,
+          data: {},
+        },
+      ],
+    })).rejects.toThrow('is not registered');
+    await expect(readFile(path.join(
+      stagingRoot,
+      'runtime',
+      'features',
+      'workspace-dependencies',
+      'settings',
+      'preferences.json',
+    ), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
 

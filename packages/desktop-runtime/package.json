@@ -22,6 +22,7 @@
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
+    "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
     "ai": "^7.0.0",
     "node-pty": "^1.1.0",
     "undici": "7.29.0",

@@ -11,13 +11,13 @@ import { WebDavSyncService } from '../../src/main/service.js';
 import { MemoryWebDavServer } from '../support/memory-webdav.js';
 import {
   createTestWebDavSyncConfigStore,
-  testWebDavSyncFeatureSettingsDocuments,
   testWebDavSyncStorageHost,
 } from '../support/feature-host.js';
 
 const temporaryRoots: string[] = [];
 const noPortableFeatureSettings = async () => [] as const;
 const noFeatureCredentialBackups = async () => [] as const;
+const noFeatureSettingsRestore = async () => [] as const;
 
 afterEach(async () => {
   await Promise.all(temporaryRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -32,7 +32,6 @@ describe('WebDavSyncService', () => {
     await writeFile(path.join(dataRoot, 'webdav-sync.json'), '{ invalid json', 'utf8');
     const service = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(
@@ -47,6 +46,7 @@ describe('WebDavSyncService', () => {
         start: async () => undefined,
         exportPortableFeatureSettings: noPortableFeatureSettings,
         exportFeatureCredentialBackups: noFeatureCredentialBackups,
+        stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
       },
     });
 
@@ -69,7 +69,6 @@ describe('WebDavSyncService', () => {
     await chmod(workRoot, 0o500);
     const service = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(
@@ -84,6 +83,7 @@ describe('WebDavSyncService', () => {
         start: async () => undefined,
         exportPortableFeatureSettings: noPortableFeatureSettings,
         exportFeatureCredentialBackups: noFeatureCredentialBackups,
+        stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
       },
     });
 
@@ -108,7 +108,6 @@ describe('WebDavSyncService', () => {
       .mockRejectedValueOnce(new Error('automatic schedule unavailable'));
     const service = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore,
@@ -120,6 +119,7 @@ describe('WebDavSyncService', () => {
         start: async () => undefined,
         exportPortableFeatureSettings: noPortableFeatureSettings,
         exportFeatureCredentialBackups: noFeatureCredentialBackups,
+        stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
       },
     });
 
@@ -149,7 +149,6 @@ describe('WebDavSyncService', () => {
     })] as const;
     const service = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(path.join(dataRoot, 'webdav-sync.json'), vault),
@@ -161,6 +160,7 @@ describe('WebDavSyncService', () => {
         start,
         exportPortableFeatureSettings: noPortableFeatureSettings,
         exportFeatureCredentialBackups,
+        stagePortableFeatureSettingsRestore: stageImageCredentialFixture,
       },
     });
     await service.initialize();
@@ -285,10 +285,10 @@ describe('WebDavSyncService', () => {
       start: async () => undefined,
       exportPortableFeatureSettings: noPortableFeatureSettings,
       exportFeatureCredentialBackups: noFeatureCredentialBackups,
+      stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
     };
     const failedService = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(configPath, new RejectingCredentialVault()),
@@ -310,7 +310,6 @@ describe('WebDavSyncService', () => {
 
     const retryService = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(configPath, new MemoryCredentialVault()),
@@ -341,6 +340,7 @@ describe('WebDavSyncService', () => {
       start: async () => undefined,
       exportPortableFeatureSettings: noPortableFeatureSettings,
       exportFeatureCredentialBackups: noFeatureCredentialBackups,
+      stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
     });
     try {
       await fixture.service.updatePreferences({ categories: ['preferences'] });
@@ -383,6 +383,7 @@ describe('WebDavSyncService', () => {
       start: async () => undefined,
       exportPortableFeatureSettings: noPortableFeatureSettings,
       exportFeatureCredentialBackups: noFeatureCredentialBackups,
+      stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
     });
     try {
       await fixture.service.updatePreferences({ categories: ['preferences'] });
@@ -405,6 +406,7 @@ describe('WebDavSyncService', () => {
       start: async () => undefined,
       exportPortableFeatureSettings: noPortableFeatureSettings,
       exportFeatureCredentialBackups: noFeatureCredentialBackups,
+      stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
     });
     try {
       await fixture.service.updatePreferences({
@@ -458,7 +460,6 @@ describe('WebDavSyncService', () => {
       });
       service = new WebDavSyncService({
         dataRoot,
-        featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
         storage: testWebDavSyncStorageHost,
         appVersion: '0.2.1',
         configStore: createTestWebDavSyncConfigStore(
@@ -473,6 +474,7 @@ describe('WebDavSyncService', () => {
           start: async () => undefined,
           exportPortableFeatureSettings: noPortableFeatureSettings,
           exportFeatureCredentialBackups: noFeatureCredentialBackups,
+          stagePortableFeatureSettingsRestore: noFeatureSettingsRestore,
         },
       });
       await service.initialize();
@@ -526,11 +528,14 @@ describe('WebDavSyncService', () => {
   it('stops the runtime before validating the final restore inventory', async () => {
     const dataRoot = await createDataRoot();
     const server = new MemoryWebDavServer('/dav');
-    const stop = vi.fn(async () => writeRuntimeConfig(dataRoot, 'changed while stopping'));
+    const stageRestore = vi.fn(noFeatureSettingsRestore);
+    const stop = vi.fn(async () => {
+      expect(stageRestore).toHaveBeenCalledOnce();
+      await writeRuntimeConfig(dataRoot, 'changed while stopping');
+    });
     const start = vi.fn(async () => undefined);
     const service = new WebDavSyncService({
       dataRoot,
-      featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
       storage: testWebDavSyncStorageHost,
       appVersion: '0.2.1',
       configStore: createTestWebDavSyncConfigStore(
@@ -545,6 +550,7 @@ describe('WebDavSyncService', () => {
         start,
         exportPortableFeatureSettings: noPortableFeatureSettings,
         exportFeatureCredentialBackups: noFeatureCredentialBackups,
+        stagePortableFeatureSettingsRestore: stageRestore,
       },
     });
     await service.initialize();
@@ -568,6 +574,7 @@ describe('WebDavSyncService', () => {
       );
 
       expect(stop).toHaveBeenCalledOnce();
+      expect(stageRestore).toHaveBeenCalledOnce();
       expect(start).toHaveBeenCalledOnce();
       expect(await readFile(path.join(dataRoot, 'runtime', 'config.json'), 'utf8'))
         .toContain('changed while stopping');
@@ -576,6 +583,54 @@ describe('WebDavSyncService', () => {
     }
   }, 15_000);
 });
+
+async function stageImageCredentialFixture(
+  input: Parameters<WebDavSyncRuntimeCoordinator['stagePortableFeatureSettingsRestore']>[0],
+) {
+  const credential = input.credentials.find((item) => (
+    item.featureId === imageGenerationFeature.id
+    && item.documentId === 'connection'
+    && item.secretName === 'api-key'
+  ));
+  if (!credential) return [] as const;
+  const secretRevision = 'secret-00000000-0000-4000-8000-000000000001';
+  const secretDirectory = path.join(
+    input.stagingRoot,
+    'runtime',
+    'secrets',
+    imageGenerationFeature.id,
+    'connection',
+  );
+  const settingsPath = path.join(
+    input.stagingRoot,
+    'runtime',
+    'features',
+    imageGenerationFeature.id,
+    'settings',
+    'connection.json',
+  );
+  await Promise.all([
+    mkdir(secretDirectory, { recursive: true }),
+    mkdir(path.dirname(settingsPath), { recursive: true }),
+  ]);
+  await writeFile(
+    path.join(secretDirectory, `${secretRevision}.json`),
+    `${JSON.stringify({ 'api-key': credential.value })}\n`,
+  );
+  await writeFile(settingsPath, `${JSON.stringify({
+    featureId: imageGenerationFeature.id,
+    documentId: 'connection',
+    schemaVersion: 1,
+    revision: 1,
+    secretRevision,
+    data: { baseUrl: '', model: '' },
+  })}\n`);
+  return [Object.freeze({
+    featureId: imageGenerationFeature.id,
+    documentId: 'connection',
+    includesSecrets: true,
+  })] as const;
+}
 
 async function createDataRoot(): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), 'setsuna-webdav-service-'));
@@ -628,7 +683,6 @@ async function createConfiguredService(runtime: WebDavSyncRuntimeCoordinator) {
   );
   const service = new WebDavSyncService({
     dataRoot,
-    featureSettingsDocuments: testWebDavSyncFeatureSettingsDocuments,
     storage: testWebDavSyncStorageHost,
     appVersion: '0.2.1',
     configStore,

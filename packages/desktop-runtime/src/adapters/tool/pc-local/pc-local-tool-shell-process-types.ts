@@ -4,7 +4,7 @@ import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import type {
   ShellToolchain,
   ShellToolchainCommand,
-} from '../../../ports/workspace-dependency-manager.js';
+} from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { ShellPolicyState } from './pc-local-tool-shell-policy.js';
 
 export type ToolArguments = Record<string, unknown>;

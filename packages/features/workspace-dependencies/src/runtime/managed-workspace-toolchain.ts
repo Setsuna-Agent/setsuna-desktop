@@ -1,4 +1,5 @@
 import type { RuntimeEnvironment } from '@setsuna-desktop/contracts';
+import type { ShellToolchainCommand } from '../contracts/index.js';
 import { constants as fsConstants } from 'node:fs';
 import {
   access,
@@ -13,7 +14,6 @@ import {
 } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import type { ShellToolchainCommand } from '../../ports/workspace-dependency-manager.js';
 import { runManagedWorkspaceCommand as runCommand } from './managed-workspace-command.js';
 import { pathExists, type ManagedToolManifest } from './managed-workspace-manifest.js';
 
