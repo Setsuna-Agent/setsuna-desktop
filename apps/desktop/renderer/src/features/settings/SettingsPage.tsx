@@ -13,7 +13,6 @@ import {
   Archive,
   Bot,
   CircleGauge,
-  CloudCog,
   HardDrive,
   Info,
   Keyboard,
@@ -51,7 +50,6 @@ import type {
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
 import { NetworkProxySettings } from './network-proxy/NetworkProxySettings.js';
 import { UsageSettings } from './usage/UsageSettings.js';
-import { WebDavSyncSettings } from './webdav-sync/WebDavSyncSettings.js';
 import { SettingsPageHeading } from './SettingsPageHeading.js';
 import { SettingsSectionExtensionOutlet } from './SettingsSectionExtensionOutlet.js';
 
@@ -86,7 +84,6 @@ const settingsSectionGroups = [
       { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} /> },
       { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} /> },
       { id: 'networkProxy', labelKey: 'settings.section.networkProxy', icon: <Network size={14} /> },
-      { id: 'sync', labelKey: 'settings.section.sync', icon: <CloudCog size={14} /> },
       { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} /> },
     ],
   },
@@ -107,7 +104,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
   networkProxy: 'settings.section.networkProxy',
-  sync: 'settings.section.sync',
   taskModels: 'settings.section.taskModels',
   usage: 'settings.section.usage',
   archives: 'settings.section.archives',
@@ -119,7 +115,6 @@ const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, Mess
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
   networkProxy: 'settings.section.networkProxyDescription',
-  sync: 'settings.section.syncDescription',
   taskModels: 'settings.section.taskModelsDescription',
   usage: 'settings.section.usageDescription',
 };
@@ -210,8 +205,6 @@ export function SettingsPage({
       />
     ) : activeSection === 'networkProxy' ? (
       <NetworkProxySettings proxy={networkProxy} />
-    ) : activeSection === 'sync' ? (
-      <WebDavSyncSettings />
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
@@ -305,6 +298,7 @@ export function SettingsSidebar({
   onSelectSection: (section: SettingsSectionId) => void;
 }) {
   const { t } = useI18n();
+  const { byGroup, ungrouped } = partitionFeatureSections(featureSections);
   return (
     <nav className="app-sidebar desktop-settings-sidebar chat-user-settings__nav">
       <PageBackButton
@@ -338,10 +332,19 @@ export function SettingsSidebar({
                   <span>{t(section.labelKey)}</span>
                 </button>
               ))}
+              {(byGroup.get(group.id) ?? []).map((section) => (
+                <SettingsFeatureSectionButton
+                  key={section.sectionId}
+                  active={activeSection === section.sectionId}
+                  section={section}
+                  translate={t}
+                  onSelect={() => onSelectSection(section.sectionId)}
+                />
+              ))}
             </div>
           );
         })}
-        {featureSections.length ? (
+        {ungrouped.length ? (
           <div
             aria-labelledby="settings-sidebar-group-features"
             className="chat-user-settings__tab-group"
@@ -350,22 +353,57 @@ export function SettingsSidebar({
             <div id="settings-sidebar-group-features" className="chat-user-settings__tab-group-title">
               {t('settings.group.features')}
             </div>
-            {featureSections.map((section) => (
-              <button
+            {ungrouped.map((section) => (
+              <SettingsFeatureSectionButton
                 key={section.sectionId}
-                className={activeSection === section.sectionId ? 'is-active' : ''}
-                type="button"
-                onClick={() => onSelectSection(section.sectionId)}
-              >
-                <Puzzle size={14} />
-                <span>{translateFeatureTitle(t, section.titleKey)}</span>
-              </button>
+                active={activeSection === section.sectionId}
+                section={section}
+                translate={t}
+                onSelect={() => onSelectSection(section.sectionId)}
+              />
             ))}
           </div>
         ) : null}
       </div>
     </nav>
   );
+}
+
+function SettingsFeatureSectionButton({
+  active,
+  onSelect,
+  section,
+  translate,
+}: Readonly<{
+  active: boolean;
+  onSelect(): void;
+  section: RegisteredSettingsView;
+  translate: ReturnType<typeof useI18n>['t'];
+}>) {
+  const Icon = section.icon ?? Puzzle;
+  return (
+    <button className={active ? 'is-active' : ''} type="button" onClick={onSelect}>
+      <Icon size={14} />
+      <span>{translateFeatureTitle(translate, section.titleKey)}</span>
+    </button>
+  );
+}
+
+function partitionFeatureSections(featureSections: readonly RegisteredSettingsView[]) {
+  const knownGroups = new Set(settingsSectionGroups.map((group) => group.id));
+  const byGroup = new Map<string, RegisteredSettingsView[]>();
+  const ungrouped: RegisteredSettingsView[] = [];
+  for (const section of featureSections) {
+    const groupId = section.navigationGroupId;
+    if (!groupId || !knownGroups.has(groupId)) {
+      ungrouped.push(section);
+      continue;
+    }
+    const group = byGroup.get(groupId) ?? [];
+    group.push(section);
+    byGroup.set(groupId, group);
+  }
+  return { byGroup, ungrouped };
 }
 
 function translateFeatureTitle(translate: ReturnType<typeof useI18n>['t'], key: string): string {

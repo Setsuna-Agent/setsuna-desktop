@@ -35,6 +35,8 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 
 Memory 是独立 renderer Feature，但不单独占用设置导航。它通过 `registerSectionExtension()` 把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 `SettingsViewHostProps.ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
 
+WebDAV Sync 也是独立 renderer Feature，并通过 `SettingsViewRegistry` 注册完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/renderer`；宿主设置页只渲染 contribution，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
+
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。
 
 ### Provider settings
@@ -189,6 +191,7 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 Settings：
 
 - `test/unit/features/settings/SettingsPage.test.ts`
+- `packages/features/webdav-sync/test/renderer/`
 - Provider/model replacement、brand icon upload。
 - Data-root issue/backup UI。
 - Usage calendar/branding/page。

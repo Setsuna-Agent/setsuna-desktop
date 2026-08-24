@@ -1,0 +1,1302 @@
+.settings-webdav {
+  gap: 16px;
+}
+
+.settings-webdav__card,
+.settings-webdav__recovery-card {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 10px;
+  background: var(--app-surface);
+}
+
+.settings-webdav__unavailable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-webdav__unavailable > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.settings-webdav__unavailable strong {
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.settings-webdav__unavailable small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.settings-webdav__recovery-card {
+  border-color: color-mix(in srgb, var(--app-warning) 48%, var(--chat-settings-divider));
+  background: color-mix(in srgb, var(--app-warning) 7%, var(--app-surface));
+}
+
+.settings-webdav__card-header,
+.settings-webdav__section-header,
+.settings-webdav__connection-heading,
+.settings-webdav__recovery-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-webdav__section-header {
+  justify-content: space-between;
+}
+
+.settings-webdav__section-header > div:first-child:not(.settings-webdav__connection-heading),
+.settings-webdav__card-header > div,
+.settings-webdav__connection-heading > div,
+.settings-webdav__recovery-heading > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settings-webdav__section-header strong,
+.settings-webdav__card-header strong,
+.settings-webdav__connection-heading strong,
+.settings-webdav__recovery-heading strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 19px;
+}
+
+.settings-webdav__section-header small,
+.settings-webdav__card-header small,
+.settings-webdav__connection-heading small,
+.settings-webdav__recovery-heading small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.settings-webdav__card-icon,
+.settings-webdav__recovery-heading > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--app-primary);
+  background: color-mix(in srgb, var(--app-primary) 10%, transparent);
+}
+
+.settings-webdav__recovery-heading > span {
+  color: var(--app-warning);
+  background: color-mix(in srgb, var(--app-warning) 13%, transparent);
+}
+
+.settings-webdav__connection-heading {
+  align-items: center;
+}
+
+.settings-webdav__connected-status {
+  margin-left: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 12%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.settings-webdav__header-actions,
+.settings-webdav__form-actions,
+.settings-webdav__restore-actions,
+.settings-webdav__disconnect-confirm > span {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-webdav__form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.settings-webdav__field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.settings-webdav__field--wide {
+  grid-column: 1 / -1;
+}
+
+.settings-webdav__field > span:first-child,
+.settings-webdav__field > label:first-child {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__control {
+  width: 100%;
+}
+
+.settings-webdav__secret-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.settings-webdav__secret-leading {
+  position: absolute;
+  z-index: 1;
+  left: 10px;
+  display: grid;
+  place-items: center;
+  color: var(--app-text-muted);
+  pointer-events: none;
+}
+
+.settings-webdav__secret-field .settings-webdav__secret-input {
+  padding-right: 38px;
+}
+
+.settings-webdav__secret-field.has-leading-icon .settings-webdav__secret-input {
+  padding-left: 32px;
+}
+
+.settings-webdav__secret-toggle {
+  position: absolute;
+  z-index: 1;
+  right: 3px;
+  width: 28px;
+  height: 28px;
+}
+
+.settings-webdav__form-actions {
+  justify-content: space-between;
+}
+
+.settings-webdav__form-actions > small {
+  max-width: 420px;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav__form-actions > span {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.settings-webdav__insecure-toggle,
+.settings-webdav__switch,
+.settings-webdav__restore-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.settings-webdav__checkbox {
+  display: inline-grid;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  padding: 0;
+  place-content: center;
+  border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border));
+  border-radius: 4px;
+  appearance: none;
+  color: #fff;
+  background: var(--app-surface);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.settings-webdav__checkbox::before {
+  width: 8px;
+  height: 5px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: '';
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.settings-webdav__checkbox:checked {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+}
+
+.settings-webdav__checkbox:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.settings-webdav__checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent);
+}
+
+.settings-webdav__checkbox:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.settings-webdav__insecure-toggle > span {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-webdav__insecure-toggle strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__insecure-toggle small {
+  color: var(--app-warning);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav__recovery-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.settings-webdav__recovery-input {
+  min-width: 0;
+}
+
+.settings-webdav__connection-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.settings-webdav__connection-details > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 11px 12px;
+}
+
+.settings-webdav__connection-details > div:nth-child(even) {
+  border-left: 1px solid var(--chat-settings-divider);
+}
+
+.settings-webdav__connection-details > div:nth-child(n + 3) {
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.settings-webdav__connection-details dt {
+  color: var(--app-text-muted);
+  font-size: 10px;
+}
+
+.settings-webdav__connection-details dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-webdav__connection-details code {
+  font-size: 10px;
+}
+
+.settings-webdav__success {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-success);
+  font-size: 11px;
+}
+
+.settings-webdav__disconnect-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 35%, var(--chat-settings-divider));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-danger) 5%, transparent);
+}
+
+.settings-webdav__disconnect-confirm > div {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-webdav__disconnect-confirm strong {
+  color: var(--app-text);
+  font-size: 12px;
+}
+
+.settings-webdav__disconnect-confirm small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav__switch {
+  align-items: center;
+  flex: 0 0 auto;
+  padding-top: 1px;
+}
+
+.settings-webdav__category-list,
+.settings-webdav__restore-categories {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-webdav__category-list > label,
+.settings-webdav__restore-categories > label {
+  display: grid;
+  grid-template-columns: auto 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav__category-list > label {
+  grid-template-columns: auto 28px minmax(0, 1fr) auto;
+}
+
+.settings-webdav__category-list > label.is-sensitive {
+  border-color: color-mix(in srgb, var(--app-primary) 28%, var(--chat-settings-divider));
+}
+
+.settings-webdav__category-icon {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav__category-copy,
+.settings-webdav__restore-categories > label > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-webdav__category-size {
+  justify-self: end;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.settings-webdav__category-list strong,
+.settings-webdav__restore-categories strong {
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__category-list small,
+.settings-webdav__restore-categories small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav__backup-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-webdav__backup-times > span {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav__backup-times small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+}
+
+.settings-webdav__backup-times strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__operation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-primary) 24%, var(--chat-settings-divider));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--app-primary) 5%, transparent);
+}
+
+.settings-webdav__operation > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.settings-webdav__operation strong,
+.settings-webdav__operation small {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__operation small {
+  color: var(--app-text-muted);
+  font-weight: 400;
+}
+
+.settings-webdav__spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--app-primary) 24%, transparent);
+  border-top-color: var(--app-primary);
+  border-radius: 50%;
+  animation: settings-webdav-spin 0.8s linear infinite;
+}
+
+@keyframes settings-webdav-spin {
+  to { transform: rotate(360deg); }
+}
+
+.settings-webdav__restore-card {
+  gap: 14px;
+}
+
+.settings-webdav__restore-group {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-webdav__restore-group > strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__snapshot-list {
+  display: grid;
+  gap: 7px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.settings-webdav__snapshot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav__snapshot.is-selected {
+  border-color: color-mix(in srgb, var(--app-primary) 48%, var(--chat-settings-divider));
+  background: color-mix(in srgb, var(--app-primary) 6%, var(--app-surface-subtle));
+}
+
+.settings-webdav__snapshot > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-webdav__snapshot strong {
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav__snapshot small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+}
+
+.settings-webdav__restore-categories > label {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.settings-webdav__empty {
+  padding: 24px;
+  border: 1px dashed var(--chat-settings-divider);
+  border-radius: 8px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.desktop-agent-modal-backdrop.settings-webdav-automatic-backdrop {
+  z-index: 150;
+  background: color-mix(in srgb, var(--app-text) 18%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.desktop-agent-modal.settings-webdav-automatic-dialog {
+  width: min(460px, calc(100vw - 48px));
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__header {
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+}
+
+.settings-webdav-automatic-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-webdav-automatic-dialog__title > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav-automatic-dialog__title > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.settings-webdav-automatic-dialog__title strong {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.settings-webdav-automatic-dialog__title small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav-automatic-dialog__body {
+  display: grid;
+  gap: 13px;
+  padding: 18px;
+}
+
+.settings-webdav-automatic-dialog__body > p {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.settings-webdav-automatic-dialog__notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+  font-size: 11px;
+  line-height: 17px;
+}
+
+.settings-webdav-automatic-dialog__notice > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--app-warning);
+}
+
+.settings-webdav-automatic-dialog > .settings-webdav-automatic-dialog__footer {
+  padding: 13px 18px 15px;
+  border-top: 1px solid var(--chat-settings-divider);
+}
+
+.desktop-agent-modal-backdrop.settings-webdav-restore-backdrop {
+  z-index: 150;
+  background: color-mix(in srgb, var(--app-text) 18%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.desktop-agent-modal.settings-webdav-restore-dialog {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(800px, calc(100vw - 48px));
+  max-height: min(700px, calc(100vh - 48px));
+  gap: 0;
+  padding: 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.settings-webdav-restore-dialog > .settings-webdav-restore-dialog__header {
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  background: var(--app-surface);
+}
+
+.settings-webdav-restore-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.settings-webdav-restore-dialog__title-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface));
+}
+
+.settings-webdav-restore-dialog__title > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-webdav-restore-dialog__title > div > strong,
+.settings-webdav-restore-dialog__title > div > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-webdav-restore-dialog__title > div > strong {
+  color: var(--app-text);
+  font-size: 15px;
+  line-height: 21px;
+}
+
+.settings-webdav-restore-dialog__title > div > span {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav-restore-dialog__body {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+}
+
+.settings-webdav-restore-dialog__body > p {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.settings-webdav-restore-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.settings-webdav-restore-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav-restore-metric > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav-restore-metric > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.settings-webdav-restore-metric strong {
+  color: var(--app-text);
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.settings-webdav-restore-metric small {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-webdav-restore-metric.is-warning,
+.settings-webdav-restore-metric.is-danger {
+  border-color: color-mix(in srgb, var(--app-danger) 25%, var(--chat-settings-divider));
+}
+
+.settings-webdav-restore-metric.is-warning > span,
+.settings-webdav-restore-metric.is-danger > span {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
+}
+
+.settings-webdav-restore-projects {
+  display: grid;
+  gap: 9px;
+}
+
+.settings-webdav-restore-projects__heading {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-webdav-restore-projects__heading strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-webdav-restore-projects__heading small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav-restore-projects__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.settings-webdav-restore-project {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav-restore-project > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav-restore-project > div {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.settings-webdav-restore-project strong,
+.settings-webdav-restore-project small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-webdav-restore-project strong {
+  color: var(--app-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.settings-webdav-restore-project small {
+  color: var(--app-text-muted);
+  font-size: 9px;
+}
+
+.settings-webdav-restore-changes {
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+
+.settings-webdav-restore-changes__heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-webdav-restore-changes__heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.settings-webdav-restore-changes__heading strong {
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.settings-webdav-restore-changes__heading small,
+.settings-webdav-restore-changes__heading > span {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav-restore-changes__heading > span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+}
+
+.settings-webdav-restore-change-groups {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-webdav-restore-change-group {
+  min-width: 0;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  background: var(--app-surface);
+  overflow: hidden;
+}
+
+.settings-webdav-restore-change-group > header {
+  min-height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  background: color-mix(in srgb, var(--app-surface-subtle) 88%, var(--app-surface));
+}
+
+.settings-webdav-restore-change-group > header strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-webdav-restore-change-group > header span {
+  color: var(--app-text-muted);
+  font-size: 10px;
+}
+
+.settings-webdav-restore-change-list {
+  display: grid;
+  max-height: 230px;
+  padding: 5px;
+  overflow-y: auto;
+}
+
+.settings-webdav-restore-change-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: 7px;
+}
+
+.settings-webdav-restore-change-item:nth-child(even) {
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav-restore-change-item__icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
+}
+
+.settings-webdav-restore-change-item__body {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.settings-webdav-restore-change-item__body strong,
+.settings-webdav-restore-change-item__body code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-webdav-restore-change-item__body strong {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+.settings-webdav-restore-change-item__body code {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.settings-webdav-restore-change-item__action {
+  padding: 4px 7px;
+  border-radius: 999px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 9%, var(--app-surface));
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.settings-webdav-restore-change-group__warning {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 1px solid var(--chat-settings-divider);
+  color: var(--app-warning);
+  font-size: 10px;
+}
+
+.settings-webdav-restore-no-loss,
+.settings-webdav-restore-safe {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 9px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-subtle);
+}
+
+.settings-webdav-restore-no-loss {
+  border-color: color-mix(in srgb, var(--app-success) 20%, var(--chat-settings-divider));
+  color: var(--app-success);
+  background: color-mix(in srgb, var(--app-success) 4%, var(--app-surface));
+}
+
+.settings-webdav-restore-no-loss > svg,
+.settings-webdav-restore-safe > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.settings-webdav-restore-no-loss > div,
+.settings-webdav-restore-safe > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settings-webdav-restore-no-loss strong,
+.settings-webdav-restore-safe strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+}
+
+.settings-webdav-restore-no-loss small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 15px;
+}
+
+.settings-webdav-restore-safe__categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.settings-webdav-restore-safe__categories > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.settings-webdav-restore-safe__categories small {
+  color: var(--app-text-muted);
+  font-size: 9px;
+}
+
+.settings-webdav__restore-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 22%, var(--chat-settings-divider));
+  border-radius: 9px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 5%, var(--app-surface));
+}
+
+.settings-webdav__restore-warning strong {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 17px;
+}
+
+.settings-webdav__restore-confirm {
+  align-items: center;
+  min-width: 0;
+  padding: 4px 0;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav-restore-dialog > .settings-webdav-restore-dialog__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 10px;
+  padding: 13px 20px 15px;
+  border-top: 1px solid var(--chat-settings-divider);
+  background: var(--app-surface);
+}
+
+.settings-webdav-restore-dialog__feedback {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 7px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface-subtle);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.settings-webdav-restore-dialog__feedback > svg,
+.settings-webdav-restore-dialog__feedback > .settings-webdav__spinner {
+  flex: 0 0 auto;
+}
+
+.settings-webdav-restore-dialog__feedback.has-progress {
+  align-items: flex-start;
+}
+
+.settings-webdav-restore-dialog__feedback.has-progress > .settings-webdav__spinner {
+  margin-top: 2px;
+}
+
+.settings-webdav-restore-dialog__progress {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 5px;
+}
+
+.settings-webdav-restore-dialog__progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-webdav-restore-dialog__progress-heading strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.settings-webdav-restore-dialog__progress-track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-primary) 12%, var(--app-surface-muted));
+}
+
+.settings-webdav-restore-dialog__progress-track > span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--app-primary);
+  transition: width 120ms ease-out;
+}
+
+.settings-webdav-restore-dialog__progress small {
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-webdav-restore-dialog__feedback.is-error {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
+}
+
+.settings-webdav-restore-dialog__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-webdav__error {
+  padding: 9px 10px;
+  border-radius: 7px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 7%, transparent);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+@media (max-width: 760px) {
+  .settings-webdav__section-header,
+  .settings-webdav__disconnect-confirm,
+  .settings-webdav__unavailable {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-webdav__header-actions {
+    justify-content: flex-start;
+  }
+
+  .settings-webdav__form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-webdav__form-actions > span {
+    justify-content: flex-end;
+  }
+
+  .settings-webdav__form-grid,
+  .settings-webdav__category-list,
+  .settings-webdav__restore-categories,
+  .settings-webdav__backup-times,
+  .settings-webdav__connection-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-webdav__field--wide {
+    grid-column: auto;
+  }
+
+  .settings-webdav__connection-details > div:nth-child(even) {
+    border-left: 0;
+  }
+
+  .settings-webdav__connection-details > div + div {
+    border-top: 1px solid var(--chat-settings-divider);
+  }
+
+  .settings-webdav__snapshot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-webdav__snapshot > small {
+    grid-column: auto;
+  }
+
+  .desktop-agent-modal.settings-webdav-restore-dialog {
+    width: min(100%, calc(100vw - 28px));
+    max-height: calc(100vh - 28px);
+  }
+
+  .settings-webdav-restore-dialog > .settings-webdav-restore-dialog__footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-webdav-restore-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-webdav-restore-projects__list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-webdav-restore-dialog__actions button {
+    flex: 1 1 0;
+  }
+}

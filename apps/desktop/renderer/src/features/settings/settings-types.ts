@@ -6,7 +6,6 @@ export type CoreSettingsSectionId =
   | 'personalization'
   | 'localLlm'
   | 'networkProxy'
-  | 'sync'
   | 'taskModels'
   | 'usage'
   | 'archives'

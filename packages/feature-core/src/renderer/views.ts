@@ -136,10 +136,17 @@ export type SettingsViewHostProps = Readonly<{
   ui: SettingsViewUi;
 }>;
 
+export type SettingsViewIconProps = Readonly<{
+  size?: string | number;
+}>;
+
 export type SettingsViewContribution = Readonly<{
   descriptionKey?: string;
+  icon?: ComponentType<SettingsViewIconProps>;
   sectionId: string;
   location: SettingsViewLocation;
+  /** Optional host navigation group; unknown or omitted groups fall back to Feature navigation. */
+  navigationGroupId?: string;
   order: number;
   titleKey: string;
   render: ComponentType<SettingsViewHostProps>;

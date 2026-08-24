@@ -1,4 +1,5 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { webDavSyncFeature } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
@@ -25,6 +26,30 @@ describe('SettingsSidebar', () => {
     const en: Translate = (key, params) => translate('en-US', key, params);
     expect(updateDownloadSourceName({ builtIn: true, id: 'github-direct', name: 'GitHub 直连' }, en)).toBe('GitHub Direct');
     expect(updateDownloadSourceName({ builtIn: false, id: 'custom-1', name: '公司镜像' }, en)).toBe('公司镜像');
+  });
+
+  it('places built-in Feature settings in their declared host group', () => {
+    const html = renderToStaticMarkup(createElement(SettingsSidebar, {
+      activeSection: 'webdav-sync',
+      featureSections: [{
+        descriptionKey: 'feature.webdavSync.settings.description',
+        featureId: webDavSyncFeature.id,
+        icon: () => createElement('svg', { 'data-settings-icon': 'webdav-sync' }),
+        location: 'settings',
+        navigationGroupId: 'models-and-services',
+        order: 350,
+        render: () => null,
+        sectionId: 'webdav-sync',
+        titleKey: 'settings.section.usage',
+      }],
+      onBack: vi.fn(),
+      onSelectSection: vi.fn(),
+    }));
+
+    expect(html.match(/role="group"/g)).toHaveLength(3);
+    expect(html).not.toContain('>功能<');
+    expect(html).toContain('data-settings-icon="webdav-sync"');
+    expect(html).toContain('用量统计');
   });
 });
 

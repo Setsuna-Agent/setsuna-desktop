@@ -15,6 +15,7 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `browser` | tab 注册、截图、favicon、设备模拟、新标签事件 | `ipc/browser-ipc.ts` |
 | `desktopReview` | review state、stage、unstage、discard | `packages/features/review/{preload,main}` |
 | `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/{preload,main}` |
+| `webdavSync` | 连接、备份、还原、取消与状态事件 | `packages/features/webdav-sync/{preload,main}` |
 | `workspaceApps` | 应用列表与打开 workspace/file | `ipc/workspace-ipc.ts` |
 | `updater` | 状态、检查、下载源、下载和打开 | `ipc/updater-ipc.ts` |
 | `windowControls` | minimize/maximize/close/scale 与状态事件 | `ipc/window-ipc.ts` |

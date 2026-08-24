@@ -8,7 +8,7 @@
 
 本文给出一套可直接拆解实施的 Feature Composition Architecture。它解决的是“一个业务功能横跨 contracts、runtime、main/preload、renderer 后，修改和删除都必须触碰大量中央文件”的问题，不把项目改造成面向第三方的通用插件平台。
 
-本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser、Collaboration、Memory 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
+本文同时保留架构决策和长期约束。阶段 0–4 与阶段 5 的 Vision Recognition、Terminal、Review native 边界、Browser、Collaboration、Memory、WebDAV Sync 迁移已落地；阶段 5 的其他热点迁移和阶段 6 的外部 Plugin Gateway 仍按真实需求推进，不为完成目录清单而提前建设。当前实现入口见第 25 节，具体业务行为仍以源码和对应模块文档为事实来源。
 
 已落地的关键结果：
 
@@ -22,6 +22,7 @@
 - Browser 已拥有 control/UI contracts、runtime 工具语义、main guest/CDP/loopback/IPC、preload 子桥及 renderer tab/webview 视图、文案和样式；宿主只保留四端 composition、窗口/UI adapter 与通用 `ToolHost` adapter。
 - Collaboration 已拥有协作工具语义、子任务台账事件与投影、typed state query/client、任务卡片/概览/子会话 presentation、文案和样式；Core 只保留通用 thread/turn/mailbox 服务，并通过窄 `RuntimeHost` capability 提供给 Feature。旧 `collaboration.task_*` 记录仅由兼容 decoder 读取，不再写入通用 thread snapshot。
 - Memory 已拥有偏好与管理 DTO、portable settings、typed operations/client、分别追加到“个性化”和“专用模型”的设置分区扩展、记忆工具语义、上下文注入、显式/被动抽取、整理与引用过滤；Core 只保留通用 model/thread/event/usage 服务、文件存储 adapter，以及持久 transcript 必需的引用和 thread mode 字段。
+- WebDAV Sync 已拥有 contracts、main 加密备份/还原状态机、preload 子桥、renderer 设置 contribution、文案、样式和测试；Electron main 只注入 data-root 存储事务、credential vault、代理 fetch、Runtime 生命周期与窗口，并保留 Runtime 打开数据前的崩溃恢复握手。
 - Renderer Settings View 由宿主通过 `SettingsViewHostProps.ui` 显式提供表单组件与语义主题 token；Feature 继续拥有业务状态和特有 presentation，但不再各自重写 Button、Input、Select、Switch 与设置页密度。
 - `scripts/check-feature-boundaries.mjs` 验证进程入口、跨 Feature import、package version、reserved identity、renderer transport 边界，并冻结已迁移 Feature 回流中央 Config/client/UI surface。
 
@@ -1604,6 +1605,7 @@ pnpm build
 | Browser owner | `packages/features/browser/*` | Control/UI DTO、runtime 工具语义、guest/CDP/loopback/IPC、preload bridge、tab/webview presentation、文案与样式的纵向 owner |
 | Collaboration owner | `packages/features/collaboration/*` | 协作工具、子任务事件/投影、typed query/client、任务概览/子会话 UI、Tool Result contribution、文案与样式的纵向 owner；Core 仅提供通用 thread/turn/mailbox host port |
 | Memory owner | `packages/features/memory/*` | 偏好/管理 contracts、portable settings、typed operations/client、Settings View、记忆工具、上下文、抽取、整理与引用过滤的纵向 owner；Core 仅提供延迟绑定 control、通用 runtime host 和持久 adapter |
+| WebDAV Sync owner | `packages/features/webdav-sync/*` | 备份/还原 contracts、加密仓库、调度、崩溃回滚、IPC/preload bridge、Settings View、文案与样式的纵向 owner；宿主仅提供 data-root、credential、network、Runtime 和窗口 adapter |
 
 任何 Feature 新增、迁移、降级处理或删除评审都使用同一组问题：
 
