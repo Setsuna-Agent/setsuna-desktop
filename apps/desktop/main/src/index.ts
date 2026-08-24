@@ -1,4 +1,5 @@
 import type {
+  DesktopNetworkProxyState,
   RuntimeInterfaceLanguage,
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
@@ -23,7 +24,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
-import { registerNetworkProxyIpc } from './ipc/network-proxy-ipc.js';
 import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
@@ -34,6 +34,7 @@ import {
   resolveDesktopDataRootBootMode,
 } from './data-root/bootstrap.js';
 import { DesktopDataRootCoordinator } from './data-root/coordinator.js';
+import { writeJsonAtomically } from './data-root/atomic-json.js';
 import { acquireBootstrapInstanceLock } from './data-root/instance-lock.js';
 import { resolveDesktopInstanceProfile } from './data-root/instance-profile.js';
 import { desktopDataLayout, legacyDesktopPolicyPaths } from './data-root/layout.js';
@@ -55,10 +56,6 @@ import { WindowsSandboxManager } from './windows-sandbox/manager.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
 import { DesktopCredentialVault } from './security/credential-vault.js';
-import { DesktopBrowserProxyController } from './network-proxy/browser.js';
-import { DesktopNetworkProxyFetch } from './network-proxy/fetch.js';
-import { DesktopNetworkProxyService } from './network-proxy/service.js';
-import { DesktopNetworkProxyStore } from './network-proxy/store.js';
 import {
   activateBuiltinMainFeatures,
   type ActivatedBuiltinMainFeatures,
@@ -95,9 +92,7 @@ let runtimeHost: RuntimeHost | null = null;
 let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdaterLifecycle: ActivatedBuiltinMainFeatures['updater'] | null = null;
-let networkProxyService: DesktopNetworkProxyService | null = null;
-let browserProxyController: DesktopBrowserProxyController | null = null;
-let networkProxyFetch: DesktopNetworkProxyFetch | null = null;
+let networkProxyMainService: ActivatedBuiltinMainFeatures['networkProxy'] | null = null;
 let webDavSyncLifecycle: DesktopWebDavSyncLifecycle | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
@@ -258,42 +253,45 @@ async function createWindow(): Promise<void> {
     dataLayout.credentialVaultPath,
     electronCredentialEncryption(safeStorage),
   );
-  const currentNetworkProxyService = new DesktopNetworkProxyService(
-    new DesktopNetworkProxyStore(dataLayout.networkProxyPath, credentialVault),
-  );
-  const currentBrowserProxyController = new DesktopBrowserProxyController(currentNetworkProxyService);
-  networkProxyService = currentNetworkProxyService;
-  browserProxyController = currentBrowserProxyController;
-  await currentBrowserProxyController.start();
-  const currentNetworkProxyFetch = new DesktopNetworkProxyFetch(currentNetworkProxyService, {
-    systemFetch: fetchWithElectronSystemProxy,
-  });
-  networkProxyFetch = currentNetworkProxyFetch;
-
   const currentDesktopNativeBridgeServer = new DesktopNativeBridgeServer({
     credentialVault,
-    deleteNetworkProxy: (proxyServerId) => currentNetworkProxyService.deleteServer(proxyServerId),
+    deleteNetworkProxy: (proxyServerId) => requireNetworkProxyMainService().deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
-    resolveNetworkProxy: (input) => currentNetworkProxyService.resolve(input),
-    resolveSandboxNetworkEnvironment: () => currentNetworkProxyService.sandboxEnvironment(),
+    resolveNetworkProxy: (input) => requireNetworkProxyMainService().resolve(input),
+    resolveSandboxNetworkEnvironment: () => (
+      requireNetworkProxyMainService().resolveSandboxNetworkEnvironment()
+    ),
     systemProxyFetch: fetchWithElectronSystemProxy,
     validateNetworkProxyReferences: (proxyServerIds) =>
-      currentNetworkProxyService.validateServerReferences(proxyServerIds),
+      requireNetworkProxyMainService().validateServerReferences(proxyServerIds),
   });
   desktopNativeBridgeServer = currentDesktopNativeBridgeServer;
-  const nativeBridge = await currentDesktopNativeBridgeServer.start();
 
   let requestRuntime = (_input: RuntimeRequestInput): Promise<unknown> => (
     Promise.reject(new Error('Desktop runtime is still starting.'))
   );
-  let activatedMainFeatures: ActivatedBuiltinMainFeatures;
+  let activatedMainFeatures: ActivatedBuiltinMainFeatures | null = null;
+  let nativeBridge: Awaited<ReturnType<typeof currentDesktopNativeBridgeServer.start>>;
   try {
     activatedMainFeatures = await activateBuiltinMainFeatures({
       activeKeyboardShortcutBindings: () => activeKeyboardShortcutBindings,
       interfaceLanguage: () => interfaceLanguage,
       mainWindow: currentMainWindow,
       nativeBridge: currentDesktopNativeBridgeServer,
-      networkProxyService: currentNetworkProxyService,
+      networkProxy: requireNetworkProxyMainService,
+      networkProxyHost: Object.freeze({
+        configPath: dataLayout.networkProxyPath,
+        credentialVault,
+        mainWindow: currentMainWindow,
+        writeJsonAtomically,
+        deleteServerThroughRuntime: async (proxyServerId: string) => (
+          await requestRuntime({
+            method: 'DELETE',
+            path: `/v1/config/network-proxy/${encodeURIComponent(proxyServerId)}`,
+          }) as DesktopNetworkProxyState
+        ),
+        systemFetch: fetchWithElectronSystemProxy,
+      }),
       requestRuntime: (input) => requestRuntime(input),
       updaterHost: Object.freeze({
         currentVersion: app.getVersion(),
@@ -304,7 +302,7 @@ async function createWindow(): Promise<void> {
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
           init?: RequestInit,
-        ) => currentNetworkProxyFetch.fetch('updater', input, init),
+        ) => requireNetworkProxyMainService().fetch('updater', input, init),
         interfaceLanguage: () => interfaceLanguage,
         mainWindow: currentMainWindow,
       }),
@@ -332,14 +330,17 @@ async function createWindow(): Promise<void> {
         fetch: (
           input: Parameters<typeof globalThis.fetch>[0],
           init?: RequestInit,
-        ) => currentNetworkProxyFetch.fetch('sync', input, init),
+        ) => requireNetworkProxyMainService().fetch('sync', input, init),
       }),
     });
+    networkProxyMainService = activatedMainFeatures.networkProxy;
+    nativeBridge = await currentDesktopNativeBridgeServer.start();
   } catch (error) {
+    await activatedMainFeatures?.composition.dispose().catch(() => undefined);
+    if (networkProxyMainService === activatedMainFeatures?.networkProxy) {
+      networkProxyMainService = null;
+    }
     await currentDesktopNativeBridgeServer.stop();
-    await currentNetworkProxyFetch.close();
-    currentBrowserProxyController.stop();
-    await currentNetworkProxyService.close();
     throw error;
   }
   const currentMainFeatureComposition = activatedMainFeatures.composition;
@@ -388,10 +389,8 @@ async function createWindow(): Promise<void> {
     await currentMainFeatureComposition.dispose().catch(() => undefined);
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
+    if (networkProxyMainService === activatedMainFeatures.networkProxy) networkProxyMainService = null;
     await currentDesktopNativeBridgeServer.stop();
-    await currentNetworkProxyFetch.close();
-    currentBrowserProxyController.stop();
-    await currentNetworkProxyService.close();
     throw error;
   }
   registerRuntimeIpc(currentRuntimeHost);
@@ -424,13 +423,7 @@ async function createWindow(): Promise<void> {
     currentMainWindow,
   );
   registerWorkspaceIpc();
-  const unregisterNetworkProxyState = registerNetworkProxyIpc(
-    currentNetworkProxyService,
-    currentRuntimeHost,
-    currentMainWindow,
-  );
   currentMainWindow.on('closed', () => {
-    unregisterNetworkProxyState();
     currentWebDavSyncLifecycle.close();
     void shutdownDesktopServices();
     if (mainWindow === currentMainWindow) mainWindow = null;
@@ -602,6 +595,11 @@ function requireRuntimeHost(): RuntimeHost {
   return runtimeHost;
 }
 
+function requireNetworkProxyMainService(): ActivatedBuiltinMainFeatures['networkProxy'] {
+  if (!networkProxyMainService) throw new Error('Desktop network proxy Feature is not available.');
+  return networkProxyMainService;
+}
+
 function shutdownDesktopServices(
   options: { requireRuntimeExit?: boolean } = {},
 ): Promise<void> {
@@ -611,13 +609,10 @@ function shutdownDesktopServices(
   const currentDesktopNativeBridgeServer = desktopNativeBridgeServer;
   const currentMainFeatureComposition = mainFeatureComposition;
   const currentDesktopUpdaterLifecycle = desktopUpdaterLifecycle;
-  const currentNetworkProxyService = networkProxyService;
-  const currentBrowserProxyController = browserProxyController;
-  const currentNetworkProxyFetch = networkProxyFetch;
+  const currentNetworkProxyMainService = networkProxyMainService;
   const currentWebDavSyncLifecycle = webDavSyncLifecycle;
 
   currentDesktopUpdaterLifecycle?.stop();
-  currentBrowserProxyController?.stop();
   currentWebDavSyncLifecycle?.close();
 
   desktopServicesShutdownPromise = (async () => {
@@ -638,8 +633,6 @@ function shutdownDesktopServices(
 
     const bridgeResults = await Promise.allSettled([
       currentDesktopNativeBridgeServer?.stop() ?? Promise.resolve(),
-      currentNetworkProxyFetch?.close() ?? Promise.resolve(),
-      currentNetworkProxyService?.close() ?? Promise.resolve(),
     ]);
     for (const result of bridgeResults) {
       if (result.status === 'rejected') console.error('[desktop] local bridge shutdown failed', result.reason);
@@ -649,9 +642,7 @@ function shutdownDesktopServices(
     if (desktopNativeBridgeServer === currentDesktopNativeBridgeServer) desktopNativeBridgeServer = null;
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
-    if (networkProxyService === currentNetworkProxyService) networkProxyService = null;
-    if (browserProxyController === currentBrowserProxyController) browserProxyController = null;
-    if (networkProxyFetch === currentNetworkProxyFetch) networkProxyFetch = null;
+    if (networkProxyMainService === currentNetworkProxyMainService) networkProxyMainService = null;
     if (webDavSyncLifecycle === currentWebDavSyncLifecycle) webDavSyncLifecycle = null;
     if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();

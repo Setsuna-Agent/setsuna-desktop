@@ -25,8 +25,8 @@ import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGu
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
+import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
-import { useDesktopNetworkProxy } from './useDesktopNetworkProxy.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 
@@ -39,7 +39,7 @@ export function useDesktopAppController() {
   const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
   const skillSelectionRequestIdRef = useRef(0);
 
-  const networkProxy = useDesktopNetworkProxy();
+  const networkProxy = useNetworkProxyFeatureView();
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
     activeTurnId,

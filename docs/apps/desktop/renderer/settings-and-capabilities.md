@@ -38,6 +38,8 @@ Updater 也是独立 renderer Feature。它通过 `settingsSectionExtensions` �
 
 WebDAV Sync 也是独立 renderer Feature，并通过 setup 返回静态 `settingsViews` contribution，形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/renderer`；宿主设置页只渲染只读 catalog，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
 
+Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/renderer`。宿主 controller 只通过 composition boundary 读取代理服务器公开投影，供仍属于根 Runtime Config 的模型 provider 下拉框使用；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
+
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。
 
 ### Provider settings
@@ -195,6 +197,7 @@ Settings：
 
 - `test/unit/features/settings/SettingsPage.test.ts`
 - `packages/features/webdav-sync/test/renderer/`
+- `packages/features/network-proxy/test/renderer/`
 - `packages/features/workspace-dependencies/test/renderer/`
 - Provider/model replacement、brand icon upload。
 - Data-root issue/backup UI。

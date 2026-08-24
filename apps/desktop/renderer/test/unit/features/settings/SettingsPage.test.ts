@@ -1,4 +1,5 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
+import { networkProxyFeature } from '@setsuna-desktop/feature-network-proxy/contracts';
 import { webDavSyncFeature } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -45,6 +46,29 @@ describe('SettingsSidebar', () => {
     expect(html).not.toContain('>功能<');
     expect(html).toContain('data-settings-icon="webdav-sync"');
     expect(html).toContain('用量统计');
+  });
+
+  it('merges Feature settings into the host group by declared order', () => {
+    const html = renderToStaticMarkup(createElement(SettingsSidebar, {
+      activeSection: 'network-proxy',
+      featureSections: [{
+        descriptionKey: 'feature.networkProxy.settings.description',
+        featureId: networkProxyFeature.id,
+        icon: () => createElement('svg', { 'data-settings-icon': 'network-proxy' }),
+        location: 'settings',
+        navigationGroupId: 'models-and-services',
+        order: 250,
+        render: () => null,
+        sectionId: 'network-proxy',
+        titleKey: 'settings.section.usage',
+      }],
+      onBack: vi.fn(),
+      onSelectSection: vi.fn(),
+    }));
+
+    const featurePosition = html.indexOf('data-settings-icon="network-proxy"');
+    expect(featurePosition).toBeGreaterThan(html.indexOf('模型服务'));
+    expect(featurePosition).toBeLessThan(html.indexOf('专用模型'));
   });
 });
 

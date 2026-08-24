@@ -17,7 +17,7 @@ Setsuna Desktop 的技术分层本身合理，但一个业务能力横跨 contra
 - Image Generation：验证 typed operation、Feature settings 和业务 UI contribution 能否退出中央 Config/client/page switch。
 - Goal：验证私有持久状态能否退出 Core `RuntimeEvent` union 和通用 thread snapshot。
 
-随后迁移 Vision Recognition、Terminal、Review、Browser、Collaboration、Memory、WebDAV Sync 和 Updater，用来确认同一所有权模型能覆盖设置、原生资源、工具、复杂恢复链路和应用级生命周期。
+随后迁移 Vision Recognition、Terminal、Review、Browser、Collaboration、Memory、WebDAV Sync、Updater 和 Network Proxy，用来确认同一所有权模型能覆盖设置、原生资源、网络边界、工具、复杂恢复链路和应用级生命周期。
 
 ## 保留的决策
 
@@ -82,7 +82,7 @@ Feature setup 返回静态 `settingsViews`、`settingsSectionExtensions`、`tool
 - Image Generation、Vision Recognition 和 Memory 的业务设置已退出根 Config 与统一 renderer client。
 - Goal 与 Collaboration 私有状态由各自 Feature event/reducer/query 拥有，通用 thread snapshot 不保存业务字段。
 - Renderer 页面只消费静态贡献 catalog，不认识各 Feature client 或状态类型。
-- Terminal、Review、Browser、WebDAV Sync 和 Updater 的 native/bridge 资源由 Feature owner 管理，宿主只注入窗口、路径、凭据、网络、版本或 runtime 等窄能力。
+- Terminal、Review、Browser、WebDAV Sync、Updater 和 Network Proxy 的 native/bridge 资源由 Feature owner 管理，宿主只注入窗口、路径、凭据、网络、版本或 runtime 等窄能力。
 - `scripts/check-feature-boundaries.mjs` 阻止跨 Feature 实现 import、raw renderer transport 和中央 host 对具体 Feature 的直接 import。
 
 这些是结构结果，不等于用户或工程结果。交付时长、review 返工、30 天用户可见回归/回滚和删除演练由当前短基线定义反馈闭环；样本形成前不把“中央文件减少”单独当作成功证明。

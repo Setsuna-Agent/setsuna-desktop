@@ -97,6 +97,19 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 
 测试位于 `test/unit/workspace/`。
 
+## Network Proxy
+
+源码：
+
+- `packages/features/network-proxy/src/{contracts,main,preload,renderer}/`
+- `apps/desktop/{main,preload,renderer}/src/composition/`
+
+Network Proxy 是纵向 Feature：配置 store、凭据引用、受保护 loopback relay、sandbox egress gateway、浏览器 session 路由、Node fetch dispatcher、IPC/preload bridge、renderer 状态服务和完整设置页都由同一包拥有。宿主只注入配置路径、credential vault、原子 JSON writer、系统代理 fetch、主窗口和 runtime 删除入口；Updater、WebDAV、Terminal 与 native bridge 只依赖 activation 后暴露的窄 `NetworkProxyMainService`。
+
+删除代理必须经 runtime 配置 route，先校验模型 provider 引用，再由 native bridge 回调 Feature 完成真实删除。普通配置不保存密码，browser/runtime 看到的也只是 Feature 管理的 loopback relay；代理初始化失败时保持 fail-closed，但设置页仍可用于修复配置。
+
+测试位于 `packages/features/network-proxy/test/`。
+
 ## Updater
 
 源码：

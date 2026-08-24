@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createConnection, createServer as createTcpServer, type Socket } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -6,11 +6,10 @@ import path from 'node:path';
 import { Server as ProxyChainServer } from 'proxy-chain';
 import { Agent, fetch, ProxyAgent } from 'undici';
 import { afterEach, describe, expect, it } from 'vitest';
-import { writeJsonAtomically } from '../../../src/data-root/atomic-json.js';
-import { DesktopNetworkProxyFetch } from '../../../src/network-proxy/fetch.js';
-import { DesktopNetworkProxyService } from '../../../src/network-proxy/service.js';
-import { DesktopNetworkProxyStore } from '../../../src/network-proxy/store.js';
-import type { CredentialVault } from '../../../src/security/credential-vault.js';
+import type { NetworkProxyCredentialVault } from '../../src/main/capabilities.js';
+import { DesktopNetworkProxyFetch } from '../../src/main/fetch.js';
+import { DesktopNetworkProxyService } from '../../src/main/service.js';
+import { DesktopNetworkProxyStore } from '../../src/main/store.js';
 
 const services: DesktopNetworkProxyService[] = [];
 const upstreamProxies: ProxyChainServer[] = [];
@@ -23,7 +22,7 @@ afterEach(async () => {
 describe('DesktopNetworkProxyStore', () => {
   it('preserves platform defaults until the user explicitly selects direct mode', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-default-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -58,7 +57,7 @@ describe('DesktopNetworkProxyStore', () => {
         },
       },
     }), 'utf8');
-    const store = new DesktopNetworkProxyStore(configPath, new MemoryCredentialVault());
+    const store = createNetworkProxyStore(configPath, new MemoryCredentialVault());
 
     await expect(store.getState()).resolves.toMatchObject({
       routing: {
@@ -76,7 +75,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('uses Chromium fetch for system routes and an explicit dispatcher for direct routes', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-route-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -109,7 +108,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('lets Chromium derive content length for system-routed request bodies', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-system-body-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -148,7 +147,7 @@ describe('DesktopNetworkProxyStore', () => {
     const targetAddress = target.address();
     if (!targetAddress || typeof targetAddress === 'string') throw new Error('Expected target address.');
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-loopback-updater-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -196,7 +195,7 @@ describe('DesktopNetworkProxyStore', () => {
     upstreamProxies.push(upstream);
     await upstream.listen();
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-redirect-updater-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -228,7 +227,7 @@ describe('DesktopNetworkProxyStore', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-corrupt-'));
     const configPath = path.join(root, 'network-proxies.json');
     await writeFile(configPath, '{ invalid json', 'utf8');
-    const store = new DesktopNetworkProxyStore(configPath, new MemoryCredentialVault());
+    const store = createNetworkProxyStore(configPath, new MemoryCredentialVault());
 
     await expect(store.getState()).rejects.toThrow('无法读取代理服务器配置');
     await expect(store.upsertServer({ name: 'Replacement', url: 'http://127.0.0.1:3128' }))
@@ -239,7 +238,7 @@ describe('DesktopNetworkProxyStore', () => {
   it('persists metadata separately from credentials and exposes only a protected relay', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-store-'));
     const vault = new MemoryCredentialVault();
-    const store = new DesktopNetworkProxyStore(path.join(root, 'network-proxies.json'), vault);
+    const store = createNetworkProxyStore(path.join(root, 'network-proxies.json'), vault);
     const service = new DesktopNetworkProxyService(store);
     services.push(service);
 
@@ -277,11 +276,11 @@ describe('DesktopNetworkProxyStore', () => {
     const vault = new MemoryCredentialVault();
     let rejectedWriteNumber: number | undefined;
     let writeCount = 0;
-    const store = new DesktopNetworkProxyStore(configPath, vault, {
+    const store = createNetworkProxyStore(configPath, vault, {
       writeConfig: async (filePath, value) => {
         writeCount += 1;
         if (writeCount === rejectedWriteNumber) throw new Error('simulated metadata write failure');
-        await writeJsonAtomically(filePath, value);
+        await writeJsonForTest(filePath, value);
       },
     });
     const initial = await store.upsertServer({
@@ -329,7 +328,7 @@ describe('DesktopNetworkProxyStore', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-password-cleanup-'));
     const configPath = path.join(root, 'network-proxies.json');
     const vault = new MemoryCredentialVault();
-    const store = new DesktopNetworkProxyStore(configPath, vault);
+    const store = createNetworkProxyStore(configPath, vault);
     const initial = await store.upsertServer({
       name: 'Authenticated proxy',
       url: 'http://proxy.example.com:8080',
@@ -358,7 +357,7 @@ describe('DesktopNetworkProxyStore', () => {
   it('enforces SOCKS5 username and password byte limits before saving credentials', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-socks5-credentials-'));
     const vault = new MemoryCredentialVault();
-    const store = new DesktopNetworkProxyStore(path.join(root, 'network-proxies.json'), vault);
+    const store = createNetworkProxyStore(path.join(root, 'network-proxies.json'), vault);
 
     await expect(store.upsertServer({
       name: 'Long username',
@@ -384,7 +383,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('stores multiple servers and resolves independent global and scoped routes', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-multiple-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -412,7 +411,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('rejects deletion while a desktop route still references the server', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-reference-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -427,7 +426,7 @@ describe('DesktopNetworkProxyStore', () => {
   it('clears credentials without retaining the username in ordinary state', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-credentials-'));
     const vault = new MemoryCredentialVault();
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       vault,
     ));
@@ -450,7 +449,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('shares one protected relay across concurrent first requests', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-concurrent-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -470,7 +469,7 @@ describe('DesktopNetworkProxyStore', () => {
 
   it('keeps an active relay alive for name-only edits and replaces it for transport edits', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-relay-edit-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -506,7 +505,7 @@ describe('DesktopNetworkProxyStore', () => {
     upstreamProxies.push(upstream);
     await upstream.listen();
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-forward-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -543,7 +542,7 @@ describe('DesktopNetworkProxyStore', () => {
     if (!targetAddress || typeof targetAddress === 'string') throw new Error('Expected target address.');
     const socks = await startAuthenticatedSocks5Proxy('socks-user', 'socks-password');
     const root = await mkdtemp(path.join(tmpdir(), 'setsuna-proxy-socks5-'));
-    const service = new DesktopNetworkProxyService(new DesktopNetworkProxyStore(
+    const service = new DesktopNetworkProxyService(createNetworkProxyStore(
       path.join(root, 'network-proxies.json'),
       new MemoryCredentialVault(),
     ));
@@ -575,7 +574,22 @@ describe('DesktopNetworkProxyStore', () => {
   });
 });
 
-class MemoryCredentialVault implements CredentialVault {
+function createNetworkProxyStore(
+  configPath: string,
+  vault: NetworkProxyCredentialVault,
+  options: ConstructorParameters<typeof DesktopNetworkProxyStore>[2] = {
+    writeConfig: writeJsonForTest,
+  },
+): DesktopNetworkProxyStore {
+  return new DesktopNetworkProxyStore(configPath, vault, options);
+}
+
+async function writeJsonForTest(filePath: string, value: unknown): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+class MemoryCredentialVault implements NetworkProxyCredentialVault {
   readonly values = new Map<string, string>();
   rejectDeletes = false;
 

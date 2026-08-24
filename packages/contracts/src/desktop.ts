@@ -4,11 +4,6 @@ import type { RuntimeRequestInput } from './http.js';
 import type { RuntimePluginInstallResult } from './plugins.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
-  DesktopNetworkProxyRoutingInput,
-  DesktopNetworkProxyServerInput,
-  DesktopNetworkProxyState,
-} from './network-proxy/index.js';
-import type {
   DesktopDataMigrationPlan,
   DesktopDataRootActionResult,
   DesktopDataRootRetainedBackupInspection,
@@ -170,13 +165,6 @@ export type SetsunaDesktopBridge = {
   };
   links: {
     openExternal(url: string): Promise<boolean>;
-  };
-  networkProxy: {
-    getState(): Promise<DesktopNetworkProxyState>;
-    upsertServer(input: DesktopNetworkProxyServerInput): Promise<DesktopNetworkProxyState>;
-    deleteServer(proxyServerId: string): Promise<DesktopNetworkProxyState>;
-    setRouting(input: DesktopNetworkProxyRoutingInput): Promise<DesktopNetworkProxyState>;
-    onStateChange(callback: (state: DesktopNetworkProxyState) => void): () => void;
   };
   windowsSandbox: {
     getStatus(): Promise<DesktopWindowsSandboxStatus>;
