@@ -1,19 +1,13 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
-import { memorySettings } from '@setsuna-desktop/feature-memory/contracts';
-import { visionRecognitionSettings } from '@setsuna-desktop/feature-vision-recognition/contracts';
 import type {
   WebDavSyncCredentialVault,
   WebDavSyncStorageHost,
 } from '../../src/main/capabilities.js';
 import { WebDavSyncConfigStore } from '../../src/main/config-store.js';
+import { webDavSyncFeatureSettingsDocuments } from '../../src/main/portable-feature-settings.js';
 
-export const testWebDavSyncFeatureSettingsDocuments = Object.freeze([
-  ...imageGenerationSettings.erasedDocuments,
-  ...memorySettings.erasedDocuments,
-  ...visionRecognitionSettings.erasedDocuments,
-]);
+export const testWebDavSyncFeatureSettingsDocuments = webDavSyncFeatureSettingsDocuments;
 
 export const testWebDavSyncStorageHost: WebDavSyncStorageHost = Object.freeze({
   dataLayout(dataRoot: string) {

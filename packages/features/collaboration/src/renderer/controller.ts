@@ -1,4 +1,3 @@
-import type { FeatureEventFeedItem } from '@setsuna-desktop/feature-core/events';
 import type { RendererFeatureEventFeed } from '@setsuna-desktop/feature-core/renderer';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import {
@@ -6,22 +5,20 @@ import {
   createInitialCollaborationState,
   type CollaborationRendererStateController,
   type CollaborationRendererStateSnapshot,
-  type CollaborationState,
   type CollaborationStateSnapshot,
 } from '../contracts/index.js';
 import type { CollaborationClient } from './client.js';
-import { createRendererCollaborationEventRegistry } from './collaboration-event-registry.js';
 
 type Listener = (snapshot: CollaborationRendererStateSnapshot) => void;
 
-/** Owns subscribe-before-query and global sequence recovery for one parent thread. */
+/** Re-reads typed Collaboration state when the global sequence gate signals a change. */
 export class CollaborationRendererController implements CollaborationRendererStateController {
   private readonly abort = new AbortController();
-  private readonly buffered = new Map<number, FeatureEventFeedItem>();
   private readonly listeners = new Set<Listener>();
-  private readonly registry = createRendererCollaborationEventRegistry();
   private feedSubscription: Readonly<{ dispose(): void }> | null = null;
   private projection: CollaborationStateSnapshot | null = null;
+  private minimumThroughSeq = 0;
+  private refreshAgain = false;
   private reading = false;
   private disposed = false;
   private view: CollaborationRendererStateSnapshot = Object.freeze({
@@ -45,7 +42,7 @@ export class CollaborationRendererController implements CollaborationRendererSta
       this.feedSubscription = this.options.feed.subscribe(
         this.options.scope,
         this.options.threadId,
-        (item) => this.accept(item),
+        (throughSeq) => this.accept(throughSeq),
       );
     }
     // The service caches controllers across transcript switches. The event hub only follows the
@@ -59,7 +56,6 @@ export class CollaborationRendererController implements CollaborationRendererSta
     this.abort.abort();
     this.feedSubscription?.dispose();
     this.feedSubscription = null;
-    this.buffered.clear();
     this.listeners.clear();
   }
 
@@ -77,35 +73,34 @@ export class CollaborationRendererController implements CollaborationRendererSta
     void this.refresh();
   }
 
-  private accept(item: FeatureEventFeedItem): void {
+  private accept(throughSeq: number): void {
     if (this.disposed) return;
-    const throughSeq = this.projection?.throughSeq ?? 0;
-    if (item.seq <= throughSeq) return;
-    if (!this.projection || this.reading || item.seq !== throughSeq + 1) {
-      this.buffered.set(item.seq, item);
-      if (this.projection && item.seq > throughSeq + 1) {
-        this.updateView({ stale: true });
-        void this.refresh();
-      }
-      return;
-    }
-    if (!this.applyContiguous(item)) void this.refresh();
+    this.minimumThroughSeq = Math.max(this.minimumThroughSeq, throughSeq);
+    if ((this.projection?.throughSeq ?? 0) >= this.minimumThroughSeq) return;
+    if (this.projection) this.updateView({ stale: true });
+    if (this.reading) this.refreshAgain = true;
+    else void this.refresh();
   }
 
   private async refresh(): Promise<void> {
     if (this.disposed || this.reading) return;
     this.reading = true;
+    this.refreshAgain = false;
     this.updateView({
       error: null,
       loading: this.projection === null,
       stale: this.projection !== null,
     });
+    let succeeded = false;
     try {
       const snapshot = await this.options.client.readState(
         this.options.threadId,
         { signal: this.abort.signal },
       );
-      if (!this.disposed) this.adoptSnapshot(snapshot);
+      if (!this.disposed) {
+        this.adoptSnapshot(snapshot);
+        succeeded = true;
+      }
     } catch (error) {
       if (!this.disposed && !this.abort.signal.aborted) {
         this.updateView({
@@ -117,6 +112,12 @@ export class CollaborationRendererController implements CollaborationRendererSta
     } finally {
       this.reading = false;
     }
+    if (
+      !this.disposed
+      && succeeded
+      && this.refreshAgain
+      && (this.projection?.throughSeq ?? 0) < this.minimumThroughSeq
+    ) void this.refresh();
   }
 
   private adoptSnapshot(snapshot: CollaborationStateSnapshot): void {
@@ -126,53 +127,12 @@ export class CollaborationRendererController implements CollaborationRendererSta
       state: cloneCollaborationState(snapshot.state),
       throughSeq: snapshot.throughSeq,
     });
-    for (const seq of this.buffered.keys()) {
-      if (seq <= snapshot.throughSeq) this.buffered.delete(seq);
-    }
-    let healthy = true;
-    for (;;) {
-      const next = this.buffered.get(this.projection.throughSeq + 1);
-      if (!next) break;
-      this.buffered.delete(next.seq);
-      if (!this.applyContiguous(next)) {
-        healthy = false;
-        break;
-      }
-    }
+    const stale = snapshot.throughSeq < this.minimumThroughSeq;
     this.publishProjection({
-      error: healthy ? null : this.view.error,
+      error: null,
       loading: false,
-      stale: !healthy || this.hasGap(),
+      stale,
     });
-  }
-
-  private applyContiguous(item: FeatureEventFeedItem): boolean {
-    if (!this.projection || item.seq !== this.projection.throughSeq + 1) return false;
-    try {
-      const state: CollaborationState = item.kind === 'event'
-        ? this.registry.reduce(this.projection.state, item.event)
-        : this.projection.state;
-      this.projection = Object.freeze({
-        state: cloneCollaborationState(state),
-        throughSeq: item.seq,
-      });
-      this.publishProjection({ error: null, loading: false, stale: false });
-      return true;
-    } catch (error) {
-      this.buffered.set(item.seq, item);
-      this.updateView({
-        error: error instanceof Error ? error.message : String(error),
-        loading: false,
-        stale: true,
-      });
-      return false;
-    }
-  }
-
-  private hasGap(): boolean {
-    if (!this.projection || !this.buffered.size) return false;
-    const first = Math.min(...this.buffered.keys());
-    return first > this.projection.throughSeq + 1;
   }
 
   private publishProjection(patch: Partial<CollaborationRendererStateSnapshot>): void {

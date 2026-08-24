@@ -60,12 +60,10 @@ export interface WebDavSyncLifecycle {
 
 export const webDavSyncMainHostCapability: CapabilityToken<WebDavSyncMainHost> = defineCapability({
   id: 'webdav-sync.main-host',
-  major: 1,
   description: 'Desktop storage, credentials, network, and runtime lifecycle required by WebDAV sync',
 });
 
 export const webDavSyncLifecycleCapability: CapabilityToken<WebDavSyncLifecycle> = defineCapability({
   id: 'webdav-sync.lifecycle',
-  major: 1,
   description: 'Early shutdown control for the desktop WebDAV synchronization service',
 });

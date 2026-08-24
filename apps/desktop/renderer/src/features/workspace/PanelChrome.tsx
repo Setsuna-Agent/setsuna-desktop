@@ -1,7 +1,7 @@
 import { Bug, Code2, FileDiff, FileText, FolderOpen, MessageSquare, PanelRight, Terminal, Users } from 'lucide-react';
+import { BrowserFeatureFavicon } from '../../composition/browser-feature-adapter.js';
 import { translate, type Translate } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
-import { BrowserFavicon } from '@setsuna-desktop/feature-browser/renderer';
 import { fileName, type DesktopPanelTab, type DesktopPanelType, type DesktopWorkspaceApp } from './model.js';
 import { workspaceAppIconAssets } from './workspaceAppIcons.js';
 import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
@@ -42,7 +42,7 @@ export function DesktopPanelIcon({ panel, type }: { panel?: DesktopPanelTab; typ
   if (panelType === 'subagent') return <Users size={14} />;
   if (panelType === 'conversation-debug') return <Bug size={14} />;
   if (panelType === 'browser') {
-    return <BrowserFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;
+    return <BrowserFeatureFavicon faviconUrl={panel?.browser?.faviconUrl ?? null} loading={panel?.browser?.loading ?? false} />;
   }
   if (panelType === 'terminal') return <Terminal size={14} />;
   if (panelType === 'review') return <FileDiff size={14} />;

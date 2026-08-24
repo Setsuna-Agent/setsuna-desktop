@@ -24,18 +24,15 @@ export interface ReviewRendererSenderPolicy {
 
 export const reviewCommitMessageCapability: CapabilityToken<ReviewCommitMessageGenerator> = defineCapability({
   id: 'desktop-review.commit-message',
-  major: 1,
   description: 'Host-backed commit message generation for native review actions',
 });
 
 export const reviewFilePreviewCapability: CapabilityToken<ReviewFilePreviewRegistry> = defineCapability({
   id: 'desktop-review.file-previews',
-  major: 1,
   description: 'Host-owned authenticated file preview registrations for review images',
 });
 
 export const reviewRendererSenderCapability: CapabilityToken<ReviewRendererSenderPolicy> = defineCapability({
   id: 'desktop-review.renderer-sender',
-  major: 1,
   description: 'Host policy for authenticating Review IPC senders',
 });

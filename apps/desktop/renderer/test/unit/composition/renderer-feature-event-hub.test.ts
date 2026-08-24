@@ -1,10 +1,10 @@
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import { describe, expect, it, vi } from 'vitest';
 import { RendererFeatureEventHub } from '../../../src/composition/renderer-feature-event-hub.js';
 
 describe('RendererFeatureEventHub', () => {
-  it('reveals only the owning Feature payload while advancing every subscriber watermark', () => {
+  it('signals only the Feature that owns an accepted event', () => {
     const hub = new RendererFeatureEventHub();
     const goal = scope('goal');
     const image = scope('image-generation');
@@ -34,14 +34,24 @@ describe('RendererFeatureEventHub', () => {
     });
 
     expect(onGoal.mock.calls.map(([item]) => item)).toEqual([
-      expect.objectContaining({ kind: 'event', seq: 1 }),
-      { kind: 'advance', seq: 2 },
+      1,
     ]);
-    expect(onImage.mock.calls.map(([item]) => item)).toEqual([
-      { kind: 'advance', seq: 1 },
-      { kind: 'advance', seq: 2 },
-    ]);
-    expect(onImage.mock.calls[0]?.[0]).not.toHaveProperty('event');
+    expect(onImage).not.toHaveBeenCalled();
+  });
+
+  it('signals every active controller after a Core resync', () => {
+    const hub = new RendererFeatureEventHub();
+    const goal = scope('goal');
+    const image = scope('image-generation');
+    const onGoal = vi.fn();
+    const onImage = vi.fn();
+    hub.subscribe(goal.scope, 'thread_1', onGoal);
+    hub.subscribe(image.scope, 'thread_1', onImage);
+
+    hub.resync('thread_1', 8);
+
+    expect(onGoal).toHaveBeenCalledWith(8);
+    expect(onImage).toHaveBeenCalledWith(8);
   });
 
   it('stops delivery when the owning scope is disposed', async () => {
@@ -51,7 +61,7 @@ describe('RendererFeatureEventHub', () => {
     hub.subscribe(owner.scope, 'thread_1', listener);
 
     await owner.finishDispose();
-    hub.advance('thread_1', 8);
+    hub.resync('thread_1', 8);
 
     expect(listener).not.toHaveBeenCalled();
   });
@@ -64,7 +74,7 @@ describe('RendererFeatureEventHub', () => {
     const subscription = hub.subscribe(owner.scope, 'thread_1', listener);
 
     subscription.dispose();
-    hub.advance('thread_1', 8);
+    hub.resync('thread_1', 8);
 
     expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
     expect(listener).not.toHaveBeenCalled();
@@ -72,7 +82,7 @@ describe('RendererFeatureEventHub', () => {
 });
 
 function scope(id: string) {
-  const definition = defineFeatureDefinition({ id, version: '1.0.0' });
+  const definition = defineFeature(id);
   const controller = createFeatureScope({
     featureId: definition.id,
     process: 'renderer',

@@ -1,23 +1,24 @@
 import {
-  composeRuntimeFeatures,
-  runtimeFeatureEventRegistrarCapability,
+  completeFeatureHostActivation,
+  defineRuntimeFeatureHost,
   runtimeFeatureSettingsRegistryCapability,
   runtimeRouteRegistrarCapability,
   threadEventReaderCapability,
   type RuntimeFeatureComposition,
 } from '@setsuna-desktop/feature-core/runtime';
 import {
-  declareCapabilityProvider,
   optionalCapability,
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
+import { browserRuntimeFeature } from '@setsuna-desktop/feature-browser/runtime';
 import {
   collaborationControlCapability,
   collaborationRuntimeHostCapability,
   createNoopCollaborationControl,
 } from '@setsuna-desktop/feature-collaboration/contracts';
+import { collaborationRuntimeFeature } from '@setsuna-desktop/feature-collaboration/runtime';
 import {
   imageGenerationAssetStoreCapability,
   imageGenerationFeature,
@@ -27,121 +28,125 @@ import {
   imageGenerationServiceCapability,
   imageGenerationWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-image-generation/contracts';
+import { imageGenerationRuntimeFeature } from '@setsuna-desktop/feature-image-generation/runtime';
 import {
   createNoopGoalControl,
   goalControlCapability,
   goalRuntimeHostCapability,
 } from '@setsuna-desktop/feature-goal/contracts';
+import { goalRuntimeFeature } from '@setsuna-desktop/feature-goal/runtime';
 import {
   createNoopMemoryControl,
   memoryControlCapability,
   memoryLegacySettingsCapability,
   memoryRuntimeHostCapability,
 } from '@setsuna-desktop/feature-memory/contracts';
+import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import {
   visionRecognitionFeature,
   visionRecognitionRuntimeHostCapability,
   visionRecognitionServiceCapability,
 } from '@setsuna-desktop/feature-vision-recognition/contracts';
+import { visionRecognitionRuntimeFeature } from '@setsuna-desktop/feature-vision-recognition/runtime';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
-import { builtinRuntimeFeatures } from './builtin-runtime-features.js';
+
+const runtimeFeatures = defineRuntimeFeatureHost({
+  required: [browserRuntimeFeature],
+  optional: [
+    collaborationRuntimeFeature,
+    imageGenerationRuntimeFeature,
+    goalRuntimeFeature,
+    memoryRuntimeFeature,
+    visionRecognitionRuntimeFeature,
+  ],
+});
 
 export async function activateBuiltinRuntimeFeatures(
   runtime: RuntimeContainer,
 ): Promise<RuntimeFeatureComposition> {
-  const composition = await composeRuntimeFeatures({
-    mounts: builtinRuntimeFeatures,
+  const composition = await runtimeFeatures.activate({
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
-      provideHostCapability(declareCapabilityProvider(runtimeRouteRegistrarCapability), runtime.featureRoutes),
+      provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
       provideHostCapability(
-        declareCapabilityProvider(runtimeFeatureEventRegistrarCapability),
-        runtime.featureEvents,
-      ),
-      provideHostCapability(
-        declareCapabilityProvider(threadEventReaderCapability),
+        threadEventReaderCapability,
         runtime.threadEventReader,
       ),
       provideHostCapability(
-        declareCapabilityProvider(runtimeFeatureSettingsRegistryCapability),
+        runtimeFeatureSettingsRegistryCapability,
         runtime.featureSettings,
       ),
       provideHostCapability(
-        declareCapabilityProvider(imageGenerationAssetStoreCapability),
+        imageGenerationAssetStoreCapability,
         runtime.generatedImageStore,
       ),
       provideHostCapability(
-        declareCapabilityProvider(imageGenerationReferenceReaderCapability),
+        imageGenerationReferenceReaderCapability,
         runtime.threadStore,
       ),
       provideHostCapability(
-        declareCapabilityProvider(imageGenerationNetworkCapability),
+        imageGenerationNetworkCapability,
         Object.freeze({ fetch: runtime.networkProxyFetch.forRoute() }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(imageGenerationWorkspaceFilesCapability),
+        imageGenerationWorkspaceFilesCapability,
         runtime.workspaceProjects,
       ),
       provideHostCapability(
-        declareCapabilityProvider(imageGenerationLegacySettingsCapability),
+        imageGenerationLegacySettingsCapability,
         runtime.configStore.imageGenerationLegacySettingsAdapter(),
       ),
       provideHostCapability(
-        declareCapabilityProvider(collaborationRuntimeHostCapability),
+        collaborationRuntimeHostCapability,
         runtime.agentLoop.collaborationRuntimeHost(),
       ),
       provideHostCapability(
-        declareCapabilityProvider(goalRuntimeHostCapability),
+        goalRuntimeHostCapability,
         runtime.agentLoop.goalRuntimeHost(),
       ),
       provideHostCapability(
-        declareCapabilityProvider(memoryRuntimeHostCapability),
+        memoryRuntimeHostCapability,
         runtime.agentLoop.memoryRuntimeHost(),
       ),
       provideHostCapability(
-        declareCapabilityProvider(memoryLegacySettingsCapability),
+        memoryLegacySettingsCapability,
         runtime.configStore.memoryLegacySettingsAdapter(),
       ),
       provideHostCapability(
-        declareCapabilityProvider(visionRecognitionRuntimeHostCapability),
+        visionRecognitionRuntimeHostCapability,
         runtime.visionRecognitionHost,
       ),
     ],
   });
 
-  const browserDependencies = composition.resolveHostDependencies({
-    tools: requiredCapability(browserRuntimeToolServiceCapability),
-  });
-  runtime.browserToolHost.bind(browserDependencies.tools);
+  return completeFeatureHostActivation(composition, (host) => {
+    host.bind({
+      tools: requiredCapability(browserRuntimeToolServiceCapability),
+    }, ({ tools }) => runtime.browserToolHost.bind(tools));
 
-  const collaborationDependencies = composition.resolveHostDependencies({
-    collaboration: optionalCapability(collaborationControlCapability, createNoopCollaborationControl),
-  });
-  runtime.agentLoop.bindCollaborationControl(collaborationDependencies.collaboration);
+    host.bind({
+      collaboration: optionalCapability(collaborationControlCapability, createNoopCollaborationControl),
+    }, ({ collaboration }) => runtime.agentLoop.bindCollaborationControl(collaboration));
 
-  const status = composition.status(imageGenerationFeature.id)?.status;
-  if (status === 'active' || status === 'degraded') {
-    const dependencies = composition.resolveHostDependencies({
+    host.bindWhenFeatureAvailable(imageGenerationFeature.id, {
       imageGeneration: requiredCapability(imageGenerationServiceCapability),
-    });
-    runtime.extensionManager.setImageGenerationService(dependencies.imageGeneration);
-  }
-  const goalDependencies = composition.resolveHostDependencies({
-    goal: optionalCapability(goalControlCapability, createNoopGoalControl),
-  });
-  runtime.agentLoop.bindGoalControl(goalDependencies.goal);
-  const memoryDependencies = composition.resolveHostDependencies({
-    memory: optionalCapability(memoryControlCapability, createNoopMemoryControl),
-  });
-  runtime.agentLoop.bindMemoryControl(memoryDependencies.memory);
-  runtime.memoryToolHost.bind(memoryDependencies.memory);
-  const visionStatus = composition.status(visionRecognitionFeature.id)?.status;
-  if (visionStatus === 'active' || visionStatus === 'degraded') {
-    const dependencies = composition.resolveHostDependencies({
+    }, ({ imageGeneration }) => runtime.extensionManager.setImageGenerationService(imageGeneration));
+
+    host.bind({
+      goal: optionalCapability(goalControlCapability, createNoopGoalControl),
+    }, ({ goal }) => runtime.agentLoop.bindGoalControl(goal));
+
+    host.bind(
+      { memory: optionalCapability(memoryControlCapability, createNoopMemoryControl) },
+      ({ memory }) => runtime.agentLoop.bindMemoryControl(memory),
+      ({ memory }) => runtime.memoryToolHost.bind(memory),
+    );
+
+    host.bindWhenFeatureAvailable(visionRecognitionFeature.id, {
       visionRecognition: requiredCapability(visionRecognitionServiceCapability),
-    });
-    runtime.extensionManager.setVisionRecognitionService(dependencies.visionRecognition);
-  }
-  runtime.featureManagement.attach(composition);
-  return composition;
+    }, ({ visionRecognition }) => runtime.extensionManager.setVisionRecognitionService(visionRecognition));
+
+    host.add(runtime.featureManagement.attach(host.composition));
+    return host.composition;
+  });
 }

@@ -120,6 +120,17 @@ pnpm docs:tree
 git diff --check
 ```
 
+## Feature projection 冷重放基准
+
+Feature projection checkpoint 以实测恢复成本为准，不进入普通 CI 门禁。手动运行真实 SQLite reader 基准：
+
+```bash
+pnpm benchmark:feature-projection
+pnpm benchmark:feature-projection -- --events=10000,50000,100000 --runs=3
+```
+
+输出比较单个与两个并行 projection 的 process-cold 重放耗时、读取页数和记录数。它不会清除 OS page cache，也不声明跨机器性能结论；应在目标平台和代表性硬件上保存结果。只有实际历史规模超过已测范围，或冷恢复持续超过产品约定预算时，才设计持久 checkpoint、版本与失效协议。
+
 还应检查：
 
 - Markdown 相对链接存在。
@@ -151,4 +162,3 @@ git diff --check
 ```
 
 如果还修改 `AGENTS.md`、生成器、package script 或构建说明，追加 `pnpm typecheck`。
-

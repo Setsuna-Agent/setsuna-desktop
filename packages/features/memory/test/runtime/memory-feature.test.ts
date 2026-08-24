@@ -11,16 +11,14 @@ describe('Memory Feature migration', () => {
   it('retires legacy settings only after the Feature document is readable', async () => {
     const invalid = await setupFeature({ settingsReadable: false });
     expect(invalid.retire).not.toHaveBeenCalled();
-    expect(invalid.markDegraded).toHaveBeenCalledWith({
+    expect(invalid.setCondition).toHaveBeenCalledWith('settings', {
       code: 'MEMORY_SETTINGS_INVALID',
       message: 'Memory settings could not be applied.',
     });
-    expect(invalid.markActive).not.toHaveBeenCalled();
 
     const valid = await setupFeature({ settingsReadable: true });
     expect(valid.retire).toHaveBeenCalledTimes(1);
-    expect(valid.markActive).toHaveBeenCalledTimes(1);
-    expect(valid.markDegraded).not.toHaveBeenCalled();
+    expect(valid.setCondition).toHaveBeenCalledWith('settings', null);
   });
 });
 
@@ -31,8 +29,7 @@ async function setupFeature(options: Readonly<{ settingsReadable: boolean }>) {
     scopeId: `memory-migration:${options.settingsReadable}`,
   });
   const retire = vi.fn(async () => undefined);
-  const markActive = vi.fn();
-  const markDegraded = vi.fn();
+  const setCondition = vi.fn();
   const settingsHandle = {
     async exists() { return true; },
     async initialize() { throw new Error('Existing settings must not be reinitialized.'); },
@@ -74,12 +71,12 @@ async function setupFeature(options: Readonly<{ settingsReadable: boolean }>) {
         retire,
       },
     },
-    health: { markActive, markDegraded },
+    health: { setCondition },
     provide() {},
   });
   await scope.finishDispose();
 
-  return { markActive, markDegraded, retire };
+  return { setCondition, retire };
 }
 
 function memoryHost(): MemoryRuntimeHost {

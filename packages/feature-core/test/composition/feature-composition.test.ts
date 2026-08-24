@@ -5,14 +5,15 @@ import {
   optionalCapability,
   requiredCapability,
 } from '../../src/capability.js';
-import { defineFeatureDefinition, type FeatureId } from '../../src/definition.js';
+import { defineFeature, type FeatureId } from '../../src/definition.js';
 import {
-  composeRuntimeFeatures,
+  completeFeatureHostActivation,
+  defineRuntimeFeatureHost,
   defineRuntimeDependencies,
   defineRuntimeFeature,
-  mountRuntimeFeature,
 } from '../../src/runtime/index.js';
 import type { FeatureScope } from '../../src/scope.js';
+import type { RuntimeFeatureSettingsRegistry } from '../../src/settings.js';
 import {
   FeatureCompositionValidationError,
   FeatureReadinessError,
@@ -23,7 +24,6 @@ type Greeter = Readonly<{ greet(name: string): string }>;
 
 const greeterCapability = defineCapability<Greeter>({
   id: 'fixture.greeter',
-  major: 1,
   description: 'Greets a fixture consumer',
 });
 const greeterDeclaration = declareCapabilityProvider(greeterCapability);
@@ -61,13 +61,11 @@ describe('Feature composition kernel', () => {
       },
     });
 
-    const composition = await composeRuntimeFeatures({
-      // Reverse mount order proves setup order comes from the dependency graph.
-      mounts: [
-        mountRuntimeFeature(consumer, { criticality: 'required' }),
-        mountRuntimeFeature(provider, { criticality: 'required' }),
-      ],
-    });
+    const composition = await defineRuntimeFeatureHost({
+      // Reverse declaration order proves setup order comes from the dependency graph.
+      required: [consumer, provider],
+      optional: [],
+    }).activate();
 
     expect(effects).toEqual(['provider:setup', 'hello consumer']);
     expect(composition.statuses().map(({ status }) => status)).toEqual(['active', 'active']);
@@ -82,54 +80,13 @@ describe('Feature composition kernel', () => {
     ]);
   });
 
-  it('rejects invalid graphs without executing setup', async () => {
-    let setupCount = 0;
-    const missingV2 = defineCapability<Greeter>({
-      id: greeterCapability.id,
-      major: 2,
-      description: 'Incompatible fixture major',
-    });
-    const consumer = defineRuntimeFeature({
-      definition: feature('invalid-consumer'),
-      provides: [],
-      dependencies: defineRuntimeDependencies({ greeter: requiredCapability(missingV2) }),
-      setup() {
-        setupCount += 1;
-      },
-    });
-    const provider = defineRuntimeFeature({
-      definition: feature('invalid-provider'),
-      provides: [greeterDeclaration],
-      dependencies: defineRuntimeDependencies({}),
-      setup({ provide }) {
-        setupCount += 1;
-        provide(greeterDeclaration, { greet: () => 'unused' });
-      },
-    });
-
-    const error = await captureError(() => composeRuntimeFeatures({
-      mounts: [
-        mountRuntimeFeature(consumer, { criticality: 'optional' }),
-        mountRuntimeFeature(provider, { criticality: 'optional' }),
-      ],
-    }));
-
-    expect(error).toBeInstanceOf(FeatureCompositionValidationError);
-    expect((error as FeatureCompositionValidationError).issues).toContainEqual(expect.objectContaining({
-      code: 'CAPABILITY_MAJOR_MISMATCH',
-    }));
-    expect(setupCount).toBe(0);
-  });
-
   it('detects duplicate providers and dependency cycles before readiness', async () => {
     const firstCapability = defineCapability<object>({
       id: 'fixture.first',
-      major: 1,
       description: 'First cycle edge',
     });
     const secondCapability = defineCapability<object>({
       id: 'fixture.second',
-      major: 1,
       description: 'Second cycle edge',
     });
     const firstDeclaration = declareCapabilityProvider(firstCapability);
@@ -152,12 +109,10 @@ describe('Feature composition kernel', () => {
       },
     });
 
-    const error = await captureError(() => composeRuntimeFeatures({
-      mounts: [
-        mountRuntimeFeature(first, { criticality: 'optional' }),
-        mountRuntimeFeature(second, { criticality: 'optional' }),
-      ],
-    }));
+    const error = await captureError(() => defineRuntimeFeatureHost({
+      required: [],
+      optional: [first, second],
+    }).activate());
 
     expect(error).toBeInstanceOf(FeatureCompositionValidationError);
     const codes = (error as FeatureCompositionValidationError).issues.map(({ code }) => code);
@@ -166,9 +121,14 @@ describe('Feature composition kernel', () => {
   });
 
   it('rejects duplicate Feature IDs and missing required capabilities', async () => {
+    let settingsRegistrationCalls = 0;
+    const settingsRegistry = {
+      registerBundles: () => {
+        settingsRegistrationCalls += 1;
+      },
+    } as unknown as RuntimeFeatureSettingsRegistry;
     const missingCapability = defineCapability<object>({
       id: 'fixture.missing',
-      major: 1,
       description: 'Intentionally absent fixture capability',
     });
     const first = defineRuntimeFeature({
@@ -188,20 +148,19 @@ describe('Feature composition kernel', () => {
       },
     });
 
-    const error = await captureError(() => composeRuntimeFeatures({
-      mounts: [
-        mountRuntimeFeature(first, { criticality: 'optional' }),
-        mountRuntimeFeature(second, { criticality: 'optional' }),
-      ],
-    }));
+    const error = await captureError(() => defineRuntimeFeatureHost({
+      required: [],
+      optional: [first, second],
+    }).activate({ settingsRegistry }));
 
     expect(error).toBeInstanceOf(FeatureCompositionValidationError);
+    expect(settingsRegistrationCalls).toBe(0);
     const codes = (error as FeatureCompositionValidationError).issues.map(({ code }) => code);
     expect(codes).toContain('DUPLICATE_FEATURE_ID');
     expect(codes).toContain('MISSING_CAPABILITY');
   });
 
-  it('rolls back a failed provider, blocks required consumers, and gives optional consumers their fallback', async () => {
+  it('rolls back a failed provider, skips required consumers, and gives optional consumers their fallback', async () => {
     const effects: string[] = [];
     const failedProvider = defineRuntimeFeature({
       definition: feature('failed-provider'),
@@ -233,22 +192,21 @@ describe('Feature composition kernel', () => {
       },
     });
 
-    const composition = await composeRuntimeFeatures({
-      mounts: [failedProvider, blockedConsumer, fallbackConsumer].map((module) => (
-        mountRuntimeFeature(module, { criticality: 'optional' })
-      )),
-    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [],
+      optional: [failedProvider, blockedConsumer, fallbackConsumer],
+    }).activate();
 
     expect(effects).toEqual(['provider:rollback', 'fallback']);
     expect(statusMap(composition.statuses())).toEqual({
       'failed-provider': 'failed',
-      'blocked-consumer': 'blocked',
+      'blocked-consumer': 'failed',
       'fallback-consumer': 'active',
     });
     await composition.dispose();
   });
 
-  it('fails readiness for a required blocked Feature and tears down independent scopes', async () => {
+  it('fails readiness for a required dependent Feature and tears down independent scopes', async () => {
     const effects: string[] = [];
     const independent = defineRuntimeFeature({
       definition: feature('required-independent'),
@@ -278,27 +236,24 @@ describe('Feature composition kernel', () => {
       },
     });
 
-    const error = await captureError(() => composeRuntimeFeatures({
-      mounts: [
-        mountRuntimeFeature(independent, { criticality: 'optional' }),
-        mountRuntimeFeature(failedProvider, { criticality: 'optional' }),
-        mountRuntimeFeature(requiredConsumer, { criticality: 'required' }),
-      ],
-    }));
+    const error = await captureError(() => defineRuntimeFeatureHost({
+      required: [requiredConsumer],
+      optional: [independent, failedProvider],
+    }).activate());
 
     expect(error).toBeInstanceOf(FeatureReadinessError);
     expect(effects).toEqual(['independent:setup', 'independent:dispose']);
     expect(statusMap((error as FeatureReadinessError).statuses)).toMatchObject({
       'required-provider': 'failed',
-      'required-consumer': 'blocked',
+      'required-consumer': 'failed',
     });
   });
 
-  it('keeps degraded scopes active and supports in-place health recovery', async () => {
+  it('keeps degraded scopes active until every owned health condition recovers', async () => {
     const captured: {
       scope?: FeatureScope;
-      markActive?: () => void;
-      markDegraded?: () => void;
+      setCredentials?: (failed: boolean) => void;
+      setProvider?: (failed: boolean) => void;
     } = {};
     const module = defineRuntimeFeature({
       definition: feature('degraded-feature'),
@@ -306,27 +261,41 @@ describe('Feature composition kernel', () => {
       dependencies: defineRuntimeDependencies({}),
       setup(context) {
         captured.scope = context.scope;
-        captured.markActive = () => context.health.markActive();
-        captured.markDegraded = () => context.health.markDegraded({
+        captured.setCredentials = (failed) => context.health.setCondition('credentials', failed ? {
+          code: 'CREDENTIALS_MISSING',
+          message: 'Fixture credentials are missing.',
+        } : null);
+        captured.setProvider = (failed) => context.health.setCondition('provider', failed ? {
           code: 'PROVIDER_UNAVAILABLE',
           message: 'Fixture provider is offline.',
-        });
-        captured.markDegraded();
+        } : null);
+        captured.setProvider(true);
+        captured.setCredentials(true);
       },
     });
-    const composition = await composeRuntimeFeatures({
-      mounts: [mountRuntimeFeature(module, { criticality: 'required' })],
-    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [module],
+      optional: [],
+    }).activate();
 
-    expect(composition.statuses()[0]).toMatchObject({ status: 'degraded', lifecycle: 'degraded' });
+    expect(composition.statuses()[0]).toMatchObject({
+      status: 'degraded',
+      diagnostic: { code: 'CREDENTIALS_MISSING' },
+    });
     await expect(requireValue(captured.scope).runOperation(async () => 'available management operation')).resolves.toBe(
       'available management operation',
     );
-    captured.markActive?.();
-    expect(composition.statuses()[0]).toMatchObject({ status: 'active', lifecycle: 'active' });
-    captured.markDegraded?.();
-    expect(composition.statuses()[0]).toMatchObject({ status: 'degraded', lifecycle: 'degraded' });
+    captured.setCredentials?.(false);
+    expect(composition.statuses()[0]).toMatchObject({
+      status: 'degraded',
+      diagnostic: { code: 'PROVIDER_UNAVAILABLE' },
+    });
+    captured.setProvider?.(false);
+    expect(composition.statuses()[0]).toMatchObject({ status: 'active' });
+    captured.setProvider?.(true);
     await composition.dispose();
+    captured.setProvider?.(false);
+    expect(composition.statuses()[0]).toMatchObject({ status: 'degraded' });
   });
 
   it('closes every operation gate before waiting for leases and disposes resources afterward', async () => {
@@ -353,9 +322,10 @@ describe('Feature composition kernel', () => {
         });
       },
     });
-    const composition = await composeRuntimeFeatures({
-      mounts: [mountRuntimeFeature(module, { criticality: 'required' })],
-    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [module],
+      optional: [],
+    }).activate();
     const scope = requireValue(captured.scope);
     const operation = scope.runOperation(async (signal) => {
       captured.operationStarted?.();
@@ -392,11 +362,12 @@ describe('Feature composition kernel', () => {
         });
       },
     });
-    const composition = await composeRuntimeFeatures({
-      mounts: [mountRuntimeFeature(module, { criticality: 'optional' })],
-    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [],
+      optional: [module],
+    }).activate();
 
-    expect(composition.statuses()[0]).toMatchObject({ status: 'failed', lifecycle: 'stopped' });
+    expect(composition.statuses()[0]).toMatchObject({ status: 'failed' });
     expect(effects).toEqual(['rollback']);
   });
 
@@ -409,19 +380,91 @@ describe('Feature composition kernel', () => {
         provide(greeterDeclaration, { greet: () => 'invalid' });
       },
     });
-    const composition = await composeRuntimeFeatures({
-      mounts: [mountRuntimeFeature(module, { criticality: 'optional' })],
-    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [],
+      optional: [module],
+    }).activate();
 
     expect(composition.statuses()[0]).toMatchObject({
       status: 'failed',
       diagnostic: { code: 'ACTIVATION_FAILED' },
     });
   });
+
+  it('disposes host bindings before Feature scopes in reverse order exactly once', async () => {
+    const effects: string[] = [];
+    const module = defineRuntimeFeature({
+      definition: feature('host-binding-disposal'),
+      provides: [],
+      dependencies: defineRuntimeDependencies({}),
+      setup({ scope }) {
+        scope.add(() => {
+          effects.push('feature');
+        });
+      },
+    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [module],
+      optional: [],
+    }).activate();
+    const managed = await completeFeatureHostActivation(composition, (host) => {
+      host.add(() => {
+        effects.push('host:first');
+      });
+      host.add(() => {
+        effects.push('host:second');
+      });
+      return host.composition;
+    });
+
+    await managed.dispose();
+    await managed.dispose();
+
+    expect(effects).toEqual(['host:second', 'host:first', 'feature']);
+  });
+
+  it('rolls back completed host bindings when later host activation fails', async () => {
+    const effects: string[] = [];
+    const serviceCapability = defineCapability<{ name: string }>({
+      id: 'test.host-binding-service',
+      description: 'Host binding rollback fixture.',
+    });
+    const serviceDeclaration = declareCapabilityProvider(serviceCapability);
+    const module = defineRuntimeFeature({
+      definition: feature('host-binding-rollback'),
+      provides: [serviceDeclaration],
+      dependencies: defineRuntimeDependencies({}),
+      setup({ provide, scope }) {
+        provide(serviceDeclaration, { name: 'fixture' });
+        scope.add(() => {
+          effects.push('feature');
+        });
+      },
+    });
+    const composition = await defineRuntimeFeatureHost({
+      required: [module],
+      optional: [],
+    }).activate();
+
+    await expect(completeFeatureHostActivation(composition, (host) => {
+      host.bind({
+        service: requiredCapability(serviceCapability),
+      }, ({ service }) => {
+        expect(service.name).toBe('fixture');
+        return () => {
+          effects.push('host:first');
+        };
+      }, () => {
+        throw new Error('host activation failed');
+      });
+    })).rejects.toThrow('host activation failed');
+
+    expect(effects).toEqual(['host:first', 'feature']);
+  });
 });
 
 function feature(id: string) {
-  return defineFeatureDefinition({ id, version: '1.0.0' });
+  return defineFeature(id);
 }
 
 function statusMap(statuses: readonly { featureId: FeatureId; status: string }[]) {

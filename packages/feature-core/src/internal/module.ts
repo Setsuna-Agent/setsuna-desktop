@@ -25,28 +25,29 @@ export type FeatureSetupContext<TDependencies> = Readonly<{
   provide<TValue>(declaration: CapabilityDeclaration<TValue>, value: TValue): void;
 }>;
 
-export type ProcessFeatureModule<TProcess extends FeatureProcess> = Readonly<{
+export type ProcessFeatureModule<TProcess extends FeatureProcess, TActivation = void> = Readonly<{
   process: TProcess;
   definition: FeatureDefinition;
   provides: readonly CapabilityDeclaration[];
   dependencies: readonly CapabilityRequirementDeclaration[];
-  setup(context: ErasedFeatureSetupContext): Awaitable<void>;
+  setup(context: ErasedFeatureSetupContext): Awaitable<TActivation>;
 }>;
 
-export type DefineProcessFeatureInput<TSpec extends DependencySpec> = Readonly<{
+export type DefineProcessFeatureInput<TSpec extends DependencySpec, TActivation = void> = Readonly<{
   definition: FeatureDefinition;
   provides?: readonly CapabilityDeclaration[];
   dependencies: TSpec;
-  setup(context: FeatureSetupContext<ResolveDependencies<TSpec>>): Awaitable<void>;
+  setup(context: FeatureSetupContext<ResolveDependencies<TSpec>>): Awaitable<TActivation>;
 }>;
 
 export function defineProcessFeature<
   TProcess extends FeatureProcess,
   const TSpec extends DependencySpec,
+  TActivation = void,
 >(
   process: TProcess,
-  input: DefineProcessFeatureInput<TSpec>,
-): ProcessFeatureModule<TProcess> {
+  input: DefineProcessFeatureInput<TSpec, TActivation>,
+): ProcessFeatureModule<TProcess, TActivation> {
   const provides = Object.freeze([...(input.provides ?? [])]);
   const dependencies = eraseDependencySpec(input.dependencies);
 

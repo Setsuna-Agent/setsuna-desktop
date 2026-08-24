@@ -102,7 +102,7 @@ async function buildTreeDocument() {
   }
 
   const routeRows = routeMap.map(([change, location]) => `| ${change} | ${location} |`).join('\n');
-  return `# Repository Tree\n\n> 此文件由 \`pnpm docs:tree\` 生成。不要手工维护逐文件清单；职责和设计约束写在 \`docs/\`。\n\n## 分层方向\n\n\`contracts -> runtime -> Electron main/preload -> renderer\`\n\n- 生产代码只放在各模块的 \`src/\`。\n- 测试只放在独立的 \`test/\`，并镜像生产目录。\n- renderer 按 \`app / features / services / shared\` 组织。\n- runtime 的 Agent loop 按 \`core / context / lifecycle / memory / tools\` 组织，实现通过 ports/adapters 隔离。\n\n## 常用入口\n\n| 改动类型 | 入口 |\n| --- | --- |\n${routeRows}\n\n## 目录索引\n\n目录后的数字分别表示直属文件数和递归文件总数；生成物与依赖目录不会进入索引。\n\n${sections.join('\n\n')}\n`;
+  return `# Repository Tree\n\n> 此文件由 \`pnpm docs:tree\` 生成。不要手工维护逐文件清单；职责和设计约束写在 \`docs/\`。\n\n## 分层方向\n\n- Core 技术层：\`contracts -> runtime -> Electron main/preload -> renderer\`。\n- 纵向业务层：\`feature-core + packages/features/*/{contracts,runtime,renderer,main,preload} -> 各进程显式 composition root\`。\n\n- 生产代码只放在各模块的 \`src/\`。\n- 测试只放在独立的 \`test/\`，并镜像生产目录。\n- renderer 按 \`app / features / services / shared\` 组织；纵向 Feature presentation 由对应 package 拥有。\n- runtime 的 Agent loop 按 \`core / context / lifecycle / memory / tools\` 组织，实现通过 ports/adapters 隔离。\n\n## 常用入口\n\n| 改动类型 | 入口 |\n| --- | --- |\n${routeRows}\n\n## 目录索引\n\n目录后的数字分别表示直属文件数和递归文件总数；生成物与依赖目录不会进入索引。\n\n${sections.join('\n\n')}\n`;
 }
 
 const nextDocument = await buildTreeDocument();

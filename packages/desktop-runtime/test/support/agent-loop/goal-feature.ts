@@ -6,7 +6,6 @@ import {
 import { createFeatureProjectionStore } from '@setsuna-desktop/feature-core/runtime';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { onTestFinished } from 'vitest';
-import { RuntimeFeatureEventRegistry } from '../../../src/features/events/runtime-feature-event-registry.js';
 import { ThreadStoreEventReader } from '../../../src/features/events/thread-store-event-reader.js';
 import { AgentLoop, type AgentLoopOptions } from '../../../src/loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../../../src/loop/lifecycle/runtime-event-writer.js';
@@ -16,10 +15,8 @@ export function createGoalEnabledAgentLoop(options: AgentLoopOptions): AgentLoop
   const eventWriter = options.eventWriter
     ?? new RuntimeEventWriter(options.threadStore, options.eventBus);
   const loop = new AgentLoop({ ...options, eventWriter });
-  const eventDispatcher = new RuntimeFeatureEventRegistry();
   const registry = createRuntimeGoalEventRegistry();
   const projection = createFeatureProjectionStore<GoalState>({
-    featureId: goalFeature.id,
     eventReader: new ThreadStoreEventReader(options.threadStore),
     initialState: () => Object.freeze({ goal: null }),
     reduce: (state, record) => registry.reduce(state, record),
@@ -30,8 +27,6 @@ export function createGoalEnabledAgentLoop(options: AgentLoopOptions): AgentLoop
     scopeId: 'goal-agent-loop-test',
   });
   scope.scope.track(projection, (store) => store.dispose());
-  eventDispatcher.registerProjection(scope.scope, projection);
-  scope.scope.add(eventWriter.subscribePersisted((event) => eventDispatcher.accept(event)));
   const control = new RuntimeGoalCoordinator({
     host: loop.goalRuntimeHost(),
     projection,

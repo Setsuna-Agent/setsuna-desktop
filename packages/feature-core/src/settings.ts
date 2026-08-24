@@ -5,8 +5,6 @@ import type { Disposer } from './scope.js';
 const DOCUMENT_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 
 export type FeatureSettingsSyncPolicy = 'portable' | 'device-local' | 'never';
-export type FeatureSettingsRetentionPolicy = 'retain-until-explicit-delete';
-export type FeatureSettingsApplyPolicy = 'immediate' | 'next-turn' | 'restart-runtime' | 'restart-app';
 
 export type FeatureSecretMetadata = Readonly<{
   set: boolean;
@@ -34,8 +32,6 @@ export type FeatureSettingsDocumentDefinition<
   credentialBackupSecretNames?: readonly string[];
   normalizeSecretPatch(patch: TSecretPatch): Readonly<Record<string, string | null>>;
   syncPolicy: FeatureSettingsSyncPolicy;
-  retentionPolicy: FeatureSettingsRetentionPolicy;
-  applyPolicy: FeatureSettingsApplyPolicy;
 }>;
 
 export type ErasedFeatureSettingsDocumentDefinition = Readonly<{
@@ -54,8 +50,6 @@ export type ErasedFeatureSettingsDocumentDefinition = Readonly<{
   credentialBackupSecretNames: readonly string[];
   normalizeSecretPatch(patch: unknown): Readonly<Record<string, string | null>>;
   syncPolicy: FeatureSettingsSyncPolicy;
-  retentionPolicy: FeatureSettingsRetentionPolicy;
-  applyPolicy: FeatureSettingsApplyPolicy;
 }>;
 
 export type FeatureSettingsBundle<
@@ -96,7 +90,8 @@ export interface RuntimeFeatureSettingsDocumentHandle<
 }
 
 export interface RuntimeFeatureSettingsRegistry {
-  register(bundle: ErasedFeatureSettingsBundle): void;
+  /** Validates the complete static catalog before publishing any document. */
+  registerBundles(bundles: readonly ErasedFeatureSettingsBundle[]): void;
   open<TStored, TPublic, TPatch, TSecretPatch>(
     definition: FeatureSettingsDocumentDefinition<TStored, TPublic, TPatch, TSecretPatch>,
   ): RuntimeFeatureSettingsDocumentHandle<TStored, TPublic, TPatch, TSecretPatch>;
@@ -267,7 +262,5 @@ function eraseDefinition<TStored, TPublic, TPatch, TSecretPatch>(
     credentialBackupSecretNames: definition.credentialBackupSecretNames ?? Object.freeze([]),
     normalizeSecretPatch: (patch) => definition.normalizeSecretPatch(patch as TSecretPatch),
     syncPolicy: definition.syncPolicy,
-    retentionPolicy: definition.retentionPolicy,
-    applyPolicy: definition.applyPolicy,
   });
 }

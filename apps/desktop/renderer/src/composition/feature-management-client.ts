@@ -3,7 +3,7 @@ import type {
   RuntimeFeatureOperationResponse,
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
-import { defineFeatureDefinition, type FeatureId } from '@setsuna-desktop/feature-core/definition';
+import { defineFeature, type FeatureId } from '@setsuna-desktop/feature-core/definition';
 import type { FeatureSettingsDiagnosis } from '@setsuna-desktop/feature-core/settings';
 import type { FeatureStatusSnapshot } from '@setsuna-desktop/feature-core/status';
 
@@ -153,17 +153,9 @@ function parseManagementSnapshot(value: unknown): FeatureManagementSnapshot {
 
 function parseFeatureStatus(value: unknown): FeatureStatusSnapshot {
   const record = objectRecord(value, 'Feature status must be an object.');
-  const definition = defineFeatureDefinition({
-    id: requiredString(record.featureId, 'Feature status featureId is invalid.'),
-    version: requiredString(record.version, 'Feature status version is invalid.'),
-  });
+  const definition = defineFeature(requiredString(record.featureId, 'Feature status featureId is invalid.'));
   const criticality = oneOf(record.criticality, ['required', 'optional'] as const, 'Feature criticality is invalid.');
-  const status = oneOf(record.status, ['active', 'degraded', 'failed', 'blocked'] as const, 'Feature status is invalid.');
-  const lifecycle = oneOf(
-    record.lifecycle,
-    ['declared', 'starting', 'active', 'degraded', 'draining', 'stopped'] as const,
-    'Feature lifecycle is invalid.',
-  );
+  const status = oneOf(record.status, ['active', 'degraded', 'failed'] as const, 'Feature status is invalid.');
   const diagnostic = record.diagnostic === undefined
     ? undefined
     : (() => {
@@ -175,10 +167,8 @@ function parseFeatureStatus(value: unknown): FeatureStatusSnapshot {
       })();
   return Object.freeze({
     featureId: definition.id,
-    version: definition.version,
     criticality,
     status,
-    lifecycle,
     ...(diagnostic ? { diagnostic } : {}),
   });
 }

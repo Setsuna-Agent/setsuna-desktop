@@ -4,12 +4,6 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main';
 import {
-  finalizeCommittedWebDavRestore,
-  recoverInterruptedWebDavRestore,
-  rollbackCommittedWebDavRestore,
-  type WebDavSyncLifecycle,
-} from '@setsuna-desktop/feature-webdav-sync/main';
-import {
   app,
   BrowserWindow,
   Menu,
@@ -71,8 +65,14 @@ import {
   activateBuiltinMainFeatures,
   type ActivatedBuiltinMainFeatures,
 } from './composition/builtin-main-features.js';
-import { builtinFeatureSettingsDocuments } from './composition/builtin-feature-settings.js';
-import { desktopWebDavSyncStorageHost } from './composition/webdav-sync-storage-host.js';
+import {
+  desktopWebDavSyncStorageHost,
+  finalizeCommittedWebDavRestore,
+  recoverInterruptedWebDavRestore,
+  rollbackCommittedWebDavRestore,
+  type DesktopWebDavSyncLifecycle,
+  webDavSyncFeatureSettingsDocuments,
+} from './composition/webdav-sync-storage-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
@@ -101,7 +101,7 @@ let desktopUpdater: DesktopUpdater | null = null;
 let networkProxyService: DesktopNetworkProxyService | null = null;
 let browserProxyController: DesktopBrowserProxyController | null = null;
 let networkProxyFetch: DesktopNetworkProxyFetch | null = null;
-let webDavSyncLifecycle: WebDavSyncLifecycle | null = null;
+let webDavSyncLifecycle: DesktopWebDavSyncLifecycle | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
 let desktopServicesShutdownPromise: Promise<void> | null = null;
@@ -164,7 +164,7 @@ async function createWindow(): Promise<void> {
   const webDavRestoreRecovery = await recoverInterruptedWebDavRestore(
     dataLayout.root,
     desktopWebDavSyncStorageHost,
-    builtinFeatureSettingsDocuments,
+    webDavSyncFeatureSettingsDocuments,
   );
   const windowStateFilePath = dataLayout.windowStatePath;
   const windowState = loadDesktopWindowState(windowStateFilePath, desktopDisplayWorkAreas(), {
@@ -304,7 +304,7 @@ async function createWindow(): Promise<void> {
         configPath: dataLayout.webDavSyncConfigPath,
         credentialVault,
         dataRoot: dataLayout.root,
-        featureSettingsDocuments: builtinFeatureSettingsDocuments,
+        featureSettingsDocuments: webDavSyncFeatureSettingsDocuments,
         mainWindow: currentMainWindow,
         requestRelaunch: requestDesktopRelaunch,
         runtime: Object.freeze({
@@ -360,7 +360,7 @@ async function createWindow(): Promise<void> {
       await rollbackCommittedWebDavRestore(
         dataLayout.root,
         desktopWebDavSyncStorageHost,
-        builtinFeatureSettingsDocuments,
+        webDavSyncFeatureSettingsDocuments,
       );
       await currentRuntimeHost.start();
     }
@@ -368,7 +368,7 @@ async function createWindow(): Promise<void> {
       await finalizeCommittedWebDavRestore(
         dataLayout.root,
         desktopWebDavSyncStorageHost,
-        builtinFeatureSettingsDocuments,
+        webDavSyncFeatureSettingsDocuments,
       );
     }
   } catch (error) {

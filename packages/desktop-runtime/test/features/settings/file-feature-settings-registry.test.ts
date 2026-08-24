@@ -1,4 +1,6 @@
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
+import { FeatureCompositionValidationError } from '@setsuna-desktop/feature-core/status';
 import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,6 +24,32 @@ describe('FileFeatureSettingsRegistry', () => {
   afterEach(async () => {
     if (temporaryRoot) await rm(temporaryRoot, { recursive: true, force: true });
     temporaryRoot = '';
+  });
+
+  it('publishes the static settings catalog atomically after validating every bundle', () => {
+    const registry = new FileFeatureSettingsRegistry(path.join(os.tmpdir(), 'unused-feature-settings-fixture'));
+    const foreignFeature = defineFeature('foreign-owner');
+
+    expect(() => registry.registerBundles([
+      imageGenerationSettings,
+      Object.freeze({
+        featureId: foreignFeature.id,
+        erasedDocuments: imageGenerationSettings.erasedDocuments,
+      }),
+    ])).toThrow(FeatureCompositionValidationError);
+    expect(registry.listRegisteredDocuments()).toEqual([]);
+
+    expect(() => registry.registerBundles([
+      imageGenerationSettings,
+      imageGenerationSettings,
+    ])).toThrow(FeatureCompositionValidationError);
+    expect(registry.listRegisteredDocuments()).toEqual([]);
+
+    registry.registerBundles([imageGenerationSettings]);
+    expect(registry.listRegisteredDocuments()).toEqual([{
+      featureId: 'image-generation',
+      documentId: 'connection',
+    }]);
   });
 
   it('recovers the envelope-selected secret across all three crash windows', async () => {
@@ -154,7 +182,7 @@ function registeredRegistry(
   secretPort?: VersionedSecretPort,
 ): FileFeatureSettingsRegistry {
   const registry = new FileFeatureSettingsRegistry(dataDir, secretPort);
-  registry.register(imageGenerationSettings);
+  registry.registerBundles([imageGenerationSettings]);
   return registry;
 }
 

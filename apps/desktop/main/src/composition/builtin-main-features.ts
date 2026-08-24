@@ -3,15 +3,13 @@ import type {
   RuntimeRequestInput,
 } from '@setsuna-desktop/contracts';
 import {
-  declareCapabilityProvider,
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import {
-  composeMainFeatures,
-  mountMainFeature,
+  completeFeatureHostActivation,
+  defineMainFeatureHost,
   type MainFeatureComposition,
-  type MainFeatureMount,
 } from '@setsuna-desktop/feature-core/main';
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
 import {
@@ -46,13 +44,10 @@ import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.
 import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 
-/** Main-process Features are explicit so native ownership and startup policy stay reviewable. */
-export const builtinMainFeatures = [
-  mountMainFeature(browserMainFeature, { criticality: 'required' }),
-  mountMainFeature(reviewMainFeature, { criticality: 'required' }),
-  mountMainFeature(terminalMainFeature, { criticality: 'required' }),
-  mountMainFeature(webDavSyncMainFeature, { criticality: 'required' }),
-] as const satisfies readonly MainFeatureMount[];
+const mainFeatures = defineMainFeatureHost({
+  required: [browserMainFeature, reviewMainFeature, terminalMainFeature, webDavSyncMainFeature],
+  optional: [],
+});
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;
@@ -69,11 +64,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
   webDavSyncHost: WebDavSyncMainHost;
 }>): Promise<ActivatedBuiltinMainFeatures> {
-  const composition = await composeMainFeatures({
-    mounts: builtinMainFeatures,
+  const composition = await mainFeatures.activate({
     hostCapabilities: [
       provideHostCapability(
-        declareCapabilityProvider(browserMainHostCapability),
+        browserMainHostCapability,
         Object.freeze({
           activeKeyboardShortcutBindings: input.activeKeyboardShortcutBindings,
           interfaceLanguage: input.interfaceLanguage,
@@ -81,7 +75,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(reviewCommitMessageCapability),
+        reviewCommitMessageCapability,
         Object.freeze({
           generate: async (source: DesktopCommitMessageGenerationSource) => {
             const result = await input.requestRuntime({
@@ -97,7 +91,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(reviewFilePreviewCapability),
+        reviewFilePreviewCapability,
         Object.freeze({
           createWorkspacePreview: async (workspaceRoot: string, filePath: string) => {
             const resolved = await resolveWorkspaceFilePreview(workspaceRoot, filePath);
@@ -123,7 +117,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(reviewRendererSenderCapability),
+        reviewRendererSenderCapability,
         Object.freeze({
           isAllowed: (senderId: number) => (
             !input.mainWindow.isDestroyed()
@@ -133,7 +127,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(terminalEnvironmentCapability),
+        terminalEnvironmentCapability,
         Object.freeze({
           resolve: async () => Object.freeze({
             PATH: desktopShellPath(process.env.PATH),
@@ -142,7 +136,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(terminalEventPublisherCapability),
+        terminalEventPublisherCapability,
         Object.freeze({
           publish: (event: DesktopTerminalEventPayload) => {
             if (!input.mainWindow.isDestroyed() && !input.mainWindow.webContents.isDestroyed()) {
@@ -152,18 +146,20 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
-        declareCapabilityProvider(webDavSyncMainHostCapability),
+        webDavSyncMainHostCapability,
         input.webDavSyncHost,
       ),
     ],
   });
-  const dependencies = composition.resolveHostDependencies({
-    browserControl: requiredCapability(browserControlConnectionCapability),
-    webDavSync: requiredCapability(webDavSyncLifecycleCapability),
-  });
-  return Object.freeze({
-    browserControl: dependencies.browserControl,
-    composition,
-    webDavSync: dependencies.webDavSync,
+  return completeFeatureHostActivation(composition, (host) => {
+    const dependencies = host.composition.resolveHostDependencies({
+      browserControl: requiredCapability(browserControlConnectionCapability),
+      webDavSync: requiredCapability(webDavSyncLifecycleCapability),
+    });
+    return Object.freeze({
+      browserControl: dependencies.browserControl,
+      composition: host.composition,
+      webDavSync: dependencies.webDavSync,
+    });
   });
 }

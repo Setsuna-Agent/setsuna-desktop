@@ -4,9 +4,9 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import {
-  CollaborationTaskList,
-  useCollaborationState,
-} from '@setsuna-desktop/feature-collaboration/renderer';
+  CollaborationFeatureTaskList,
+  useCollaborationFeatureState,
+} from '../../../composition/CollaborationFeatureBoundary.js';
 import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
 import { formatTokens, type DesktopReviewState } from '../../workspace/model.js';
 import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
@@ -64,7 +64,7 @@ export function ConversationOverviewPanel({
   const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
-  const collaboration = useCollaborationState(currentThread.id);
+  const collaboration = useCollaborationFeatureState(currentThread.id);
   const callCount = usageSummary?.recordCount ?? 0;
   const totalTokensLabel = formatTokens(usageSummary?.totalTokens ?? 0);
   const cacheHitRateLabel = formatCacheHitRate(usageSummary?.cachedInputTokens ?? 0, usageSummary?.inputTokens ?? 0);
@@ -144,7 +144,7 @@ export function ConversationOverviewPanel({
         </div>
       </div>
       {shellProcessClient ? <ConversationBackgroundServices client={shellProcessClient} threadId={currentThread.id} /> : null}
-      <CollaborationTaskList
+      <CollaborationFeatureTaskList
         parentThreadId={currentThread.id}
         tasks={collaboration.state.tasks}
         translate={t}

@@ -27,6 +27,12 @@
 
 Main/preload/runtime 的 external、format 和 platform 设置在这里统一维护。
 
+### `feature-package-aliases.ts`
+
+Vite 与 Vitest 共用的 build-time Feature source alias。它从 `packages/features/*` 派生 package-name 到 `src/` 的映射，避免新增 Feature 时同步两份手写清单；运行时 inventory 仍由四个显式 composition root 决定。
+
+`pnpm build:features` 同样通过 pnpm workspace filter 构建全部 Feature package，不维护第二份 package path 列表。
+
 ### `clean.mjs`
 
 删除明确的构建输出和增量状态。修改时保持目标列表窄，不能把 workspace root 或用户数据目录作为递归目标。
@@ -41,7 +47,9 @@ Main/preload/runtime 的 external、format 和 platform 设置在这里统一维
 
 检查：
 
-- `contracts → runtime → main/preload → renderer` 依赖方向。
+- Core 技术层依赖方向，以及 `feature-core`/纵向 Feature 的进程入口与跨 Feature import 边界。
+- 中央 runtime-client/settings/capabilities/tool-result 区域不得直接导入具体 Feature。
+- renderer Feature 不得使用 raw transport 或直接访问 preload 全局桥。
 - Contracts 相对 import cycle。
 - `src/` 混入测试。
 - Build output 混入 test artifact。
@@ -49,6 +57,8 @@ Main/preload/runtime 的 external、format 和 platform 设置在这里统一维
 - 单目录直属 source file 密度。
 
 由 `pnpm check:architecture` 调用。
+
+Feature 边界检查只判断 exact import 与 AST 可证明的调用，不根据变量名或字符串内容猜测 owner。持久 identifier 的 rename/delete 兼容由对应 Feature 的 decoder/migration 和 review 负责。
 
 ### `generate-tree.mjs`
 
@@ -60,6 +70,10 @@ Main/preload/runtime 的 external、format 和 platform 设置在这里统一维
 - 支持 `--check` 验证未过期。
 
 模块职责写在 `docs/`；不要把长设计说明塞进生成器模板。
+
+### `benchmark-feature-projection.ts`
+
+使用真实 SQLite ThreadStore 与 `ThreadStoreEventReader`，手动测量一个或两个 Feature projection 的 process-cold 全量重放。该命令不进入 CI、不清除 OS page cache，也不设置统一阈值；它只为是否需要持久 checkpoint 提供同机可重复证据。
 
 ## Native dependency
 
@@ -170,4 +184,3 @@ Publish job：
 - 生成物必须 deterministic。
 - 增加 `scripts/test/` 或 release test。
 - 同步 package scripts、workflow 和文档。
-

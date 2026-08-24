@@ -1,236 +1,249 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
-import { declareCapabilityProvider, provideHostCapability } from '@setsuna-desktop/feature-core/capability';
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
+import { provideHostCapability } from '@setsuna-desktop/feature-core/capability';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import type { FeatureOperationTransport } from '@setsuna-desktop/feature-core/operation';
 import {
-  composeRendererFeatures,
-  mountRendererFeature,
+  defineRendererFeatureHost,
   rendererFeatureEventFeedCapability,
   rendererFeatureOperationTransportCapability,
-  rendererSettingsViewRegistryCapability,
-  rendererToolResultViewRegistryCapability,
+  type RendererFeatureActivation,
+  type RendererFeatureContributionInput,
+  type RendererFeatureContributions,
   type RendererFeatureEventFeed,
 } from '@setsuna-desktop/feature-core/renderer';
-import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
+import { FeatureCompositionValidationError } from '@setsuna-desktop/feature-core/status';
 import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  RendererSettingsViewRegistry,
-  RendererToolResultViewRegistry,
+  createRendererFeatureViews,
+  RendererSettingsViewCatalog,
+  RendererToolResultViewCatalog,
 } from '../../../src/composition/feature-view-registries.js';
 
-describe('Renderer Feature view registries', () => {
+describe('Renderer Feature view catalogs', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('orders settings contributions, rejects conflicts, and removes scope-owned entries', async () => {
-    const registry = new RendererSettingsViewRegistry();
-    const first = scope('first-feature');
-    const second = scope('second-feature');
-    registry.register(first.scope, {
-      sectionId: 'later',
-      location: 'capabilities',
-      order: 20,
-      titleKey: 'feature.first.title',
-      render: () => null,
-    });
-    registry.register(second.scope, {
-      sectionId: 'earlier',
-      location: 'capabilities',
-      order: 10,
-      titleKey: 'feature.second.title',
-      render: () => null,
-    });
+  it('orders settings contributions and rejects conflicts while composing the static catalog', () => {
+    const catalog = new RendererSettingsViewCatalog([
+      activation('first-feature', {
+        settingsViews: [{
+          sectionId: 'later',
+          location: 'capabilities',
+          order: 20,
+          titleKey: 'feature.first.title',
+          render: () => null,
+        }],
+      }),
+      activation('second-feature', {
+        settingsViews: [{
+          sectionId: 'earlier',
+          location: 'capabilities',
+          order: 10,
+          titleKey: 'feature.second.title',
+          render: () => null,
+        }],
+      }),
+    ]);
 
-    expect(registry.list('capabilities').map(({ sectionId }) => sectionId)).toEqual(['earlier', 'later']);
-    expect(() => registry.register(second.scope, {
-      sectionId: 'later',
-      location: 'capabilities',
-      order: 30,
-      titleKey: 'feature.second.conflict',
-      render: () => null,
-    })).toThrow('Settings view conflict');
-
-    await first.finishDispose();
-    expect(registry.find('capabilities', 'later')).toBeUndefined();
-    await second.finishDispose();
+    expect(catalog.list('capabilities').map(({ sectionId }) => sectionId)).toEqual(['earlier', 'later']);
+    const error = captureError(() => new RendererSettingsViewCatalog([
+      activation('first-feature', {
+        settingsViews: [{
+          sectionId: 'duplicate',
+          location: 'settings',
+          order: 10,
+          titleKey: 'feature.first.title',
+          render: () => null,
+        }],
+      }),
+      activation('second-feature', {
+        settingsViews: [{
+          sectionId: 'duplicate',
+          location: 'settings',
+          order: 20,
+          titleKey: 'feature.second.title',
+          render: () => null,
+        }],
+      }),
+    ]));
+    expect(error).toBeInstanceOf(FeatureCompositionValidationError);
+    expect((error as FeatureCompositionValidationError).issues).toMatchObject([{
+      code: 'DUPLICATE_RENDERER_CONTRIBUTION',
+      featureIds: ['first-feature', 'second-feature'],
+    }]);
   });
 
-  it('orders host-section extensions and removes them with their Feature scope', async () => {
-    const registry = new RendererSettingsViewRegistry();
-    const first = scope('first-feature');
-    const second = scope('second-feature');
-    registry.registerSectionExtension(first.scope, {
-      id: 'later-preferences',
-      targetSectionId: 'personalization',
-      order: 20,
-      render: () => null,
-      subpages: [{ id: 'details', render: () => null }],
-    });
-    registry.registerSectionExtension(second.scope, {
-      id: 'earlier-preferences',
-      targetSectionId: 'personalization',
-      order: 10,
-      render: () => null,
-    });
-    registry.registerSectionExtension(second.scope, {
-      id: 'task-models',
-      targetSectionId: 'taskModels',
-      order: 10,
-      render: () => null,
-    });
+  it('orders host-section extensions and validates nested subpages once', () => {
+    const catalog = new RendererSettingsViewCatalog([
+      activation('first-feature', {
+        settingsSectionExtensions: [{
+          id: 'later-preferences',
+          targetSectionId: 'personalization',
+          order: 20,
+          render: () => null,
+          subpages: [{ id: 'details', render: () => null }],
+        }],
+      }),
+      activation('second-feature', {
+        settingsSectionExtensions: [{
+          id: 'earlier-preferences',
+          targetSectionId: 'personalization',
+          order: 10,
+          render: () => null,
+        }, {
+          id: 'task-models',
+          targetSectionId: 'taskModels',
+          order: 10,
+          render: () => null,
+        }],
+      }),
+    ]);
 
-    expect(registry.listSectionExtensions('personalization').map(({ id }) => id)).toEqual([
+    expect(catalog.listSectionExtensions('personalization').map(({ id }) => id)).toEqual([
       'earlier-preferences',
       'later-preferences',
     ]);
-    expect(registry.listSectionExtensions('taskModels').map(({ id }) => id)).toEqual(['task-models']);
-    expect(registry.listSectionExtensions('personalization')[1]?.subpages?.map(({ id }) => id)).toEqual([
+    expect(catalog.listSectionExtensions('taskModels').map(({ id }) => id)).toEqual(['task-models']);
+    expect(catalog.listSectionExtensions('personalization')[1]?.subpages?.map(({ id }) => id)).toEqual([
       'details',
     ]);
-    expect(() => registry.registerSectionExtension(second.scope, {
-      id: 'later-preferences',
-      targetSectionId: 'personalization',
-      order: 30,
-      render: () => null,
-    })).toThrow('Settings section extension conflict');
 
-    await first.finishDispose();
-    expect(registry.listSectionExtensions('personalization').map(({ id }) => id)).toEqual([
-      'earlier-preferences',
-    ]);
-    await second.finishDispose();
-    expect(registry.listSectionExtensions('personalization')).toEqual([]);
-    expect(registry.listSectionExtensions('taskModels')).toEqual([]);
+    const error = captureError(() => new RendererSettingsViewCatalog([
+      activation('invalid-feature', {
+        settingsSectionExtensions: [{
+          id: 'preferences',
+          targetSectionId: 'personalization',
+          order: 10,
+          render: () => null,
+          subpages: [{ id: 'duplicate', render: () => null }, { id: 'duplicate', render: () => null }],
+        }],
+      }),
+    ]));
+    expect(error).toBeInstanceOf(FeatureCompositionValidationError);
+    expect((error as FeatureCompositionValidationError).issues).toMatchObject([{
+      code: 'INVALID_RENDERER_CONTRIBUTION',
+      featureIds: ['invalid-feature'],
+    }]);
   });
 
-  it('mounts Memory into Personalization and Task Models without creating a settings page', async () => {
-    const registry = new RendererSettingsViewRegistry();
+  it('collects Memory settings metadata from a successful Feature activation', async () => {
     const transport: FeatureOperationTransport = {
       call: vi.fn(async () => {
         throw new Error('State reads are not expected while composing the Feature.');
       }) as FeatureOperationTransport['call'],
     };
-    const composition = await composeRendererFeatures({
-      mounts: [mountRendererFeature(memoryRendererFeature, { criticality: 'required' })],
+    const { composition } = await defineRendererFeatureHost({
+      required: [memoryRendererFeature],
+      optional: [],
+    }).activate({
+      hostMessages: { 'en-US': {} },
       hostCapabilities: [
         provideHostCapability(
-          declareCapabilityProvider(rendererFeatureOperationTransportCapability),
+          rendererFeatureOperationTransportCapability,
           transport,
-        ),
-        provideHostCapability(
-          declareCapabilityProvider(rendererSettingsViewRegistryCapability),
-          registry,
         ),
       ],
     });
+    const views = createRendererFeatureViews(composition.activations());
 
-    expect(registry.list('settings')).toEqual([]);
-    expect(registry.listSectionExtensions('personalization')).toMatchObject([{
+    expect(views.settings.list('settings')).toEqual([]);
+    expect(views.settings.listSectionExtensions('personalization')).toMatchObject([{
       featureId: 'memory',
       id: 'memory-preferences',
       subpages: [{ id: 'preview' }],
     }]);
-    expect(registry.listSectionExtensions('taskModels')).toMatchObject([{
+    expect(views.settings.listSectionExtensions('taskModels')).toMatchObject([{
       featureId: 'memory',
       id: 'memory-task-models',
     }]);
 
     await composition.dispose();
-    expect(registry.listSectionExtensions('personalization')).toEqual([]);
-    expect(registry.listSectionExtensions('taskModels')).toEqual([]);
   });
 
-  it('uses exact result kind and major, fails closed on bad payloads, and unregisters on dispose', async () => {
+  it('uses exact result kind and major and fails closed on bad payloads', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const registry = new RendererToolResultViewRegistry();
-    const owner = scope('result-feature');
-    registry.register(owner.scope, {
-      id: 'result-feature.view',
-      resultKind: 'result-feature.output',
-      major: 2,
-      payload: defineRuntimeCodec<{ count: number }>((value) => {
-        if (!value || typeof value !== 'object' || (value as { count?: unknown }).count !== 2) {
-          throw new Error('invalid fixture payload');
-        }
-        return { count: 2 };
+    const catalog = new RendererToolResultViewCatalog([
+      activation('result-feature', {
+        toolResultViews: [{
+          id: 'result-feature.view',
+          resultKind: 'result-feature.output',
+          major: 2,
+          payload: defineRuntimeCodec<{ count: number }>((value) => {
+            if (!value || typeof value !== 'object' || (value as { count?: unknown }).count !== 2) {
+              throw new Error('invalid fixture payload');
+            }
+            return { count: 2 };
+          }),
+          legacy: {
+            matches: (value) => Boolean(
+              value
+              && typeof value === 'object'
+              && (value as { legacyCount?: unknown }).legacyCount !== undefined,
+            ),
+            payload: defineRuntimeCodec<{ count: number }>((value) => {
+              if (!value || typeof value !== 'object' || (value as { legacyCount?: unknown }).legacyCount !== 2) {
+                throw new Error('invalid legacy fixture payload');
+              }
+              return { count: 2 };
+            }),
+          },
+          render: () => null,
+        }],
       }),
-      legacy: {
-        matches: (value) => Boolean(
-          value
-          && typeof value === 'object'
-          && (value as { legacyCount?: unknown }).legacyCount !== undefined,
-        ),
-        payload: defineRuntimeCodec<{ count: number }>((value) => {
-          if (!value || typeof value !== 'object' || (value as { legacyCount?: unknown }).legacyCount !== 2) {
-            throw new Error('invalid legacy fixture payload');
-          }
-          return { count: 2 };
-        }),
-      },
-      render: () => null,
-    });
+    ]);
 
-    expect(registry.resolve({
+    expect(catalog.resolve({
       resultKind: 'result-feature.output',
       resultMajor: 2,
       payload: { count: 2 },
     })).toMatchObject({ featureId: 'result-feature', payload: { count: 2 } });
-    expect(registry.resolve({
+    expect(catalog.resolve({
       resultKind: 'result-feature.output',
       resultMajor: 1,
       payload: { count: 2 },
     })).toBeNull();
-    expect(registry.resolve({
+    expect(catalog.resolve({
       resultKind: 'result-feature.output',
       resultMajor: 2,
       payload: { count: 1 },
     })).toBeNull();
-    expect(registry.resolve({ legacyCount: 2 })).toMatchObject({
+    expect(catalog.resolve({ legacyCount: 2 })).toMatchObject({
       featureId: 'result-feature',
       payload: { count: 2 },
     });
-    expect(registry.resolve({ legacyCount: 1 })).toBeNull();
-    expect(registry.resolve({ unrelated: true })).toBeNull();
-
-    await owner.finishDispose();
-    expect(registry.resolve({
-      resultKind: 'result-feature.output',
-      resultMajor: 2,
-      payload: { count: 2 },
-    })).toBeNull();
-    expect(registry.resolve({ legacyCount: 2 })).toBeNull();
+    expect(catalog.resolve({ legacyCount: 1 })).toBeNull();
+    expect(catalog.resolve({ unrelated: true })).toBeNull();
   });
 
-  it('lets the Collaboration Feature recover a persisted flat spawn_agent result', async () => {
-    const registry = new RendererToolResultViewRegistry();
+  it('recovers Collaboration legacy tool results from its static activation metadata', async () => {
     const transport: FeatureOperationTransport = {
       call: vi.fn(async () => {
-        throw new Error('State reads are not expected in this registry test.');
+        throw new Error('State reads are not expected in this catalog test.');
       }) as FeatureOperationTransport['call'],
     };
     const feed: RendererFeatureEventFeed = {
       subscribe: () => ({ dispose: () => undefined }),
     };
-    const composition = await composeRendererFeatures({
-      mounts: [mountRendererFeature(collaborationRendererFeature, { criticality: 'required' })],
+    const { composition } = await defineRendererFeatureHost({
+      required: [collaborationRendererFeature],
+      optional: [],
+    }).activate({
+      hostMessages: { 'en-US': {} },
       hostCapabilities: [
         provideHostCapability(
-          declareCapabilityProvider(rendererFeatureOperationTransportCapability),
+          rendererFeatureOperationTransportCapability,
           transport,
         ),
         provideHostCapability(
-          declareCapabilityProvider(rendererFeatureEventFeedCapability),
+          rendererFeatureEventFeedCapability,
           feed,
-        ),
-        provideHostCapability(
-          declareCapabilityProvider(rendererToolResultViewRegistryCapability),
-          registry,
         ),
       ],
     });
+    const views = createRendererFeatureViews(composition.activations());
 
-    expect(registry.resolve({
+    expect(views.toolResults.resolve({
       tool: 'spawn_agent',
       senderThreadId: 'thread_parent',
       childThreadId: 'thread_child',
@@ -257,11 +270,25 @@ describe('Renderer Feature view registries', () => {
   });
 });
 
-function scope(featureId: string) {
-  const definition = defineFeatureDefinition({ id: featureId, version: '1.0.0' });
-  return createFeatureScope({
-    featureId: definition.id,
-    scopeId: `${featureId}:renderer`,
-    process: 'renderer',
+function activation(
+  featureId: string,
+  contributions: RendererFeatureContributionInput,
+): RendererFeatureActivation {
+  const definition = defineFeature(featureId);
+  const value: RendererFeatureContributions = Object.freeze({
+    composerStatusViews: Object.freeze([...(contributions.composerStatusViews ?? [])]),
+    settingsViews: Object.freeze([...(contributions.settingsViews ?? [])]),
+    settingsSectionExtensions: Object.freeze([...(contributions.settingsSectionExtensions ?? [])]),
+    toolResultViews: Object.freeze([...(contributions.toolResultViews ?? [])]),
   });
+  return Object.freeze({ featureId: definition.id, value });
+}
+
+function captureError(run: () => unknown): unknown {
+  try {
+    run();
+    throw new Error('Expected fixture to fail.');
+  } catch (error) {
+    return error;
+  }
 }

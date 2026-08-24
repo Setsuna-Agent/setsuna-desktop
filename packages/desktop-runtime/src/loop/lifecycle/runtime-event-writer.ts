@@ -27,9 +27,6 @@ const DEFAULT_DELTA_FLUSH_MS = 25;
  */
 export class RuntimeEventWriter {
   private readonly batches = new Map<string, PendingBatch>();
-  private readonly persistedObservers = new Set<(
-    event: StoredThreadEvent,
-  ) => void | PromiseLike<void>>();
   private readonly streamMetrics: RuntimeStreamMetricsCollector;
   private readonly writeQueues = new Map<string, Promise<void>>();
   private fatalError: Error | null = null;
@@ -41,13 +38,6 @@ export class RuntimeEventWriter {
     debugTrace?: RuntimeDebugTraceSink,
   ) {
     this.streamMetrics = new RuntimeStreamMetricsCollector(debugTrace);
-  }
-
-  subscribePersisted(
-    observer: (event: StoredThreadEvent) => void | PromiseLike<void>,
-  ): () => void {
-    this.persistedObservers.add(observer);
-    return () => this.persistedObservers.delete(observer);
   }
 
   append(threadId: string, event: PendingCoreRuntimeEvent): Promise<RuntimeEvent | null>;
@@ -83,7 +73,10 @@ export class RuntimeEventWriter {
       await this.persistAndPublish(pending);
       if (this.threadStore.appendEvents) {
         savedEvents = await this.threadStore.appendEvents(threadId, events);
-        for (const saved of savedEvents) await this.publishPersisted(saved);
+        for (const saved of savedEvents) {
+          this.eventBus.publish(saved);
+          this.streamMetrics.recordPersisted(saved);
+        }
         return;
       }
       for (const event of events) {
@@ -173,14 +166,9 @@ export class RuntimeEventWriter {
 
   private async persistAndPublishOne(event: PendingEvent): Promise<StoredThreadEvent> {
     const saved = await this.threadStore.appendEvent(event.threadId, event);
-    await this.publishPersisted(saved);
-    return saved;
-  }
-
-  private async publishPersisted(saved: StoredThreadEvent): Promise<void> {
-    await Promise.all([...this.persistedObservers].map((observer) => observer(saved)));
     this.eventBus.publish(saved);
     this.streamMetrics.recordPersisted(saved);
+    return saved;
   }
 
   private recordFailure(error: unknown): void {

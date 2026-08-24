@@ -4,7 +4,7 @@ import type {
   RegisteredSettingsSectionExtension,
   RendererTranslate,
 } from '@setsuna-desktop/feature-core/renderer';
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SettingsSectionExtensionOutlet } from '../../../../src/features/settings/SettingsSectionExtensionOutlet.js';
@@ -37,7 +37,7 @@ describe('SettingsSectionExtensionOutlet', () => {
   });
 });
 
-const featureId = defineFeatureDefinition({ id: 'test-feature', version: '1.0.0' }).id;
+const featureId = defineFeature('test-feature').id;
 const translate: RendererTranslate = (key) => key;
 const extensions: readonly RegisteredSettingsSectionExtension[] = [{
   featureId,

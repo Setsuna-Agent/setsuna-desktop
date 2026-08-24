@@ -1,5 +1,5 @@
 import { defineRuntimeCodec } from '@setsuna-desktop/feature-core/codec';
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 import {
   defineFeatureOperation,
   FeatureOperationFailure,
@@ -266,7 +266,7 @@ function operation(id: string, path: string) {
 
 function featureScope(): FeatureScopeController {
   return createFeatureScope({
-    featureId: defineFeatureDefinition({ id: 'fixture', version: '1.0.0' }).id,
+    featureId: defineFeature('fixture').id,
     scopeId: `fixture:${Date.now()}:${Math.random()}`,
     process: 'runtime',
   });

@@ -93,13 +93,11 @@ export interface CollaborationControl {
 
 export const collaborationControlCapability: CapabilityToken<CollaborationControl> = defineCapability({
   id: 'collaboration.control',
-  major: 1,
   description: 'Control collaboration tools and child task lifecycle without exposing Feature internals',
 });
 
 export const collaborationRuntimeHostCapability: CapabilityToken<CollaborationRuntimeHost> = defineCapability({
   id: 'collaboration.runtime-host',
-  major: 1,
   description: 'Narrow Core thread and turn services required by the Collaboration runtime Feature',
 });
 
@@ -145,7 +143,6 @@ export type CollaborationRendererStateSnapshot = CollaborationStateSnapshot & Re
 
 export const collaborationRendererStateCapability: CapabilityToken<CollaborationRendererStateService> = defineCapability({
   id: 'collaboration.renderer-state',
-  major: 1,
   description: 'Thread-scoped collaboration task projections for renderer contributions and host adapters',
 });
 

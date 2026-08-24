@@ -4,9 +4,6 @@
   "description": "Image generation Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "image-generation"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

@@ -5,22 +5,22 @@ Setsuna Desktop 是 local-first Electron 工作台。Electron 提供可信桌面
 ## 分层方向
 
 ```text
-packages/contracts
-        ↓
-packages/desktop-runtime
-        ↓
-apps/desktop/main ── apps/desktop/preload
-        ↓                    ↓
-        └──────── apps/desktop/renderer
+packages/contracts        packages/feature-core
+        │                         │
+        ├──── Core layers ────────┤
+        │                         └──── packages/features/* process entries
+        ↓                                      ↓
+desktop runtime ── Electron main/preload ── React renderer
+        └──────────── explicit composition roots ────────────┘
 ```
 
 允许的依赖方向由 `scripts/check-architecture.mjs` 检查：
 
-- `contracts` 不依赖其他业务层。
-- `runtime` 只依赖 `contracts`。
-- Electron `main` 可以依赖 `contracts` 和 runtime 的公开入口。
-- `preload` 只依赖 `contracts`。
-- `renderer` 只依赖 `contracts`，不能 import main 或 runtime 实现。
+- `contracts` 不依赖其他业务层，`feature-core` 不依赖具体 Feature。
+- 每个 Feature 只开放独立的 `contracts/runtime/renderer/main/preload` 进程入口，不提供根导出。
+- Feature 之间只能导入对方 `/contracts`，不能导入实现。
+- Core runtime、main/preload 和 renderer 可以在 composition 或窄 host adapter 中导入同进程 Feature entry/contract。
+- runtime/renderer 不能跨进程导入 Feature 实现；renderer Feature 也不能访问 Node、Electron 或 raw transport。
 
 这里的箭头表示代码依赖，不等同于运行时请求方向。运行时请求从 renderer 经 preload/main 进入 runtime，事件再反向返回 renderer。
 
@@ -47,7 +47,9 @@ React renderer
 | Agent loop | turn 生命周期、prompt、模型采样、工具、审批、事件 | 具体文件/网络实现细节 |
 | Ports | runtime 内部抽象边界 | 文件格式和厂商协议细节 |
 | Adapters | store、model、MCP、tool、workspace 的具体实现 | UI 编排 |
-| Contracts | 跨层类型、事件 union、投影 reducer | I/O 和副作用 |
+| Contracts | Core 跨层类型、事件 union、投影 reducer | I/O 和副作用 |
+| Feature Core | 组合、Capability、Scope、状态与通用 contribution contract | 具体业务语义 |
+| Feature package | 业务 contracts、use case、设置、私有事件和 presentation | 全局容器、其他 Feature 实现 |
 
 ## 两组边界
 
@@ -62,7 +64,8 @@ React renderer
 
 ### 数据边界
 
-- 线程状态以 append-only `RuntimeEvent` 为真源。
+- 通用线程状态以 append-only Core `RuntimeEvent` 为真源。
+- Feature 私有持久状态使用 `feature.event` envelope，由所属 Feature codec/migration/reducer 解释。
 - `RuntimeThread` 是 reducer 投影出的 snapshot，不是另一套可独立修改的数据。
 - REST 返回可重拉的 snapshot，SSE 返回活跃线程的增量事件。
 - runtime 业务逻辑依赖 ports；SQLite、JSON、provider HTTP、MCP SDK 和本地工具都是 adapters。
@@ -82,7 +85,7 @@ Renderer 的方法级 client 把请求交给 preload，main 的 `RuntimeHost` �
 
 ### 事件
 
-Runtime 先把事件写入 store，再通过 event bus 发布。main 转发 SSE，renderer 用同一份 contracts reducer 更新当前线程，并以 `lastSeq` 去重和续订。
+Runtime 先把事件写入 store，再通过 event bus 发布。main 转发 SSE，renderer 的 Core owner 是唯一全局 sequence gate：Core record 进入通用投影，已接受的 Feature record 只向所属 controller 发 typed snapshot 刷新信号；Core resync 会让当前线程的 Feature controller 全部重读。Feature UI 不维护第二套 live reducer。
 
 ### Agent turn
 
@@ -94,7 +97,7 @@ Agent loop 创建 turn，组装环境和上下文，流式采样模型，执行�
 
 ### Contract 先行
 
-跨进程数据先进入 `packages/contracts`。不要在 renderer、main 和 runtime 各维护一套形似但不相同的类型。
+通用跨进程数据进入 `packages/contracts`；Feature 专用 DTO、operation、event 和 settings definition 进入该 Feature 的 `/contracts`。不要在 renderer、main 和 runtime 各维护一套形似但不相同的类型。
 
 ### 事件先落盘
 
@@ -110,7 +113,7 @@ Agent loop 面向 `ThreadStore`、`ModelClient`、`ToolHost` 等 port。I/O、�
 
 ### UI 状态有明确所有者
 
-Runtime snapshot 与事件属于 `useRuntimeClientState`；页面导航属于 app controller；feature 内临时交互放在对应 hook。展示组件只接收明确 props。
+Core runtime snapshot 与事件属于对应 runtime-client domain hook；纵向 Feature 的设置、私有投影和 controller state 由 `packages/features/*/renderer` 持有。页面导航属于 app controller，展示组件只接收明确 props。
 
 ### 安全是链路属性
 
@@ -119,6 +122,8 @@ Runtime snapshot 与事件属于 `useRuntimeClientState`；页面导航属于 ap
 ## 继续阅读
 
 - [启动、请求、事件与 turn 时序](runtime-flows.md)
+- [Feature Composition 决策概览](feature-composition.md)
+- [Feature 从 0 到 1](feature-development-guide.md)
 - [数据布局与安全边界](data-and-security.md)
 - [常见变更的跨层扩散](change-map.md)
 - [Desktop 应用模块](../apps/desktop/README.md)

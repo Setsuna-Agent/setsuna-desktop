@@ -9,6 +9,7 @@ export {
   type WebDavSyncStorageHost,
 } from './capabilities.js';
 export { webDavSyncMainFeature } from './feature.js';
+export { webDavSyncFeatureSettingsDocuments } from './portable-feature-settings.js';
 export {
   finalizeCommittedWebDavRestore,
   recoverInterruptedWebDavRestore,

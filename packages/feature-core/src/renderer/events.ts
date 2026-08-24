@@ -1,13 +1,11 @@
 import { defineCapability, type CapabilityToken } from '../capability.js';
-import type { FeatureEventFeedItem } from '../events.js';
 import type { FeatureScope } from '../scope.js';
 
-export type RendererFeatureEventFeedListener = (item: FeatureEventFeedItem) => void;
+export type RendererFeatureEventFeedListener = (minimumThroughSeq: number) => void;
 
 /**
- * Per-thread feed exposed after the host has accepted the global SSE sequence.
- * The subscriber identity comes from its scope, so a Feature cannot inspect
- * another Feature's event payload.
+ * Per-thread refresh signal exposed after the host accepts a matching Feature
+ * event or completes a Core resync. Event payloads remain behind the host gate.
  */
 export interface RendererFeatureEventFeed {
   subscribe(
@@ -19,6 +17,5 @@ export interface RendererFeatureEventFeed {
 
 export const rendererFeatureEventFeedCapability: CapabilityToken<RendererFeatureEventFeed> = defineCapability({
   id: 'renderer.feature-event-feed',
-  major: 1,
-  description: 'Current-thread Feature event feed behind the renderer global sequence gate',
+  description: 'Feature refresh signals behind the renderer global sequence gate',
 });

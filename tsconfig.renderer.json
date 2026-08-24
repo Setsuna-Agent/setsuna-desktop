@@ -20,7 +20,6 @@
       "@setsuna-desktop/feature-image-generation/*": ["packages/features/image-generation/src/*"],
       "@setsuna-desktop/feature-goal/*": ["packages/features/goal/src/*"],
       "@setsuna-desktop/feature-memory/*": ["packages/features/memory/src/*"],
-      "@setsuna-desktop/feature-review/*": ["packages/features/review/src/*"],
       "@setsuna-desktop/feature-terminal/*": ["packages/features/terminal/src/*"],
       "@setsuna-desktop/feature-vision-recognition/*": ["packages/features/vision-recognition/src/*"],
       "@setsuna-desktop/feature-webdav-sync/*": ["packages/features/webdav-sync/src/*"]
@@ -40,7 +39,6 @@
     { "path": "./packages/features/image-generation/tsconfig.build.json" },
     { "path": "./packages/features/goal/tsconfig.build.json" },
     { "path": "./packages/features/memory/tsconfig.build.json" },
-    { "path": "./packages/features/review/tsconfig.build.json" },
     { "path": "./packages/features/terminal/tsconfig.build.json" },
     { "path": "./packages/features/vision-recognition/tsconfig.build.json" },
     { "path": "./packages/features/webdav-sync/tsconfig.build.json" }

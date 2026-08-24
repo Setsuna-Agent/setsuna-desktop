@@ -32,10 +32,6 @@ export type PendingFeatureEventEnvelope<TPayload = unknown> = Omit<
   'seq'
 >;
 
-export type FeatureEventFeedItem =
-  | Readonly<{ kind: 'advance'; seq: number }>
-  | Readonly<{ kind: 'event'; seq: number; event: FeatureEventEnvelope }>;
-
 export type FeatureEventContract<TValue> = Readonly<{
   featureId: FeatureId;
   eventType: string;

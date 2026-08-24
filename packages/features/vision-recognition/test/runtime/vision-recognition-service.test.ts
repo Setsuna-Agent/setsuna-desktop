@@ -153,7 +153,7 @@ async function createService(overrides: ServiceOverrides = {}): Promise<RuntimeV
     controller.scope,
     settingsHandle({ providerId: 'vision-provider', modelId: 'vision-model' }),
     host,
-    { markActive() {}, markDegraded() {} },
+    { setCondition() {} },
     async () => ({
       featureId: visionRecognitionFeature.id,
       documentId: 'model-selection',

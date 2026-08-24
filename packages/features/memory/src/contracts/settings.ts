@@ -101,8 +101,6 @@ const preferencesDocument = defineFeatureSettingsDocument<
   secretNames: [],
   normalizeSecretPatch: () => Object.freeze({}),
   syncPolicy: 'portable',
-  retentionPolicy: 'retain-until-explicit-delete',
-  applyPolicy: 'next-turn',
 });
 
 export const memorySettings = defineFeatureSettingsBundle({

@@ -1,5 +1,5 @@
-import { CollaborationTaskNavigationProvider } from '@setsuna-desktop/feature-collaboration/renderer';
 import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
+import { CollaborationFeatureNavigationBoundary } from '../composition/CollaborationFeatureBoundary.js';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
@@ -74,9 +74,9 @@ function ReadyAppContent({ controller }: Readonly<{
     [controller.workspacePanels.openSubagentPanel],
   );
   return (
-    <CollaborationTaskNavigationProvider onOpenTask={openCollaborationTask}>
+    <CollaborationFeatureNavigationBoundary onOpenTask={openCollaborationTask}>
       <AppReadyLayout controller={controller} />
-    </CollaborationTaskNavigationProvider>
+    </CollaborationFeatureNavigationBoundary>
   );
 }
 

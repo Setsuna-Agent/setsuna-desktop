@@ -96,13 +96,11 @@ export interface GoalControl {
 
 export const goalControlCapability: CapabilityToken<GoalControl> = defineCapability({
   id: 'goal.control',
-  major: 1,
   description: 'Control persistent Goal lifecycle without exposing its coordinator or projection',
 });
 
 export const goalRuntimeHostCapability: CapabilityToken<GoalRuntimeHost> = defineCapability({
   id: 'goal.runtime-host',
-  major: 1,
   description: 'Narrow Agent Loop and event services required by the Goal runtime Feature',
 });
 

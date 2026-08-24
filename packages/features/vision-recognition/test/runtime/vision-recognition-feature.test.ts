@@ -54,7 +54,7 @@ async function setupFeature(options: Readonly<{ settingsReadable: boolean }>) {
         retireLegacySelection: retire,
       },
     },
-    health: { markActive() {}, markDegraded() {} },
+    health: { setCondition() {} },
     provide() {},
   });
   await scope.finishDispose();

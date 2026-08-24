@@ -13,8 +13,17 @@ import type {
 export class BrowserToolHost implements ToolHost {
   private service: BrowserRuntimeToolService | null = null;
 
-  bind(service: BrowserRuntimeToolService): void {
+  bind(service: BrowserRuntimeToolService): () => void {
+    if (this.service && this.service !== service) {
+      throw new Error('Browser tool service is already bound.');
+    }
     this.service = service;
+    let disposed = false;
+    return () => {
+      if (disposed) return;
+      disposed = true;
+      if (this.service === service) this.service = null;
+    };
   }
 
   listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {

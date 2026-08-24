@@ -4,9 +4,6 @@
   "description": "Local long-term memory Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "memory"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

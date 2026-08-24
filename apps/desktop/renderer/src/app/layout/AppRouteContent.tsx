@@ -18,7 +18,7 @@ import {
 import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActions.js';
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
-import { latestBrowserOpenRequest } from '@setsuna-desktop/feature-browser/renderer';
+import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {
@@ -128,7 +128,7 @@ export function AppRouteContent({
     : null;
   const handledBrowserOpenRequestIdRef = useRef<string | null>(null);
   const pendingBrowserOpenRequest = useMemo(
-    () => latestBrowserOpenRequest(runtime.activityEvents),
+    () => latestBrowserFeatureOpenRequest(runtime.activityEvents),
     [runtime.activityEvents],
   );
   const { openBrowserPanel } = workspacePanels;

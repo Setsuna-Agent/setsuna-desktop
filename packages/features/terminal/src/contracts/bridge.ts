@@ -52,12 +52,10 @@ export interface TerminalEventPublisher {
 
 export const terminalEnvironmentCapability: CapabilityToken<TerminalEnvironmentProvider> = defineCapability({
   id: 'terminal.environment',
-  major: 1,
   description: 'Host-managed process environment for native terminal sessions',
 });
 
 export const terminalEventPublisherCapability: CapabilityToken<TerminalEventPublisher> = defineCapability({
   id: 'terminal.event-publisher',
-  major: 1,
   description: 'Narrow host bridge for publishing native terminal events to the renderer',
 });

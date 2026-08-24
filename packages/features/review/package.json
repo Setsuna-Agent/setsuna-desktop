@@ -4,9 +4,6 @@
   "description": "Native Git review Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
-  "setsunaFeature": {
-    "id": "desktop-review"
-  },
   "exports": {
     "./contracts": {
       "types": "./dist/contracts/index.d.ts",

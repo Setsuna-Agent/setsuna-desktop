@@ -72,7 +72,6 @@ export interface VisionRecognitionService {
 
 export const visionRecognitionServiceCapability: CapabilityToken<VisionRecognitionService> = defineCapability({
   id: 'vision-recognition.service',
-  major: 1,
   description: 'Stable vision recognition execution and settings facade',
 });
 
@@ -112,6 +111,5 @@ export interface VisionRecognitionRuntimeHost {
 
 export const visionRecognitionRuntimeHostCapability: CapabilityToken<VisionRecognitionRuntimeHost> = defineCapability({
   id: 'vision-recognition.runtime-host',
-  major: 1,
   description: 'Host-managed model, attachment, usage, plugin, and legacy configuration boundary',
 });

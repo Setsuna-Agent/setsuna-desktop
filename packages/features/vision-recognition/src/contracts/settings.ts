@@ -34,8 +34,6 @@ const modelSelectionDocument = defineFeatureSettingsDocument<
   secretNames: [],
   normalizeSecretPatch: () => Object.freeze({}),
   syncPolicy: 'portable',
-  retentionPolicy: 'retain-until-explicit-delete',
-  applyPolicy: 'immediate',
 });
 
 export const visionRecognitionSettings = defineFeatureSettingsBundle({

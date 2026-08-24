@@ -1,8 +1,9 @@
 import type { DependencySpec, HostCapabilityProvider } from '../capability.js';
 import {
   composeFeatureModules,
+  createFeatureMounts,
   type FeatureComposition,
-  type FeatureMount,
+  type FeatureHostDefinition,
 } from '../internal/composition.js';
 import {
   defineDependencies,
@@ -10,11 +11,20 @@ import {
   type DefineProcessFeatureInput,
   type ProcessFeatureModule,
 } from '../internal/module.js';
-import type { FeatureCriticality } from '../status.js';
+
+export { completeFeatureHostActivation } from '../internal/host-bindings.js';
+export type { FeatureHostBindingContext } from '../internal/host-bindings.js';
 
 export type MainFeatureModule = ProcessFeatureModule<'main'>;
-export type MainFeatureMount = FeatureMount<MainFeatureModule>;
 export type MainFeatureComposition = FeatureComposition;
+export type MainFeatureHostDefinition = FeatureHostDefinition<MainFeatureModule>;
+export type MainFeatureHostActivationInput = Readonly<{
+  hostCapabilities?: readonly HostCapabilityProvider[];
+}>;
+
+export interface MainFeatureHost {
+  activate(input?: MainFeatureHostActivationInput): Promise<MainFeatureComposition>;
+}
 
 export function defineMainDependencies<const TSpec extends DependencySpec>(spec: TSpec): TSpec {
   return defineDependencies(spec);
@@ -26,22 +36,21 @@ export function defineMainFeature<const TSpec extends DependencySpec>(
   return defineProcessFeature('main', input);
 }
 
-export function mountMainFeature(
-  module: MainFeatureModule,
-  options: Readonly<{ criticality: FeatureCriticality; enabled?: boolean }>,
-): MainFeatureMount {
+export function defineMainFeatureHost(
+  definition: MainFeatureHostDefinition,
+): MainFeatureHost {
+  const mounts = createFeatureMounts(definition);
   return Object.freeze({
-    module,
-    criticality: options.criticality,
-    enabled: options.enabled ?? true,
+    activate: (input: MainFeatureHostActivationInput = {}) => composeFeatureModules<
+      'main',
+      void,
+      MainFeatureModule
+    >({
+      process: 'main',
+      mounts,
+      hostCapabilities: input.hostCapabilities,
+    }),
   });
-}
-
-export function composeMainFeatures(input: Readonly<{
-  mounts: readonly MainFeatureMount[];
-  hostCapabilities?: readonly HostCapabilityProvider[];
-}>): Promise<MainFeatureComposition> {
-  return composeFeatureModules({ process: 'main', ...input });
 }
 
 export type {

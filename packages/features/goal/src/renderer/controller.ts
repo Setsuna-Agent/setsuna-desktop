@@ -1,4 +1,3 @@
-import type { FeatureEventFeedItem } from '@setsuna-desktop/feature-core/events';
 import type { RendererFeatureEventFeed } from '@setsuna-desktop/feature-core/renderer';
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import {
@@ -6,11 +5,9 @@ import {
   createInitialGoalState,
   type Goal,
   type GoalPatch,
-  type GoalState,
   type GoalStateSnapshot,
 } from '../contracts/index.js';
 import type { GoalClient } from './client.js';
-import { createRendererGoalEventRegistry } from './goal-event-registry.js';
 
 export type GoalRendererControllerSnapshot = Readonly<{
   error: string | null;
@@ -22,14 +19,14 @@ export type GoalRendererControllerSnapshot = Readonly<{
 
 type Listener = (snapshot: GoalRendererControllerSnapshot) => void;
 
-/** Owns the subscribe-before-query sequence gate for one renderer thread. */
+/** Re-reads typed Goal state when the host's global sequence gate signals a change. */
 export class GoalRendererController {
   private readonly abort = new AbortController();
-  private readonly buffered = new Map<number, FeatureEventFeedItem>();
   private readonly listeners = new Set<Listener>();
-  private readonly registry = createRendererGoalEventRegistry();
   private feedSubscription: Readonly<{ dispose(): void }> | null = null;
   private projection: GoalStateSnapshot | null = null;
+  private minimumThroughSeq = 0;
+  private refreshAgain = false;
   private reading = false;
   private disposed = false;
   private view: GoalRendererControllerSnapshot = Object.freeze({
@@ -55,7 +52,7 @@ export class GoalRendererController {
     this.feedSubscription = this.options.feed.subscribe(
       this.options.scope,
       this.options.threadId,
-      (item) => this.accept(item),
+      (throughSeq) => this.accept(throughSeq),
     );
     void this.refresh();
   }
@@ -66,7 +63,6 @@ export class GoalRendererController {
     this.abort.abort();
     this.feedSubscription?.dispose();
     this.feedSubscription = null;
-    this.buffered.clear();
     this.listeners.clear();
   }
 
@@ -91,6 +87,7 @@ export class GoalRendererController {
       { signal: this.abort.signal },
     );
     this.adoptSnapshot(snapshot);
+    if (this.projection && this.projection.throughSeq < this.minimumThroughSeq) void this.refresh();
   }
 
   async clear(): Promise<void> {
@@ -99,37 +96,37 @@ export class GoalRendererController {
       { signal: this.abort.signal },
     );
     this.adoptSnapshot(snapshot);
+    if (this.projection && this.projection.throughSeq < this.minimumThroughSeq) void this.refresh();
   }
 
-  private accept(item: FeatureEventFeedItem): void {
+  private accept(throughSeq: number): void {
     if (this.disposed) return;
-    const throughSeq = this.projection?.throughSeq ?? 0;
-    if (item.seq <= throughSeq) return;
-    if (!this.projection || this.reading || item.seq !== throughSeq + 1) {
-      this.buffered.set(item.seq, item);
-      if (this.projection && item.seq > throughSeq + 1) {
-        this.updateView({ stale: true });
-        void this.refresh();
-      }
-      return;
-    }
-    if (!this.applyContiguous(item)) void this.refresh();
+    this.minimumThroughSeq = Math.max(this.minimumThroughSeq, throughSeq);
+    if ((this.projection?.throughSeq ?? 0) >= this.minimumThroughSeq) return;
+    if (this.projection) this.updateView({ stale: true });
+    if (this.reading) this.refreshAgain = true;
+    else void this.refresh();
   }
 
   private async refresh(): Promise<void> {
     if (this.disposed || this.reading) return;
     this.reading = true;
+    this.refreshAgain = false;
     this.updateView({
       error: null,
       loading: this.projection === null,
       stale: this.projection !== null,
     });
+    let succeeded = false;
     try {
       const snapshot = await this.options.client.readState(
         this.options.threadId,
         { signal: this.abort.signal },
       );
-      if (!this.disposed) this.adoptSnapshot(snapshot);
+      if (!this.disposed) {
+        this.adoptSnapshot(snapshot);
+        succeeded = true;
+      }
     } catch (error) {
       if (!this.disposed && !this.abort.signal.aborted) {
         this.updateView({
@@ -141,8 +138,12 @@ export class GoalRendererController {
     } finally {
       this.reading = false;
     }
-    if (!this.disposed && this.projection && this.hasGap()) {
-      this.updateView({ stale: true });
+    if (
+      !this.disposed
+      && succeeded
+      && this.refreshAgain
+      && (this.projection?.throughSeq ?? 0) < this.minimumThroughSeq
+    ) {
       void this.refresh();
     }
   }
@@ -154,54 +155,12 @@ export class GoalRendererController {
       state: cloneGoalState(snapshot.state),
       throughSeq: snapshot.throughSeq,
     });
-    for (const seq of this.buffered.keys()) {
-      if (seq <= snapshot.throughSeq) this.buffered.delete(seq);
-    }
-    let healthy = true;
-    for (;;) {
-      const next = this.buffered.get(this.projection.throughSeq + 1);
-      if (!next) break;
-      this.buffered.delete(next.seq);
-      if (!this.applyContiguous(next)) {
-        healthy = false;
-        break;
-      }
-    }
+    const stale = snapshot.throughSeq < this.minimumThroughSeq;
     this.publishProjection({
-      error: healthy ? null : this.view.error,
+      error: null,
       loading: false,
-      stale: !healthy || this.hasGap(),
+      stale,
     });
-  }
-
-  private applyContiguous(item: FeatureEventFeedItem): boolean {
-    if (!this.projection || item.seq !== this.projection.throughSeq + 1) return false;
-    try {
-      const state: GoalState = item.kind === 'event'
-        ? this.registry.reduce(this.projection.state, item.event)
-        : this.projection.state;
-      this.projection = Object.freeze({
-        state: cloneGoalState(state),
-        throughSeq: item.seq,
-      });
-      this.publishProjection({ error: null, loading: false, stale: false });
-      return true;
-    } catch (error) {
-      // Unknown or corrupt Goal payloads fail closed and force a typed snapshot replay.
-      this.buffered.set(item.seq, item);
-      this.updateView({
-        error: error instanceof Error ? error.message : String(error),
-        loading: false,
-        stale: true,
-      });
-      return false;
-    }
-  }
-
-  private hasGap(): boolean {
-    if (!this.projection || !this.buffered.size) return false;
-    const first = Math.min(...this.buffered.keys());
-    return first > this.projection.throughSeq + 1;
   }
 
   private publishProjection(patch: Partial<GoalRendererControllerSnapshot>): void {

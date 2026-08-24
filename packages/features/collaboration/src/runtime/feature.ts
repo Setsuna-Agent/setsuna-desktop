@@ -4,7 +4,6 @@ import {
   createFeatureProjectionStore,
   defineRuntimeDependencies,
   defineRuntimeFeature,
-  runtimeFeatureEventRegistrarCapability,
   runtimeRouteRegistrarCapability,
   threadEventReaderCapability,
 } from '@setsuna-desktop/feature-core/runtime';
@@ -22,7 +21,6 @@ import { CollaborationThreadNotFoundError } from './runtime-collaboration-errors
 
 const dependencies = defineRuntimeDependencies({
   routes: requiredCapability(runtimeRouteRegistrarCapability),
-  events: requiredCapability(runtimeFeatureEventRegistrarCapability),
   threadEvents: requiredCapability(threadEventReaderCapability),
   host: requiredCapability(collaborationRuntimeHostCapability),
 });
@@ -34,19 +32,17 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
   setup(context) {
     const registry = createRuntimeCollaborationEventRegistry();
     const projection = createFeatureProjectionStore<CollaborationState>({
-      featureId: collaborationFeature.id,
       eventReader: context.dependencies.threadEvents,
       initialState: createInitialCollaborationState,
       reduce: (state, record) => registry.reduce(state, record),
     });
     context.scope.track(projection, (store) => store.dispose());
-    context.dependencies.events.registerProjection(context.scope, projection);
 
     const control = new RuntimeCollaborationCoordinator({
       host: context.dependencies.host,
       projection,
-      onProjectionFailure: () => {
-        context.health.markDegraded({
+      onProjectionFailure: (threadId) => {
+        context.health.setCondition(`projection:${threadId}`, {
           code: 'COLLABORATION_PROJECTION_UNAVAILABLE',
           message: 'Collaboration state could not be reconstructed for one or more threads.',
         });
@@ -60,7 +56,7 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
       async ({ threadId }) => {
         try {
           const snapshot = await control.readState(threadId);
-          context.health.markActive();
+          context.health.setCondition(`projection:${threadId}`, null);
           return snapshot;
         } catch (error) {
           if (error instanceof CollaborationThreadNotFoundError) {
@@ -70,7 +66,7 @@ export const collaborationRuntimeFeature = defineRuntimeFeature({
               retryable: false,
             });
           }
-          context.health.markDegraded({
+          context.health.setCondition(`projection:${threadId}`, {
             code: 'COLLABORATION_PROJECTION_UNAVAILABLE',
             message: 'Collaboration state could not be reconstructed for a thread.',
           });

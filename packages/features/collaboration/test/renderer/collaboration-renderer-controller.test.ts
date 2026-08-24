@@ -1,10 +1,8 @@
-import { createFeatureEvent, type FeatureEventFeedItem } from '@setsuna-desktop/feature-core/events';
 import type { RendererFeatureEventFeed } from '@setsuna-desktop/feature-core/renderer';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
 import {
   collaborationFeature,
-  collaborationTaskCreatedEvent,
   type CollaborationStateSnapshot,
   type CollaborationTask,
 } from '../../src/contracts/index.js';
@@ -12,46 +10,30 @@ import type { CollaborationClient } from '../../src/renderer/client.js';
 import { CollaborationRendererController } from '../../src/renderer/controller.js';
 
 describe('CollaborationRendererController', () => {
-  it('subscribes before reading and applies contiguous global-sequence advances', async () => {
+  it('subscribes before reading and refetches when a change arrives during that query', async () => {
     const order: string[] = [];
     const feed = new TestFeed(() => order.push('subscribe'));
+    const first = deferred<CollaborationStateSnapshot>();
+    let reads = 0;
     const client = clientWithRead(async () => {
-      order.push('read');
-      return snapshot([], 10);
+      reads += 1;
+      order.push(`read:${reads}`);
+      return reads === 1 ? first.promise : snapshot([task()], 12);
     });
     const controller = createController(client, feed);
 
     controller.start();
-    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(10));
-    feed.emit({ kind: 'advance', seq: 11 });
-    feed.emit(taskCreatedFeedItem(12));
+    expect(order).toEqual(['subscribe', 'read:1']);
+    feed.emit(12);
+    first.resolve(snapshot([], 10));
+    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(12));
 
-    expect(order).toEqual(['subscribe', 'read']);
+    expect(order).toEqual(['subscribe', 'read:1', 'read:2']);
     expect(controller.snapshot()).toMatchObject({
       state: { tasks: [{ id: 'task_1', status: 'running' }] },
       stale: false,
       throughSeq: 12,
     });
-    controller.dispose();
-  });
-
-  it('refetches a sequence gap from the durable projection', async () => {
-    const feed = new TestFeed();
-    const reads = [snapshot([], 10), snapshot([task()], 12)];
-    const client = clientWithRead(async () => reads.shift()!);
-    const controller = createController(client, feed);
-
-    controller.start();
-    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(10));
-    feed.emit(taskCreatedFeedItem(12));
-    await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(12));
-
-    expect(controller.snapshot()).toMatchObject({
-      state: { tasks: [{ id: 'task_1' }] },
-      stale: false,
-      throughSeq: 12,
-    });
-    expect(client.readState).toHaveBeenCalledTimes(2);
     controller.dispose();
   });
 
@@ -85,7 +67,7 @@ describe('CollaborationRendererController', () => {
 
     controller.start();
     await vi.waitFor(() => expect(controller.snapshot().throughSeq).toBe(10));
-    feed.emit(taskCreatedFeedItem(12));
+    feed.emit(12);
     await vi.waitFor(() => expect(controller.snapshot().error).toBe('runtime offline'));
 
     await Promise.resolve();
@@ -117,7 +99,7 @@ function createController(client: CollaborationClient, feed: RendererFeatureEven
 }
 
 class TestFeed implements RendererFeatureEventFeed {
-  private listener: ((item: FeatureEventFeedItem) => void) | null = null;
+  private listener: ((minimumThroughSeq: number) => void) | null = null;
   subscribeCount = 0;
 
   constructor(private readonly onSubscribe: () => void = () => undefined) {}
@@ -125,7 +107,7 @@ class TestFeed implements RendererFeatureEventFeed {
   subscribe(
     _scope: Parameters<RendererFeatureEventFeed['subscribe']>[0],
     _threadId: string,
-    listener: (item: FeatureEventFeedItem) => void,
+    listener: (minimumThroughSeq: number) => void,
   ) {
     this.subscribeCount += 1;
     this.onSubscribe();
@@ -133,26 +115,13 @@ class TestFeed implements RendererFeatureEventFeed {
     return { dispose: () => { this.listener = null; } };
   }
 
-  emit(item: FeatureEventFeedItem): void {
-    this.listener?.(item);
+  emit(minimumThroughSeq: number): void {
+    this.listener?.(minimumThroughSeq);
   }
 }
 
 function clientWithRead(readState: CollaborationClient['readState']): CollaborationClient {
   return { readState: vi.fn(readState) };
-}
-
-function taskCreatedFeedItem(seq: number): FeatureEventFeedItem {
-  const pending = createFeatureEvent(
-    collaborationTaskCreatedEvent,
-    {
-      id: `event_${seq}`,
-      threadId: 'thread_parent',
-      createdAt: '2026-08-22T00:00:00.000Z',
-    },
-    task(),
-  );
-  return { kind: 'event', seq, event: { ...pending, seq } };
 }
 
 function snapshot(tasks: CollaborationTask[], throughSeq: number): CollaborationStateSnapshot {

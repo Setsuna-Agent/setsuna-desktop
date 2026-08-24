@@ -1,7 +1,3 @@
-import { defineFeatureDefinition } from '@setsuna-desktop/feature-core/definition';
-import { FEATURE_PACKAGE_VERSION } from '../generated/package-version.js';
+import { defineFeature } from '@setsuna-desktop/feature-core/definition';
 
-export const terminalFeature = defineFeatureDefinition({
-  id: 'terminal',
-  version: FEATURE_PACKAGE_VERSION,
-});
+export const terminalFeature = defineFeature('terminal');

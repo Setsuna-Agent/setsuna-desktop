@@ -11,17 +11,18 @@ const nodeBuiltins = new Set([
   ...builtinModules,
   ...builtinModules.map((name) => `node:${name}`),
 ]);
+const processEntries = ['contracts', 'runtime', 'renderer', 'main', 'preload'];
 const featurePackagePattern = /^@setsuna-desktop\/feature-([^/]+)(?:\/(contracts|runtime|renderer|main|preload))?$/u;
-const featureIdPattern = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+const featureBuildScript = 'pnpm --recursive --filter "./packages/features/*" run build';
 
 export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryRoot) {
   const violations = [];
   const featureCoreRoot = path.join(repositoryRoot, 'packages/feature-core');
   const featuresRoot = path.join(repositoryRoot, 'packages/features');
-  const reserved = await readReservedManifest(featureCoreRoot, violations);
   const featureDirectories = await childDirectories(featuresRoot);
-  const featurePackages = new Map();
-  const featureIdsByDirectory = new Map();
+  const featurePackages = [];
+  const packageNames = new Map();
+  const sourceEntriesByDirectory = new Map();
 
   for (const directory of featureDirectories) {
     const packagePath = path.join(directory, 'package.json');
@@ -31,43 +32,51 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
     }
     const manifest = JSON.parse(await readFile(packagePath, 'utf8'));
     const packageName = String(manifest.name ?? '');
-    featurePackages.set(packageName, directory);
+    if (!featurePackagePattern.test(packageName)) {
+      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature package name must use @setsuna-desktop/feature-<name>.`);
+    }
+    const expectedPackageName = `@setsuna-desktop/feature-${path.basename(directory)}`;
+    if (packageName !== expectedPackageName) {
+      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature package name must match its directory as "${expectedPackageName}".`);
+    }
+    const existingPackageDirectory = packageNames.get(packageName);
+    if (existingPackageDirectory) {
+      violations.push(
+        `${repositoryPath(repositoryRoot, packagePath)}: Feature package name "${packageName}" is also used by ${repositoryPath(repositoryRoot, existingPackageDirectory)}.`,
+      );
+    } else {
+      packageNames.set(packageName, directory);
+    }
+    featurePackages.push({ directory, manifest, packageName, packagePath });
     if (Object.hasOwn(manifest.exports ?? {}, '.')) {
       violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature packages must not provide a root "." export.`);
     }
-    const metadata = manifest.setsunaFeature;
-    const featureId = typeof metadata?.id === 'string' && featureIdPattern.test(metadata.id)
-      ? metadata.id
-      : null;
-    featureIdsByDirectory.set(directory, featureId);
-    if (!metadata || typeof metadata.id !== 'string' || !featureIdPattern.test(metadata.id)) {
-      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: setsunaFeature.id must be a stable lowercase kebab FeatureId.`);
-    } else if (!reserved.features.has(metadata.id)) {
-      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: FeatureId "${metadata.id}" is missing from reserved-identifiers.json.`);
-    }
-    await checkGeneratedVersion(repositoryRoot, directory, manifest, violations);
   }
 
-  for (const [packageName, directory] of featurePackages) {
-    const featureId = featureIdsByDirectory.get(directory) ?? null;
+  const identityOwners = new Map();
+  for (const { packageName, directory, manifest, packagePath } of featurePackages) {
     const sourceRoot = path.join(directory, 'src');
+    const sourceEntries = new Set();
+    const identityDeclarations = [];
     for (const filePath of await collectFiles(sourceRoot)) {
       if (!sourceExtensions.has(path.extname(filePath))) continue;
       const relative = path.relative(sourceRoot, filePath).replaceAll(path.sep, '/');
       const entry = relative.split('/')[0];
-      if (!['contracts', 'runtime', 'renderer', 'main', 'preload', 'generated'].includes(entry)) {
+      if (!processEntries.includes(entry)) {
         violations.push(`${repositoryPath(repositoryRoot, filePath)}: Feature source must live under an explicit process entry.`);
         continue;
       }
+      sourceEntries.add(entry);
       const sourceText = await readFile(filePath, 'utf8');
-      checkReservedDeclarations(
-        repositoryRoot,
-        filePath,
-        sourceText,
-        featureId,
-        reserved,
-        violations,
-      );
+      for (const declaration of featureIdentityDeclarations(filePath, sourceText)) {
+        identityDeclarations.push(declaration);
+        if (entry !== 'contracts') {
+          violations.push(`${repositoryPath(repositoryRoot, filePath)}: Feature identity must be declared in the contracts entry.`);
+        }
+        if (!declaration.featureId) {
+          violations.push(`${repositoryPath(repositoryRoot, filePath)}: defineFeature() identity must be a string literal.`);
+        }
+      }
       if (entry === 'renderer') checkRendererTransportBoundary(repositoryRoot, filePath, sourceText, violations);
       if ((entry === 'runtime' || entry === 'renderer' || entry === 'main') && /FeatureModule\s*</u.test(sourceText)) {
         violations.push(`${repositoryPath(repositoryRoot, filePath)}: heterogeneous Feature modules must use the erased module type returned by define*Feature().`);
@@ -86,12 +95,42 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
         }
       }
     }
+
+    checkProcessExportSymmetry(
+      repositoryRoot,
+      packagePath,
+      manifest.exports,
+      sourceEntries,
+      violations,
+    );
+    sourceEntriesByDirectory.set(directory, sourceEntries);
+    if (identityDeclarations.length !== 1) {
+      violations.push(
+        `${repositoryPath(repositoryRoot, packagePath)}: Feature package must contain exactly one contracts defineFeature() identity declaration; found ${identityDeclarations.length}.`,
+      );
+    } else if (identityDeclarations[0].featureId) {
+      const declaration = identityDeclarations[0];
+      const existingOwner = identityOwners.get(declaration.featureId);
+      if (existingOwner) {
+        violations.push(
+          `${repositoryPath(repositoryRoot, declaration.filePath)}: Feature identity "${declaration.featureId}" is already declared by ${repositoryPath(repositoryRoot, existingOwner)}.`,
+        );
+      } else {
+        identityOwners.set(declaration.featureId, declaration.filePath);
+      }
+    }
   }
+
+  await checkFeatureBuildGraph(
+    repositoryRoot,
+    featurePackages,
+    sourceEntriesByDirectory,
+    violations,
+  );
 
   for (const filePath of await collectFiles(path.join(featureCoreRoot, 'src'))) {
     if (!sourceExtensions.has(path.extname(filePath))) continue;
     const sourceText = await readFile(filePath, 'utf8');
-    checkReservedDeclarations(repositoryRoot, filePath, sourceText, null, reserved, violations);
     for (const specifier of importedSpecifiers(sourceText)) {
       const match = featurePackagePattern.exec(specifier);
       if (match && !specifier.startsWith('@setsuna-desktop/feature-core/')) {
@@ -101,43 +140,205 @@ export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryR
   }
 
   await checkHostProcessImports(repositoryRoot, violations);
-  await checkFrozenCentralSurfaces(repositoryRoot, reserved.features, violations);
+  await checkCompositionRoots(repositoryRoot, violations);
+  await checkCentralFeatureImports(repositoryRoot, violations);
   return violations;
 }
 
-async function readReservedManifest(featureCoreRoot, violations) {
-  const filePath = path.join(featureCoreRoot, 'reserved-identifiers.json');
-  if (!existsSync(filePath)) {
-    violations.push('packages/feature-core/reserved-identifiers.json: stable identifier manifest is required.');
-    return { features: new Set() };
+async function checkFeatureBuildGraph(
+  repositoryRoot,
+  featurePackages,
+  sourceEntriesByDirectory,
+  violations,
+) {
+  const rootPackagePath = path.join(repositoryRoot, 'package.json');
+  const rootTsconfigPath = path.join(repositoryRoot, 'tsconfig.json');
+  const rendererTsconfigPath = path.join(repositoryRoot, 'tsconfig.renderer.json');
+  const runtimePackagePath = path.join(repositoryRoot, 'packages/desktop-runtime/package.json');
+  const runtimeTsconfigPath = path.join(repositoryRoot, 'packages/desktop-runtime/tsconfig.build.json');
+  if (
+    !existsSync(rootPackagePath)
+    || !existsSync(rootTsconfigPath)
+    || !existsSync(rendererTsconfigPath)
+    || !existsSync(runtimePackagePath)
+    || !existsSync(runtimeTsconfigPath)
+  ) return;
+
+  const rootPackage = JSON.parse(await readFile(rootPackagePath, 'utf8'));
+  const rootTsconfig = JSON.parse(await readFile(rootTsconfigPath, 'utf8'));
+  const rendererTsconfig = JSON.parse(await readFile(rendererTsconfigPath, 'utf8'));
+  const runtimePackage = JSON.parse(await readFile(runtimePackagePath, 'utf8'));
+  const runtimeTsconfig = JSON.parse(await readFile(runtimeTsconfigPath, 'utf8'));
+  const rootReferences = referenceRepositoryPaths(repositoryRoot, rootTsconfigPath, rootTsconfig);
+  const rendererReferences = referenceRepositoryPaths(repositoryRoot, rendererTsconfigPath, rendererTsconfig);
+  const runtimeReferences = referenceRepositoryPaths(repositoryRoot, runtimeTsconfigPath, runtimeTsconfig);
+  const rendererPaths = rendererTsconfig.compilerOptions?.paths ?? {};
+  const knownBuildPaths = new Set(featurePackages.map(({ directory }) => (
+    `${repositoryPath(repositoryRoot, directory)}/tsconfig.build.json`
+  )));
+  const knownPackageNames = new Set(featurePackages.map(({ packageName }) => packageName));
+
+  if (rootPackage.scripts?.['build:features'] !== featureBuildScript) {
+    violations.push(
+      `${repositoryPath(repositoryRoot, rootPackagePath)}: build:features must use the workspace Feature build command "${featureBuildScript}".`,
+    );
   }
-  const manifest = JSON.parse(await readFile(filePath, 'utf8'));
-  if (manifest.schemaVersion !== 1) {
-    violations.push('packages/feature-core/reserved-identifiers.json: unsupported schemaVersion.');
-  }
-  const categories = ['features', 'capabilities', 'settingsDocuments', 'featureEvents', 'toolResults', 'operations'];
-  const reserved = {};
-  for (const category of categories) {
-    if (!Array.isArray(manifest[category]) || manifest[category].some((value) => typeof value !== 'string')) {
-      violations.push(`packages/feature-core/reserved-identifiers.json: ${category} must be a string array.`);
-    } else if (new Set(manifest[category]).size !== manifest[category].length) {
-      violations.push(`packages/feature-core/reserved-identifiers.json: ${category} contains duplicate identities.`);
+  checkStaleFeatureBuildPaths(
+    repositoryRoot,
+    rootTsconfigPath,
+    'references',
+    rootReferences,
+    knownBuildPaths,
+    violations,
+  );
+  checkStaleFeatureBuildPaths(
+    repositoryRoot,
+    runtimeTsconfigPath,
+    'runtime references',
+    runtimeReferences,
+    knownBuildPaths,
+    violations,
+  );
+  checkStaleFeatureBuildPaths(
+    repositoryRoot,
+    rendererTsconfigPath,
+    'renderer references',
+    rendererReferences,
+    knownBuildPaths,
+    violations,
+  );
+  for (const alias of Object.keys(rendererPaths)) {
+    const packageName = rendererAliasPackageName(alias);
+    if (isConcreteFeaturePackageName(packageName) && !knownPackageNames.has(packageName)) {
+      violations.push(`${repositoryPath(repositoryRoot, rendererTsconfigPath)}: stale renderer Feature alias "${alias}" has no package.`);
     }
-    reserved[category] = new Set(Array.isArray(manifest[category]) ? manifest[category] : []);
   }
-  return reserved;
+  for (const [manifestPath, dependencies] of [
+    [rootPackagePath, rootPackage.dependencies],
+    [runtimePackagePath, runtimePackage.dependencies],
+  ]) {
+    for (const packageName of Object.keys(dependencies ?? {})) {
+      if (isConcreteFeaturePackageName(packageName) && !knownPackageNames.has(packageName)) {
+        violations.push(`${repositoryPath(repositoryRoot, manifestPath)}: stale Feature dependency "${packageName}" has no package.`);
+      }
+    }
+  }
+
+  for (const { directory, manifest, packageName, packagePath } of featurePackages) {
+    const relativeDirectory = repositoryPath(repositoryRoot, directory);
+    const buildPath = `${relativeDirectory}/tsconfig.build.json`;
+    if (!existsSync(path.join(directory, 'tsconfig.build.json'))) {
+      violations.push(`${buildPath}: Feature package build config is required.`);
+    }
+    if (manifest.scripts?.build !== 'tsc -b tsconfig.build.json') {
+      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature package build script must be "tsc -b tsconfig.build.json".`);
+    }
+    if (rootReferences.filter((entry) => entry === buildPath).length !== 1) {
+      violations.push(`${repositoryPath(repositoryRoot, rootTsconfigPath)}: references must contain "./${buildPath}" exactly once.`);
+    }
+
+    const sourceEntries = sourceEntriesByDirectory.get(directory) ?? new Set();
+    const rendererReferenceCount = rendererReferences.filter((entry) => entry === buildPath).length;
+    const runtimeReferenceCount = runtimeReferences.filter((entry) => entry === buildPath).length;
+    if (sourceEntries.has('renderer')) {
+      if (rendererReferenceCount !== 1) {
+        violations.push(`${repositoryPath(repositoryRoot, rendererTsconfigPath)}: renderer Feature "${packageName}" must have one build reference.`);
+      }
+      const alias = `${packageName}/*`;
+      const expectedTarget = [`${relativeDirectory}/src/*`];
+      if (JSON.stringify(rendererPaths[alias]) !== JSON.stringify(expectedTarget)) {
+        violations.push(`${repositoryPath(repositoryRoot, rendererTsconfigPath)}: renderer Feature alias "${alias}" must target "${expectedTarget[0]}".`);
+      }
+    } else {
+      if (rendererReferenceCount) {
+        violations.push(`${repositoryPath(repositoryRoot, rendererTsconfigPath)}: renderer Feature "${packageName}" must not retain a build reference without a renderer source entry.`);
+      }
+      for (const alias of Object.keys(rendererPaths)) {
+        if (rendererAliasPackageName(alias) === packageName) {
+          violations.push(`${repositoryPath(repositoryRoot, rendererTsconfigPath)}: renderer Feature alias "${alias}" must not exist without a renderer source entry.`);
+        }
+      }
+    }
+    if (sourceEntries.has('runtime')) {
+      if (runtimeReferenceCount !== 1) {
+        violations.push(`${repositoryPath(repositoryRoot, runtimeTsconfigPath)}: runtime Feature "${packageName}" must have one build reference.`);
+      }
+    } else if (runtimeReferenceCount) {
+      violations.push(`${repositoryPath(repositoryRoot, runtimeTsconfigPath)}: runtime Feature "${packageName}" must not retain a build reference without a runtime source entry.`);
+    }
+
+    const rootOwnsEntry = ['renderer', 'main', 'preload'].some((entry) => sourceEntries.has(entry));
+    if (rootOwnsEntry && rootPackage.dependencies?.[packageName] !== 'workspace:*') {
+      violations.push(`${repositoryPath(repositoryRoot, rootPackagePath)}: desktop host must depend on "${packageName}" as workspace:*.`);
+    } else if (!rootOwnsEntry && rootPackage.dependencies?.[packageName] !== undefined) {
+      violations.push(`${repositoryPath(repositoryRoot, rootPackagePath)}: desktop host must not depend on "${packageName}" without a renderer, main, or preload source entry.`);
+    }
+    if (sourceEntries.has('runtime') && runtimePackage.dependencies?.[packageName] !== 'workspace:*') {
+      violations.push(`${repositoryPath(repositoryRoot, runtimePackagePath)}: runtime host must depend on "${packageName}" as workspace:*.`);
+    } else if (!sourceEntries.has('runtime') && runtimePackage.dependencies?.[packageName] !== undefined) {
+      violations.push(`${repositoryPath(repositoryRoot, runtimePackagePath)}: runtime host must not depend on "${packageName}" without a runtime source entry.`);
+    }
+
+    if (!packageName) {
+      violations.push(`${repositoryPath(repositoryRoot, packagePath)}: Feature package name is required for build graph validation.`);
+    }
+  }
 }
 
-async function checkGeneratedVersion(repositoryRoot, directory, manifest, violations) {
-  const versionFile = path.join(directory, 'src/generated/package-version.ts');
-  if (!existsSync(versionFile)) {
-    violations.push(`${repositoryPath(repositoryRoot, versionFile)}: generated package version constant is required.`);
-    return;
+function checkStaleFeatureBuildPaths(
+  repositoryRoot,
+  filePath,
+  field,
+  entries,
+  knownBuildPaths,
+  violations,
+) {
+  for (const entry of new Set(entries)) {
+    if (!/^packages\/features\/[^/]+\/tsconfig\.build\.json$/u.test(entry)) continue;
+    if (!knownBuildPaths.has(entry)) {
+      violations.push(`${repositoryPath(repositoryRoot, filePath)}: stale ${field} entry "${entry}" has no Feature package.`);
+    }
   }
-  const sourceText = await readFile(versionFile, 'utf8');
-  const expected = `export const FEATURE_PACKAGE_VERSION = ${JSON.stringify(manifest.version)} as const;`;
-  if (sourceText.trim() !== expected) {
-    violations.push(`${repositoryPath(repositoryRoot, versionFile)}: generated version must equal package.json version ${manifest.version}.`);
+}
+
+function isConcreteFeaturePackageName(packageName) {
+  return packageName.startsWith('@setsuna-desktop/feature-')
+    && packageName !== '@setsuna-desktop/feature-core';
+}
+
+function rendererAliasPackageName(alias) {
+  return alias.endsWith('/*') ? alias.slice(0, -2) : alias;
+}
+
+function referenceRepositoryPaths(repositoryRoot, tsconfigPath, tsconfig) {
+  return (tsconfig.references ?? [])
+    .map((reference) => repositoryPath(
+      repositoryRoot,
+      path.resolve(path.dirname(tsconfigPath), String(reference?.path ?? '')),
+    ));
+}
+
+function checkProcessExportSymmetry(
+  repositoryRoot,
+  packagePath,
+  exportsField,
+  sourceEntries,
+  violations,
+) {
+  const packageExports = exportsField && typeof exportsField === 'object' ? exportsField : {};
+  for (const entry of processEntries) {
+    const hasSource = sourceEntries.has(entry);
+    const hasExport = Object.hasOwn(packageExports, `./${entry}`);
+    if (hasSource && !hasExport) {
+      violations.push(
+        `${repositoryPath(repositoryRoot, packagePath)}: Feature source entry "${entry}" must have a matching "./${entry}" package export.`,
+      );
+    }
+    if (hasExport && !hasSource) {
+      violations.push(
+        `${repositoryPath(repositoryRoot, packagePath)}: Feature export "./${entry}" has no matching source entry.`,
+      );
+    }
   }
 }
 
@@ -178,6 +379,8 @@ async function checkHostProcessImports(repositoryRoot, violations) {
   const roots = [
     ['runtime', path.join(repositoryRoot, 'packages/desktop-runtime/src')],
     ['renderer', path.join(repositoryRoot, 'apps/desktop/renderer/src')],
+    ['main', path.join(repositoryRoot, 'apps/desktop/main/src')],
+    ['preload', path.join(repositoryRoot, 'apps/desktop/preload/src')],
   ];
   for (const [processName, root] of roots) {
     for (const filePath of await collectFiles(root)) {
@@ -187,73 +390,75 @@ async function checkHostProcessImports(repositoryRoot, violations) {
         const match = featurePackagePattern.exec(specifier);
         if (!match || specifier.startsWith('@setsuna-desktop/feature-core/')) continue;
         const entry = match[2];
+        const relativeHostPath = path.relative(root, filePath).replaceAll(path.sep, '/');
+        if (entry !== 'contracts' && !relativeHostPath.startsWith('composition/')) {
+          violations.push(
+            `${repositoryPath(repositoryRoot, filePath)}: concrete Feature implementation import "${specifier}" must be isolated under the ${processName} composition directory.`,
+          );
+        }
         if (processName === 'runtime' && ['renderer', 'main', 'preload'].includes(entry)) {
           violations.push(`${repositoryPath(repositoryRoot, filePath)}: runtime host cannot import "${specifier}".`);
         }
         if (processName === 'renderer' && ['runtime', 'main', 'preload'].includes(entry)) {
           violations.push(`${repositoryPath(repositoryRoot, filePath)}: renderer host cannot import "${specifier}".`);
         }
+        if (processName === 'main' && ['runtime', 'renderer', 'preload'].includes(entry)) {
+          violations.push(`${repositoryPath(repositoryRoot, filePath)}: main host cannot import "${specifier}".`);
+        }
+        if (processName === 'preload' && ['runtime', 'renderer', 'main'].includes(entry)) {
+          violations.push(`${repositoryPath(repositoryRoot, filePath)}: preload host cannot import "${specifier}".`);
+        }
       }
     }
   }
 }
 
-function checkReservedDeclarations(
-  repositoryRoot,
-  filePath,
-  sourceText,
-  featureId,
-  reserved,
-  violations,
-) {
-  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
-  const reportMissing = (category, identity, node) => {
-    if (reserved[category]?.has(identity)) return;
-    const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
-    violations.push(
-      `${repositoryPath(repositoryRoot, filePath)}:${line}: published ${category} identity "${identity}" is missing from reserved-identifiers.json.`,
-    );
-  };
-
-  const visit = (node) => {
-    if (ts.isCallExpression(node)) {
-      const name = callName(node.expression);
-      const input = node.arguments[0];
-      if (input && ts.isObjectLiteralExpression(input)) {
-        if (name === 'defineCapability') {
-          const id = stringProperty(input, 'id');
-          const major = numberProperty(input, 'major');
-          if (id && major !== null) reportMissing('capabilities', `${id}@${major}`, node);
-        } else if (name === 'defineFeatureOperation') {
-          const id = stringProperty(input, 'id');
-          if (id) reportMissing('operations', id, node);
-        } else if (name === 'defineFeatureEventContract' && featureId) {
-          const eventType = stringProperty(input, 'eventType');
-          const version = numberProperty(input, 'currentVersion');
-          if (eventType && version !== null) {
-            reportMissing('featureEvents', `${featureId}/${eventType}@${version}`, node);
-          }
-        } else if (name === 'defineFeatureSettingsBundle' && featureId) {
-          const documents = objectProperty(input, 'documents');
-          if (documents) {
-            for (const property of documents.properties) {
-              const documentId = propertyNameText(property.name);
-              if (documentId) reportMissing('settingsDocuments', `${featureId}/${documentId}`, property);
-            }
-          }
-        }
+async function checkCompositionRoots(repositoryRoot, violations) {
+  const roots = [
+    {
+      processName: 'runtime',
+      root: path.join(repositoryRoot, 'packages/desktop-runtime/src'),
+      moduleName: '@setsuna-desktop/feature-core/runtime',
+      factoryName: 'defineRuntimeFeatureHost',
+    },
+    {
+      processName: 'renderer',
+      root: path.join(repositoryRoot, 'apps/desktop/renderer/src'),
+      moduleName: '@setsuna-desktop/feature-core/renderer',
+      factoryName: 'defineRendererFeatureHost',
+    },
+    {
+      processName: 'main',
+      root: path.join(repositoryRoot, 'apps/desktop/main/src'),
+      moduleName: '@setsuna-desktop/feature-core/main',
+      factoryName: 'defineMainFeatureHost',
+    },
+    {
+      processName: 'preload',
+      root: path.join(repositoryRoot, 'apps/desktop/preload/src'),
+      moduleName: '@setsuna-desktop/feature-core/preload',
+      factoryName: 'definePreloadFeatureHost',
+    },
+  ];
+  for (const root of roots) {
+    const declarations = [];
+    for (const filePath of await collectFiles(root.root)) {
+      if (!sourceExtensions.has(path.extname(filePath))) continue;
+      const sourceText = await readFile(filePath, 'utf8');
+      const callCount = countImportedBindingCalls(filePath, sourceText, root.moduleName, root.factoryName);
+      for (let index = 0; index < callCount; index += 1) {
+        declarations.push(filePath);
       }
     }
-    if (featureId && ts.isObjectLiteralExpression(node)) {
-      const resultKind = stringProperty(node, 'resultKind');
-      const major = numberProperty(node, 'major');
-      if (resultKind && major !== null) {
-        reportMissing('toolResults', `${resultKind}@${major}`, node);
-      }
+    if (declarations.length !== 1) {
+      const locations = declarations.length
+        ? ` Found: ${declarations.map((filePath) => repositoryPath(repositoryRoot, filePath)).join(', ')}.`
+        : '';
+      violations.push(
+        `${repositoryPath(repositoryRoot, root.root)}: ${root.processName} host must contain exactly one ${root.factoryName}() composition root; found ${declarations.length}.${locations}`,
+      );
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
+  }
 }
 
 function checkRendererTransportBoundary(repositoryRoot, filePath, sourceText, violations) {
@@ -285,89 +490,91 @@ function checkRendererTransportBoundary(repositoryRoot, filePath, sourceText, vi
   visit(sourceFile);
 }
 
-async function checkFrozenCentralSurfaces(repositoryRoot, featureIds, violations) {
-  const files = [
-    'packages/contracts/src/config.ts',
-    'packages/contracts/src/http.ts',
-    'apps/desktop/renderer/src/services/runtime-client/client.ts',
-    'apps/desktop/renderer/src/services/runtime-client/useRuntimeConfigState.ts',
-    'apps/desktop/renderer/src/features/settings/SettingsPage.tsx',
-    'apps/desktop/renderer/src/features/capabilities/CapabilitiesPage.tsx',
-    'apps/desktop/renderer/src/features/chat/tool-runs/RuntimeToolRuns.tsx',
+async function checkCentralFeatureImports(repositoryRoot, violations) {
+  const directories = [
+    'apps/desktop/renderer/src/services/runtime-client',
+    'apps/desktop/renderer/src/features/settings',
+    'apps/desktop/renderer/src/features/capabilities',
+    'apps/desktop/renderer/src/features/chat/tool-runs',
   ];
-  for (const relativePath of files) {
-    const filePath = path.join(repositoryRoot, ...relativePath.split('/'));
-    if (!existsSync(filePath)) continue;
-    const sourceText = await readFile(filePath, 'utf8');
-    const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
-    let match = null;
-    const visit = (node) => {
-      if (match) return;
-      if (
-        (ts.isIdentifier(node) || ts.isStringLiteralLike(node))
-        && (match = referencedFeature(node.text, featureIds))
-      ) return;
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-    if (match) {
-      violations.push(
-        `${relativePath}: migrated Feature "${match}" cannot re-enter this frozen central surface; use its Feature package and composition contribution.`,
-      );
+  for (const relativeDirectory of directories) {
+    const directory = path.join(repositoryRoot, ...relativeDirectory.split('/'));
+    for (const filePath of await collectFiles(directory)) {
+      if (!sourceExtensions.has(path.extname(filePath))) continue;
+      const sourceText = await readFile(filePath, 'utf8');
+      for (const specifier of importedSpecifiers(sourceText)) {
+        const match = featurePackagePattern.exec(specifier);
+        if (!match || specifier.startsWith('@setsuna-desktop/feature-core/')) continue;
+        violations.push(
+          `${repositoryPath(repositoryRoot, filePath)}: central host code cannot import concrete Feature "${specifier}"; register it in the renderer composition root instead.`,
+        );
+      }
     }
   }
 }
 
-function referencedFeature(value, featureIds) {
-  const lower = value.toLowerCase();
-  const segments = lower.split(/[^a-z0-9]+/gu).filter(Boolean);
-  for (const featureId of featureIds) {
-    const featureLower = featureId.toLowerCase();
-    const featureCompact = featureLower.replaceAll('-', '');
-    if (
-      (featureLower.includes('-') && lower.includes(featureLower))
-      || segments.some((segment) => segment.startsWith(featureCompact))
-    ) return featureId;
-  }
-  return null;
-}
-
-function callName(expression) {
-  if (ts.isIdentifier(expression)) return expression.text;
-  if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
-  return null;
-}
-
-function objectProperty(object, name) {
-  const property = object.properties.find((candidate) => propertyNameText(candidate.name) === name);
-  return property && ts.isPropertyAssignment(property) && ts.isObjectLiteralExpression(property.initializer)
-    ? property.initializer
-    : null;
-}
-
-function stringProperty(object, name) {
-  const property = object.properties.find((candidate) => propertyNameText(candidate.name) === name);
-  return property && ts.isPropertyAssignment(property) && ts.isStringLiteralLike(property.initializer)
-    ? property.initializer.text
-    : null;
-}
-
-function numberProperty(object, name) {
-  const property = object.properties.find((candidate) => propertyNameText(candidate.name) === name);
-  if (!property || !ts.isPropertyAssignment(property) || !ts.isNumericLiteral(property.initializer)) return null;
-  const value = Number(property.initializer.text);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
-}
-
-function propertyNameText(name) {
-  if (!name) return null;
-  return ts.isIdentifier(name) || ts.isStringLiteralLike(name) || ts.isNumericLiteral(name)
-    ? name.text
-    : null;
-}
-
 function importedSpecifiers(sourceText) {
   return ts.preProcessFile(sourceText, true, true).importedFiles.map((entry) => entry.fileName);
+}
+
+function featureIdentityDeclarations(filePath, sourceText) {
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const localNames = importedBindingNames(
+    sourceFile,
+    '@setsuna-desktop/feature-core/definition',
+    'defineFeature',
+  );
+  const declarations = [];
+  visitImportedCalls(sourceFile, localNames, (call) => {
+    const argument = call.arguments[0];
+    declarations.push({
+      featureId: argument && ts.isStringLiteralLike(argument) ? argument.text : null,
+      filePath,
+    });
+  });
+  return declarations;
+}
+
+function countImportedBindingCalls(filePath, sourceText, moduleName, exportedName) {
+  const sourceFile = ts.createSourceFile(filePath, sourceText, ts.ScriptTarget.Latest, true);
+  const localNames = importedBindingNames(sourceFile, moduleName, exportedName);
+  let calls = 0;
+  visitImportedCalls(sourceFile, localNames, () => {
+    calls += 1;
+  });
+  return calls;
+}
+
+function importedBindingNames(sourceFile, moduleName, exportedName) {
+  const localNames = new Set();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement)
+      || !ts.isStringLiteral(statement.moduleSpecifier)
+      || statement.moduleSpecifier.text !== moduleName
+    ) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const element of bindings.elements) {
+      if ((element.propertyName?.text ?? element.name.text) === exportedName) {
+        localNames.add(element.name.text);
+      }
+    }
+  }
+  return localNames;
+}
+
+function visitImportedCalls(sourceFile, localNames, onCall) {
+  if (!localNames.size) return;
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node)
+      && ts.isIdentifier(node.expression)
+      && localNames.has(node.expression.text)
+    ) onCall(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
 }
 
 async function childDirectories(directory) {

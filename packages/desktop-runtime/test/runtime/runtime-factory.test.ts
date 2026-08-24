@@ -9,6 +9,7 @@ import {
   type DesktopResolveNetworkProxyInput,
 } from '@setsuna-desktop/contracts';
 import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
+import { createNoopGoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
 import { visionRecognitionServiceCapability } from '@setsuna-desktop/feature-vision-recognition/contracts';
 import { mkdtemp } from 'node:fs/promises';
@@ -21,6 +22,58 @@ import { activateBuiltinRuntimeFeatures } from '../../src/composition/runtime-fe
 import { InMemoryDesktopNativeBridge } from '../support/in-memory-secret-store.js';
 
 describe('runtime factory tool wiring', () => {
+  it('rolls back earlier host bindings when a later Feature binding fails', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-feature-rollback-test-'));
+    const runtime = createRuntimeFactory({ dataDir });
+    const blockingGoalControl = Object.freeze({
+      ...createNoopGoalControl(),
+      available: true as const,
+    });
+    const releaseBlockingGoal = runtime.agentLoop.bindGoalControl(blockingGoalControl);
+
+    try {
+      await expect(activateBuiltinRuntimeFeatures(runtime)).rejects.toThrow('Goal control is already bound.');
+      expect(runtime.featureManagement.statuses()).toEqual([]);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
+      );
+    } finally {
+      releaseBlockingGoal();
+      await runtime.extensionManager.shutdown();
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
+  it('detaches Feature-owned host bindings when the runtime composition is disposed', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-feature-disposal-test-'));
+    const runtime = createRuntimeFactory({ dataDir });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
+
+    try {
+      expect(runtime.featureManagement.statuses().length).toBeGreaterThan(0);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
+      );
+
+      await composition.dispose();
+
+      expect(runtime.featureManagement.statuses()).toEqual([]);
+      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
+      );
+    } finally {
+      await composition.dispose();
+      await runtime.extensionManager.shutdown();
+      await runtime.mcpConnections.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
   it('uses the same skill registry for chat tool creation and capability form APIs', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-factory-test-'));
     const runtime = createRuntimeFactory({ dataDir });

@@ -33,9 +33,9 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 | `ArchivedThreadsSettings.tsx` | 归档线程管理 |
 | `AboutSettings.tsx` | 版本与 updater |
 
-Memory 是独立 renderer Feature，但不单独占用设置导航。它通过 `registerSectionExtension()` 把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 `SettingsViewHostProps.ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
+Memory 是独立 renderer Feature，但不单独占用设置导航。它的 setup 静态返回两个 `settingsSectionExtensions`，把启用/生成/外部上下文策略和记忆管理入口追加到“个性化”，把抽取/整理模型追加到“专用模型”；preview、delete、clear 和保存状态仍由 Feature 自己持有，`SettingsPage` 不接收任何 Memory 专用 prop。标准 Section/Group/Row、Switch、Select 和 Button 由宿主通过 `SettingsViewHostProps.ui` 注入，因此业务所有权独立不等于信息架构或视觉系统独立。
 
-WebDAV Sync 也是独立 renderer Feature，并通过 `SettingsViewRegistry` 注册完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/renderer`；宿主设置页只渲染 contribution，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
+WebDAV Sync 也是独立 renderer Feature，并通过 setup 返回静态 `settingsViews` contribution，形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/renderer`；宿主设置页只渲染只读 catalog，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
 
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。
 
@@ -128,7 +128,7 @@ Capabilities 的一级标签默认通过 `AppRouteTopbarPortal` 挂载到 `Shell
 
 本地 Plugin Bundle 通过右上角“创建”菜单导入；不属于默认市场的已安装 Plugin 单独标识。
 
-图片生成和视觉识别第一方 Plugin 的配置不在 `CapabilitiesPluginDetail` 中硬编码。各自的 renderer Feature 通过 `SettingsViewRegistry` 向对应 Plugin 详情贡献设置与测试视图：
+图片生成和视觉识别第一方 Plugin 的配置不在 `CapabilitiesPluginDetail` 中硬编码。各自的 renderer Feature 在 setup 时静态返回对应 Plugin 详情的设置与测试视图：
 
 - `packages/features/image-generation/src/renderer/`
 - `packages/features/vision-recognition/src/renderer/`

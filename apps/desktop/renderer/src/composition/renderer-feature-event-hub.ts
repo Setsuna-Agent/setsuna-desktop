@@ -1,5 +1,5 @@
 import type { StoredThreadEvent } from '@setsuna-desktop/contracts';
-import { isFeatureEventEnvelope, type FeatureEventFeedItem } from '@setsuna-desktop/feature-core/events';
+import { isFeatureEventEnvelope } from '@setsuna-desktop/feature-core/events';
 import type {
   RendererFeatureEventFeed,
   RendererFeatureEventFeedListener,
@@ -50,33 +50,31 @@ export class RendererFeatureEventHub implements RendererFeatureEventFeed {
   }
 
   accept(record: StoredThreadEvent): void {
+    if (!isFeatureEventEnvelope(record)) return;
     const subscriptions = this.subscriptionsByThread.get(record.threadId);
     if (!subscriptions?.size) return;
     for (const subscription of [...subscriptions]) {
-      const item: FeatureEventFeedItem = isFeatureEventEnvelope(record)
-        && record.featureId === subscription.featureId
-        ? Object.freeze({ kind: 'event', seq: record.seq, event: record })
-        : Object.freeze({ kind: 'advance', seq: record.seq });
-      this.deliver(subscription, item);
+      if (record.featureId === subscription.featureId) {
+        this.deliver(subscription, record.seq);
+      }
     }
   }
 
-  /** A Core resync snapshot has no Feature payload, but its watermark must still reach controllers. */
-  advance(threadId: string, throughSeq: number): void {
+  /** A Core resync may have skipped Feature events, so active controllers re-read typed state. */
+  resync(threadId: string, throughSeq: number): void {
     const subscriptions = this.subscriptionsByThread.get(threadId);
     if (!subscriptions?.size) return;
-    const item: FeatureEventFeedItem = Object.freeze({ kind: 'advance', seq: throughSeq });
-    for (const subscription of [...subscriptions]) this.deliver(subscription, item);
+    for (const subscription of [...subscriptions]) this.deliver(subscription, throughSeq);
   }
 
-  private deliver(subscription: Subscription, item: FeatureEventFeedItem): void {
+  private deliver(subscription: Subscription, throughSeq: number): void {
     try {
-      subscription.listener(item);
+      subscription.listener(throughSeq);
     } catch {
       // One optional controller cannot break the host SSE owner or sibling Features.
       console.error('[renderer-feature] Event feed listener failed.', {
         featureId: subscription.featureId,
-        seq: item.seq,
+        seq: throughSeq,
       });
     }
   }

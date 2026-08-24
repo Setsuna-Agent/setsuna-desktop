@@ -14,6 +14,10 @@ import {
   FeatureSettingsDocumentError,
   FeatureSettingsRevisionConflictError,
 } from '@setsuna-desktop/feature-core/settings';
+import {
+  FeatureCompositionValidationError,
+  type FeatureCompositionIssue,
+} from '@setsuna-desktop/feature-core/status';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -54,18 +58,44 @@ export class FileFeatureSettingsRegistry implements RuntimeFeatureSettingsRegist
     this.secrets = secretPort ?? new VersionedFileSecretStore(dataDir);
   }
 
-  register(bundle: ErasedFeatureSettingsBundle): void {
-    for (const definition of bundle.erasedDocuments) {
-      if (definition.featureId !== bundle.featureId) {
-        throw new Error(`Feature settings bundle "${bundle.featureId}" contains a foreign document.`);
+  registerBundles(bundles: readonly ErasedFeatureSettingsBundle[]): void {
+    const staged = new Map<string, ErasedFeatureSettingsDocumentDefinition>();
+    const issues: FeatureCompositionIssue[] = [];
+
+    for (const bundle of bundles) {
+      for (const definition of bundle.erasedDocuments) {
+        if (definition.featureId !== bundle.featureId) {
+          issues.push({
+            code: 'INVALID_SETTINGS_DOCUMENT',
+            message: `Feature settings bundle "${bundle.featureId}" contains a document owned by "${definition.featureId}".`,
+            featureIds: [bundle.featureId, definition.featureId],
+          });
+          continue;
+        }
+        const key = documentKey(definition.featureId, definition.documentId);
+        if (this.definitions.has(key) || staged.has(key)) {
+          issues.push({
+            code: 'DUPLICATE_SETTINGS_DOCUMENT',
+            message: `Feature settings document is registered more than once: ${key}`,
+            featureIds: [definition.featureId],
+          });
+          continue;
+        }
+        try {
+          validateDefinition(definition);
+          staged.set(key, definition);
+        } catch (error) {
+          issues.push({
+            code: 'INVALID_SETTINGS_DOCUMENT',
+            message: `Feature settings document ${key} is invalid: ${errorMessage(error)}`,
+            featureIds: [definition.featureId],
+          });
+        }
       }
-      const key = documentKey(definition.featureId, definition.documentId);
-      if (this.definitions.has(key)) {
-        throw new Error(`Feature settings document is already registered: ${key}`);
-      }
-      validateDefinition(definition);
-      this.definitions.set(key, definition);
     }
+
+    if (issues.length) throw new FeatureCompositionValidationError(issues);
+    for (const [key, definition] of staged) this.definitions.set(key, definition);
   }
 
   listRegisteredDocuments(): readonly Readonly<{ featureId: FeatureId; documentId: string }>[] {
@@ -662,6 +692,10 @@ function safeDocumentError(error: unknown): string {
     return error.message;
   }
   return 'Feature settings document could not be validated.';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function isRegularFile(filePath: string): Promise<boolean> {

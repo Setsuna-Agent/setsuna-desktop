@@ -1,7 +1,7 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
-import { clearTerminalRestoreBuffer } from '@setsuna-desktop/feature-terminal/renderer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { clearTerminalFeatureRestoreBuffer } from '../../../composition/terminal-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
@@ -167,7 +167,7 @@ export function useDesktopWorkspacePanels({
       const sessionsByProject = sessionsByPanel[panelId];
       if (!sessionsByProject) return sessionsByPanel;
       for (const session of Object.values(sessionsByProject)) {
-        clearTerminalRestoreBuffer(session.sessionId);
+        clearTerminalFeatureRestoreBuffer(session.sessionId);
         void window.setsunaDesktop?.terminal.close(session.sessionId).catch(() => undefined);
       }
       const next = { ...sessionsByPanel };

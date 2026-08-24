@@ -1,14 +1,7 @@
-import type { FeatureId, PackageVersion } from './definition.js';
+import type { FeatureId } from './definition.js';
 
 export type FeatureCriticality = 'required' | 'optional';
-export type FeatureActivationStatus = 'active' | 'degraded' | 'failed' | 'blocked';
-export type FeatureLifecycleState =
-  | 'declared'
-  | 'starting'
-  | 'active'
-  | 'degraded'
-  | 'draining'
-  | 'stopped';
+export type FeatureActivationStatus = 'active' | 'degraded' | 'failed';
 
 export type FeatureDiagnostic = Readonly<{
   code: string;
@@ -17,16 +10,14 @@ export type FeatureDiagnostic = Readonly<{
 
 export type FeatureStatusSnapshot = Readonly<{
   featureId: FeatureId;
-  version: PackageVersion;
   criticality: FeatureCriticality;
   status: FeatureActivationStatus;
-  lifecycle: FeatureLifecycleState;
   diagnostic?: FeatureDiagnostic;
 }>;
 
 export interface FeatureHealthReporter {
-  markActive(): void;
-  markDegraded(diagnostic: FeatureDiagnostic): void;
+  /** A Feature is active only after every independently owned condition is cleared. */
+  setCondition(conditionId: string, diagnostic: FeatureDiagnostic | null): void;
 }
 
 export class FeatureScopeUnavailableError extends Error {
@@ -51,21 +42,36 @@ export type FeatureCompositionIssueCode =
   | 'DUPLICATE_FEATURE_ID'
   | 'DUPLICATE_CAPABILITY_PROVIDER'
   | 'MISSING_CAPABILITY'
-  | 'CAPABILITY_MAJOR_MISMATCH'
-  | 'DEPENDENCY_CYCLE';
+  | 'DEPENDENCY_CYCLE'
+  | 'DUPLICATE_RENDERER_MESSAGE_NAMESPACE'
+  | 'DUPLICATE_RENDERER_MESSAGE_KEY'
+  | 'DUPLICATE_RENDERER_CONTRIBUTION'
+  | 'INVALID_RENDERER_CONTRIBUTION'
+  | 'DUPLICATE_SETTINGS_DOCUMENT'
+  | 'INVALID_SETTINGS_DOCUMENT'
+  | 'INVALID_PRELOAD_BRIDGE';
 
 export type FeatureCompositionIssue = Readonly<{
   code: FeatureCompositionIssueCode;
   message: string;
+  /** Concrete Features involved in the invalid composition, when attribution is possible. */
+  featureIds?: readonly FeatureId[];
 }>;
 
 export class FeatureCompositionValidationError extends Error {
   readonly issues: readonly FeatureCompositionIssue[];
 
   constructor(issues: readonly FeatureCompositionIssue[]) {
-    super(`Feature composition validation failed with ${issues.length} issue(s).`);
+    const summary = issues[0]?.message;
+    super(
+      `Feature composition validation failed with ${issues.length} issue(s).`
+      + (summary ? ` ${summary}` : ''),
+    );
     this.name = 'FeatureCompositionValidationError';
-    this.issues = Object.freeze([...issues]);
+    this.issues = Object.freeze(issues.map((issue) => Object.freeze({
+      ...issue,
+      ...(issue.featureIds ? { featureIds: Object.freeze([...issue.featureIds]) } : {}),
+    })));
   }
 }
 
@@ -73,7 +79,7 @@ export class FeatureReadinessError extends Error {
   readonly statuses: readonly FeatureStatusSnapshot[];
 
   constructor(statuses: readonly FeatureStatusSnapshot[]) {
-    super('A required Feature failed to activate or was blocked by a required dependency.');
+    super('A required Feature failed to activate.');
     this.name = 'FeatureReadinessError';
     this.statuses = Object.freeze([...statuses]);
   }
