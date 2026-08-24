@@ -9,6 +9,7 @@ import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-r
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
 import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-updater/contracts';
 import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/feature-webdav-sync/contracts';
+import type { WorkspaceAppsPreloadBridgeContribution } from '@setsuna-desktop/feature-workspace-apps/contracts';
 
 declare global {
   interface Window {
@@ -18,6 +19,7 @@ declare global {
       & ReviewPreloadBridgeContribution
       & TerminalPreloadBridgeContribution
       & UpdaterPreloadBridgeContribution
-      & WebDavSyncPreloadBridgeContribution;
+      & WebDavSyncPreloadBridgeContribution
+      & WorkspaceAppsPreloadBridgeContribution;
   }
 }

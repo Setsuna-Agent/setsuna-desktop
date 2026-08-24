@@ -16,11 +16,11 @@ Preload 是 renderer 唯一能接触 Electron IPC 的地方。它使用 `context
 | `desktopReview` | review state、stage、unstage、discard | `packages/features/review/{preload,main}` |
 | `terminal` | session open/write/read/resize/restart/close、事件 | `packages/features/terminal/{preload,main}` |
 | `webdavSync` | 连接、备份、还原、取消与状态事件 | `packages/features/webdav-sync/{preload,main}` |
-| `workspaceApps` | 应用列表与打开 workspace/file | `ipc/workspace-ipc.ts` |
+| `workspaceApps` | 应用列表与打开 workspace/file | `packages/features/workspace-apps/{preload,main}` |
 | `updater` | 状态、检查、下载源、安装包打开与状态事件 | `packages/features/updater/{preload,main}` |
 | `windowControls` | minimize/maximize/close/scale 与状态事件 | `ipc/window-ipc.ts` |
 
-准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义；Updater bridge 例如由 `packages/features/updater/src/contracts/bridge.ts` 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
+准确方法面由 `packages/contracts/src/desktop.ts`、`http.ts` 和相关 Feature/领域 contract 定义；Updater、Workspace Apps 等 bridge 由各自 Feature contracts 定义。Host namespaces 与 Feature contributions 由 `src/composition/builtin-preload-features.ts` 组装，最后只调用一次 `contextBridge.exposeInMainWorld`。
 
 ## Runtime SSE 的细节
 

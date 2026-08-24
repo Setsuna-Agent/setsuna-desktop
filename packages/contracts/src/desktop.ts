@@ -52,12 +52,6 @@ export type DesktopImageDataResult =
   | { ok: true; data: Uint8Array; type: string }
   | { ok: false; error: string };
 
-export type DesktopWorkspaceApp = {
-  id: string;
-  label: string;
-  icon: string;
-};
-
 export type DesktopUserProfile = {
   username: string;
   displayName: string;
@@ -184,9 +178,5 @@ export type SetsunaDesktopBridge = {
     isMaximized(): Promise<boolean>;
     onMaximizedChange(callback: (maximized: boolean) => void): () => void;
     setTitlebarScale(scale: number): Promise<boolean>;
-  };
-  workspaceApps: {
-    list(workspaceRoot: string): Promise<DesktopWorkspaceApp[]>;
-    open(workspaceRoot: string, appId: string, filePath?: string | null, line?: number | null): Promise<boolean>;
   };
 };

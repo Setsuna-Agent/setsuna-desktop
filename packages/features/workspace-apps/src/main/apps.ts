@@ -1,9 +1,9 @@
-import type { DesktopWorkspaceApp } from '@setsuna-desktop/contracts';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import path from 'node:path';
+import type { DesktopWorkspaceApp } from '../contracts/index.js';
 
 type WorkspaceAppDefinition = DesktopWorkspaceApp & {
   macAppName?: string;

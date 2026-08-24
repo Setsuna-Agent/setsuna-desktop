@@ -3,7 +3,7 @@ import {
   DESKTOP_WORKSPACE_APP_STORAGE_KEY,
   readPreferredWorkspaceAppId,
   writePreferredWorkspaceAppId,
-} from '../../../../../src/features/workspace/model/workspaceAppPreference.js';
+} from '../../src/renderer/preference.js';
 
 describe('workspace app preference', () => {
   it('reads and writes the pc-compatible preferred workspace app id', () => {

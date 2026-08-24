@@ -1,4 +1,8 @@
-import type { DesktopOpenPathResult, DesktopWorkspaceApp, SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
+import type { DesktopOpenPathResult, SetsunaDesktopBridge } from '@setsuna-desktop/contracts';
+import type {
+  DesktopWorkspaceApp,
+  WorkspaceAppsDesktopBridge,
+} from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
@@ -6,7 +10,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 type SideWorkspaceFileOpeningOptions = {
   filePath: string;
   line?: number;
-  openInWorkspaceApp?: SetsunaDesktopBridge['workspaceApps']['open'];
+  openInWorkspaceApp?: WorkspaceAppsDesktopBridge['open'];
   openWithDefaultApp?: (workspaceRoot: string, filePath: string) => Promise<DesktopOpenPathResult>;
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   t?: Translate;

@@ -3,6 +3,7 @@
 源码：
 
 - `apps/desktop/renderer/src/features/workspace/`
+- `packages/features/workspace-apps/src/renderer/`
 - `apps/desktop/renderer/src/features/conversation-debug/`
 
 Workspace feature 管理右侧/底部工作区 surface：项目文件、review、terminal、内置浏览器和外部应用。Conversation debug 是受开发者开关保护的独立诊断 feature。
@@ -101,7 +102,7 @@ Browser presentation 位于 `packages/features/browser/src/renderer/`，主要�
 
 ## 外部 Workspace apps
 
-`WorkspaceAppLauncher.tsx` 展示 main 检测到的应用。`model/workspaceAppPreference.ts` 保存用户偏好。
+`packages/features/workspace-apps/src/renderer/` 拥有 launcher、glyph、应用图标、用户偏好、文案和作用域样式。宿主 `composition/workspace-apps-feature-adapter.tsx` 只注入 i18n；Workspace hook 继续拥有 project/panel 状态和打开动作编排。
 
 打开 workspace/file 时只传结构化 app ID、workspace root、relative path 和可选 line；平台命令由 main 构造。
 
@@ -158,8 +159,8 @@ Conversation debug 有独立 `conversation-debug.css`，不要把图和虚拟列
 
 ## 测试
 
-Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser、review、icons、hooks、model 与 resize。Terminal 自有 renderer helper 测试位于 `packages/features/terminal/test/renderer/`。
+Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser、review、hooks、model 与 resize。Workspace Apps 和 Terminal 自有 renderer helper 测试分别位于 `packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
 
 Conversation debug 测试位于 `test/unit/features/conversation-debug/`，重点覆盖 graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation 和 virtual window。
 
-Main 对应 review、browser、workspace tests，以及 Terminal Feature integration tests，也必须随跨层改动更新。
+Main 对应 review、browser、workspace tests，以及 Workspace Apps/Terminal Feature tests，也必须随跨层改动更新。

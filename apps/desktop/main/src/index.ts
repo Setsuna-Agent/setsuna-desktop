@@ -28,7 +28,6 @@ import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import { registerWindowsSandboxIpc } from './ipc/windows-sandbox-ipc.js';
-import { registerWorkspaceIpc } from './ipc/workspace-ipc.js';
 import {
   maintenanceProfileRoot,
   resolveDesktopDataRootBootMode,
@@ -422,7 +421,6 @@ async function createWindow(): Promise<void> {
     new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
     currentMainWindow,
   );
-  registerWorkspaceIpc();
   currentMainWindow.on('closed', () => {
     currentWebDavSyncLifecycle.close();
     void shutdownDesktopServices();

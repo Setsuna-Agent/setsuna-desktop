@@ -1,6 +1,5 @@
 import type {
   DesktopRuntimeClient,
-  DesktopWorkspaceApp,
   RuntimeConfigState,
   RuntimePluginSummary,
   RuntimeSkillSummary,
@@ -8,6 +7,7 @@ import type {
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { useCallback, type Dispatch, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';

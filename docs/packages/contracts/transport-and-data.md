@@ -48,8 +48,7 @@ Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。Feature
 - Data-root。
 - Desktop/system。
 - Browser。
-- Feature-owned bridge（Review、Terminal）通过对应 Feature contracts 与 host bridge 显式组合。
-- Workspace apps。
+- Feature-owned bridge（Review、Terminal、Workspace Apps 等）通过对应 Feature contracts 与 host bridge 显式组合。
 - Updater。
 - Window controls。
 

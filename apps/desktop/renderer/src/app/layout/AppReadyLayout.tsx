@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeActivityTrigger.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
-import { WorkspaceAppLauncher } from '../../features/workspace/WorkspaceAppLauncher.js';
+import { WorkspaceAppsFeatureLauncher } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
 import { useAppKeyboardShortcuts, type AppKeyboardShortcutHandlers } from '../controller/useAppKeyboardShortcuts.js';
@@ -248,7 +248,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       actions={activeView === 'chat' ? (
         <>
           {activeWorkspace?.path ? (
-            <WorkspaceAppLauncher
+            <WorkspaceAppsFeatureLauncher
               selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
               workspaceAppMenuOpen={workspacePanels.workspaceAppMenuOpen}
               workspaceApps={workspacePanels.workspaceApps}

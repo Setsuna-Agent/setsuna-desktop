@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { workspaceAppLauncherMenuPosition } from '../../../../src/features/workspace/WorkspaceAppLauncher.js';
+import { workspaceAppLauncherMenuPosition } from '../../src/renderer/WorkspaceAppLauncher.js';
 
 describe('workspaceAppLauncherMenuPosition', () => {
   it('right-aligns the menu with its launcher at the default page scale', () => {

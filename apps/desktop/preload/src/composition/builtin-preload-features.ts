@@ -14,6 +14,8 @@ import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-
 import { updaterPreloadFeature } from '@setsuna-desktop/feature-updater/preload';
 import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { webDavSyncPreloadFeature } from '@setsuna-desktop/feature-webdav-sync/preload';
+import type { WorkspaceAppsPreloadBridgeContribution } from '@setsuna-desktop/feature-workspace-apps/contracts';
+import { workspaceAppsPreloadFeature } from '@setsuna-desktop/feature-workspace-apps/preload';
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & BrowserPreloadBridgeContribution
@@ -21,7 +23,8 @@ export type DesktopPreloadBridge = SetsunaDesktopBridge
   & ReviewPreloadBridgeContribution
   & TerminalPreloadBridgeContribution
   & UpdaterPreloadBridgeContribution
-  & WebDavSyncPreloadBridgeContribution;
+  & WebDavSyncPreloadBridgeContribution
+  & WorkspaceAppsPreloadBridgeContribution;
 
 const desktopPreloadBridgeKeys = [
   'browser',
@@ -49,6 +52,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
     terminalPreloadFeature,
     updaterPreloadFeature,
     webDavSyncPreloadFeature,
+    workspaceAppsPreloadFeature,
   ],
 });
 

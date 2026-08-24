@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { pageScaleInverse, zoomedPortalPosition } from '../../shared/lib/zoomedPortalPosition.js';
-import { WorkspaceAppGlyph } from './PanelChrome.js';
+import { WorkspaceAppsFeatureGlyph } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopWorkspaceApp } from './model.js';
 
 export type WorkspaceFileContextTarget = {
@@ -113,7 +113,7 @@ export function WorkspaceFileContextMenu({
               runAndClose(() => onOpenWithApp(selectedWorkspaceApp.id, target.filePath, target.line));
             }}
           >
-            {selectedWorkspaceApp ? <WorkspaceAppGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />}
+            {selectedWorkspaceApp ? <WorkspaceAppsFeatureGlyph app={selectedWorkspaceApp} /> : <Code2 size={14} />}
             <span>{selectedWorkspaceApp ? openInAppLabel(selectedWorkspaceApp, target.line, t) : t('workspace.fileMenu.noApp')}</span>
           </button>
           <div
@@ -147,7 +147,7 @@ export function WorkspaceFileContextMenu({
                     key={app.id}
                     onClick={() => runAndClose(() => onOpenWithApp(app.id, target.filePath, target.line))}
                   >
-                    <WorkspaceAppGlyph app={app} />
+                    <WorkspaceAppsFeatureGlyph app={app} />
                     <span>{app.label}</span>
                     {selectedWorkspaceApp?.id === app.id ? <Check className="desktop-file-context-menu__selected" size={13} /> : null}
                   </button>

@@ -2,6 +2,10 @@ import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { CollaborationTask } from '@setsuna-desktop/feature-collaboration/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clearTerminalFeatureRestoreBuffer } from '../../../composition/terminal-feature-adapter.js';
+import {
+  readPreferredWorkspaceAppId,
+  writePreferredWorkspaceAppId,
+} from '../../../composition/workspace-apps-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
@@ -37,7 +41,6 @@ import {
   type DesktopTerminalSession,
   type DesktopWorkspaceApp,
 } from '../model.js';
-import { readPreferredWorkspaceAppId, writePreferredWorkspaceAppId } from '../model/workspaceAppPreference.js';
 import { useDesktopReviewState } from './useDesktopReviewState.js';
 import {
   desktopWorkspaceBrowserPanelInstances,

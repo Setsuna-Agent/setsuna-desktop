@@ -52,6 +52,7 @@ import {
   type WebDavSyncLifecycle,
   type WebDavSyncMainHost,
 } from '@setsuna-desktop/feature-webdav-sync/main';
+import { workspaceAppsMainFeature } from '@setsuna-desktop/feature-workspace-apps/main';
 import type { BrowserWindow } from 'electron';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
@@ -65,6 +66,7 @@ const mainFeatures = defineMainFeatureHost({
     terminalMainFeature,
     updaterMainFeature,
     webDavSyncMainFeature,
+    workspaceAppsMainFeature,
   ],
   optional: [],
 });
