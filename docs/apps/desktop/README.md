@@ -98,7 +98,7 @@ Preload 当前通过 contracts、main IPC 和 renderer client 的组合测试约
 - 数据目录迁移：[main/data-root.md](main/data-root.md)
 - 内置浏览器：[main/browser.md](main/browser.md)
 - Runtime 子进程和 IPC：[main/runtime-and-ipc.md](main/runtime-and-ipc.md)
-- Feature-owned Review、terminal、updater 与宿主 workspace app：[main/native-capabilities.md](main/native-capabilities.md)
+- Feature-owned Review、terminal、updater、workspace apps：[main/native-capabilities.md](main/native-capabilities.md)
 - 顶层 UI 状态：[renderer/app-and-runtime-state.md](renderer/app-and-runtime-state.md)
 - Chat：[renderer/chat.md](renderer/chat.md)
 - Workspace：[renderer/workspace-and-debug.md](renderer/workspace-and-debug.md)

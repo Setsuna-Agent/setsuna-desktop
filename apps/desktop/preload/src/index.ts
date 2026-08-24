@@ -140,12 +140,6 @@ const windowsSandbox: SetsunaDesktopBridge['windowsSandbox'] = {
   runAction: (action) => ipcRenderer.invoke('windows-sandbox:run-action', action),
 };
 
-const workspaceApps: SetsunaDesktopBridge['workspaceApps'] = {
-  list: (workspaceRoot) => ipcRenderer.invoke('workspace-apps:list', { workspaceRoot }),
-  open: (workspaceRoot, appId, filePath, line) =>
-    ipcRenderer.invoke('workspace-apps:open', { workspaceRoot, appId, filePath, line }),
-};
-
 const hostBridge: SetsunaDesktopBridge = {
   dataRoot,
   desktop,
@@ -154,7 +148,6 @@ const hostBridge: SetsunaDesktopBridge = {
   runtime,
   windowControls,
   windowsSandbox,
-  workspaceApps,
 };
 const bridge = composeBuiltinPreloadBridge(hostBridge);
 contextBridge.exposeInMainWorld('setsunaDesktop', bridge);

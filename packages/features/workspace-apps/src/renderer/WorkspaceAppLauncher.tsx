@@ -1,17 +1,19 @@
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import { Check, ChevronDown } from 'lucide-react';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import {
-  pageScaleInverse,
-  zoomedPortalPosition,
-  type ZoomedPortalPosition,
-} from '../../shared/lib/zoomedPortalPosition.js';
-import { WorkspaceAppGlyph } from './PanelChrome.js';
-import type { DesktopWorkspaceApp } from './model.js';
+import type { DesktopWorkspaceApp } from '../contracts/index.js';
+import { WorkspaceAppGlyph } from './WorkspaceAppGlyph.js';
+import './workspace-apps.css';
 
 const WORKSPACE_APP_MENU_WIDTH = 196;
 const WORKSPACE_APP_MENU_OFFSET = 6;
+const VIEWPORT_GUTTER = 8;
+
+type WorkspaceAppMenuPosition = Readonly<{
+  left: number;
+  top: number;
+}>;
 
 export function WorkspaceAppLauncher({
   selectedWorkspaceApp,
@@ -20,18 +22,19 @@ export function WorkspaceAppLauncher({
   onOpenCurrentWorkspaceApp,
   onSelectWorkspaceApp,
   onToggleWorkspaceAppMenu,
-}: {
+  translate,
+}: Readonly<{
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   workspaceAppMenuOpen: boolean;
   workspaceApps: DesktopWorkspaceApp[];
   onOpenCurrentWorkspaceApp: () => void;
   onSelectWorkspaceApp: (app: DesktopWorkspaceApp) => void;
   onToggleWorkspaceAppMenu: () => void;
-}) {
-  const { t } = useI18n();
+  translate: RendererTranslate;
+}>) {
   const launcherRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [menuPosition, setMenuPosition] = useState<ZoomedPortalPosition>({ left: 8, top: 8 });
+  const [menuPosition, setMenuPosition] = useState<WorkspaceAppMenuPosition>({ left: 8, top: 8 });
 
   const updateMenuPosition = useCallback(() => {
     const rect = launcherRef.current?.getBoundingClientRect();
@@ -77,17 +80,21 @@ export function WorkspaceAppLauncher({
   }, [onToggleWorkspaceAppMenu, updateMenuPosition, workspaceAppMenuOpen, workspaceApps.length]);
 
   return (
-    <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label={t('workspace.launcher.label')}>
+    <div className="desktop-workspace-launcher" ref={launcherRef} role="group" aria-label={translate('feature.workspaceApps.launcher.label')}>
       <button
         className="desktop-workspace-launcher__main"
         type="button"
         disabled={!selectedWorkspaceApp}
-        aria-label={selectedWorkspaceApp ? t('workspace.launcher.openWith', { app: selectedWorkspaceApp.label }) : t('workspace.launcher.label')}
+        aria-label={selectedWorkspaceApp
+          ? translate('feature.workspaceApps.launcher.openWith', { app: selectedWorkspaceApp.label })
+          : translate('feature.workspaceApps.launcher.label')}
         title={selectedWorkspaceApp?.label}
         onClick={onOpenCurrentWorkspaceApp}
       >
         <WorkspaceAppGlyph app={selectedWorkspaceApp} />
-        <span className="desktop-workspace-launcher__label">{selectedWorkspaceApp?.label ?? t('workspace.launcher.open')}</span>
+        <span className="desktop-workspace-launcher__label">
+          {selectedWorkspaceApp?.label ?? translate('feature.workspaceApps.launcher.open')}
+        </span>
       </button>
       <button
         className={`desktop-workspace-launcher__trigger ${workspaceAppMenuOpen ? 'is-active' : ''}`}
@@ -95,7 +102,7 @@ export function WorkspaceAppLauncher({
         disabled={!workspaceApps.length}
         aria-expanded={workspaceAppMenuOpen}
         aria-haspopup="menu"
-        aria-label={t('workspace.launcher.choose')}
+        aria-label={translate('feature.workspaceApps.launcher.choose')}
         onClick={() => {
           updateMenuPosition();
           onToggleWorkspaceAppMenu();
@@ -122,7 +129,7 @@ export function WorkspaceAppLauncher({
                   </button>
                 ))
               ) : (
-                <span>{t('workspace.launcher.noApps')}</span>
+                <span>{translate('feature.workspaceApps.launcher.noApps')}</span>
               )}
             </div>,
             document.body,
@@ -146,16 +153,26 @@ export function workspaceAppLauncherMenuPosition({
   scaleInverse?: number;
   viewportHeight: number;
   viewportWidth: number;
-}): ZoomedPortalPosition {
-  return zoomedPortalPosition({
-    anchorX: rect.right,
-    anchorY: rect.bottom,
-    horizontalAlign: 'end',
-    menuHeight,
-    menuWidth,
-    offsetY: WORKSPACE_APP_MENU_OFFSET,
-    scaleInverse,
-    viewportHeight,
-    viewportWidth,
-  });
+}): WorkspaceAppMenuPosition {
+  const safeScaleInverse = Number.isFinite(scaleInverse) && scaleInverse > 0
+    ? scaleInverse
+    : 1;
+  const scaledViewportWidth = viewportWidth * safeScaleInverse;
+  const scaledViewportHeight = viewportHeight * safeScaleInverse;
+  const desiredLeft = rect.right * safeScaleInverse - menuWidth;
+  const desiredTop = rect.bottom * safeScaleInverse + WORKSPACE_APP_MENU_OFFSET;
+  const maxLeft = Math.max(VIEWPORT_GUTTER, scaledViewportWidth - menuWidth - VIEWPORT_GUTTER);
+  const maxTop = Math.max(VIEWPORT_GUTTER, scaledViewportHeight - menuHeight - VIEWPORT_GUTTER);
+  return {
+    left: Math.min(Math.max(VIEWPORT_GUTTER, desiredLeft), maxLeft),
+    top: Math.min(Math.max(VIEWPORT_GUTTER, desiredTop), maxTop),
+  };
+}
+
+function pageScaleInverse(): number {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return 1;
+  const value = Number.parseFloat(
+    window.getComputedStyle(document.documentElement).getPropertyValue('--app-page-scale-inverse'),
+  );
+  return Number.isFinite(value) && value > 0 ? value : 1;
 }

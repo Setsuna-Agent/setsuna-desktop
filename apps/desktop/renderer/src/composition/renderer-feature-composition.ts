@@ -41,6 +41,7 @@ import {
   webDavSyncRendererHostCapability,
 } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-workspace-dependencies/renderer';
+import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
 import {
   createRendererFeatureViews,
@@ -56,6 +57,7 @@ const rendererFeatures = defineRendererFeatureHost({
     networkProxyRendererFeature,
     terminalRendererFeature,
     updaterRendererFeature,
+    workspaceAppsRendererFeature,
   ],
   optional: [
     collaborationRendererFeature,

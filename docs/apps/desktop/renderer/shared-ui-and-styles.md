@@ -115,9 +115,8 @@
 - 优先构建期静态 asset。
 - 不从 runtime Plugin 路径直接渲染任意 SVG。
 
-Workspace app 图标属于 workspace feature，保留在 `features/workspace/assets/`。
+Workspace app 图标属于 Workspace Apps Feature，保留在 `packages/features/workspace-apps/src/renderer/assets/`。
 
 ## 测试
 
 `test/unit/shared/` 镜像 branding、hooks、i18n、lib、preferences 和 UI。纯 CSS 改动没有专用截图测试时，至少运行 lint/build；本仓库默认不要求主动打开浏览器做视觉验证。
-

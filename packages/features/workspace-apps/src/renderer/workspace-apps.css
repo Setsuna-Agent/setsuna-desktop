@@ -1,0 +1,181 @@
+.desktop-workspace-launcher {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  height: 28px;
+  margin-left: 10px;
+  margin-right: 8px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--app-border) 86%, transparent);
+  border-radius: var(--app-radius-md);
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.desktop-workspace-launcher:hover {
+  border-color: color-mix(in srgb, var(--app-text) 24%, var(--app-border));
+}
+
+.desktop-workspace-launcher__main,
+.desktop-workspace-launcher__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  line-height: 1;
+}
+
+.desktop-workspace-launcher__main {
+  gap: 6px;
+  min-width: 68px;
+  max-width: 140px;
+  padding: 0 7px 0 8px;
+}
+
+.desktop-workspace-launcher__label {
+  max-width: 102px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-workspace-launcher__trigger {
+  width: 24px;
+  border-left: 1px solid color-mix(in srgb, var(--app-border) 74%, transparent);
+  color: color-mix(in srgb, var(--app-text-muted) 90%, transparent);
+}
+
+.desktop-workspace-launcher__main:not(:disabled):hover,
+.desktop-workspace-launcher__trigger:not(:disabled):hover {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-workspace-launcher__trigger.is-active {
+  background: var(--desktop-agent-control-active-bg);
+}
+
+.desktop-workspace-launcher__main:disabled,
+.desktop-workspace-launcher__trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.desktop-workspace-launcher-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 196px;
+  max-height: min(520px, calc(100vh - 72px));
+  padding: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  background: var(--app-surface);
+  overflow-y: auto;
+  box-shadow: var(--app-shadow-popover);
+}
+
+.desktop-workspace-launcher-menu button,
+.desktop-workspace-launcher-menu > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--app-text);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+
+.desktop-workspace-launcher-menu button:hover {
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-workspace-launcher-menu button.is-selected {
+  background: var(--desktop-agent-control-active-bg);
+  font-weight: 500;
+}
+
+.desktop-workspace-launcher__menu-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.desktop-workspace-launcher__menu-main > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-workspace-launcher__menu-check {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.desktop-workspace-launcher-menu > span {
+  justify-content: flex-start;
+  color: var(--app-text-muted);
+}
+
+.desktop-workspace-launcher__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+  line-height: 1;
+}
+
+.desktop-workspace-launcher__glyph img,
+.desktop-workspace-launcher__glyph svg,
+.desktop-workspace-launcher__glyph .iconify {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.desktop-workspace-launcher__main .desktop-workspace-launcher__glyph,
+.desktop-workspace-launcher__main .desktop-workspace-launcher__glyph img,
+.desktop-workspace-launcher__main .desktop-workspace-launcher__glyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Keep host toolbar actions available when the main header becomes narrow. */
+@container app-main-header (max-width: 300px) {
+  .desktop-workspace-launcher {
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  .desktop-workspace-launcher__main {
+    min-width: 32px;
+    max-width: 32px;
+    padding: 0;
+  }
+
+  .desktop-workspace-launcher__label {
+    display: none;
+  }
+}
+
+/* Invert downloaded monochrome marks without changing full-color app icons. */
+:root[data-theme='dark'] .desktop-workspace-launcher__glyph--monochrome img {
+  filter: invert(1);
+}

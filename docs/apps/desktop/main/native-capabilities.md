@@ -81,11 +81,16 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 
 ## Workspace apps 与文件动作
 
-源码：`apps/desktop/main/src/workspace/`
+Workspace Apps 源码：
 
-### `apps.ts`
+- `packages/features/workspace-apps/src/{contracts,main,preload,renderer}/`
+- `apps/desktop/renderer/src/composition/workspace-apps-feature-adapter.tsx`
 
-检测 VS Code、Cursor、Finder/Explorer、Terminal、JetBrains 等应用，并生成平台特定启动参数。
+Workspace Apps 是纵向 Feature，拥有应用 DTO 与固定 IPC channel、平台应用检测和启动参数、preload 子桥，以及 launcher、图标、偏好、文案和作用域样式。它检测 VS Code、Cursor、Finder/Explorer、Terminal、JetBrains 等应用；renderer 只传结构化 app ID、workspace root、relative path 和可选行号，main 不通过 shell 字符串拼接命令。Feature scope 会排空在途操作并撤销 handler。
+
+宿主 Workspace hook 继续负责当前 project、panel 和文件动作的编排，通过 `composition/workspace-apps-feature-adapter.tsx` 注入宿主 i18n。Feature 测试位于 `packages/features/workspace-apps/test/`。
+
+其余宿主文件动作源码：`apps/desktop/main/src/workspace/`
 
 ### `file-opening.ts`
 
@@ -95,7 +100,7 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 
 处理生成图片复制、显示目录或相关本机动作。输入是 runtime 管理的 asset/路径 contract，main 再次校验格式和边界。
 
-测试位于 `test/unit/workspace/`。
+宿主文件动作测试位于 `apps/desktop/main/test/unit/workspace/`。
 
 ## Network Proxy
 

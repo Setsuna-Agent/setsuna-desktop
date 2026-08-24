@@ -4,7 +4,7 @@ import {
   macLineAwareWorkspaceAppLaunchSpec,
   windowsTerminalLaunchSpec,
   workspaceAppSpawnSpec,
-} from '../../../src/workspace/apps.js';
+} from '../../src/main/apps.js';
 
 const WINDOWS_WORKSPACE = 'C:\\Projects\\sample-app';
 const WINDOWS_FILE_TARGET = `${WINDOWS_WORKSPACE}\\src\\index.ts:12`;
