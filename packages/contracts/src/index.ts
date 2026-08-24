@@ -30,6 +30,5 @@ export * from './swe-events.js';
 export * from './thread-events.js';
 export * from './thread-title.js';
 export * from './threads.js';
-export * from './updater.js';
 export * from './usage.js';
 export * from './workspace.js';

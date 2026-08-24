@@ -14,11 +14,6 @@ import type {
   DesktopDataRootRetainedBackupInspection,
   DesktopDataRootState,
 } from './data-root.js';
-import type {
-  DesktopUpdateActionResult,
-  DesktopUpdateDownloadSourceInput,
-  DesktopUpdateState,
-} from './updater.js';
 
 export type DesktopOpenPathResult =
   | { ok: true }
@@ -192,17 +187,6 @@ export type SetsunaDesktopBridge = {
     installLocal(): Promise<RuntimePluginInstallResult | null>;
   };
   runtime: DesktopRuntimeBridge;
-  updater: {
-    getState(): Promise<DesktopUpdateState>;
-    checkForUpdates(): Promise<DesktopUpdateState>;
-    downloadUpdate(): Promise<DesktopUpdateState>;
-    addDownloadSource(input: DesktopUpdateDownloadSourceInput): Promise<DesktopUpdateState>;
-    selectDownloadSource(sourceId: string): Promise<DesktopUpdateState>;
-    removeDownloadSource(sourceId: string): Promise<DesktopUpdateState>;
-    quitAndInstall(): Promise<DesktopUpdateActionResult>;
-    promptReadyUpdate(): Promise<DesktopUpdateActionResult>;
-    onStateChange(callback: (state: DesktopUpdateState) => void): () => void;
-  };
   windowControls: {
     minimize(): Promise<boolean>;
     toggleMaximize(): Promise<boolean>;

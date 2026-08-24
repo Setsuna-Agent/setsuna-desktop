@@ -1,3 +1,4 @@
+import type { RuntimeInterfaceLanguage } from '@setsuna-desktop/contracts';
 import type {
   DesktopUpdateActionResult,
   DesktopUpdateDownloadSource,
@@ -6,13 +7,13 @@ import type {
   DesktopUpdateInstallMode,
   DesktopUpdateProgress,
   DesktopUpdateState,
-  RuntimeInterfaceLanguage,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/index.js';
+import { UPDATER_IPC_CHANNELS } from '../contracts/index.js';
 import { app, BrowserWindow, dialog, shell } from 'electron';
 import { createHash } from 'node:crypto';
 import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
-import { createNativeTranslate } from '../i18n/native-messages.js';
+import { createUpdaterNativeTranslate } from './messages.js';
 import {
   GITHUB_DIRECT_DOWNLOAD_SOURCE,
   resolveUpdateDownloadUrl,
@@ -358,7 +359,7 @@ export class DesktopUpdater {
   private setState(patch: Partial<DesktopUpdateState>): void {
     this.state = { ...this.state, ...patch };
     for (const window of BrowserWindow.getAllWindows()) {
-      window.webContents.send('desktop-updater:state-change', this.getState());
+      window.webContents.send(UPDATER_IPC_CHANNELS.stateChange, this.getState());
     }
   }
 }
@@ -388,39 +389,39 @@ function promptOptionsForState(
   state: DesktopUpdateState,
   locale: RuntimeInterfaceLanguage,
 ): Electron.MessageBoxOptions {
-  const t = createNativeTranslate(locale);
+  const t = createUpdaterNativeTranslate(locale);
   if (state.platform === 'darwin') {
-    const packageName = state.assetName ?? t('updater.ready.macPackage');
+    const packageName = state.assetName ?? t('ready.macPackage');
     return {
       type: 'info',
-      buttons: [t('updater.ready.openFinder'), t('updater.ready.later')],
+      buttons: [t('ready.openFinder'), t('ready.later')],
       defaultId: 0,
       cancelId: 1,
-      message: t('updater.ready.title'),
-      detail: t('updater.ready.macDetail', { name: packageName }),
+      message: t('ready.title'),
+      detail: t('ready.macDetail', { name: packageName }),
     };
   }
 
   if (state.platform === 'win32') {
-    const packageName = state.assetName ?? t('updater.ready.windowsPackage');
+    const packageName = state.assetName ?? t('ready.windowsPackage');
     return {
       type: 'info',
-      buttons: [t('updater.ready.restart'), t('updater.ready.later')],
+      buttons: [t('ready.restart'), t('ready.later')],
       defaultId: 0,
       cancelId: 1,
-      message: t('updater.ready.title'),
-      detail: t('updater.ready.windowsDetail', { name: packageName }),
+      message: t('ready.title'),
+      detail: t('ready.windowsDetail', { name: packageName }),
     };
   }
 
-  const packageName = state.assetName ?? t('updater.ready.package');
+  const packageName = state.assetName ?? t('ready.package');
   return {
     type: 'info',
-    buttons: [t('updater.ready.openDownloads'), t('updater.ready.later')],
+    buttons: [t('ready.openDownloads'), t('ready.later')],
     defaultId: 0,
     cancelId: 1,
-    message: t('updater.ready.title'),
-    detail: t('updater.ready.detail', { name: packageName }),
+    message: t('ready.title'),
+    detail: t('ready.detail', { name: packageName }),
   };
 }
 

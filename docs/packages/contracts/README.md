@@ -52,7 +52,6 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `desktop.ts` | `SetsunaDesktopBridge` 与 main/preload 能力 |
 | `browser-control.ts` | Runtime ↔ main 浏览器控制协议 |
 | `data-root.ts` | 数据根扫描、迁移、恢复与 cleanup |
-| `updater.ts` | Updater state、source 和 asset |
 | `ui-actions.ts` | Runtime 可投影给桌面的受限 UI action |
 
 详见 [传输与数据边界](transport-and-data.md)。
@@ -74,7 +73,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `workspace.ts` | Project、entry、read、search、status |
 | `debug-traces.ts` | 非持久化开发者 trace |
 
-单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Workspace Dependencies 不在 Core contracts 维护镜像类型或全局 client 方法。
+单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Updater 与 Workspace Dependencies 都不在 Core contracts 维护镜像类型或全局 client 方法。
 
 ### SWE / app-server
 

@@ -8,6 +8,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
 import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
+import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
 import { RendererFeatureViewsProvider } from './composition/feature-view-registries.js';
 import { CodeAppearanceProvider } from './shared/code/CodeAppearanceProvider.js';
@@ -61,13 +62,15 @@ async function bootstrapRenderer(): Promise<void> {
     <React.StrictMode>
       <I18nProvider messageCatalog={features.messages}>
         <RendererFeatureViewsProvider views={features.views}>
-          <CollaborationFeatureServiceBoundary service={features.collaboration}>
-            <KeyboardShortcutsProvider>
-              <CodeAppearanceProvider>
-                <App />
-              </CodeAppearanceProvider>
-            </KeyboardShortcutsProvider>
-          </CollaborationFeatureServiceBoundary>
+          <UpdaterFeatureServiceBoundary service={features.updater}>
+            <CollaborationFeatureServiceBoundary service={features.collaboration}>
+              <KeyboardShortcutsProvider>
+                <CodeAppearanceProvider>
+                  <App />
+                </CodeAppearanceProvider>
+              </KeyboardShortcutsProvider>
+            </CollaborationFeatureServiceBoundary>
+          </UpdaterFeatureServiceBoundary>
         </RendererFeatureViewsProvider>
       </I18nProvider>
     </React.StrictMode>,

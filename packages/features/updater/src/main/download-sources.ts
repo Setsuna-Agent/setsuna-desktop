@@ -1,4 +1,7 @@
-import type { DesktopUpdateDownloadSource, DesktopUpdateDownloadSourceInput } from '@setsuna-desktop/contracts';
+import type {
+  DesktopUpdateDownloadSource,
+  DesktopUpdateDownloadSourceInput,
+} from '../contracts/index.js';
 import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';

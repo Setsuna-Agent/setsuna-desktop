@@ -99,7 +99,12 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 
 ## Updater
 
-源码：`apps/desktop/main/src/updater/`
+源码：
+
+- `packages/features/updater/src/{contracts,main,preload,renderer}/`
+- `apps/desktop/{main,preload,renderer}/src/composition/`
+
+Updater 是纵向 Feature：状态 DTO、IPC channel、main 状态机、preload 子桥、renderer 状态服务、设置扩展、顶栏提示、文案和 scoped CSS 都由同一包拥有。宿主只注入版本、数据/下载路径、网络代理 fetch、主窗口和语言，并控制 `initialize/start/stop` 时点。
 
 ### `metadata.ts`
 
@@ -122,7 +127,7 @@ Integration 测试：`packages/features/terminal/test/integration/main/terminal-
 - macOS/Linux 打开文件位置，Windows 打开 installer。
 - 下载期间切换源会取消并按新源重试。
 
-Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。测试位于 `test/unit/updater/`。
+Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用。测试位于 `packages/features/updater/test/`。
 
 ## Desktop IPC 辅助能力
 
@@ -139,7 +144,7 @@ Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用�
 
 ## Main i18n
 
-`src/i18n/native-messages.ts` 只保存 main 侧原生菜单/提示需要的少量文案。完整 UI 翻译仍在 renderer `shared/i18n/`。
+`src/i18n/native-messages.ts` 只保存宿主原生菜单/提示需要的少量文案。单一 Feature 使用的原生文案（例如 updater 安装提示）留在 Feature 内；完整宿主 UI 翻译仍在 renderer `shared/i18n/`。
 
 新增 main 文案时：
 
@@ -158,4 +163,3 @@ Updater 默认只在 packaged 或 `SETSUNA_DESKTOP_ENABLE_UPDATES=1` 时启用�
 - GUI 启动缺少 login-shell PATH。
 - 应用不存在、被移动或启动失败。
 - Unicode、空格和引号路径。
-

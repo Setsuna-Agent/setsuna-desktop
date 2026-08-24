@@ -7,7 +7,7 @@ import {
   normalizeDownloadSourceTemplate,
   resolveUpdateDownloadUrl,
   UpdateDownloadSourceStore,
-} from '../../../src/updater/download-sources.js';
+} from '../../src/main/download-sources.js';
 
 describe('desktop update download sources', () => {
   it('turns a proxy base URL into a raw GitHub URL template', () => {

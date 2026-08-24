@@ -60,6 +60,7 @@
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",
+    "@setsuna-desktop/feature-updater": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
     "@setsuna-desktop/feature-webdav-sync": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",

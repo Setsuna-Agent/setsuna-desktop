@@ -41,7 +41,6 @@
 - Chat composer/session/actions
 - Workspace panels、review、terminal、browser
 - Panel resize
-- Updater
 - Sidebar 与 overlays
 
 它可以做跨 feature 编排，但复杂业务状态应留在各自 hook。返回值应按 surface 分组，避免形成没有边界的巨大 props bag。
@@ -61,8 +60,9 @@
 ### 其他 controller
 
 - `useDesktopSidebarAutoCollapse.ts`：窗口/布局条件下的 sidebar 自动收起。
-- `useDesktopUpdater.ts`：main updater 状态和通知。
 - `useGlobalEscapeMenus.ts`：全局 Esc 收敛浮层。
+
+Updater 不再进入 App controller。Renderer composition 解析 Feature 提供的单例状态服务，`UpdaterFeatureServiceBoundary.tsx` 只负责把它接到 React context 和宿主顶栏插槽；设置内容通过静态 settings extension catalog 挂载。
 
 ## Layout
 
@@ -235,7 +235,7 @@ snapshot 把完成 turn 恢复成 active。Snapshot、usage、capability 等后�
 - Runtime 状态通过 client mutation + event/snapshot 收敛。
 - Local-only UI 偏好写 `shared/preferences` 管理的 localStorage。
 - Draft、menu、resize 等 ephemeral state 留在 feature hook。
-- Main-owned 状态（窗口、updater、data root）通过 preload event/API。
+- Main-owned 宿主状态（窗口、data root）通过 preload event/API；单一业务 owner 的 main 状态（如 updater）由对应 Feature bridge 和 renderer service 消费。
 - 不用 React state 复制可以从 `currentThread` 纯计算的 timeline。
 
 ## 测试

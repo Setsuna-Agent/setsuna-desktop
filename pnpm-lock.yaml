@@ -22,6 +22,7 @@ importers:
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
+      '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-webdav-sync': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
@@ -76,6 +77,7 @@ importers:
       '@setsuna-desktop/feature-memory': link:packages/features/memory
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
+      '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
       '@setsuna-desktop/feature-webdav-sync': link:packages/features/webdav-sync
       '@setsuna-desktop/feature-workspace-dependencies': link:packages/features/workspace-dependencies
@@ -257,6 +259,22 @@ importers:
       electron: 43.2.0
       lucide-react: 0.468.0_react@18.3.1
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
+      react: 18.3.1
+
+  packages/features/updater:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      antd: ^6.3.6
+      electron: '>=30'
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
+      electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 
   packages/features/vision-recognition:

@@ -264,7 +264,9 @@ describe('DesktopReviewPanel interactions', () => {
       '[data-review-file-path="packages/app/src/review.ts"]',
     )?.classList.contains('is-focused')).toBe(false);
     await waitFor(() => {
-      const diff = document.querySelector('diffs-container');
+      const diff = document.querySelector(
+        '[data-review-file-path="packages/app/src/review.ts"] diffs-container',
+      );
       const annotationSlot = diff?.shadowRoot?.querySelector<HTMLSlotElement>(
         'slot[name="annotation-additions-28"]',
       );

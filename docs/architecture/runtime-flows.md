@@ -22,9 +22,9 @@
 1. 读取窗口状态并创建主 `BrowserWindow`。
 2. 在同一个 native window 内显示 splash `WebContentsView`。
 3. 补齐桌面进程 PATH 并解析随包发布的 ripgrep。
-4. 启动浏览器控制 server 和原生凭据 bridge。
+4. 启动原生凭据 bridge，并激活 Main Feature composition；Browser server、Terminal/Updater IPC 等由各自 Feature scope 管理。
 5. 创建并启动 `RuntimeHost`。
-6. 初始化 updater、terminal store 和各组 IPC。
+6. 启动 WebDAV 调度、初始化 updater 持久下载源并注册其余宿主 IPC。
 7. 加载 Vite dev server 或 `dist/renderer/index.html`。
 8. renderer 首帧完成后揭示主界面并启动 updater。
 
@@ -188,12 +188,12 @@ BrowserToolHost（通用 ToolHost adapter）
 
 正常关闭按依赖逆序进行：
 
-1. Runtime server 停止接收新请求并关闭 SSE。
-2. 终止 app-server command/fs manager。
-3. `AgentLoop.shutdown()` 取消并排空 turn 与后台 memory。
-4. 等待已进入的 HTTP handler 完成。
-5. 关闭后台 shell、MCP connections 和 thread store。
-6. Main 再停止 browser server、native bridge、terminal 和 updater。
+1. Main 先停止 Updater 定时检查、WebDAV 调度和 browser proxy 等新的外围工作。
+2. Runtime server 停止接收新请求并关闭 SSE。
+3. 终止 app-server command/fs manager，`AgentLoop.shutdown()` 取消并排空 turn 与后台 memory。
+4. 等待已进入的 HTTP handler 完成，再关闭后台 shell、MCP connections 和 thread store。
+5. Main dispose Feature composition；scope 先拒绝新 IPC，排空已进入的操作，再关闭 Browser server、Terminal PTY 和 Updater 传输并撤销 handler。
+6. 关闭 native bridge 与网络代理资源。
 
 数据根迁移要求 runtime 通过 stdin 控制协议正常退出并返回 0。超时后使用的终止信号只能算迁移失败，不能把未排空状态误判为安全。
 

@@ -141,7 +141,7 @@ Contracts 不直接读写文件，但定义持久化内容的 JSON shape：
 ├── window-preferences.json           # main-owned window behavior
 ├── window-state.json                 # main internal
 ├── secure-credentials.json           # main vault internal
-├── update-download-sources.json      # updater contract/internal
+├── update-download-sources.json      # Updater Feature-owned download source config
 └── runtime/
     ├── config.json                   # config contracts
     ├── secrets.json                  # secret store internal

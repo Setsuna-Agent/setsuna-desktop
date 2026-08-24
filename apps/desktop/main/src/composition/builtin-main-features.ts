@@ -32,6 +32,13 @@ import {
 } from '@setsuna-desktop/feature-terminal/contracts';
 import { terminalMainFeature } from '@setsuna-desktop/feature-terminal/main';
 import {
+  updaterLifecycleCapability,
+  updaterMainFeature,
+  updaterMainHostCapability,
+  type UpdaterLifecycle,
+  type UpdaterMainHost,
+} from '@setsuna-desktop/feature-updater/main';
+import {
   webDavSyncLifecycleCapability,
   webDavSyncMainFeature,
   webDavSyncMainHostCapability,
@@ -45,13 +52,20 @@ import { desktopShellPath } from '../runtime/desktop-environment.js';
 import { resolveWorkspaceFilePreview } from '../workspace/file-opening.js';
 
 const mainFeatures = defineMainFeatureHost({
-  required: [browserMainFeature, reviewMainFeature, terminalMainFeature, webDavSyncMainFeature],
+  required: [
+    browserMainFeature,
+    reviewMainFeature,
+    terminalMainFeature,
+    updaterMainFeature,
+    webDavSyncMainFeature,
+  ],
   optional: [],
 });
 
 export type ActivatedBuiltinMainFeatures = Readonly<{
   browserControl: BrowserControlConnection;
   composition: MainFeatureComposition;
+  updater: UpdaterLifecycle;
   webDavSync: WebDavSyncLifecycle;
 }>;
 
@@ -62,6 +76,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   nativeBridge: DesktopNativeBridgeServer;
   networkProxyService: DesktopNetworkProxyService;
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
+  updaterHost: UpdaterMainHost;
   webDavSyncHost: WebDavSyncMainHost;
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
@@ -146,6 +161,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         }),
       ),
       provideHostCapability(
+        updaterMainHostCapability,
+        input.updaterHost,
+      ),
+      provideHostCapability(
         webDavSyncMainHostCapability,
         input.webDavSyncHost,
       ),
@@ -154,11 +173,13 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   return completeFeatureHostActivation(composition, (host) => {
     const dependencies = host.composition.resolveHostDependencies({
       browserControl: requiredCapability(browserControlConnectionCapability),
+      updater: requiredCapability(updaterLifecycleCapability),
       webDavSync: requiredCapability(webDavSyncLifecycleCapability),
     });
     return Object.freeze({
       browserControl: dependencies.browserControl,
       composition: host.composition,
+      updater: dependencies.updater,
       webDavSync: dependencies.webDavSync,
     });
   });

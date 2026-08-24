@@ -9,6 +9,7 @@ import {
 import {
   optionalCapability,
   provideHostCapability,
+  requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import { browserRendererFeature } from '@setsuna-desktop/feature-browser/renderer';
 import {
@@ -22,6 +23,12 @@ import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-g
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
+import {
+  updaterRendererFeature,
+  updaterRendererHostCapability,
+  updaterRendererStateCapability,
+  type UpdaterRendererStateService,
+} from '@setsuna-desktop/feature-updater/renderer';
 import { visionRecognitionRendererFeature } from '@setsuna-desktop/feature-vision-recognition/renderer';
 import {
   webDavSyncRendererFeature,
@@ -38,7 +45,7 @@ import { hostMessages } from '../shared/i18n/messages.js';
 import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 
 const rendererFeatures = defineRendererFeatureHost({
-  required: [browserRendererFeature, terminalRendererFeature],
+  required: [browserRendererFeature, terminalRendererFeature, updaterRendererFeature],
   optional: [
     collaborationRendererFeature,
     imageGenerationRendererFeature,
@@ -54,6 +61,7 @@ export type ActiveRendererFeatures = Readonly<{
   collaboration: CollaborationRendererStateService;
   composition: RendererFeatureComposition;
   messages: ComposedRendererMessages<AppLocale>;
+  updater: UpdaterRendererStateService;
   views: RendererFeatureViews;
 }>;
 
@@ -82,6 +90,15 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         }),
       ),
       provideHostCapability(
+        updaterRendererHostCapability,
+        Object.freeze({
+          bridge: window.setsunaDesktop?.updater ?? null,
+          platform: desktop.platform,
+          openExternal: (url: string) => window.setsunaDesktop?.links.openExternal(url)
+            ?? Promise.resolve(false),
+        }),
+      ),
+      provideHostCapability(
         webDavSyncRendererHostCapability,
         Object.freeze({ bridge: window.setsunaDesktop?.webdavSync ?? null }),
       ),
@@ -94,11 +111,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         collaborationRendererStateCapability,
         createNoopCollaborationRendererStateService,
       ),
+      updater: requiredCapability(updaterRendererStateCapability),
     });
     return Object.freeze({
       collaboration: dependencies.collaboration,
       composition: host.composition,
       messages,
+      updater: dependencies.updater,
       views,
     });
   });

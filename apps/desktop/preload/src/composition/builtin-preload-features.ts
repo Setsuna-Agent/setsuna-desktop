@@ -8,6 +8,8 @@ import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-r
 import { reviewPreloadFeature } from '@setsuna-desktop/feature-review/preload';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
 import { terminalPreloadFeature } from '@setsuna-desktop/feature-terminal/preload';
+import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-updater/contracts';
+import { updaterPreloadFeature } from '@setsuna-desktop/feature-updater/preload';
 import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { webDavSyncPreloadFeature } from '@setsuna-desktop/feature-webdav-sync/preload';
 
@@ -15,6 +17,7 @@ export type DesktopPreloadBridge = SetsunaDesktopBridge
   & BrowserPreloadBridgeContribution
   & ReviewPreloadBridgeContribution
   & TerminalPreloadBridgeContribution
+  & UpdaterPreloadBridgeContribution
   & WebDavSyncPreloadBridgeContribution;
 
 const desktopPreloadBridgeKeys = [
@@ -40,6 +43,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
     browserPreloadFeature,
     reviewPreloadFeature,
     terminalPreloadFeature,
+    updaterPreloadFeature,
     webDavSyncPreloadFeature,
   ],
 });

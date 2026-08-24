@@ -28,7 +28,6 @@ import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { useDesktopNetworkProxy } from './useDesktopNetworkProxy.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
-import { useDesktopUpdater } from './useDesktopUpdater.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
 
 export function useDesktopAppController() {
@@ -40,7 +39,6 @@ export function useDesktopAppController() {
   const [skillSelectionRequest, setSkillSelectionRequest] = useState<ChatSkillSelectionRequest | null>(null);
   const skillSelectionRequestIdRef = useRef(0);
 
-  const updater = useDesktopUpdater();
   const networkProxy = useDesktopNetworkProxy();
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
@@ -307,7 +305,6 @@ export function useDesktopAppController() {
     terminalMinHeight,
     threadsByProjectId,
     toolbarTitle,
-    updater,
     workspacePanelReservesLayout,
     workspaceMaxWidth,
     workspaceMinWidth,
