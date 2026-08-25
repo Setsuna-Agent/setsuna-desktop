@@ -201,7 +201,6 @@ export function WebDavConnectionForm({
         </div>
       ) : null}
       <footer className="settings-webdav__form-actions">
-        <small>{t('feature.webdavSync.connection.testHint')}</small>
         <span>
           <Button
             disabled={busy || !canTestConnection(draft)}
