@@ -1,8 +1,3 @@
-.desktop-settings-panel .chat-user-settings__content > .settings-network-proxy,
-.desktop-settings-panel .chat-user-settings__content:has(> .settings-network-proxy) > .chat-user-settings__page-heading {
-  width: min(900px, 100%);
-}
-
 .desktop-settings-panel .settings-network-proxy {
   gap: 18px;
 }
