@@ -299,6 +299,7 @@
   border-radius: var(--app-radius-sm);
   color: var(--app-text-muted);
   background: transparent;
+  pointer-events: auto;
 }
 
 .app-project-toolbar-title__more:hover,
@@ -579,8 +580,18 @@
   height: var(--desktop-workspace-toolbar-height);
 }
 
+:root[data-desktop-platform='win32'] .app-workbench__main-actions {
+  padding-top: 0;
+}
+
 :root[data-desktop-platform='win32'] .app-workbench__main-title {
   padding-left: calc(var(--app-topbar-item-gap) + 4px);
+  border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+}
+
+:root[data-desktop-platform='win32'] .desktop-agent-page--sidebar-collapsed .app-workbench__main-title {
+  /* 标题使用裸图标；补上标题栏按钮的图标内缩，使上下两排的图标左缘共线。 */
+  padding-left: calc(var(--app-topbar-item-gap) + 4px + var(--app-topbar-navigation-icon-inset));
 }
 
 :root[data-desktop-platform='win32'] .chat-main-conversation--with-bottom-sender {

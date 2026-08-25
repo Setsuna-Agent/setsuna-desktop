@@ -1,7 +1,10 @@
-const overviewPanelWidthPx = 292;
+const overviewPanelWidthPx = 284;
 const overviewPanelRightInsetPx = 16;
-const overviewPanelContentGapPx = 12;
-const overviewMaxContentShiftPx = 152;
+const overviewExpandedContentGapPx = 60;
+const overviewCompactContentGapPx = 24;
+const overviewRightLaneWidthPx = overviewPanelWidthPx + overviewPanelRightInsetPx;
+const overviewRequiredGutterPx = overviewRightLaneWidthPx + overviewExpandedContentGapPx;
+const overviewContentCenterShiftPx = overviewRightLaneWidthPx / 2;
 
 export function canFitConversationOverviewPanel({
   conversationWidth,
@@ -11,7 +14,9 @@ export function canFitConversationOverviewPanel({
   contentWidth: number;
 }): boolean {
   const metrics = conversationOverviewGutterMetrics({ conversationWidth, contentWidth });
-  return metrics ? metrics.rightGutter + overviewMaxContentShiftPx >= metrics.requiredGutter : false;
+  if (!metrics) return false;
+  return metrics.rightGutter + overviewContentCenterShiftPx >= metrics.requiredGutter
+    && metrics.rightGutter - overviewContentCenterShiftPx >= overviewExpandedContentGapPx;
 }
 
 export function needsConversationOverviewContentShift({
@@ -37,7 +42,7 @@ export function doesConversationOverviewOverlapContent({
   if (overviewWidth <= 0) return false;
   const metrics = conversationOverviewGutterMetrics({ conversationWidth, contentWidth });
   return metrics
-    ? metrics.rightGutter < overviewWidth + overviewPanelRightInsetPx + overviewPanelContentGapPx
+    ? metrics.rightGutter < overviewWidth + overviewPanelRightInsetPx + overviewCompactContentGapPx
     : false;
 }
 
@@ -88,7 +93,7 @@ function conversationOverviewGutterMetrics({
 }): { requiredGutter: number; rightGutter: number } | null {
   if (conversationWidth <= 0 || contentWidth <= 0) return null;
   return {
-    requiredGutter: overviewPanelWidthPx + overviewPanelRightInsetPx + overviewPanelContentGapPx,
+    requiredGutter: overviewRequiredGutterPx,
     rightGutter: Math.max(0, (conversationWidth - contentWidth) / 2),
   };
 }
