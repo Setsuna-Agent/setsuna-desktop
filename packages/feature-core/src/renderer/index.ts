@@ -133,6 +133,7 @@ export type {
   ComposerStatusViewContribution,
   ComposerStatusViewHostProps,
   ComposerStatusViewCatalog,
+  CheckboxProps,
   ErasedToolResultViewContribution,
   RendererFeatureContributionInput,
   RendererFeatureContributions,

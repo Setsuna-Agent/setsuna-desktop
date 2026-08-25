@@ -40,7 +40,7 @@ export function ProxyServerDialog({
   onClose,
   onSave,
 }: ProxyServerDialogProps) {
-  const { Button, IconButton, TextField } = ui;
+  const { Button, Checkbox, IconButton, TextField } = ui;
   const titleId = useId();
   const descriptionId = useId();
   const previousFocusRef = useRef<HTMLElement | null>(
@@ -164,16 +164,15 @@ export function ProxyServerDialog({
           </div>
 
           {draft.passwordSet || draft.username ? (
-            <label className="settings-network-proxy-dialog__clear-credentials">
-              <input
-                checked={clearCredentials}
-                disabled={disabled}
-                type="checkbox"
-                onChange={(event) => setClearCredentials(event.currentTarget.checked)}
-              />
+            <Checkbox
+              checked={clearCredentials}
+              className="settings-network-proxy-dialog__clear-credentials"
+              disabled={disabled}
+              onChange={setClearCredentials}
+            >
               <KeyRound size={13} />
               <span>{translate('feature.networkProxy.settings.clearCredentials')}</span>
-            </label>
+            </Checkbox>
           ) : null}
 
           {actionError ? (

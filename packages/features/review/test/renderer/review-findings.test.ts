@@ -1,9 +1,9 @@
 import type {
-  DesktopDiffFile,
   RuntimeMessage,
   RuntimeReviewFinding,
   RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
+import type { DesktopDiffFile } from '../../src/contracts/index.js';
 import { describe, expect, it } from 'vitest';
 import {
   latestCompletedReview,
@@ -11,7 +11,7 @@ import {
   reviewPathsMatch,
   resolveReviewFile,
   resolveReviewFindingTarget,
-} from '../../../../src/features/workspace/review-findings.js';
+} from '../../src/renderer/review-findings.js';
 
 describe('reviewPathsMatch', () => {
   it('normalizes workspace and git prefixes without matching partial segments', () => {

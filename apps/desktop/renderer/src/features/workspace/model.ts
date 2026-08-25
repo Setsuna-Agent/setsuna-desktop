@@ -1,15 +1,16 @@
-import type {
-  DesktopDiffFile,
-  DesktopDiffLine,
-  DesktopDiffSummary,
-  RuntimeReviewFinding,
-  WorkspaceEntry,
-} from '@setsuna-desktop/contracts';
+import type { WorkspaceEntry } from '@setsuna-desktop/contracts';
 import {
   DEFAULT_BROWSER_URL,
   type BrowserPanelState,
 } from '@setsuna-desktop/feature-browser/contracts';
-import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
+import type {
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
+  DesktopReviewFocusRequest,
+  DesktopReviewOpenHandler,
+  DesktopReviewState,
+} from '@setsuna-desktop/feature-review/contracts';
 import type {
   DesktopTerminalEvent,
   DesktopTerminalSession,
@@ -20,6 +21,8 @@ export type {
   DesktopDiffFile,
   DesktopDiffLine,
   DesktopDiffSummary,
+  DesktopReviewFocusRequest,
+  DesktopReviewOpenHandler,
   DesktopReviewState,
   DesktopTerminalEvent,
   DesktopTerminalSession,
@@ -230,20 +233,6 @@ export const removePanelFromSlotState = (slot: DesktopPanelSlotState, panelId: s
   const active = slot.active === panelId ? panels[fallbackIndex]?.id ?? null : slot.active;
   return { active, panels };
 };
-
-export type DesktopReviewFocusRequest = {
-  /** Preserve the exact review card that initiated navigation. */
-  finding?: RuntimeReviewFinding;
-  line?: number;
-  path: string;
-  version: number;
-};
-
-export type DesktopReviewOpenHandler = (
-  filePath?: string,
-  line?: number,
-  finding?: RuntimeReviewFinding,
-) => void;
 
 export type WorkspaceFileFocusRequest = {
   line: number;

@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { Checkbox } from '../../../shared/ui/primitives.js';
 
 export function DeleteSelectionBar({
   allChecked,
@@ -23,18 +23,19 @@ export function DeleteSelectionBar({
   totalCount: number;
 }) {
   const { t } = useI18n();
-  const checkboxRef = useRef<HTMLInputElement | null>(null);
-  useLayoutEffect(() => {
-    if (checkboxRef.current) checkboxRef.current.indeterminate = indeterminate;
-  }, [indeterminate]);
 
   return (
     <div className="chat-delete-bar">
       <div className="chat-delete-bar__inner">
-        <label className="chat-delete-bar__select-all">
-          <input ref={checkboxRef} type="checkbox" checked={allChecked} disabled={loading || totalCount === 0} onChange={(event) => onToggleAll(event.currentTarget.checked)} />
+        <Checkbox
+          checked={allChecked}
+          className="chat-delete-bar__select-all"
+          disabled={loading || totalCount === 0}
+          indeterminate={indeterminate}
+          onChange={onToggleAll}
+        >
           <span>{t('chat.delete.selectAll')}</span>
-        </label>
+        </Checkbox>
         <span className="chat-delete-bar__count">{t('chat.delete.selected', { count: selectedCount })}</span>
         <button type="button" className="chat-delete-bar__cancel" disabled={loading} onClick={onCancel}>
           {t('common.cancel')}

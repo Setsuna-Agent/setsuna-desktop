@@ -42,7 +42,7 @@ export function WebDavRestorePlanDialog({
   onConfirm,
   onRestore,
 }: WebDavRestorePlanDialogProps) {
-  const { locale, t, ui: { Button, IconButton } } = useWebDavSyncView();
+  const { locale, t, ui: { Button, Checkbox, IconButton } } = useWebDavSyncView();
   const titleId = useId();
   const descriptionId = useId();
   const addedCount = plan.diffs.reduce((sum, diff) => sum + diff.addedCount, 0)
@@ -283,16 +283,14 @@ export function WebDavRestorePlanDialog({
               <span>{error}</span>
             </div>
           ) : null}
-          <label className="settings-webdav__restore-confirm">
-            <input
-              className="settings-webdav__checkbox"
-              checked={confirmed}
-              disabled={busy}
-              type="checkbox"
-              onChange={(event) => onConfirm(event.currentTarget.checked)}
-            />
+          <Checkbox
+            checked={confirmed}
+            className="settings-webdav__restore-confirm"
+            disabled={busy}
+            onChange={onConfirm}
+          >
             <span>{t('feature.webdavSync.restore.confirm')}</span>
-          </label>
+          </Checkbox>
           <div className="settings-webdav-restore-dialog__actions">
             <Button autoFocus disabled={busy} onClick={onClose}>
               {t('feature.webdavSync.restore.closePlan')}

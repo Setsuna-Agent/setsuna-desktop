@@ -27,7 +27,7 @@ export function WebDavConnectionForm({
   onSubmit: (input: DesktopWebDavSyncConfigureInput) => Promise<void>;
   onTest: (input: DesktopWebDavSyncConfigureInput) => Promise<void>;
 }) {
-  const { t, ui: { Button, SelectField, TextField } } = useWebDavSyncView();
+  const { t, ui: { Button, Checkbox, SelectField, TextField } } = useWebDavSyncView();
   const [draft, setDraft] = useState<ConnectionDraft>(() => ({
     endpoint: '',
     remoteRoot: '/setsuna',
@@ -183,19 +183,17 @@ export function WebDavConnectionForm({
           </div>
         ) : null}
       </div>
-      <label className="settings-webdav__insecure-toggle">
-        <input
-          className="settings-webdav__checkbox"
-          checked={draft.allowInsecureHttp}
-          disabled={busy}
-          type="checkbox"
-          onChange={(event) => updateDraft('allowInsecureHttp', event.currentTarget.checked)}
-        />
+      <Checkbox
+        checked={draft.allowInsecureHttp}
+        className="settings-webdav__insecure-toggle"
+        disabled={busy}
+        onChange={(checked) => updateDraft('allowInsecureHttp', checked)}
+      >
         <span>
           <strong>{t('feature.webdavSync.connection.insecure')}</strong>
           <small>{t('feature.webdavSync.connection.httpWarning')}</small>
         </span>
-      </label>
+      </Checkbox>
       {error ? <div className="settings-webdav__error" role="alert">{error}</div> : null}
       {testSucceeded ? (
         <div className="settings-webdav__success" role="status">

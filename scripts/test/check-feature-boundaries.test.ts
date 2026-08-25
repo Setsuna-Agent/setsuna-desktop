@@ -94,10 +94,16 @@ describe('Feature boundary checker', () => {
       'apps/desktop/renderer/src/features/chat/leaked-view.ts': `
         import '@setsuna-desktop/feature-memory/renderer';
       `,
+      'apps/desktop/renderer/src/features/workspace/leaked-panel.ts': `
+        import '@setsuna-desktop/feature-memory/renderer/panel';
+      `,
     }, async (root) => {
       const violations = await checkFeatureBoundaries(root);
       expect(violations).toContainEqual(expect.stringContaining(
         'concrete Feature implementation import "@setsuna-desktop/feature-memory/renderer" must be isolated under the renderer composition directory',
+      ));
+      expect(violations).toContainEqual(expect.stringContaining(
+        'concrete Feature implementation import "@setsuna-desktop/feature-memory/renderer/panel" must be isolated under the renderer composition directory',
       ));
     });
   });

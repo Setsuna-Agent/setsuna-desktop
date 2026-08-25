@@ -1,6 +1,3 @@
 @import './workspace-shell.css';
 @import './workspace-editor.css';
 @import './workspace-file-tree.css';
-@import './workspace-review.css';
-@import './workspace-review-browser.css';
-@import './workspace-review-diff.css';

@@ -60,35 +60,6 @@ export type DesktopUserProfile = {
   hostName: string | null;
 };
 
-export type DesktopDiffLine = {
-  type: 'context' | 'added' | 'removed' | 'gap';
-  lineNumber: number;
-  oldLine?: number;
-  newLine?: number;
-  content: string;
-};
-
-export type DesktopDiffFile = {
-  path: string;
-  /** Original repository path for renamed files. */
-  previousPath?: string;
-  action: string;
-  additions: number;
-  deletions: number;
-  /** Non-text files are listed without ever decoding their bytes into text diff lines. */
-  contentKind?: 'binary' | 'image';
-  truncated: boolean;
-  lines: DesktopDiffLine[];
-  /** Original unified patch for complete previews; omitted when truncated. */
-  patch?: string;
-};
-
-export type DesktopDiffSummary = {
-  files: DesktopDiffFile[];
-  additions: number;
-  deletions: number;
-};
-
 export type DesktopRuntimeBridge = {
   request<T = unknown>(input: RuntimeRequestInput): Promise<T>;
   cancelRequest(requestId: string): Promise<boolean>;

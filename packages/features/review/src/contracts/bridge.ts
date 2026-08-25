@@ -1,4 +1,4 @@
-import type { DesktopDiffSummary } from '@setsuna-desktop/contracts';
+import type { DesktopDiffSummary } from './diff.js';
 
 export type DesktopReviewImagePreviewResult =
   | { ok: true; previewId: string; url: string }

@@ -22,6 +22,7 @@ import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/featur
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
+import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer/feature';
 import {
   networkProxyRendererFeature,
   networkProxyRendererHostCapability,
@@ -55,6 +56,7 @@ const rendererFeatures = defineRendererFeatureHost({
   required: [
     browserRendererFeature,
     networkProxyRendererFeature,
+    reviewRendererFeature,
     terminalRendererFeature,
     updaterRendererFeature,
     workspaceAppsRendererFeature,

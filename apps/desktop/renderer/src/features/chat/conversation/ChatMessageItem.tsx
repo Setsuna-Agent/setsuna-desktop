@@ -8,6 +8,7 @@ import {
 import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
 import { useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
+import { Checkbox } from '../../../shared/ui/primitives.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
 import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
@@ -308,9 +309,13 @@ function UserMessageEditor({ disabled, onCancel, onChange, onSubmit, submitting,
 
 function MessageSelectionControl({ checked, label, onChange }: { checked: boolean; label: string; onChange: (checked: boolean) => void }) {
   return (
-    <label className="chat-message-select" onClick={(event) => event.stopPropagation()}>
-      <input type="checkbox" aria-label={label} checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
-    </label>
+    <Checkbox
+      aria-label={label}
+      checked={checked}
+      className="chat-message-select"
+      onChange={onChange}
+      onClick={(event) => event.stopPropagation()}
+    />
   );
 }
 

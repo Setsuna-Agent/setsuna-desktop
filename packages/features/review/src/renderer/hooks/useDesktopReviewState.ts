@@ -1,7 +1,8 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLatestRequestGuard } from '../../../shared/hooks/useLatestRequestGuard.js';
-import type { DesktopReviewState } from '../model.js';
+import type { DesktopReviewState } from '../../contracts/index.js';
+import { useReviewRendererHost } from '../host.js';
+import { useReviewRequestGuard } from '../request-guard.js';
 import type { DesktopReviewSource } from '../review-types.js';
 import {
   normalizeReviewBaseRefPreference,
@@ -22,10 +23,11 @@ type ReviewLoadRequest = {
 };
 
 export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptions) {
+  const { bridge } = useReviewRendererHost();
   const [reviewState, setReviewState] = useState<DesktopReviewState | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const reviewRequests = useLatestRequestGuard();
+  const reviewRequests = useReviewRequestGuard();
   const branchSummaryRequestedRef = useRef(false);
   const preferredBaseRefRef = useRef<string | null>(null);
   const reviewStateRef = useRef<DesktopReviewState | null>(null);
@@ -44,7 +46,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
     request: ReviewLoadRequest,
   ) => {
     const { baseRef, foreground, includeBranchSummary, preferenceMode } = request;
-    const api = window.setsunaDesktop?.desktopReview;
+    const api = bridge;
     if (!api) {
       setReviewError('Desktop review bridge is unavailable.');
       return;
@@ -89,7 +91,7 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
         }
       }
     }
-  }, [reviewRequests]);
+  }, [bridge, reviewRequests]);
 
   const loadReviewState = useCallback(async () => {
     if (!projectPath || !preferenceKey) return;
@@ -191,10 +193,10 @@ export function useDesktopReviewState({ activeProject }: DesktopReviewStateOptio
 
   useEffect(() => {
     if (!projectPath) return undefined;
-    const api = window.setsunaDesktop?.desktopReview;
+    const api = bridge;
     if (!api) return undefined;
     return api.watchChanges(projectPath, () => refreshCurrentRef.current());
-  }, [projectPath, reviewRepositoryKey]);
+  }, [bridge, projectPath, reviewRepositoryKey]);
 
   return {
     loadReviewState,

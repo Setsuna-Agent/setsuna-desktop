@@ -86,14 +86,13 @@ export function ChatWorkspace({
   onSearchProjectEntries,
   onSend,
   queuedTurnActions,
-  onReviewRefresh,
   onSetMultiAgentEnabled,
   onStartThreadReview,
   onImageAttachmentRequestConsumed,
   onSkillSelectionRequestConsumed,
   onWorkspaceMentionRequestConsumed,
+  reviewControls,
   reviewError = null,
-  reviewLoading = false,
   reviewState = null,
   plugins = [],
   variant = 'main',
@@ -134,7 +133,6 @@ export function ChatWorkspace({
   onSearchProjectEntries: (query?: string, parent?: string | null) => Promise<WorkspaceEntrySearchResponse>;
   onSend: (value?: string, options?: { attachments?: RuntimeMessage['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeMessage['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
-  onReviewRefresh?: () => void | Promise<void>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (
     target: RuntimeReviewTarget,
@@ -143,8 +141,8 @@ export function ChatWorkspace({
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;
   onSkillSelectionRequestConsumed: (requestId: number) => void;
   onWorkspaceMentionRequestConsumed?: (requestId: number) => void;
+  reviewControls?: ReactNode;
   reviewError?: string | null;
-  reviewLoading?: boolean;
   reviewState?: DesktopReviewState | null;
   plugins?: RuntimePluginSummary[];
   variant?: 'main' | 'side';
@@ -301,9 +299,9 @@ export function ChatWorkspace({
                 contextLabel={overviewContextLabel}
                 contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                 overview={conversationOverview}
+                reviewControls={reviewControls}
                 shellProcessClient={client}
                 reviewError={reviewError}
-                reviewLoading={reviewLoading}
                 reviewState={reviewState}
                 onCollapse={() => {
                   setOverviewManuallyCollapsed(true);
@@ -314,7 +312,6 @@ export function ChatWorkspace({
                   setOverviewManuallyExpanded(!overviewCanExpand);
                 }}
                 onOpenReview={onOpenFileReview}
-                onReviewRefresh={onReviewRefresh}
                 currentThread={currentThread}
                 threadUsage={displayedThreadUsage}
               />

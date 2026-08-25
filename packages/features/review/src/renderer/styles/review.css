@@ -1,3 +1,7 @@
+@import './review-browser.css';
+@import './review-diff.css';
+@import './review-git.css';
+
 .desktop-review-panel {
   --desktop-review-panel-x-padding: 8px;
   --desktop-review-file-action-edge: 8px;
@@ -761,11 +765,37 @@
 }
 
 .desktop-review-finding__location {
+  display: inline-block;
   width: fit-content;
   max-width: 100%;
   overflow: hidden;
+  color: color-mix(in srgb, var(--app-primary) 76%, var(--app-text));
   font-size: 12px;
+  line-height: inherit;
   text-overflow: ellipsis;
+  vertical-align: baseline;
+  white-space: nowrap;
+}
+
+button.desktop-review-finding__location {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+button.desktop-review-finding__location:hover,
+button.desktop-review-finding__location:focus-visible {
+  color: color-mix(in srgb, var(--app-primary-hover) 82%, var(--app-text));
+  text-decoration: underline dashed;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.desktop-review-finding__location.is-unavailable {
+  color: var(--app-text-muted);
 }
 
 @media (hover: none) {

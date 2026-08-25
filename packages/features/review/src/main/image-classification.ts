@@ -1,8 +1,7 @@
 import {
   detectWorkspacePreviewImageMimeType,
-  type DesktopDiffFile,
-  type DesktopDiffSummary,
 } from '@setsuna-desktop/contracts';
+import type { DesktopDiffFile, DesktopDiffSummary } from '../contracts/index.js';
 import { spawn } from 'node:child_process';
 import { constants as fsConstants } from 'node:fs';
 import { lstat, open, realpath, stat } from 'node:fs/promises';

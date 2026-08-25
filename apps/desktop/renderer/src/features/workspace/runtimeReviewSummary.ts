@@ -5,7 +5,11 @@ import {
   type RuntimeFileChangeSummary,
   type RuntimeFileDiffLine,
 } from '../chat/tool-runs/runtimeFileChanges.js';
-import type { DesktopDiffFile, DesktopDiffLine, DesktopDiffSummary } from './model.js';
+import type {
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
+} from '@setsuna-desktop/feature-review/contracts';
 
 export function latestDesktopReviewSummaryFromMessages(messages: RuntimeMessage[]): DesktopDiffSummary | null {
   return desktopDiffSummaryFromRuntimeFileChanges(latestFileChangeSummaryFromMessages(messages));

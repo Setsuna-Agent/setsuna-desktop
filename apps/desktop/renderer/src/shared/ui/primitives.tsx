@@ -1,7 +1,9 @@
 import { Tooltip as AntTooltip, type TooltipProps } from 'antd';
+import type { CheckboxProps } from '@setsuna-desktop/feature-core/renderer';
 import { ArrowLeft } from 'lucide-react';
 import {
   forwardRef,
+  useCallback,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactElement,
@@ -91,6 +93,37 @@ export function TextField({ className = '', ...props }: InputHTMLAttributes<HTML
 
 export function TextArea({ className = '', ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={`sd-textarea ${className}`} {...props} />;
+}
+
+export function Checkbox({
+  checked,
+  children,
+  className = '',
+  indeterminate = false,
+  onChange,
+  onClick,
+  ...props
+}: CheckboxProps) {
+  const controlRef = useCallback((control: HTMLInputElement | null) => {
+    if (control) control.indeterminate = indeterminate;
+  }, [indeterminate]);
+
+  return (
+    <label
+      className={`sd-checkbox ${props.disabled ? 'is-disabled' : ''} ${className}`.trim()}
+      onClick={onClick}
+    >
+      <input
+        {...props}
+        ref={controlRef}
+        className="sd-checkbox__control"
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+      />
+      {children}
+    </label>
+  );
 }
 
 export function Panel({ title, meta, actions, children, className = '' }: { title: string; meta?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string }) {

@@ -1,12 +1,12 @@
 import {
   detectWorkspacePreviewImageMimeType,
   isProbablyBinaryFileContent,
-  type DesktopDiffFile,
-  type DesktopDiffLine,
-  type DesktopDiffSummary,
 } from '@setsuna-desktop/contracts';
 import type {
   DesktopCommitMessageGenerationSource,
+  DesktopDiffFile,
+  DesktopDiffLine,
+  DesktopDiffSummary,
   DesktopReviewActionResult,
   DesktopReviewBranch,
   DesktopReviewCommitInput,

@@ -2,6 +2,7 @@ import type {
   ButtonHTMLAttributes,
   ComponentType,
   InputHTMLAttributes,
+  MouseEventHandler,
   ReactElement,
   ReactNode,
   TextareaHTMLAttributes,
@@ -97,6 +98,18 @@ export type SettingsToggleProps = Readonly<{
   onChange(checked: boolean): void;
 }>;
 
+export type CheckboxProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  'checked' | 'children' | 'className' | 'onChange' | 'onClick' | 'type'
+> & Readonly<{
+  checked: boolean;
+  children?: ReactNode;
+  className?: string;
+  indeterminate?: boolean;
+  onChange(checked: boolean): void;
+  onClick?: MouseEventHandler<HTMLLabelElement>;
+}>;
+
 export type SettingsNavigationRowProps = Readonly<{
   actionLabel: ReactNode;
   disabled?: boolean;
@@ -112,6 +125,7 @@ export type SettingsNavigationRowProps = Readonly<{
  */
 export type SettingsViewUi = Readonly<{
   Button: ComponentType<SettingsButtonProps>;
+  Checkbox: ComponentType<CheckboxProps>;
   EmptyState: ComponentType<Readonly<{ action?: ReactNode; body?: string; title: string }>>;
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;

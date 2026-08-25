@@ -681,51 +681,6 @@
   margin-top: 14px;
 }
 
-.chat-message-select input,
-.chat-delete-bar input {
-  display: inline-grid;
-  place-content: center;
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border));
-  border-radius: 4px;
-  appearance: none;
-  background: var(--app-surface);
-}
-
-.chat-message-select input::before,
-.chat-delete-bar input::before {
-  content: '';
-  width: 8px;
-  height: 5px;
-  border-bottom: 2px solid #fff;
-  border-left: 2px solid #fff;
-  transform: rotate(-45deg) scale(0);
-  transform-origin: center;
-  transition: transform 0.12s ease;
-}
-
-.chat-message-select input:checked,
-.chat-delete-bar input:checked,
-.chat-delete-bar input:indeterminate {
-  border-color: var(--app-primary);
-  background: var(--app-primary);
-}
-
-.chat-message-select input:checked::before,
-.chat-delete-bar input:checked::before {
-  transform: rotate(-45deg) scale(1);
-}
-
-.chat-delete-bar input:indeterminate::before {
-  width: 8px;
-  height: 2px;
-  border: 0;
-  background: #fff;
-  transform: none;
-}
-
 .chat-ai-bubble .ant-bubble-content {
   width: 100%;
   min-width: 0;

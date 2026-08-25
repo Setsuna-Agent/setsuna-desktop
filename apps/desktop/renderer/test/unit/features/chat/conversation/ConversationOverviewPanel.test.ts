@@ -78,7 +78,7 @@ describe('ConversationOverviewPanel', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
-      reviewLoading: true,
+      reviewControls: createElement('span', null, '加载中'),
       reviewState: null,
     });
 
@@ -91,6 +91,7 @@ describe('ConversationOverviewPanel', () => {
     const html = renderOverviewPanel({
       ...baseProps,
       compact: false,
+      reviewControls: createElement('span', null, '加载失败'),
       reviewError: 'git status failed',
       reviewState: null,
     });
@@ -251,13 +252,12 @@ const baseProps = {
     lastSeq: 0,
   } satisfies RuntimeThread,
   overview,
+  reviewControls: createElement('span'),
   reviewError: null,
-  reviewLoading: false,
   reviewState,
   onCollapse: () => undefined,
   onExpand: () => undefined,
   onOpenReview: () => undefined,
   onOpenThread: () => undefined,
-  onReviewRefresh: () => undefined,
   threadUsage: null,
 };

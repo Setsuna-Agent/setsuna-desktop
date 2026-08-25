@@ -1,9 +1,9 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
-  readBrowserStorageValue,
-  removeBrowserStorageValue,
-  writeBrowserStorageValue,
-} from '../../../shared/preferences/browserStorage.js';
+  readReviewPreference,
+  removeReviewPreference,
+  writeReviewPreference,
+} from '../preferences.js';
 
 export function reviewBaseRefPreferenceKey(project: WorkspaceProject): string {
   return `setsuna-desktop:review-base-ref:${project.id || project.path}`;
@@ -11,12 +11,12 @@ export function reviewBaseRefPreferenceKey(project: WorkspaceProject): string {
 
 export function readReviewBaseRefPreference(key: string | null): string | null {
   if (!key) return null;
-  return readBrowserStorageValue(key)?.trim() || null;
+  return readReviewPreference(key)?.trim() || null;
 }
 
 export function writeReviewBaseRefPreference(key: string, baseRef: string | null): void {
-  if (baseRef) writeBrowserStorageValue(key, baseRef);
-  else removeBrowserStorageValue(key);
+  if (baseRef) writeReviewPreference(key, baseRef);
+  else removeReviewPreference(key);
 }
 
 export function normalizeReviewBaseRefPreference(

@@ -210,52 +210,12 @@
   font-size: 12px;
 }
 
-.settings-webdav__checkbox {
-  display: inline-grid;
-  flex: 0 0 auto;
-  box-sizing: border-box;
-  width: 15px;
-  height: 15px;
-  margin: 2px 0 0;
-  padding: 0;
-  place-content: center;
-  border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border));
-  border-radius: 4px;
-  appearance: none;
-  color: #fff;
-  background: var(--app-surface);
-  cursor: pointer;
-  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
-}
-
-.settings-webdav__checkbox::before {
-  width: 8px;
-  height: 5px;
-  border-bottom: 2px solid currentColor;
-  border-left: 2px solid currentColor;
-  content: '';
-  transform: rotate(-45deg) scale(0);
-  transform-origin: center;
-  transition: transform 120ms ease;
-}
-
-.settings-webdav__checkbox:checked {
-  border-color: var(--app-primary);
-  background: var(--app-primary);
-}
-
-.settings-webdav__checkbox:checked::before {
-  transform: rotate(-45deg) scale(1);
-}
-
-.settings-webdav__checkbox:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent);
-}
-
-.settings-webdav__checkbox:disabled {
-  cursor: default;
-  opacity: 0.5;
+.settings-webdav__insecure-toggle > .sd-checkbox__control,
+.settings-webdav__switch > .sd-checkbox__control,
+.settings-webdav__category-list > label > .sd-checkbox__control,
+.settings-webdav__restore-categories > label > .sd-checkbox__control,
+.settings-webdav__restore-confirm > .sd-checkbox__control {
+  margin-top: 2px;
 }
 
 .settings-webdav__insecure-toggle > span {

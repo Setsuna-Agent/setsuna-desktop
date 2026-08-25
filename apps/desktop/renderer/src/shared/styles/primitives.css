@@ -808,3 +808,71 @@
 .sd-check input:disabled {
   opacity: 0.45;
 }
+
+.sd-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sd-checkbox__control {
+  display: inline-grid;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  place-content: center;
+  border: 1px solid color-mix(in srgb, var(--app-text) 28%, var(--app-border));
+  border-radius: 4px;
+  appearance: none;
+  color: var(--app-surface);
+  background: var(--app-surface);
+  cursor: inherit;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.sd-checkbox__control::before {
+  width: 8px;
+  height: 5px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  content: '';
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+  transition: transform 120ms ease;
+}
+
+.sd-checkbox__control:checked,
+.sd-checkbox__control:indeterminate {
+  border-color: var(--app-primary);
+  background: var(--app-primary);
+}
+
+.sd-checkbox__control:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+
+.sd-checkbox__control:indeterminate::before {
+  width: 8px;
+  height: 2px;
+  border: 0;
+  background: currentColor;
+  transform: none;
+}
+
+.sd-checkbox__control:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-primary) 18%, transparent);
+}
+
+.sd-checkbox.is-disabled {
+  cursor: default;
+}
+
+.sd-checkbox__control:disabled {
+  opacity: 0.5;
+}

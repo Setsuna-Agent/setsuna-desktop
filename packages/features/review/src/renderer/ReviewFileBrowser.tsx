@@ -7,7 +7,7 @@ import {
   useCallback,
   type ComponentProps,
 } from 'react';
-import type { DesktopDiffSummary } from './model.js';
+import type { DesktopDiffSummary } from '../contracts/index.js';
 import { ReviewSummarySection } from './ReviewDiffView.js';
 import { ReviewFileNavigator } from './ReviewFileNavigator.js';
 import { resolveReviewFile } from './review-findings.js';
