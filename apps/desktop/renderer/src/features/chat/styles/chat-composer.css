@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px var(--chat-content-inline-padding) 16px;
+  padding: 12px var(--chat-content-inline-padding) var(--chat-composer-bottom-inset);
   border-top: 0;
   background: var(--desktop-agent-main-bg);
 }
@@ -505,13 +505,13 @@
   border: 1px solid var(--desktop-agent-panel-border);
   border-radius: var(--app-radius-xl);
   background: var(--desktop-agent-main-surface);
-  box-shadow: var(--desktop-agent-input-shadow) !important;
+  box-shadow: var(--desktop-agent-composer-shadow) !important;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .chat-sender .ant-sender:focus-within {
-  border-color: color-mix(in srgb, var(--app-primary) 42%, var(--desktop-agent-panel-border));
-  box-shadow: var(--desktop-agent-input-shadow) !important;
+  border-color: var(--desktop-agent-panel-border);
+  box-shadow: var(--desktop-agent-composer-shadow) !important;
 }
 
 .chat-sender .ant-sender-content,

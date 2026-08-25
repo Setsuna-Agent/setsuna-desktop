@@ -1,7 +1,8 @@
 import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
-import { Archive, LoaderCircle, Pencil } from 'lucide-react';
+import { Archive, LoaderCircle } from 'lucide-react';
 import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ActionTooltip } from '../../shared/ui/primitives.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
 
@@ -55,7 +56,7 @@ export function SidebarThreadRow({
   const menu = (
     <SidebarFloatingMenu anchorPoint={menuAnchorPoint} open={menuOpen} triggerRef={rowRef} onClose={() => onToggleMenu(thread.id)}>
       <button type="button" role="menuitem" onClick={() => onRename(thread)}>
-        <Pencil size={13} />
+        <EditIcon size={13} />
         <span>{t('sidebar.rename')}</span>
       </button>
     </SidebarFloatingMenu>

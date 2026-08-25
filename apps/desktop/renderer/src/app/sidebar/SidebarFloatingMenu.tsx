@@ -16,7 +16,7 @@ export function SidebarFloatingMenu({
   anchorPoint?: { x: number; y: number };
   children: ReactNode;
   open: boolean;
-  placement?: 'bottom-left' | 'bottom-right';
+  placement?: 'bottom-left' | 'bottom-right' | 'top-left';
   triggerRef: RefObject<HTMLElement>;
   onClose: () => void;
 }) {
@@ -30,13 +30,15 @@ export function SidebarFloatingMenu({
       if (!rect && !anchorPoint) return;
 
       const menuHeight = menuRef.current?.offsetHeight ?? 0;
+      const opensToLeft = placement.endsWith('left');
+      const opensAbove = placement.startsWith('top');
       setPosition(zoomedPortalPosition({
-        anchorX: anchorPoint?.x ?? (placement === 'bottom-right' ? (rect?.left ?? 0) : (rect?.right ?? 0)),
-        anchorY: anchorPoint?.y ?? (rect?.bottom ?? 0),
-        horizontalAlign: !anchorPoint && placement === 'bottom-left' ? 'end' : 'start',
+        anchorX: anchorPoint?.x ?? (opensToLeft ? (rect?.right ?? 0) : (rect?.left ?? 0)),
+        anchorY: anchorPoint?.y ?? (opensAbove ? (rect?.top ?? 0) : (rect?.bottom ?? 0)),
+        horizontalAlign: !anchorPoint && opensToLeft ? 'end' : 'start',
         menuHeight,
         menuWidth: MENU_WIDTH,
-        offsetY: anchorPoint ? 0 : 6,
+        offsetY: anchorPoint ? 0 : opensAbove ? -menuHeight - 6 : 6,
         scaleInverse: pageScaleInverse(),
         viewportHeight: window.innerHeight,
         viewportWidth: window.innerWidth,

@@ -5,13 +5,13 @@ import {
 import {
   MessageSquareText,
   Paperclip,
-  Pencil,
   SendHorizontal,
   Target,
   Trash2,
 } from 'lucide-react';
 import { memo, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 
 type QueueAction = 'delete' | 'edit' | 'send';
 
@@ -120,7 +120,7 @@ export const ChatSendQueue = memo(function ChatSendQueue({
                   title={editLabel}
                   onClick={() => void runItemAction(item.id, 'edit', () => onEdit(item))}
                 >
-                  <Pencil size={13} aria-hidden="true" />
+                  <EditIcon size={13} aria-hidden="true" />
                 </button>
                 <button
                   className="chat-send-queue__icon-action is-danger"

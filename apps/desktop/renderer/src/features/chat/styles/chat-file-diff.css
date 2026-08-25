@@ -5,11 +5,13 @@
 }
 
 .chat-file-diff__summary {
+  box-sizing: border-box;
   width: fit-content;
   max-width: 100%;
   border-radius: 4px;
   cursor: pointer;
   list-style: none;
+  overflow: hidden;
 }
 
 .chat-file-diff__summary::-webkit-details-marker {
@@ -17,6 +19,10 @@
 }
 
 .chat-file-diff__summary:hover {
+  color: var(--app-text);
+}
+
+.chat-file-diff__summary:hover .chat-tool-run__detail-icon {
   color: var(--app-text);
 }
 

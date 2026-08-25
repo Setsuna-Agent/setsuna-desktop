@@ -1,8 +1,9 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import { Copy, Pencil, Trash2 } from 'lucide-react';
+import { Copy, Trash2 } from 'lucide-react';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useI18n, type AppLocale } from '../../../shared/i18n/I18nProvider.js';
 import { copyTextToClipboard } from '../../../shared/lib/clipboard.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import { ActionTooltip } from '../../../shared/ui/primitives.js';
 
 const timeFormatters = new Map<AppLocale, Intl.DateTimeFormat>();
@@ -53,7 +54,7 @@ export function ChatMessageFooter({
       ) : null}
       {onEdit ? (
         <MessageFooterAction disabled={actionsDisabled} label={t('chat.message.edit')} onClick={onEdit}>
-          <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
+          <EditIcon size={14} strokeWidth={1.8} aria-hidden="true" />
         </MessageFooterAction>
       ) : null}
     </>

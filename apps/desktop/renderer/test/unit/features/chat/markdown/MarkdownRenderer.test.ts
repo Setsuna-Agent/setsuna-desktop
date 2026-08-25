@@ -6,6 +6,7 @@ import {
   normalizeMarkdownCodeLanguage,
   shouldSyntaxHighlightMarkdownCode,
 } from '../../../../../src/features/chat/markdown/MarkdownCodeBlock.js';
+import { MarkdownContentBlock } from '../../../../../src/features/chat/markdown/MarkdownContentBlock.js';
 import { MarkdownNavigationProvider } from '../../../../../src/features/chat/markdown/MarkdownNavigationProvider.js';
 import { MarkdownRenderer } from '../../../../../src/features/chat/markdown/MarkdownRenderer.js';
 import {
@@ -62,6 +63,20 @@ describe('MarkdownRenderer', () => {
     expect(html).toContain('<strong>bold</strong>');
     expect(html).not.toContain('is-streaming');
     expect(html).not.toContain('chat-markdown__empty-tail');
+  });
+
+  it('keeps consecutive streamed chunks in separate transition nodes', () => {
+    const html = renderToStaticMarkup(createElement(MarkdownContentBlock, {
+      content: '开始输出一段内容',
+      revealRanges: [
+        { start: 1, end: 4, key: 0 },
+        { start: 4, end: 8, key: 1 },
+      ],
+    }));
+
+    expect(html.match(/chat-markdown__stream-reveal/g)).toHaveLength(2);
+    expect(html).toContain('>始输出</span>');
+    expect(html).toContain('>一段内容</span>');
   });
 
   it('keeps reference definitions with their mutable uses while preserving the stable prefix', () => {

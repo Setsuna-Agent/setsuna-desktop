@@ -37,8 +37,7 @@
   padding-top: 4px;
 }
 
-.desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target,
-.chat-sidebar-user > .sd-shortcut-tooltip-target {
+.desktop-agent-sidebar__top-actions > .sd-shortcut-tooltip-target {
   display: flex;
   width: 100%;
 }
@@ -265,9 +264,18 @@
 
 .chat-sidebar-user {
   position: relative;
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
   padding: 10px var(--desktop-agent-row-start);
   background: transparent;
+}
+
+.chat-sidebar-user > .sd-shortcut-tooltip-target {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .chat-sidebar-user::before {
@@ -288,6 +296,29 @@
   font-size: 13px;
   line-height: 18px;
   text-align: left;
+}
+
+.chat-sidebar-user__more {
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-md);
+  color: var(--app-sidebar-text-secondary);
+  background: transparent;
+}
+
+.chat-sidebar-user__more:hover,
+.chat-sidebar-user__more:focus-visible,
+.chat-sidebar-user__more.is-active {
+  color: var(--app-text);
+  border-color: var(--desktop-agent-divider);
+  background: var(--desktop-agent-sidebar-active-bg);
+  box-shadow: var(--desktop-agent-sidebar-active-shadow);
 }
 
 .chat-sidebar-user__icon {
@@ -563,10 +594,11 @@
     border-color 140ms ease;
 }
 
-.desktop-agent-project:hover {
+.desktop-agent-project:hover,
+.desktop-agent-project.is-menu-open {
   border-color: transparent;
   color: var(--desktop-agent-sidebar-active-text);
-  background: var(--desktop-agent-sidebar-hover-bg);
+  background: var(--desktop-agent-sidebar-active-bg);
 }
 
 .desktop-agent-project:has(.desktop-agent-project__select:focus-visible) {
@@ -661,6 +693,7 @@
 
 .desktop-agent-project:hover .desktop-agent-project__actions,
 .desktop-agent-project:focus-within .desktop-agent-project__actions,
+.desktop-agent-project.is-menu-open .desktop-agent-project__actions,
 .desktop-agent-project__actions:focus-visible {
   opacity: 1;
   pointer-events: auto;

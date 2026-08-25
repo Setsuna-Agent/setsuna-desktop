@@ -7,9 +7,10 @@ import {
   type RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
 import { Popconfirm } from 'antd';
-import { Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { BrandIconMark } from '../../../shared/branding/BrandIconMark.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import {
   resolveAutomaticModelBrand,
   resolveAutomaticProviderBrand,
@@ -123,7 +124,7 @@ export function LocalModelSettings({
                   onClick={() => openProviderIconEditor(selectedProvider.id)}
                 >
                   <BrandIconMark brand={resolveProviderBrand(selectedProvider)} fallbackName={selectedProvider.name} size="large" />
-                  <span className="chat-user-settings__provider-brand-trigger-edit" aria-hidden="true"><Pencil size={8} /></span>
+                  <span className="chat-user-settings__provider-brand-trigger-edit" aria-hidden="true"><EditIcon size={8} /></span>
                 </button>
                 <span className="chat-user-settings__local-provider-title-copy">
                   <strong>{selectedProviderName}</strong>
@@ -373,7 +374,7 @@ function ProviderModelRow({
           onClick={onEditIcon}
         >
           <BrandIconMark brand={resolveModelBrand(model, provider)} fallbackName={name} />
-          <span className="settings-model-option__icon-edit" aria-hidden="true"><Pencil size={7} /></span>
+          <span className="settings-model-option__icon-edit" aria-hidden="true"><EditIcon size={7} /></span>
         </button>
         <span className="settings-model-option__copy">
           <span className="settings-model-option__name">{name}</span>
@@ -388,7 +389,7 @@ function ProviderModelRow({
       </span>
       <div className="settings-model-option__actions">
         <IconButton label={t('settings.providers.editModel')} onClick={onEdit}>
-          <Pencil size={14} />
+          <EditIcon size={14} />
         </IconButton>
         <IconButton label={t('settings.providers.deleteModel')} variant="danger" disabled={!canDelete} onClick={onDelete}>
           <Trash2 size={14} />

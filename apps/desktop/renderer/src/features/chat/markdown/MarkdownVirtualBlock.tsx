@@ -2,6 +2,11 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { pageScaleInverse } from '../../../shared/lib/zoomedPortalPosition.js';
 import { MarkdownContentBlock } from './MarkdownContentBlock.js';
 import { useMarkdownViewport } from './MarkdownViewportProvider.js';
+import {
+  initialStreamingRevealState,
+  reconcileStreamingRevealState,
+  type StreamingRevealState,
+} from './streamingReveal.js';
 
 const markdownVirtualizationBlockThreshold = 24;
 const markdownVirtualizationCharacterThreshold = 16_000;
@@ -23,6 +28,12 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
 }: MarkdownVirtualBlockProps) {
   const viewport = useMarkdownViewport();
   const blockRef = useRef<HTMLDivElement | null>(null);
+  const revealStateRef = useRef<StreamingRevealState>(initialStreamingRevealState(content));
+  const revealRanges = useMemo(() => {
+    const nextState = reconcileStreamingRevealState(revealStateRef.current, content, mutable);
+    revealStateRef.current = nextState;
+    return nextState.ranges;
+  }, [content, mutable]);
   const estimatedHeight = useMemo(() => estimateMarkdownBlockHeight(content), [content]);
   const canVirtualize = virtualized
     && Boolean(viewport?.supported);
@@ -73,7 +84,12 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
       ref={blockRef}
       style={shouldRender ? undefined : { height: placeholderHeight }}
     >
-      {shouldRender ? <MarkdownContentBlock content={content} /> : null}
+      {shouldRender ? (
+        <MarkdownContentBlock
+          content={content}
+          revealRanges={revealRanges.length ? revealRanges : undefined}
+        />
+      ) : null}
     </div>
   );
 });

@@ -8,7 +8,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -21,6 +21,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { TerminalFeaturePane } from '../../composition/TerminalFeaturePane.js';
 import { CodeFileView } from '../../shared/code/PierreCode.js';
@@ -341,7 +342,7 @@ export function WorkspacePanel({
                   : 'workspace.files.editUnavailable')}
               onClick={() => void fileDraft.startEditing()}
             >
-              <Pencil size={14} />
+              <EditIcon size={14} />
             </IconButton>
           )
         ) : null}

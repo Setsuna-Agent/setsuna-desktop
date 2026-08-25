@@ -1,0 +1,62 @@
+/* Design foundation adapted from Beautiful UI by Shane Levine (MIT).
+   See THIRD_PARTY_NOTICES.md for the upstream license.
+
+   Tailwind is a utility layer only. Omitting Preflight keeps Ant Design and
+   Electron's existing element defaults in charge while the harness can use
+   Tailwind's layout primitives. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+/* Setsuna already owns theme persistence; Tailwind's dark variant follows it. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --color-page: var(--app-bg);
+  --color-canvas: var(--app-window-bg);
+  --color-surface: var(--app-surface);
+  --color-inset: var(--app-surface-subtle);
+  --color-hover: var(--desktop-agent-control-hover-bg);
+  --color-hover-2: var(--desktop-agent-control-active-bg);
+  --color-field: var(--app-surface-muted);
+  --color-line: var(--app-border);
+  --color-line-strong: var(--app-border-strong);
+  --color-ink: var(--app-text);
+  --color-ink-2: var(--app-text-secondary);
+  --color-ink-3: var(--app-text-subtle);
+  --color-accent: var(--app-primary);
+  --color-accent-ink: var(--app-primary);
+  --color-accent-tint: var(--app-accent-subtle);
+  --color-green: var(--app-success);
+  --color-green-tint: var(--app-success-bg);
+  --color-orange: var(--app-warning);
+  --color-orange-tint: var(--app-warning-bg);
+  --color-red: var(--app-danger);
+  --color-red-tint: var(--app-danger-bg);
+
+  --shadow-hairline: var(--app-shadow-hairline);
+  --shadow-btn: var(--app-shadow-button);
+  --shadow-card: var(--app-shadow-surface);
+  --shadow-raised: var(--app-shadow-raised);
+  --shadow-overlay: var(--app-shadow-overlay);
+  --shadow-inset-field: var(--app-shadow-inset-field);
+
+  --font-sans: Inter, var(--app-font-family);
+  --font-mono: 'JetBrains Mono', var(--app-code-font-family);
+
+  /* Beautiful UI's four-level geometry. The OS window radius remains a
+     separate platform token because Windows DWM clips it at roughly 8px. */
+  --radius-chip: 6px;
+  --radius-control: 8px;
+  --radius-card: 10px;
+  --radius-window: 14px;
+
+  --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-link: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+::selection {
+  color: var(--app-text);
+  background: var(--app-accent-soft);
+}

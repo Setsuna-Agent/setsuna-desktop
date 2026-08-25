@@ -16,6 +16,7 @@ import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
+import { ChatEntryTransition } from '../motion/ChatEntryTransition.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
 import {
@@ -809,13 +810,13 @@ function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boo
 function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean, t: Translate): ReactNode {
   if (block.type === 'content') {
     return (
-      <div className="chat-assistant-run__segment" key={block.id}>
+      <ChatEntryTransition className="chat-assistant-run__segment" key={block.id}>
         <MarkdownRenderer
           content={block.content}
           legacyThinkingTags={block.segment.streamParts === undefined}
           streaming={block.segment.status === 'streaming'}
         />
-      </div>
+      </ChatEntryTransition>
     );
   }
   if (block.type === 'loading') {

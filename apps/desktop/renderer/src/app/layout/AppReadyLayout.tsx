@@ -1,14 +1,16 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { RuntimeActivityTrigger } from '../../features/runtime-activity/RuntimeActivityTrigger.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { WorkspaceAppsFeatureLauncher } from '../../composition/workspace-apps-feature-adapter.js';
 import type { DesktopAppController } from '../controller/useDesktopAppController.js';
 import type { ConversationOverviewVisibility } from '../types.js';
 import { useAppKeyboardShortcuts, type AppKeyboardShortcutHandlers } from '../controller/useAppKeyboardShortcuts.js';
+import { useThreadNavigationHistory } from '../controller/useThreadNavigationHistory.js';
 import { AppOverlays } from './AppOverlays.js';
+import { AppProjectToolbarTitle } from './AppProjectToolbarTitle.js';
 import { AppRouteContent } from './AppRouteContent.js';
 import { AppSidebarSurface } from './AppSidebarSurface.js';
 import { AppTopbarActions } from './AppTopbarActions.js';
+import { AppThreadHistoryNavigation } from './AppThreadHistoryNavigation.js';
 import { AppWorkspaceToolbar } from './AppWorkspaceToolbar.js';
 import { RuntimeErrorNotice, runtimeErrorNoticeMessage } from './RuntimeErrorNotice.js';
 import { ShellFrame } from './ShellFrame.js';
@@ -72,6 +74,11 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setFocusComposerRequest((current) => current === requestId ? 0 : current);
   }, []);
   const runtimeActivityTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const currentThread = runtime.currentThread;
+  const threadHistory = useThreadNavigationHistory({
+    currentThreadId: currentThread?.id ?? null,
+    onOpenThread: navigation.selectThread,
+  });
   const visibleRuntimeError = runtimeErrorNoticeMessage(runtime.error, runtime.currentThread);
   const handleToggleSidebar = useCallback(() => setSidebarCollapsed((value) => !value), [setSidebarCollapsed]);
   const handleToggleConversationOverview = useCallback(() => {
@@ -134,6 +141,14 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         setActiveView('chat');
         navigation.setSidebarSearchOpen(true);
       },
+    },
+    'navigation.goBack': {
+      enabled: threadHistory.canGoBack,
+      execute: threadHistory.goBack,
+    },
+    'navigation.goForward': {
+      enabled: threadHistory.canGoForward,
+      execute: threadHistory.goForward,
     },
     'app.addProject': {
       execute: navigation.openCreateProject,
@@ -216,6 +231,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     runtime.currentThread,
     runtimeActivityOpen,
     setActiveView,
+    threadHistory.canGoBack,
+    threadHistory.canGoForward,
+    threadHistory.goBack,
+    threadHistory.goForward,
     windowMenuActions,
     workspacePanels.toggleBottomTerminal,
     workspacePanels.conversationDebugEnabled,
@@ -235,13 +254,24 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       onToggleSidebar={handleToggleSidebar}
       showSidebarToggle={activeView !== 'settings'}
       navigationActions={activeView !== 'settings' ? (
-        <RuntimeActivityTrigger
-          open={runtimeActivityOpen}
-          triggerRef={runtimeActivityTriggerRef}
-          onToggle={() => setRuntimeActivityOpen((open) => !open)}
+        <AppThreadHistoryNavigation
+          canGoBack={threadHistory.canGoBack}
+          canGoForward={threadHistory.canGoForward}
+          onGoBack={threadHistory.goBack}
+          onGoForward={threadHistory.goForward}
         />
       ) : undefined}
-      toolbarTitle={toolbarTitle}
+      toolbarTitle={activeView === 'chat' && activeProject ? (
+        <AppProjectToolbarTitle
+          key={activeProject.id}
+          project={activeProject}
+          title={toolbarTitle ?? activeProject.name}
+          onArchiveProject={(project) => void navigation.archiveProject(project)}
+          onRenameThread={currentThread
+            ? () => navigation.openRenameThread(currentThread)
+            : undefined}
+        />
+      ) : toolbarTitle}
       workspaceToolbar={activeView === 'chat' ? <AppWorkspaceToolbar projectWorkspace={projectWorkspace} workspacePanels={workspacePanels} /> : undefined}
       menuActions={windowMenuActions}
       className={shellClassName}
@@ -289,10 +319,12 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         maxWidth={sidebarMaxWidth}
         minWidth={sidebarMinWidth}
         onOpenCapabilities={openCapabilities}
+        onOpenRuntimeActivity={() => setRuntimeActivityOpen(true)}
         onOpenSettings={openSettings}
         onResetDraft={resetComposer}
         onResizeStep={handleSidebarResizeStep}
         onResizeStart={handleSidebarResizeStart}
+        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
       />
 
       <AppRouteContent

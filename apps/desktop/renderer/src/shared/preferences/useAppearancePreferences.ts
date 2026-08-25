@@ -34,6 +34,12 @@ export const fontFamilyOptions = [
     platforms: ['all'],
   },
   {
+    label: 'Inter',
+    value: 'inter',
+    css: 'Inter, "PingFang SC", "Hiragino Sans GB", "Segoe UI", "Microsoft YaHei UI", ui-sans-serif, system-ui, sans-serif',
+    platforms: ['all'],
+  },
+  {
     label: 'Helvetica Neue',
     value: 'helveticaNeue',
     css: '"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", sans-serif',
@@ -258,7 +264,6 @@ const legacyFontFamilyMap: Partial<Record<string, FontFamilyMode>> = {
   apple: 'system',
   arialRoundedMtBold: 'arialRounded',
   hiraginoSansGb: 'system',
-  inter: 'helveticaNeue',
   mono: 'courierNew',
   pingFangSc: 'system',
   roboto: 'helveticaNeue',

@@ -1,4 +1,4 @@
-import { Minus, PanelLeft, Plus, X } from 'lucide-react';
+import { Minus, PanelLeft, SquarePen, X } from 'lucide-react';
 import {
   useCallback,
   useEffect,
@@ -196,7 +196,7 @@ function TitlebarNavigation({
       {onNewChat ? (
         <ShortcutTooltip commandId="app.newChat" label={t('app.newChat')}>
           <IconButton title="" label={t('app.newChat')} className="app-shell-icon-control app-topbar__new-chat" onClick={onNewChat}>
-            <Plus size={15} />
+            <SquarePen size={15} />
           </IconButton>
         </ShortcutTooltip>
       ) : null}

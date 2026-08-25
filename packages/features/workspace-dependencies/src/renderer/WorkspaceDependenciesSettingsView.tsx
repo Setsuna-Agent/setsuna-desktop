@@ -3,9 +3,9 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
 import {
-  Pencil,
   RefreshCw,
   RotateCcw,
+  SquarePen as EditIcon,
   Wrench,
   X,
 } from 'lucide-react';
@@ -235,7 +235,7 @@ function PackageSourceForm({
                 setEditing(true);
               }}
             >
-              <Pencil size={13} />
+              <EditIcon size={13} />
             </IconButton>
             {customized ? (
               <IconButton

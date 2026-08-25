@@ -215,6 +215,7 @@ export function ApprovalActions({
           const decisionLabel = approvalDecisionLabel(decision, t, manualRiskOverride);
           return (
             <button
+              className={`chat-tool-run__action chat-tool-run__action--${approvalDecisionTone(decision)}`}
               key={decisionKey}
               type="button"
               disabled={Boolean(submittingDecisionKey)}
@@ -335,7 +336,7 @@ export function McpElicitationActions({
         </code>
       )}
       <div className="chat-tool-run__actions">
-        <button type="submit" disabled={Boolean(submittingAction)}>
+        <button className="chat-tool-run__action chat-tool-run__action--primary" type="submit" disabled={Boolean(submittingAction)}>
           {t(
             submittingAction === 'accept'
               ? 'toolRun.elicitation.submitting'
@@ -345,6 +346,7 @@ export function McpElicitationActions({
           )}
         </button>
         <button
+          className="chat-tool-run__action chat-tool-run__action--secondary"
           type="button"
           disabled={Boolean(submittingAction)}
           onClick={() => void submit('decline')}
@@ -356,6 +358,7 @@ export function McpElicitationActions({
           )}
         </button>
         <button
+          className="chat-tool-run__action chat-tool-run__action--danger"
           type="button"
           disabled={Boolean(submittingAction)}
           onClick={() => void submit('cancel')}
@@ -380,6 +383,16 @@ function defaultApprovalDecisions(): RuntimeApprovalAvailableDecision[] {
     { type: 'approve_for_session' },
     { type: 'reject' },
   ];
+}
+
+function approvalDecisionTone(
+  decision: RuntimeApprovalAvailableDecision,
+): 'primary' | 'secondary' | 'danger' {
+  if (decision.type === 'approve') return 'primary';
+  if (decision.type === 'reject' || decision.type === 'cancel') return 'danger';
+  if (decision.type === 'approve_network_policy_amendment'
+    && decision.networkPolicyAmendment.action === 'deny') return 'danger';
+  return 'secondary';
 }
 
 function approvalDecisionKey(

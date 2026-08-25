@@ -16,6 +16,7 @@ import { FeatureContributionBoundary } from '../../../composition/FeatureContrib
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
+import { ChatEntryTransition } from '../motion/ChatEntryTransition.js';
 import type {
   AnswerApprovalHandler,
   ToolRunDisplayGroup,
@@ -126,14 +127,18 @@ export function RuntimeToolRuns({
   const singleRun = visibleRuns.length === 1 ? visibleRuns[0] : undefined;
   const replacement = singleRun ? featureViews.toolResults.resolve(singleRun.data) : null;
   if (singleRun && replacement?.contribution.presentation === 'replace') {
-    return <FeatureToolResultView result={replacement} runId={singleRun.id} />;
+    return (
+      <ChatEntryTransition className="chat-tool-runs">
+        <FeatureToolResultView result={replacement} runId={singleRun.id} />
+      </ChatEntryTransition>
+    );
   }
   const group = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode)[0];
   if (!group) return null;
   return (
-    <div className="chat-tool-runs">
+    <ChatEntryTransition className="chat-tool-runs">
       <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
-    </div>
+    </ChatEntryTransition>
   );
 }
 
@@ -583,7 +588,7 @@ function FileMutationRunRow({
       <span className="chat-tool-run__icon">{toolRunIcon(run)}</span>
       <span className="chat-tool-run__summary-text">
         <span className="chat-tool-run__file-status">
-          <span>{fileOperationVerb(run, t)}</span>
+          <span className="chat-tool-run__action-label">{fileOperationVerb(run, t)}</span>
           {target ? (
             <>
               <FileOperationTarget target={target} />
@@ -666,7 +671,7 @@ function InspectionTargetList({ runs }: { runs: RuntimeToolRun[] }) {
           <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
             {inspectionEntryIcon(entry.kind)}
           </span>
-          <span>{inspectionEntryLabel(entry.kind, t)}</span>
+          <span className="chat-tool-run__action-label">{inspectionEntryLabel(entry.kind, t)}</span>
           <InspectionTarget className="chat-tool-run__file-list-target" entry={entry} />
         </li>
       ))}
@@ -691,7 +696,7 @@ function FileOperationTargetList({ runs }: { runs: RuntimeToolRun[] }) {
             <span aria-hidden="true" className="chat-tool-run__icon chat-tool-run__detail-icon">
               {toolRunKindIcon('fileMutation')}
             </span>
-            <span>{fileOperationActionLabel(entry.action, t)}</span>
+            <span className="chat-tool-run__action-label">{fileOperationActionLabel(entry.action, t)}</span>
             <WorkspaceFileLink
               className="chat-tool-run__file-list-target"
               filePath={entry.path}

@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Clock3,
   FileText,
-  Pencil,
   Play,
   Search,
   ShieldAlert,
@@ -17,6 +16,7 @@ import {
   useI18n,
   type Translate,
 } from '../../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
 
@@ -87,7 +87,7 @@ export function toolRunIcon(run: RuntimeToolRun) {
   if (run.status === 'rejected') return <AlertCircle size={14} />;
   if (run.name.includes('search')) return <Search size={14} />;
   if (run.name.includes('shell')) return <TerminalSquare size={14} />;
-  if (isRuntimeFileMutationRun(run)) return <Pencil size={14} />;
+  if (isRuntimeFileMutationRun(run)) return <EditIcon size={14} />;
   if (run.name.includes('file') || run.name.includes('workspace')) return <FileText size={14} />;
   if (run.name.includes('run')) return <Play size={14} />;
   if (run.status === 'success') return <CheckCircle2 size={14} />;
@@ -98,6 +98,6 @@ export function toolRunKindIcon(kind: ToolRunGroupKind) {
   if (kind === 'inspection') return <FileText size={14} />;
   if (kind === 'search') return <Search size={14} />;
   if (kind === 'shell') return <TerminalSquare size={14} />;
-  if (kind === 'fileMutation') return <Pencil size={14} />;
+  if (kind === 'fileMutation') return <EditIcon size={14} />;
   return <CheckCircle2 size={14} />;
 }
