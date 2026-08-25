@@ -243,7 +243,7 @@ describe('Renderer Feature view catalogs', () => {
     });
     const views = createRendererFeatureViews(composition.activations());
 
-    expect(views.toolResults.resolve({
+    const spawnResultView = views.toolResults.resolve({
       tool: 'spawn_agent',
       senderThreadId: 'thread_parent',
       childThreadId: 'thread_child',
@@ -253,11 +253,11 @@ describe('Renderer Feature view catalogs', () => {
       objective: 'Inspect the repository.',
       identity: { displayName: 'Scout', avatarSeed: 'seed_1' },
       status: 'running',
-    })).toMatchObject({
+    });
+    expect(spawnResultView).toMatchObject({
       featureId: 'collaboration',
       contribution: {
         presentation: 'replace',
-        workHistoryPresentation: 'persistent',
       },
       payload: {
         parentThreadId: 'thread_parent',
@@ -265,6 +265,7 @@ describe('Renderer Feature view catalogs', () => {
         taskId: 'task_1',
       },
     });
+    expect(spawnResultView?.contribution.workHistoryPresentation).toBeUndefined();
 
     await composition.dispose();
   });

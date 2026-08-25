@@ -98,14 +98,14 @@
   transition: box-shadow 0.12s ease;
 }
 
-/* 时间线中的持久卡片与正文共用内容宽度，不保留嵌套工具区的阴影边距。 */
-.chat-work-history__body > .subagent-task-card {
+/* 工作记录中的子代理卡片会经过工具结果与入场动画包装，仍应与正文共用内容宽度。 */
+.chat-work-history__body .subagent-task-card {
   width: 100%;
   margin-inline: 0;
 }
 
 /* 齐宽卡片借用对话区的左右留白绘制阴影，正文仍沿用消息内容层的裁剪规则。 */
-.chat-ai-bubble .ant-bubble-content:has(.chat-work-history__body > .subagent-task-card) {
+.chat-ai-bubble .ant-bubble-content:has(.chat-work-history__body .subagent-task-card) {
   overflow: visible;
 }
 

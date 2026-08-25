@@ -121,6 +121,11 @@
   -ms-overflow-style: none;
 }
 
+/* Windows 主对话与右侧概览卡片共用同一视觉起始线；侧对话仍使用默认紧凑间距。 */
+:root[data-desktop-platform='win32'] .desktop-chat-panel:not(.desktop-chat-panel--side) .chat-main-conversation--with-bottom-sender > .chat-messages {
+  padding-top: 24px;
+}
+
 /* 对话记录负责滚动条，嵌套消息内容不应再绘制次级滚动条。 */
 .chat-messages * {
   scrollbar-width: none !important;
