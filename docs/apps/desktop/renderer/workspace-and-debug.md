@@ -3,10 +3,13 @@
 源码：
 
 - `apps/desktop/renderer/src/features/workspace/`
+- `packages/features/review/src/renderer/`
 - `packages/features/workspace-apps/src/renderer/`
+- `apps/desktop/renderer/src/composition/review-feature-adapter.tsx`
+- `apps/desktop/renderer/src/composition/review-feature-panel-adapter.ts`
 - `apps/desktop/renderer/src/features/conversation-debug/`
 
-Workspace feature 管理右侧/底部工作区 surface：项目文件、review、terminal、内置浏览器和外部应用。Conversation debug 是受开发者开关保护的独立诊断 feature。
+Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、Terminal、Browser、Workspace Apps 的 presentation 由各自 Feature package 拥有。Conversation debug 是受开发者开关保护的独立诊断 feature。
 
 ## Workspace 面板
 
@@ -25,7 +28,6 @@ Panel 选择和 session 生命周期在 hooks，不应由各 tab 各自维护一
 | Hook/helper | 职责 |
 | --- | --- |
 | `useDesktopWorkspacePanels.ts` | Side/bottom panel 选择与跨 feature 动作 |
-| `useDesktopReviewState.ts` | Workspace 级 Git/review 状态、比较基准与变更订阅；不依赖 review panel 是否打开 |
 | `useDesktopWorkspacePanelSession.ts` | Panel 对当前 thread/project 的 session |
 | `useDesktopPanelResize.ts` | Sidebar/workspace/bottom 尺寸与边界 |
 | `useProjectWorkspace.ts` | 项目目录、搜索、文件读取 |
@@ -51,22 +53,25 @@ Renderer：
 
 - 只展示 runtime 已做边界检查的结果。
 - 对目录数量、搜索结果和文件预览保持 UI 上限。
-- 使用 `model.ts`、`review-paths.ts` 等纯 helper 规范化展示。
+- 使用 `model.ts` 等纯 helper 规范化展示。
 - 不直接读取本地路径。
 
 Workspace file context menu 的“打开、复制路径、Reveal、预览”走 preload/main；runtime 的文件读取与 Agent 工具走 runtime workspace store，两条链路都要独立校验 workspace。
 
 ## Review
 
-主要文件：
+Review presentation 与 Workspace 级 Git 状态由 `packages/features/review/src/renderer/` 拥有，主要文件：
 
 - `ReviewPanel.tsx`：review 来源、比较基准和 diff 展示交互。
 - `ReviewDiffView.tsx`：文件卡、展开、聚焦和 context menu 编排。
-- `ReviewDiffContent.tsx`：Unified/split diff 展示与虚拟滚动。
-- `reviewDiffModel.ts`：高亮、split rows、整文件变更、换行和 virtual range 纯计算。
+- `ReviewFileBrowser.tsx` / `ReviewFileNavigator.tsx`：大型变更的单文件浏览和导航。
+- `hooks/useDesktopReviewState.ts`：比较基准、变更订阅与 latest-wins 请求保护；不依赖 review panel 是否打开。
+- `git/WorkspaceGitCommitDialog.tsx` / `ConversationGitControls.tsx`：共享 Git 操作 surface。
 - `ReviewChangeCounts.tsx`：统计。
 - `reviewChanges.ts` / `review-types.ts` / `review-paths.ts`：纯转换。
-- `runtimeReviewSummary.ts`：runtime review target/summary 映射。
+- `messages.ts` / `styles/review.css`：Feature 自有文案和样式入口。
+
+宿主 `composition/review-feature-adapter.tsx` 只注入 preload bridge、i18n、通知和通用 diff/Markdown/文件菜单 UI；`review-feature-panel-adapter.ts` 单独承接 Workspace 懒加载的 Review panel 入口。Workspace panel 与 Chat overview 均通过 composition adapter 使用 Review 的公开 surface。`runtimeReviewSummary.ts` 留在宿主侧，负责把 chat tool-run 投影转换为 Review contract。
 
 Review preference 按 workspace 持久化在 localStorage。Main 才执行 Git 操作；renderer 不拼 Git 命令。
 活动 workspace 会通过 preload 订阅 Main 的 Git worktree 变更；`useDesktopReviewState` 合并连续失效通知，并始终使用当前保存的比较基准重新获取状态。因此概览、Git 控件和 review panel 即使在 panel 关闭时也共享最新快照。普通刷新只重新读取状态，只有显式选择比较基准才会更新对应 preference。
@@ -150,16 +155,16 @@ Workspace 使用：
 - `styles/workspace.css` 稳定入口。
 - `workspace-shell.css`
 - `workspace-editor.css`
-- `workspace-review.css`
-- `workspace-review-diff.css`
 - `bottom-panel.css`
 - `panel-chrome.css`
+
+Review 样式和 renderer 测试分别位于 `packages/features/review/src/renderer/styles/` 与 `packages/features/review/test/renderer/`，不再由 Workspace/Chat 样式入口持有。
 
 Conversation debug 有独立 `conversation-debug.css`，不要把图和虚拟列表样式放入 workspace 全局入口。
 
 ## 测试
 
-Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、browser、review、hooks、model 与 resize。Workspace Apps 和 Terminal 自有 renderer helper 测试分别位于 `packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
+Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、文件、hooks、model 与 resize。Review、Workspace Apps 和 Terminal 自有 renderer 测试分别位于 `packages/features/review/test/renderer/`、`packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
 
 Conversation debug 测试位于 `test/unit/features/conversation-debug/`，重点覆盖 graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation 和 virtual window。
 

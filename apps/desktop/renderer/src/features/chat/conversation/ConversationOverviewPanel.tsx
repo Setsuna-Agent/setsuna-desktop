@@ -7,15 +7,16 @@ import {
   CollaborationFeatureTaskList,
   useCollaborationFeatureState,
 } from '../../../composition/CollaborationFeatureBoundary.js';
+import { localFeatureReviewChangeStats } from '../../../composition/review-feature-adapter.js';
+import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
 import { ChevronUp, CircleGauge, FileDiff } from 'lucide-react';
-import { formatTokens, type DesktopReviewState } from '../../workspace/model.js';
-import { localReviewChangeStats } from '../../workspace/reviewChanges.js';
+import type { ReactNode } from 'react';
+import { formatTokens } from '../../workspace/model.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { AppTooltip } from '../../../shared/ui/primitives.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
 import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
-import { ConversationGitControls } from './ConversationGitControls.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 
 export function ConversationOverviewPanel({
@@ -25,14 +26,13 @@ export function ConversationOverviewPanel({
   contextPercent,
   currentThread,
   overview,
+  reviewControls,
   shellProcessClient,
-  reviewLoading,
   reviewState,
   threadUsage,
   onCollapse,
   onExpand,
   onOpenReview,
-  onReviewRefresh,
   reviewError,
 }: {
   activeProject?: WorkspaceProject;
@@ -41,26 +41,25 @@ export function ConversationOverviewPanel({
   contextPercent: number;
   currentThread: RuntimeThread;
   overview: ConversationOverviewState;
+  reviewControls?: ReactNode;
   shellProcessClient?: BackgroundShellProcessClient;
-  reviewLoading: boolean;
   reviewState: DesktopReviewState | null;
   threadUsage: RuntimeUsageResponse | null;
   onCollapse: () => void;
   onExpand: () => void;
   onOpenReview?: () => void;
-  onReviewRefresh?: () => void | Promise<void>;
   reviewError: string | null;
 }) {
   const { t } = useI18n();
   const changeStats = reviewState?.isGitRepository
-    ? localReviewChangeStats(reviewState)
+    ? localFeatureReviewChangeStats(reviewState)
     : {
         additions: overview.fileChangeSummary?.additions ?? 0,
         deletions: overview.fileChangeSummary?.deletions ?? 0,
         fileCount: overview.fileChangeSummary?.files.length ?? 0,
       };
   const hasFileChanges = changeStats.fileCount > 0;
-  // The first status read is pending before its effect has flipped reviewLoading on.
+  // The first status read is pending before the review state effect settles.
   const reviewPending = Boolean(activeProject && !reviewState && !reviewError);
   const reviewFailed = Boolean(activeProject && !reviewState && reviewError);
   const usageSummary = threadUsage?.summary;
@@ -110,13 +109,7 @@ export function ConversationOverviewPanel({
             ) : reviewPending ? t('conversation.overview.loading') : reviewFailed ? t('conversation.overview.loadFailed') : t('conversation.overview.noChanges')}
           </span>
         </button>
-        <ConversationGitControls
-          activeProject={activeProject}
-          reviewError={reviewError}
-          reviewLoading={reviewLoading}
-          reviewState={reviewState}
-          onReviewRefresh={onReviewRefresh}
-        />
+        {reviewControls}
         <div className="chat-conversation-overview-panel__row chat-conversation-overview-panel__row--static">
           <span className="chat-conversation-overview-panel__icon">
             <ContextProgressIcon percent={contextPercent} />

@@ -1,4 +1,6 @@
-export type DesktopReviewSource = 'unstaged' | 'staged' | 'branch' | 'latest';
+import type { DesktopReviewSource } from '../contracts/index.js';
+
+export type { DesktopReviewSource } from '../contracts/index.js';
 export type DesktopReviewDiffLayout = 'unified' | 'split';
 
 export type ReviewPathContext = {

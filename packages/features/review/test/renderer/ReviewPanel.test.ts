@@ -3,15 +3,24 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
-  DesktopReviewPanel,
+  DesktopReviewPanel as ReviewPanel,
   branchCompareRefOptions,
   consumeReviewFocusRequest,
   reviewFilePathParts,
   reviewWorkspaceFilePath,
   shouldAutoExpandReviewSummary,
   shouldUseReviewFileBrowser,
-} from '../../../../src/features/workspace/ReviewPanel.js';
-import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
+} from '../../src/renderer/ReviewPanel.js';
+import type { DesktopDiffSummary, DesktopReviewState } from '../../src/contracts/index.js';
+import { ReviewRendererTestHost } from './review-renderer-test-host.js';
+
+function DesktopReviewPanel(props: Parameters<typeof ReviewPanel>[0]) {
+  return createElement(
+    ReviewRendererTestHost,
+    null,
+    createElement(ReviewPanel, props),
+  );
+}
 
 describe('DesktopReviewPanel', () => {
   it('sorts changed files by path without putting uppercase names first', () => {

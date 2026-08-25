@@ -6,6 +6,7 @@ import {
   readPreferredWorkspaceAppId,
   writePreferredWorkspaceAppId,
 } from '../../../composition/workspace-apps-feature-adapter.js';
+import { useReviewFeatureState } from '../../../composition/review-feature-adapter.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import {
   chatComposerTargetIdentity,
@@ -41,7 +42,6 @@ import {
   type DesktopTerminalSession,
   type DesktopWorkspaceApp,
 } from '../model.js';
-import { useDesktopReviewState } from './useDesktopReviewState.js';
 import {
   desktopWorkspaceBrowserPanelInstances,
   useDesktopWorkspacePanelSession,
@@ -97,7 +97,7 @@ export function useDesktopWorkspacePanels({
     reviewState,
     selectReviewBaseRef,
     setReviewSource,
-  } = useDesktopReviewState({ activeProject });
+  } = useReviewFeatureState({ activeProject });
   // These dispatchers are scoped to targetIdentity, so callbacks using them must
   // include them in their dependency list instead of treating them like useState setters.
   const [terminalSessionsByPanelId, setTerminalSessionsByPanelId] = useState<TerminalSessionsByPanelId>({});

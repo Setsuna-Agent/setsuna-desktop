@@ -7,7 +7,14 @@ import type {
 import { Loader2, RefreshCw, Save } from 'lucide-react';
 import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { Button, PageHeader, SelectField, TextArea, TextField } from '../../../shared/ui/primitives.js';
+import {
+  Button,
+  Checkbox,
+  PageHeader,
+  SelectField,
+  TextArea,
+  TextField,
+} from '../../../shared/ui/primitives.js';
 import {
   mcpDraftToInput,
   mcpToolStats,
@@ -190,13 +197,17 @@ export function CapabilitiesMcpEditor({
                 {draft.tools.map((tool) => {
                   const checked = (!allowedTools.size || allowedTools.has(tool.name)) && !disabledTools.has(tool.name);
                   return (
-                    <label className="desktop-capabilities-mcp-tool" key={tool.name}>
-                      <input type="checkbox" checked={checked} onChange={(event) => setToolEnabled(tool.name, event.currentTarget.checked)} />
+                    <Checkbox
+                      key={tool.name}
+                      checked={checked}
+                      className="desktop-capabilities-mcp-tool"
+                      onChange={(enabled) => setToolEnabled(tool.name, enabled)}
+                    >
                       <span>
                         <strong>{tool.name}</strong>
                         {tool.description ? <small>{tool.description}</small> : null}
                       </span>
-                    </label>
+                    </Checkbox>
                   );
                 })}
               </div>

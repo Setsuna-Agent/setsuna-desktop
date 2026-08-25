@@ -45,7 +45,11 @@ import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from '../../features/workspace/WorkspaceFileContextMenu.js';
-import { WorkspaceGitCommitProvider } from '../../features/workspace/git/WorkspaceGitCommitDialog.js';
+import {
+  ReviewFeatureConversationGitControls,
+  ReviewFeatureGitCommitProvider,
+  latestCompletedFeatureReview,
+} from '../../composition/review-feature-adapter.js';
 import type { DesktopBrowserPanelInstance } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { WorkspaceFileDraftState } from '../../features/workspace/hooks/useWorkspaceFileDraft.js';
 import type {
@@ -63,8 +67,7 @@ import type {
   WorkspaceFileFocusRequest,
 } from '../../features/workspace/model.js';
 import { latestDesktopReviewSummaryFromMessages } from '../../features/workspace/runtimeReviewSummary.js';
-import { latestCompletedReview } from '../../features/workspace/review-findings.js';
-import type { DesktopReviewSource } from '../../features/workspace/review-types.js';
+import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
 import { workspaceFileMentionEntry } from '../../features/workspace/workspaceFileMention.js';
 import type { RuntimeAccessModeSelection } from '../../shared/lib/runtimeAccessMode.js';
 import type {
@@ -331,7 +334,7 @@ export function AppChatSurface({
     [currentThread?.messages],
   );
   const latestReviewFindings = useMemo<RuntimeReviewFinding[]>(
-    () => latestCompletedReview(
+    () => latestCompletedFeatureReview(
       currentThread?.messages ?? [],
       activeTurnId,
     )?.findings ?? [],
@@ -398,7 +401,7 @@ export function AppChatSurface({
   } satisfies Omit<ComponentProps<typeof WorkspacePanel>, 'activePanel' | 'placement' | 'terminalSession'>;
 
   return (
-    <WorkspaceGitCommitProvider
+    <ReviewFeatureGitCommitProvider
       activeProject={activeWorkspace}
       reviewLoading={reviewLoading}
       reviewState={reviewState}
@@ -428,8 +431,16 @@ export function AppChatSurface({
             focusComposerRequest={focusComposerRequest}
             imageAttachmentRequest={imageAttachmentRequest}
             plugins={plugins}
+            reviewControls={(
+              <ReviewFeatureConversationGitControls
+                activeProject={activeWorkspace}
+                reviewError={reviewError}
+                reviewLoading={reviewLoading}
+                reviewState={reviewState}
+                onReviewRefresh={onReviewRefresh}
+              />
+            )}
             reviewError={reviewError}
-            reviewLoading={reviewLoading}
             reviewState={reviewState}
             skillSelectionRequest={skillSelectionRequest}
             workspaceMentionRequest={workspaceMentionRequest}
@@ -453,7 +464,6 @@ export function AppChatSurface({
             onSelectModel={onSelectModel}
             onSend={onSend}
             queuedTurnActions={queuedTurnActions}
-            onReviewRefresh={onReviewRefresh}
             onSetMultiAgentEnabled={onSetMultiAgentEnabled}
             onStartThreadReview={onStartThreadReview}
             onImageAttachmentRequestConsumed={resolveImageAttachmentRequest}
@@ -632,7 +642,7 @@ export function AppChatSurface({
           </FloatingWorkspacePanelSlot>
         ) : null}
       </RuntimePluginNavigationProvider>
-    </WorkspaceGitCommitProvider>
+    </ReviewFeatureGitCommitProvider>
   );
 }
 

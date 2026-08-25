@@ -1,6 +1,6 @@
 import { Check, Loader2, Plus } from 'lucide-react';
 import type { FormEvent } from 'react';
-import type { Translate } from '../../../shared/i18n/I18nProvider.js';
+import type { ReviewTranslate } from '../messages.js';
 
 export function WorkspaceGitBranchCreateControl({
   branchDraft,
@@ -25,7 +25,7 @@ export function WorkspaceGitBranchCreateControl({
   onCancelCreate: () => void;
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
-  t: Translate;
+  t: ReviewTranslate;
 }) {
   const createDisabled = busy || Boolean(disabledReason);
   if (!creatingBranch) {
@@ -39,7 +39,7 @@ export function WorkspaceGitBranchCreateControl({
       >
         <Plus size={14} />
         <span className="chat-git-branch-menu__create-body">
-          <span>{t(compact ? 'conversation.git.newBranch' : 'conversation.git.createAndCheckout')}</span>
+          <span>{t(compact ? 'feature.review.git.newBranch' : 'feature.review.git.createAndCheckout')}</span>
           {disabledReason ? <small>{disabledReason}</small> : null}
         </span>
       </button>
@@ -53,19 +53,19 @@ export function WorkspaceGitBranchCreateControl({
       <input
         autoFocus
         value={branchDraft}
-        placeholder={t('conversation.git.branchNamePlaceholder')}
+        placeholder={t('feature.review.git.branchNamePlaceholder')}
         disabled={createDisabled}
         onChange={(event) => onBranchDraftChange(event.currentTarget.value)}
       />
       <button
         type="submit"
         disabled={createDisabled}
-        aria-label={t('conversation.git.createBranch')}
+        aria-label={t('feature.review.git.createBranch')}
         title={disabledReason ?? undefined}
       >
         {submitting
           ? <Loader2 className="chat-git-loading-icon" size={13} />
-          : compact ? t('conversation.git.create') : <Check size={13} />}
+          : compact ? t('feature.review.git.create') : <Check size={13} />}
       </button>
       <button type="button" disabled={busy} onClick={onCancelCreate}>
         {t('common.cancel')}

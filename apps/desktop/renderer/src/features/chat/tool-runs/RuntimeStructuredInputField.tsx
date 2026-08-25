@@ -4,7 +4,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { useId } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
-import { SelectField } from '../../../shared/ui/primitives.js';
+import { Checkbox, SelectField } from '../../../shared/ui/primitives.js';
 
 export function RuntimeStructuredInputField({
   field,
@@ -37,7 +37,13 @@ export function RuntimeStructuredInputField({
       <label id={labelId} htmlFor={fieldId}>{label}{required ? <em>{t('toolRun.input.required')}</em> : null}</label>
       {field.description ? <small>{field.description}</small> : null}
       {field.type === 'boolean' ? (
-        <input id={fieldId} name={name} type="checkbox" checked={value === true} onChange={(event) => onChange(event.currentTarget.checked)} />
+        <Checkbox
+          aria-labelledby={labelId}
+          checked={value === true}
+          id={fieldId}
+          name={name}
+          onChange={onChange}
+        />
       ) : field.type === 'number' || field.type === 'integer' ? (
         <input
           id={fieldId}

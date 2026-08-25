@@ -13,6 +13,7 @@ import type {
 import { ChevronRight } from 'lucide-react';
 import {
   Button,
+  Checkbox,
   AppTooltip,
   EmptyState,
   IconButton,
@@ -28,6 +29,7 @@ import {
  */
 export const settingsViewUi = Object.freeze({
   Button: SettingsButton,
+  Checkbox,
   EmptyState,
   Group: SettingsGroup,
   IconButton: SettingsIconButton,

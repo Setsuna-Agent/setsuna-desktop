@@ -30,7 +30,7 @@ import {
 import './webdav-sync.css';
 
 export function WebDavSyncSettings() {
-  const { locale, t, ui: { Button, EmptyState, TextField } } = useWebDavSyncView();
+  const { locale, t, ui: { Button, Checkbox, EmptyState, TextField } } = useWebDavSyncView();
   const sync = useDesktopWebDavSync();
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -279,22 +279,20 @@ export function WebDavSyncSettings() {
             <strong>{t('feature.webdavSync.automatic.title')}</strong>
             <small>{t('feature.webdavSync.automatic.description')}</small>
           </div>
-          <label className="settings-webdav__switch">
-            <input
-              className="settings-webdav__checkbox"
-              checked={state.automaticBackup}
-              disabled={busy}
-              type="checkbox"
-              onChange={(event) => {
-                if (event.currentTarget.checked) {
-                  setConfirmAutomaticBackup(true);
-                  return;
-                }
-                void sync.updatePreferences({ automaticBackup: false }).catch(() => undefined);
-              }}
-            />
+          <Checkbox
+            checked={state.automaticBackup}
+            className="settings-webdav__switch"
+            disabled={busy}
+            onChange={(checked) => {
+              if (checked) {
+                setConfirmAutomaticBackup(true);
+                return;
+              }
+              void sync.updatePreferences({ automaticBackup: false }).catch(() => undefined);
+            }}
+          >
             <span>{t('feature.webdavSync.automatic.label')}</span>
-          </label>
+          </Checkbox>
         </header>
       </section>
 
@@ -307,14 +305,13 @@ export function WebDavSyncSettings() {
         </header>
         <div className="settings-webdav__category-list">
           {DESKTOP_WEBDAV_SYNC_CATEGORY_IDS.map((category) => (
-            <label key={category} className={category === 'model_credentials' ? 'is-sensitive' : ''}>
-              <input
-                className="settings-webdav__checkbox"
-                checked={state.categories.includes(category)}
-                disabled={busy || categoryUpdatePending}
-                type="checkbox"
-                onChange={(event) => void updateCategory(category, event.currentTarget.checked)}
-              />
+            <Checkbox
+              key={category}
+              checked={state.categories.includes(category)}
+              className={category === 'model_credentials' ? 'is-sensitive' : ''}
+              disabled={busy || categoryUpdatePending}
+              onChange={(checked) => void updateCategory(category, checked)}
+            >
               <span className="settings-webdav__category-icon">
                 {category === 'model_credentials' ? <LockKeyhole size={15} /> : <Cloud size={15} />}
               </span>
@@ -327,7 +324,7 @@ export function WebDavSyncSettings() {
                   ? formatSyncBytes(localCategoryBytes.get(category)!, locale)
                   : '—'}
               </span>
-            </label>
+            </Checkbox>
           ))}
         </div>
         {categoryError ? <div className="settings-webdav__error" role="alert">{categoryError}</div> : null}

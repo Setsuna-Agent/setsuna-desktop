@@ -1,5 +1,6 @@
 import { Virtualizer } from '@pierre/diffs/react';
 import type { RuntimeReviewFinding, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { DesktopWorkspaceApp } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { Button, Dropdown, type MenuProps } from 'antd';
 import {
   AlignJustify,
@@ -16,16 +17,23 @@ import {
   WrapText,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { translate, useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
-import type { MessageKey } from '../../shared/i18n/messages.js';
-import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
-import { ActionTooltip, EmptyState, IconButton } from '../../shared/ui/primitives.js';
 import type {
   DesktopDiffSummary,
   DesktopReviewFocusRequest,
   DesktopReviewState,
-  DesktopWorkspaceApp,
-} from './model.js';
+} from '../contracts/index.js';
+import { useReviewRendererHost } from './host.js';
+import {
+  translateReviewMessage,
+  type ReviewMessageKey,
+  type ReviewTranslate,
+} from './messages.js';
+import { readReviewPreference, writeReviewPreference } from './preferences.js';
+import {
+  ReviewActionTooltip as ActionTooltip,
+  ReviewEmptyState as EmptyState,
+  ReviewIconButton as IconButton,
+} from './primitives.js';
 import { normalizeReviewFocusPath } from './review-paths.js';
 import type {
   BranchCompareRefOption,
@@ -42,34 +50,36 @@ import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
 import { reviewFindingKey, reviewPathsMatch } from './review-findings.js';
 
 export type { BranchCompareRefOption, DesktopReviewSource, ReviewPathContext } from './review-types.js';
-const reviewSourceLabelKeys: Record<DesktopReviewSource, MessageKey> = {
-  branch: 'workspace.review.source.branch',
-  latest: 'workspace.review.source.latest',
-  staged: 'workspace.review.source.staged',
-  unstaged: 'workspace.review.source.unstaged',
+const reviewSourceLabelKeys: Record<DesktopReviewSource, ReviewMessageKey> = {
+  branch: 'feature.review.workspace.source.branch',
+  latest: 'feature.review.workspace.source.latest',
+  staged: 'feature.review.workspace.source.staged',
+  unstaged: 'feature.review.workspace.source.unstaged',
 };
-const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
+const defaultTranslate: ReviewTranslate = (key, params) => (
+  key === 'common.cancel' ? '取消' : translateReviewMessage('zh-CN', key, params)
+);
 
-function reviewSourceLabel(source: DesktopReviewSource, t: Translate = defaultTranslate): string {
+function reviewSourceLabel(source: DesktopReviewSource, t: ReviewTranslate = defaultTranslate): string {
   return t(reviewSourceLabelKeys[source]);
 }
 
-const reviewEmptyTextKeys: Record<DesktopReviewSource, { title: MessageKey; description: MessageKey }> = {
+const reviewEmptyTextKeys: Record<DesktopReviewSource, { title: ReviewMessageKey; description: ReviewMessageKey }> = {
   branch: {
-    title: 'workspace.review.empty.branch.title',
-    description: 'workspace.review.empty.branch.description',
+    title: 'feature.review.workspace.empty.branch.title',
+    description: 'feature.review.workspace.empty.branch.description',
   },
   latest: {
-    title: 'workspace.review.empty.latest.title',
-    description: 'workspace.review.empty.latest.description',
+    title: 'feature.review.workspace.empty.latest.title',
+    description: 'feature.review.workspace.empty.latest.description',
   },
   staged: {
-    title: 'workspace.review.empty.staged.title',
-    description: 'workspace.review.empty.staged.description',
+    title: 'feature.review.workspace.empty.staged.title',
+    description: 'feature.review.workspace.empty.staged.description',
   },
   unstaged: {
-    title: 'workspace.review.empty.unstaged.title',
-    description: 'workspace.review.empty.unstaged.description',
+    title: 'feature.review.workspace.empty.unstaged.title',
+    description: 'feature.review.workspace.empty.unstaged.description',
   },
 };
 
@@ -122,7 +132,7 @@ export function DesktopReviewPanel({
   onSourceChange?: (source: DesktopReviewSource) => void;
   onRevealFile?: (filePath: string) => void;
 }) {
-  const { t } = useI18n();
+  const { translate: t } = useReviewRendererHost();
   const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const [reviewSourceByKey, setReviewSourceByKey] = useState<Record<string, DesktopReviewSource>>({});
   const [reviewDiffLayoutByKey, setReviewDiffLayoutByKey] = useState<Record<string, DesktopReviewDiffLayout>>({});
@@ -155,13 +165,13 @@ export function DesktopReviewPanel({
   const availableBaseRefs = reviewState?.baseRefs ?? [];
   const activeBranchBaseRef = reviewState?.baseRef ?? '';
   const reviewLayoutToggleTip = reviewDiffLayout === 'split'
-    ? t('workspace.review.layout.split')
-    : t('workspace.review.layout.unified');
+    ? t('feature.review.workspace.layout.split')
+    : t('feature.review.workspace.layout.unified');
   const reviewLineWrapToggleTip = reviewLineWrap
-    ? t('workspace.review.wrap.on')
-    : t('workspace.review.wrap.off');
+    ? t('feature.review.workspace.wrap.on')
+    : t('feature.review.workspace.wrap.off');
   const reviewRefreshing = loading || refreshFeedbackVisible;
-  const reviewRefreshTip = t(reviewRefreshing ? 'workspace.review.refreshing' : 'workspace.review.refresh');
+  const reviewRefreshTip = t(reviewRefreshing ? 'feature.review.workspace.refreshing' : 'feature.review.workspace.refresh');
   const activeSummary = reviewSummaryForSource(reviewState, activeSource, latestSummary);
   const fileBrowserVisible = shouldUseReviewFileBrowser(activeSummary);
   const autoExpandReviewFiles = shouldAutoExpandReviewSummary(activeSummary);
@@ -240,21 +250,21 @@ export function DesktopReviewPanel({
   if (!activeProject) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title={t('workspace.review.noProject')} body={t('workspace.review.addProject')} />
+        <EmptyState title={t('feature.review.workspace.noProject')} body={t('feature.review.workspace.addProject')} />
       </section>
     );
   }
   if (loading && !reviewState && !latestSummary?.files.length) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title={t('workspace.review.loading')} body={activeProject.path} />
+        <EmptyState title={t('feature.review.workspace.loading')} body={activeProject.path} />
       </section>
     );
   }
   if (error && !reviewState && !latestSummary?.files.length) {
     return (
       <section className="desktop-review-panel">
-        <EmptyState title={t('workspace.review.loadFailed')} body={error} />
+        <EmptyState title={t('feature.review.workspace.loadFailed')} body={error} />
       </section>
     );
   }
@@ -263,10 +273,10 @@ export function DesktopReviewPanel({
   const bulkExpandDisabled = !effectiveFileExpansionRequest.expanded && !autoExpandReviewFiles;
   const reviewFileExpansionTip = t(
     effectiveFileExpansionRequest.expanded
-      ? 'workspace.review.collapseAll'
+      ? 'feature.review.workspace.collapseAll'
       : bulkExpandDisabled
-        ? 'workspace.review.expandLargeIndividually'
-        : 'workspace.review.expandAll',
+        ? 'feature.review.workspace.expandLargeIndividually'
+        : 'feature.review.workspace.expandAll',
   );
   const sourceMenuItems: MenuProps['items'] = reviewSourceOptions.map((source) => ({
     disabled: source === 'branch' && !branchComparisonAvailable,
@@ -346,12 +356,12 @@ export function DesktopReviewPanel({
               </Button>
             </Dropdown>
           ) : (
-            <span className="chat-file-review-panel__source-title">{t('workspace.review.source.latestChanges')}</span>
+            <span className="chat-file-review-panel__source-title">{t('feature.review.workspace.source.latestChanges')}</span>
           )}
           <ReviewChangeCounts additions={activeSummary?.additions ?? 0} deletions={activeSummary?.deletions ?? 0} />
         </div>
         <div className="desktop-review-panel__actions">
-          <div className="desktop-review-panel__action-group" role="group" aria-label={t('workspace.review.diffDisplay')}>
+          <div className="desktop-review-panel__action-group" role="group" aria-label={t('feature.review.workspace.diffDisplay')}>
             {!fileBrowserVisible ? (
               <ActionTooltip title={reviewFileExpansionTip}>
                 <IconButton
@@ -392,7 +402,7 @@ export function DesktopReviewPanel({
               </IconButton>
             </ActionTooltip>
           </div>
-          <div className="desktop-review-panel__action-group" role="group" aria-label={t('workspace.review.actions')}>
+          <div className="desktop-review-panel__action-group" role="group" aria-label={t('feature.review.workspace.actions')}>
             <ActionTooltip title={reviewRefreshTip}>
               <IconButton
                 aria-disabled={reviewRefreshing}
@@ -415,7 +425,7 @@ export function DesktopReviewPanel({
                 onClick={openCommitDialog}
               >
                 <GitCommitHorizontal size={14} />
-                <span>{t('conversation.git.commitOrPush')}</span>
+                <span>{t('feature.review.git.commitOrPush')}</span>
               </button>
             ) : null}
           </div>
@@ -587,34 +597,34 @@ function reviewLineWrapPreferenceKey(project: WorkspaceProject): string {
 
 function readReviewSourcePreference(key: string | null): DesktopReviewSource | null {
   if (!key) return null;
-  const value = readBrowserStorageValue(key);
+  const value = readReviewPreference(key);
   return isDesktopReviewSource(value) ? value : null;
 }
 
 function readReviewDiffLayoutPreference(key: string | null): DesktopReviewDiffLayout | null {
   if (!key) return null;
-  const value = readBrowserStorageValue(key);
+  const value = readReviewPreference(key);
   return isDesktopReviewDiffLayout(value) ? value : null;
 }
 
 function readReviewLineWrapPreference(key: string | null): boolean | null {
   if (!key) return null;
-  const value = readBrowserStorageValue(key);
+  const value = readReviewPreference(key);
   if (value === 'wrap') return true;
   if (value === 'nowrap') return false;
   return null;
 }
 
 function writeReviewSourcePreference(key: string, source: DesktopReviewSource): void {
-  writeBrowserStorageValue(key, source);
+  writeReviewPreference(key, source);
 }
 
 function writeReviewDiffLayoutPreference(key: string, layout: DesktopReviewDiffLayout): void {
-  writeBrowserStorageValue(key, layout);
+  writeReviewPreference(key, layout);
 }
 
 function writeReviewLineWrapPreference(key: string, lineWrap: boolean): void {
-  writeBrowserStorageValue(key, lineWrap ? 'wrap' : 'nowrap');
+  writeReviewPreference(key, lineWrap ? 'wrap' : 'nowrap');
 }
 
 function isDesktopReviewSource(value: unknown): value is DesktopReviewSource {
@@ -636,7 +646,7 @@ function BranchCompareBar({
   currentBranch?: string | null;
   onBaseRefChange: (baseRef: string) => void;
 }) {
-  const { t } = useI18n();
+  const { translate: t } = useReviewRendererHost();
   const [query, setQuery] = useState('');
   const selectableBaseRefs = useMemo(() => {
     if (!baseRef || baseRefs.includes(baseRef)) return baseRefs;
@@ -644,7 +654,7 @@ function BranchCompareBar({
   }, [baseRef, baseRefs]);
   const selectableOptions = useMemo(() => branchCompareRefOptions(selectableBaseRefs, baseRef), [selectableBaseRefs, baseRef]);
   const selectedBaseValue = preferredBranchCompareRef(baseRef ?? '', selectableBaseRefs);
-  const selectedBaseLabel = branchCompareDisplayName(selectedBaseValue) || t('workspace.review.branch.unset');
+  const selectedBaseLabel = branchCompareDisplayName(selectedBaseValue) || t('feature.review.workspace.branch.unset');
   const filteredBaseRefs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return selectableOptions;
@@ -667,7 +677,7 @@ function BranchCompareBar({
     : [{
       key: '__empty',
       disabled: true,
-      label: <span className="desktop-review-branch-menu__empty">{t('workspace.review.branch.noMatch')}</span>,
+      label: <span className="desktop-review-branch-menu__empty">{t('feature.review.workspace.branch.noMatch')}</span>,
     }];
   const handleMenuClick: NonNullable<MenuProps['onClick']> = ({ key }) => {
     if (key === '__empty') return;
@@ -689,14 +699,14 @@ function BranchCompareBar({
               <Search size={13} />
               <input
                 value={query}
-                placeholder={t('workspace.review.branch.search')}
+                placeholder={t('feature.review.workspace.branch.search')}
                 onChange={(event) => setQuery(event.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 onKeyDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
               />
             </label>
-            <div className="desktop-review-branch-menu__label">{t('workspace.review.branch.label')}</div>
+            <div className="desktop-review-branch-menu__label">{t('feature.review.workspace.branch.label')}</div>
             {menu}
           </div>
         )}

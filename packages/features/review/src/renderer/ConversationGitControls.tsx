@@ -1,12 +1,15 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
 import { Check, ChevronDown, GitBranch, GitCommitHorizontal, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import {
-  useWorkspaceGitCommitDialog,
-} from '../../workspace/git/WorkspaceGitCommitDialog.js';
-import { WorkspaceGitBranchCreateControl } from '../../workspace/git/WorkspaceGitBranchCreateControl.js';
-import type { DesktopDiffSummary, DesktopReviewState } from '../../workspace/model.js';
+import type {
+  DesktopDiffSummary,
+  DesktopReviewBridge,
+  DesktopReviewState,
+} from '../contracts/index.js';
+import { WorkspaceGitBranchCreateControl } from './git/WorkspaceGitBranchCreateControl.js';
+import { useWorkspaceGitCommitDialog } from './git/WorkspaceGitCommitDialog.js';
+import { useReviewRendererHost } from './host.js';
+import type { ReviewTranslate } from './messages.js';
 
 type BranchBusyAction = 'checkout' | 'create' | null;
 
@@ -23,7 +26,7 @@ export function ConversationGitControls({
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: () => void | Promise<void>;
 }) {
-  const { t } = useI18n();
+  const { bridge, translate: t } = useReviewRendererHost();
   const { canOpenCommitDialog, openCommitDialog } = useWorkspaceGitCommitDialog();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
@@ -37,15 +40,15 @@ export function ConversationGitControls({
   const hasGit = Boolean(reviewState?.isGitRepository);
   const currentBranch = reviewState?.currentBranch || 'HEAD';
   const currentBranchLabel = reviewLoading
-    ? t('conversation.overview.loading')
+    ? t('feature.review.git.loading')
     : reviewState
       ? currentBranch
       : reviewError
-        ? t('conversation.overview.loadFailed')
-        : t('conversation.overview.loading');
+        ? t('feature.review.git.loadFailed')
+        : t('feature.review.git.loading');
   const unstagedFileCount = fileCount(reviewState?.unstagedSummary);
   const createBranchDisabledReason = unstagedFileCount > 0
-    ? t('conversation.git.unstagedBranchBlocked')
+    ? t('feature.review.git.unstagedBranchBlocked')
     : null;
   const filteredBranches = useMemo(() => {
     const branches = reviewState?.branches ?? [];
@@ -88,17 +91,20 @@ export function ConversationGitControls({
     closeBranchCreate();
   };
 
-  const runBranchAction = async (action: BranchBusyAction, task: () => Promise<void>) => {
+  const runBranchAction = async (
+    action: BranchBusyAction,
+    task: (api: DesktopReviewBridge) => Promise<void>,
+  ) => {
     if (!workspaceRoot || busyAction) return;
-    const api = window.setsunaDesktop?.desktopReview;
+    const api = bridge;
     if (!api) {
-      setError(t('conversation.git.unsupported'));
+      setError(t('feature.review.git.unsupported'));
       return;
     }
     setBusyAction(action);
     setError(null);
     try {
-      await task();
+      await task(api);
       await onReviewRefresh?.();
     } catch (unknownError) {
       setError(gitControlErrorMessage(unknownError, t));
@@ -108,8 +114,8 @@ export function ConversationGitControls({
   };
 
   const checkoutBranch = (branchName: string) => {
-    void runBranchAction('checkout', async () => {
-      await window.setsunaDesktop?.desktopReview.checkoutBranch(workspaceRoot, branchName);
+    void runBranchAction('checkout', async (api) => {
+      await api.checkoutBranch(workspaceRoot, branchName);
       closeBranchMenu();
     });
   };
@@ -118,11 +124,11 @@ export function ConversationGitControls({
     event.preventDefault();
     const branchName = branchDraft.trim();
     if (!branchName) {
-      setError(t('conversation.git.branchRequired'));
+      setError(t('feature.review.git.branchRequired'));
       return;
     }
-    void runBranchAction('create', async () => {
-      await window.setsunaDesktop?.desktopReview.createBranch(workspaceRoot, branchName);
+    void runBranchAction('create', async (api) => {
+      await api.createBranch(workspaceRoot, branchName);
       closeBranchMenu();
     });
   };
@@ -141,7 +147,7 @@ export function ConversationGitControls({
         <span className="chat-conversation-overview-panel__icon">
           <GitBranch size={14} />
         </span>
-        <span className="chat-conversation-overview-panel__label">{t('conversation.git.branch')}</span>
+        <span className="chat-conversation-overview-panel__label">{t('feature.review.git.branch')}</span>
         <span
           className="chat-conversation-overview-panel__meta"
           title={!reviewState && reviewError ? reviewError : undefined}
@@ -167,7 +173,7 @@ export function ConversationGitControls({
         <span className="chat-conversation-overview-panel__icon">
           <GitCommitHorizontal size={14} />
         </span>
-        <span className="chat-conversation-overview-panel__label">{t('conversation.git.commitOrPush')}</span>
+        <span className="chat-conversation-overview-panel__label">{t('feature.review.git.commitOrPush')}</span>
       </button>
 
       {branchMenuOpen ? (
@@ -227,7 +233,7 @@ function BranchMenu({
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
   onQueryChange: (value: string) => void;
-  t: Translate;
+  t: ReviewTranslate;
 }) {
   return (
     <div className="chat-git-branch-menu">
@@ -235,11 +241,11 @@ function BranchMenu({
         <Search size={13} />
         <input
           value={query}
-          placeholder={t('conversation.git.searchBranches')}
+          placeholder={t('feature.review.git.searchBranches')}
           onChange={(event) => onQueryChange(event.currentTarget.value)}
         />
       </label>
-      <div className="chat-git-branch-menu__label">{t('conversation.git.branch')}</div>
+      <div className="chat-git-branch-menu__label">{t('feature.review.git.branch')}</div>
       <div className="chat-git-branch-menu__list">
         {filteredBranches.length ? filteredBranches.map((branch) => (
           <button
@@ -254,8 +260,8 @@ function BranchMenu({
               <span>{branch.name}</span>
               {branch.uncommittedFiles > 0 ? (
                 <small>{t(branch.uncommittedFiles === 1
-                  ? 'conversation.git.uncommittedFiles.one'
-                  : 'conversation.git.uncommittedFiles.many', { count: branch.uncommittedFiles })}</small>
+                  ? 'feature.review.git.uncommittedFiles.one'
+                  : 'feature.review.git.uncommittedFiles.many', { count: branch.uncommittedFiles })}</small>
               ) : null}
             </span>
             <span className="chat-git-branch-menu__check">
@@ -263,7 +269,7 @@ function BranchMenu({
             </span>
           </button>
         )) : (
-          <div className="chat-git-branch-menu__empty">{t('conversation.git.noMatchingBranches')}</div>
+          <div className="chat-git-branch-menu__empty">{t('feature.review.git.noMatchingBranches')}</div>
         )}
       </div>
       <div className="chat-git-branch-menu__divider" />
@@ -288,9 +294,9 @@ function fileCount(summary: DesktopDiffSummary | null | undefined): number {
   return summary?.files.length ?? 0;
 }
 
-function gitControlErrorMessage(error: unknown, t: Translate): string {
+function gitControlErrorMessage(error: unknown, t: ReviewTranslate): string {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const withoutIpcPrefix = rawMessage.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/u, '');
   const withoutRuntimePath = withoutIpcPrefix.replace(/\s*\((?:GET|POST|PUT|PATCH|DELETE)\s+\/v\d+\/[^)]+\)\s*$/u, '');
-  return withoutRuntimePath.trim() || t('conversation.git.operationFailed');
+  return withoutRuntimePath.trim() || t('feature.review.git.operationFailed');
 }

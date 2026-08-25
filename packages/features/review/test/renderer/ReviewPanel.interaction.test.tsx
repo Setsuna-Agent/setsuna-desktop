@@ -8,6 +8,11 @@ import type {
   RuntimeReviewFinding,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type {
+  DesktopDiffSummary,
+  DesktopReviewBridge,
+  DesktopReviewState,
+} from '../../src/contracts/index.js';
 import {
   cleanup,
   fireEvent,
@@ -17,11 +22,9 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ToastProvider } from '../../../../src/app/providers/ToastProvider.js';
-import { DesktopReviewPanel } from '../../../../src/features/workspace/ReviewPanel.js';
-import { WorkspaceGitCommitProvider } from '../../../../src/features/workspace/git/WorkspaceGitCommitDialog.js';
-import type { DesktopDiffSummary, DesktopReviewState } from '../../../../src/features/workspace/model.js';
-import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
+import { DesktopReviewPanel } from '../../src/renderer/ReviewPanel.js';
+import { WorkspaceGitCommitProvider } from '../../src/renderer/git/WorkspaceGitCommitDialog.js';
+import { ReviewRendererTestHost } from './review-renderer-test-host.js';
 
 afterEach(() => {
   cleanup();
@@ -43,7 +46,7 @@ describe('DesktopReviewPanel interactions', () => {
     const noop = () => undefined;
     const pierreRender = vi.spyOn(VirtualizedFileDiff.prototype, 'render');
     const panel = () => (
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -57,7 +60,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={noop}
           onSelectBaseRef={noop}
         />
-      </I18nProvider>
+      </ReviewRendererTestHost>
     );
     const view = render(panel());
 
@@ -84,7 +87,7 @@ describe('DesktopReviewPanel interactions', () => {
     };
 
     render(
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -97,7 +100,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     expect(screen.getByText('暂不支持预览此文件格式')).toBeTruthy();
@@ -115,9 +118,10 @@ describe('DesktopReviewPanel interactions', () => {
       previewId: `${input.side}-${createImagePreview.mock.calls.length}`,
       url: `setsuna-preview://review/${input.side}.png`,
     }));
-    vi.stubGlobal('setsunaDesktop', {
-      desktopReview: { createImagePreview, releaseImagePreview },
-    });
+    const bridge = {
+      createImagePreview,
+      releaseImagePreview,
+    } as unknown as DesktopReviewBridge;
     const summary: DesktopDiffSummary = {
       additions: 0,
       deletions: 0,
@@ -134,7 +138,7 @@ describe('DesktopReviewPanel interactions', () => {
     };
 
     const renderPanel = (activeSummary: DesktopDiffSummary) => (
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost bridge={bridge} locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -147,7 +151,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>
+      </ReviewRendererTestHost>
     );
     const view = render(renderPanel(summary));
 
@@ -228,7 +232,7 @@ describe('DesktopReviewPanel interactions', () => {
     };
 
     render(
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={nestedProject}
           error={null}
@@ -252,7 +256,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     await waitFor(() => {
@@ -267,14 +271,14 @@ describe('DesktopReviewPanel interactions', () => {
       const diff = document.querySelector(
         '[data-review-file-path="packages/app/src/review.ts"] diffs-container',
       );
-      const annotationSlot = diff?.shadowRoot?.querySelector<HTMLSlotElement>(
-        'slot[name="annotation-additions-28"]',
+      const annotation = diff?.querySelector<HTMLElement>(
+        '[slot="annotation-additions-28"]',
       );
-      const annotationText = annotationSlot?.assignedElements()[0]?.textContent;
+      const annotationText = annotation?.textContent;
       expect(annotationText).toContain('行内评论标题');
       expect(annotationText).toContain('行内评论正文');
     });
-    await userEvent.click(screen.getByRole('link', { name: /review\.ts:28/u }));
+    await userEvent.click(screen.getByRole('button', { name: /review\.ts:28/u }));
     expect(openedFiles).toEqual([{ path: 'src/review.ts', line: 28 }]);
     await userEvent.click(screen.getByRole('link', { name: /helper\.ts:7/u }));
     expect(openedFiles.at(-1)).toEqual({
@@ -283,7 +287,7 @@ describe('DesktopReviewPanel interactions', () => {
     });
   });
 
-  it('renders and focuses a review card whose file is not in the diff', async () => {
+  it('renders an unavailable location for a focused finding outside the project', async () => {
     const { virtualizerScrollTo } = mockReviewScroller({
       deferFindingLayout: false,
       diffs: [],
@@ -316,9 +320,9 @@ describe('DesktopReviewPanel interactions', () => {
     };
 
     render(
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
-          activeProject={project}
+          activeProject={nestedProject}
           error={null}
           findings={[]}
           focusRequest={{
@@ -329,16 +333,25 @@ describe('DesktopReviewPanel interactions', () => {
           }}
           latestSummary={summary}
           loading={false}
-          reviewState={{ ...reviewState, unstagedSummary: summary }}
+          reviewState={{
+            ...reviewState,
+            workspaceRoot: nestedProject.path!,
+            gitRoot: project.path!,
+            unstagedSummary: summary,
+          }}
           onExternalOpenFile={() => undefined}
           onOpenProjectFile={() => undefined}
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     expect(screen.getByText('[P3] 缺少测试脚本')).toBeTruthy();
+    const location = screen.getByText('package.json:8');
+    expect(location.tagName).toBe('SPAN');
+    expect(location.classList.contains('is-unavailable')).toBe(true);
+    expect(screen.queryByRole('button', { name: 'package.json:8' })).toBeNull();
     await waitFor(() => {
       expect(document.querySelector(
         '[data-review-finding-path="package.json"]',
@@ -394,7 +407,7 @@ describe('DesktopReviewPanel interactions', () => {
       },
     });
     const panel = (finding: RuntimeReviewFinding, version: number) => (
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -413,7 +426,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>
+      </ReviewRendererTestHost>
     );
     const view = render(panel(firstFinding, 1));
 
@@ -459,7 +472,7 @@ describe('DesktopReviewPanel interactions', () => {
       linePositions: { 28: { top: 300, height: 20 } },
     });
     render(
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -478,7 +491,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     // The user takes over scrolling before the alignment loop converges. The
@@ -495,40 +508,43 @@ describe('DesktopReviewPanel interactions', () => {
 
   it('opens the shared Git dialog from the review action', async () => {
     render(
-      <I18nProvider initialLocale="en-US">
-        <ToastProvider>
-          <WorkspaceGitCommitProvider
+      <ReviewRendererTestHost locale="en-US">
+        <WorkspaceGitCommitProvider
+          activeProject={project}
+          reviewLoading={false}
+          reviewState={reviewState}
+        >
+          <DesktopReviewPanel
             activeProject={project}
-            reviewLoading={false}
+            error={null}
+            latestSummary={emptySummary}
+            loading={false}
             reviewState={reviewState}
-          >
-            <DesktopReviewPanel
-              activeProject={project}
-              error={null}
-              latestSummary={emptySummary}
-              loading={false}
-              reviewState={reviewState}
-              onExternalOpenFile={() => undefined}
-              onOpenProjectFile={() => undefined}
-              onRefresh={() => undefined}
-              onSelectBaseRef={() => undefined}
-            />
-          </WorkspaceGitCommitProvider>
-        </ToastProvider>
-      </I18nProvider>,
+            onExternalOpenFile={() => undefined}
+            onOpenProjectFile={() => undefined}
+            onRefresh={() => undefined}
+            onSelectBaseRef={() => undefined}
+          />
+        </WorkspaceGitCommitProvider>
+      </ReviewRendererTestHost>,
     );
 
     const trigger = screen.getByRole('button', { name: 'Commit or push' }) as HTMLButtonElement;
     expect(trigger.disabled).toBe(false);
     await userEvent.click(trigger);
     expect(screen.getByRole('dialog', { name: 'Commit or push' })).toBeTruthy();
+
+    const includeUnstaged = screen.getByRole('checkbox', { name: 'Include unstaged changes' }) as HTMLInputElement;
+    expect(includeUnstaged.checked).toBe(true);
+    await userEvent.click(includeUnstaged);
+    expect(includeUnstaged.checked).toBe(false);
   });
 
   it('refreshes a branch review without changing its selected base ref', async () => {
     const onRefresh = vi.fn();
     window.localStorage.setItem('setsuna-desktop:review-source:project_review_interaction', 'branch');
     render(
-      <I18nProvider initialLocale="en-US">
+      <ReviewRendererTestHost locale="en-US">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -540,7 +556,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={onRefresh}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     await userEvent.click(screen.getByRole('button', { name: 'Refresh review information' }));
@@ -550,7 +566,7 @@ describe('DesktopReviewPanel interactions', () => {
 
   it('keeps a successful review snapshot visible after a background refresh error', () => {
     render(
-      <I18nProvider initialLocale="en-US">
+      <ReviewRendererTestHost locale="en-US">
         <DesktopReviewPanel
           activeProject={project}
           error="refresh failed"
@@ -562,7 +578,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     expect(screen.queryByText('Could not load review information')).toBeNull();
@@ -580,7 +596,7 @@ describe('DesktopReviewPanel interactions', () => {
     };
 
     render(
-      <I18nProvider initialLocale="zh-CN">
+      <ReviewRendererTestHost locale="zh-CN">
         <DesktopReviewPanel
           activeProject={project}
           error={null}
@@ -592,7 +608,7 @@ describe('DesktopReviewPanel interactions', () => {
           onRefresh={() => undefined}
           onSelectBaseRef={() => undefined}
         />
-      </I18nProvider>,
+      </ReviewRendererTestHost>,
     );
 
     await waitFor(() => {

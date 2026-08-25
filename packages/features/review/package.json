@@ -16,11 +16,45 @@
     "./preload": {
       "types": "./dist/preload/index.d.ts",
       "default": "./dist/preload/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "default": "./dist/renderer/index.js"
+    },
+    "./renderer/feature": {
+      "types": "./dist/renderer/feature.d.ts",
+      "default": "./dist/renderer/feature.js"
+    },
+    "./renderer/git": {
+      "types": "./dist/renderer/git.d.ts",
+      "default": "./dist/renderer/git.js"
+    },
+    "./renderer/host": {
+      "types": "./dist/renderer/host.d.ts",
+      "default": "./dist/renderer/host.js"
+    },
+    "./renderer/model": {
+      "types": "./dist/renderer/model.d.ts",
+      "default": "./dist/renderer/model.js"
+    },
+    "./renderer/panel": {
+      "types": "./dist/renderer/panel.d.ts",
+      "default": "./dist/renderer/panel.js"
+    },
+    "./renderer/state": {
+      "types": "./dist/renderer/state.d.ts",
+      "default": "./dist/renderer/state.js"
     }
   },
   "dependencies": {
     "@setsuna-desktop/contracts": "workspace:*",
-    "@setsuna-desktop/feature-core": "workspace:*"
+    "@setsuna-desktop/feature-core": "workspace:*",
+    "@setsuna-desktop/feature-workspace-apps": "workspace:*",
+    "@pierre/diffs": "1.3.3",
+    "antd": "^6.3.6",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "peerDependencies": {
     "electron": ">=30"

@@ -7,6 +7,7 @@ import {
   type WorkspaceProject,
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
+import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
 import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Pencil, Save, Search, Terminal, X } from 'lucide-react';
 import {
   lazy,
@@ -20,8 +21,9 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { CodeFileView } from '../../shared/code/PierreCode.js';
+import { ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { TerminalFeaturePane } from '../../composition/TerminalFeaturePane.js';
+import { CodeFileView } from '../../shared/code/PierreCode.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
 import { ShortcutHint } from '../../shared/ui/ShortcutTooltip.js';
@@ -45,8 +47,6 @@ import type {
   WorkspaceFileFocusRequest,
 } from './model.js';
 import { desktopPanelTitle } from './PanelChrome.js';
-import { DesktopReviewPanel } from './ReviewPanel.js';
-import type { DesktopReviewSource } from './review-types.js';
 import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
@@ -369,7 +369,7 @@ export function WorkspacePanel({
         onOpenTerminalPanel={onOpenTerminalPanel}
       />
     ) : activePanel.type === 'review' ? (
-      <DesktopReviewPanel
+      <ReviewFeaturePanel
         activeProject={activeProject}
         error={reviewError}
         focusRequest={reviewFocusRequest}
@@ -495,7 +495,7 @@ export function WorkspacePanel({
                     ) : null}
                   </div>
                 ) : (
-                  <EmptyState title={t('workspace.review.noProject')} body={t('workspace.review.addProject')} />
+                  <EmptyState title={t('workspace.files.noProject')} body={t('workspace.files.addProject')} />
                 )}
               </div>
             </section>

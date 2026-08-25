@@ -1,5 +1,6 @@
 import { Component, useCallback, useEffect, type ErrorInfo, type ReactNode } from 'react';
 import { CollaborationFeatureNavigationBoundary } from '../composition/CollaborationFeatureBoundary.js';
+import { ReviewFeatureHostBoundary } from '../composition/review-feature-adapter.js';
 import { Button, EmptyState, StatusBadge } from '../shared/ui/primitives.js';
 import { interfaceLanguageFromConfig, useI18n } from '../shared/i18n/I18nProvider.js';
 import { useDesktopAppController } from './controller/useDesktopAppController.js';
@@ -15,13 +16,15 @@ export function App() {
 
   return (
     <ToastProvider>
-      <AppErrorBoundary>
-        <DesktopDataRootProvider>
-          <DesktopDataRootGate>
-            <AppContent />
-          </DesktopDataRootGate>
-        </DesktopDataRootProvider>
-      </AppErrorBoundary>
+      <ReviewFeatureHostBoundary>
+        <AppErrorBoundary>
+          <DesktopDataRootProvider>
+            <DesktopDataRootGate>
+              <AppContent />
+            </DesktopDataRootGate>
+          </DesktopDataRootProvider>
+        </AppErrorBoundary>
+      </ReviewFeatureHostBoundary>
     </ToastProvider>
   );
 }

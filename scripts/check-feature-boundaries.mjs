@@ -12,7 +12,7 @@ const nodeBuiltins = new Set([
   ...builtinModules.map((name) => `node:${name}`),
 ]);
 const processEntries = ['contracts', 'runtime', 'renderer', 'main', 'preload'];
-const featurePackagePattern = /^@setsuna-desktop\/feature-([^/]+)(?:\/(contracts|runtime|renderer|main|preload))?$/u;
+const featurePackagePattern = /^@setsuna-desktop\/feature-([^/]+)(?:\/(contracts|runtime|renderer|main|preload)(?:\/[^/]+)*)?$/u;
 const featureBuildScript = 'pnpm --recursive --filter "./packages/features/*" run build';
 
 export async function checkFeatureBoundaries(repositoryRoot = defaultRepositoryRoot) {
@@ -348,7 +348,7 @@ function checkProcessImport(repositoryRoot, filePath, entry, specifier, violatio
     if (nodeBuiltins.has(specifier) || specifier === 'electron' || specifier === 'react' || specifier.startsWith('react/')) {
       fail(`contracts entry cannot import process library "${specifier}".`);
     }
-    if (/\/(runtime|renderer|main|preload)$/u.test(specifier)) {
+    if (/\/(runtime|renderer|main|preload)(?:\/|$)/u.test(specifier)) {
       fail(`contracts entry cannot import process implementation "${specifier}".`);
     }
   }
@@ -356,7 +356,7 @@ function checkProcessImport(repositoryRoot, filePath, entry, specifier, violatio
     if (specifier === 'react' || specifier.startsWith('react/') || specifier === 'electron') {
       fail(`runtime entry cannot import "${specifier}".`);
     }
-    if (/\/(renderer|main|preload)$/u.test(specifier)) {
+    if (/\/(renderer|main|preload)(?:\/|$)/u.test(specifier)) {
       fail(`runtime entry cannot import process implementation "${specifier}".`);
     }
   }
@@ -364,12 +364,12 @@ function checkProcessImport(repositoryRoot, filePath, entry, specifier, violatio
     if (nodeBuiltins.has(specifier) || specifier === 'electron') {
       fail(`renderer entry cannot import Node/Electron module "${specifier}".`);
     }
-    if (/\/(runtime|main|preload)$/u.test(specifier)) {
+    if (/\/(runtime|main|preload)(?:\/|$)/u.test(specifier)) {
       fail(`renderer entry cannot import process implementation "${specifier}".`);
     }
   }
   if (entry === 'preload') {
-    if (specifier === 'react' || specifier.startsWith('react/') || /\/(runtime|renderer|main)$/u.test(specifier)) {
+    if (specifier === 'react' || specifier.startsWith('react/') || /\/(runtime|renderer|main)(?:\/|$)/u.test(specifier)) {
       fail(`preload entry cannot import "${specifier}".`);
     }
   }

@@ -1,4 +1,4 @@
-import type { DesktopReviewState } from './model.js';
+import type { DesktopReviewState } from '../contracts/index.js';
 
 export type LocalReviewChangeStats = {
   additions: number;

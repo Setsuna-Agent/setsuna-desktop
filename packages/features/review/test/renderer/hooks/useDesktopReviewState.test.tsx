@@ -1,14 +1,18 @@
 // @vitest-environment happy-dom
 
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
+import type { DesktopReviewBridge, DesktopReviewState } from '../../../src/contracts/index.js';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { useDesktopReviewState } from '../../../../../src/features/workspace/hooks/useDesktopReviewState.js';
+import { useDesktopReviewState } from '../../../src/renderer/hooks/useDesktopReviewState.js';
+import { ReviewRendererTestHost } from '../review-renderer-test-host.js';
+
+let installedReviewBridge: DesktopReviewBridge | null = null;
 
 afterEach(() => {
   cleanup();
   window.localStorage.clear();
+  installedReviewBridge = null;
   vi.restoreAllMocks();
 });
 
@@ -238,6 +242,14 @@ describe('useDesktopReviewState', () => {
 });
 
 function ReviewStateProbe({ project: activeProject }: { project: WorkspaceProject }) {
+  return (
+    <ReviewRendererTestHost bridge={installedReviewBridge}>
+      <ReviewStateProbeContent project={activeProject} />
+    </ReviewRendererTestHost>
+  );
+}
+
+function ReviewStateProbeContent({ project: activeProject }: { project: WorkspaceProject }) {
   const review = useDesktopReviewState({ activeProject });
   return (
     <>
@@ -263,12 +275,7 @@ function installReviewBridge({
   }) => Promise<DesktopReviewState>;
   watchChanges: (workspaceRoot: string, callback: () => void) => () => void;
 }): void {
-  Object.defineProperty(window, 'setsunaDesktop', {
-    configurable: true,
-    value: {
-      desktopReview: { getState, watchChanges },
-    },
-  });
+  installedReviewBridge = { getState, watchChanges } as DesktopReviewBridge;
 }
 
 function reviewState(additions: number): DesktopReviewState {

@@ -2,12 +2,11 @@ import {
   FILE_MUTATION_TOOL_NAMES,
   SHELL_TOOL_NAMES,
   normalizeRuntimeReviewNotice,
-  type DesktopDiffFile,
-  type DesktopDiffSummary,
   type RuntimeMessage,
   type RuntimeReviewFinding,
   type RuntimeReviewModeNotice,
 } from '@setsuna-desktop/contracts';
+import type { DesktopDiffFile, DesktopDiffSummary } from '../contracts/index.js';
 import { normalizeReviewFocusPath } from './review-paths.js';
 
 export function latestCompletedReview(

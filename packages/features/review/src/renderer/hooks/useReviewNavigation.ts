@@ -12,7 +12,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
-import type { DesktopReviewFocusRequest } from '../model.js';
+import type { DesktopReviewFocusRequest } from '../../contracts/index.js';
 import { normalizeReviewFocusPath } from '../review-paths.js';
 import type { ReviewFindingAnnotationAnchor, ReviewFindingTarget } from '../review-findings.js';
 

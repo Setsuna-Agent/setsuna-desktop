@@ -17,12 +17,15 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
-import { ActionTooltip, IconButton } from '../../shared/ui/primitives.js';
-import type { DesktopDiffFile } from './model.js';
+import type { DesktopDiffFile } from '../contracts/index.js';
+import { useReviewRendererHost } from './host.js';
+import { readReviewPreference, writeReviewPreference } from './preferences.js';
+import {
+  ReviewActionTooltip as ActionTooltip,
+  ReviewIconButton as IconButton,
+} from './primitives.js';
 import { ReviewChangeCounts } from './ReviewChangeCounts.js';
-import { WorkspaceFileIcon } from './WorkspaceFileIcon.js';
+import { ReviewFileIcon } from './ReviewFileVisuals.js';
 
 const reviewFilePathCollator = new Intl.Collator('en', {
   numeric: true,
@@ -64,7 +67,7 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
   selectedPath: string | null;
   onSelect: (filePath: string) => void;
 }) {
-  const { t } = useI18n();
+  const { translate: t } = useReviewRendererHost();
   const [query, setQuery] = useState('');
   const [collapsedPaths, setCollapsedPaths] = useState<Set<string>>(() => new Set());
   const [layout, setLayout] = useState<ReviewFileListLayout>(readReviewFileListLayout);
@@ -95,21 +98,21 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
   const toggleVisible = useCallback(() => {
     setVisible((current) => {
       const next = !current;
-      writeBrowserStorageValue(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY, String(next));
+      writeReviewPreference(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY, String(next));
       return next;
     });
   }, []);
   const toggleLayout = useCallback(() => {
     setLayout((current) => {
       const next = current === 'tree' ? 'flat' : 'tree';
-      writeBrowserStorageValue(REVIEW_FILE_TREE_LAYOUT_STORAGE_KEY, next);
+      writeReviewPreference(REVIEW_FILE_TREE_LAYOUT_STORAGE_KEY, next);
       return next;
     });
   }, []);
   const adjustWidth = useCallback((delta: number) => {
     setWidth((current) => {
       const next = clampReviewFileTreeWidth(current + delta);
-      writeBrowserStorageValue(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY, String(next));
+      writeReviewPreference(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY, String(next));
       return next;
     });
   }, []);
@@ -131,7 +134,7 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
       window.removeEventListener('pointerup', stopResize);
       window.removeEventListener('pointercancel', stopResize);
       if (resizeCleanupRef.current === stopResize) resizeCleanupRef.current = null;
-      writeBrowserStorageValue(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY, String(nextWidth));
+      writeReviewPreference(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY, String(nextWidth));
     };
     resizeCleanupRef.current = stopResize;
     document.body.classList.add('desktop-review-file-tree-resizing');
@@ -157,7 +160,7 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
           onClick={() => onSelect(file.path)}
         >
           <span className="desktop-review-file-tree__spacer" />
-          <WorkspaceFileIcon path={file.path} type="file" />
+          <ReviewFileIcon path={file.path} />
           <span>{label}</span>
           <ReviewChangeCounts additions={file.additions} deletions={file.deletions} />
         </button>
@@ -191,11 +194,11 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
   };
 
   const layoutToggleLabel = layout === 'tree'
-    ? t('workspace.review.fileBrowser.showFlat')
-    : t('workspace.review.fileBrowser.showTree');
+    ? t('feature.review.workspace.fileBrowser.showFlat')
+    : t('feature.review.workspace.fileBrowser.showTree');
   const visibilityToggleLabel = visible
-    ? t('workspace.review.fileBrowser.collapse')
-    : t('workspace.review.fileBrowser.expand');
+    ? t('feature.review.workspace.fileBrowser.collapse')
+    : t('feature.review.workspace.fileBrowser.expand');
   const rows = !visible
     ? []
     : layout === 'tree'
@@ -209,20 +212,20 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
 
   return (
     <aside
-      aria-label={t('workspace.review.fileBrowser.label')}
+      aria-label={t('feature.review.workspace.fileBrowser.label')}
       className={`desktop-review-file-tree${visible ? '' : ' is-collapsed'}`}
       style={navigatorStyle}
     >
       {visible ? (
         <button
-          aria-label={t('workspace.review.fileBrowser.resize')}
+          aria-label={t('feature.review.workspace.fileBrowser.resize')}
           aria-orientation="vertical"
           aria-valuemax={REVIEW_FILE_TREE_MAX_WIDTH}
           aria-valuemin={REVIEW_FILE_TREE_MIN_WIDTH}
           aria-valuenow={width}
           className="desktop-review-file-tree__resize-handle"
           role="separator"
-          title={t('workspace.review.fileBrowser.resizeHint')}
+          title={t('feature.review.workspace.fileBrowser.resizeHint')}
           type="button"
           onKeyDown={(event) => {
             if (event.key === 'ArrowLeft') {
@@ -245,7 +248,7 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
       <header className="desktop-review-file-tree__header">
         {visible ? (
           <span className="desktop-review-file-tree__header-label">
-            <span>{t('workspace.review.fileBrowser.label')}</span>
+            <span>{t('feature.review.workspace.fileBrowser.label')}</span>
             <span className="desktop-review-file-tree__header-count">{files.length}</span>
           </span>
         ) : null}
@@ -282,8 +285,8 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
           <label className="desktop-review-file-tree__search">
             <Search size={13} />
             <input
-              aria-label={t('workspace.review.fileBrowser.filter')}
-              placeholder={t('workspace.review.fileBrowser.filter')}
+              aria-label={t('feature.review.workspace.fileBrowser.filter')}
+              placeholder={t('feature.review.workspace.fileBrowser.filter')}
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -292,7 +295,7 @@ export const ReviewFileNavigator = memo(function ReviewFileNavigator({
           <div className="desktop-review-file-tree__items">
             {rows.length ? rows : (
               <div className="desktop-review-file-tree__empty">
-                {t('workspace.review.fileBrowser.noMatch')}
+                {t('feature.review.workspace.fileBrowser.noMatch')}
               </div>
             )}
           </div>
@@ -359,17 +362,17 @@ function clampReviewFileTreeWidth(width: number): number {
 }
 
 function readReviewFileListLayout(): ReviewFileListLayout {
-  return readBrowserStorageValue(REVIEW_FILE_TREE_LAYOUT_STORAGE_KEY) === 'flat'
+  return readReviewPreference(REVIEW_FILE_TREE_LAYOUT_STORAGE_KEY) === 'flat'
     ? 'flat'
     : 'tree';
 }
 
 function readReviewFileTreeVisible(): boolean {
-  return readBrowserStorageValue(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY) !== 'false';
+  return readReviewPreference(REVIEW_FILE_TREE_VISIBLE_STORAGE_KEY) !== 'false';
 }
 
 function readReviewFileTreeWidth(): number {
-  const storedWidth = readBrowserStorageValue(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY);
+  const storedWidth = readReviewPreference(REVIEW_FILE_TREE_WIDTH_STORAGE_KEY);
   if (storedWidth === null) return REVIEW_FILE_TREE_DEFAULT_WIDTH;
   const parsedWidth = Number(storedWidth);
   return Number.isFinite(parsedWidth)

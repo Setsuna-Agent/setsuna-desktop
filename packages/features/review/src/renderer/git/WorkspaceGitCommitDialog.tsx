@@ -1,5 +1,10 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { DesktopReviewCommitResult } from '@setsuna-desktop/feature-review/contracts';
+import type {
+  DesktopDiffSummary,
+  DesktopReviewBridge,
+  DesktopReviewCommitResult,
+  DesktopReviewState,
+} from '../../contracts/index.js';
 import {
   Check,
   ChevronDown,
@@ -21,9 +26,8 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useToast } from '../../../app/providers/ToastProvider.js';
-import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
-import type { DesktopDiffSummary, DesktopReviewState } from '../model.js';
+import { useReviewRendererHost } from '../host.js';
+import type { ReviewTranslate } from '../messages.js';
 import { ReviewChangeCounts } from '../ReviewChangeCounts.js';
 import { localReviewChangeStats } from '../reviewChanges.js';
 import { WorkspaceGitBranchCreateControl } from './WorkspaceGitBranchCreateControl.js';
@@ -61,8 +65,7 @@ export function WorkspaceGitCommitProvider({
   reviewState: DesktopReviewState | null;
   onReviewRefresh?: () => void | Promise<void>;
 }>) {
-  const toast = useToast();
-  const { t } = useI18n();
+  const { bridge, notifySuccess, translate: t, ui: { Checkbox } } = useReviewRendererHost();
   const [open, setOpen] = useState(false);
   const [branchMenuOpen, setBranchMenuOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
@@ -122,17 +125,20 @@ export function WorkspaceGitCommitProvider({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [closeDialog, open]);
 
-  const runGitAction = async (action: CommitBusyAction, task: () => Promise<void>) => {
+  const runGitAction = async (
+    action: CommitBusyAction,
+    task: (api: DesktopReviewBridge) => Promise<void>,
+  ) => {
     if (!workspaceRoot || busyAction) return;
-    const api = window.setsunaDesktop?.desktopReview;
+    const api = bridge;
     if (!api) {
-      setError(t('conversation.git.unsupported'));
+      setError(t('feature.review.git.unsupported'));
       return;
     }
     setBusyAction(action);
     setError(null);
     try {
-      await task();
+      await task(api);
       await onReviewRefresh?.();
     } catch (unknownError) {
       setError(gitControlErrorMessage(unknownError, t));
@@ -151,11 +157,11 @@ export function WorkspaceGitCommitProvider({
     event.preventDefault();
     const branchName = branchDraft.trim();
     if (!branchName) {
-      setError(t('conversation.git.branchRequired'));
+      setError(t('feature.review.git.branchRequired'));
       return;
     }
-    void runGitAction('create', async () => {
-      await window.setsunaDesktop?.desktopReview.createBranch(workspaceRoot, branchName, {
+    void runGitAction('create', async (api) => {
+      await api.createBranch(workspaceRoot, branchName, {
         allowUnstaged: true,
       });
       setBranchMenuOpen(false);
@@ -165,15 +171,13 @@ export function WorkspaceGitCommitProvider({
 
   const commitChanges = (push: boolean) => {
     const action = push ? 'commit-and-push' : 'commit';
-    void runGitAction(action, async () => {
-      const api = window.setsunaDesktop?.desktopReview;
-      if (!api) throw new Error(t('conversation.git.unsupported'));
+    void runGitAction(action, async (api) => {
       let message = commitMessage.trim();
       if (!message) {
         setCommitPhase('generating');
         const generated = await api.generateCommitMessage(workspaceRoot, { includeUnstaged });
         message = generated.message.trim();
-        if (!message) throw new Error(t('conversation.git.messageGenerationFailed'));
+        if (!message) throw new Error(t('feature.review.git.messageGenerationFailed'));
         setCommitMessage(message);
       }
       setCommitPhase('committing');
@@ -181,22 +185,22 @@ export function WorkspaceGitCommitProvider({
       setBranchMenuOpen(false);
       if (result.pushError) {
         setCommitMessage('');
-        setError(t('conversation.git.pushAfterCommitFailed', {
-          hash: result.commitHash || t('conversation.git.commitFinished'),
+        setError(t('feature.review.git.pushAfterCommitFailed', {
+          hash: result.commitHash || t('feature.review.git.commitFinished'),
           error: result.pushError,
         }));
         return;
       }
       resetDialog(false);
-      toast.success(commitSuccessMessage(result, push, t));
+      notifySuccess(commitSuccessMessage(result, push, t));
     });
   };
 
   const pushBranch = () => {
-    void runGitAction('push', async () => {
-      await window.setsunaDesktop?.desktopReview.push(workspaceRoot);
+    void runGitAction('push', async (api) => {
+      await api.push(workspaceRoot);
       resetDialog(false);
-      toast.success(t('conversation.git.pushSuccess', { branch: currentBranch }));
+      notifySuccess(t('feature.review.git.pushSuccess', { branch: currentBranch }));
     });
   };
 
@@ -215,7 +219,7 @@ export function WorkspaceGitCommitProvider({
       }}
     >
       <div
-        aria-label={t('conversation.git.commitOrPush')}
+        aria-label={t('feature.review.git.commitOrPush')}
         aria-modal="true"
         className="chat-git-commit-popover"
         role="dialog"
@@ -260,19 +264,18 @@ export function WorkspaceGitCommitProvider({
           className="chat-git-commit-popover__message"
           value={commitMessage}
           rows={3}
-          placeholder={t('conversation.git.messagePlaceholder')}
+          placeholder={t('feature.review.git.messagePlaceholder')}
           disabled={Boolean(busyAction)}
           onChange={(event) => setCommitMessage(event.currentTarget.value)}
         />
-        <label className="chat-git-commit-popover__check">
-          <input
-            type="checkbox"
-            checked={includeUnstaged}
-            disabled={Boolean(busyAction)}
-            onChange={(event) => setIncludeUnstaged(event.currentTarget.checked)}
-          />
-          <span>{t('conversation.git.includeUnstaged')}</span>
-        </label>
+        <Checkbox
+          checked={includeUnstaged}
+          className="chat-git-commit-popover__check"
+          disabled={Boolean(busyAction)}
+          onChange={setIncludeUnstaged}
+        >
+          {t('feature.review.git.includeUnstaged')}
+        </Checkbox>
         <div className="chat-git-commit-popover__divider" />
         <div className="chat-git-commit-popover__actions">
           <GitActionButton
@@ -280,8 +283,8 @@ export function WorkspaceGitCommitProvider({
             icon={<GitCommitHorizontal size={14} />}
             loading={busyAction === 'commit'}
             title={busyAction === 'commit'
-              ? commitPhase === 'generating' ? t('conversation.git.generatingMessage') : t('conversation.git.committing')
-              : t('conversation.git.commit')}
+              ? commitPhase === 'generating' ? t('feature.review.git.generatingMessage') : t('feature.review.git.committing')
+              : t('feature.review.git.commit')}
             onClick={() => commitChanges(false)}
           />
           <GitActionButton
@@ -289,15 +292,15 @@ export function WorkspaceGitCommitProvider({
             icon={<GitPullRequestArrow size={14} />}
             loading={busyAction === 'commit-and-push'}
             title={busyAction === 'commit-and-push'
-              ? commitPhase === 'generating' ? t('conversation.git.generatingMessage') : t('conversation.git.commitAndPushing')
-              : t('conversation.git.commitAndPush')}
+              ? commitPhase === 'generating' ? t('feature.review.git.generatingMessage') : t('feature.review.git.commitAndPushing')
+              : t('feature.review.git.commitAndPush')}
             onClick={() => commitChanges(true)}
           />
           <GitActionButton
             disabled={Boolean(busyAction)}
             icon={<UploadCloud size={14} />}
             loading={busyAction === 'push'}
-            title={t('conversation.git.push')}
+            title={t('feature.review.git.push')}
             onClick={pushBranch}
           />
         </div>
@@ -338,11 +341,11 @@ function CommitBranchMenu({
   onCancelCreate: () => void;
   onCreate: (event: FormEvent<HTMLFormElement>) => void;
   onCreateStart: () => void;
-  t: Translate;
+  t: ReviewTranslate;
 }) {
   return (
     <div className="chat-git-commit-branch-menu">
-      <div className="chat-git-commit-branch-menu__label">{t('conversation.git.commitTo')}</div>
+      <div className="chat-git-commit-branch-menu__label">{t('feature.review.git.commitTo')}</div>
       <div className="chat-git-commit-branch-menu__item is-current">
         <GitBranch size={14} />
         <span>{currentBranch}</span>
@@ -397,10 +400,10 @@ function GitActionButton({
 function commitSuccessMessage(
   result: Pick<DesktopReviewCommitResult, 'commitHash'>,
   pushed: boolean,
-  t?: Translate,
+  t?: ReviewTranslate,
 ): string {
   const action = t
-    ? t(pushed ? 'conversation.git.commitPushSuccess' : 'conversation.git.commitSuccess')
+    ? t(pushed ? 'feature.review.git.commitPushSuccess' : 'feature.review.git.commitSuccess')
     : pushed ? '提交并推送成功' : '提交成功';
   return result.commitHash ? `${action} · ${result.commitHash}` : action;
 }
@@ -409,9 +412,9 @@ function reviewFileCount(summary: DesktopDiffSummary | null | undefined): number
   return summary?.files.length ?? 0;
 }
 
-function gitControlErrorMessage(error: unknown, t: Translate): string {
+function gitControlErrorMessage(error: unknown, t: ReviewTranslate): string {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const withoutIpcPrefix = rawMessage.replace(/^Error invoking remote method '[^']+':\s*Error:\s*/u, '');
   const withoutRuntimePath = withoutIpcPrefix.replace(/\s*\((?:GET|POST|PUT|PATCH|DELETE)\s+\/v\d+\/[^)]+\)\s*$/u, '');
-  return withoutRuntimePath.trim() || t('conversation.git.operationFailed');
+  return withoutRuntimePath.trim() || t('feature.review.git.operationFailed');
 }

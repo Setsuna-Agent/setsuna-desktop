@@ -10,9 +10,27 @@ const Button: SettingsViewUi['Button'] = ({ children, icon, ...props }) => (
 const IconButton: SettingsViewUi['IconButton'] = ({ children, label, ...props }) => (
   <button {...props} aria-label={label}>{children}</button>
 );
+const Checkbox: SettingsViewUi['Checkbox'] = ({
+  checked,
+  children,
+  className,
+  indeterminate,
+  onChange,
+  onClick,
+  ...props
+}) => (
+  <label className={className} onClick={onClick}>{children}<input
+    {...props}
+    ref={(input) => { if (input) input.indeterminate = Boolean(indeterminate); }}
+    checked={checked}
+    type="checkbox"
+    onChange={(event) => onChange(event.currentTarget.checked)}
+  /></label>
+);
 
 export const testSettingsViewUi: SettingsViewUi = Object.freeze({
   Button,
+  Checkbox,
   EmptyState: ({ action, body, title }) => <div><strong>{title}</strong>{body}{action}</div>,
   Group: ({ children }) => <section>{children}</section>,
   IconButton,

@@ -29,7 +29,7 @@ export function WebDavRestorePanel({
   onRestore: (planId: string) => Promise<void>;
   restoreOperation?: DesktopWebDavSyncOperationState;
 }) {
-  const { locale, t, ui: { Button } } = useWebDavSyncView();
+  const { locale, t, ui: { Button, Checkbox } } = useWebDavSyncView();
   const [selectedCategories, setSelectedCategories] = useState<DesktopWebDavSyncCategoryId[]>([]);
   const [plan, setPlan] = useState<DesktopWebDavSyncRestorePlan | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -104,26 +104,24 @@ export function WebDavRestorePanel({
             <strong>{t('feature.webdavSync.restore.categories')}</strong>
             <div className="settings-webdav__restore-categories">
               {backup.categories.map((category) => (
-                <label key={category.id}>
-                  <input
-                    className="settings-webdav__checkbox"
-                    checked={selectedCategories.includes(category.id)}
-                    disabled={busy}
-                    type="checkbox"
-                    onChange={(event) => {
+                <Checkbox
+                  key={category.id}
+                  checked={selectedCategories.includes(category.id)}
+                  disabled={busy}
+                  onChange={(checked) => {
                       setPlan(null);
-                      setSelectedCategories((current) => event.currentTarget.checked
+                      setSelectedCategories((current) => checked
                         ? [...current, category.id]
                         : current.filter((id) => id !== category.id));
-                    }}
-                  />
+                  }}
+                >
                   <span>
                     <strong>{t(webDavCategoryCopy[category.id].labelKey)}</strong>
                     <small>{t('feature.webdavSync.restore.categorySummary', {
                       size: formatSyncBytes(category.totalBytes, locale),
                     })}</small>
                   </span>
-                </label>
+                </Checkbox>
               ))}
             </div>
           </div>
