@@ -16,7 +16,7 @@ import type { ChatContextTokenUsage } from './chatContextUsage.js';
 import {
   canFitConversationOverviewPanel,
   doesConversationOverviewOverlapContent,
-  needsConversationOverviewContentShift
+  needsConversationOverviewContentShift,
 } from './conversationOverviewLayout.js';
 
 const scrollBottomThresholdPx = 96;

@@ -19,15 +19,14 @@ describe('AppProjectToolbarTitle', () => {
     vi.restoreAllMocks();
   });
 
-  it('offers rename and archive actions for the active project', () => {
-    const onArchiveProject = vi.fn();
+  it('offers rename and archive actions for the active thread', () => {
+    const onArchiveThread = vi.fn();
     const onRenameThread = vi.fn();
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const view = render(
       <AppProjectToolbarTitle
         project={project}
         title="Current thread"
-        onArchiveProject={onArchiveProject}
+        onArchiveThread={onArchiveThread}
         onRenameThread={onRenameThread}
       />,
     );
@@ -35,15 +34,35 @@ describe('AppProjectToolbarTitle', () => {
     expect(view.container.querySelector('.app-project-toolbar-title__project-icon')).toBeTruthy();
     expect(screen.getByText('Current thread')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: '项目操作' }));
+    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }));
     expect(onRenameThread).toHaveBeenCalledOnce();
 
-    fireEvent.click(screen.getByRole('button', { name: '项目操作' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '归档项目' }));
-    expect(window.confirm).toHaveBeenCalledWith(
-      '确认归档项目「test-project」？项目下的全部对话也会归档，本地文件不会被删除。',
+    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '归档对话' }));
+    expect(onArchiveThread).toHaveBeenCalledOnce();
+  });
+
+  it('hides unavailable thread actions and disables archive while the thread is running', () => {
+    const onArchiveThread = vi.fn();
+    const view = render(
+      <AppProjectToolbarTitle project={project} title="New thread" />,
     );
-    expect(onArchiveProject).toHaveBeenCalledWith(project);
+
+    expect(screen.queryByRole('button', { name: '对话操作' })).toBeNull();
+
+    view.rerender(
+      <AppProjectToolbarTitle
+        project={project}
+        title="Running thread"
+        archiveThreadDisabled
+        onArchiveThread={onArchiveThread}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '对话操作' }));
+    const archiveAction = screen.getByRole('menuitem', { name: '归档对话' });
+    expect(archiveAction.hasAttribute('disabled')).toBe(true);
+    fireEvent.click(archiveAction);
+    expect(onArchiveThread).not.toHaveBeenCalled();
   });
 });

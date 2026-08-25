@@ -45,7 +45,6 @@ export const collaborationRendererFeature = defineRendererFeature({
           payload: collaborationLegacySpawnResultCodec,
         },
         presentation: 'replace',
-        workHistoryPresentation: 'persistent',
         render: CollaborationSpawnResultView,
       }],
     };

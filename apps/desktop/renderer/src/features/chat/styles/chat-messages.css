@@ -121,6 +121,11 @@
   -ms-overflow-style: none;
 }
 
+/* Windows 主对话与右侧概览卡片共用同一视觉起始线；侧对话仍使用默认紧凑间距。 */
+:root[data-desktop-platform='win32'] .desktop-chat-panel:not(.desktop-chat-panel--side) .chat-main-conversation--with-bottom-sender > .chat-messages {
+  padding-top: 24px;
+}
+
 /* 对话记录负责滚动条，嵌套消息内容不应再绘制次级滚动条。 */
 .chat-messages * {
   scrollbar-width: none !important;
@@ -182,10 +187,10 @@
   transition: transform 260ms cubic-bezier(0.2, 0.82, 0.2, 1);
 }
 
-/* 仅移动足够的内容，让浮动概览留在右侧可用留白中。
+/* 将正文放到概览卡片左侧的可用区域正中，左右保留相等且至少 60px 的间距。
    命令菜单保留自身的居中变换，并通过变量获得相同偏移。 */
 .chat-main-conversation--overview-shifted {
-  --chat-overview-expanded-shift: 152px;
+  --chat-overview-expanded-shift: 150px;
 }
 
 .chat-main-conversation--overview-shifted .chat-content-frame,
@@ -198,7 +203,7 @@
 }
 
 .chat-main-conversation--overview-shifted .chat-sender:not(.chat-sender--starter) > .chat-command-menu {
-  --chat-command-menu-shift: -152px;
+  --chat-command-menu-shift: calc(0px - var(--chat-overview-expanded-shift));
 }
 
 .chat-messages--starter {

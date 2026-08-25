@@ -266,7 +266,10 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
           key={activeProject.id}
           project={activeProject}
           title={toolbarTitle ?? activeProject.name}
-          onArchiveProject={(project) => void navigation.archiveProject(project)}
+          archiveThreadDisabled={Boolean(currentThread?.activeTurnId)}
+          onArchiveThread={currentThread
+            ? () => void navigation.archiveThread(currentThread)
+            : undefined}
           onRenameThread={currentThread
             ? () => navigation.openRenameThread(currentThread)
             : undefined}

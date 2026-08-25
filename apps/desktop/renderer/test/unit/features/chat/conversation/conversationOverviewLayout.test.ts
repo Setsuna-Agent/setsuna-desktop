@@ -9,9 +9,9 @@ import {
 } from '../../../../../src/features/chat/conversation/conversationOverviewLayout.js';
 
 describe('canFitConversationOverviewPanel', () => {
-  it('requires enough right gutter or movable content space for the expanded overview', () => {
-    expect(canFitConversationOverviewPanel({ conversationWidth: 1085, contentWidth: 750 })).toBe(false);
-    expect(canFitConversationOverviewPanel({ conversationWidth: 1086, contentWidth: 750 })).toBe(true);
+  it('preserves the content inset while centering it beside the expanded overview', () => {
+    expect(canFitConversationOverviewPanel({ conversationWidth: 1169, contentWidth: 750 })).toBe(false);
+    expect(canFitConversationOverviewPanel({ conversationWidth: 1170, contentWidth: 750 })).toBe(true);
     expect(canFitConversationOverviewPanel({ conversationWidth: 1390, contentWidth: 750 })).toBe(true);
   });
 
@@ -25,13 +25,13 @@ describe('canFitConversationOverviewPanel', () => {
     expect(doesConversationOverviewOverlapContent({ conversationWidth: 900, contentWidth: 750, overviewWidth: 0 })).toBe(false);
   });
 
-  it('does not shift centered content when the right gutter can already hold the overview', () => {
-    expect(needsConversationOverviewContentShift({ conversationWidth: 1390, contentWidth: 750 })).toBe(false);
+  it('keeps content centered when the natural card gap is already at least 60px', () => {
+    expect(needsConversationOverviewContentShift({ conversationWidth: 1470, contentWidth: 750 })).toBe(false);
     expect(shouldShiftConversationOverviewContent({ canExpand: true, compact: false, needsShift: false })).toBe(false);
   });
 
-  it('shifts content only when the overview needs extra right gutter', () => {
-    expect(needsConversationOverviewContentShift({ conversationWidth: 1086, contentWidth: 750 })).toBe(true);
+  it('centers content in the left lane only when the natural card gap is too small', () => {
+    expect(needsConversationOverviewContentShift({ conversationWidth: 1469, contentWidth: 750 })).toBe(true);
     expect(shouldShiftConversationOverviewContent({ canExpand: true, compact: false, needsShift: true })).toBe(true);
     expect(shouldShiftConversationOverviewContent({ canExpand: false, compact: false, needsShift: true })).toBe(false);
     expect(shouldShiftConversationOverviewContent({ canExpand: true, compact: true, needsShift: true })).toBe(false);
