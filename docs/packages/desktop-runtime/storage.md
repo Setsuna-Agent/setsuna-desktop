@@ -253,14 +253,14 @@ Search 实现独立为 `WorkspaceSearchEngine`，不把 ripgrep process 状态�
 
 ## Debug trace
 
-`InMemoryRuntimeDebugTraceStore` 故意不落盘：
+Conversation Debug Feature 的 `InMemoryConversationDebugTraceStore` 故意不落盘：
 
 - 每 thread 最多 10,000 条。
 - LRU 最多跟踪 50 个 thread。
 - 返回 `droppedBeforeSeq`。
 - Runtime 重启自然清空。
 
-不要把它加入数据根备份或 thread recovery。
+不要把它加入数据根备份或 thread recovery；启用状态由 device-local Feature settings 持久化，旧 `developer_features` 仅做一次性迁移输入。
 
 ## 修改持久化格式
 

@@ -187,17 +187,6 @@ describe('desktop runtime client advanced thread methods', () => {
     });
   });
 
-  it('lists incremental developer traces through an encoded thread path', async () => {
-    const request = installRuntimeBridge(() => ({ nextSeq: 8, traces: [] }));
-    const client = createDesktopRuntimeClient();
-
-    await client.listDebugTraces('thread / 1', 7.9);
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/threads/thread%20%2F%201/debug-traces?afterSeq=7',
-    });
-  });
-
   it('uses narrow bridges for local links, managed uploads, and pending deletes', async () => {
     const linkAttachment = vi.fn(async () => ({
       id: 'attachment_link_1',

@@ -1,5 +1,4 @@
 import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   type RuntimeConfigState,
   type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
@@ -586,12 +585,12 @@ describe('agent loop turn execution', () => {
       expect(switched?.turns?.[1]?.modelBinding).toEqual(bindingB);
     });
 
-  it('uses the committed step event only as a transient developer trace anchor', async () => {
+  it('always uses the committed step event as the transient debug trace anchor', async () => {
       const ids = new RandomIdGenerator();
       const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
       const thread = await threadStore.createThread({ title: 'Debug trace anchor' });
       const modelClient = new MemoryCapturingModelClient();
-      const config = developerFeaturesConfig();
+      const config = debugAnchorConfig();
       const loop = new AgentLoop({
         threadStore,
         modelClient,
@@ -615,12 +614,9 @@ describe('agent loop turn execution', () => {
       );
       expect(stepEvent).toBeDefined();
       expect(modelClient.requests[0].stepSnapshot?.threadLastSeq).toBe(stepEvent?.seq);
-      expect(modelClient.requests[0].stepSnapshot?.featureKeys).toContain(
-        RUNTIME_DEVELOPER_FEATURES_FLAG,
-      );
       expect(stepEvent?.payload.snapshot.threadLastSeq).toBeLessThan(stepEvent?.seq ?? 0);
-      expect(stepEvent?.payload.snapshot.featureKeys).not.toContain(
-        RUNTIME_DEVELOPER_FEATURES_FLAG,
+      expect(modelClient.requests[0].stepSnapshot?.featureKeys).toEqual(
+        stepEvent?.payload.snapshot.featureKeys,
       );
     });
   
@@ -788,12 +784,12 @@ describe('agent loop turn execution', () => {
   
 });
 
-function developerFeaturesConfig(): RuntimeConfigState {
+function debugAnchorConfig(): RuntimeConfigState {
   return {
     approvalPolicy: 'on-request',
     configPath: '/tmp/config.json',
     dataPath: '/tmp',
-    features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
+    features: {},
     globalPrompt: '',
     permissionProfile: 'workspace-write',
     providers: [],

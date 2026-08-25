@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { InMemoryEventBus } from '../../../src/adapters/event/in-memory-event-bus.js';
-import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
+import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-conversation-debug/runtime';
 import { RandomIdGenerator } from '../../../src/adapters/id/random-id-generator.js';
 import { createTestThreadStore } from '../../support/thread-store.js';
 import { RuntimeEventWriter } from '../../../src/loop/lifecycle/runtime-event-writer.js';
@@ -18,7 +18,10 @@ describe('runtime event writer', () => {
       systemClock,
       ids,
     );
-    const debugTraces = new InMemoryRuntimeDebugTraceStore(systemClock, ids);
+    const debugTraces = new InMemoryConversationDebugTraceStore({
+      id: (prefix) => ids.id(prefix),
+      now: () => systemClock.now(),
+    });
     const writer = new RuntimeEventWriter(
       store,
       new InMemoryEventBus(),
@@ -112,7 +115,10 @@ describe('runtime event writer', () => {
       systemClock,
       ids,
     );
-    const debugTraces = new InMemoryRuntimeDebugTraceStore(systemClock, ids);
+    const debugTraces = new InMemoryConversationDebugTraceStore({
+      id: (prefix) => ids.id(prefix),
+      now: () => systemClock.now(),
+    });
     const writer = new RuntimeEventWriter(store, new InMemoryEventBus(), 10_000, debugTraces);
     const thread = await store.createThread({ title: 'Cancelled stream metrics' });
     const createdAt = systemClock.now().toISOString();

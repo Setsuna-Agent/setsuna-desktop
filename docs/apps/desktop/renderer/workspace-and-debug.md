@@ -7,9 +7,10 @@
 - `packages/features/workspace-apps/src/renderer/`
 - `apps/desktop/renderer/src/composition/review-feature-adapter.tsx`
 - `apps/desktop/renderer/src/composition/review-feature-panel-adapter.ts`
-- `apps/desktop/renderer/src/features/conversation-debug/`
+- `packages/features/conversation-debug/`
+- `apps/desktop/renderer/src/composition/conversation-debug-feature-panel.tsx`
 
-Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、Terminal、Browser、Workspace Apps 的 presentation 由各自 Feature package 拥有。Conversation debug 是受开发者开关保护的独立诊断 feature。
+Workspace host 管理右侧/底部工作区 surface 和项目文件；Review、Terminal、Browser、Workspace Apps、Conversation Debug 的 presentation 由各自 Feature package 拥有。Conversation Debug 的启用状态和 trace 查询也由其 Feature settings 与 typed operations 管理。
 
 ## Workspace 面板
 
@@ -113,13 +114,15 @@ Browser presentation 位于 `packages/features/browser/src/renderer/`，主要�
 
 ## Conversation Debug
 
-Developer features 开启后，`features/conversation-debug/` 提供：
+Conversation Debug Feature 开启后，`packages/features/conversation-debug/src/renderer/` 提供：
 
 - `ConversationDebugFlow.tsx`：事件/工具/模型关系图。
-- `ConversationDebugEventList.tsx`：原始记录列表。
-- `ConversationDebugInspector.tsx`：脱敏详情。
+- `ConversationDebugActivityList.tsx`：面向人的语义化活动列表；复用 graph 节点，不直接展示 event type 和序号。
+- `ConversationDebugDiagnostics.tsx` / `conversationDebugInspectorModel.ts` / `conversationDebugNotices.ts`：把节点 payload 自动投影为结构化字段，并提升 runtime、模型、工具、Hook、审批、压缩和重放异常。
+- `ConversationDebugRecordPicker.tsx`：Inspector 高级详情中的可展开、无损压缩底层记录选择器。
+- `ConversationDebugInspector.tsx`：语义化节点详情；运行标识、模型/上下文/工具字段和异常摘要直接可见，完整脱敏 payload 仍收进折叠的底层调试数据。
 - `ConversationDebugTurnNavigator.tsx`：轮次过滤。
-- `useConversationDebugEvents.ts`：从 `seq=0` 获取正式 thread event。
+- `useConversationDebugEvents.ts`：按固定 E# 水位分页读取正式 thread event，完成后从水位接入 SSE。
 - `useConversationDebugTraces.ts`：轮询独立 debug trace。
 - `conversationDebugGraph.ts`：图投影。
 - `conversationDebugTraceBuffer.ts`：D# 有界缓存和 dropped watermark。
@@ -139,8 +142,9 @@ Debug 回放还要用当前 `RuntimeThread.messages/turns` 限制：
 
 - 已删除、截断或 model-only 的记录不能重新出现在“全部轮次”。
 - Provider 复用 tool/item ID 时，用 turn + model transaction + provider 形成实例身份。
-- Delta 短时间片批量提交。
-- 节点、连线、背景和原始记录按固定行高/viewport 窗口化。
+- 历史记录每页到达即增量提交；活动列表只展示语义节点，连续 delta 和 replay 明细在 Inspector 的底层调试数据中可逆折叠。
+- 同一 turn 的 provider replay trace 投影为一个节点，原始 D# 仍完整保留。
+- 节点、连线、背景和活动记录按固定行高/viewport 窗口化。
 
 关闭 developer features 时：
 
@@ -166,6 +170,6 @@ Conversation debug 有独立 `conversation-debug.css`，不要把图和虚拟列
 
 Workspace 测试位于 `test/unit/features/workspace/`，覆盖 panel、文件、hooks、model 与 resize。Review、Workspace Apps 和 Terminal 自有 renderer 测试分别位于 `packages/features/review/test/renderer/`、`packages/features/workspace-apps/test/renderer/`、`packages/features/terminal/test/renderer/`。
 
-Conversation debug 测试位于 `test/unit/features/conversation-debug/`，重点覆盖 graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation 和 virtual window。
+Conversation debug 测试位于 `packages/features/conversation-debug/test/`，重点覆盖分页切换 SSE、语义化活动展示、record folding、graph identity、serialization 脱敏、trace watermark、turn filtering、canvas navigation、virtual window 和内存 store 边界。
 
 Main 对应 review、browser、workspace tests，以及 Workspace Apps/Terminal Feature tests，也必须随跨层改动更新。

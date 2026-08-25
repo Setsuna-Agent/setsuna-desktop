@@ -1,8 +1,6 @@
 import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   cloneRuntimeSkillReferences,
   isRuntimeInputMessageAttachment,
-  runtimeDeveloperFeaturesEnabled,
   type ModelRequest,
   type RuntimeConfigState,
   type RuntimeMessage,
@@ -26,6 +24,7 @@ import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resol
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
 import {
   appendRuntimeDebugTraceSafely,
+  runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
 import type { SkillRegistry } from '../../ports/skill-registry.js';
@@ -59,7 +58,6 @@ const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
 
 export type RuntimeSamplingStepContext = {
   conversationMessages: RuntimeMessage[];
-  developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
   modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
   modelHistoryWarnings?: string[];
@@ -155,9 +153,9 @@ export class RuntimeSamplingContextBuilder {
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
     const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind, turnModel);
-    const developerFeaturesEnabled = runtimeDeveloperFeaturesEnabled(stepRuntimeConfig);
+    const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
-    if (developerFeaturesEnabled) {
+    if (debugTraceEnabled) {
       appendRuntimeDebugTraceSafely(this.options.debugTrace, {
         afterEventSeq: snapshotThread?.lastSeq ?? thread.lastSeq,
         kind: 'model.history.normalized',
@@ -377,9 +375,7 @@ export class RuntimeSamplingContextBuilder {
         budget: contextBudget,
       }),
       promptManifest: compiledPrompt.manifest,
-      featureKeys: Object.keys(toolContext.features ?? {})
-        .filter((key) => key !== RUNTIME_DEVELOPER_FEATURES_FLAG)
-        .sort(),
+      featureKeys: Object.keys(toolContext.features ?? {}).sort(),
       worldState: {
         ...(stepRuntimeConfig?.activeProviderId ? { activeProviderId: stepRuntimeConfig.activeProviderId } : {}),
         ...(stepRuntimeConfig?.configPath ? { configPath: stepRuntimeConfig.configPath } : {}),
@@ -390,7 +386,6 @@ export class RuntimeSamplingContextBuilder {
     };
     return {
       conversationMessages: compactedConversationMessages,
-      developerFeaturesEnabled,
       messages,
       modelRequest: samplingModel.request,
       ...(normalizedConversation.warnings.length
@@ -486,8 +481,7 @@ function runtimeToolFeatureFlags(
   features: Record<string, boolean> | undefined,
 ): Record<string, boolean> {
   return Object.fromEntries(
-    Object.entries(features ?? {})
-      .filter(([key]) => key !== RUNTIME_DEVELOPER_FEATURES_FLAG),
+    Object.entries(features ?? {}),
   );
 }
 

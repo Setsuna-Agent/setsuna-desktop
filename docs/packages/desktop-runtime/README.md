@@ -16,6 +16,7 @@ Desktop runtime 是本地 Agent service。它通过认证的 HTTP/SSE 服务 Ele
 | `src/loop/lifecycle/` | Queue、hook、title、finalize、terminate | [Agent loop](agent-loop.md) |
 | `src/loop/tools/` | Tool router/orchestrator/executor/user shell | [工具与能力](tools-and-capabilities.md) |
 | `../features/memory/` | Memory contracts、runtime coordinator、typed operations 与 renderer 设置 | [Feature Composition](../../designs/feature-composition-architecture.md) |
+| `../features/conversation-debug/` | 非持久化诊断 trace、device-local settings、typed operations 与 renderer 面板 | [Feature Composition](../../architecture/feature-composition.md) |
 | `../features/workspace-dependencies/` | Node.js/Python/uv 工具链、包源 settings、typed operations 与 renderer 设置 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/ports/` | Runtime 内部抽象 | [Ports 与 adapters](ports-and-adapters.md) |
 | `src/adapters/store/` | SQLite、JSON、附件、memory、usage | [存储](storage.md) |

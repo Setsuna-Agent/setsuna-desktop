@@ -5,6 +5,7 @@
     { "path": "./packages/feature-core" },
     { "path": "./packages/features/browser/tsconfig.build.json" },
     { "path": "./packages/features/collaboration/tsconfig.build.json" },
+    { "path": "./packages/features/conversation-debug/tsconfig.build.json" },
     { "path": "./packages/features/image-generation/tsconfig.build.json" },
     { "path": "./packages/features/goal/tsconfig.build.json" },
     { "path": "./packages/features/memory/tsconfig.build.json" },

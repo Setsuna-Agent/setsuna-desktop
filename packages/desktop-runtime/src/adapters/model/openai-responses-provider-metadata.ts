@@ -3,8 +3,8 @@ import type {
   RuntimeJsonValue,
   RuntimeMessage,
   RuntimeMessageProviderMetadata,
-  RuntimeProviderReplayReason,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeProviderReplayReason } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import {
   providerMetadataMatchesSemanticMessage,
 } from '../../utils/runtime-message-semantic-fingerprint.js';

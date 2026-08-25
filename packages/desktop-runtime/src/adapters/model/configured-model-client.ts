@@ -1,11 +1,9 @@
-import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
-  type ModelRequest,
-} from '@setsuna-desktop/contracts';
+import type { ModelRequest } from '@setsuna-desktop/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-store.js';
 import type { ModelClient, ModelCompactionRequest, ModelCompactionResult } from '../../ports/model-client.js';
 import {
   appendRuntimeDebugTraceSafely,
+  runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
 import { AiSdkOpenAiCompatibleModelClient } from './ai-sdk-model-client.js';
@@ -112,11 +110,7 @@ export class ConfiguredModelClient implements ModelClient {
     model: string,
   ): void {
     const snapshot = request.stepSnapshot;
-    if (
-      !snapshot
-      || !snapshot.featureKeys.includes(RUNTIME_DEVELOPER_FEATURES_FLAG)
-      || !this.timeoutOptions.debugTrace
-    ) return;
+    if (!snapshot || !runtimeDebugTraceEnabled(this.timeoutOptions.debugTrace)) return;
     const replayContext = providerReplayContext(provider, model);
     const spanId = `model-request:${snapshot.turnId}:${snapshot.threadLastSeq}`;
     try {

@@ -3,16 +3,13 @@ import type {
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
 import {
-  CircleGauge,
-  Code2,
-  Package,
   Pencil,
   RefreshCw,
   RotateCcw,
   Wrench,
   X,
 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import {
   DEFAULT_NPM_REGISTRY_URL,
   DEFAULT_PYTHON_PACKAGE_INDEX_URL,
@@ -49,7 +46,6 @@ export function WorkspaceDependenciesSettingsView({
           defaultValue={DEFAULT_NPM_REGISTRY_URL}
           disabled={busy || !settings}
           id="workspace-npm-registry"
-          icon={<Package size={15} />}
           label={translate('feature.workspaceDependencies.settings.npmSource')}
           normalize={normalizeNpmRegistryUrl}
           translate={translate}
@@ -61,7 +57,6 @@ export function WorkspaceDependenciesSettingsView({
           defaultValue={DEFAULT_PYTHON_PACKAGE_INDEX_URL}
           disabled={busy || !settings}
           id="workspace-python-package-index"
-          icon={<Code2 size={15} />}
           label={translate('feature.workspaceDependencies.settings.pythonSource')}
           normalize={normalizePythonPackageIndexUrl}
           translate={translate}
@@ -71,7 +66,6 @@ export function WorkspaceDependenciesSettingsView({
         />
         <Row
           className="feature-workspace-dependencies__status-row"
-          icon={<CircleGauge size={16} />}
           label={(
             <span className="feature-workspace-dependencies__environment-heading">
               <span>{translate('feature.workspaceDependencies.settings.environment')}</span>
@@ -124,7 +118,6 @@ function PackageSourceForm({
   defaultValue,
   disabled,
   id,
-  icon,
   label,
   normalize,
   onPersist,
@@ -135,7 +128,6 @@ function PackageSourceForm({
   defaultValue: string;
   disabled: boolean;
   id: string;
-  icon: ReactNode;
   label: string;
   normalize: (value: unknown) => string | null;
   onPersist(value: string): Promise<boolean>;
@@ -195,7 +187,6 @@ function PackageSourceForm({
   return (
     <Row
       className="feature-workspace-dependencies__source-row"
-      icon={icon}
       label={label}
     >
       <form noValidate onSubmit={submit}>

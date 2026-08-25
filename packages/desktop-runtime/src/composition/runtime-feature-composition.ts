@@ -14,6 +14,13 @@ import {
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
 import { browserRuntimeFeature } from '@setsuna-desktop/feature-browser/runtime';
 import {
+  conversationDebugControlCapability,
+  conversationDebugLegacySettingsCapability,
+  conversationDebugRuntimeHostCapability,
+  createNoopConversationDebugControl,
+} from '@setsuna-desktop/feature-conversation-debug/contracts';
+import { conversationDebugRuntimeFeature } from '@setsuna-desktop/feature-conversation-debug/runtime';
+import {
   collaborationControlCapability,
   collaborationRuntimeHostCapability,
   createNoopCollaborationControl,
@@ -61,6 +68,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
   required: [browserRuntimeFeature],
   optional: [
     collaborationRuntimeFeature,
+    conversationDebugRuntimeFeature,
     imageGenerationRuntimeFeature,
     goalRuntimeFeature,
     memoryRuntimeFeature,
@@ -83,6 +91,18 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         runtimeFeatureSettingsRegistryCapability,
         runtime.featureSettings,
+      ),
+      provideHostCapability(
+        conversationDebugRuntimeHostCapability,
+        Object.freeze({
+          id: (prefix: string) => runtime.ids.id(prefix),
+          now: () => runtime.clock.now(),
+          threadExists: async (threadId: string) => Boolean(await runtime.threadStore.getThread(threadId)),
+        }),
+      ),
+      provideHostCapability(
+        conversationDebugLegacySettingsCapability,
+        runtime.configStore.conversationDebugLegacySettingsAdapter(),
       ),
       provideHostCapability(
         imageGenerationAssetStoreCapability,
@@ -150,6 +170,13 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       collaboration: optionalCapability(collaborationControlCapability, createNoopCollaborationControl),
     }, ({ collaboration }) => runtime.agentLoop.bindCollaborationControl(collaboration));
+
+    host.bind({
+      conversationDebug: optionalCapability(
+        conversationDebugControlCapability,
+        createNoopConversationDebugControl,
+      ),
+    }, ({ conversationDebug }) => runtime.conversationDebugTraceSink.bind(conversationDebug));
 
     host.bindWhenFeatureAvailable(imageGenerationFeature.id, {
       imageGeneration: requiredCapability(imageGenerationServiceCapability),

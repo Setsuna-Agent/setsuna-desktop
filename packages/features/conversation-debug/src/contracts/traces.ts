@@ -1,0 +1,116 @@
+import type { ModelProviderKind } from '@setsuna-desktop/contracts';
+
+export type RuntimeDebugTraceKind =
+  | 'context.compaction.completed'
+  | 'context.compaction.native'
+  | 'context.compaction.portable'
+  | 'model.history.normalized'
+  | 'provider.replay.decision'
+  | 'stream.pipeline.summary';
+
+export type RuntimeToolCallWireRewrite = {
+  assistantMessageId: string;
+  callIndex: number;
+  providerMetadataRemoved: boolean;
+  semanticCallId: string;
+  toolResultMessageIds: string[];
+  wireCallId: string;
+};
+
+export type RuntimeHistoryNormalizationDebugPayload = {
+  inputMessageCount: number;
+  interruptedToolResultMessageIds: string[];
+  orphanToolResultMessageIds: string[];
+  outputMessageCount: number;
+  warnings: string[];
+  wireToolCallRewrites: RuntimeToolCallWireRewrite[];
+};
+
+export type RuntimeProviderReplayReason =
+  | 'context_mismatch'
+  | 'legacy_provider_mismatch'
+  | 'metadata_missing'
+  | 'native_envelope_invalid'
+  | 'native_replay_compatible'
+  | 'semantic_mismatch'
+  | 'unsupported_provider';
+
+export type RuntimeProviderReplayDebugPayload = {
+  messageId: string;
+  model: string;
+  nativeItemCount: number;
+  providerId: string;
+  providerKind: ModelProviderKind;
+  reason: RuntimeProviderReplayReason;
+  strategy: 'native' | 'semantic';
+};
+
+export type RuntimeCompactionDebugPayload = {
+  error?: string;
+  metadataPersisted?: boolean;
+  olderMessageCount: number;
+  outcome: 'error' | 'fallback' | 'started' | 'success' | 'unsupported';
+  recentMessageCount: number;
+  source?: 'local' | 'remote';
+  summaryCharacters?: number;
+};
+
+/**
+ * Per-turn counters for the high-frequency runtime event path. These diagnostics
+ * stay memory-only and describe transport work without becoming transcript state.
+ */
+export type RuntimeStreamPipelineDebugPayload = {
+  batchFlushCount: number;
+  coalescedEventCount: number;
+  maxBufferedEventCount: number;
+  persistedEventCount: number;
+  persistedStreamCharacters: number;
+  persistedStreamDeltaCount: number;
+  receivedEventCount: number;
+  receivedMergeableEventCount: number;
+  receivedStreamCharacters: number;
+  receivedStreamDeltaCount: number;
+  terminalEventType: 'runtime.error' | 'turn.cancelled' | 'turn.completed';
+};
+
+export type RuntimeDebugTracePayloadByKind = {
+  'context.compaction.completed': RuntimeCompactionDebugPayload;
+  'context.compaction.native': RuntimeCompactionDebugPayload;
+  'context.compaction.portable': RuntimeCompactionDebugPayload;
+  'model.history.normalized': RuntimeHistoryNormalizationDebugPayload;
+  'provider.replay.decision': RuntimeProviderReplayDebugPayload;
+  'stream.pipeline.summary': RuntimeStreamPipelineDebugPayload;
+};
+
+export type RuntimeDebugTraceEvent = {
+  [TKind in RuntimeDebugTraceKind]: {
+    /** Highest committed RuntimeEvent.seq observed before this trace was emitted. */
+    afterEventSeq: number;
+    createdAt: string;
+    id: string;
+    kind: TKind;
+    payload: RuntimeDebugTracePayloadByKind[TKind];
+    seq: number;
+    spanId?: string;
+    threadId: string;
+    turnId?: string;
+  }
+}[RuntimeDebugTraceKind];
+
+export type RuntimeDebugTraceInput = {
+  [TKind in RuntimeDebugTraceKind]: {
+    /** Highest committed RuntimeEvent.seq observed before this trace was emitted. */
+    afterEventSeq: number;
+    kind: TKind;
+    payload: RuntimeDebugTracePayloadByKind[TKind];
+    spanId?: string;
+    threadId: string;
+    turnId?: string;
+  }
+}[RuntimeDebugTraceKind];
+
+export type RuntimeDebugTraceList = {
+  droppedBeforeSeq?: number;
+  nextSeq: number;
+  traces: readonly RuntimeDebugTraceEvent[];
+};

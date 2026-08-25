@@ -188,7 +188,7 @@ Portable semantic history仍是 `RuntimeMessage[]`。`providerMetadata` 只是�
 
 ## RuntimeDebugTrace 不是 RuntimeEvent
 
-Debug trace：
+Debug trace 由 `packages/features/conversation-debug/src/contracts/` 定义，不属于 Core contracts。它：
 
 - 不进入 reducer。
 - 不写 SQLite。

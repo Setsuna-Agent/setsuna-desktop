@@ -1,5 +1,4 @@
 import {
-  runtimeDeveloperFeaturesEnabled,
   type AnswerRuntimeApprovalInput,
   type DesktopRuntimeClient,
   type RuntimeConfiguredModelReference,
@@ -77,9 +76,9 @@ import type {
 } from '../types.js';
 import { FloatingWorkspacePanelSlot } from './FloatingWorkspacePanelSlot.js';
 
-const ConversationDebugPanel = lazy(async () => {
-  const module = await import('../../features/conversation-debug/ConversationDebugPanel.js');
-  return { default: module.ConversationDebugPanel };
+const ConversationDebugFeaturePanel = lazy(async () => {
+  const module = await import('../../composition/conversation-debug-feature-panel.js');
+  return { default: module.ConversationDebugFeaturePanel };
 });
 const BottomToolsPanel = lazy(async () => {
   const module = await import('../../features/workspace/BottomToolsPanel.js');
@@ -112,6 +111,7 @@ export function AppChatSurface({
   canClearContext,
   composerKey,
   config,
+  conversationDebugEnabled,
   conversationOverviewShowRequest,
   conversationOverviewVisibility,
   contextCompacting,
@@ -205,6 +205,7 @@ export function AppChatSurface({
   canClearContext: boolean;
   composerKey: string;
   config: RuntimeConfigState | null;
+  conversationDebugEnabled: boolean;
   conversationOverviewShowRequest: number;
   conversationOverviewVisibility: ConversationOverviewVisibility;
   contextCompacting: boolean;
@@ -384,7 +385,7 @@ export function AppChatSurface({
     onOpenProjectFile,
     onOpenFilesPanel,
     onOpenBrowser,
-    onOpenConversationDebug: runtimeDeveloperFeaturesEnabled(config) ? onOpenConversationDebug : undefined,
+    onOpenConversationDebug: conversationDebugEnabled ? onOpenConversationDebug : undefined,
     onOpenReviewPanel: onOpenFileReviewPanel,
     onOpenSideChat,
     onOpenTerminalPanel: onOpenSideTerminalPanel,
@@ -622,14 +623,14 @@ export function AppChatSurface({
             </FloatingWorkspacePanelSlot>
           );
         })}
-        {activeDebugPanel && runtimeDeveloperFeaturesEnabled(config) ? (
+        {activeDebugPanel && conversationDebugEnabled ? (
           <FloatingWorkspacePanelSlot
             key={activeDebugPanel.panel.id}
             placement={activeDebugPanel.placement}
           >
             <Suspense fallback={null}>
-              <ConversationDebugPanel
-                client={runtimeClient}
+              <ConversationDebugFeaturePanel
+                eventSource={runtimeClient}
                 placement={activeDebugPanel.placement}
                 thread={currentThread}
                 onResizeStep={onWorkspaceResizeStep}

@@ -1,9 +1,5 @@
-import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
-  runtimeDeveloperFeaturesEnabled,
-  type RuntimeConfigState,
-} from '@setsuna-desktop/contracts';
-import { ChevronRight, FileCog, FileJson2, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
+import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
+import { ChevronRight, FileJson2, FolderOpen, Plus, ShieldCheck, X } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { localizedRuntimeAccessModeOptions } from '../../../shared/i18n/runtimeAccessModeCopy.js';
@@ -66,7 +62,6 @@ export function RuntimePolicySettings({
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <label className="chat-user-settings__row chat-user-settings__runtime-policy-row">
             <span className="chat-user-settings__runtime-policy-copy">
-              <ShieldCheck size={14} />
               <span>
                 <strong>{t('settings.runtime.permissionPolicy')}</strong>
                 <small>{accessModeOption.description}</small>
@@ -88,7 +83,6 @@ export function RuntimePolicySettings({
         <div className="chat-user-settings__group chat-user-settings__runtime-card">
           <div className="chat-user-settings__row chat-user-settings__path-row">
             <span className="chat-user-settings__row-label">
-              <FileCog size={14} />
               <span>{t('settings.runtime.configFile')}</span>
             </span>
             <div className="chat-user-settings__path-actions">
@@ -146,17 +140,6 @@ export function RuntimeAdvancedSettings({
           </span>
         </summary>
         <div className="chat-user-settings__group chat-user-settings__runtime-card chat-user-settings__runtime-advanced">
-          <SettingsToggle
-            checked={runtimeDeveloperFeaturesEnabled(config)}
-            description={t('settings.runtime.developerFeaturesDescription')}
-            label={t('settings.runtime.developerFeatures')}
-            onChange={(enabled) => void onSave({
-              features: {
-                ...(config.features ?? {}),
-                [RUNTIME_DEVELOPER_FEATURES_FLAG]: enabled,
-              },
-            })}
-          />
           <SettingsToggle
             checked={config.desktopSettings?.showThinkingInTranscript === true}
             description={t('settings.runtime.showThinkingDescription')}

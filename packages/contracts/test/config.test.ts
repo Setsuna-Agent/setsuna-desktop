@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   BRAND_ICON_MAX_BYTES,
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   defaultModelMaxOutputTokens,
   normalizeBrandIconConfig,
   normalizeRuntimeAccessModeConfig,
   runtimeAccessModeForConfig,
   runtimeAccessModeSelection,
-  runtimeDeveloperFeaturesEnabled,
 } from '../src/config.js';
 
 describe('normalizeBrandIconConfig', () => {
@@ -36,16 +34,6 @@ describe('defaultModelMaxOutputTokens', () => {
     expect(defaultModelMaxOutputTokens('anthropic')).toBe(8192);
     expect(defaultModelMaxOutputTokens('openai-compatible')).toBe(68000);
     expect(defaultModelMaxOutputTokens('openai-responses')).toBe(68000);
-  });
-});
-
-describe('runtimeDeveloperFeaturesEnabled', () => {
-  it('requires the explicit shared developer feature flag', () => {
-    expect(runtimeDeveloperFeaturesEnabled(undefined)).toBe(false);
-    expect(runtimeDeveloperFeaturesEnabled({ features: {} })).toBe(false);
-    expect(runtimeDeveloperFeaturesEnabled({
-      features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
-    })).toBe(true);
   });
 });
 

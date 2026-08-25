@@ -1,7 +1,7 @@
 import type {
   RuntimeMessage,
-  RuntimeProviderReplayDebugPayload,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeProviderReplayDebugPayload } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import { diagnoseAnthropicReplay } from './anthropic-provider-messages.js';
 import { diagnoseOpenAiResponsesReplay } from './openai-responses-provider-metadata.js';
 import type { ProviderReplayContext } from './provider-replay-context.js';

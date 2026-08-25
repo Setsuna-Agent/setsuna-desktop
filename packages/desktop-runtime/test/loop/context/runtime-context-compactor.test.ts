@@ -1,5 +1,4 @@
 import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   type ModelRequest,
   type ModelStreamEvent,
   type RuntimeConfigState,
@@ -15,7 +14,7 @@ import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-conte
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
 import type { RuntimeDebugTraceSink } from '../../../src/ports/runtime-debug-trace.js';
 import type { UsageStore } from '../../../src/ports/usage-store.js';
-import { InMemoryRuntimeDebugTraceStore } from '../../../src/adapters/debug/in-memory-runtime-debug-trace-store.js';
+import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-conversation-debug/runtime';
 import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
 describe('RuntimeContextCompactor', () => {
@@ -208,10 +207,10 @@ describe('RuntimeContextCompactor', () => {
 
   it('records portable and native summary decisions on the debug channel', async () => {
     let id = 0;
-    const traces = new InMemoryRuntimeDebugTraceStore(
-      { now: () => new Date('2026-07-11T00:00:00.000Z') },
-      { id: (prefix) => `${prefix}_${++id}` },
-    );
+    const traces = new InMemoryConversationDebugTraceStore({
+      now: () => new Date('2026-07-11T00:00:00.000Z'),
+      id: (prefix) => `${prefix}_${++id}`,
+    });
     const modelClient = new CompactionModelClient([
       { type: 'text_delta', text: '{"summary":"Portable summary."}' },
       { type: 'done', finishReason: 'stop' },
@@ -242,10 +241,10 @@ describe('RuntimeContextCompactor', () => {
 
   it('marks compaction complete only after the persisted compaction event succeeds', async () => {
     let id = 0;
-    const traces = new InMemoryRuntimeDebugTraceStore(
-      { now: () => new Date('2026-07-11T00:00:00.000Z') },
-      { id: (prefix) => `${prefix}_${++id}` },
-    );
+    const traces = new InMemoryConversationDebugTraceStore({
+      now: () => new Date('2026-07-11T00:00:00.000Z'),
+      id: (prefix) => `${prefix}_${++id}`,
+    });
     const modelClient = new CompactionModelClient([
       { type: 'text_delta', text: '{"summary":"Portable summary."}' },
       { type: 'done', finishReason: 'stop' },
@@ -279,6 +278,7 @@ describe('RuntimeContextCompactor', () => {
       { type: 'done', finishReason: 'stop' },
     ]);
     const failingTrace: RuntimeDebugTraceSink = {
+      enabled: () => true,
       append: () => {
         throw new Error('debug sink unavailable');
       },
@@ -413,7 +413,7 @@ function developerRuntimeConfig(): RuntimeConfigState {
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
-    features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
+    features: {},
   };
 }
 

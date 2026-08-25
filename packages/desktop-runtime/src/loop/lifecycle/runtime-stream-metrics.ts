@@ -1,8 +1,8 @@
 import type {
   PendingStoredThreadEvent,
   StoredThreadEvent,
-  RuntimeStreamPipelineDebugPayload,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeStreamPipelineDebugPayload } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import {
   appendRuntimeDebugTraceSafely,
   type RuntimeDebugTraceSink,

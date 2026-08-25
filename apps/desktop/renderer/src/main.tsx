@@ -8,6 +8,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App.js';
 import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
+import { ConversationDebugFeatureServiceBoundary } from './composition/ConversationDebugFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './composition/NetworkProxyFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
@@ -65,13 +66,15 @@ async function bootstrapRenderer(): Promise<void> {
         <RendererFeatureViewsProvider views={features.views}>
           <UpdaterFeatureServiceBoundary service={features.updater}>
             <NetworkProxyFeatureServiceBoundary service={features.networkProxy}>
-              <CollaborationFeatureServiceBoundary service={features.collaboration}>
-                <KeyboardShortcutsProvider>
-                  <CodeAppearanceProvider>
-                    <App />
-                  </CodeAppearanceProvider>
-                </KeyboardShortcutsProvider>
-              </CollaborationFeatureServiceBoundary>
+              <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
+                <CollaborationFeatureServiceBoundary service={features.collaboration}>
+                  <KeyboardShortcutsProvider>
+                    <CodeAppearanceProvider>
+                      <App />
+                    </CodeAppearanceProvider>
+                  </KeyboardShortcutsProvider>
+                </CollaborationFeatureServiceBoundary>
+              </ConversationDebugFeatureServiceBoundary>
             </NetworkProxyFeatureServiceBoundary>
           </UpdaterFeatureServiceBoundary>
         </RendererFeatureViewsProvider>
