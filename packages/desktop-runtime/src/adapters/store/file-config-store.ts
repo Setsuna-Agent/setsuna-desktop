@@ -20,6 +20,7 @@ import {
   normalizeImageGenerationServiceUrl,
   type ImageGenerationLegacySettingsAdapter,
 } from '@setsuna-desktop/feature-image-generation/contracts';
+import type { ConversationDebugLegacySettingsAdapter } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import type {
   MemoryLegacySettingsAdapter,
   MemoryPreferences,
@@ -54,6 +55,12 @@ import {
   type LegacyRuntimeMemorySettings,
   type StoredTaskModelSettings,
 } from './legacy-memory-config.js';
+import {
+  conversationDebugFeatureFlagsForSave,
+  conversationDebugSettingsFromLegacy,
+  normalizeLegacyFreeFeatureFlags,
+  retireLegacyConversationDebugSettings,
+} from './legacy-conversation-debug-config.js';
 import {
   normalizeConfiguredModelReference,
   taskModelSettingsForSave,
@@ -157,6 +164,13 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  conversationDebugLegacySettingsAdapter(): ConversationDebugLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyConversationDebugSettings(),
+      retire: () => this.retireLegacyConversationDebugSettings(),
+    });
+  }
+
   visionRecognitionLegacySettingsAdapter(): VisionRecognitionLegacySettingsAdapter {
     return Object.freeze({
       read: () => this.readLegacyVisionRecognitionSelection(),
@@ -245,7 +259,7 @@ export class FileConfigStore implements ConfigStore {
         ),
         hooks: normalizeHooksConfig(input.hooks ?? previous.hooks),
         bypassHookTrust: booleanOrUndefined(input.bypassHookTrust ?? previous.bypassHookTrust),
-        features: normalizeFeatureFlags(input.features ?? previous.features),
+        features: conversationDebugFeatureFlagsForSave(input.features ?? previous.features, previous.features),
         desktopSettings: {
           ...normalizeDesktopSettings(input.desktopSettings ?? previous.desktopSettings),
           // A config save must not erase unconsumed Feature migration input.
@@ -291,6 +305,23 @@ export class FileConfigStore implements ConfigStore {
           ...copyOptionalMemoryLimits(memory),
         }),
       });
+    });
+  }
+
+  private async readLegacyConversationDebugSettings() {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return conversationDebugSettingsFromLegacy(stored.features);
+    });
+  }
+
+  private async retireLegacyConversationDebugSettings(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      const retired = retireLegacyConversationDebugSettings(stored.features);
+      if (!retired.changed) return;
+      stored.features = retired.value;
+      await writeJsonFile(this.configPath, stored);
     });
   }
 
@@ -441,7 +472,7 @@ export class FileConfigStore implements ConfigStore {
       }),
       hooks: normalizeHooksConfig(stored.hooks),
       bypassHookTrust: stored.bypassHookTrust === true,
-      features: normalizeFeatureFlags(stored.features),
+      features: normalizeLegacyFreeFeatureFlags(stored.features),
       desktopSettings: normalizeDesktopSettings(stored.desktopSettings),
       providers,
     };
@@ -732,15 +763,6 @@ function normalizeSetsunaStyle(value: unknown): RuntimeConfigState['setsunaStyle
     default:
       return 'developer';
   }
-}
-
-function normalizeFeatureFlags(value: unknown): Record<string, boolean> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).filter((entry): entry is [string, boolean] => (
-      typeof entry[0] === 'string' && typeof entry[1] === 'boolean'
-    )),
-  );
 }
 
 function normalizeSandboxWorkspaceWrite(

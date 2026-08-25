@@ -1,16 +1,17 @@
 import type {
-  RuntimeDebugTraceEvent,
+  ConversationDebugTraceSink,
   RuntimeDebugTraceInput,
-  RuntimeDebugTraceList,
-} from '@setsuna-desktop/contracts';
+} from '@setsuna-desktop/feature-conversation-debug/contracts';
 
-export type RuntimeDebugTraceSink = {
-  append(input: RuntimeDebugTraceInput): RuntimeDebugTraceEvent;
-};
+export type RuntimeDebugTraceSink = ConversationDebugTraceSink;
 
-export type RuntimeDebugTraceStore = RuntimeDebugTraceSink & {
-  list(threadId: string, afterSeq?: number): RuntimeDebugTraceList;
-};
+export function runtimeDebugTraceEnabled(sink: RuntimeDebugTraceSink | undefined): boolean {
+  try {
+    return sink?.enabled() === true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Debug observability must never change a turn's behavior. Keep sink failures
@@ -20,7 +21,7 @@ export function appendRuntimeDebugTraceSafely(
   sink: RuntimeDebugTraceSink | undefined,
   input: RuntimeDebugTraceInput,
 ): void {
-  if (!sink) return;
+  if (!sink || !runtimeDebugTraceEnabled(sink)) return;
   try {
     sink.append(input);
   } catch {

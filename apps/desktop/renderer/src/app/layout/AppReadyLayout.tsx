@@ -199,7 +199,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
       execute: () => workspacePanels.openBrowserPanel(),
     },
     'workspace.openConversationDebug': {
-      enabled: activeView === 'chat' && workspacePanels.developerFeaturesEnabled,
+      enabled: activeView === 'chat' && workspacePanels.conversationDebugEnabled,
       execute: () => workspacePanels.openDesktopPanel('side', 'conversation-debug'),
     },
   }), [
@@ -218,7 +218,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setActiveView,
     windowMenuActions,
     workspacePanels.toggleBottomTerminal,
-    workspacePanels.developerFeaturesEnabled,
+    workspacePanels.conversationDebugEnabled,
     workspacePanels.openBrowserPanel,
     workspacePanels.openDesktopPanel,
     workspacePanels.toggleSidePanel,

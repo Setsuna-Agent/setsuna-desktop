@@ -152,14 +152,16 @@ Sequence 由持久化 store 决定，event bus 只负责通知。SWE 映射仍�
 
 SSE response 被 server 跟踪，shutdown 时先 end 长连接，避免 `server.close()` 永远等待。
 
-## Debug traces
+## Conversation Debug 数据路由
 
-`GET /v1/threads/:id/debug-traces?afterSeq=`：
+Conversation Debug Feature 注册两个只读数据入口：
 
-- 只有 `developer_features` 开启时可用。
+- `GET /v1/features/conversation-debug/threads/:id/events/:afterSeq/:throughSeq/:limit`：按固定 E# 水位读取连续、精确的持久化事件页，能跨 hot table 和压缩 archive。
+- `GET /v1/features/conversation-debug/threads/:id/traces/:afterSeq`：增量读取进程内 D# trace。
+- 只有 Feature settings 中 `enabled` 开启时可用。
 - 返回独立 D# trace 和 `droppedBeforeSeq`。
 - 不读取 thread event sequence 作为 trace sequence。
-- Store 是进程内有界 LRU。
+- Feature 内部 store 是进程内有界 LRU。
 - Append 和 route 失败不能中断 turn。
 
 ## App-server

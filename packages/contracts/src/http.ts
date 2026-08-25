@@ -19,7 +19,6 @@ import type {
   RuntimeInterfaceLanguage,
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
-import type { RuntimeDebugTraceList } from './debug-traces.js';
 import type {
   RuntimeMcpResourceReadResult,
   RuntimeMcpServerInput,
@@ -155,7 +154,6 @@ export type DesktopRuntimeClient = {
     sinceSeq: number | undefined,
     onBatch: (batch: RuntimeEventBatch) => void,
   ): () => void;
-  listDebugTraces(threadId: string, afterSeq?: number): Promise<RuntimeDebugTraceList>;
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;

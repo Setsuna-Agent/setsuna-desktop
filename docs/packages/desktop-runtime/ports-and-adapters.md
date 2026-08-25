@@ -46,7 +46,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 
 - `EventBus`
 - `AppServerNotificationBus`
-- `RuntimeDebugTraceSink/Store`
+- `RuntimeDebugTraceSink`（由 Conversation Debug Feature control 绑定）
 - `Clock`
 - `IdGenerator`
 - `SecretStore` / `DesktopNativeBridge`

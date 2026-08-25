@@ -19,6 +19,34 @@ describe('file config store', () => {
     });
   });
 
+  it('hands the legacy developer flag to Conversation Debug exactly once', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ features: { developer_features: true, request_permissions_tool: true } });
+    const configPath = path.join(dataDir, 'config.json');
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as { features?: Record<string, boolean> };
+    stored.features = { ...stored.features, developer_features: true };
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
+
+    const legacy = store.conversationDebugLegacySettingsAdapter();
+    await expect(legacy.read()).resolves.toEqual({ enabled: true });
+    await expect(store.getConfig()).resolves.toMatchObject({
+      features: { request_permissions_tool: true },
+    });
+
+    await store.saveConfig({ globalPrompt: 'preserve unconsumed debug settings' });
+    const preserved = JSON.parse(await readFile(configPath, 'utf8')) as { features?: Record<string, boolean> };
+    expect(preserved.features).toMatchObject({
+      developer_features: true,
+      request_permissions_tool: true,
+    });
+
+    await legacy.retire();
+    await store.saveConfig({ globalPrompt: 'do not resurrect retired debug settings' });
+    const retired = JSON.parse(await readFile(configPath, 'utf8')) as { features?: Record<string, boolean> };
+    expect(retired.features).not.toHaveProperty('developer_features');
+  });
+
   it('migrates the old implicit network denial once and then respects an explicit disable', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

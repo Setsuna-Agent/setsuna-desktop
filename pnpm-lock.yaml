@@ -16,6 +16,7 @@ importers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
       '@setsuna-desktop/feature-collaboration': workspace:*
+      '@setsuna-desktop/feature-conversation-debug': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
@@ -73,6 +74,7 @@ importers:
       '@setsuna-desktop/contracts': link:packages/contracts
       '@setsuna-desktop/feature-browser': link:packages/features/browser
       '@setsuna-desktop/feature-collaboration': link:packages/features/collaboration
+      '@setsuna-desktop/feature-conversation-debug': link:packages/features/conversation-debug
       '@setsuna-desktop/feature-core': link:packages/feature-core
       '@setsuna-desktop/feature-goal': link:packages/features/goal
       '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
@@ -136,6 +138,7 @@ importers:
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
       '@setsuna-desktop/feature-collaboration': workspace:*
+      '@setsuna-desktop/feature-conversation-debug': workspace:*
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
@@ -155,6 +158,7 @@ importers:
       '@setsuna-desktop/contracts': link:../contracts
       '@setsuna-desktop/feature-browser': link:../features/browser
       '@setsuna-desktop/feature-collaboration': link:../features/collaboration
+      '@setsuna-desktop/feature-conversation-debug': link:../features/conversation-debug
       '@setsuna-desktop/feature-core': link:../feature-core
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
@@ -195,6 +199,18 @@ importers:
     dependencies:
       '@setsuna-desktop/contracts': link:../../contracts
       '@setsuna-desktop/feature-core': link:../../feature-core
+      react: 18.3.1
+
+  packages/features/conversation-debug:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 
   packages/features/goal:

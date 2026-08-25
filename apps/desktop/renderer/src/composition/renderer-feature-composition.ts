@@ -18,6 +18,12 @@ import {
   type CollaborationRendererStateService,
 } from '@setsuna-desktop/feature-collaboration/contracts';
 import { collaborationRendererFeature } from '@setsuna-desktop/feature-collaboration/renderer';
+import {
+  conversationDebugRendererFeature,
+  conversationDebugRendererStateCapability,
+  createNoopConversationDebugRendererService,
+  type ConversationDebugRendererService,
+} from '@setsuna-desktop/feature-conversation-debug/renderer';
 import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/feature-image-generation/contracts';
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
@@ -63,6 +69,7 @@ const rendererFeatures = defineRendererFeatureHost({
   ],
   optional: [
     collaborationRendererFeature,
+    conversationDebugRendererFeature,
     imageGenerationRendererFeature,
     goalRendererFeature,
     memoryRendererFeature,
@@ -75,6 +82,7 @@ const rendererFeatures = defineRendererFeatureHost({
 export type ActiveRendererFeatures = Readonly<{
   collaboration: CollaborationRendererStateService;
   composition: RendererFeatureComposition;
+  conversationDebug: ConversationDebugRendererService;
   messages: ComposedRendererMessages<AppLocale>;
   networkProxy: NetworkProxyRendererStateService;
   updater: UpdaterRendererStateService;
@@ -131,12 +139,17 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         collaborationRendererStateCapability,
         createNoopCollaborationRendererStateService,
       ),
+      conversationDebug: optionalCapability(
+        conversationDebugRendererStateCapability,
+        createNoopConversationDebugRendererService,
+      ),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
       updater: requiredCapability(updaterRendererStateCapability),
     });
     return Object.freeze({
       collaboration: dependencies.collaboration,
       composition: host.composition,
+      conversationDebug: dependencies.conversationDebug,
       messages,
       networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
-import { InMemoryRuntimeDebugTraceStore } from '../adapters/debug/in-memory-runtime-debug-trace-store.js';
+import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
@@ -80,7 +80,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const clock = systemClock;
   const ids = new RandomIdGenerator();
   const eventBus = new InMemoryEventBus();
-  const debugTraceStore = new InMemoryRuntimeDebugTraceStore(clock, ids);
+  const conversationDebugTraceSink = new ConversationDebugRuntimeSink();
   const appServerNotificationBus = new InMemoryAppServerNotificationBus();
   const featureRoutes = new RuntimeRouteRegistry();
   const featureSettings = new FileFeatureSettingsRegistry(runtimeDataDir);
@@ -96,7 +96,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     persistedThreadStore,
     eventBus,
     undefined,
-    debugTraceStore,
+    conversationDebugTraceSink,
   );
   const threadStore = new EventCoordinatedThreadStore(persistedThreadStore, eventWriter, generatedImageStore);
   const nativeBridge = options.nativeBridge ?? HttpDesktopNativeBridge.fromEnvironment();
@@ -145,7 +145,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
   const configuredModelClient = new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
-    debugTrace: debugTraceStore,
+    debugTrace: conversationDebugTraceSink,
     fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
   });
   const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
@@ -213,7 +213,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     approvalGate,
     appServerNotificationBus,
     configStore,
-    debugTrace: debugTraceStore,
+    debugTrace: conversationDebugTraceSink,
     skillRegistry,
     toolHost,
     usageStore,
@@ -234,13 +234,15 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     backgroundShellProcesses,
     browserToolHost,
     configStore,
+    clock,
+    conversationDebugTraceSink,
     dataDir: runtimeDataDir,
-    debugTraceStore,
     eventBus,
     eventWriter,
     featureRoutes,
     featureSettings,
     featureManagement,
+    ids,
     environmentResolver,
     extensionManager,
     generatedImageStore,

@@ -1,11 +1,9 @@
 import {
   RUNTIME_PROVIDER_METADATA_MAX_BYTES,
-  runtimeDeveloperFeaturesEnabled,
   runtimeJsonByteLength,
   sanitizeRuntimeJsonObject,
   type PendingRuntimeEvent,
   type ModelRequest,
-  type RuntimeCompactionDebugPayload,
   type RuntimeConfigState,
   type RuntimeEvent,
   type RuntimeMessage,
@@ -15,6 +13,7 @@ import {
   type RuntimeToolDefinition,
   type RuntimeUsage,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeCompactionDebugPayload } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import { createHash } from 'node:crypto';
 import type { RuntimeCompactHookTrigger } from '../../hooks/runtime-hooks.js';
 import type { Clock } from '../../ports/clock.js';
@@ -22,6 +21,7 @@ import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import {
   appendRuntimeDebugTraceSafely,
+  runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
 import type { UsageStore } from '../../ports/usage-store.js';
@@ -119,7 +119,7 @@ export class RuntimeContextCompactor {
       messages,
       budget,
     );
-    const debugContext = runtimeDeveloperFeaturesEnabled(runtimeConfig)
+    const debugContext = runtimeDebugTraceEnabled(this.options.debugTrace)
       ? {
           afterEventSeq: committedEventSeq(compactingEvent, thread.lastSeq),
           spanId: `context-compaction:${turnId}:${candidate.olderMessages.length}:${candidate.recentMessages.length}`,

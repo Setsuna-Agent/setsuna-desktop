@@ -1,4 +1,8 @@
-import { RUNTIME_DEVELOPER_FEATURES_FLAG, type RuntimeDebugTraceEvent, type RuntimeDebugTraceInput, type RuntimeMessage } from '@setsuna-desktop/contracts';
+import type { RuntimeMessage } from '@setsuna-desktop/contracts';
+import type {
+  RuntimeDebugTraceEvent,
+  RuntimeDebugTraceInput,
+} from '@setsuna-desktop/feature-conversation-debug/contracts';
 import { describe, expect, it } from 'vitest';
 import { AiSdkOpenAiCompatibleModelClient } from '../../../src/adapters/model/ai-sdk-model-client.js';
 import { AnthropicMessagesModelClient } from '../../../src/adapters/model/anthropic-messages-model-client.js';
@@ -295,10 +299,12 @@ describe('configured model routing and options', () => {
     });
   });
 
-  it('publishes provider replay decisions only for developer-enabled model steps', async () => {
+  it('publishes provider replay decisions only while the debug sink is enabled', async () => {
     const traces: RuntimeDebugTraceEvent[] = [];
     let traceSeq = 0;
+    let debugEnabled = true;
     const debugTrace = {
+      enabled: () => debugEnabled,
       append(input: RuntimeDebugTraceInput) {
         const trace = {
           ...input,
@@ -334,8 +340,9 @@ describe('configured model routing and options', () => {
 
     await collect(client, {
       messages: [assistant],
-      stepSnapshot: modelStepSnapshot([RUNTIME_DEVELOPER_FEATURES_FLAG]),
+      stepSnapshot: modelStepSnapshot([]),
     });
+    debugEnabled = false;
     await collect(client, {
       messages: [assistant],
       stepSnapshot: modelStepSnapshot([]),

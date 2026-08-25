@@ -1,5 +1,4 @@
 import {
-  runtimeDeveloperFeaturesEnabled,
   type RuntimeConfiguredModelReference,
   type RuntimeReviewTarget,
 } from '@setsuna-desktop/contracts';
@@ -26,6 +25,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
+import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
@@ -40,6 +40,7 @@ export function useDesktopAppController() {
   const skillSelectionRequestIdRef = useRef(0);
 
   const networkProxy = useNetworkProxyFeatureView();
+  const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
   const {
     activeTurnId,
@@ -80,9 +81,7 @@ export function useDesktopAppController() {
   const workspacePanels = useDesktopWorkspacePanels({
     activeProject: activeWorkspace,
     activeView,
-    developerFeaturesEnabled: runtime.config
-      ? runtimeDeveloperFeaturesEnabled(runtime.config)
-      : null,
+    conversationDebugEnabled,
     setError,
     targetIdentity: chatTargetIdentity,
     workspaceStatus: activeWorkspaceState.status,

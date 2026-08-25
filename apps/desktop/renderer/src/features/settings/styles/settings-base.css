@@ -1055,7 +1055,6 @@
   justify-self: start;
   width: fit-content;
   max-width: min(360px, 100%);
-  padding-left: 22px;
   color: var(--app-text-muted);
   font-size: 11px;
   line-height: 16px;
@@ -1251,16 +1250,8 @@
 }
 
 .desktop-settings-panel .chat-user-settings__runtime-policy-copy {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
+  display: grid;
   min-width: 0;
-}
-
-.desktop-settings-panel .chat-user-settings__runtime-policy-copy > svg {
-  flex: 0 0 14px;
-  margin-top: 2px;
-  color: var(--app-text-muted);
 }
 
 .desktop-settings-panel .chat-user-settings__runtime-policy-copy > span {

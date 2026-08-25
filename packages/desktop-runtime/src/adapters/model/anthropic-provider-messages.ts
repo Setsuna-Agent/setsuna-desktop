@@ -1,8 +1,8 @@
 import type {
   RuntimeAnthropicContentBlock,
   RuntimeMessage,
-  RuntimeProviderReplayDebugPayload,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeProviderReplayDebugPayload } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import type { AssistantContent, ModelMessage, SystemModelMessage } from 'ai';
 import {
   providerMetadataMatchesSemanticMessage,

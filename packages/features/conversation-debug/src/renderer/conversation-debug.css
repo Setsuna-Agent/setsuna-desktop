@@ -1,0 +1,1374 @@
+.conversation-debug-panel__body {
+  --conversation-debug-user-color: var(--app-text-muted);
+  --conversation-debug-runtime-color: var(--app-text-muted);
+  --conversation-debug-provider-color: var(--app-text-muted);
+  --conversation-debug-tool-color: var(--app-text-muted);
+  --conversation-debug-control-hover: color-mix(in srgb, var(--app-text) 6%, var(--app-surface));
+  --conversation-debug-selection: color-mix(in srgb, var(--app-text) 7%, var(--app-surface));
+
+  display: flex;
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--app-surface);
+}
+
+.conversation-debug-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.conversation-debug-toolbar__modes {
+  display: inline-flex;
+  min-width: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-muted);
+}
+
+.conversation-debug-toolbar__modes button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--app-text-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.conversation-debug-toolbar__modes button:hover {
+  color: var(--app-text);
+  background: var(--conversation-debug-control-hover);
+}
+
+.conversation-debug-toolbar__modes button.is-active {
+  color: var(--app-text);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+}
+
+.conversation-debug-toolbar__modes button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-toolbar__turn-scope {
+  flex: 0 0 112px;
+  width: 112px;
+  font-size: 11.5px;
+}
+
+.conversation-debug-toolbar__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--app-text-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.conversation-debug-toolbar__status.is-live svg {
+  color: var(--app-text-subtle);
+}
+
+.conversation-debug-toolbar__status.is-syncing svg {
+  color: var(--app-warning);
+  animation: conversation-debug-pulse 1.1s ease-in-out infinite;
+}
+
+.conversation-debug-panel__notice {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--app-border);
+  border-left: 2px solid var(--app-warning);
+  color: var(--app-text);
+  background: var(--app-surface-subtle);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.conversation-debug-panel__notice--error {
+  border-left-color: var(--app-danger);
+  color: var(--app-text);
+}
+
+.conversation-debug-panel__placeholder {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px;
+  color: var(--app-text-muted);
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-loading {
+  display: grid;
+  position: relative;
+  align-items: center;
+  justify-content: space-between;
+  grid-template-columns: repeat(3, 9px);
+  width: 58px;
+  height: 24px;
+}
+
+.conversation-debug-loading::before,
+.conversation-debug-loading::after {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.conversation-debug-loading::before {
+  right: 4px;
+  height: 1px;
+  background: var(--app-border-strong);
+}
+
+.conversation-debug-loading::after {
+  display: none;
+}
+
+.conversation-debug-loading__node {
+  display: block;
+  position: relative;
+  z-index: 2;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 3px;
+  background: var(--app-surface);
+  box-shadow: 0 0 0 3px var(--app-surface-subtle);
+  animation: conversation-debug-loading-node 1.4s ease-in-out infinite;
+}
+
+.conversation-debug-loading__node:nth-child(2) {
+  animation-delay: 180ms;
+}
+
+.conversation-debug-loading__node:nth-child(3) {
+  animation-delay: 360ms;
+}
+
+.conversation-debug-loading__label {
+  color: var(--app-text-muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.conversation-debug-flow {
+  display: flex;
+  position: relative;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--app-surface-subtle);
+  isolation: isolate;
+}
+
+.conversation-debug-flow__scroll-progress {
+  position: absolute;
+  z-index: 6;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.conversation-debug-flow__scroll-progress span {
+  display: block;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--app-text-muted);
+}
+
+.conversation-debug-flow__viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  cursor: grab;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: none;
+}
+
+.conversation-debug-flow__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.conversation-debug-flow__viewport.is-panning {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.conversation-debug-flow__stage {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.conversation-debug-flow__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.conversation-debug-flow__legend-item--user,
+.conversation-debug-flow__spine--user,
+.conversation-debug-node--user,
+.conversation-debug-activity__item--user {
+  --conversation-debug-lane-color: var(--conversation-debug-user-color);
+}
+
+.conversation-debug-flow__legend-item--runtime,
+.conversation-debug-flow__spine--runtime,
+.conversation-debug-node--runtime,
+.conversation-debug-activity__item--runtime {
+  --conversation-debug-lane-color: var(--conversation-debug-runtime-color);
+}
+
+.conversation-debug-flow__legend-item--provider,
+.conversation-debug-flow__spine--provider,
+.conversation-debug-node--provider,
+.conversation-debug-activity__item--provider {
+  --conversation-debug-lane-color: var(--conversation-debug-provider-color);
+}
+
+.conversation-debug-flow__legend-item--tool,
+.conversation-debug-flow__spine--tool,
+.conversation-debug-node--tool,
+.conversation-debug-activity__item--tool {
+  --conversation-debug-lane-color: var(--conversation-debug-tool-color);
+}
+
+.conversation-debug-flow__turn-band {
+  position: absolute;
+  z-index: 0;
+  border: 1px dashed var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  pointer-events: none;
+}
+
+.conversation-debug-flow__turn-band > span {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 5px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-subtle);
+  font-size: 9.5px;
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-flow__turn-band--running {
+  border-color: var(--app-border-strong);
+}
+
+.conversation-debug-flow__turn-band--error {
+  border-color: color-mix(in srgb, var(--app-danger) 35%, var(--app-border));
+}
+
+.conversation-debug-flow__edges {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.conversation-debug-flow__edge {
+  fill: none;
+  stroke: color-mix(in srgb, var(--app-text-subtle) 46%, transparent);
+  stroke-width: 1.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.conversation-debug-flow__edge--causal {
+  stroke: color-mix(in srgb, var(--app-text) 46%, transparent);
+  stroke-dasharray: 4 3;
+  stroke-width: 1.4;
+}
+
+#conversation-debug-arrow path {
+  fill: color-mix(in srgb, var(--app-text-subtle) 56%, transparent);
+}
+
+#conversation-debug-arrow-causal path {
+  fill: color-mix(in srgb, var(--app-text) 52%, transparent);
+}
+
+.conversation-debug-flow__spine {
+  position: absolute;
+  z-index: 1;
+  height: 1px;
+  background: var(--app-border);
+  pointer-events: none;
+}
+
+.conversation-debug-flow__spine::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--app-border-strong);
+  content: '';
+  transform: translateY(-50%);
+}
+
+.conversation-debug-node {
+  --conversation-debug-status-color: var(--app-text-subtle);
+
+  box-sizing: border-box;
+  display: grid;
+  position: absolute;
+  z-index: 3;
+  top: var(--conversation-debug-node-top);
+  left: var(--conversation-debug-node-left);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 5px;
+  width: 228px;
+  height: 112px;
+  padding: 9px 10px 8px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  text-align: left;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.conversation-debug-node:hover {
+  border-color: var(--app-border-strong);
+  background: var(--app-surface);
+  box-shadow: 0 2px 5px color-mix(in srgb, #000000 7%, transparent);
+}
+
+.conversation-debug-node.is-selected {
+  border-color: var(--app-text-muted);
+  box-shadow: 0 0 0 2px var(--app-focus);
+}
+
+.conversation-debug-node:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-node__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-width: 0;
+}
+
+.conversation-debug-node__title {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-node__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  height: 19px;
+  padding: 0 6px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--conversation-debug-status-color);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-node__status i {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--conversation-debug-status-color);
+}
+
+.conversation-debug-node--running {
+  --conversation-debug-status-color: var(--app-text-muted);
+}
+
+.conversation-debug-node--running .conversation-debug-node__status i {
+  animation: conversation-debug-pulse 1.1s ease-in-out infinite;
+}
+
+.conversation-debug-node--success {
+  --conversation-debug-status-color: var(--app-success);
+}
+
+.conversation-debug-node--warning {
+  --conversation-debug-status-color: var(--app-warning);
+}
+
+.conversation-debug-node--error {
+  --conversation-debug-status-color: var(--app-danger);
+}
+
+.conversation-debug-node__summary {
+  display: -webkit-box;
+  align-self: start;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversation-debug-node__lane {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--app-text-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background: transparent;
+}
+
+.conversation-debug-node__lane i {
+  display: none;
+}
+
+.conversation-debug-node__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--app-text-subtle);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.conversation-debug-node__meta code,
+.conversation-debug-node__meta time {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font: inherit;
+  text-overflow: ellipsis;
+}
+
+.conversation-debug-node__meta em {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--app-text-muted);
+  font-style: normal;
+}
+
+.conversation-debug-flow__navigator {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  width: max-content;
+  max-width: calc(100% - 146px);
+  min-width: 0;
+  height: 32px;
+}
+
+.conversation-debug-flow__navigator-track {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow-x: auto;
+  list-style: none;
+  scrollbar-width: none;
+}
+
+.conversation-debug-flow__navigator-track::-webkit-scrollbar {
+  display: none;
+}
+
+.conversation-debug-flow__navigator-track li {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.conversation-debug-flow__navigator-turn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  background: transparent;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.conversation-debug-flow__navigator-turn:hover {
+  color: var(--app-text);
+  background: var(--conversation-debug-control-hover);
+}
+
+.conversation-debug-flow__navigator-turn[aria-current='step'] {
+  border-color: var(--app-border);
+  color: var(--app-text);
+  font-weight: 700;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+}
+
+.conversation-debug-flow__navigator-turn:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -1px;
+}
+
+.conversation-debug-flow__controls {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.conversation-debug-flow__controls button {
+  display: inline-flex;
+  min-width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font: inherit;
+  background: transparent;
+}
+
+.conversation-debug-flow__controls button:hover:not(:disabled) {
+  border-color: var(--app-border);
+  color: var(--app-text);
+  background: var(--app-surface);
+}
+
+.conversation-debug-flow__controls button:focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: -1px;
+}
+
+.conversation-debug-flow__controls button:disabled {
+  opacity: 0.35;
+}
+
+.conversation-debug-flow__controls .conversation-debug-flow__zoom-value {
+  min-width: 52px;
+  color: var(--app-text);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.conversation-debug-flow__footer {
+  display: grid;
+  z-index: 5;
+  flex: 0 0 44px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 5px 10px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-flow__footer .conversation-debug-flow__navigator {
+  width: 100%;
+  max-width: 100%;
+  justify-self: start;
+}
+
+.conversation-debug-flow__footer .conversation-debug-flow__controls {
+  justify-self: end;
+  margin-left: 0;
+}
+
+.conversation-debug-flow__legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.conversation-debug-flow__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.conversation-debug-flow__legend-item i {
+  display: none;
+}
+
+.conversation-debug-activity {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--app-surface);
+}
+
+.conversation-debug-activity__canvas {
+  position: relative;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  list-style: none;
+}
+
+.conversation-debug-activity__canvas li {
+  position: absolute;
+  top: var(--conversation-debug-activity-top);
+  right: 10px;
+  left: 10px;
+  height: 68px;
+}
+
+.conversation-debug-activity__item {
+  --conversation-debug-lane-color: var(--app-text-muted);
+
+  display: grid;
+  width: 100%;
+  min-height: 62px;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text);
+  text-align: left;
+  background: transparent;
+}
+
+.conversation-debug-activity__item:hover {
+  background: var(--conversation-debug-control-hover);
+}
+
+.conversation-debug-activity__item.is-selected {
+  border-color: var(--app-border);
+  background: var(--conversation-debug-selection);
+}
+
+.conversation-debug-activity__item:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-activity__marker {
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--app-border-strong);
+}
+
+.conversation-debug-activity__item--warning .conversation-debug-activity__marker {
+  background: var(--app-warning);
+}
+
+.conversation-debug-activity__item--error .conversation-debug-activity__marker {
+  background: var(--app-danger);
+}
+
+.conversation-debug-activity__body,
+.conversation-debug-activity__meta {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.conversation-debug-activity__body strong {
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__body small {
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 10px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__meta {
+  justify-items: end;
+  color: var(--app-text-subtle);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.conversation-debug-activity__meta > span:last-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.conversation-debug-activity__meta time,
+.conversation-debug-activity__meta em {
+  font: inherit;
+  font-style: normal;
+}
+
+.conversation-debug-inspector {
+  --conversation-debug-lane-color: var(--app-text-muted);
+  --conversation-debug-status-color: var(--app-text-subtle);
+
+  display: flex;
+  position: absolute;
+  z-index: 20;
+  top: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: min(520px, calc(100% - 16px));
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface);
+  box-shadow: 0 12px 32px color-mix(in srgb, #000000 12%, transparent);
+  animation: conversation-debug-inspector-enter 160ms ease-out;
+}
+
+.conversation-debug-inspector--user {
+  --conversation-debug-lane-color: var(--conversation-debug-user-color);
+}
+
+.conversation-debug-inspector--runtime {
+  --conversation-debug-lane-color: var(--conversation-debug-runtime-color);
+}
+
+.conversation-debug-inspector--provider {
+  --conversation-debug-lane-color: var(--conversation-debug-provider-color);
+}
+
+.conversation-debug-inspector--tool {
+  --conversation-debug-lane-color: var(--conversation-debug-tool-color);
+}
+
+.conversation-debug-inspector__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.conversation-debug-inspector__heading {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.conversation-debug-inspector__badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__header h2 {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 19px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-inspector__header p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--app-text-muted);
+  font-size: 10.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversation-debug-inspector__close {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+.conversation-debug-inspector__lane,
+.conversation-debug-inspector__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  height: 19px;
+  padding: 0 7px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  background: var(--app-surface-subtle);
+  white-space: nowrap;
+}
+
+.conversation-debug-inspector__lane i,
+.conversation-debug-inspector__status i {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.conversation-debug-inspector__lane i {
+  display: none;
+}
+
+.conversation-debug-inspector__status {
+  color: var(--conversation-debug-status-color);
+}
+
+.conversation-debug-inspector__status--running {
+  --conversation-debug-status-color: var(--app-text-muted);
+}
+
+.conversation-debug-inspector__status--success {
+  --conversation-debug-status-color: var(--app-success);
+}
+
+.conversation-debug-inspector__status--warning {
+  --conversation-debug-status-color: var(--app-warning);
+}
+
+.conversation-debug-inspector__status--error {
+  --conversation-debug-status-color: var(--app-danger);
+}
+
+.conversation-debug-inspector__tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+.conversation-debug-inspector__tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 550;
+  background: transparent;
+}
+
+.conversation-debug-inspector__tabs button:hover {
+  color: var(--app-text);
+  background: var(--conversation-debug-control-hover);
+}
+
+.conversation-debug-inspector__tabs button[aria-selected='true'] {
+  border-color: var(--app-border);
+  color: var(--app-text);
+  background: var(--app-surface-subtle);
+  box-shadow: var(--app-shadow-card);
+}
+
+.conversation-debug-inspector__tabs button:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-inspector__tabs small {
+  min-width: 16px;
+  padding: 1px 4px;
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-subtle);
+  font-family: var(--app-code-font-family);
+  font-size: 8px;
+  line-height: 14px;
+  text-align: center;
+  background: var(--app-surface-muted);
+}
+
+.conversation-debug-inspector__overview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: color-mix(in srgb, var(--app-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.conversation-debug-inspector__overview[hidden],
+.conversation-debug-inspector__records-view[hidden] {
+  display: none;
+}
+
+.conversation-debug-diagnostics {
+  display: grid;
+  min-width: 0;
+}
+
+.conversation-debug-diagnostics__section,
+.conversation-debug-diagnostics__notices {
+  display: grid;
+  gap: 9px;
+  padding: 13px 16px 15px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.conversation-debug-diagnostics h3 {
+  margin: 0;
+  color: var(--app-text);
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.conversation-debug-diagnostics__section dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+}
+
+.conversation-debug-diagnostics__section dl > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(104px, 0.42fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-top: 1px solid var(--app-border);
+  background: transparent;
+}
+
+.conversation-debug-diagnostics__section dl > div:first-child {
+  border-top: 0;
+}
+
+.conversation-debug-diagnostics__section dl > div.is-wide {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.conversation-debug-diagnostics__section dt {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.conversation-debug-diagnostics__section dt > span {
+  color: var(--app-text-subtle);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: none;
+}
+
+.conversation-debug-diagnostics__section dt > code {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--app-text-subtle) 78%, transparent);
+  font-size: 7.5px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversation-debug-diagnostics__section dd {
+  min-width: 0;
+  max-height: 180px;
+  margin: 0;
+  overflow: auto;
+  color: var(--app-text);
+  font-size: 10px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  scrollbar-width: thin;
+}
+
+.conversation-debug-diagnostics__section .is-monospace dd {
+  font-family: var(--app-code-font-family);
+  font-size: 9px;
+}
+
+.conversation-debug-diagnostics__section .has-code dd {
+  max-height: none;
+  overflow: hidden;
+}
+
+.conversation-debug-diagnostics__code {
+  width: 100%;
+  max-height: 220px;
+  box-sizing: border-box;
+  overflow: auto;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-subtle);
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--app-text) 20%, transparent) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.conversation-debug-diagnostics__code:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+.conversation-debug-diagnostics__notices {
+  background: var(--app-surface);
+}
+
+.conversation-debug-diagnostics__notices > div {
+  display: grid;
+  gap: 6px;
+}
+
+.conversation-debug-diagnostics__notice {
+  --conversation-debug-notice-color: var(--app-text-muted);
+
+  display: grid;
+  grid-template-columns: 3px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-diagnostics__notice--warning {
+  --conversation-debug-notice-color: var(--app-warning);
+}
+
+.conversation-debug-diagnostics__notice--error {
+  --conversation-debug-notice-color: var(--app-danger);
+}
+
+.conversation-debug-diagnostics__notice > i {
+  align-self: stretch;
+  width: 2px;
+  min-height: 22px;
+  margin-top: 0;
+  border-radius: 2px;
+  background: var(--conversation-debug-notice-color);
+}
+
+.conversation-debug-diagnostics__notice > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.conversation-debug-diagnostics__notice strong {
+  color: var(--app-text);
+  font-size: 9.5px;
+  font-weight: 650;
+}
+
+.conversation-debug-diagnostics__notice p {
+  margin: 0;
+  color: var(--app-text-muted);
+  font-size: 9.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.conversation-debug-diagnostics__notice > code {
+  max-width: 140px;
+  padding: 2px 5px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--app-surface);
+}
+
+.conversation-debug-inspector__records-view {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.conversation-debug-inspector__events {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--app-border);
+}
+
+.conversation-debug-inspector__events > header,
+.conversation-debug-inspector__payload > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__events > header > span {
+  color: var(--app-text-subtle);
+  font-family: var(--app-code-font-family);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.conversation-debug-inspector__events > header strong,
+.conversation-debug-inspector__payload > header strong {
+  color: var(--app-text);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.conversation-debug-inspector__record-navigation {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__record-select {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.conversation-debug-inspector__record-step {
+  flex: 0 0 auto;
+}
+
+.conversation-debug-inspector__payload {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px 16px 16px;
+}
+
+.conversation-debug-inspector__payload > header > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.conversation-debug-inspector__payload > header > span small {
+  color: var(--app-text-subtle);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.conversation-debug-inspector__payload > header > code {
+  flex: 0 0 auto;
+  max-width: 120px;
+  padding: 3px 6px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-xs);
+  color: var(--app-text-muted);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-inspector__payload-code {
+  align-self: stretch;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow: auto;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  font-family: var(--app-code-font-family);
+  tab-size: 2;
+  background: var(--app-surface-subtle);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: color-mix(in srgb, var(--app-text) 20%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.conversation-debug-inspector__payload-code::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.conversation-debug-inspector__payload-code::-webkit-scrollbar-thumb {
+  border: 2px solid var(--app-surface-subtle);
+  border-radius: var(--app-radius-sm);
+  background: color-mix(in srgb, var(--app-text) 24%, transparent);
+}
+
+.conversation-debug-inspector__payload-code::-webkit-scrollbar-corner {
+  background: var(--app-surface-subtle);
+}
+
+.conversation-debug-inspector__payload-code:focus-visible {
+  outline: 0;
+  box-shadow: var(--app-focus-ring);
+}
+
+@keyframes conversation-debug-inspector-enter {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conversation-debug-inspector {
+    animation: none;
+  }
+
+  .conversation-debug-loading::after {
+    display: none;
+  }
+
+  .conversation-debug-loading__node {
+    animation: none;
+    transform: none;
+  }
+}
+
+@keyframes conversation-debug-loading-node {
+  0%,
+  26%,
+  100% {
+    border-color: var(--app-border-strong);
+    background: var(--app-surface);
+    box-shadow: 0 0 0 3px var(--app-surface-subtle);
+    transform: scale(0.94);
+  }
+
+  42%,
+  58% {
+    border-color: var(--app-text-muted);
+    background: var(--app-surface-muted);
+    box-shadow: 0 0 0 3px var(--app-surface-subtle);
+    transform: scale(1);
+  }
+}
+
+@keyframes conversation-debug-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}

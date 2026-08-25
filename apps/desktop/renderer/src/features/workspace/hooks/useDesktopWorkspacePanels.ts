@@ -59,7 +59,7 @@ type SidePanelTransitionPhase = 'opening' | 'closing' | null;
 type WorkspacePanelsOptions = {
   activeProject: WorkspaceProject | null | undefined;
   activeView: string;
-  developerFeaturesEnabled: boolean | null;
+  conversationDebugEnabled: boolean | null;
   setError: (message: string | null) => void;
   targetIdentity: ChatComposerTargetIdentity;
   workspaceStatus: ThreadWorkspaceStatus;
@@ -71,7 +71,7 @@ const GLOBAL_TERMINAL_PROJECT_KEY = '__global__';
 export function useDesktopWorkspacePanels({
   activeProject,
   activeView,
-  developerFeaturesEnabled,
+  conversationDebugEnabled,
   setError,
   targetIdentity,
   workspaceStatus,
@@ -129,7 +129,7 @@ export function useDesktopWorkspacePanels({
   const panelLauncherTypes = useMemo(() => [
     'chat',
     'browser',
-    developerFeaturesEnabled === true
+    conversationDebugEnabled === true
       && !slotHasPanelType(sidePanelSlot, 'conversation-debug')
       && !slotHasPanelType(bottomPanelSlot, 'conversation-debug')
       ? 'conversation-debug'
@@ -145,7 +145,7 @@ export function useDesktopWorkspacePanels({
       ? 'files'
       : null,
     'terminal',
-  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, developerFeaturesEnabled, sidePanelSlot]);
+  ].filter(Boolean) as DesktopPanelType[], [activeProject, bottomPanelSlot, conversationDebugEnabled, sidePanelSlot]);
   const terminalProjectKey = activeProject?.id ?? GLOBAL_TERMINAL_PROJECT_KEY;
   const terminalWorkspacePath = readyThreadWorkspacePath(activeProject, workspaceStatus);
   const activeTerminalSessionsByPanelId = useMemo(() => {
@@ -313,7 +313,7 @@ export function useDesktopWorkspacePanels({
   const openDesktopPanel = useCallback(
     (slot: DesktopPanelSlot, type: DesktopPanelType) => {
       if (type === 'file') return;
-      if (type === 'conversation-debug' && developerFeaturesEnabled !== true) return;
+      if (type === 'conversation-debug' && conversationDebugEnabled !== true) return;
       if (type === 'review' && !activeProject) return;
       if (type === 'files' && !activeProject?.path) return;
       closeWorkspaceMenus();
@@ -359,7 +359,7 @@ export function useDesktopWorkspacePanels({
       createBrowserPanelTab,
       createChatPanel,
       createTerminalPanel,
-      developerFeaturesEnabled,
+      conversationDebugEnabled,
       setBottomPanelSlot,
       setSidePanelExpanded,
       setSidePanelSlot,
@@ -368,14 +368,14 @@ export function useDesktopWorkspacePanels({
   );
 
   useEffect(() => {
-    if (developerFeaturesEnabled !== false) return;
+    if (conversationDebugEnabled !== false) return;
     const removeDebugPanel = (current: DesktopPanelSlotState) => {
       const debugPanel = current.panels.find((panel) => panel.type === 'conversation-debug');
       return debugPanel ? removePanelFromSlotState(current, debugPanel.id) : current;
     };
     setSidePanelSlot(removeDebugPanel);
     setBottomPanelSlot(removeDebugPanel);
-  }, [developerFeaturesEnabled, setBottomPanelSlot, setSidePanelSlot]);
+  }, [conversationDebugEnabled, setBottomPanelSlot, setSidePanelSlot]);
 
   const openFilePanel = useCallback((filePath: string) => {
     closeWorkspaceMenus();
@@ -649,7 +649,7 @@ export function useDesktopWorkspacePanels({
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
-      developerFeaturesEnabled: developerFeaturesEnabled === true,
+      conversationDebugEnabled: conversationDebugEnabled === true,
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,
@@ -702,7 +702,7 @@ export function useDesktopWorkspacePanels({
       closeDesktopPanelSlot,
       closeWorkspaceMenus,
       copyWorkspaceFilePath,
-      developerFeaturesEnabled,
+      conversationDebugEnabled,
       loadReviewState,
       moveDesktopPanel,
       openBrowserPanel,

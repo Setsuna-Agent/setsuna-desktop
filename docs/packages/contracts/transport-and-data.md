@@ -94,7 +94,8 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/threads/:id/turns
 /v1/threads/:id/queued-turn-inputs
 /v1/threads/:id/events
-/v1/threads/:id/debug-traces
+/v1/features/conversation-debug/threads/:id/events/:afterSeq/:throughSeq/:limit
+/v1/features/conversation-debug/threads/:id/traces/:afterSeq
 /v1/features/workspace-dependencies
 /v1/projects
 /v1/skills

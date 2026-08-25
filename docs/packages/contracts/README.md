@@ -71,9 +71,8 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `skills.ts` | Skill summary/detail/input/dependency |
 | `usage.ts` | Usage record、summary、bucket |
 | `workspace.ts` | Project、entry、read、search、status |
-| `debug-traces.ts` | 非持久化开发者 trace |
 
-单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Updater 与 Workspace Dependencies 都不在 Core contracts 维护镜像类型或全局 client 方法。
+单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Conversation Debug 的非持久化 trace、Updater 与 Workspace Dependencies 都不在 Core contracts 维护镜像类型或全局 client 方法。
 
 ### SWE / app-server
 

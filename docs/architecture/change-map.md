@@ -39,7 +39,7 @@ Feature Event：
 3. renderer 的 Core sequence owner 在接受匹配事件或完成 resync 后通知 Feature controller 重读 typed snapshot；controller 不解码 live payload。
 4. 覆盖固定高水位 replay、增量 cache、请求期间到达通知、迟到 snapshot、unknown version 和 legacy decoder。
 
-不要为了 debug 信息新增持久化事件；只读内部诊断优先使用 `RuntimeDebugTraceSink`。
+不要为了 debug 信息新增持久化事件；只读内部诊断优先使用 Conversation Debug Feature contracts 中的 trace DTO，并通过 Core 的 `RuntimeDebugTraceSink` 窄接缝采集。
 
 ## 新增 Electron / preload 能力
 

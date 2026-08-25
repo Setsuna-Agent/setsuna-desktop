@@ -1,5 +1,4 @@
 import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   WORKSPACE_TEXT_FILE_MAX_BYTES,
   type RuntimeDataMigrationReadiness,
   type RuntimeThread,
@@ -211,22 +210,29 @@ describe('runtime server REST runtime state', () => {
       });
     });
 
-  it('gates incremental in-memory debug traces behind developer features', async () => {
+  it('gates paged events and incremental traces behind conversation debug Feature settings', async () => {
       const thread = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',
         body: JSON.stringify({ title: 'Debug trace thread' }),
       });
-      const debugPath = `/v1/threads/${encodeURIComponent(thread.id)}/debug-traces`;
-      const disabledResponse = await fetch(`${harness.baseUrl}${debugPath}`, {
+      const debugPath = `/v1/features/conversation-debug/threads/${encodeURIComponent(thread.id)}/traces`;
+      const eventPath = `/v1/features/conversation-debug/threads/${encodeURIComponent(thread.id)}/events`;
+      const disabledResponse = await fetch(`${harness.baseUrl}${debugPath}/0`, {
+        headers: { Authorization: `Bearer ${harness.token}` },
+      });
+      const disabledEventResponse = await fetch(`${harness.baseUrl}${eventPath}/0/${thread.lastSeq}/1`, {
         headers: { Authorization: `Bearer ${harness.token}` },
       });
 
       expect(disabledResponse.status).toBe(404);
+      expect(disabledEventResponse.status).toBe(404);
 
-      await harness.runtimeFetch('/v1/config', {
-        method: 'PUT',
+      const settings = await harness.runtimeFetch('/v1/features/conversation-debug/settings');
+      await harness.runtimeFetch('/v1/features/conversation-debug/settings', {
+        method: 'PATCH',
         body: JSON.stringify({
-          features: { [RUNTIME_DEVELOPER_FEATURES_FLAG]: true },
+          expectedRevision: settings.revision,
+          patch: { enabled: true },
         }),
       });
       await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}/turns`, {
@@ -239,11 +245,7 @@ describe('runtime server REST runtime state', () => {
           (message) => message.role === 'assistant' && message.status === 'complete',
         ),
       );
-      expect(completedThread.turns?.flatMap((turn) => (
-        turn.stepSnapshots?.flatMap((step) => step.snapshot.featureKeys) ?? []
-      ))).not.toContain(RUNTIME_DEVELOPER_FEATURES_FLAG);
-
-      const firstPage = await harness.runtimeFetch(debugPath);
+      const firstPage = await harness.runtimeFetch(`${debugPath}/0`);
       expect(firstPage.traces).toContainEqual(expect.objectContaining({
         kind: 'model.history.normalized',
         threadId: thread.id,
@@ -253,8 +255,36 @@ describe('runtime server REST runtime state', () => {
         }),
       }));
       const lastSeq = firstPage.traces.at(-1)?.seq ?? 0;
-      const nextPage = await harness.runtimeFetch(`${debugPath}?afterSeq=${lastSeq}`);
+      const nextPage = await harness.runtimeFetch(`${debugPath}/${lastSeq}`);
       expect(nextPage).toMatchObject({ traces: [], nextSeq: lastSeq + 1 });
+
+      const firstEventPage = await harness.runtimeFetch(
+        `${eventPath}/0/${completedThread.lastSeq}/2`,
+      );
+      const secondEventPage = await harness.runtimeFetch(
+        `${eventPath}/2/${completedThread.lastSeq}/2`,
+      );
+      expect(firstEventPage).toMatchObject({
+        throughSeq: completedThread.lastSeq,
+        records: [{ seq: 1 }, { seq: 2 }],
+      });
+      expect(secondEventPage).toMatchObject({
+        throughSeq: completedThread.lastSeq,
+        records: [{ seq: 3 }, { seq: 4 }],
+      });
+
+      await harness.runtimeFetch(`/v1/threads/${encodeURIComponent(thread.id)}`, {
+        method: 'DELETE',
+      });
+      const deletedThreadPage = await fetch(
+        `${harness.baseUrl}${eventPath}/2/${completedThread.lastSeq}/2`,
+        { headers: { Authorization: `Bearer ${harness.token}` } },
+      );
+      expect(deletedThreadPage.status).toBe(404);
+      await expect(deletedThreadPage.json()).resolves.toMatchObject({
+        code: 'THREAD_NOT_FOUND',
+        retryable: false,
+      });
     });
   
   it('starts turns with ids and accepts cancellation requests', async () => {

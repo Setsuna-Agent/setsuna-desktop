@@ -1,5 +1,4 @@
 import {
-  RUNTIME_DEVELOPER_FEATURES_FLAG,
   type ModelRequest,
   type ModelStreamEvent,
   type RuntimeMemoryCitation,
@@ -29,7 +28,6 @@ import { mergeRuntimeProviderMetadata } from './runtime-provider-metadata.js';
 type TurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
 
 export type RuntimeSamplingModelContext = {
-  developerFeaturesEnabled: boolean;
   messages: RuntimeMessage[];
   modelRequest: Pick<ModelRequest, 'model' | 'providerId'>;
   snapshot: RuntimeModelRequestStepSnapshot;
@@ -130,17 +128,12 @@ export class RuntimeModelSampler {
       turnId,
       requestSnapshot,
     );
-    const modelRequestSnapshot = step.developerFeaturesEnabled
-      ? {
-          ...requestSnapshot,
-          // Debug traces use the committed step event as their cross-stream order anchor.
-          threadLastSeq: samplingStepEvent?.seq ?? requestSnapshot.threadLastSeq,
-          featureKeys: [...new Set([
-            ...requestSnapshot.featureKeys,
-            RUNTIME_DEVELOPER_FEATURES_FLAG,
-          ])].sort(),
-        }
-      : requestSnapshot;
+    const modelRequestSnapshot = {
+      ...requestSnapshot,
+      // A trace may be enabled after context construction. Always pass the committed event
+      // as the transient cross-stream anchor so a late trace cannot precede its step snapshot.
+      threadLastSeq: samplingStepEvent?.seq ?? requestSnapshot.threadLastSeq,
+    };
 
     for await (const item of this.options.modelClient.stream({
       ...step.modelRequest,

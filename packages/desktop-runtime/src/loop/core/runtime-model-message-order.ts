@@ -1,8 +1,8 @@
 import type {
   RuntimeMessage,
   RuntimeToolCall,
-  RuntimeToolCallWireRewrite,
 } from '@setsuna-desktop/contracts';
+import type { RuntimeToolCallWireRewrite } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import { createHash } from 'node:crypto';
 
 export const LEGACY_ORPHAN_TOOL_RESULT_OMITTED_WARNING = 'legacy_orphan_tool_result_omitted';

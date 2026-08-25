@@ -281,6 +281,7 @@ export function AppRouteContent({
       composerKey={composerKey}
       focusComposerRequest={focusComposerRequest}
       config={runtime.config}
+      conversationDebugEnabled={workspacePanels.conversationDebugEnabled}
       conversationOverviewShowRequest={conversationOverviewShowRequest}
       conversationOverviewVisibility={conversationOverviewVisibility}
       contextCompacting={runtime.contextCompacting}
