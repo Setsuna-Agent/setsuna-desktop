@@ -86,25 +86,74 @@ function TestFindingMarkdown({
   content,
   onOpenWorkspaceFile,
 }: ReviewFindingMarkdownProps) {
-  const linkPattern = /\[([^\]]+)\]\(([^):]+):(\d+)\)/gu;
   const children: ReactNode[] = [];
   let offset = 0;
-  for (const match of content.matchAll(linkPattern)) {
-    const index = match.index ?? 0;
-    children.push(content.slice(offset, index));
-    const [, label = '', path = '', line = '1'] = match;
+  let link = findTestWorkspaceLink(content, offset);
+  while (link) {
+    children.push(content.slice(offset, link.start));
+    const { end, label, line, path, start } = link;
     children.push(createElement('a', {
       href: `${path}:${line}`,
-      key: `${path}:${line}:${index}`,
+      key: `${path}:${line}:${start}`,
       onClick: (event: { preventDefault(): void }) => {
         event.preventDefault();
-        onOpenWorkspaceFile(path, Number(line));
+        onOpenWorkspaceFile(path, line);
       },
     }, label));
-    offset = index + match[0].length;
+    offset = end;
+    link = findTestWorkspaceLink(content, offset);
   }
   children.push(content.slice(offset));
   return <>{children}</>;
+}
+
+type TestWorkspaceLink = Readonly<{
+  end: number;
+  label: string;
+  line: number;
+  path: string;
+  start: number;
+}>;
+
+/** Parses the small workspace-link subset needed by these tests in one forward pass. */
+function findTestWorkspaceLink(content: string, from: number): TestWorkspaceLink | null {
+  let start = content.indexOf('[', from);
+  while (start >= 0) {
+    const labelEnd = content.indexOf(']', start + 1);
+    if (labelEnd < 0) return null;
+    if (content[labelEnd + 1] !== '(') {
+      start = content.indexOf('[', labelEnd + 1);
+      continue;
+    }
+
+    const targetStart = labelEnd + 2;
+    const targetEnd = content.indexOf(')', targetStart);
+    if (targetEnd < 0) return null;
+    const target = content.slice(targetStart, targetEnd);
+    const separator = target.lastIndexOf(':');
+    const path = target.slice(0, separator);
+    const lineText = target.slice(separator + 1);
+    if (separator > 0 && !path.includes(':') && isAsciiDigits(lineText)) {
+      return {
+        end: targetEnd + 1,
+        label: content.slice(start + 1, labelEnd),
+        line: Number(lineText),
+        path,
+        start,
+      };
+    }
+    start = content.indexOf('[', targetEnd + 1);
+  }
+  return null;
+}
+
+function isAsciiDigits(value: string): boolean {
+  if (!value) return false;
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    if (code < 48 || code > 57) return false;
+  }
+  return true;
 }
 
 function testDiffPatch(file: DesktopDiffFile): string {
