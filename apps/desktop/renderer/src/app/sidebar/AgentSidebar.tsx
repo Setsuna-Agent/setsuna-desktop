@@ -3,7 +3,7 @@ import {
   Archive,
   Blocks,
   ChevronDown,
-  Folder,
+  FolderClosed,
   FolderOpen,
   FolderPlus,
   MoreHorizontal,
@@ -18,6 +18,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type Ref,
+  type RefObject,
 } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
@@ -56,6 +57,7 @@ export function AgentSidebar({
   onEnterChatMode,
   onEditProject,
   onOpenCapabilities,
+  onOpenRuntimeActivity,
   onOpenSettings,
   onRemoveProject,
   onResizeStep,
@@ -69,6 +71,7 @@ export function AgentSidebar({
   onToggleSessionsCollapsed,
   onToggleThreadActions,
   onRenameThread,
+  runtimeActivityTriggerRef,
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
@@ -97,6 +100,7 @@ export function AgentSidebar({
   onEnterChatMode: () => void;
   onEditProject: (project: WorkspaceProject) => void;
   onOpenCapabilities: () => void;
+  onOpenRuntimeActivity: () => void;
   onOpenSettings: () => void;
   onRemoveProject: (project: WorkspaceProject) => void;
   onResizeStep: (delta: number) => void;
@@ -110,6 +114,7 @@ export function AgentSidebar({
   onToggleSessionsCollapsed: () => void;
   onToggleThreadActions: (threadId: string) => void;
   onRenameThread: (thread: RuntimeThreadSummary) => void;
+  runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
   const { t } = useI18n();
 
@@ -176,7 +181,11 @@ export function AgentSidebar({
           onToggleThreadActions={onToggleThreadActions}
         />
       </div>
-      <SidebarUserMenu onOpenSettings={onOpenSettings} />
+      <SidebarUserMenu
+        runtimeActivityTriggerRef={runtimeActivityTriggerRef}
+        onOpenRuntimeActivity={onOpenRuntimeActivity}
+        onOpenSettings={onOpenSettings}
+      />
       <button
         className="desktop-agent-sidebar__resize-handle"
         type="button"
@@ -285,7 +294,7 @@ function ProjectSection({
                 return (
                   <div className="desktop-agent-project-node" key={project.id}>
                     <div
-                      className="desktop-agent-project"
+                      className={`desktop-agent-project${projectActionMenuId === project.id ? ' is-menu-open' : ''}`}
                       title={project.path ?? t('sidebar.projectDirectoryUnbound')}
                       onContextMenu={(event) => {
                         if (isProjectActionTarget(event.target)) return;
@@ -306,7 +315,7 @@ function ProjectSection({
                       >
                         {project.path && !isProjectCollapsed
                           ? <FolderOpen className="desktop-agent-project__icon" size={14} />
-                          : <Folder className="desktop-agent-project__icon" size={14} />}
+                          : <FolderClosed className="desktop-agent-project__icon" size={14} />}
                         <span className="desktop-agent-project__text">
                           <span className="desktop-agent-project__name">{project.name}</span>
                           {!project.path ? <small>{t('sidebar.projectUnbound')}</small> : null}

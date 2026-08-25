@@ -58,13 +58,13 @@ describe('MessageItem collaboration updates', () => {
 
     const bodyChildren = [...(view.container.querySelector('.chat-work-history__body')?.children ?? [])];
     expect(bodyChildren.map((element) => (
-      element.classList.contains('subagent-task-card') ? 'subagent' : 'tools'
+      element.querySelector('.subagent-task-card') ? 'subagent' : 'tools'
     ))).toEqual(['tools', 'subagent', 'tools']);
     expect(keyWarnings).toEqual([]);
 
     view.rerender(messageItem([readBefore, persistentResult, readAfter], true));
     expect(view.container.querySelector('.subagent-task-card')).not.toBeNull();
-    expect(view.container.querySelectorAll('.chat-tool-runs')).toHaveLength(0);
+    expect(view.container.querySelectorAll('.chat-tool-run')).toHaveLength(0);
   });
 });
 

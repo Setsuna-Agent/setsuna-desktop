@@ -27,6 +27,22 @@
   --app-muted: #a3a3a3;
   --app-focus: rgba(0, 0, 0, 0.12);
   --app-focus-ring: 0 0 0 3px var(--app-focus);
+  --app-shadow-hairline: 0 0 0 1px var(--app-border);
+  --app-shadow-button:
+    0 0 0 1px var(--app-border-strong),
+    0 1px 2px color-mix(in srgb, #000000 6%, transparent);
+  --app-shadow-surface:
+    0 0 0 1px var(--app-border),
+    0 1px 2px color-mix(in srgb, #000000 5%, transparent),
+    0 2px 6px color-mix(in srgb, #000000 3%, transparent);
+  --app-shadow-raised:
+    0 0 0 1px var(--app-border),
+    0 2px 8px color-mix(in srgb, #000000 7%, transparent),
+    0 8px 24px color-mix(in srgb, #000000 4%, transparent);
+  --app-shadow-overlay:
+    0 0 0 1px var(--app-border),
+    0 8px 28px color-mix(in srgb, #000000 14%, transparent);
+  --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 10%, transparent);
   --app-shadow-popover: 0 14px 42px color-mix(in srgb, #000000 12%, transparent), 0 2px 8px color-mix(in srgb, #000000 6%, transparent);
   --app-shadow-modal: 0 24px 64px color-mix(in srgb, #000000 18%, transparent), 0 4px 16px color-mix(in srgb, #000000 8%, transparent);
   --app-tooltip-bg: #ffffff;
@@ -66,27 +82,43 @@
   --file-icon-seti-white: #6d8086;
   --file-icon-seti-yellow: #a18f24;
   --file-icon-seti-ignore: #899599;
-  /* 圆角层级：xs 行内 chip、sm 小控件、md 标准控件、lg 卡片、xl 浮层。 */
+  /* Beautiful UI 圆角层级：chip 6、control 8、card 10、window 14。
+     sm/md 共享 control，避免为相邻控件制造不可感知的 1px 差异。 */
   --app-radius-xs: 6px;
-  --app-radius-sm: 7px;
-  --app-radius-md: 9px;
-  --app-radius-lg: 12px;
-  --app-radius-xl: 16px;
+  --app-radius-sm: 8px;
+  --app-radius-md: 8px;
+  --app-radius-lg: 10px;
+  --app-radius-xl: 14px;
   /* Win11 DWM 按约 8px 裁剪 HWND 外沿；窗口壳圆角必须与系统圆角同心，
      不能跟随卡片圆角令牌放大，否则壳边框与系统裁剪之间露出底色带。 */
   --app-window-radius: 8px;
   --app-topbar-height: 42px;
   --app-topbar-item-gap: 8px;
+  --app-topbar-navigation-icon-size: 14px;
+  --app-topbar-navigation-icon-inset: 7px;
+  --app-topbar-navigation-visual-gap: 20px;
   --app-topbar-navigation-control-size: 28px;
+  --app-topbar-navigation-item-gap: calc(
+    var(--app-topbar-navigation-visual-gap)
+    - var(--app-topbar-navigation-control-size)
+    + var(--app-topbar-navigation-icon-size)
+  );
+  --app-topbar-navigation-divider-inset: calc(
+    var(--app-topbar-navigation-visual-gap)
+    - var(--app-topbar-navigation-icon-inset)
+  );
   --app-topbar-native-controls-inset: 82px;
-  /* 侧栏折叠后同时保留侧栏开关、运行中心和新对话三个导航控件。 */
+  /* 侧栏折叠后保留四个等间距导航控件：侧栏开关、会话历史箭头和新对话。 */
   --app-topbar-collapsed-sidebar-width: calc(
     var(--app-topbar-native-controls-inset)
     + var(--app-topbar-navigation-control-size)
-    + var(--app-topbar-item-gap)
+    + var(--app-topbar-navigation-item-gap)
     + var(--app-topbar-navigation-control-size)
-    + var(--app-topbar-item-gap)
+    + var(--app-topbar-navigation-item-gap)
     + var(--app-topbar-navigation-control-size)
+    + var(--app-topbar-navigation-item-gap)
+    + var(--app-topbar-navigation-control-size)
+    + var(--app-topbar-navigation-divider-inset)
   );
   --desktop-workspace-toolbar-height: 42px;
   /* 复用实色外壳基底，让标题栏与侧边栏在视觉上保持连续。 */
@@ -110,8 +142,11 @@
   /* 中性控件让悬停与选中状态在不同强调色主题下保持视觉一致。 */
   --desktop-agent-control-active-bg: var(--desktop-agent-control-hover-bg);
   --desktop-agent-input-shadow:
-    0 12px 36px rgba(0, 0, 0, 0.11),
-    0 2px 8px rgba(0, 0, 0, 0.07);
+    0 2px 8px rgba(0, 0, 0, 0.07),
+    0 8px 24px rgba(0, 0, 0, 0.045);
+  --desktop-agent-composer-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.045),
+    0 5px 16px rgba(0, 0, 0, 0.025);
   --desktop-agent-sidebar-hover-bg: #f2f2f2;
   --desktop-agent-sidebar-active-bg: color-mix(in srgb, var(--app-sidebar-text) 10%, var(--app-sidebar-bg));
   --desktop-agent-sidebar-active-text: #242424;
@@ -127,6 +162,7 @@
   --chat-code-bg: #fafafa;
   --chat-content-max-width: 750px;
   --chat-content-inline-padding: 28px;
+  --chat-composer-bottom-inset: 16px;
   --chat-message-footer-gap: 3px;
   --chat-scrollbar-width: 8px;
   --chat-scrollbar-thumb: color-mix(in srgb, var(--app-muted) 34%, transparent);
@@ -218,6 +254,21 @@
   --app-text-subtle: #737373;
   --app-muted: #737373;
   --app-focus: rgba(255, 255, 255, 0.14);
+  --app-shadow-hairline: 0 0 0 1px var(--app-border);
+  --app-shadow-button:
+    0 0 0 1px color-mix(in srgb, #ffffff 10%, transparent),
+    0 1px 2px color-mix(in srgb, #000000 30%, transparent);
+  --app-shadow-surface:
+    0 0 0 1px color-mix(in srgb, #ffffff 11%, transparent),
+    0 1px 2px color-mix(in srgb, #000000 20%, transparent),
+    0 2px 6px color-mix(in srgb, #000000 20%, transparent);
+  --app-shadow-raised:
+    0 0 0 1px color-mix(in srgb, #ffffff 13%, transparent),
+    0 2px 10px color-mix(in srgb, #000000 22%, transparent);
+  --app-shadow-overlay:
+    0 0 0 1px color-mix(in srgb, #ffffff 15%, transparent),
+    0 8px 28px color-mix(in srgb, #000000 34%, transparent);
+  --app-shadow-inset-field: inset 0 1px 2px color-mix(in srgb, #000000 40%, transparent);
   --app-tooltip-bg: #2b2b2b;
   --app-tooltip-border: #454545;
   --app-primary: #f4f4f5;
@@ -242,8 +293,11 @@
   --desktop-agent-subtle-divider: #2d3033;
   --desktop-agent-control-hover-bg: color-mix(in srgb, var(--app-text) 10%, var(--app-surface));
   --desktop-agent-input-shadow:
-    0 16px 42px rgba(0, 0, 0, 0.4),
-    0 3px 12px rgba(0, 0, 0, 0.24);
+    0 2px 10px rgba(0, 0, 0, 0.28),
+    0 10px 28px rgba(0, 0, 0, 0.18);
+  --desktop-agent-composer-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.18),
+    0 6px 18px rgba(0, 0, 0, 0.1);
   --desktop-agent-sidebar-hover-bg: #34383b;
   --desktop-agent-sidebar-active-text: #fafafa;
   --desktop-agent-sidebar-edge: color-mix(in srgb, var(--app-border-strong) 68%, transparent);

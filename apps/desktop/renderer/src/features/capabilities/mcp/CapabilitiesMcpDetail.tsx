@@ -1,8 +1,9 @@
 import type { RuntimeMcpServer } from '@setsuna-desktop/contracts';
 import { Dropdown, type MenuProps } from 'antd';
-import { Clock3, Loader2, LogIn, LogOut, MoreHorizontal, Pencil, Plug, Settings2, Trash2 } from 'lucide-react';
+import { Clock3, Loader2, LogIn, LogOut, MoreHorizontal, Plug, Settings2, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import { Button, IconButton, PageHeader } from '../../../shared/ui/primitives.js';
 import { mcpToolStats } from './mcp-editor-model.js';
 
@@ -46,7 +47,7 @@ export function CapabilitiesMcpDetail({
     {
       key: 'edit',
       disabled: server.readOnly,
-      icon: <Pencil size={14} />,
+      icon: <EditIcon size={14} />,
       label: t('capabilities.mcp.edit'),
     },
     {

@@ -2,6 +2,11 @@ import '@fontsource/geist-mono/400.css';
 import '@fontsource/geist-sans/400.css';
 import '@fontsource/geist-sans/500.css';
 import '@fontsource/geist-sans/600.css';
+import '@fontsource/inter/latin-400.css';
+import '@fontsource/inter/latin-500.css';
+import '@fontsource/inter/latin-600.css';
+import '@fontsource/jetbrains-mono/latin-400.css';
+import '@fontsource/jetbrains-mono/latin-500.css';
 import 'antd/dist/reset.css';
 import 'katex/dist/katex.min.css';
 import React from 'react';
@@ -25,6 +30,7 @@ import { KeyboardShortcutsProvider } from './shared/shortcuts/KeyboardShortcutsP
 
 // Shared defaults must load before feature styles so scoped components can override them.
 import './shared/styles/tokens.css';
+import './shared/styles/beautiful-ui.css';
 import './app/styles/app.css';
 import './features/settings/styles/settings-data-root.css';
 import './shared/styles/file-icons.css';

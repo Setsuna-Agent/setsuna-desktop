@@ -12,7 +12,6 @@ import type {
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import setsunaAppIconUrl from '../../shared/assets/setsuna-app.png';
 import type {
   ChatImageAttachmentOutcome,
   ChatImageAttachmentRequest,
@@ -36,6 +35,7 @@ import {
 } from './conversation/ChatWorkspaceScroll.js';
 import { ConversationOverviewPanel } from './conversation/ConversationOverviewPanel.js';
 import type { AnswerApprovalHandler } from './conversation/chat-workspace-types.js';
+import { ChatStarter } from './conversation/ChatStarter.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
@@ -47,6 +47,7 @@ import {
 } from './conversation/conversationOverviewLayout.js';
 import type { ChatQueuedTurnActions } from './hooks/useQueuedTurnInputActions.js';
 import { useModelSetupNotice } from './hooks/useModelSetupNotice.js';
+import { useChatStarterTransition } from './hooks/useChatStarterTransition.js';
 import { useThreadMessageHistory } from './hooks/useThreadMessageHistory.js';
 
 export function ChatWorkspace({
@@ -198,7 +199,22 @@ export function ChatWorkspace({
     () => conversationOverviewContextLabel(contextUsage, currentThread?.contextCompaction?.status, t),
     [contextUsage, currentThread?.contextCompaction?.status, t],
   );
-  const showEmptyStarter = variant === 'main' && messages.length === 0 && !activeTurnId;
+  const starterSourceVisible = variant === 'main' && messages.length === 0 && !activeTurnId;
+  const starterIdentity = currentThread?.id ?? activeProject?.id ?? 'empty-chat';
+  const starterTransition = useChatStarterTransition({
+    conversationRef,
+    sourceVisible: starterSourceVisible,
+    starterKey: starterIdentity,
+  });
+  const {
+    begin: beginStarterTransition,
+    cancel: cancelStarterTransition,
+    composerHeight: starterComposerHeight,
+    offsetY: starterOffsetY,
+    phase: starterSettlePhase,
+    starterKey,
+    visible: showEmptyStarter,
+  } = starterTransition;
   const { modelSetupNoticeVisible, dismissModelSetupNotice } = useModelSetupNotice(config);
   const modelSetupNotice = showEmptyStarter && modelSetupNoticeVisible && onOpenModelSettings ? (
     <ChatModelSetupNotice onConfigure={onOpenModelSettings} onDismiss={dismissModelSetupNotice} />
@@ -212,12 +228,20 @@ export function ChatWorkspace({
     onConversationOverviewRenderedChange?.(Boolean(conversationOverview && currentThread && overviewVisible));
   }, [conversationOverview, currentThread, onConversationOverviewRenderedChange, overviewVisible]);
   const handleSend = useCallback<NonNullable<typeof onSend>>(
-    (value, options) => {
+    async (value, options) => {
       // 发送消息代表用户重新关注最新进度；同时恢复 sticky，后续流式内容会持续贴底。
       scrollToBottomRef.current?.();
-      return onSend(value, options);
+      beginStarterTransition();
+      try {
+        const sent = await onSend(value, options);
+        if (!sent) cancelStarterTransition();
+        return sent;
+      } catch (error) {
+        cancelStarterTransition();
+        throw error;
+      }
     },
-    [onSend],
+    [beginStarterTransition, cancelStarterTransition, onSend],
   );
   const composer = (starter = false) => (
     <ChatComposer
@@ -257,9 +281,6 @@ export function ChatWorkspace({
       onWorkspaceMentionRequestConsumed={onWorkspaceMentionRequestConsumed}
     />
   );
-  const starterTitle = activeProject
-    ? t('chat.starter.projectTitle', { project: activeProject.name })
-    : t('chat.starter.title');
   return (
     <main className={`chat-main-panel desktop-chat-panel ${variant === 'side' ? 'desktop-chat-panel--side' : ''}`}>
       <div className="chat-main-workspace">
@@ -278,7 +299,16 @@ export function ChatWorkspace({
             showThinkingInTranscript={showThinkingInTranscript}
             skills={skills}
             starterContent={showEmptyStarter ? (
-              <ChatStarter composer={composer(true)} modelSetupNotice={modelSetupNotice} title={starterTitle} />
+              <ChatStarter
+                key={starterKey}
+                composer={composer(true)}
+                modelSetupNotice={modelSetupNotice}
+                projectName={activeProject?.name}
+                settleComposerHeight={starterComposerHeight}
+                settleOffsetY={starterOffsetY}
+                settlePhase={starterSettlePhase}
+                onSend={handleSend}
+              />
             ) : undefined}
             onAnswerApproval={onAnswerApproval}
             onDeleteMessages={onDeleteMessages}
@@ -321,20 +351,5 @@ export function ChatWorkspace({
         </div>
       </div>
     </main>
-  );
-}
-
-function ChatStarter({ composer, modelSetupNotice, title }: { composer: ReactNode; modelSetupNotice?: ReactNode; title: string }) {
-  return (
-    <div className="chat-starter">
-      <div className="chat-starter__intro">
-        <div className="chat-starter__heading">
-          <img className="chat-starter__system-icon" src={setsunaAppIconUrl} alt="" aria-hidden="true" />
-          <h1>{title}</h1>
-        </div>
-        {modelSetupNotice}
-      </div>
-      {composer}
-    </div>
   );
 }

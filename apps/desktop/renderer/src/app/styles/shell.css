@@ -57,11 +57,26 @@
 
 .app-topbar__nav {
   flex: 0 0 auto;
+  gap: var(--app-topbar-navigation-item-gap);
+}
+
+.app-thread-history-navigation {
+  display: contents;
+}
+
+.app-thread-history-navigation > .sd-shortcut-tooltip-target {
+  display: inline-flex;
+  align-items: center;
+}
+
+.app-topbar .app-thread-history-navigation .sd-icon-button.app-shell-icon-control:disabled {
+  color: color-mix(in srgb, var(--app-text) 18%, transparent);
+  opacity: 1;
 }
 
 .app-shell-icon-control svg {
-  width: 14px;
-  height: 14px;
+  width: var(--app-topbar-navigation-icon-size);
+  height: var(--app-topbar-navigation-icon-size);
   stroke-width: 2;
 }
 
@@ -248,6 +263,50 @@
   white-space: nowrap;
 }
 
+.app-project-toolbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.app-project-toolbar-title__project-icon {
+  flex: 0 0 auto;
+  margin-right: 11px;
+  color: var(--app-text-muted);
+  stroke-width: 1.7;
+  transform: translateY(0.5px);
+}
+
+.app-project-toolbar-title__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-project-toolbar-title__more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  margin-left: 5px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+}
+
+.app-project-toolbar-title__more:hover,
+.app-project-toolbar-title__more[aria-expanded='true'] {
+  color: var(--app-text);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
 .app-topbar__right .sd-icon-button.is-active {
   color: var(--app-text);
   background: var(--desktop-agent-control-active-bg);
@@ -255,7 +314,7 @@
 
 .desktop-agent-page--sidebar-collapsed .app-topbar__brand {
   gap: var(--app-topbar-item-gap);
-  padding-right: 0;
+  padding-right: var(--app-topbar-navigation-divider-inset);
   border-right: 0;
   background: var(--app-bg);
 }
@@ -288,19 +347,17 @@
     background: var(--app-bg);
   }
 
+  :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__right {
+    border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  }
+
   :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar::before {
     position: absolute;
     z-index: -1;
     inset: 0 auto 0 0;
     width: var(--app-sidebar-width);
-    background:
-      linear-gradient(
-        to right,
-        transparent calc(100% - 8px),
-        var(--desktop-agent-sidebar-separator-color) 100%
-      ),
-      var(--app-sidebar-bg);
-    box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+    background: var(--app-sidebar-bg);
+    box-shadow: inset -1px 0 var(--desktop-agent-subtle-divider);
     content: '';
     pointer-events: none;
     transition: width var(--app-sidebar-motion-duration) var(--app-sidebar-motion-easing);
@@ -314,6 +371,24 @@
   :root[data-desktop-platform='darwin'] .desktop-agent-page--sidebar-collapsed > .app-topbar::before {
     width: 0;
     opacity: 0;
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell.desktop-agent-page--sidebar-collapsed:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand {
+    position: relative;
+    border-right: 0;
+    border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell.desktop-agent-page--sidebar-collapsed:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand::after {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 1px;
+    height: 18px;
+    background: var(--desktop-agent-subtle-divider);
+    content: '';
+    pointer-events: none;
+    transform: translateY(-50%);
   }
 }
 
@@ -616,12 +691,8 @@
   :root[data-desktop-platform='darwin'] .app-workbench::after {
     inset: 0 auto 0 0;
     width: var(--app-sidebar-width);
-    background: linear-gradient(
-      to right,
-      transparent calc(100% - 8px),
-      var(--desktop-agent-sidebar-separator-color) 100%
-    );
-    box-shadow: inset -1px 0 var(--desktop-agent-sidebar-edge);
+    background: transparent;
+    box-shadow: inset -1px 0 var(--desktop-agent-subtle-divider);
   }
 
   :root[data-desktop-platform='darwin'] .desktop-agent-page--sidebar-collapsed .app-workbench::after {

@@ -44,6 +44,7 @@ describe('AgentSidebar project actions', () => {
       onEnterChatMode: noop,
       onEditProject: noop,
       onOpenCapabilities: noop,
+      onOpenRuntimeActivity: noop,
       onOpenSettings: noop,
       onRemoveProject: noop,
       onRenameThread: noop,
@@ -57,12 +58,16 @@ describe('AgentSidebar project actions', () => {
       onToggleSearch: noop,
       onToggleSessionsCollapsed: noop,
       onToggleThreadActions: noop,
+      runtimeActivityTriggerRef: createRef<HTMLButtonElement>(),
     }));
 
     expect(html).toContain('aria-label="新建项目"');
+    expect(html).toContain('class="desktop-agent-project is-menu-open"');
     expect(html).toContain('aria-label="在 test-project 中新建会话"');
     expect(html).toContain('>编辑项目</button>');
     expect(html).toContain('>归档项目</button>');
     expect(html).toContain('>插件</span>');
+    expect(html).toContain('aria-label="更多操作"');
+    expect(html).toContain('>运行中心</button>');
   });
 });

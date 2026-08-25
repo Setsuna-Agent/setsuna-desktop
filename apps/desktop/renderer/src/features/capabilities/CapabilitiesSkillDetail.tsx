@@ -1,7 +1,8 @@
 import type { RuntimeSkillDetail, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
 import { Dropdown, type MenuProps } from 'antd';
-import { FileText, Loader2, LogIn, MessageSquare, MoreHorizontal, Pencil, Plug, RefreshCw, Trash2 } from 'lucide-react';
+import { FileText, Loader2, LogIn, MessageSquare, MoreHorizontal, Plug, RefreshCw, Trash2 } from 'lucide-react';
 import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { Button, EmptyState, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginFilePreview } from './CapabilitiesPluginItemDialog.js';
 
@@ -41,7 +42,7 @@ export function CapabilitiesSkillDetail({
     ...(activeSkill.kind !== 'builtin' ? [
       {
         key: 'edit',
-        icon: <Pencil size={14} />,
+        icon: <EditIcon size={14} />,
         label: t('capabilities.skill.edit'),
       },
       {

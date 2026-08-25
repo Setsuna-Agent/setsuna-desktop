@@ -42,4 +42,5 @@ describe('ShellFrame', () => {
     expect(activityIndex).toBeGreaterThan(sidebarControlIndex);
     expect(newChatIndex).toBeGreaterThan(activityIndex);
   });
+
 });

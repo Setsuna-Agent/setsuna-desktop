@@ -1,6 +1,7 @@
-import { Keyboard, Pencil, RotateCcw, Search, X } from 'lucide-react';
+import { Keyboard, RotateCcw, Search, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
+import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import type { MessageKey } from '../../../shared/i18n/messages.js';
 import {
   captureKeyboardShortcut,
@@ -285,7 +286,7 @@ function KeyboardShortcutRow({
               title={t('shortcuts.add')}
               onClick={onAdd}
             >
-              <Pencil size={13} />
+              <EditIcon size={13} />
             </button>
           )}
           <button

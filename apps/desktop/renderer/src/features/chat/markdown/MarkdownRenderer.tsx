@@ -8,6 +8,7 @@ import {
   reconcileMarkdownRenderBlocks,
   type StreamingMarkdownRenderState,
 } from './streamingMarkdown.js';
+import { useSmoothedStreamingContent } from './useSmoothedStreamingContent.js';
 
 export function MarkdownRenderer({
   content,
@@ -64,11 +65,12 @@ function MarkdownSegment({
   streaming: boolean;
 }) {
   const renderStateRef = useRef<StreamingMarkdownRenderState | null>(null);
+  const visibleContent = useSmoothedStreamingContent(content, streaming);
   const blocks = useMemo(() => {
-    const result = reconcileMarkdownRenderBlocks(renderStateRef.current, content, streaming);
+    const result = reconcileMarkdownRenderBlocks(renderStateRef.current, visibleContent, streaming);
     renderStateRef.current = result.state;
     return result.blocks;
-  }, [content, streaming]);
+  }, [streaming, visibleContent]);
   const virtualized = shouldVirtualizeMarkdownBlocks(blocks);
 
   return (

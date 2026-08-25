@@ -1,5 +1,5 @@
 import { Input, Modal } from 'antd';
-import { Pause, Pencil, Play, RefreshCw, Target, Trash2, X } from 'lucide-react';
+import { Pause, Play, RefreshCw, SquarePen as EditIcon, Target, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type {
   ComposerActiveTurn,
@@ -140,7 +140,7 @@ function GoalStatus({
             setEditOpen(true);
           }}
         >
-          <Pencil size={13} />
+          <EditIcon size={13} />
         </GoalIconButton>
         {goal.status === 'active' ? (
           <GoalIconButton

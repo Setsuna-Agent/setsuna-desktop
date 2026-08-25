@@ -1,5 +1,5 @@
 import type { RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
-import type { PointerEvent as ReactPointerEvent, Ref } from 'react';
+import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { AgentSidebar } from '../sidebar/AgentSidebar.js';
 import type { MainView } from '../types.js';
@@ -19,10 +19,12 @@ export function AppSidebarSurface({
   maxWidth,
   minWidth,
   onOpenCapabilities,
+  onOpenRuntimeActivity,
   onOpenSettings,
   onResetDraft,
   onResizeStep,
   onResizeStart,
+  runtimeActivityTriggerRef,
 }: {
   activeProjectId: string | null;
   activeThreadId?: string | null;
@@ -38,10 +40,12 @@ export function AppSidebarSurface({
   maxWidth: number;
   minWidth: number;
   onOpenCapabilities: () => void;
+  onOpenRuntimeActivity: () => void;
   onOpenSettings: () => void;
   onResetDraft: () => void;
   onResizeStep: (delta: number) => void;
   onResizeStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  runtimeActivityTriggerRef: RefObject<HTMLButtonElement>;
 }) {
   if (activeView === 'settings') return null;
 
@@ -86,6 +90,7 @@ export function AppSidebarSurface({
       onEnterChatMode={() => void navigation.enterChatMode()}
       onEditProject={navigation.editProject}
       onOpenCapabilities={onOpenCapabilities}
+      onOpenRuntimeActivity={onOpenRuntimeActivity}
       onOpenSettings={onOpenSettings}
       onRemoveProject={(project) => {
         navigation.setProjectActionMenuId(null);
@@ -102,6 +107,7 @@ export function AppSidebarSurface({
       onToggleSessionsCollapsed={() => navigation.setSessionsCollapsed((value) => !value)}
       onToggleThreadActions={(threadId) => navigation.setThreadActionMenuId((current) => (current === threadId ? null : threadId))}
       onRenameThread={navigation.openRenameThread}
+      runtimeActivityTriggerRef={runtimeActivityTriggerRef}
     />
   );
 }

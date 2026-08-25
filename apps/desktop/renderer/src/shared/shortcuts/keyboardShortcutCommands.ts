@@ -15,6 +15,8 @@ export const KEYBOARD_SHORTCUT_COMMAND_IDS = [
   'app.openSettings',
   'app.openCapabilities',
   'app.toggleRuntimeActivity',
+  'navigation.goBack',
+  'navigation.goForward',
   'layout.toggleSidebar',
   'layout.toggleWorkspace',
   'layout.toggleTerminal',
@@ -87,6 +89,28 @@ export const keyboardShortcutCommands: readonly KeyboardShortcutCommand[] = [
     labelKey: 'shortcuts.command.searchChats',
     descriptionKey: 'shortcuts.command.searchChatsDescription',
     defaultBindings: primaryBinding('KeyK'),
+  },
+  {
+    id: 'navigation.goBack',
+    group: 'navigation',
+    labelKey: 'shortcuts.command.goBack',
+    descriptionKey: 'shortcuts.command.goBackDescription',
+    defaultBindings: {
+      darwin: ['Meta+BracketLeft'],
+      linux: ['Alt+ArrowLeft'],
+      win32: ['Alt+ArrowLeft'],
+    },
+  },
+  {
+    id: 'navigation.goForward',
+    group: 'navigation',
+    labelKey: 'shortcuts.command.goForward',
+    descriptionKey: 'shortcuts.command.goForwardDescription',
+    defaultBindings: {
+      darwin: ['Meta+BracketRight'],
+      linux: ['Alt+ArrowRight'],
+      win32: ['Alt+ArrowRight'],
+    },
   },
   {
     id: 'layout.toggleSidebar',

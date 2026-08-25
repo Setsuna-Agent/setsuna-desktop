@@ -1,7 +1,7 @@
 import type { DesktopNetworkProxyServerState } from '@setsuna-desktop/contracts';
 import type { RendererTranslate, SettingsViewUi } from '@setsuna-desktop/feature-core/renderer';
 import { Popconfirm } from 'antd';
-import { Pencil, Server, Trash2 } from 'lucide-react';
+import { Server, SquarePen as EditIcon, Trash2 } from 'lucide-react';
 
 type ProxyServerCardProps = {
   disabled: boolean;
@@ -54,7 +54,7 @@ export function ProxyServerCard({
           disabled={disabled}
           onClick={onEdit}
         >
-          <Pencil size={13} />
+          <EditIcon size={13} />
         </IconButton>
         <Popconfirm
           title={translate('feature.networkProxy.settings.deleteTitle', { name: server.name })}
