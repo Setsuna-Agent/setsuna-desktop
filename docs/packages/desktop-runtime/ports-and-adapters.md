@@ -97,7 +97,7 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 | --- | --- |
 | `adapters/store/` | SQLite、JSON、attachments、images、config、MCP、memory、policy |
 | `adapters/feature/` | Feature host adapter 与激活后绑定 proxy，包括 `BindableUsageRecorder` |
-| `adapters/model/` | AI SDK/provider clients、stream/replay/discovery |
+| `adapters/model/` | 模型图片资产解析 wrapper 与 Feature sampling 绑定；协议、stream/replay/discovery 位于 `packages/features/model-provider/` |
 | `adapters/tool/` | ToolHost implementations |
 | `adapters/mcp/` | SDK connection、OAuth、elicitation、result normalize |
 | `adapters/skill/` | File Skill registry 与 MCP dependency |

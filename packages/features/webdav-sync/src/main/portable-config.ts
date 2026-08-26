@@ -15,6 +15,7 @@ const PORTABLE_ROOT_KEYS = [
 const PORTABLE_PROVIDER_KEYS = [
   'id',
   'name',
+  'catalogProviderId',
   'provider',
   'baseUrl',
   'enabled',

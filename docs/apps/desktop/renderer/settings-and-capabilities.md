@@ -14,7 +14,6 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 `SettingsPage.tsx` 负责宿主 section 导航和数据/回调分发，并通过通用 `settings` contribution slot 挂载纵向 Feature 设置。具体宿主内容位于：
 
 - `sections/`
-- `providers/`
 - `data-root/`
 - `components/`
 - `styles/`
@@ -37,27 +36,31 @@ Updater 也是独立 renderer Feature。它通过 `settingsSectionExtensions` �
 
 WebDAV Sync 也是独立 renderer Feature，并通过 setup 返回静态 `settingsViews` contribution，形成完整“同步”页面。它用 `navigationGroupId` 声明归入宿主“模型与服务”分组；没有已知宿主归属的 contribution 才进入独立“功能”分组，为后续可安装/第三方功能保留。连接、自动备份、数据类别、当前快照、还原检查、文案和 scoped CSS 都位于 `packages/features/webdav-sync/renderer`；宿主设置页只渲染只读 catalog，不读取 WebDAV 状态，也不持有 bridge 方法。标准表单控件由 `SettingsViewHostProps.ui` 注入，Feature 只维护业务特有布局。
 
-Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/renderer`。宿主 controller 只通过 composition boundary 读取代理服务器公开投影，供仍属于根 Runtime Config 的模型 provider 下拉框使用；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
+Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/renderer`。Model Provider Feature 通过宿主 capability 读取代理服务器公开投影；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
 `shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。完整页面默认由宿主渲染标题；需要把 Feature 状态动作放进标题栏时，contribution 声明 `pageHeading: 'view'`，再使用注入的 `ui.PageHeading`，不能用正文定位或负 margin 模拟标题 action。
 
 ### Provider settings
 
-`providers/ProviderSettings.tsx` 和 `provider-model.ts` 管理：
+模型服务由 `packages/features/model-provider/` 独立拥有，并通过 `settingsViews` contribution 挂载到宿主设置页。renderer service 负责读取、暂存和串行保存，宿主只注入 Settings UI、品牌图标和网络代理能力。
 
-- Provider kind、base URL、API key。
-- Models 与默认 model。
+Feature 管理：
+
+- Pi 内置厂商/方案、API key 与模型目录。
+- 自定义兼容服务的协议、base URL 和模型同步。
 - Thinking effort、max output、vision 等能力。
 - Provider/model 品牌图标。
-- 模型替换与引用关系。
+- 模型批量选择与删除。
 
 规则：
 
 - API key 留空不能覆盖已保存 secret。
 - Renderer 只看到 `apiKeySet`/preview。
-- Provider capabilities 来自 contract/discovery，不在 UI 写死厂商私有 payload。
+- 厂商或方案变更必须确认并清除旧凭据和不兼容模型；显式选择自定义服务不能被旧配置迁移再次识别成预设厂商。
+- Provider capabilities 来自 Pi catalog 或 discovery，不在 UI 写死厂商私有 payload。
 - Base URL normalize 和 provider validation 最终仍由 runtime store 执行。
-- 删除/替换被 task model 引用的模型要先显式迁移引用。
+- 模型列表没有厂商级“默认模型”概念；聊天和宿主任务各自保存 provider/model 引用。
+- 同步结果必须确认后应用，并在连接配置变化时丢弃旧请求结果。
 
 ### 访问模式与审批审查
 
@@ -208,11 +211,11 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 Settings：
 
 - `test/unit/features/settings/SettingsPage.test.ts`
+- `packages/features/model-provider/test/renderer/`
 - `packages/features/webdav-sync/test/renderer/`
 - `packages/features/network-proxy/test/renderer/`
 - `packages/features/workspace-dependencies/test/renderer/`
 - `packages/features/usage/test/renderer/`
-- Provider/model replacement、brand icon upload。
 - Data-root issue/backup UI。
 - Task model settings。
 

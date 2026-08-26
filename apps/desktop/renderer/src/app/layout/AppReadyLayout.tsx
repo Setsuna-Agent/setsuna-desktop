@@ -102,7 +102,7 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
     setActiveView('settings');
   }, [setActiveView]);
   const openModelSettings = useCallback(() => {
-    setSettingsInitialSection('localLlm');
+    setSettingsInitialSection('model-provider');
     setActiveView('settings');
   }, [setActiveView]);
   const openFilesPanel = useCallback(() => {
@@ -344,7 +344,6 @@ export function AppReadyLayout({ controller }: { controller: DesktopAppControlle
         draft={draft}
         projectWorkspace={projectWorkspace}
         runtime={runtime}
-        networkProxy={controller.networkProxy}
         setActiveView={setActiveView}
         setDraft={setDraft}
         skillSelectionRequest={skillSelectionRequest}

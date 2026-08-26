@@ -70,12 +70,13 @@ describe('WebDAV portable snapshot data', () => {
       approvalPolicy?: string;
       hooks?: unknown;
       storagePath?: string;
-      providers: Array<{ proxyRoute?: { mode: string } }>;
+      providers: Array<{ catalogProviderId?: string; proxyRoute?: { mode: string } }>;
       imageGeneration?: unknown;
     };
     expect(portableConfig.storagePath).toBeUndefined();
     expect(portableConfig.approvalPolicy).toBeUndefined();
     expect(portableConfig.hooks).toBeUndefined();
+    expect(portableConfig.providers[0]?.catalogProviderId).toBe('openai');
     expect(portableConfig.providers[0]?.proxyRoute).toBeUndefined();
     expect(portableConfig.imageGeneration).toBeUndefined();
     const featureSettings = sources.find((source) => (
@@ -340,6 +341,7 @@ async function createDataRoot(): Promise<string> {
     providers: [{
       id: 'provider-openai',
       name: 'OpenAI',
+      catalogProviderId: 'openai',
       proxyRoute: { mode: 'proxy', proxyServerId: 'proxy-local' },
     }],
   }), 'utf8');

@@ -496,6 +496,30 @@ describe('file config store', () => {
     });
   });
 
+  it('persists and explicitly detaches a Pi catalog provider identity', async () => {
+    const store = new FileConfigStore(await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-')));
+    const initial = await store.getConfig();
+    const baseProvider = initial.providers[0];
+    if (!baseProvider) throw new Error('Expected the default provider fixture.');
+
+    await expect(store.saveConfig({
+      providers: [{ ...baseProvider, catalogProviderId: 'deepseek' }],
+    })).resolves.toMatchObject({
+      providers: [{ id: baseProvider.id, catalogProviderId: 'deepseek' }],
+    });
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ id: baseProvider.id, catalogProviderId: 'deepseek' }],
+    });
+
+    const detached = await store.saveConfig({
+      providers: [{ ...baseProvider, catalogProviderId: null }],
+    });
+    expect(detached.providers[0]).toHaveProperty('catalogProviderId', null);
+    await expect(store.getConfig()).resolves.toMatchObject({
+      providers: [{ id: baseProvider.id, catalogProviderId: null }],
+    });
+  });
+
   it('persists preset and custom provider icons and supports restoring automatic matching', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);

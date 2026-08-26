@@ -147,12 +147,10 @@ Renderer 的薄 runtime facade，只持有：
 
 Runtime config 的唯一 renderer state owner，持有共享配置文档并负责：
 
-- Provider 保存与 active provider 回退。
 - Composer 模型选择。
 - Runtime preferences。
-- Provider model discovery。
 
-该 hook 只依赖 Core `saveConfig` 与 `fetchProviderModels`。Provider state 到 config input 的映射由纯函数集中处理；Bootstrap 和 Hook mutation 通过 `replaceConfig` 更新同一份状态，不复制第二个 config owner。图片生成连接、secret 安全投影和连通性测试由 Image Generation renderer controller 与 typed Feature client 独立持有，不能回流根 config。
+该 hook 只依赖 Core `saveConfig`。Model Provider Feature 独立持有 provider CRUD、secret 安全投影与模型发现，并通过只读 projection 合入这份共享配置，使聊天和任务模型选择保持同步；它们不复制第二个 Core config owner。图片生成连接、secret 安全投影和连通性测试同样由 Image Generation renderer controller 与 typed Feature client 独立持有。
 
 ### `useRuntimeCapabilityState.ts`
 

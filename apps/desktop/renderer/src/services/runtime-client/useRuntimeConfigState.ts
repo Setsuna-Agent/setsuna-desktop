@@ -1,16 +1,14 @@
 import type {
   DesktopRuntimeClient,
   ProviderConfigState,
-  RuntimeAvailableModelsResponse,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeFetchModelsInput,
 } from '@setsuna-desktop/contracts';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type RuntimeConfigClient = Pick<
   DesktopRuntimeClient,
-  'fetchProviderModels' | 'saveConfig'
+  'saveConfig'
 >;
 
 export type RuntimePreferenceInput = Pick<
@@ -28,34 +26,20 @@ export type RuntimePreferenceInput = Pick<
 
 type RuntimeConfigStateOptions = {
   client: RuntimeConfigClient;
+  modelProvider?: ModelProviderProjectionService;
 };
 
-export function providerSaveConfigInput(
-  providers: ProviderConfigState[],
-  apiKeysByProviderId: Record<string, string>,
-  currentActiveProviderId?: string,
-): Pick<RuntimeConfigInput, 'activeProviderId' | 'providers'> {
-  const activeProviderId = providers.some(
-    (provider) => provider.id === currentActiveProviderId && provider.enabled,
-  )
-    ? currentActiveProviderId
-    : providers.find((provider) => provider.enabled)?.id ?? providers[0]?.id;
-
-  return {
-    activeProviderId,
-    providers: providers.map((provider) => ({
-      id: provider.id,
-      name: provider.name,
-      provider: provider.provider,
-      baseUrl: provider.baseUrl,
-      enabled: provider.enabled,
-      icon: provider.icon ?? null,
-      proxyRoute: provider.proxyRoute,
-      apiKey: apiKeysByProviderId[provider.id] || undefined,
-      models: provider.models,
-    })),
-  };
-}
+export type ModelProviderProjectionService = Readonly<{
+  providerProjection(): Readonly<{
+    activeProviderId?: string;
+    providers: ProviderConfigState[];
+  }> | null;
+  selectProviderModel(providerId: string, modelId: string): Promise<Readonly<{
+    activeProviderId?: string;
+    providers: ProviderConfigState[];
+  }>>;
+  subscribe(listener: () => void): () => void;
+}>;
 
 export function providerModelSelectionConfigInput(
   config: RuntimeConfigState,
@@ -67,6 +51,7 @@ export function providerModelSelectionConfigInput(
     providers: config.providers.map((provider) => ({
       id: provider.id,
       name: provider.name,
+      ...(provider.catalogProviderId ? { catalogProviderId: provider.catalogProviderId } : {}),
       provider: provider.provider,
       baseUrl: provider.baseUrl,
       enabled: provider.id === providerId ? true : provider.enabled,
@@ -86,16 +71,28 @@ export function providerModelSelectionConfigInput(
  * Capability mutations may replace this state through `replaceConfig`, but no other
  * renderer coordinator keeps a second config copy.
  */
-export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
+export function useRuntimeConfigState({ client, modelProvider }: RuntimeConfigStateOptions) {
   const [config, setConfig] = useState<RuntimeConfigState | null>(null);
   const confirmedConfigRef = useRef<RuntimeConfigState | null>(null);
   const modelSelectionRequestRef = useRef(0);
   const modelSelectionSaveTailRef = useRef<Promise<void>>(Promise.resolve());
 
   const replaceConfig = useCallback((nextConfig: RuntimeConfigState) => {
-    confirmedConfigRef.current = nextConfig;
-    setConfig(nextConfig);
-  }, []);
+    const merged = mergeProviderProjection(nextConfig, modelProvider?.providerProjection() ?? null);
+    confirmedConfigRef.current = merged;
+    setConfig(merged);
+  }, [modelProvider]);
+
+  useEffect(() => modelProvider?.subscribe(() => {
+    const projection = modelProvider.providerProjection();
+    if (!projection) return;
+    setConfig((current) => {
+      if (!current) return current;
+      const merged = mergeProviderProjection(current, projection);
+      confirmedConfigRef.current = merged;
+      return merged;
+    });
+  }), [modelProvider]);
 
   const saveConfig = useCallback(async (input: RuntimeConfigInput) => {
     const nextConfig = await client.saveConfig(input);
@@ -104,20 +101,6 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     return nextConfig;
   }, [client]);
 
-  const saveProviders = useCallback(
-    async (
-      providers: ProviderConfigState[],
-      apiKeysByProviderId: Record<string, string>,
-    ) => {
-      await saveConfig(providerSaveConfigInput(
-        providers,
-        apiKeysByProviderId,
-        config?.activeProviderId,
-      ));
-    },
-    [config?.activeProviderId, saveConfig],
-  );
-
   const saveRuntimePreferences = useCallback(
     async (input: RuntimePreferenceInput) => {
       await saveConfig(input);
@@ -125,16 +108,10 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
     [saveConfig],
   );
 
-  const fetchProviderModels = useCallback(
-    async (input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse> => (
-      client.fetchProviderModels(input)
-    ),
-    [client],
-  );
-
   const selectProviderModel = useCallback(
     async (providerId: string, modelId: string) => {
       if (!config) return;
+      if (!modelProvider) throw new Error('Required model-provider Feature is unavailable.');
       const requestId = modelSelectionRequestRef.current + 1;
       modelSelectionRequestRef.current = requestId;
       const input = providerModelSelectionConfigInput(config, providerId, modelId);
@@ -153,9 +130,10 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
       // The composer reads the next-chat default synchronously, so an immediate send cannot
       // race the config round trip and accidentally dispatch the previously selected model.
       setConfig(optimistic);
-      const savedConfig = modelSelectionSaveTailRef.current.then(() => (
-        client.saveConfig(input)
-      ));
+      const savedConfig = modelSelectionSaveTailRef.current.then(async () => {
+        const projection = await modelProvider.selectProviderModel(providerId, modelId);
+        return mergeProviderProjection(confirmedConfigRef.current ?? config, projection);
+      });
       // Serialize model writes so late responses cannot apply an older selection after a newer one.
       modelSelectionSaveTailRef.current = savedConfig.then(
         () => undefined,
@@ -176,15 +154,25 @@ export function useRuntimeConfigState({ client }: RuntimeConfigStateOptions) {
         throw error;
       }
     },
-    [client, config],
+    [config, modelProvider],
   );
 
   return {
     config,
-    fetchProviderModels,
     replaceConfig,
-    saveProviders,
     saveRuntimePreferences,
     selectProviderModel,
+  };
+}
+
+function mergeProviderProjection(
+  config: RuntimeConfigState,
+  projection: ReturnType<ModelProviderProjectionService['providerProjection']>,
+): RuntimeConfigState {
+  if (!projection) return config;
+  return {
+    ...config,
+    activeProviderId: projection.activeProviderId,
+    providers: projection.providers,
   };
 }

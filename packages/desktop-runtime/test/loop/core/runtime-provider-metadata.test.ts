@@ -38,7 +38,7 @@ describe('runtime provider metadata merge', () => {
     expect(merged?.openAiResponses).toEqual({
       kind: 'response',
       responseId: 'resp_2',
-      items: [{ type: 'message', id: 'message_2', content: [] }],
+      items: [{ type: 'message', id: 'message_2', role: 'assistant', content: [] }],
     });
   });
 

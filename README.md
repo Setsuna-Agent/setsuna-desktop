@@ -27,7 +27,7 @@
   <a href="https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Setsuna-Agent/setsuna-desktop?display_name=tag&amp;sort=semver"></a>
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-black.svg"></a>
   <img alt="Supported platforms" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black.svg">
-  <img alt="Node.js 22.13 or newer" src="https://img.shields.io/badge/node-%3E%3D22.13.0-43853d.svg">
+  <img alt="Node.js 22.19 or newer" src="https://img.shields.io/badge/node-%3E%3D22.19.0-43853d.svg">
 </p>
 
 <p align="center">
@@ -150,7 +150,7 @@ For a guided codebase tour, start with the [documentation index](docs/README.md)
 
 ### Requirements
 
-- Node.js `>=22.13.0`
+- Node.js `>=22.19.0`
 - pnpm `7.33.7`
 
 ### Development

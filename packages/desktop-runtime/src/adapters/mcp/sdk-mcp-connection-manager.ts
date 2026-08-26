@@ -35,7 +35,7 @@ import type {
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
 import { recordInput } from '../../shared/unknown.js';
 import { UnavailableDesktopNativeBridge } from '../native/http-desktop-native-bridge.js';
-import type { FetchImpl } from '../model/provider-http.js';
+import type { FetchImpl } from '../network/fetch-impl.js';
 import type { McpElicitationExecutionContext, McpElicitationHandler } from './mcp-elicitation-coordinator.js';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from './mcp-oauth-coordinator.js';
 import {

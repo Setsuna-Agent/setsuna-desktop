@@ -42,9 +42,8 @@ export async function prepareSandboxCurlTrustBundle(
 }
 
 function windowsSystemCertificates(): readonly string[] {
-  // Node 22.13 satisfies the app's engine range but predates getCACertificates.
-  // The pinned Mozilla bundle remains usable there; newer Node versions also
-  // contribute the desktop account's Windows certificate-store view.
+  // Keep the feature check so older portable runtimes can still use the pinned
+  // Mozilla bundle even when the system certificate API is unavailable.
   const getCACertificates = (tls as typeof tls & {
     getCACertificates?: (type: 'system') => string[];
   }).getCACertificates;

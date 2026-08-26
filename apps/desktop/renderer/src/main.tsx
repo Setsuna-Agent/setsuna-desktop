@@ -15,6 +15,7 @@ import { App } from './app/App.js';
 import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
 import { ConversationDebugFeatureServiceBoundary } from './composition/ConversationDebugFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './composition/NetworkProxyFeatureBoundary.js';
+import { ModelProviderFeatureServiceBoundary } from './composition/ModelProviderFeatureBoundary.js';
 import { PluginManagementFeatureServiceBoundary } from './composition/PluginManagementFeatureBoundary.js';
 import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
@@ -74,7 +75,8 @@ async function bootstrapRenderer(): Promise<void> {
         <RendererFeatureViewsProvider views={features.views}>
           <UpdaterFeatureServiceBoundary service={features.updater}>
             <NetworkProxyFeatureServiceBoundary service={features.networkProxy}>
-              <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
+              <ModelProviderFeatureServiceBoundary service={features.modelProvider}>
+                <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
                 <CollaborationFeatureServiceBoundary service={features.collaboration}>
                   <UsageFeatureServiceBoundary service={features.usage}>
                     <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
@@ -88,7 +90,8 @@ async function bootstrapRenderer(): Promise<void> {
                     </RuntimeActivityFeatureServiceBoundary>
                   </UsageFeatureServiceBoundary>
                 </CollaborationFeatureServiceBoundary>
-              </ConversationDebugFeatureServiceBoundary>
+                </ConversationDebugFeatureServiceBoundary>
+              </ModelProviderFeatureServiceBoundary>
             </NetworkProxyFeatureServiceBoundary>
           </UpdaterFeatureServiceBoundary>
         </RendererFeatureViewsProvider>

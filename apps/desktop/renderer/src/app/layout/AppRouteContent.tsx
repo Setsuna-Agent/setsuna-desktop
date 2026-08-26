@@ -19,7 +19,6 @@ import type { ChatTurnActions } from '../../features/chat/hooks/useChatTurnActio
 import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/markdownLinkPreference.js';
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
-import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { usePluginManagementCapabilities } from '../../composition/usePluginManagementCapabilities.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
@@ -52,7 +51,6 @@ export function AppRouteContent({
   focusComposerRequest,
   projectWorkspace,
   runtime,
-  networkProxy,
   selectedCapabilitiesPluginId,
   settingsInitialSection,
   setActiveView,
@@ -89,7 +87,6 @@ export function AppRouteContent({
   focusComposerRequest: number;
   projectWorkspace: ProjectWorkspaceState;
   runtime: RuntimeClientState;
-  networkProxy: NetworkProxyFeatureView;
   selectedCapabilitiesPluginId: string | null;
   settingsInitialSection?: SettingsSectionId | null;
   setActiveView: Dispatch<SetStateAction<MainView>>;
@@ -216,10 +213,7 @@ export function AppRouteContent({
           config={runtime.config}
           initialSection={settingsInitialSection ?? undefined}
           skillExtraRoots={runtime.skillExtraRoots}
-          networkProxy={networkProxy}
           onBack={() => setActiveView('chat')}
-          onFetchProviderModels={runtime.fetchProviderModels}
-          onSaveProviders={runtime.saveProviders}
           onSaveRuntimePreferences={runtime.saveRuntimePreferences}
           onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
           onDeleteArchivedThread={runtime.permanentlyDeleteThread}

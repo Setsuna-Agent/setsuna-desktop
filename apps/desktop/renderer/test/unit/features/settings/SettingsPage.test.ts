@@ -2,6 +2,8 @@ import type { RuntimeThreadSummary } from '@setsuna-desktop/contracts';
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
 import { networkProxyFeature } from '@setsuna-desktop/feature-network-proxy/contracts';
 import { networkProxyRendererFeature } from '@setsuna-desktop/feature-network-proxy/renderer';
+import { modelProviderFeature } from '@setsuna-desktop/feature-model-provider/contracts';
+import { modelProviderRendererFeature } from '@setsuna-desktop/feature-model-provider/renderer';
 import { webDavSyncFeature } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import { webDavSyncRendererFeature } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { createElement } from 'react';
@@ -12,6 +14,7 @@ import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../src/shared/i18n/messages.js';
 
 const messageCatalog = composeRendererMessages(hostMessages, [
+  { module: modelProviderRendererFeature },
   { module: networkProxyRendererFeature },
   { module: webDavSyncRendererFeature },
 ]);
@@ -20,7 +23,17 @@ describe('SettingsSidebar', () => {
   it('groups settings navigation by purpose while preserving the section order', () => {
     const html = renderSettingsSidebar({
       activeSection: 'general',
-      featureSections: [],
+      featureSections: [{
+        descriptionKey: 'feature.modelProvider.description',
+        featureId: modelProviderFeature.id,
+        icon: () => createElement('svg', { 'data-settings-icon': 'model-provider' }),
+        location: 'settings',
+        navigationGroupId: 'models-and-services',
+        order: 200,
+        render: () => null,
+        sectionId: 'model-provider',
+        titleKey: 'feature.modelProvider.title',
+      }],
       onBack: vi.fn(),
       onSelectSection: vi.fn(),
     });

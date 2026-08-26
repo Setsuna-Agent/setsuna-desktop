@@ -22,6 +22,7 @@ import {
   TextArea,
   TextField,
 } from './primitives.js';
+import { SettingsDialog } from './SettingsDialog.js';
 
 /**
  * Concrete host implementation of the renderer Feature settings contract.
@@ -31,6 +32,7 @@ import {
 export const settingsViewUi = Object.freeze({
   Button: SettingsButton,
   Checkbox,
+  Dialog: SettingsDialog,
   EmptyState,
   Group: SettingsGroup,
   IconButton: SettingsIconButton,

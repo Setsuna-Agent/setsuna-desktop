@@ -23,7 +23,7 @@ import {
   reportOptionalRuntimeLoadFailures,
   useRuntimeCapabilityState,
 } from './useRuntimeCapabilityState.js';
-import { useRuntimeConfigState } from './useRuntimeConfigState.js';
+import { useRuntimeConfigState, type ModelProviderProjectionService } from './useRuntimeConfigState.js';
 import {
   useRuntimeThreadState,
   type RuntimeTurnSettlement,
@@ -33,6 +33,7 @@ export type LoadState = 'loading' | 'ready' | 'error';
 
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
+  modelProvider: ModelProviderProjectionService;
   onPluginSkillMutation?: () => Promise<void>;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
@@ -44,6 +45,7 @@ type RuntimeClientStateOptions = {
  */
 export function useRuntimeClientState({
   activeProjectId,
+  modelProvider,
   onPluginSkillMutation,
   onTurnSettled,
   setActiveProjectId,
@@ -73,7 +75,7 @@ export function useRuntimeClientState({
   const {
     replaceConfig,
     ...configState
-  } = useRuntimeConfigState({ client });
+  } = useRuntimeConfigState({ client, modelProvider });
   const {
     applyBootstrapResults: applyCapabilityBootstrapResults,
     refreshCapabilities,

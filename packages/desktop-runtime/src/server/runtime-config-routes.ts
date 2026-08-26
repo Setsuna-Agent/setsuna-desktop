@@ -1,7 +1,5 @@
-import type { RuntimeFetchModelsInput } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
-import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { ProviderProxyReferenceError } from '../adapters/store/file-config-store.js';
 import { RuntimeHttpError } from './http-error.js';
 import { readBody, sendJson } from './http-utils.js';
@@ -37,21 +35,6 @@ export async function handleRuntimeConfigRequest(
       }
       throw error;
     }
-    return true;
-  }
-
-  if (request.method === 'POST' && url.pathname === '/v1/config/models') {
-    const input = await readBody<RuntimeFetchModelsInput>(request, {});
-    const savedProvider = input.providerId
-      ? await runtime.configStore.getProviderConfig(input.providerId)
-      : await runtime.configStore.getActiveProviderConfig();
-    sendJson(response, 200, {
-      models: await fetchAvailableModels(
-        input,
-        savedProvider,
-        runtime.networkProxyFetch.forRoute(input.proxyRoute ?? savedProvider?.proxyRoute),
-      ),
-    });
     return true;
   }
 

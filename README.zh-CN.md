@@ -27,7 +27,7 @@
   <a href="https://github.com/Setsuna-Agent/setsuna-desktop/releases/latest"><img alt="最新版本" src="https://img.shields.io/github/v/release/Setsuna-Agent/setsuna-desktop?display_name=tag&amp;sort=semver"></a>
   <a href="LICENSE"><img alt="MIT 许可证" src="https://img.shields.io/badge/license-MIT-black.svg"></a>
   <img alt="支持 macOS、Windows 和 Linux" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black.svg">
-  <img alt="Node.js 22.13 或更高版本" src="https://img.shields.io/badge/node-%3E%3D22.13.0-43853d.svg">
+  <img alt="Node.js 22.19 或更高版本" src="https://img.shields.io/badge/node-%3E%3D22.19.0-43853d.svg">
 </p>
 
 <p align="center">
@@ -150,7 +150,7 @@ renderer 不会直接连接 runtime 端口、读取模型凭据或访问本地�
 
 ### 环境要求
 
-- Node.js `>=22.13.0`
+- Node.js `>=22.19.0`
 - pnpm `7.33.7`
 
 ### 开发环境

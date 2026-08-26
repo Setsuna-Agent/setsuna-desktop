@@ -55,7 +55,6 @@ const productionEntrypoints = new Set([
 const legacyHotspotLineBudgets = new Map([
   ['apps/desktop/main/src/data-root/coordinator.ts', 965],
   ['apps/desktop/renderer/src/features/chat/conversation/ChatMessageItem.tsx', 1_005],
-  ['apps/desktop/renderer/src/features/settings/providers/ProviderSettings.tsx', 926],
   ['apps/desktop/renderer/src/shared/i18n/messages.ts', 1_172],
   ['packages/desktop-runtime/src/adapters/mcp/sdk-mcp-connection-manager.ts', 993],
   ['packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts', 974],

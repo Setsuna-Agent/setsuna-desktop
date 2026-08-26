@@ -27,6 +27,8 @@ export type ModelIconConfig = BrandIconConfig;
 export type ProviderConfigState = {
   id: string;
   name: string;
+  /** Pi built-in provider identity. `null` marks an explicitly custom service; omitted values are legacy records. */
+  catalogProviderId?: string | null;
   provider: ModelProviderKind;
   baseUrl: string;
   enabled: boolean;
@@ -225,6 +227,8 @@ export type RuntimeAvailableModelsResponse = {
 export type ProviderConfigInput = {
   id?: string;
   name?: string;
+  /** `null` explicitly detaches a service from the Pi built-in catalog. */
+  catalogProviderId?: string | null;
   provider?: ModelProviderKind;
   baseUrl?: string;
   enabled?: boolean;

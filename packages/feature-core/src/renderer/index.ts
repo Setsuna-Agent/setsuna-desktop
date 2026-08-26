@@ -142,6 +142,7 @@ export type {
   RegisteredSettingsView,
   ResolvedToolResultView,
   SettingsButtonProps,
+  SettingsDialogProps,
   SettingsGroupProps,
   SettingsIconButtonProps,
   SettingsNavigationRowProps,

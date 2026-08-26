@@ -50,6 +50,12 @@ import {
 } from '@setsuna-desktop/feature-memory/contracts';
 import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import {
+  modelProviderRuntimeHostCapability,
+  modelProviderSamplingCapability,
+  type ModelProviderRuntimeHost,
+} from '@setsuna-desktop/feature-model-provider/contracts';
+import { modelProviderRuntimeFeature } from '@setsuna-desktop/feature-model-provider/runtime';
+import {
   pluginManagementRuntimeHostCapability,
   type PluginManagementRuntimeHost,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -79,11 +85,13 @@ import {
 import { workspaceDependenciesRuntimeFeature } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
 import { windowsSandboxRuntimeServiceCapability } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 import { windowsSandboxRuntimeFeature } from '@setsuna-desktop/feature-windows-sandbox/runtime';
+import { appendRuntimeDebugTraceSafely } from '../ports/runtime-debug-trace.js';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
   required: [
     browserRuntimeFeature,
+    modelProviderRuntimeFeature,
     pluginManagementRuntimeFeature,
     reviewRuntimeFeature,
     runtimeActivityRuntimeFeature,
@@ -108,6 +116,44 @@ export async function activateBuiltinRuntimeFeatures(
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
+      provideHostCapability(
+        modelProviderRuntimeHostCapability,
+        Object.freeze({
+          resolveProvider: (providerId?: string) => providerId
+            ? runtime.configStore.getProviderConfig?.(providerId) ?? Promise.resolve(null)
+            : runtime.configStore.getActiveProviderConfig(),
+          readProviderState: async () => {
+            const config = await runtime.configStore.getConfig();
+            return {
+              ...(config.activeProviderId ? { activeProviderId: config.activeProviderId } : {}),
+              providers: config.providers,
+            };
+          },
+          saveProviderState: async (input) => {
+            const config = await runtime.configStore.saveConfig(input);
+            return {
+              ...(config.activeProviderId ? { activeProviderId: config.activeProviderId } : {}),
+              providers: config.providers,
+            };
+          },
+          fetchForRoute: (route) => (
+            runtime.networkProxyFetch.forRoute(route) as typeof fetch
+          ),
+          reportReplayDecisions: (trace) => {
+            const spanId = `model-request:${trace.turnId}:${trace.afterEventSeq}`;
+            for (const payload of trace.decisions) {
+              appendRuntimeDebugTraceSafely(runtime.conversationDebugTraceSink, {
+                afterEventSeq: trace.afterEventSeq,
+                kind: 'provider.replay.decision',
+                payload,
+                spanId,
+                threadId: trace.threadId,
+                turnId: trace.turnId,
+              });
+            }
+          },
+        } satisfies ModelProviderRuntimeHost),
+      ),
       provideHostCapability(
         threadEventReaderCapability,
         runtime.threadEventReader,
@@ -254,6 +300,10 @@ export async function activateBuiltinRuntimeFeatures(
   });
 
   return completeFeatureHostActivation(composition, (host) => {
+    host.bind({
+      sampling: requiredCapability(modelProviderSamplingCapability),
+    }, ({ sampling }) => runtime.providerModelClient.bind(sampling));
+
     host.bind({
       tools: requiredCapability(browserRuntimeToolServiceCapability),
     }, ({ tools }) => runtime.browserToolHost.bind(tools));

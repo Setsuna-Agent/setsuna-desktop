@@ -1,5 +1,7 @@
 import type { RuntimeModelRequestStepSnapshot, RuntimeToolChoice, RuntimeToolDefinition } from './provider.js';
+import type { RuntimeMessageProviderMetadata } from './message-metadata.js';
 import type { RuntimeMessage } from './threads.js';
+import type { RuntimeUsage } from './usage.js';
 
 export type ModelResponseFormat = {
   type: 'json';
@@ -23,3 +25,17 @@ export type ModelRequest = {
   responseFormat?: ModelResponseFormat;
   signal?: AbortSignal;
 };
+
+export type ModelCompactionRequest = Pick<ModelRequest, 'model' | 'providerId' | 'messages' | 'signal'>;
+
+export type ModelCompactionResult =
+  | {
+      kind: 'summary';
+      summary: string;
+      usage?: RuntimeUsage;
+    }
+  | {
+      kind: 'native';
+      providerMetadata: RuntimeMessageProviderMetadata;
+      usage?: RuntimeUsage;
+    };

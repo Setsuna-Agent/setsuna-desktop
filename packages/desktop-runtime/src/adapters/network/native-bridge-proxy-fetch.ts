@@ -4,7 +4,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import { Agent, ProxyAgent, type Dispatcher } from 'undici';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
-import type { FetchImpl } from '../model/provider-http.js';
+import type { FetchImpl } from './fetch-impl.js';
 
 const PROXY_ENVIRONMENT_KEYS = [
   'HTTP_PROXY',

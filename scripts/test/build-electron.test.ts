@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import {
   createRuntimeBuildOptions,
@@ -32,5 +33,15 @@ describe('electron build externals', () => {
       outfile: path.join(projectRoot, 'dist/runtime/extension-worker-entry.js'),
       format: 'esm',
     });
+  });
+
+  it('keeps bundled Pi code out of Electron Builder production dependency collection', async () => {
+    const packageJson = JSON.parse(await readFile(
+      path.resolve('packages/features/model-provider/package.json'),
+      'utf8',
+    )) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
+
+    expect(packageJson.dependencies).not.toHaveProperty('@earendil-works/pi-ai');
+    expect(packageJson.devDependencies).toHaveProperty('@earendil-works/pi-ai', '0.84.3');
   });
 });

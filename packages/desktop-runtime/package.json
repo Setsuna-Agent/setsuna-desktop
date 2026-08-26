@@ -10,9 +10,6 @@
     "setsuna-desktop-runtime": "dist/cli.js"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.0",
-    "@ai-sdk/openai": "^4.0.0",
-    "@ai-sdk/openai-compatible": "^3.0.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
@@ -22,6 +19,7 @@
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
+    "@setsuna-desktop/feature-model-provider": "workspace:*",
     "@setsuna-desktop/feature-plugin-management": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-runtime-activity": "workspace:*",
@@ -29,7 +27,6 @@
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
     "@setsuna-desktop/feature-windows-sandbox": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
-    "ai": "^7.0.0",
     "node-pty": "^1.1.0",
     "undici": "7.29.0",
     "yaml": "^2.8.1",

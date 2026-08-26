@@ -153,6 +153,122 @@
   gap: 8px;
 }
 
+.sd-settings-dialog {
+  --chat-settings-divider: color-mix(in srgb, var(--app-border) 52%, transparent);
+}
+
+.sd-settings-dialog .ant-modal-container {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 12px;
+  background: var(--app-surface);
+}
+
+.sd-settings-dialog .ant-modal-header {
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--chat-settings-divider);
+  background: var(--app-surface);
+}
+
+.sd-settings-dialog .ant-modal-title {
+  color: var(--app-text);
+}
+
+.sd-settings-dialog__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.sd-settings-dialog__title-icon {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--chat-settings-divider);
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  background: var(--app-surface);
+}
+
+.sd-settings-dialog__title-copy {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sd-settings-dialog__title-copy strong,
+.sd-settings-dialog__title-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sd-settings-dialog__title-copy strong {
+  color: var(--app-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 19px;
+}
+
+.sd-settings-dialog__title-copy small {
+  color: var(--app-text-muted);
+  font-size: 11px;
+  font-weight: var(--app-font-weight);
+  line-height: 15px;
+}
+
+.sd-settings-dialog .ant-modal-close {
+  top: 6px;
+  right: 7px;
+  color: var(--app-text-muted);
+}
+
+.sd-settings-dialog .ant-modal-body {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.sd-settings-dialog__body {
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(100vh - 154px);
+  padding: 11px 14px 13px;
+  overflow: auto;
+}
+
+.sd-settings-dialog .ant-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 14px 10px;
+  border-top: 1px solid var(--chat-settings-divider);
+  background: var(--app-surface);
+  text-align: left;
+}
+
+@media (max-width: 760px) {
+  .sd-settings-dialog {
+    width: calc(100vw - 28px) !important;
+    max-width: calc(100vw - 28px);
+  }
+
+  .sd-settings-dialog .ant-modal-container {
+    max-height: calc(100vh - 28px);
+  }
+}
+
 .sd-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;

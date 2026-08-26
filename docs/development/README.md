@@ -4,7 +4,7 @@
 
 ## 环境
 
-- Node.js `>=22.13.0`
+- Node.js `>=22.19.0`
 - pnpm `7.33.7`（仓库 `packageManager`）
 - 原生依赖 `node-pty`
 - Git

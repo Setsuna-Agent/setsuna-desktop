@@ -1,8 +1,5 @@
 import type {
-  ProviderConfigState,
-  RuntimeAvailableModelsResponse,
   RuntimeConfigState,
-  RuntimeFetchModelsInput,
   RuntimeThread,
   RuntimeThreadSummary,
 } from '@setsuna-desktop/contracts';
@@ -10,7 +7,6 @@ import type { RegisteredSettingsView, RendererTranslate } from '@setsuna-desktop
 import {
   Archive,
   Bot,
-  HardDrive,
   Info,
   Keyboard,
   Puzzle,
@@ -18,19 +14,12 @@ import {
   Sparkles,
   Wrench,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
-import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
+import { useState, type ReactNode } from 'react';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
 import { SettingsPageHeading, settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
-import {
-  AutoSaveStatus,
-  LocalModelSettings,
-  idleSaveState,
-  type SaveState,
-} from './providers/ProviderSettings.js';
 import { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
 import { GeneralSettings } from './sections/GeneralSettings.js';
 import { PersonalizationSettings } from './sections/PersonalizationSettings.js';
@@ -73,7 +62,6 @@ const settingsSectionGroups = [
     id: 'models-and-services',
     labelKey: 'settings.group.modelsAndServices',
     sections: [
-      { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} />, order: 200 },
       { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} />, order: 300 },
     ],
   },
@@ -92,7 +80,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
   general: 'settings.section.general',
   shortcuts: 'settings.section.shortcuts',
   personalization: 'settings.section.personalization',
-  localLlm: 'settings.section.localLlm',
   taskModels: 'settings.section.taskModels',
   archives: 'settings.section.archives',
   runtime: 'settings.section.runtime',
@@ -101,7 +88,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
 
 const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, MessageKey>> = {
   shortcuts: 'settings.section.shortcutsDescription',
-  localLlm: 'settings.section.localLlmDescription',
   taskModels: 'settings.section.taskModelsDescription',
 };
 
@@ -110,10 +96,7 @@ export function SettingsPage({
   config,
   initialSection,
   skillExtraRoots,
-  networkProxy,
   onBack,
-  onFetchProviderModels,
-  onSaveProviders,
   onSaveRuntimePreferences,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
@@ -124,13 +107,7 @@ export function SettingsPage({
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
   skillExtraRoots: string[];
-  networkProxy: NetworkProxyFeatureView;
   onBack: () => void;
-  onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
-  onSaveProviders: (
-    providers: ProviderConfigState[],
-    apiKeysByProviderId: Record<string, string>,
-  ) => Promise<void>;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
@@ -143,14 +120,9 @@ export function SettingsPage({
   // initialSection 支持从聊天页引导卡片直达某个分区；设置页每次进入都会重新挂载，
   // 所以这里只需在挂载时取一次初始值。
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? 'general');
-  const [localModelSaveState, setLocalModelSaveState] = useState<SaveState>(() => idleSaveState());
   const activeFeatureSection = featureSections.find((section) => section.sectionId === activeSection);
   const activeSectionExtensions = featureViews.settings.listSectionExtensions(activeSection);
   const translateFeature: RendererTranslate = t;
-
-  useEffect(() => {
-    if (activeSection !== 'localLlm') setLocalModelSaveState(idleSaveState());
-  }, [activeSection]);
 
   const FeatureSettingsContent = activeFeatureSection?.render;
   const content = FeatureSettingsContent ? (
@@ -163,18 +135,6 @@ export function SettingsPage({
       <GeneralSettings config={config} onSave={onSaveRuntimePreferences} />
     ) : activeSection === 'shortcuts' ? (
       <KeyboardShortcutsSettings />
-    ) : activeSection === 'localLlm' ? (
-      config ? (
-        <LocalModelSettings
-          config={config}
-          proxyServers={networkProxy.state?.servers ?? []}
-          onFetchModels={onFetchProviderModels}
-          onSave={onSaveProviders}
-          onSaveStateChange={setLocalModelSaveState}
-        />
-      ) : (
-        <EmptyState title={t('settings.configUnavailable')} />
-      )
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
@@ -236,15 +196,12 @@ export function SettingsPage({
       <main className="desktop-settings-panel">
         <section
           className={`chat-user-settings__content ${
-            activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''
+            activeFeatureSection?.layout === 'wide' ? 'chat-user-settings__content--wide' : ''
           }`}
           data-settings-feature={activeFeatureSection?.featureId}
         >
           {activeFeatureSection?.pageHeading !== 'view' ? (
             <SettingsPageHeading
-              action={activeSection === 'localLlm' && localModelSaveState.status === 'error' && localModelSaveState.message ? (
-                <AutoSaveStatus state={localModelSaveState} />
-              ) : null}
               description={description}
               title={title}
             />

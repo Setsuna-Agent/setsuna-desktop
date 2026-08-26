@@ -9,6 +9,7 @@
     { "path": "./packages/features/image-generation/tsconfig.build.json" },
     { "path": "./packages/features/goal/tsconfig.build.json" },
     { "path": "./packages/features/memory/tsconfig.build.json" },
+    { "path": "./packages/features/model-provider/tsconfig.build.json" },
     { "path": "./packages/features/network-proxy/tsconfig.build.json" },
     { "path": "./packages/features/plugin-management/tsconfig.build.json" },
     { "path": "./packages/features/review/tsconfig.build.json" },

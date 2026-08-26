@@ -1,213 +1,118 @@
-# 模型适配器
+# Model Provider Feature
 
-源码目录：`packages/desktop-runtime/src/adapters/model/`
+模型供应商实现位于 `packages/features/model-provider/`。Desktop runtime 只保留稳定的 `ModelClient` port、图片资产解析 wrapper 与 Feature composition 绑定，不再维护协议客户端。
 
-模型层把 runtime 的 portable `ModelRequest` 和 stream event contract 适配到不同供应商，同时保留安全、可验证的协议原生续写信息。
+完整迁移决策与验收线见 [Model Provider Feature 与 Pi 协议迁移](../../designs/model-provider-pi-migration.md)。
 
-## 入口
+## 组装入口
 
-### `configured-model-client.ts`
+```text
+AgentLoop / Review / Vision / Thread title / Memory
+                         │
+                  ModelClient port
+                         │
+             ImageAssetResolvingModelClient
+                         │
+                 BindableModelClient
+                         │
+        modelProviderSamplingCapability
+                         │
+       feature-model-provider/runtime
+                         │
+          @earendil-works/pi-ai 0.84.3
+```
 
-`ConfiguredModelClient`：
+`model-provider` 是 required runtime/renderer Feature。Runtime factory 先创建 `BindableModelClient`，Feature 激活完成后把 sampling capability 绑定进去；激活失败不会退回旧协议栈。
 
-- 读取 active provider/model config。
-- 选择 provider client。
-- 处理无可用 provider 的 `TestModelClient` fallback。
-- 注入 debug trace。
+## Feature 所有权
 
-AgentLoop 只依赖 `ModelClient` port，不判断 provider kind。
+### Contracts
 
-### `image-asset-resolving-model-client.ts`
+`packages/features/model-provider/src/contracts/` 定义 Feature identity、runtime host/sampling capability、provider settings/model discovery typed operations 与 renderer state capability。Pi 类型不得进入这些 contracts、`RuntimeEvent` 或持久存储。
 
-在请求供应商前把 runtime managed image asset 解析为模型可见内容。它不扩大文件访问范围，也不接受任意本地路径。
+### Runtime
 
-## Provider clients
-
-### OpenAI-compatible Chat
-
-- `openai-chat-model-client.ts`
-- `openai-provider-messages.ts`
-- 共用 `provider-http.ts` / `provider-stream.ts`
-
-Portable semantic messages/tool calls/results 转成 `/chat/completions` 语义。未知厂商原始字段不持久化，Chat history 保持 semantic-only。
-
-### OpenAI Responses
-
-- `openai-responses-model-client.ts`
-- `openai-responses-extension-fetch.ts`
-- `openai-responses-native-events.ts`
-- `openai-responses-provider-metadata.ts`
-- `openai-responses-tool-arguments.ts`
-
-官方 AI SDK 负责标准 `/responses` request/stream；扩展 fetch/side-channel 处理 SDK schema 外但经过白名单的：
-
-- Encrypted reasoning。
-- Commentary/final phase。
-- Collab/extra item。
-- Native compaction replacement。
-- Response ID 和 replay metadata。
-
-Response ID 当前只持久化，不发送 `previous_response_id`。
-
-### Anthropic Messages
-
-- `anthropic-messages-model-client.ts`
-- `anthropic-provider-messages.ts`
-- `anthropic-native-metadata.ts`
-
-官方 AI SDK 负责 Messages transport。Raw chunk 只用于提取 signed/redacted thinking 和兼容 content blocks；未知 payload 不直接落盘。
-
-## AI SDK bridge
-
-### `ai-sdk-prompt.ts`
-
-统一：
-
-- Semantic messages。
-- System/developer instruction。
-- 图片。
-- Tool schema。
-- Tool choice。
-
-### `ai-sdk-stream-bridge.ts`
-
-把 `fullStream` 映射为 runtime：
-
-- Item start/delta/complete。
-- Text/reasoning。
-- Tool call。
-- Usage。
-- Done/error。
-
-### `ai-sdk-raw-event-order.ts`
-
-Responses 等扩展事件通过 side-channel 到达时，要在下一个 SDK raw 边界或流结束时释放，保持 provider 源顺序，不能让 native metadata event 超过对应 visible delta。
-
-## 共用 helper
+`packages/features/model-provider/src/runtime/` 拥有：
 
 | 文件 | 职责 |
 | --- | --- |
-| `provider-http.ts` | Endpoint、auth、fetch、HTTP error |
-| `provider-stream.ts` | Legacy SSE framing/JSON stream |
-| `provider-values.ts` | 不可信 payload 值收窄 |
-| `provider-message-content.ts` | 指令和图片内容 |
-| `provider-thinking.ts` | Thinking effort normalize |
-| `provider-usage.ts` | Usage normalize |
-| `provider-replay-context.ts` | Provider/source/semantic compatibility |
-| `provider-replay-debug.ts` | 脱敏 replay 诊断 |
-| `model-request-timeout.ts` | Request/stream timeout |
-| `model-discovery.ts` | 模型列表与 capability |
+| `feature.ts` | 注册 typed operations 并提供 sampling capability |
+| `pi-model-client.ts` | Provider 解析、Pi built-in/custom 分发、超时、取消和温度兼容重试 |
+| `pi-context.ts` | `ModelRequest`/tool/image/history 到 Pi context，v2/v3 replay |
+| `pi-stream-bridge.ts` | Pi stream 到 `ModelStreamEvent`、usage、v3 metadata |
+| `provider-catalog.ts` | 窄注册表筛选 Pi built-in 厂商/方案/模型，并恢复预置模型 compat metadata |
+| `model-discovery.ts` | 模型列表、能力解析、请求取消和超时上限 |
+| `responses-compactor.ts` | 唯一保留的窄原生协议调用：`/responses/compact` |
+| `model-request-timeout.ts` | 总超时与 idle timeout |
 
-## Semantic history 与 native replay
+预置厂商从 Pi provider factories 建立仅包含下列三种 API 的窄注册表，避免把 AWS、Google 等未支持协议的 SDK 打进桌面 runtime；自定义兼容服务直接使用对应 adapter：
 
-Portable history 始终来自 `RuntimeMessage`：
+- `@earendil-works/pi-ai/api/openai-completions`
+- `@earendil-works/pi-ai/api/openai-responses`
+- `@earendil-works/pi-ai/api/anthropic-messages`
 
-- Text。
-- Tool calls。
-- Tool results。
-- Portable compaction summary。
+Setsuna provider ID 是配置和 metadata 身份。预置配置的 Pi model 保留 `deepseek`、`openrouter`、`openai`、`anthropic` 等真实 provider identity 和模型 compat；自定义配置使用 canonical `openai`/`anthropic` fallback。
 
-Native metadata 只有在以下全部匹配时使用：
+### Renderer
 
-- Provider ID。
-- Provider kind/protocol。
-- Model。
-- Normalized endpoint fingerprint。
-- Semantic fingerprint。
+`packages/features/model-provider/src/renderer/` 持有 provider settings state、Pi 目录 typed client、自动保存、模型发现和 `model-provider` 设置视图。Host 设置页只负责 contribution 布局与品牌图标渲染，不再拥有 provider CRUD controller。
 
-任何不匹配都静默回退 semantic conversion，不能同时发送 native 与 semantic 两份 assistant/tool。
+预置服务的主流程是厂商、接入方案、API Key 和模型目录；协议、Base URL、代理、图标与模型 token/capability override 位于高级配置。选择“自定义兼容服务”后才展开协议、URL、同步模型和手动模型入口。
 
-## Metadata 白名单
+Provider projection 仍合入共享 `RuntimeConfigState`，供聊天模型选择和 Core task-model 设置读取；写 provider 配置只走 Feature operation。
 
-### Anthropic
+## 配置与 Secret
 
-保存可验证的 signed/redacted thinking/content blocks；legacy blocks 只在 Anthropic adapter 内兼容。
+原磁盘字段和值保持不变：
 
-### Responses
+- `openai-compatible` → Pi `openai-completions`
+- `openai-responses` → Pi `openai-responses`
+- `anthropic` → Pi `anthropic-messages`
 
-只保存白名单且嵌套结构通过校验的：
+可选 `catalogProviderId` 记录 Pi built-in provider identity。历史配置缺少该字段时，runtime 会用协议和规范化 Base URL 做唯一匹配以恢复 Pi compat；无法唯一匹配或显式切换到自定义服务时仍按自定义服务处理。API key 只保存在 `secrets.json`，切换厂商或自定义服务会先确认并清除旧端点的凭据与模型。
 
-- Message/output text/annotation。
-- Reasoning/encrypted content。
-- Function call。
-- Native compact 中必要的 function call output。
-- Compaction item。
-- Response ID。
+`FileConfigStore` 继续拥有 `config.json`/`secrets.json` 的锁与原子写入。Feature host 只暴露 provider 查询/保存及按 proxy route 解析的 fetch；API key 不进入 renderer state。
 
-合法 `phase` 可保留；非法 phase 或任何 item 无法完整清洗时整条 envelope 降级。
+## Replay metadata
 
-### 限制
+新请求只写 `schemaVersion: 3`：
 
-- JSON-safe 深拷贝。
-- 不保存 headers、API key、request metadata、完整 raw response。
-- 单 message metadata 上限 2 MiB。
-- 超限省略 metadata，并记录 verification warning。
+- `source`：Setsuna provider ID/kind、model、endpoint fingerprint。
+- `semanticFingerprint`：由 runtime 在 assistant 完成时绑定。
+- `assistantReplay.blocks`：text、thinking/signature、tool call/item ID。
+- `openAiResponsesCompaction.items`：Responses compact opaque replacement。
 
-## Tool call IDs
+只有 source 和 semantic fingerprint 都匹配时才恢复签名或 native item；否则退回 portable text/thinking/tool calls。历史 v2 Anthropic/Responses envelope 仍只读兼容。
 
-Provider vendor ID 可能跨轮复用。Runtime 在模型请求副本中：
-
-- 计算 transaction identity。
-- 生成 window-unique wire ID。
-- 同步改写 result。
-- 不修改持久化 portable message ID。
-
-无法消歧的同 transaction 重复 ID 在请求前失败，避免执行错误工具。
+所有 metadata 经过 JSON 清洗、2 MiB 单消息上限和持久化预留检查，不保存 header、API key 或完整 raw response。
 
 ## Compaction
 
-所有协议使用 portable summary。
+所有协议都有 portable summary。OpenAI Responses 额外支持原生 compact：
 
-OpenAI Responses 可以额外调用 native compact：
+1. 把真实待替换旧窗口转成 Responses input。
+2. POST `{baseUrl}/responses/compact`。
+3. 只接受恰好一个可回放 `compaction` item。
+4. 写入 v3 `openAiResponsesCompaction`。
+5. 同 replay boundary 才原生续写，否则使用 portable summary。
 
-- 输入是真实待替换旧模型窗口。
-- 输出完整 replacement item list。
-- 保存到 provider metadata。
-- 只在同 replay context 使用。
+## 新增协议或 Provider
 
-Portable summary由独立摘要请求生成，两者不能互相推导。
+1. 先扩展共享 provider kind/request contract，确认磁盘兼容策略。
+2. 在 `piApiForProvider` 与 `streamForProvider` 增加明确映射；不要新建 Core client。
+3. 定义 Pi model/context、tool choice、structured output 与 semantic fallback。
+4. 明确 replay 白名单、source 边界和 metadata 上限。
+5. 更新 Feature model discovery/settings。
+6. 添加 context、stream bridge、replay/compaction 与 runtime integration 测试。
 
-## Model discovery
+## 高收益测试
 
-`model-discovery.ts`：
-
-- 拉取 provider 模型列表。
-- 归一化 ID/name。
-- 推断/读取 thinking efforts、max output、vision。
-- 应用 timeout 和 payload limit。
-- 返回 contracts 的 capability state。
-
-Renderer provider settings 依赖这里的结果，不应维护另一套厂商模型表。
-
-## Timeout、取消与错误
-
-- 所有 provider request 接受 `AbortSignal`。
-- Request timeout 与用户 cancel 可区分。
-- HTTP error 截断不可信 body。
-- Stream 结束前 flush 有序 side-channel。
-- Partial assistant 状态由 AgentLoop termination 结算。
-- Usage 缺失时不伪造。
-
-## 新增 provider
-
-1. 扩展 contracts provider kind/capability。
-2. 实现 `ModelClient` adapter。
-3. 分开 prompt、transport、stream、usage、replay。
-4. 在 `ConfiguredModelClient` 注册。
-5. 在 discovery 支持。
-6. 定义 semantic fallback。
-7. 明确 metadata 白名单和上限。
-8. 更新 settings/provider branding。
-9. 添加 adapter、stream ordering、replay 和 integration tests。
-
-## 测试
-
-- `test/adapters/model/provider-adapters.test.ts`
-- `provider-replay-context.test.ts`
-- `model-request-timeout.test.ts`
-- `image-asset-resolving-model-client.test.ts`
-- `test/loop/core/runtime-provider-metadata.test.ts`
-- `runtime-model-message-order.test.ts`
-- AgentLoop history/compaction integration。
-- Contracts `message-metadata.test.ts`。
-
+- `packages/features/model-provider/test/runtime/pi-context.test.ts`
+- `packages/features/model-provider/test/runtime/provider-catalog.test.ts`
+- `packages/features/model-provider/test/renderer/provider-catalog.test.ts`
+- `packages/features/model-provider/test/runtime/pi-stream-bridge.test.ts`
+- `packages/features/model-provider/test/runtime/responses-compactor.test.ts`
+- `packages/desktop-runtime/test/integration/runtime-server/rest-config-models.test.ts`
+- `packages/desktop-runtime/test/adapters/model/image-asset-resolving-model-client.test.ts`
+- `packages/contracts/test/message-metadata.test.ts`
+- AgentLoop history、tool continuation 与 context compaction integration。
