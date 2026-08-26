@@ -14,6 +14,7 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `src/composition/` | Renderer Feature catalog、registry 与 native Feature adapter | [Feature Composition](../../../designs/feature-composition-architecture.md) |
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |
+| `packages/features/runtime-activity/src/renderer/` | 跨线程运行任务、后台服务管理与全局 Overlay | [App 与 runtime 状态](app-and-runtime-state.md) |
 | `src/features/settings/` | 外观、模型、runtime、数据根与 Feature 设置宿主 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `packages/features/usage/src/renderer/` | Usage 设置、会话投影、状态服务与样式 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `src/features/capabilities/` | Plugin、MCP、Skill、Hook 管理 | [Settings 与 capabilities](settings-and-capabilities.md) |

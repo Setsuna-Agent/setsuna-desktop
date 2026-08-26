@@ -86,7 +86,7 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 
 - 把 event writer 与 generated image cleanup 等跨 store 副作用收敛。
 - 保持 AgentLoop 只依赖一个 thread facade。
-- 透传 active turn 的有界 activity projection，供运行中心轮询而不复制消息历史。
+- 透传 active turn 的有界 activity projection，供 Runtime Activity Feature 轮询而不复制消息历史。
 - 删除/截断时协调相关 managed asset。
 
 它不是第二个持久化 store。

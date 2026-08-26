@@ -81,10 +81,7 @@ Updater 不再进入 App controller。Renderer composition 解析 Feature 提供
 
 Layout 只组合已经定义清楚的状态和 callback，不在 render 中发起 runtime 请求。
 
-`features/runtime-activity/` 实现全局运行中心：入口位于侧栏开关旁且不显示计数角标；打开时每两秒拉取一次
-`/v1/runtime-activities`，展示所有线程的 active turn 与持久后台服务，并复用
-thread-scoped cancel/terminate API。轮询、乐观移除和 latest-request guard 留在 feature
-hook；layout 只持有开关状态与顶栏入口，不从可能过期的线程列表派生隐藏计数。
+`packages/features/runtime-activity/src/renderer/` 实现全局运行中心：入口位于侧栏开关旁且不显示计数角标；打开时每两秒通过 typed Feature operation 拉取跨线程 active turn 与持久后台服务。Feature 自己拥有 DTO、聚合查询、终止操作、轮询、乐观移除、文案和样式；Core 继续拥有 turn、approval、thread 与后台进程生命周期。宿主 `composition/RuntimeActivityFeatureBoundary.tsx` 只注入标准按钮、i18n、项目名称和线程导航，layout 只持有开关状态与入口位置。
 
 ## Sidebar
 

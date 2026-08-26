@@ -1,33 +1,28 @@
 import type {
-  RuntimeApprovalRequest,
-  RuntimeActiveTaskState,
+  RuntimeActivityApproval,
   RuntimeActivityList,
-} from '@setsuna-desktop/contracts';
-import type { RuntimeContainer } from '../runtime-factory.js';
-
-type RuntimeActivitySource = Pick<
-  RuntimeContainer,
-  'agentLoop' | 'approvalGate' | 'backgroundShellProcesses' | 'threadStore'
->;
+  RuntimeActivityRuntimeHost,
+  RuntimeActiveTaskState,
+} from '../contracts/index.js';
 
 /** Build one bounded, user-facing view over active turns and persisted shell services. */
-export async function listRuntimeActivities(
-  runtime: RuntimeActivitySource,
+export async function projectRuntimeActivities(
+  host: RuntimeActivityRuntimeHost,
 ): Promise<RuntimeActivityList> {
-  const [threadSummaries, backgroundProcesses, approvalList] = await Promise.all([
-    runtime.threadStore.listThreads({ includeArchived: true, includeSide: true }),
-    runtime.backgroundShellProcesses.listAllBackgroundShellProcesses(),
-    runtime.approvalGate.listApprovals(),
+  const [threadSummaries, backgroundProcesses, approvals] = await Promise.all([
+    host.listThreads(),
+    host.listBackgroundShellProcesses(),
+    host.listApprovals(),
   ]);
   const threadById = new Map(threadSummaries.map((thread) => [thread.id, thread]));
-  const taskStates = pendingTaskStates(approvalList.approvals);
+  const taskStates = pendingTaskStates(approvals);
   const activeThreads = threadSummaries.flatMap((thread) => {
-    const turnId = runtime.agentLoop.activeTurnId(thread.id);
+    const turnId = host.activeTurnId(thread.id);
     return turnId ? [{ thread, turnId }] : [];
   });
   const activeProjections = await Promise.all(
     activeThreads.map(({ thread, turnId }) => (
-      runtime.threadStore.getTurnActivity(thread.id, turnId)
+      host.getTurnActivity(thread.id, turnId)
     )),
   );
   const tasks = activeThreads.map(({ thread, turnId }, index) => {
@@ -58,13 +53,13 @@ export async function listRuntimeActivities(
         threadTitle: owner?.title ?? null,
       };
     }),
-    capturedAt: new Date().toISOString(),
+    capturedAt: host.now().toISOString(),
     tasks,
   };
 }
 
 function pendingTaskStates(
-  approvals: RuntimeApprovalRequest[],
+  approvals: readonly RuntimeActivityApproval[],
 ): Map<string, RuntimeActiveTaskState> {
   const states = new Map<string, RuntimeActiveTaskState>();
   for (const approval of approvals) {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { translate } from '../../../../src/shared/i18n/I18nProvider.js';
 import {
   formatRuntimeActivityDuration,
   resolveRuntimeActivityLoadView,
   runtimeActivityCanOpenThread,
   runtimeServiceCanOpenThread,
   singleLineActivityCommand,
-} from '../../../../src/features/runtime-activity/runtimeActivityModel.js';
+} from '../../src/renderer/runtime-activity-model.js';
+import { runtimeActivityTestTranslate as zh } from './support.js';
 
 describe('runtime activity model', () => {
   it('distinguishes initial failures from loading and ready snapshots', () => {
@@ -46,7 +46,3 @@ describe('runtime activity model', () => {
     })).toBe(false);
   });
 });
-
-const zh = (key: Parameters<typeof translate>[1], params?: Parameters<typeof translate>[2]) => (
-  translate('zh-CN', key, params)
-);

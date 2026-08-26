@@ -14,7 +14,6 @@ import type {
   QueuedTurnInputResponse,
   DeleteQueuedTurnInputResponse,
   RegenerateMessageInput,
-  RuntimeActivityList,
   RuntimeApprovalList,
   RuntimeAvailableModelsResponse,
   RuntimeBackgroundShellProcessList,
@@ -98,9 +97,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       if (query.projectId) params.set('projectId', query.projectId);
       const suffix = params.size ? `?${params}` : '';
       return request<ThreadList>({ path: `/v1/threads${suffix}` });
-    },
-    listRuntimeActivities() {
-      return request<RuntimeActivityList>({ path: '/v1/runtime-activities' });
     },
     getThread(threadId: string) {
       return request<RuntimeThread>({

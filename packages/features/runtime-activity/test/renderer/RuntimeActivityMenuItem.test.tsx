@@ -1,11 +1,12 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { RuntimeActivityMenuItem } from '../../../../src/features/runtime-activity/RuntimeActivityMenuItem.js';
+import { RuntimeActivityMenuItem } from '../../src/renderer/RuntimeActivityMenuItem.js';
+import { runtimeActivityTestTranslate } from './support.js';
 
 describe('RuntimeActivityMenuItem', () => {
   it('exposes the runtime activity dialog through an accessible menu item', () => {
     const html = renderToStaticMarkup(
-      <RuntimeActivityMenuItem onClick={vi.fn()} />,
+      <RuntimeActivityMenuItem onClick={vi.fn()} translate={runtimeActivityTestTranslate} />,
     );
 
     expect(html).toContain('role="menuitem"');
