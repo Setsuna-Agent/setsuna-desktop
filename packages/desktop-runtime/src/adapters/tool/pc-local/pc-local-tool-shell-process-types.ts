@@ -108,6 +108,7 @@ export type ShellFailureSession = {
   exitCode?: number | null;
   signal?: NodeJS.Signals | string | null;
   sandboxed?: boolean;
+  sandboxProvider?: unknown;
   errorCode?: unknown;
   stdout?: unknown;
   stderr?: unknown;

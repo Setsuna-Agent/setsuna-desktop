@@ -2,7 +2,7 @@ import type {
   RendererTranslate,
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
-import { ArrowLeft, Eye, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import type {
   MemoryModelOption,
@@ -55,7 +55,6 @@ export function MemoryPreferencesSettingsView({
         />
         <NavigationRow
           actionLabel={translate('feature.memory.settings.view')}
-          icon={<Eye size={14} />}
           label={translate('feature.memory.settings.preview')}
           onClick={onOpenPreview}
         />

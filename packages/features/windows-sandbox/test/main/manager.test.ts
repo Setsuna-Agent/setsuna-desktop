@@ -58,7 +58,7 @@ describe('WindowsSandboxManager', () => {
       sidecarVersion: '0.1.0',
       state: 'ready',
     });
-    expect(runSidecar.mock.calls.map(([command]) => command)).toEqual(['status', 'install']);
+    expect(runSidecar.mock.calls.map(([command]) => command)).toEqual(['doctor', 'install']);
   });
 
   it('serializes elevated lifecycle actions', async () => {

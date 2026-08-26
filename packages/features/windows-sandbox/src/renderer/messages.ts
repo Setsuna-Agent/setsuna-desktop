@@ -7,10 +7,7 @@ export const windowsSandboxMessages = defineRendererMessageBundle({
     'zh-CN': {
       'feature.windowsSandbox.settings.title': 'Windows 沙箱',
       'feature.windowsSandbox.settings.nativeProvider': '原生权限沙箱',
-      'feature.windowsSandbox.settings.loading': '正在检测本机账户、防火墙与权限组件。',
       'feature.windowsSandbox.settings.defaultDescription': '使用受限令牌、NTFS ACL、Job Object 与 Windows 防火墙隔离命令。',
-      'feature.windowsSandbox.settings.readyDescription': '已启用离线与在线两个隔离账户；在线账户只能通过 Setsuna 本机代理访问网络。',
-      'feature.windowsSandbox.settings.version': '组件版本 {version}',
       'feature.windowsSandbox.settings.status.ready': '已就绪',
       'feature.windowsSandbox.settings.status.notInstalled': '未安装',
       'feature.windowsSandbox.settings.status.needsRepair': '需要修复',
@@ -29,10 +26,7 @@ export const windowsSandboxMessages = defineRendererMessageBundle({
     'en-US': {
       'feature.windowsSandbox.settings.title': 'Windows sandbox',
       'feature.windowsSandbox.settings.nativeProvider': 'Native permission sandbox',
-      'feature.windowsSandbox.settings.loading': 'Checking local accounts, firewall rules, and permission components.',
       'feature.windowsSandbox.settings.defaultDescription': 'Isolates commands with restricted tokens, NTFS ACLs, a Job Object, and Windows Firewall.',
-      'feature.windowsSandbox.settings.readyDescription': 'Offline and online isolation accounts are ready. The online account can reach the network only through Setsuna’s local proxy.',
-      'feature.windowsSandbox.settings.version': 'Component version {version}',
       'feature.windowsSandbox.settings.status.ready': 'Ready',
       'feature.windowsSandbox.settings.status.notInstalled': 'Not installed',
       'feature.windowsSandbox.settings.status.needsRepair': 'Needs repair',

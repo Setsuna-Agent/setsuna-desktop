@@ -2,7 +2,7 @@ import type {
   RendererTranslate,
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
-import { Download, RefreshCw, ShieldCheck, Trash2, Wrench } from 'lucide-react';
+import { Download, RefreshCw, Trash2, Wrench } from 'lucide-react';
 import type {
   DesktopWindowsSandboxState,
   WindowsSandboxDesktopBridge,
@@ -32,6 +32,7 @@ export function WindowsSandboxSettingsView({
   const sandbox = useWindowsSandbox(bridge);
   const busy = sandbox.busyAction !== null;
   const status = sandbox.status;
+  const description = statusDescription(status?.state, status?.reason, translate);
   const { Button, Group, Row, Section } = ui;
 
   const uninstall = () => {
@@ -45,7 +46,6 @@ export function WindowsSandboxSettingsView({
       <Group title={translate('feature.windowsSandbox.settings.title')}>
         <Row
           className="feature-windows-sandbox__status-row"
-          icon={<ShieldCheck size={18} aria-hidden="true" />}
           label={(
             <span className="feature-windows-sandbox__summary">
               <span className="feature-windows-sandbox__heading">
@@ -55,20 +55,13 @@ export function WindowsSandboxSettingsView({
                     className={`feature-windows-sandbox__status is-${statusTone(status.state)}`}
                     aria-atomic="true"
                     aria-live="polite"
-                  >
-                    {translate(STATUS_LABEL_KEYS[status.state])}
-                  </span>
-                ) : null}
-                {status?.sidecarVersion ? (
-                  <span
-                    className="feature-windows-sandbox__version"
-                    title={translate('feature.windowsSandbox.settings.version', { version: status.sidecarVersion })}
-                  >
-                    v{status.sidecarVersion}
-                  </span>
+                    aria-label={translate(STATUS_LABEL_KEYS[status.state])}
+                    role="status"
+                    title={translate(STATUS_LABEL_KEYS[status.state])}
+                  />
                 ) : null}
               </span>
-              <small>{statusDescription(status?.state, status?.reason, translate)}</small>
+              {description ? <small>{description}</small> : null}
             </span>
           )}
         >
@@ -128,10 +121,10 @@ function statusDescription(
   state: DesktopWindowsSandboxState | undefined,
   reason: string | undefined,
   translate: RendererTranslate,
-): string {
-  if (!state) return translate('feature.windowsSandbox.settings.loading');
+): string | null {
+  if (!state) return null;
+  if (state === 'ready' || state === 'not-installed') return null;
   if (reason) return reason;
-  if (state === 'ready') return translate('feature.windowsSandbox.settings.readyDescription');
   return translate('feature.windowsSandbox.settings.defaultDescription');
 }
 

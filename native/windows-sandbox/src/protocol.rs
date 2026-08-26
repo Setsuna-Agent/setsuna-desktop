@@ -238,6 +238,24 @@ pub enum SandboxErrorCode {
     Internal,
 }
 
+impl SandboxErrorCode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidArguments => "invalid-arguments",
+            Self::InvalidRequest => "invalid-request",
+            Self::ProtocolMismatch => "protocol-mismatch",
+            Self::UnsupportedPlatform => "unsupported-platform",
+            Self::UnsupportedPolicy => "unsupported-policy",
+            Self::NotInstalled => "not-installed",
+            Self::NeedsRepair => "needs-repair",
+            Self::ElevationCancelled => "elevation-cancelled",
+            Self::SetupFailed => "setup-failed",
+            Self::SpawnFailed => "spawn-failed",
+            Self::Internal => "internal",
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 #[error("{message}")]
 pub struct SandboxError {
@@ -278,6 +296,13 @@ impl SandboxError {
             SandboxErrorCode::SetupFailed => 7,
             SandboxErrorCode::SpawnFailed => 8,
             SandboxErrorCode::Internal => 10,
+        }
+    }
+
+    pub fn detailed_message(&self) -> String {
+        match &self.source {
+            Some(source) => format!("{}: {source:#}", self.message),
+            None => self.message.clone(),
         }
     }
 }
@@ -357,7 +382,7 @@ impl CommandOutput {
             version: None,
             error: Some(ErrorOutput {
                 code: error.code,
-                message: error.message.clone(),
+                message: error.detailed_message(),
             }),
             emit: true,
             exit_code: error.exit_code(),
@@ -424,5 +449,21 @@ mod tests {
         input.supervisor_pids.clear();
         let error = input.validate().expect_err("supervisor must fail closed");
         assert_eq!(error.code, SandboxErrorCode::InvalidRequest);
+    }
+
+    #[test]
+    fn failure_output_includes_the_underlying_os_error() {
+        let error = SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            "sandbox process creation failed",
+            std::io::Error::from_raw_os_error(5),
+        );
+        let output = CommandOutput::failure(&error);
+
+        assert!(output
+            .error
+            .expect("failure details")
+            .message
+            .contains("os error 5"));
     }
 }

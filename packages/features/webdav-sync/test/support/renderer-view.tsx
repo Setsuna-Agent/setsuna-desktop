@@ -69,6 +69,7 @@ export const testSettingsViewUi: SettingsViewUi = Object.freeze({
       onChange={(event) => onChange(event.currentTarget.checked)}
     /></label>
   ),
+  Toast: ({ message, tone }) => <div data-tone={tone}>{message}</div>,
   Tooltip: ({ children }) => children,
 });
 

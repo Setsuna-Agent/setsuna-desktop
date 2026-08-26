@@ -134,6 +134,17 @@ export function classifyShellSessionFailure(session: ShellFailureSession) {
       failure_stage: 'execution',
     };
   }
+  const sidecarFailure = windowsSandboxSidecarFailure(session);
+  if (sidecarFailure) {
+    return {
+      failure_kind: 'sandbox_unavailable',
+      failure_stage: 'preflight',
+      exit_code: session.exitCode,
+      signal: session.signal,
+      sandbox_error_code: sidecarFailure.code,
+      sandbox_error_message: sidecarFailure.message,
+    };
+  }
   if (session.sandboxed && isSandboxDeniedShellFailure(session)) {
     const suggestedReadableRoots = sandboxDeniedReadableRoots(session);
     return {
@@ -164,9 +175,34 @@ function isSandboxDeniedShellFailure(session: ShellFailureSession): boolean {
       /\bcode\s*:\s*['"]?(?:EPERM|EACCES)\b/i.test(output)
       && /\bsyscall\s*:\s*['"]?spawn\b/i.test(output)
     );
-  return /\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b|deny\(\d+\)|sandbox|seatbelt/i.test(output)
+  return /\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b|deny\(\d+\)|\bsandboxd\b|\bseatbelt\b/i.test(output)
     || nodeSpawnPermissionError
     || shellCommandHiddenBySandbox(output, session);
+}
+
+function windowsSandboxSidecarFailure(
+  session: ShellFailureSession,
+): { code: string; message: string } | null {
+  if (!session.sandboxed || session.sandboxProvider !== 'windows-native') return null;
+  const lines = `${String(session.stdout ?? '')}\n${String(session.stderr ?? '')}`
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reverse();
+  for (const line of lines) {
+    try {
+      const value = JSON.parse(line) as {
+        ok?: unknown;
+        error?: { code?: unknown; message?: unknown };
+      };
+      const code = typeof value.error?.code === 'string' ? value.error.code.trim() : '';
+      const message = typeof value.error?.message === 'string' ? value.error.message.trim() : '';
+      if (value.ok === false && code && message) return { code, message };
+    } catch {
+      // A command can print arbitrary non-JSON output before the sidecar diagnostic.
+    }
+  }
+  return null;
 }
 
 export function shellCommandHiddenBySandbox(

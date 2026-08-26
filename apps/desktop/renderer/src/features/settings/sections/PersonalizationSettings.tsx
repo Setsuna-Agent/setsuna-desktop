@@ -1,5 +1,5 @@
 import type { RuntimeConfigState } from '@setsuna-desktop/contracts';
-import { Code2, Palette, Sun } from 'lucide-react';
+import { Code2, Sun } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { TextArea } from '../../../shared/ui/primitives.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
@@ -44,7 +44,6 @@ export function PersonalizationSettings({
         <div className="chat-user-settings__group chat-user-settings__personalization-card">
           <div className="chat-user-settings__row">
             <span className="chat-user-settings__row-label">
-              <Palette size={14} />
               <span>{t('settings.personalization.setsunaStyle')}</span>
             </span>
             <SettingsChoiceGroup

@@ -15,8 +15,8 @@ mod wide;
 
 use crate::capability::{new_capability_record, policy_key, validate_capability_sid};
 use crate::protocol::{
-    CommandOutput, SandboxError, SandboxErrorCode, SandboxRunRequest, SandboxStatus,
-    SandboxStatusKind, SIDECAR_VERSION,
+    CommandOutput, PermissionProfile, SandboxError, SandboxErrorCode, SandboxRunRequest,
+    SandboxStatus, SandboxStatusKind, PROTOCOL_VERSION, SIDECAR_VERSION,
 };
 use crate::state::{
     InstalledState, SandboxAccountState, StateStore, OFFLINE_USERNAME, ONLINE_USERNAME,
@@ -34,10 +34,36 @@ pub fn status() -> Result<CommandOutput, SandboxError> {
     Ok(CommandOutput::status(current_status()))
 }
 
+/// Settings uses this deeper check. The runtime's per-command capability probe
+/// deliberately keeps using `status` so it does not spawn two extra processes.
+pub fn doctor() -> Result<CommandOutput, SandboxError> {
+    let status = current_status();
+    if status.state != SandboxStatusKind::Ready {
+        return Ok(CommandOutput::status(status));
+    }
+
+    let installed_version = status.installed_version.clone();
+    for (stage, network_access) in [("offline-account", false), ("online-account", true)] {
+        if let Err(error) = run_execution_probe(network_access) {
+            return Ok(CommandOutput::status(status_value(
+                SandboxStatusKind::NeedsRepair,
+                format!(
+                    "Windows sandbox execution check failed.\nStage: {stage}\nCode: {}\nDetails: {}",
+                    error.code.as_str(),
+                    error.detailed_message(),
+                ),
+                installed_version,
+            )));
+        }
+    }
+
+    Ok(CommandOutput::status(status))
+}
+
 pub fn install(repair: bool) -> Result<CommandOutput, SandboxError> {
     let existing = current_status();
     if !repair && existing.state == SandboxStatusKind::Ready {
-        return Ok(CommandOutput::status(existing));
+        return doctor();
     }
     let owner_sid = accounts::current_user_sid_string()?;
     elevation::run_elevated("install-elevated", &["--owner-sid", &owner_sid])?;
@@ -48,7 +74,7 @@ pub fn install(repair: bool) -> Result<CommandOutput, SandboxError> {
             installed.reason,
         ));
     }
-    Ok(CommandOutput::status(installed))
+    doctor()
 }
 
 pub fn uninstall() -> Result<CommandOutput, SandboxError> {
@@ -266,7 +292,13 @@ pub fn internal_child(
 fn current_status() -> SandboxStatus {
     let store = match state_store() {
         Ok(store) => store,
-        Err(error) => return status_value(SandboxStatusKind::NeedsRepair, error.message, None),
+        Err(error) => {
+            return status_value(
+                SandboxStatusKind::NeedsRepair,
+                error.detailed_message(),
+                None,
+            )
+        }
     };
     let installed = match store.read() {
         Ok(Some(state)) => state,
@@ -277,17 +309,167 @@ fn current_status() -> SandboxStatus {
                 None,
             )
         }
-        Err(error) => return status_value(SandboxStatusKind::NeedsRepair, error.message, None),
+        Err(error) => {
+            return status_value(
+                SandboxStatusKind::NeedsRepair,
+                error.detailed_message(),
+                None,
+            )
+        }
     };
     let installed_version = Some(installed.installed_version.clone());
     match validate_installation(&installed) {
         Ok(_) => status_value(SandboxStatusKind::Ready, "", installed_version),
         Err(error) => status_value(
             SandboxStatusKind::NeedsRepair,
-            error.message,
+            error.detailed_message(),
             installed_version,
         ),
     }
+}
+
+fn run_execution_probe(network_access: bool) -> Result<(), SandboxError> {
+    let store = state_store()?;
+    let workspace = store
+        .directory()
+        .parent()
+        .ok_or_else(|| {
+            SandboxError::new(
+                SandboxErrorCode::Internal,
+                "sandbox state directory has no parent for the execution check",
+            )
+        })?
+        .join("Sandbox Health Check");
+    fs::create_dir_all(&workspace).map_err(|error| {
+        SandboxError::with_source(
+            SandboxErrorCode::SpawnFailed,
+            format!(
+                "cannot create sandbox execution-check workspace {}",
+                workspace.display(),
+            ),
+            error,
+        )
+    })?;
+
+    let system_root = env::var_os("SystemRoot")
+        .or_else(|| env::var_os("SYSTEMROOT"))
+        .ok_or_else(|| {
+            SandboxError::new(
+                SandboxErrorCode::SpawnFailed,
+                "SystemRoot is unavailable; cannot create sandbox execution-check control files",
+            )
+        })?;
+    let system_root = PathBuf::from(system_root);
+    let system_directory = system_root.join("System32");
+    let whoami_path = system_directory.join("whoami.exe");
+    if !whoami_path.is_file() {
+        return Err(SandboxError::new(
+            SandboxErrorCode::SpawnFailed,
+            format!(
+                "sandbox execution-check command is missing: {}",
+                whoami_path.display(),
+            ),
+        ));
+    }
+    let control_parent = system_root.join("Temp");
+    // The stable workspace reuses one capability ACL. Control files remain in
+    // randomized system-temp children and are destroyed after each probe.
+    let suffix = format!("{}-{:016x}", std::process::id(), rand::random::<u64>());
+    let control_root = control_parent.join(format!("setsuna-sandbox-health-{suffix}"));
+    let working_root = control_root.join("work");
+    let request_path = control_root.join("sandbox-request.json");
+    let marker_name = format!("probe-{suffix}.txt");
+    let marker_path = workspace.join(&marker_name);
+
+    let result = (|| {
+        fs::create_dir_all(&working_root).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                format!(
+                    "cannot create sandbox execution-check control directory {}",
+                    control_root.display(),
+                ),
+                error,
+            )
+        })?;
+        let request = SandboxRunRequest {
+            protocol_version: PROTOCOL_VERSION,
+            execution_id: format!("health_{suffix}"),
+            supervisor_pids: vec![std::process::id()],
+            command: format!("\"{}\">{marker_name}", whoami_path.display()),
+            cwd: workspace.clone(),
+            workspace_root: workspace.clone(),
+            permission_profile: PermissionProfile::WorkspaceWrite,
+            // Match real exec_command plans, which grant the resolved native
+            // executable and its containing directory before process launch.
+            readable_roots: vec![workspace.clone(), whoami_path.clone(), system_directory],
+            writable_roots: vec![workspace.clone(), working_root.clone()],
+            ephemeral_writable_roots: vec![working_root.clone()],
+            denied_roots: Vec::new(),
+            denied_glob_reg_exp_sources: Vec::new(),
+            protected_writable_roots: Vec::new(),
+            network_access,
+            environment: BTreeMap::from([(
+                "SystemRoot".to_string(),
+                system_root.to_string_lossy().into_owned(),
+            )]),
+        };
+        let request_json = serde_json::to_vec(&request).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::Internal,
+                "cannot serialize sandbox execution-check request",
+                error,
+            )
+        })?;
+        fs::write(&request_path, request_json).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                format!(
+                    "cannot write sandbox execution-check request {}",
+                    request_path.display(),
+                ),
+                error,
+            )
+        })?;
+
+        let output = run(&request_path)?;
+        if output.exit_code != 0 {
+            return Err(SandboxError::new(
+                SandboxErrorCode::SpawnFailed,
+                format!(
+                    "sandbox execution-check command exited with code {}",
+                    output.exit_code,
+                ),
+            ));
+        }
+        let marker = fs::read(&marker_path).map_err(|error| {
+            SandboxError::with_source(
+                SandboxErrorCode::SpawnFailed,
+                format!(
+                    "sandbox execution-check command did not create {}",
+                    marker_path.display(),
+                ),
+                error,
+            )
+        })?;
+        let expected_username = if network_access {
+            ONLINE_USERNAME
+        } else {
+            OFFLINE_USERNAME
+        };
+        let identity = String::from_utf8_lossy(&marker).trim().to_ascii_lowercase();
+        if !identity.ends_with(&format!("\\{}", expected_username.to_ascii_lowercase())) {
+            return Err(SandboxError::new(
+                SandboxErrorCode::SpawnFailed,
+                format!("sandbox execution-check command returned unexpected identity: {identity}",),
+            ));
+        }
+        Ok(())
+    })();
+
+    let _ = fs::remove_file(&marker_path);
+    let _ = fs::remove_dir_all(&control_root);
+    result
 }
 
 fn validate_installation(state: &InstalledState) -> Result<PathBuf, SandboxError> {

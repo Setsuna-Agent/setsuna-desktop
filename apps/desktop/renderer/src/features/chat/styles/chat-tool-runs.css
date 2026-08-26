@@ -1072,15 +1072,6 @@ details.chat-tool-run > .chat-tool-run__summary:hover .chat-tool-run__action-lab
   gap: 6px;
 }
 
-.chat-tool-run--pending_approval .chat-tool-run__approval:has(> .chat-tool-run__actions) {
-  width: fit-content;
-  max-width: 100%;
-  padding: 10px;
-  border-radius: var(--app-radius-lg);
-  background: var(--app-surface);
-  box-shadow: var(--app-shadow-surface);
-}
-
 .chat-tool-run__approval-review {
   display: inline-flex;
   align-items: flex-start;

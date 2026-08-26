@@ -7,6 +7,10 @@ pub fn status() -> Result<CommandOutput, SandboxError> {
     )))
 }
 
+pub fn doctor() -> Result<CommandOutput, SandboxError> {
+    status()
+}
+
 pub fn install(_repair: bool) -> Result<CommandOutput, SandboxError> {
     unsupported()
 }

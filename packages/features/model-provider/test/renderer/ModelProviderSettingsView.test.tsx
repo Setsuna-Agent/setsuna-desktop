@@ -192,6 +192,44 @@ describe('ModelProviderSettingsView', () => {
     service.dispose();
   });
 
+  it('shows model discovery failures through the shared toast surface', async () => {
+    const user = userEvent.setup();
+    const provider: ProviderConfigState = {
+      id: 'custom-provider',
+      name: 'Custom',
+      catalogProviderId: null,
+      provider: 'openai-compatible',
+      baseUrl: 'https://custom.example/v1',
+      enabled: true,
+      apiKeySet: false,
+      apiKeyPreview: '',
+      models: [],
+    };
+    const service = new ModelProviderRendererStateService({
+      catalog: async () => ({ providers: [] }),
+      read: async () => ({ activeProviderId: provider.id, providers: [provider] }),
+      save: async (input) => stateFromInput(input),
+      discover: async () => {
+        throw new Error('provider rejected the request');
+      },
+    }, null);
+    service.start();
+    render(
+      <ModelProviderSettingsView
+        host={{ BrandIcon: () => null, BrandIconPicker: () => null, networkProxyBridge: null }}
+        service={service}
+        translate={translate}
+        ui={testUi}
+      />,
+    );
+
+    await user.click(await screen.findByRole('button', { name: '同步模型' }));
+
+    expect((await screen.findByRole('alert')).textContent)
+      .toContain('同步模型失败：provider rejected the request');
+    service.dispose();
+  });
+
   it('keeps discovery valid while a legacy custom identity is persisted as explicit null', async () => {
     const user = userEvent.setup();
     const discovery = deferred<{ models: Array<{ id: string; name: string }> }>();
@@ -645,4 +683,7 @@ const testUi = {
     <select {...props} onChange={(event) => onValueChange(event.currentTarget.value)}>{children}</select>
   ),
   TextField: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  Toast: ({ message, tone }: ComponentProps<SettingsViewUi['Toast']>) => (
+    <div data-tone={tone} role={tone === 'error' ? 'alert' : 'status'}>{message}</div>
+  ),
 } as unknown as SettingsViewUi;

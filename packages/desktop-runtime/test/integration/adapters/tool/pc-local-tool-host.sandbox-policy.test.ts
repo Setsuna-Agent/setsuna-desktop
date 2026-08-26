@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { realPathIfExists } from '../../../../src/adapters/tool/pc-local/pc-local-tool-paths.js';
 import { createShellSandboxExecutionPlan, shellSandboxCapability, shellSandboxProfile, shellSandboxUnavailableReason } from '../../../../src/adapters/tool/pc-local/pc-local-tools.js';
 import { ToolExecutionError } from '../../../../src/ports/tool-host.js';
+import type { ShellSandboxProvider } from '../../../../src/ports/shell-sandbox-provider.js';
 import { restrictedShellExecutionUnavailable, expectRestrictedShellUnavailable, createHost, StaticPolicyAmendmentStore, nodeCommand } from './pc-local-tool-host.support.js';
 
 describe('pc local shell sandbox policy', () => {
@@ -259,6 +260,30 @@ describe('pc local shell sandbox policy', () => {
       permissionProfile: 'danger-full-access',
       sandboxWorkspaceWrite: {},
     }, capability)).toBe('');
+  });
+
+  it('uses the Windows sandbox provider bound to the tool state during preflight', () => {
+    const readyCapability = {
+      executablePath: 'C:\\Program Files\\Setsuna Desktop\\setsuna-sandbox-win.exe',
+      provider: 'windows-native',
+      reason: '',
+      supported: true,
+    } as const;
+    const provider: ShellSandboxProvider = {
+      capability: () => readyCapability,
+      controlRoot: () => 'C:\\Windows\\Temp',
+      networkEnvironment: async () => ({}),
+      prepareEnvironment: (environment) => ({ environment, readableRoots: [] }),
+      writeRequest: async () => 'C:\\Windows\\Temp\\sandbox-request.json',
+    };
+
+    expect(shellSandboxUnavailableReason({
+      root: 'C:\\workspace',
+      osSandbox: true,
+      permissionProfile: 'workspace-write',
+      sandboxWorkspaceWrite: {},
+      shellSandboxProvider: provider,
+    })).toBe('');
   });
 
   it('builds a native Windows plan and fails closed for unrepresentable deny rules', async () => {

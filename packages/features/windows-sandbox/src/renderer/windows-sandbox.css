@@ -1,41 +1,52 @@
-.feature-windows-sandbox__status-row > :last-child {
-  align-items: center;
-  display: flex;
-  gap: 12px;
+.feature-windows-sandbox__status-row {
+  min-height: 62px;
 }
 
 .feature-windows-sandbox__summary {
   display: grid;
-  gap: 4px;
+  min-width: 0;
+  gap: 3px;
 }
 
-.feature-windows-sandbox__heading,
-.feature-windows-sandbox__actions {
+.feature-windows-sandbox__heading {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
 }
 
-.feature-windows-sandbox__summary small,
-.feature-windows-sandbox__version {
+.feature-windows-sandbox__actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.feature-windows-sandbox__summary small {
   color: var(--sd-color-text-muted, GrayText);
 }
 
+.feature-windows-sandbox__summary small {
+  line-height: 18px;
+  white-space: pre-wrap;
+}
+
 .feature-windows-sandbox__status {
+  display: inline-block;
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  font-size: 12px;
-  line-height: 20px;
-  padding: 0 8px;
+  color: var(--sd-color-text-muted, GrayText);
+  background: currentColor;
 }
 
 .feature-windows-sandbox__status.is-success {
-  background: color-mix(in srgb, var(--sd-color-success, #16803d) 14%, transparent);
   color: var(--sd-color-success, #16803d);
 }
 
 .feature-windows-sandbox__status.is-warning {
-  background: color-mix(in srgb, var(--sd-color-warning, #ea580c) 14%, transparent);
   color: var(--sd-color-warning, #ea580c);
 }
 
@@ -45,7 +56,6 @@
 }
 
 .feature-windows-sandbox__status.is-neutral {
-  background: var(--sd-color-surface-subtle, Canvas);
   color: var(--sd-color-text-muted, GrayText);
 }
 
