@@ -28,7 +28,6 @@ import {
   useRuntimeCapabilityState,
 } from './useRuntimeCapabilityState.js';
 import { useRuntimeConfigState } from './useRuntimeConfigState.js';
-import { useRuntimeUsageState } from './useRuntimeUsageState.js';
 import {
   useRuntimeThreadState,
   type RuntimeTurnSettlement,
@@ -38,6 +37,7 @@ export type LoadState = 'loading' | 'ready' | 'error';
 
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
+  onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
 
@@ -47,6 +47,7 @@ type RuntimeClientStateOptions = {
  */
 export function useRuntimeClientState({
   activeProjectId,
+  onTurnSettled,
   setActiveProjectId,
 }: RuntimeClientStateOptions) {
   const client = useMemo(() => createDesktopRuntimeClient(), []);
@@ -133,28 +134,13 @@ export function useRuntimeClientState({
     }
   }, [client, configState.selectProviderModel, setError]);
 
-  const {
-    applyBootstrapUsage,
-    refreshThreadUsage,
-    refreshUsage,
-    ...usageState
-  } = useRuntimeUsageState({
-    client,
-    currentThreadId,
-  });
-
   // React hooks cannot form a dependency cycle. The stable forwarding callback lets the
   // thread owner emit settlements while always invoking the latest domain refreshers.
-  turnSettlementHandlerRef.current = ({
-    refreshThreadUsage: shouldRefreshThreadUsage,
-    refreshUsage: shouldRefreshUsage,
-    threadId,
-  }) => {
+  turnSettlementHandlerRef.current = (settlement) => {
     void refreshCapabilities().catch((unknownError) => {
       reportRuntimeBackgroundFailure('capability refresh after turn', unknownError);
     });
-    if (shouldRefreshUsage) void refreshUsage();
-    if (shouldRefreshThreadUsage) void refreshThreadUsage(threadId);
+    onTurnSettled?.(settlement);
   };
 
   const refresh = useCallback(async () => {
@@ -174,7 +160,6 @@ export function useRuntimeClientState({
         pluginMarketplaceResult,
         pluginResult,
         skillResult,
-        usageResult,
       } = bootstrap.optional;
       replaceConfig(nextConfig);
       setProjects(projectList.projects);
@@ -189,13 +174,11 @@ export function useRuntimeClientState({
         pluginResult,
         pluginMarketplaceResult,
       });
-      applyBootstrapUsage(usageResult);
       reportOptionalRuntimeLoadFailures([
         ['skills', skillResult],
         ['MCP', mcpResult],
         ['plugins', pluginResult],
         ['plugin marketplace', pluginMarketplaceResult],
-        ['usage', usageResult],
       ]);
       await threadBootstrap;
       setLoadState('ready');
@@ -206,7 +189,6 @@ export function useRuntimeClientState({
     }
   }, [
     applyBootstrapThreads,
-    applyBootstrapUsage,
     applyCapabilityBootstrapResults,
     client,
     replaceConfig,
@@ -220,7 +202,6 @@ export function useRuntimeClientState({
   return {
     ...capabilityState,
     ...configState,
-    ...usageState,
     ...threadState,
     client,
     error,
@@ -240,7 +221,6 @@ export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
   | 'getConfig'
-  | 'getUsage'
   | 'listMcpServers'
   | 'listPluginMarketplace'
   | 'listPlugins'
@@ -262,7 +242,6 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
       client.listMcpServers(),
       client.listPlugins(),
       client.listPluginMarketplace(),
-      client.getUsage(),
     ]),
   ]);
   const [nextConfig, threadList, allThreadList, projectList] = core;
@@ -271,7 +250,6 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
     mcpResult,
     pluginResult,
     pluginMarketplaceResult,
-    usageResult,
   ] = optional;
   return {
     core: { nextConfig, threadList, allThreadList, projectList },
@@ -280,7 +258,6 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
       mcpResult,
       pluginResult,
       pluginMarketplaceResult,
-      usageResult,
     },
   };
 }

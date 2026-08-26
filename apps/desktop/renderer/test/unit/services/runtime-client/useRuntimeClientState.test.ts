@@ -30,11 +30,10 @@ describe('loadRuntimeBootstrap', () => {
 
 function bootstrapClient(): Pick<
   DesktopRuntimeClient,
-  'getConfig' | 'getUsage' | 'listMcpServers' | 'listPluginMarketplace' | 'listPlugins' | 'listProjects' | 'listSkills' | 'listThreads'
+  'getConfig' | 'listMcpServers' | 'listPluginMarketplace' | 'listPlugins' | 'listProjects' | 'listSkills' | 'listThreads'
 > {
   return {
     getConfig: async () => ({ providers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['getConfig']>>,
-    getUsage: async () => ({}) as Awaited<ReturnType<DesktopRuntimeClient['getUsage']>>,
     listMcpServers: async () => ({ servers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['listMcpServers']>>,
     listPluginMarketplace: async () => ({ plugins: [], errors: [] }),
     listPlugins: async () => ({ plugins: [] }),

@@ -40,6 +40,9 @@ export const testSettingsViewUi: SettingsViewUi = Object.freeze({
   NavigationRow: ({ actionLabel, disabled, label, onClick }) => (
     <button disabled={disabled} onClick={onClick}>{label}{actionLabel}</button>
   ),
+  PageHeading: ({ action, description, title }) => (
+    <header><h1>{title}</h1>{description}{action}</header>
+  ),
   Row: ({ children, description, label }) => <div>{label}{description}{children}</div>,
   Section: ({ children, className, featureId }) => (
     <section className={className} data-feature-id={featureId}>{children}</section>

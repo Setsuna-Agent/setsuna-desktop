@@ -1,10 +1,14 @@
 import type { RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
+import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
+import { createNoopUsageRendererStateService } from '@setsuna-desktop/feature-usage/contracts';
+import { usageRendererFeature } from '@setsuna-desktop/feature-usage/renderer';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
+import { UsageFeatureServiceBoundary } from '../../../../../src/composition/UsageFeatureBoundary.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
-import { AppTooltip } from '../../../../../src/shared/ui/primitives.js';
+import { hostMessages } from '../../../../../src/shared/i18n/messages.js';
 import type {
   ConversationOverviewState,
 } from '../../../../../src/features/chat/conversation/chatConversationOverview.js';
@@ -119,58 +123,30 @@ describe('ConversationOverviewPanel', () => {
     expect(html).toContain('Apply focused change');
   });
 
-  it('shows total usage, an integer cache hit rate, and call count', () => {
-    const props = {
-      ...baseProps,
-      compact: false,
-      threadUsage: {
-        records: [],
-        summary: {
-          inputTokens: 800_000,
-          cachedInputTokens: 756_000,
-          outputTokens: 50_000,
-          totalTokens: 850_000,
-          recordCount: 1,
-          byDay: [],
-          byProvider: [],
-          byModel: [],
-        },
-      },
-    };
-    const html = renderOverviewPanel(props);
+  it('omits usage diagnostics when the optional Usage feature is unavailable', () => {
+    const html = renderOverviewPanel({ ...baseProps, compact: false });
 
-    expect(html).toContain('850.0K · 95% · 1 次');
-    expect(html).not.toContain('已完成');
-    expect(html).not.toContain('title="850.0K · 95% · 1 次"');
-
-    const panel = captureOverviewPanel(props);
-    const usageRow = panel.props.children[1].props.children[3];
-    const usageTooltip = usageRow.props.children[2];
-    expect(usageTooltip.type).toBe(AppTooltip);
-    expect(usageTooltip.props.children.props.title).toBeUndefined();
-
-    const tooltipHtml = renderToStaticMarkup(createElement(
-      I18nProvider,
-      { initialLocale: 'zh-CN' },
-      usageTooltip.props.title,
-    ));
-    expect(tooltipHtml).toContain('总 Token');
-    expect(tooltipHtml).toContain('缓存命中率');
-    expect(tooltipHtml).toContain('调用次数');
-    expect(tooltipHtml).toContain('850.0K');
-    expect(tooltipHtml).toContain('95%');
-    expect(tooltipHtml).toContain('1 次');
+    expect(html).not.toContain('用量与诊断');
+    expect(html).not.toContain('0 · 0% · 0 次');
   });
 
 });
+
+const messageCatalog = composeRendererMessages(hostMessages, [{ module: usageRendererFeature }]);
 
 function renderOverviewPanel(
   props: Parameters<typeof ConversationOverviewPanel>[0],
 ): string {
   return renderToStaticMarkup(createElement(
     I18nProvider,
-    { initialLocale: 'zh-CN' },
-    createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
+    { initialLocale: 'zh-CN', messageCatalog },
+    createElement(
+      UsageFeatureServiceBoundary,
+      {
+        service: createNoopUsageRendererStateService(),
+        children: createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
+      },
+    ),
   ));
 }
 
@@ -182,8 +158,14 @@ function captureOverviewPanel(props: Parameters<typeof ConversationOverviewPanel
   }
   renderToStaticMarkup(createElement(
     I18nProvider,
-    { initialLocale: 'zh-CN' },
-    createElement(ToastProvider, null, createElement(Capture)),
+    { initialLocale: 'zh-CN', messageCatalog },
+    createElement(
+      UsageFeatureServiceBoundary,
+      {
+        service: createNoopUsageRendererStateService(),
+        children: createElement(ToastProvider, null, createElement(Capture)),
+      },
+    ),
   ));
   if (!captured.panel) throw new Error('Conversation overview panel did not render.');
   return captured.panel;
@@ -259,5 +241,4 @@ const baseProps = {
   onExpand: () => undefined,
   onOpenReview: () => undefined,
   onOpenThread: () => undefined,
-  threadUsage: null,
 };

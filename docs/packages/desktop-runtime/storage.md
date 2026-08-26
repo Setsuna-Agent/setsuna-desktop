@@ -206,13 +206,16 @@ runtime/memories/
 
 ## Usage
 
-`file-usage-store.ts`：
+`packages/features/usage/src/runtime/file-usage-store.ts`：
 
 - Append-only `usage.jsonl`。
 - 按 thread/provider/model/time 查询。
 - Summary/bucket 聚合。
 - 只有模型返回 usage 时写记录。
 - Config provider metadata 用于安全展示，不保存 API key。
+
+Agent loop 仅依赖 Core `UsageRecorder` 窄口；composition 在 Usage Runtime Feature 激活后把
+`usage.control` 绑定到稳定 recorder proxy。查询、分页、bucket 聚合和持久化实现都不在 Core runtime。
 
 部分写入/坏尾行需要有明确读取策略，不能让一条坏记录抹掉全部历史。
 

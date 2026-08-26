@@ -59,9 +59,8 @@ export type RuntimeThreadBootstrap = {
 };
 
 export type RuntimeTurnSettlement = {
-  refreshThreadUsage: boolean;
-  refreshUsage: boolean;
   threadId: string;
+  usageChanged: boolean;
 };
 
 type RuntimeThreadStateOptions = {
@@ -75,7 +74,7 @@ type RuntimeThreadStateOptions = {
 /**
  * Owns the main conversation's thread snapshots, SSE sequence, and active-turn lifecycle.
  *
- * Cross-domain capability/usage refreshes are emitted through `onTurnSettled` so this hook
+ * Cross-domain refreshes are emitted through `onTurnSettled` so this hook
  * does not depend on those state domains.
  */
 export function useRuntimeThreadState({
@@ -308,11 +307,9 @@ export function useRuntimeThreadState({
         for (const event of coreEvents) {
           if (event.type === 'runtime.error') onError(event.payload.message);
           if (event.type !== 'turn.completed') continue;
-          const refreshUsage = Boolean(event.payload.usage);
           onTurnSettled({
             threadId: event.threadId,
-            refreshUsage,
-            refreshThreadUsage: refreshUsage,
+            usageChanged: Boolean(event.payload.usage),
           });
         }
       },
@@ -363,11 +360,9 @@ export function useRuntimeThreadState({
           terminalTurnIdsRef.current.add(turnId);
           setActiveTurnId((active) => (active === turnId ? null : active));
           refreshThreadsSoon(true);
-          onTurnSettled({
-            threadId,
-            refreshUsage: true,
-            refreshThreadUsage: false,
-          });
+          // Polling is the fallback when the terminal SSE event was missed. By this point
+          // the runtime turn has settled, so conservatively invalidate usage projections.
+          onTurnSettled({ threadId, usageChanged: true });
           continuePolling = false;
         } else if (snapshotActiveTurnId !== turnId) {
           terminalTurnIdsRef.current.delete(snapshotActiveTurnId);

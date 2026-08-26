@@ -37,6 +37,15 @@ import {
 } from '@setsuna-desktop/feature-network-proxy/renderer';
 import { terminalRendererFeature } from '@setsuna-desktop/feature-terminal/renderer';
 import {
+  createNoopUsageRendererStateService,
+  usageRendererStateCapability,
+  type UsageRendererStateService,
+} from '@setsuna-desktop/feature-usage/contracts';
+import {
+  usageRendererFeature,
+  usageRendererHostCapability,
+} from '@setsuna-desktop/feature-usage/renderer';
+import {
   updaterRendererFeature,
   updaterRendererHostCapability,
   updaterRendererStateCapability,
@@ -59,6 +68,7 @@ import {
   type RendererFeatureViews,
 } from './feature-view-registries.js';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
+import { usageRendererHost } from './UsageFeatureBoundary.js';
 import { hostMessages } from '../shared/i18n/messages.js';
 import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 
@@ -78,6 +88,7 @@ const rendererFeatures = defineRendererFeatureHost({
     imageGenerationRendererFeature,
     goalRendererFeature,
     memoryRendererFeature,
+    usageRendererFeature,
     visionRecognitionRendererFeature,
     webDavSyncRendererFeature,
     workspaceDependenciesRendererFeature,
@@ -91,6 +102,7 @@ export type ActiveRendererFeatures = Readonly<{
   messages: ComposedRendererMessages<AppLocale>;
   networkProxy: NetworkProxyRendererStateService;
   updater: UpdaterRendererStateService;
+  usage: UsageRendererStateService;
   views: RendererFeatureViews;
 }>;
 
@@ -131,6 +143,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
             ?? Promise.resolve(false),
         }),
       ),
+      provideHostCapability(usageRendererHostCapability, usageRendererHost),
       provideHostCapability(
         webDavSyncRendererHostCapability,
         Object.freeze({ bridge: window.setsunaDesktop?.webdavSync ?? null }),
@@ -157,6 +170,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       ),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
       updater: requiredCapability(updaterRendererStateCapability),
+      usage: optionalCapability(
+        usageRendererStateCapability,
+        createNoopUsageRendererStateService,
+      ),
     });
     return Object.freeze({
       collaboration: dependencies.collaboration,
@@ -165,6 +182,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       messages,
       networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,
+      usage: dependencies.usage,
       views,
     });
   });

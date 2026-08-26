@@ -13,7 +13,7 @@ import type { RuntimeContextCompactionCandidate } from '../../../src/loop/contex
 import { RuntimeContextCompactor } from '../../../src/loop/context/runtime-context-compactor.js';
 import type { ModelClient, ModelCompactionRequest } from '../../../src/ports/model-client.js';
 import type { RuntimeDebugTraceSink } from '../../../src/ports/runtime-debug-trace.js';
-import type { UsageStore } from '../../../src/ports/usage-store.js';
+import type { UsageRecorder } from '../../../src/ports/usage-store.js';
 import { InMemoryConversationDebugTraceStore } from '@setsuna-desktop/feature-conversation-debug/runtime';
 import { CapturingUsageStore } from '../../support/agent-loop/shared.js';
 
@@ -301,7 +301,7 @@ function createCompactor(
   modelClient: ModelClient,
   events: Array<Omit<RuntimeEvent, 'seq'>> = [],
   debugTrace?: RuntimeDebugTraceSink,
-  usageStore?: UsageStore,
+  usageStore?: UsageRecorder,
 ): RuntimeContextCompactor {
   return new RuntimeContextCompactor({
     clock: { now: () => new Date('2026-07-11T00:00:00.000Z') },

@@ -5,7 +5,7 @@ import { handleRuntimeCapabilityRequest } from './runtime-capability-routes.js';
 import { handleRuntimeConfigRequest } from './runtime-config-routes.js';
 import { handleRuntimeExtensionRequest } from './runtime-extension-routes.js';
 import { handleRuntimeFeatureManagementRequest } from './runtime-feature-management-routes.js';
-import { handleRuntimeMemoryUsageRequest } from './runtime-memory-usage-routes.js';
+import { handleRuntimeMemoryRequest } from './runtime-memory-routes.js';
 import { handleRuntimeResourceRequest } from './runtime-resource-routes.js';
 import { handleRuntimeThreadCommandRequest } from './runtime-thread-command-routes.js';
 import { handleRuntimeThreadRequest } from './runtime-thread-routes.js';
@@ -38,7 +38,7 @@ export async function handleRuntimeRestRequest(
   if (await handleRuntimeWorkspaceRequest(runtime, request, response, url)) {
     return true;
   }
-  if (await handleRuntimeMemoryUsageRequest(runtime, request, response, url)) {
+  if (await handleRuntimeMemoryRequest(runtime, request, response, url)) {
     return true;
   }
   if (await handleRuntimeResourceRequest(runtime, request, response, url)) {

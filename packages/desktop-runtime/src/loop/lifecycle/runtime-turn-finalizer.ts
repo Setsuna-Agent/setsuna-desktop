@@ -10,7 +10,7 @@ import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageStore } from '../../ports/usage-store.js';
+import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeModelStreamEventPublisher } from '../core/runtime-model-stream-event-publisher.js';
 import type {
   RuntimeThreadTitleCoordinator,
@@ -36,7 +36,7 @@ type RuntimeTurnFinalizerOptions = {
   memoryControl(): Pick<MemoryControl, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
   streamEvents: Pick<RuntimeModelStreamEventPublisher, 'completeMessage' | 'publishMessage'>;
   threadTitles: Pick<RuntimeThreadTitleCoordinator, 'commit'>;
-  usageStore?: UsageStore;
+  usageStore?: UsageRecorder;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 

@@ -27,6 +27,7 @@ importers:
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-updater': workspace:*
+      '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-webdav-sync': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
@@ -90,6 +91,7 @@ importers:
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-updater': link:packages/features/updater
+      '@setsuna-desktop/feature-usage': link:packages/features/usage
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
       '@setsuna-desktop/feature-webdav-sync': link:packages/features/webdav-sync
       '@setsuna-desktop/feature-windows-sandbox': link:packages/features/windows-sandbox
@@ -154,6 +156,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
+      '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
@@ -176,6 +179,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
       '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-review': link:../features/review
+      '@setsuna-desktop/feature-usage': link:../features/usage
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
       '@setsuna-desktop/feature-workspace-dependencies': link:../features/workspace-dependencies
@@ -344,6 +348,20 @@ importers:
       '@setsuna-desktop/feature-core': link:../../feature-core
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
       electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+
+  packages/features/usage:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      antd: ^6.3.6
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
 

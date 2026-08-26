@@ -16,7 +16,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 - `ConfigStore`
 - `AttachmentStore`
 - `GeneratedImageStore`
-- `UsageStore`
+- `UsageRecorder`（Core 只需要 append 能力，查询/存储归 Usage Feature）
 - Memory Feature contracts 中的 `MemoryStore`（由 desktop runtime 提供文件 adapter）
 - `McpStore`
 - `SkillRegistry`
@@ -67,7 +67,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 `src/runtime/runtime-factory.ts` 组装顺序大致为：
 
 1. Clock、IDs、event/debug/notification buses、approval gate。
-2. Thread/attachment/image/config/usage/MCP/policy stores，以及提供给 Memory Feature 的 store adapter。
+2. Thread/attachment/image/config/MCP/policy stores，Usage recorder proxy，以及提供给 Memory Feature 的 store adapter。
 3. Event writer 与 `EventCoordinatedThreadStore`。
 4. MCP connection 与 elicitation。
 5. Skill registry 和 MCP dependency wrapper。
@@ -95,7 +95,8 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 
 | 目录 | 实现 |
 | --- | --- |
-| `adapters/store/` | SQLite、JSON、attachments、images、config、MCP、memory、usage、policy |
+| `adapters/store/` | SQLite、JSON、attachments、images、config、MCP、memory、policy |
+| `adapters/feature/` | Feature host adapter 与激活后绑定 proxy，包括 `BindableUsageRecorder` |
 | `adapters/model/` | AI SDK/provider clients、stream/replay/discovery |
 | `adapters/tool/` | ToolHost implementations |
 | `adapters/mcp/` | SDK connection、OAuth、elicitation、result normalize |

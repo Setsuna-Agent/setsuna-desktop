@@ -69,7 +69,8 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
 - `runtime-capability-routes.ts`：Hook、MCP status/resource/tool 与 Skill extra roots。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
-- `runtime-memory-usage-routes.ts`：Usage query 与旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
+- `runtime-memory-routes.ts`：旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
+- `RuntimeRouteRegistry`：Usage 等 Feature 在 setup 期间登记 typed operations。
 
 Route family 只做 method/path/body 解析、错误映射和 response DTO。跨 port 的业务事务下沉到 `runtime/use-cases/`；例如项目归档由 `workspace-operations.ts` 持有。Feature-owned typed operation 则由对应 Feature runtime 入口登记；Review 的 commit message prompt、安全边界与 fallback 位于 `packages/features/review/src/runtime/commit-message-generation.ts`，Core 仅提供默认模型的窄 host adapter。
 
@@ -106,7 +107,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 ### 数据域
 
 - Projects、entries、search、file read、workspace status；项目归档事务由 `runtime/use-cases/workspace-operations.ts` 持有。
-- Usage 由对应 domain handler 解析；旧 Memory REST 只作为兼容 adapter 调用 Feature-owned store contract，设置与新管理面走 `MemoryControl`/typed operations。
+- Usage 通过 `/v1/features/usage/query` typed operation 查询；旧 Memory REST 只作为兼容 adapter 调用 Feature-owned store contract，设置与新管理面走 `MemoryControl`/typed operations。
 
 Route 应：
 

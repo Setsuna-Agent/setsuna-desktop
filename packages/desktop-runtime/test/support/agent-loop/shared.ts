@@ -25,7 +25,7 @@ import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../../src
 import type { SkillRegistry } from '../../../src/ports/skill-registry.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost, type ToolTurnCleanupOutcome } from '../../../src/ports/tool-host.js';
-import type { UsageStore } from '../../../src/ports/usage-store.js';
+import type { UsageRecorder } from '../../../src/ports/usage-store.js';
 import {
   createTestTempDirectory,
   createTestTempDirectorySync,
@@ -447,7 +447,7 @@ export class AdditionalPermissionsExecToolHost implements ToolHost {
   }
 }
 
-export class CapturingUsageStore implements UsageStore {
+export class CapturingUsageStore implements UsageRecorder {
   records: RuntimeUsageRecord[] = [];
 
   async recordUsage(input: Omit<RuntimeUsageRecord, 'id'>): Promise<RuntimeUsageRecord> {
@@ -456,21 +456,6 @@ export class CapturingUsageStore implements UsageStore {
     return record;
   }
 
-  async getUsage() {
-    return {
-      records: this.records,
-      summary: {
-        inputTokens: 0,
-        cachedInputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        recordCount: this.records.length,
-        byDay: [],
-        byProvider: [],
-        byModel: [],
-      },
-    };
-  }
 }
 
 export class InMemoryPolicyAmendmentStore implements PolicyAmendmentStore {

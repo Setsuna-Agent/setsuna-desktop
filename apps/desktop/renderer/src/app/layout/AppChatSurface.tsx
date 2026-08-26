@@ -9,7 +9,6 @@ import {
   type RuntimeSkillSummary,
   type RuntimeThread,
   type RuntimeThreadSummary,
-  type RuntimeUsageResponse,
   type WorkspaceEntry,
   type WorkspaceEntrySearchItem,
   type WorkspaceEntrySearchResponse,
@@ -131,7 +130,6 @@ export function AppChatSurface({
   selectedWorkspaceApp,
   workspaceApps,
   skills,
-  threadUsage,
   sideActivePanel,
   sidePanelSlot,
   runtimeClient,
@@ -225,7 +223,6 @@ export function AppChatSurface({
   selectedWorkspaceApp: DesktopWorkspaceApp | null;
   workspaceApps: DesktopWorkspaceApp[];
   skills: RuntimeSkillSummary[];
-  threadUsage: RuntimeUsageResponse | null;
   threads: RuntimeThreadSummary[];
   sideActivePanel?: DesktopPanelTab | null;
   sidePanelSlot: DesktopPanelSlotState;
@@ -446,7 +443,6 @@ export function AppChatSurface({
             skillSelectionRequest={skillSelectionRequest}
             workspaceMentionRequest={workspaceMentionRequest}
             skills={skills}
-            threadUsage={threadUsage}
             onCancelActiveTurn={onCancelActiveTurn}
             onAccessModeChange={onAccessModeChange}
             onConversationOverviewRenderedChange={onConversationOverviewRenderedChange}

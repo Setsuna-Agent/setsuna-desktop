@@ -20,7 +20,7 @@ import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';
-import type { UsageStore } from '../../ports/usage-store.js';
+import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 
 export type AgentLoopOptions = {
@@ -37,7 +37,7 @@ export type AgentLoopOptions = {
   debugTrace?: RuntimeDebugTraceSink;
   skillRegistry?: SkillRegistry;
   toolHost?: ToolHost;
-  usageStore?: UsageStore;
+  usageStore?: UsageRecorder;
   memoryStore?: MemoryStore;
   mcpStore?: Pick<McpStore, 'listServerInputs'>;
   policyAmendmentStore?: PolicyAmendmentStore;

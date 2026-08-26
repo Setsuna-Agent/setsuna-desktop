@@ -6,7 +6,6 @@ import type {
   RuntimeConfigState,
   RuntimeReviewTarget,
   RuntimeThread,
-  RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
@@ -66,7 +65,6 @@ export function useSideChat({
   const featureViews = useRendererFeatureViews();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
-  const [threadUsage, setThreadUsage] = useState<RuntimeUsageResponse | null>(null);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const terminalTurnIdsRef = useRef<Set<string>>(new Set());
   const currentThreadLastSeqRef = useRef(0);
@@ -118,7 +116,6 @@ export function useSideChat({
     setCurrentThread(null);
     resetComposer();
     setActiveTurnId(null);
-    setThreadUsage(null);
     terminalTurnIdsRef.current.clear();
   }, [client, parentThreadId, resetComposer]);
 
@@ -171,33 +168,9 @@ export function useSideChat({
       }
       for (const event of coreEvents) {
         if (event.type === 'runtime.error') setError(event.payload.message);
-        if (event.type !== 'turn.completed') continue;
-        if (event.payload.usage) {
-          void client.getUsage({ threadId: event.threadId }).then((nextUsage) => {
-            if (threadIdRef.current === event.threadId) setThreadUsage(nextUsage);
-          });
-        }
       }
     });
   }, [client, featureViews.events, reloadThreads, setError, threadId]);
-
-  useEffect(() => {
-    if (!threadId) {
-      setThreadUsage(null);
-      return;
-    }
-    let cancelled = false;
-    const requestedThreadId = threadId;
-    setThreadUsage(null);
-    void client.getUsage({ threadId: requestedThreadId }).then((nextUsage) => {
-      if (!cancelled && threadIdRef.current === requestedThreadId) setThreadUsage(nextUsage);
-    }).catch((error) => {
-      if (!cancelled) setError(error instanceof Error ? error.message : String(error));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [client, setError, threadId]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !threadId) return undefined;
@@ -334,7 +307,6 @@ export function useSideChat({
     draft,
     setDraft,
     startReview,
-    threadUsage,
   }), [
     actions,
     answerApproval,
@@ -347,7 +319,6 @@ export function useSideChat({
     effectiveActiveTurnId,
     setDraft,
     startReview,
-    threadUsage,
   ]);
 }
 

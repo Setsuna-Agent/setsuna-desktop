@@ -5,14 +5,11 @@ import type {
   RuntimeFetchModelsInput,
   RuntimeThread,
   RuntimeThreadSummary,
-  RuntimeUsageQuery,
-  RuntimeUsageResponse,
 } from '@setsuna-desktop/contracts';
 import type { RegisteredSettingsView, RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 import {
   Archive,
   Bot,
-  CircleGauge,
   HardDrive,
   Info,
   Keyboard,
@@ -25,7 +22,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { EmptyState, PageBackButton } from '../../shared/ui/primitives.js';
-import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
+import { SettingsPageHeading, settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import {
@@ -45,8 +42,6 @@ import type {
   SettingsSectionId,
 } from './settings-types.js';
 import { KeyboardShortcutsSettings } from './shortcuts/KeyboardShortcutsSettings.js';
-import { UsageSettings } from './usage/UsageSettings.js';
-import { SettingsPageHeading } from './SettingsPageHeading.js';
 import { SettingsSectionExtensionOutlet } from './SettingsSectionExtensionOutlet.js';
 
 export { ArchivedThreadsSettings } from './sections/ArchivedThreadsSettings.js';
@@ -78,7 +73,6 @@ const settingsSectionGroups = [
     id: 'models-and-services',
     labelKey: 'settings.group.modelsAndServices',
     sections: [
-      { id: 'usage', labelKey: 'settings.section.usage', icon: <CircleGauge size={14} />, order: 100 },
       { id: 'localLlm', labelKey: 'settings.section.localLlm', icon: <HardDrive size={14} />, order: 200 },
       { id: 'taskModels', labelKey: 'settings.section.taskModels', icon: <Bot size={14} />, order: 300 },
     ],
@@ -100,7 +94,6 @@ const settingsSectionLabelKeys: Record<CoreSettingsSectionId, MessageKey> = {
   personalization: 'settings.section.personalization',
   localLlm: 'settings.section.localLlm',
   taskModels: 'settings.section.taskModels',
-  usage: 'settings.section.usage',
   archives: 'settings.section.archives',
   runtime: 'settings.section.runtime',
   about: 'settings.section.about',
@@ -110,23 +103,18 @@ const settingsSectionDescriptionKeys: Partial<Record<CoreSettingsSectionId, Mess
   shortcuts: 'settings.section.shortcutsDescription',
   localLlm: 'settings.section.localLlmDescription',
   taskModels: 'settings.section.taskModelsDescription',
-  usage: 'settings.section.usageDescription',
 };
-
-const EMPTY_PROVIDER_CONFIGS: ProviderConfigState[] = [];
 
 export function SettingsPage({
   archivedThreads,
   config,
   initialSection,
   skillExtraRoots,
-  usage,
   networkProxy,
   onBack,
   onFetchProviderModels,
   onSaveProviders,
   onSaveRuntimePreferences,
-  onQueryUsage,
   onDeleteAllArchivedThreads,
   onDeleteArchivedThread,
   onRestoreArchivedThread,
@@ -136,7 +124,6 @@ export function SettingsPage({
   config: RuntimeConfigState | null;
   initialSection?: SettingsSectionId;
   skillExtraRoots: string[];
-  usage: RuntimeUsageResponse | null;
   networkProxy: NetworkProxyFeatureView;
   onBack: () => void;
   onFetchProviderModels: (input: RuntimeFetchModelsInput) => Promise<RuntimeAvailableModelsResponse>;
@@ -145,7 +132,6 @@ export function SettingsPage({
     apiKeysByProviderId: Record<string, string>,
   ) => Promise<void>;
   onSaveRuntimePreferences: (input: RuntimePreferenceInput) => Promise<void>;
-  onQueryUsage: (query: RuntimeUsageQuery) => Promise<RuntimeUsageResponse>;
   onDeleteAllArchivedThreads: (threadIds: string[]) => Promise<void>;
   onDeleteArchivedThread: (threadId: string) => Promise<void>;
   onRestoreArchivedThread: (threadId: string) => Promise<RuntimeThread>;
@@ -189,12 +175,6 @@ export function SettingsPage({
       ) : (
         <EmptyState title={t('settings.configUnavailable')} />
       )
-    ) : activeSection === 'usage' ? (
-      <UsageSettings
-        providers={config?.providers ?? EMPTY_PROVIDER_CONFIGS}
-        usage={usage}
-        onQueryUsage={onQueryUsage}
-      />
     ) : activeSection === 'taskModels' ? (
       config ? (
         <TaskModelSettings config={config} onSave={onSaveRuntimePreferences} />
@@ -257,9 +237,10 @@ export function SettingsPage({
         <section
           className={`chat-user-settings__content ${
             activeSection === 'localLlm' ? 'chat-user-settings__content--local-llm' : ''
-          } ${activeSection === 'usage' ? 'chat-user-settings__content--usage' : ''}`}
+          }`}
+          data-settings-feature={activeFeatureSection?.featureId}
         >
-          {activeSection === 'usage' ? null : (
+          {activeFeatureSection?.pageHeading !== 'view' ? (
             <SettingsPageHeading
               action={activeSection === 'localLlm' && localModelSaveState.status === 'error' && localModelSaveState.message ? (
                 <AutoSaveStatus state={localModelSaveState} />
@@ -267,7 +248,7 @@ export function SettingsPage({
               description={description}
               title={title}
             />
-          )}
+          ) : null}
           <SettingsSectionExtensionOutlet
             key={activeSection}
             extensions={activeSectionExtensions}

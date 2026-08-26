@@ -24,7 +24,7 @@ import {
   runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
-import type { UsageStore } from '../../ports/usage-store.js';
+import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { PROVIDER_METADATA_SEMANTIC_BINDING_RESERVE_BYTES } from '../../utils/runtime-message-semantic-fingerprint.js';
 import { runtimeTaskModelRequest } from '../core/runtime-task-model.js';
@@ -67,7 +67,7 @@ type RuntimeContextCompactorOptions = {
   debugTrace?: RuntimeDebugTraceSink;
   ids: IdGenerator;
   modelClient: ModelClient;
-  usageStore?: UsageStore;
+  usageStore?: UsageRecorder;
   appendEvent(
     threadId: string,
     event: PendingRuntimeEvent,

@@ -18,8 +18,9 @@ Desktop runtime 是本地 Agent service。它通过认证的 HTTP/SSE 服务 Ele
 | `../features/memory/` | Memory contracts、runtime coordinator、typed operations 与 renderer 设置 | [Feature Composition](../../designs/feature-composition-architecture.md) |
 | `../features/conversation-debug/` | 非持久化诊断 trace、device-local settings、typed operations 与 renderer 面板 | [Feature Composition](../../architecture/feature-composition.md) |
 | `../features/workspace-dependencies/` | Node.js/Python/uv 工具链、包源 settings、typed operations 与 renderer 设置 | [Feature Composition](../../architecture/feature-composition.md) |
+| `../features/usage/` | Usage 持久化、聚合查询、typed operation 与 renderer 投影 | [Feature Composition](../../architecture/feature-composition.md) |
 | `src/ports/` | Runtime 内部抽象 | [Ports 与 adapters](ports-and-adapters.md) |
-| `src/adapters/store/` | SQLite、JSON、附件、memory、usage | [存储](storage.md) |
+| `src/adapters/store/` | SQLite、JSON、附件、memory | [存储](storage.md) |
 | `src/adapters/model/` | Provider、stream、metadata、discovery | [模型适配器](model-providers.md) |
 | `src/adapters/tool/` | 本地、MCP、Browser、Skill、Plugin 等工具 | [工具与能力](tools-and-capabilities.md) |
 | `src/adapters/{mcp,skill,plugin,workspace,search}/` | 外部能力实现 | [工具与能力](tools-and-capabilities.md) |
@@ -48,7 +49,7 @@ cli
 Factory 返回的 container 包含：
 
 - `agentLoop`
-- Thread/event/config/usage/MCP/plugin/skill stores、Feature settings registry，以及注入 Memory Feature 的文件存储 adapter
+- Thread/event/config/MCP/plugin/skill stores、Usage recorder proxy、Feature settings registry，以及注入 Memory Feature 的文件存储 adapter
 - Approval 与 event buses
 - Model client
 - Composite tool host

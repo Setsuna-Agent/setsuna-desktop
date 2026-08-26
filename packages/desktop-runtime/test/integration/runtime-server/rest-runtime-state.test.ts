@@ -177,21 +177,56 @@ describe('runtime server REST runtime state', () => {
     });
   
   it('exposes local usage summaries', async () => {
-      const usage = await harness.runtimeFetch('/v1/usage');
+      const snapshot = await harness.runtimeFetch('/v1/features/usage/query', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
   
-      expect(usage).toMatchObject({
-        records: [],
-        summary: {
-          inputTokens: 0,
-          cachedInputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          recordCount: 0,
-          byDay: [],
-          byProvider: [],
-          byModel: [],
+      expect(snapshot).toMatchObject({
+        providers: [{
+          id: 'local-test',
+          name: 'Local test provider',
+          provider: 'openai-compatible',
+          models: [{ code: 'local-runtime-smoke', name: 'Local runtime smoke' }],
+        }],
+        usage: {
+          records: [],
+          summary: {
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+            recordCount: 0,
+            byDay: [],
+            byProvider: [],
+            byModel: [],
+          },
         },
       });
+      expect(snapshot.providers[0]).not.toHaveProperty('apiKey');
+    });
+
+  it('uses the provider id when a configured usage display name is blank', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          activeProviderId: 'blank-provider',
+          providers: [{
+            ...configuredProvider('blank-provider', 'blank-model'),
+            name: '',
+          }],
+        }),
+      });
+
+      const snapshot = await harness.runtimeFetch('/v1/features/usage/query', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+
+      expect(snapshot.providers).toMatchObject([{
+        id: 'blank-provider',
+        name: 'blank-provider',
+      }]);
     });
   
   it('exposes local approval queue', async () => {
