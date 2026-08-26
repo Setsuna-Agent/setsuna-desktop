@@ -38,12 +38,12 @@
 ### `apps/desktop/main/`
 
 ```text
-apps/desktop/main/ — 0 direct / 72 total files
-├── src/ — 2 direct / 45 total files
+apps/desktop/main/ — 0 direct / 71 total files
+├── src/ — 2 direct / 44 total files
 │   ├── composition/ — 3 direct / 3 total files
 │   ├── data-root/ — 14 direct / 14 total files
 │   ├── i18n/ — 1 direct / 1 total files
-│   ├── ipc/ — 6 direct / 6 total files
+│   ├── ipc/ — 5 direct / 5 total files
 │   ├── runtime/ — 7 direct / 7 total files
 │   ├── security/ — 2 direct / 2 total files
 │   ├── window/ — 6 direct / 8 total files
@@ -71,15 +71,15 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 563 total files
-├── src/ — 2 direct / 400 total files
+apps/desktop/renderer/ — 0 direct / 565 total files
+├── src/ — 2 direct / 402 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 6 direct / 6 total files
 │   │   ├── layout/ — 17 direct / 17 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 23 direct / 23 total files
+│   ├── composition/ — 25 direct / 25 total files
 │   ├── features/ — 248 files
 │   │   ├── capabilities/ — 21 direct / 31 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
@@ -196,7 +196,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 660 total files
+packages/features/ — 0 direct / 684 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -260,6 +260,17 @@ packages/features/ — 0 direct / 660 total files
 │       ├── main/ — 2 direct / 2 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── support/ — 1 direct / 1 total files
+├── plugin-management/ — 2 direct / 24 total files
+│   ├── src/ — 19 files
+│   │   ├── contracts/ — 6 direct / 6 total files
+│   │   ├── main/ — 5 direct / 5 total files
+│   │   ├── preload/ — 2 direct / 2 total files
+│   │   ├── renderer/ — 4 direct / 4 total files
+│   │   └── runtime/ — 2 direct / 2 total files
+│   └── test/ — 3 files
+│       ├── main/ — 1 direct / 1 total files
+│       ├── renderer/ — 1 direct / 1 total files
+│       └── runtime/ — 1 direct / 1 total files
 ├── review/ — 2 direct / 65 total files
 │   ├── src/ — 53 files
 │   │   ├── contracts/ — 8 direct / 8 total files

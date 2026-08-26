@@ -20,6 +20,7 @@ import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/mar
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
 import type { NetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
+import { usePluginManagementCapabilities } from '../../composition/usePluginManagementCapabilities.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {
@@ -118,6 +119,10 @@ export function AppRouteContent({
   workspaceWidth: number;
 }) {
   const { t } = useI18n();
+  const pluginManagement = usePluginManagementCapabilities({
+    refreshCapabilities: runtime.refreshCapabilities,
+    refreshCapabilityDependencies: runtime.refreshCapabilityDependencies,
+  });
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
   const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
@@ -232,19 +237,19 @@ export function AppRouteContent({
           skills={runtime.skills}
           mcpState={runtime.mcpState}
           hookState={runtime.hookState}
-          plugins={runtime.plugins}
-          pluginMarketplace={runtime.pluginMarketplace}
-          pluginMarketplaceErrors={runtime.pluginMarketplaceErrors}
-          extensionStatuses={runtime.extensionStatuses}
+          plugins={pluginManagement.plugins}
+          pluginMarketplace={pluginManagement.marketplace}
+          pluginMarketplaceErrors={pluginManagement.marketplaceErrors}
+          extensionStatuses={pluginManagement.extensions}
           selectedPluginId={selectedCapabilitiesPluginId}
           onCreateSkill={runtime.createSkill}
           onDeleteSkill={runtime.deleteSkill}
-          onGetPluginItemContent={runtime.getPluginItemContent}
+          onGetPluginItemContent={pluginManagement.getItemContent}
           onGetSkillDetail={runtime.getSkillDetail}
           onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
           onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}
           onCreateInConversation={onSelectSkillForChat}
-          onRefresh={runtime.refreshCapabilities}
+          onRefresh={pluginManagement.refresh}
           onUpdateSkill={runtime.updateSkill}
           onFetchMcpTools={runtime.fetchMcpServerTools}
           onSaveMcpServer={runtime.saveMcpServer}
@@ -252,11 +257,11 @@ export function AppRouteContent({
           onDeleteMcpServer={runtime.deleteMcpServer}
           onLoginMcpServer={runtime.loginMcpServer}
           onLogoutMcpServer={runtime.logoutMcpServer}
-          onInstallLocalPlugin={runtime.installLocalPlugin}
-          onInstallMarketplacePlugin={runtime.installMarketplacePlugin}
-          onUpdateMarketplacePlugin={runtime.updateMarketplacePlugin}
-          onRemovePlugin={runtime.removePlugin}
-          onSetPluginExtensionTrust={runtime.setPluginExtensionTrust}
+          onInstallLocalPlugin={pluginManagement.installLocal}
+          onInstallMarketplacePlugin={pluginManagement.installMarketplace}
+          onUpdateMarketplacePlugin={pluginManagement.updateMarketplace}
+          onRemovePlugin={pluginManagement.remove}
+          onSetPluginExtensionTrust={pluginManagement.setExtensionTrust}
           onDeleteStandaloneHook={runtime.deleteStandaloneHook}
           onSetHookEnabled={runtime.setHookEnabled}
           onSetHookTrust={runtime.setHookTrust}
@@ -288,7 +293,7 @@ export function AppRouteContent({
       fileDraft={projectWorkspace.fileDraft}
       fileFocusRequest={projectWorkspace.fileFocusRequest}
       filePreview={projectWorkspace.filePreview}
-      plugins={runtime.plugins}
+      plugins={pluginManagement.plugins}
       panelLauncherTypes={workspacePanels.panelLauncherTypes}
       skillSelectionRequest={skillSelectionRequest}
       reviewError={workspacePanels.reviewError}

@@ -1,9 +1,9 @@
 import {
   RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
-  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type RuntimeEvent,
 } from '@setsuna-desktop/contracts';
+import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import type { WebContents } from 'electron';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
@@ -308,9 +308,19 @@ describe('runtime host packaging paths', () => {
   });
 
   it('keeps local plugin path installation on the main-only runtime route', async () => {
+    const localInstallPath = installLocalPlugin.path;
     const bundlePath = path.resolve('/tmp/local-plugin');
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      plugin: { id: 'local-plugin', name: 'Local Plugin' },
+      plugin: {
+        id: 'local-plugin',
+        name: 'Local Plugin',
+        installedAt: '2026-08-26T00:00:00.000Z',
+        skills: [],
+        mcpServers: [],
+        hooks: [],
+        hookCount: 0,
+        resources: [],
+      },
       installedMcpServers: [],
       reusedMcpServers: [],
     }), { status: 201 }));
@@ -320,18 +330,18 @@ describe('runtime host packaging paths', () => {
       dataDir: '/tmp/setsuna-data',
     });
 
-    await expect(host.request({ path: RUNTIME_LOCAL_PLUGIN_INSTALL_PATH }))
+    await expect(host.request({ path: localInstallPath }))
       .rejects.toThrow('Runtime path is not allowed');
-    await expect(host.request({ path: `/v1/..${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+    await expect(host.request({ path: `/v1/..${localInstallPath}` }))
       .rejects.toThrow('Runtime path is not allowed');
-    await expect(host.request({ path: `/v1/%2e%2e${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}` }))
+    await expect(host.request({ path: `/v1/%2e%2e${localInstallPath}` }))
       .rejects.toThrow('Runtime path is not allowed');
     await expect(host.installLocalPluginBundle(bundlePath)).resolves.toMatchObject({
       plugin: { id: 'local-plugin' },
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://127.0.0.1:0${RUNTIME_LOCAL_PLUGIN_INSTALL_PATH}`);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`http://127.0.0.1:0${localInstallPath}`);
     expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
       method: 'POST',
       body: JSON.stringify({ path: bundlePath }),

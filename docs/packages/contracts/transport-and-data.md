@@ -99,14 +99,17 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/features/runtime-activity/tasks/:threadId/:turnId
 /v1/features/runtime-activity/services/:threadId/:processId
 /v1/features/workspace-dependencies
+/v1/features/plugin-management
+/v1/features/plugin-management/extensions
+/v1/features/plugin-management/installed
+/v1/features/plugin-management/marketplace/:pluginId/install
+/v1/features/plugin-management/installed/:pluginId
 /v1/projects
 /v1/skills
 /v1/mcp/servers
 /v1/memories
 /v1/features/usage/query
 /v1/approvals
-/v1/plugins
-/v1/plugin-marketplace
 ```
 
 不要把这份概览当路由注册真源。

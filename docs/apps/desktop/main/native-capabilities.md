@@ -92,6 +92,14 @@ Workspace Apps 是纵向 Feature，拥有应用 DTO 与固定 IPC channel、平�
 
 宿主 Workspace hook 继续负责当前 project、panel 和文件动作的编排，通过 `composition/workspace-apps-feature-adapter.tsx` 注入宿主 i18n。Feature 测试位于 `packages/features/workspace-apps/test/`。
 
+## Plugin Management
+
+源码：`packages/features/plugin-management/src/{contracts,runtime,main,preload,renderer}/`
+
+Plugin Management 是 Plugin catalog 和管理事务的纵向 Feature。runtime 入口登记聚合 snapshot、详情、市场安装/更新、卸载和 extension trust typed operations；main/preload 入口单独拥有本地目录选择桥。Feature 自己持有原生选择器标题文案，宿主只提供当前界面语言、可信 sender 判定、目录选择实现和 RuntimeHost 安装能力。
+
+本地安装 operation 虽位于统一 `/v1/features/plugin-management/*` namespace，Electron main 的通用 runtime proxy 会拒绝该精确路径；只有 Feature IPC 在原生选择器返回绝对目录后才通过 main 内部 RuntimeHost 调用。renderer service 不持有也不传递路径。
+
 其余宿主文件动作源码：`apps/desktop/main/src/workspace/`
 
 ### `file-opening.ts`

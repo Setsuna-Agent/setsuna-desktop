@@ -168,6 +168,7 @@ describe('plugin bundle tool host', () => {
 
 function pluginStoreFixture(): PluginBundleStore {
   return {
+    catalogRevision: vi.fn(async () => 'catalog-1'),
     listPlugins: vi.fn(async () => ({
       plugins: [{
         id: 'demo',

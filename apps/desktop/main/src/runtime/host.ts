@@ -1,6 +1,5 @@
 import {
   RUNTIME_LOCAL_ATTACHMENT_LINK_PATH,
-  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
   RUNTIME_PROCESS_SHUTDOWN_MESSAGE,
   type DesktopImageDataResult,
   type DesktopRuntimeEventPayload,
@@ -16,6 +15,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { WebContents } from 'electron';
 import type { BrowserControlConnection } from '@setsuna-desktop/feature-browser/contracts';
+import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { KERNEL_FEATURE_OPERATION_ERRORS } from '@setsuna-desktop/feature-core/operation';
 import type {
   FeatureCredentialBackup,
@@ -174,11 +174,13 @@ export class RuntimeHost {
   /** Installs a native-picker-selected bundle through a main-only runtime route. */
   async installLocalPluginBundle(sourcePath: string): Promise<RuntimePluginInstallResult> {
     if (!path.isAbsolute(sourcePath)) throw new Error('Plugin bundle path must be absolute.');
-    return this.sendRequest<RuntimePluginInstallResult>({
-      path: RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
-      method: 'POST',
-      body: { path: sourcePath },
-    }, RUNTIME_LOCAL_PLUGIN_INSTALL_PATH);
+    const input = installLocalPlugin.input.parse({ path: sourcePath });
+    const result = await this.sendRequest<unknown>({
+      path: installLocalPlugin.path,
+      method: installLocalPlugin.method,
+      body: input,
+    }, installLocalPlugin.path);
+    return installLocalPlugin.output.parse(result);
   }
 
   private async sendRequest<T>(
@@ -697,6 +699,11 @@ function normalizeRuntimePath(value: string): string {
     throw new Error('Runtime path is not allowed.');
   }
   if (!normalized.pathname.startsWith('/v1/') && normalized.pathname !== '/health') {
+    throw new Error('Runtime path is not allowed.');
+  }
+  // Local bundle installation accepts an absolute filesystem path selected by
+  // main. Keep the typed Feature route unreachable through the renderer proxy.
+  if (normalized.pathname === installLocalPlugin.path) {
     throw new Error('Runtime path is not allowed.');
   }
   return `${normalized.pathname}${normalized.search}`;

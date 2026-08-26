@@ -63,6 +63,7 @@ export type PluginRuntimeMutationCoordinator = {
 };
 
 export type PluginBundleStore = {
+  catalogRevision(): Promise<string>;
   listPlugins(): Promise<RuntimePluginList>;
   inspectPlugin(input: RuntimePluginInstallInput): Promise<PluginBundleInspection>;
   migrateLegacyMarketplaceInstallations(

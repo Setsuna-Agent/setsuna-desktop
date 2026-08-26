@@ -8,7 +8,7 @@ import type {
   RuntimePluginRemoveResult,
   RuntimePluginSkill
 } from '@setsuna-desktop/contracts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
@@ -79,6 +79,11 @@ export class FilePluginBundleStore implements PluginBundleStore {
 
   setRuntimeMutationCoordinator(coordinator: PluginRuntimeMutationCoordinator): void {
     this.runtimeMutation = coordinator;
+  }
+
+  async catalogRevision(): Promise<string> {
+    const index = await this.readIndex();
+    return createHash('sha256').update(JSON.stringify(index)).digest('hex');
   }
 
   async listPlugins(): Promise<RuntimePluginList> {

@@ -1,7 +1,6 @@
 import type { RuntimeAttachmentUploadInput, RuntimeStoredMessageAttachment } from './attachments.js';
 import type { RuntimeEventBatch } from './events.js';
 import type { RuntimeRequestInput } from './http.js';
-import type { RuntimePluginInstallResult } from './plugins.js';
 import type { RuntimeInterfaceLanguage } from './config.js';
 import type {
   DesktopDataMigrationPlan,
@@ -110,10 +109,6 @@ export type SetsunaDesktopBridge = {
   };
   links: {
     openExternal(url: string): Promise<boolean>;
-  };
-  plugins: {
-    /** Opens the native directory picker and installs the selected local Plugin Bundle. */
-    installLocal(): Promise<RuntimePluginInstallResult | null>;
   };
   runtime: DesktopRuntimeBridge;
   windowControls: {

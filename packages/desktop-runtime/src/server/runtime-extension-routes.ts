@@ -1,19 +1,14 @@
 import type {
   AnswerRuntimeApprovalInput,
-  RuntimeExtensionTrustInput,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
   RuntimeMcpServerPatch,
-  RuntimePluginInstallInput,
-  RuntimePluginItemKind,
 } from '@setsuna-desktop/contracts';
 import {
   mergeRuntimeMcpServerInput,
-  RUNTIME_LOCAL_PLUGIN_INSTALL_PATH,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
-import { assertSafeRuntimeId } from '../security/runtime-id.js';
 import { RuntimeHttpError } from './http-error.js';
 import { readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
@@ -26,112 +21,6 @@ export async function handleRuntimeExtensionRequest(
 ): Promise<boolean> {
   if (request.method === 'GET' && url.pathname === '/v1/skills') {
     sendJson(response, 200, await runtime.skillRegistry.listSkills());
-    return true;
-  }
-
-  if (request.method === 'GET' && url.pathname === '/v1/plugins') {
-    sendJson(response, 200, await runtime.pluginStore.listPlugins());
-    return true;
-  }
-
-  if (request.method === 'GET' && url.pathname === '/v1/extensions/status') {
-    sendJson(response, 200, await runtime.extensionManager.listStatuses());
-    return true;
-  }
-
-  if (request.method === 'GET' && url.pathname === '/v1/plugin-marketplace') {
-    sendJson(response, 200, await runtime.pluginMarketplace.listPlugins());
-    return true;
-  }
-
-  if (request.method === 'POST' && url.pathname === RUNTIME_LOCAL_PLUGIN_INSTALL_PATH) {
-    const input = await readBody<RuntimePluginInstallInput | null>(request, null);
-    if (!input || typeof input !== 'object' || typeof input.path !== 'string' || !input.path) {
-      throw new RuntimeHttpError(400, 'path must be a non-empty string.');
-    }
-    sendJson(response, 201, await runtime.pluginStore.installPlugin({ path: input.path }));
-    return true;
-  }
-
-  const marketplaceItemMatch = url.pathname.match(
-    /^\/v1\/plugin-marketplace\/([^/]+)\/items\/([^/]+)\/([^/]+)$/u,
-  );
-  if (marketplaceItemMatch && request.method === 'GET') {
-    sendJson(response, 200, await runtime.pluginMarketplace.readItemContent(
-      assertSafeRuntimeId(
-        decodeURIComponent(marketplaceItemMatch[1]),
-        'plugin id',
-      ),
-      runtimePluginItemKind(decodeURIComponent(marketplaceItemMatch[2])),
-      assertSafeRuntimeId(
-        decodeURIComponent(marketplaceItemMatch[3]),
-        'plugin item id',
-      ),
-    ));
-    return true;
-  }
-
-  const marketplaceInstallMatch = url.pathname.match(
-    /^\/v1\/plugin-marketplace\/([^/]+)\/install$/u,
-  );
-  if (marketplaceInstallMatch && request.method === 'POST') {
-    sendJson(response, 201, await runtime.pluginMarketplace.installPlugin(
-      assertSafeRuntimeId(
-        decodeURIComponent(marketplaceInstallMatch[1]),
-        'plugin id',
-      ),
-    ));
-    return true;
-  }
-
-  const marketplaceUpdateMatch = url.pathname.match(
-    /^\/v1\/plugin-marketplace\/([^/]+)\/update$/u,
-  );
-  if (marketplaceUpdateMatch && request.method === 'POST') {
-    sendJson(response, 200, await runtime.pluginMarketplace.updatePlugin(
-      assertSafeRuntimeId(
-        decodeURIComponent(marketplaceUpdateMatch[1]),
-        'plugin id',
-      ),
-    ));
-    return true;
-  }
-
-  const pluginItemMatch = url.pathname.match(
-    /^\/v1\/plugins\/([^/]+)\/items\/([^/]+)\/([^/]+)$/u,
-  );
-  if (pluginItemMatch && request.method === 'GET') {
-    sendJson(response, 200, await runtime.pluginStore.readItemContent(
-      assertSafeRuntimeId(decodeURIComponent(pluginItemMatch[1]), 'plugin id'),
-      runtimePluginItemKind(decodeURIComponent(pluginItemMatch[2])),
-      assertSafeRuntimeId(
-        decodeURIComponent(pluginItemMatch[3]),
-        'plugin item id',
-      ),
-    ));
-    return true;
-  }
-
-  const extensionTrustMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)\/extension\/trust$/u);
-  if (extensionTrustMatch && request.method === 'PUT') {
-    const input = await readBody<RuntimeExtensionTrustInput | null>(request, null);
-    if (!input || typeof input !== 'object' || typeof input.trusted !== 'boolean') {
-      throw new RuntimeHttpError(400, 'trusted must be a boolean.');
-    }
-    sendJson(response, 200, await runtime.pluginStore.setExtensionTrust(
-      assertSafeRuntimeId(decodeURIComponent(extensionTrustMatch[1]), 'plugin id'),
-      input.trusted,
-    ));
-    return true;
-  }
-
-  const pluginMatch = url.pathname.match(/^\/v1\/plugins\/([^/]+)$/u);
-  if (pluginMatch && request.method === 'DELETE') {
-    sendJson(
-      response,
-      200,
-      await runtime.pluginStore.removePlugin(decodeURIComponent(pluginMatch[1])),
-    );
     return true;
   }
 
@@ -305,13 +194,6 @@ export async function handleRuntimeExtensionRequest(
   }
 
   return false;
-}
-
-function runtimePluginItemKind(value: string): RuntimePluginItemKind {
-  if (value === 'skill' || value === 'mcp' || value === 'hook' || value === 'resource') {
-    return value;
-  }
-  throw new RuntimeHttpError(400, `Unsupported plugin item kind: ${value}`);
 }
 
 function normalizeMcpServerKey(value: string): string {

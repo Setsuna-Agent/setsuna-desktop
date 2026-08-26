@@ -108,6 +108,8 @@ Updater 的固定 handler、channel contract 和状态机由 `packages/features/
 
 Network Proxy 的固定 handler 和 channel contract 由 `packages/features/network-proxy/{contracts,main}` 拥有。Main composition 注入配置、凭据、系统 fetch 与 runtime 删除入口；Feature scope 负责撤销 handler、停止 browser proxy 更新并关闭 fetch dispatcher 与通用 relay。
 
+Plugin Management 的本地 Bundle 目录选择、可信 renderer 校验和固定 IPC 由 `packages/features/plugin-management/{contracts,main,preload}` 拥有。绝对路径只由 main 传给 runtime 的受保护 typed operation；通用 renderer runtime proxy 会拒绝该路径，Capabilities renderer 只能通过 Feature 子桥触发原生选择器。
+
 Windows Sandbox 的 sidecar 资源、UAC 生命周期、固定 IPC、curl 信任快照与受限出口由 `packages/features/windows-sandbox/{contracts,main}` 拥有。Main composition 只注入可信 renderer 判定和 runtime 路由解析；native bridge 通过激活后的窄服务取得一次性认证环境。
 
 Workspace Apps 的固定 handler、应用检测和平台启动参数由 `packages/features/workspace-apps/{contracts,main}` 拥有。Feature scope 会先排空在途打开/检测操作，再撤销全部 handler；宿主 composition 只登记该 Feature，不再持有业务实现。

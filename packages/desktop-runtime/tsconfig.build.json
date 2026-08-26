@@ -23,6 +23,7 @@
     { "path": "../features/image-generation/tsconfig.build.json" },
     { "path": "../features/goal/tsconfig.build.json" },
     { "path": "../features/memory/tsconfig.build.json" },
+    { "path": "../features/plugin-management/tsconfig.build.json" },
     { "path": "../features/review/tsconfig.build.json" },
     { "path": "../features/runtime-activity/tsconfig.build.json" },
     { "path": "../features/usage/tsconfig.build.json" },

@@ -1,26 +1,29 @@
-import { describe, expect, it } from 'vitest';
+// @vitest-environment happy-dom
+
+import type {
+  RuntimeSkillDetail,
+  RuntimeSkillSummary,
+} from '@setsuna-desktop/contracts';
+import { act, cleanup, renderHook } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   capabilityBootstrapValues,
   normalizeSkillExtraRoots,
+  useRuntimeCapabilityState,
+  type RuntimeCapabilityClient,
 } from '../../../../src/services/runtime-client/useRuntimeCapabilityState.js';
+
+afterEach(cleanup);
 
 describe('capabilityBootstrapValues', () => {
   it('applies successful optional domains without manufacturing failed state', () => {
     const values = capabilityBootstrapValues({
       skillResult: fulfilled({ skills: [] }),
       mcpResult: rejected(new Error('MCP unavailable')),
-      pluginResult: fulfilled({ plugins: [] }),
-      pluginMarketplaceResult: fulfilled({
-        plugins: [],
-        errors: ['marketplace manifest is invalid'],
-      }),
     });
 
     expect(values).toEqual({
       skills: [],
-      plugins: [],
-      pluginMarketplace: [],
-      pluginMarketplaceErrors: ['marketplace manifest is invalid'],
     });
     expect(values).not.toHaveProperty('mcpState');
   });
@@ -41,10 +44,50 @@ describe('normalizeSkillExtraRoots', () => {
   });
 });
 
+describe('plugin Skill mutations', () => {
+  it('invalidates the installed Plugin snapshot after update and delete', async () => {
+    const skill = pluginSkill();
+    const client = {
+      deleteSkill: vi.fn(async () => undefined),
+      updateSkill: vi.fn(async () => ({
+        ...skill,
+        content: '# Updated',
+        name: 'Updated plugin Skill',
+        references: [],
+      } satisfies RuntimeSkillDetail)),
+    } as unknown as RuntimeCapabilityClient;
+    const onPluginSkillMutation = vi.fn(async () => undefined);
+    const { result } = renderHook(() => useRuntimeCapabilityState({
+      client,
+      config: null,
+      enabled: false,
+      onConfigChange: vi.fn(),
+      onPluginSkillMutation,
+    }));
+
+    await act(async () => {
+      await result.current.updateSkill(skill, { name: 'Updated plugin Skill' });
+      await result.current.deleteSkill(skill);
+    });
+
+    expect(onPluginSkillMutation).toHaveBeenCalledTimes(2);
+  });
+});
+
 function fulfilled<T>(value: T): PromiseFulfilledResult<T> {
   return { status: 'fulfilled', value };
 }
 
 function rejected(reason: unknown): PromiseRejectedResult {
   return { status: 'rejected', reason };
+}
+
+function pluginSkill(): RuntimeSkillSummary {
+  return {
+    enabled: true,
+    id: 'plugin.sample-skill',
+    kind: 'plugin',
+    name: 'Sample plugin Skill',
+    pluginId: 'plugin',
+  };
 }

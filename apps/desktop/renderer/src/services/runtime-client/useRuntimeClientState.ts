@@ -1,8 +1,4 @@
-import type {
-  DesktopRuntimeClient,
-  RuntimePluginInstallResult,
-  WorkspaceProject,
-} from '@setsuna-desktop/contracts';
+import type { DesktopRuntimeClient, WorkspaceProject } from '@setsuna-desktop/contracts';
 import {
   useCallback,
   useEffect,
@@ -37,6 +33,7 @@ export type LoadState = 'loading' | 'ready' | 'error';
 
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
+  onPluginSkillMutation?: () => Promise<void>;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
@@ -47,6 +44,7 @@ type RuntimeClientStateOptions = {
  */
 export function useRuntimeClientState({
   activeProjectId,
+  onPluginSkillMutation,
   onTurnSettled,
   setActiveProjectId,
 }: RuntimeClientStateOptions) {
@@ -86,15 +84,8 @@ export function useRuntimeClientState({
     config: configState.config,
     enabled: loadState === 'ready',
     onConfigChange: replaceConfig,
+    onPluginSkillMutation,
   });
-  const installLocalPlugin = useCallback(async (): Promise<RuntimePluginInstallResult | null> => {
-    const install = window.setsunaDesktop?.plugins?.installLocal;
-    if (!install) throw new Error('Local plugin installation is unavailable in this build.');
-    const result = await install();
-    if (!result) return null;
-    await refreshCapabilities();
-    return result;
-  }, [refreshCapabilities]);
   const {
     applyBootstrapThreads,
     ...threadState
@@ -157,8 +148,6 @@ export function useRuntimeClientState({
       } = bootstrap.core;
       const {
         mcpResult,
-        pluginMarketplaceResult,
-        pluginResult,
         skillResult,
       } = bootstrap.optional;
       replaceConfig(nextConfig);
@@ -171,14 +160,10 @@ export function useRuntimeClientState({
       applyCapabilityBootstrapResults({
         skillResult,
         mcpResult,
-        pluginResult,
-        pluginMarketplaceResult,
       });
       reportOptionalRuntimeLoadFailures([
         ['skills', skillResult],
         ['MCP', mcpResult],
-        ['plugins', pluginResult],
-        ['plugin marketplace', pluginMarketplaceResult],
       ]);
       await threadBootstrap;
       setLoadState('ready');
@@ -205,7 +190,6 @@ export function useRuntimeClientState({
     ...threadState,
     client,
     error,
-    installLocalPlugin,
     loadState,
     projects,
     refresh,
@@ -222,8 +206,6 @@ type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
   | 'getConfig'
   | 'listMcpServers'
-  | 'listPluginMarketplace'
-  | 'listPlugins'
   | 'listProjects'
   | 'listSkills'
   | 'listThreads'
@@ -240,24 +222,15 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
     Promise.allSettled([
       client.listSkills(),
       client.listMcpServers(),
-      client.listPlugins(),
-      client.listPluginMarketplace(),
     ]),
   ]);
   const [nextConfig, threadList, allThreadList, projectList] = core;
-  const [
-    skillResult,
-    mcpResult,
-    pluginResult,
-    pluginMarketplaceResult,
-  ] = optional;
+  const [skillResult, mcpResult] = optional;
   return {
     core: { nextConfig, threadList, allThreadList, projectList },
     optional: {
       skillResult,
       mcpResult,
-      pluginResult,
-      pluginMarketplaceResult,
     },
   };
 }

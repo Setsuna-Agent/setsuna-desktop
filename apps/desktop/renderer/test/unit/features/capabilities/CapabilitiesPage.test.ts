@@ -34,7 +34,7 @@ describe('pluginActionError', () => {
     vi.spyOn(console, 'error').mockImplementationOnce(() => undefined);
 
     expect(pluginActionError(
-      new Error("EPERM: operation not permitted, rename 'staging' -> 'installed' (POST /v1/plugin-marketplace/audit/update)"),
+      new Error("EPERM: operation not permitted, rename 'staging' -> 'installed' (POST /v1/features/plugin-management/marketplace/audit/update)"),
       '更新插件失败，请重试。',
     )).toBe("更新插件失败：EPERM: operation not permitted, rename 'staging' -> 'installed'");
   });

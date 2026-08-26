@@ -27,6 +27,8 @@ import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
+import { usePluginManagementFeatureService } from '../../composition/PluginManagementFeatureBoundary.js';
+import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
@@ -44,11 +46,19 @@ export function useDesktopAppController() {
   const networkProxy = useNetworkProxyFeatureView();
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const invalidateUsage = useUsageFeatureInvalidation();
+  const pluginManagement = usePluginManagementFeatureService();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
-  }, [invalidateUsage]);
+    void pluginManagement.refreshExtensions().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('plugin status refresh after turn', unknownError);
+    });
+  }, [invalidateUsage, pluginManagement]);
+  const handlePluginSkillMutation = useCallback(async () => {
+    await pluginManagement.refreshInstalled();
+  }, [pluginManagement]);
   const runtime = useRuntimeClientState({
     activeProjectId,
+    onPluginSkillMutation: handlePluginSkillMutation,
     onTurnSettled: handleTurnSettled,
     setActiveProjectId,
   });
@@ -66,6 +76,13 @@ export function useDesktopAppController() {
     terminalTurnIdsRef,
     threads,
   } = runtime;
+
+  useEffect(() => {
+    if (loadState !== 'ready') return;
+    void pluginManagement.refresh().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('plugin management refresh', unknownError);
+    });
+  }, [loadState, pluginManagement]);
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,

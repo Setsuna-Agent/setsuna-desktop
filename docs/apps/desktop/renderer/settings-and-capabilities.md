@@ -129,6 +129,8 @@ Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的
 
 ### Plugin market
 
+Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot 与安装、更新、卸载、详情和扩展信任 typed operations；runtime 只通过 Plugin Store、Marketplace 和 Extension Manager 窄 host 能力实现；renderer service 持有 snapshot、并发 refresh 与 mutation 后收敛。宿主 `CapabilitiesPage` 继续承担 Plugin、Skill、MCP 的统一信息架构和视觉适配，但不再通过 `DesktopRuntimeClient` 或 `useRuntimeCapabilityState` 保存 Plugin 状态。
+
 相关组件：
 
 - `CapabilitiesPluginMarket`
@@ -182,13 +184,13 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
 ## State 与 refresh
 
-宿主 Settings/Capabilities 继续通过 `useRuntimeClientState` facade 获取通用 Config 和目录数据，实际能力状态由 `useRuntimeCapabilityState` 持有；Feature-owned 设置则由 renderer composition 注入的 typed client/controller 独立读取：
+宿主 Settings/Capabilities 通过 `useRuntimeClientState` facade 获取通用 Config、Skill、MCP 和 Hook 数据；Plugin 列表、市场和 extension 状态由 Plugin Management renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
 
 - Config save 后更新统一 config state。
 - Image Generation、Vision Recognition 与 Workspace Dependencies 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
-- Capabilities refresh 使用 `Promise.allSettled`，单个 Skill/MCP/Hook/Plugin 请求失败不抹掉其他成功数据。
+- Core capabilities refresh 使用 `Promise.allSettled`，单个 Skill/MCP/Hook 请求失败不抹掉其他成功数据；Plugin Management 使用独立的聚合 snapshot，迟到的旧 refresh 不覆盖新状态。
 - Hook 请求受当前 project cwd 影响，使用 latest request guard。
-- Install/remove 后重新拉取 Plugin、Skill、MCP、Hook，而不是靠局部猜测所有权变化。
+- Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再让宿主刷新可能被 Bundle 改变的 Skill、MCP、Hook 和 Hook config，而不是靠局部猜测所有权变化；turn 结算读取 extension 状态时会同时比较 runtime 的全局 Plugin catalog revision，只有 revision 变化才刷新完整 Plugin snapshot，因此协作子线程的插件变更也能收敛。Plugin Skill 编辑/删除只刷新已安装插件摘要。
 
 ## Developer features
 
