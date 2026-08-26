@@ -4,7 +4,6 @@ import type { RuntimeMcpTransport } from './mcp.js';
 export type { RuntimePluginReference } from './plugin-reference.js';
 
 export const RUNTIME_EXTENSION_API_VERSION = 1 as const;
-export const RUNTIME_LOCAL_PLUGIN_INSTALL_PATH = '/internal/plugins/install-local' as const;
 
 export const RUNTIME_EXTENSION_EVENT_NAMES = [
   'session.start',

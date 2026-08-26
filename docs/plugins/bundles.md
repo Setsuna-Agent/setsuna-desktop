@@ -114,9 +114,9 @@ Bundle 是否执行代码由 `extension` 字段决定，而不是由 schema 版�
 
 ## 安装和卸载
 
-应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。renderer 通过 `GET /v1/plugin-marketplace` 获取不含本地路径、命令或凭据的市场投影；投影包含用于详情页展示的 Tool、Skill、MCP、Hook 和 resource 描述。点击安装后只向 `POST /v1/plugin-marketplace/:id/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
+应用根目录的 `plugins/` 是默认精选市场源，打包时随应用发布。Plugin Management renderer service 通过 `GET /v1/features/plugin-management` 获取不含本地路径、命令或凭据的聚合投影；投影包含已安装插件、市场、extension 状态，以及详情页需要的 Tool、Skill、MCP、Hook 和 resource 描述。点击安装后只向 `POST /v1/features/plugin-management/marketplace/:pluginId/install` 提交插件 ID。runtime 根据可信目录找到 Bundle，并复制到 Electron `userData/runtime/plugins/<plugin-id>`；安装目录完全由 Setsuna 管理。
 
-普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。右上角“创建”菜单统一提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的内部端点；路径不会进入 renderer REST。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
+普通用户从随应用发布的市场卡片一键安装，不需要下载或解压 Bundle。右上角“创建”菜单统一提供“用对话创建插件”和“导入本地插件”：前者会选中内置 `create-plugin-in-chat` Skill，由模型调用 `configure_plugin` 创建或更新受管 Plugin；后者用于导入已经准备好的开发 Bundle 目录。能力页使用 Electron 原生目录选择器，主进程把用户选中的路径提交给 runtime 的受保护 Plugin Management operation；通用 renderer runtime proxy 明确拒绝该路径。内部开发工具 `install_plugin_bundle` 仍可执行目录侧载。模型发起的创建、更新、侧载和卸载始终需要审批。安装后：
 
 - Bundle 被复制到 runtime 数据目录，运行不依赖原始目录继续存在。
 - Skills 会出现在技能页并标记为 Plugin 来源。

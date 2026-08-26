@@ -60,9 +60,9 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 `runtime-rest-routes.ts` 是小型有序分发入口，只组合窄 domain handler：
 
 - `runtime-config-routes.ts`：Config 与 provider model discovery。
-- `runtime-extension-routes.ts`：Skills、MCP、Hooks、Plugins 和 Approvals。
+- `runtime-extension-routes.ts`：Skills、MCP 和 Approvals。
 - `runtime-resource-routes.ts`：Attachment 创建、读取与清理。
-- `RuntimeRouteRegistry`：由 Usage、Runtime Activity 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
+- `RuntimeRouteRegistry`：由 Usage、Runtime Activity、Plugin Management 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel 与 review。
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。

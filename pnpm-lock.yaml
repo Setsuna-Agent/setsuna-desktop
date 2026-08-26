@@ -24,6 +24,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-network-proxy': workspace:*
+      '@setsuna-desktop/feature-plugin-management': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
@@ -89,6 +90,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': link:packages/features/image-generation
       '@setsuna-desktop/feature-memory': link:packages/features/memory
       '@setsuna-desktop/feature-network-proxy': link:packages/features/network-proxy
+      '@setsuna-desktop/feature-plugin-management': link:packages/features/plugin-management
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-runtime-activity': link:packages/features/runtime-activity
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
@@ -157,6 +159,7 @@ importers:
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
+      '@setsuna-desktop/feature-plugin-management': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
@@ -181,6 +184,7 @@ importers:
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
       '@setsuna-desktop/feature-memory': link:../features/memory
+      '@setsuna-desktop/feature-plugin-management': link:../features/plugin-management
       '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-runtime-activity': link:../features/runtime-activity
       '@setsuna-desktop/feature-usage': link:../features/usage
@@ -298,6 +302,16 @@ importers:
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
       undici: 7.29.0
+
+  packages/features/plugin-management:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      electron: '>=30'
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      electron: 43.2.0
 
   packages/features/review:
     specifiers:

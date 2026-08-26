@@ -5,6 +5,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-browser/contracts';
 import type { NetworkProxyPreloadBridgeContribution } from '@setsuna-desktop/feature-network-proxy/contracts';
+import type { PluginManagementPreloadBridgeContribution } from '@setsuna-desktop/feature-plugin-management/contracts';
 import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-review/contracts';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
 import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-updater/contracts';
@@ -17,6 +18,7 @@ declare global {
     setsunaDesktop?: SetsunaDesktopBridge
       & BrowserPreloadBridgeContribution
       & NetworkProxyPreloadBridgeContribution
+      & PluginManagementPreloadBridgeContribution
       & ReviewPreloadBridgeContribution
       & TerminalPreloadBridgeContribution
       & UpdaterPreloadBridgeContribution

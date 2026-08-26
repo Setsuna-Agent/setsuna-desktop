@@ -63,6 +63,7 @@
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-network-proxy": "workspace:*",
+    "@setsuna-desktop/feature-plugin-management": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-runtime-activity": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",

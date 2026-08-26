@@ -6,6 +6,8 @@ import type { BrowserPreloadBridgeContribution } from '@setsuna-desktop/feature-
 import { browserPreloadFeature } from '@setsuna-desktop/feature-browser/preload';
 import type { NetworkProxyPreloadBridgeContribution } from '@setsuna-desktop/feature-network-proxy/contracts';
 import { networkProxyPreloadFeature } from '@setsuna-desktop/feature-network-proxy/preload';
+import type { PluginManagementPreloadBridgeContribution } from '@setsuna-desktop/feature-plugin-management/contracts';
+import { pluginManagementPreloadFeature } from '@setsuna-desktop/feature-plugin-management/preload';
 import type { ReviewPreloadBridgeContribution } from '@setsuna-desktop/feature-review/contracts';
 import { reviewPreloadFeature } from '@setsuna-desktop/feature-review/preload';
 import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature-terminal/contracts';
@@ -22,6 +24,7 @@ import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-s
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & BrowserPreloadBridgeContribution
   & NetworkProxyPreloadBridgeContribution
+  & PluginManagementPreloadBridgeContribution
   & ReviewPreloadBridgeContribution
   & TerminalPreloadBridgeContribution
   & UpdaterPreloadBridgeContribution
@@ -51,6 +54,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
   features: [
     browserPreloadFeature,
     networkProxyPreloadFeature,
+    pluginManagementPreloadFeature,
     reviewPreloadFeature,
     terminalPreloadFeature,
     updaterPreloadFeature,

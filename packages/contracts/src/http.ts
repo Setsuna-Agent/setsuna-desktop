@@ -28,16 +28,6 @@ import type {
   RuntimeMcpToolList,
 } from './mcp.js';
 import type {
-  RuntimeExtensionStatusList,
-  RuntimeExtensionTrustInput,
-  RuntimePluginInstallResult,
-  RuntimePluginItemContent,
-  RuntimePluginItemKind,
-  RuntimePluginList,
-  RuntimePluginMarketplaceList,
-  RuntimePluginRemoveResult,
-} from './plugins.js';
-import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
@@ -162,15 +152,6 @@ export type DesktopRuntimeClient = {
   deleteSkill(skillId: string): Promise<void>;
   installSkillMcpDependencies(skillId: string): Promise<RuntimeSkillMcpDependencyInstallResult>;
   authenticateSkillMcpDependency(skillId: string, serverKey: string): Promise<RuntimeSkillDetail>;
-  listPlugins(): Promise<RuntimePluginList>;
-  listPluginMarketplace(): Promise<RuntimePluginMarketplaceList>;
-  getPluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
-  getMarketplacePluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string): Promise<RuntimePluginItemContent>;
-  installMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
-  updateMarketplacePlugin(pluginId: string): Promise<RuntimePluginInstallResult>;
-  removePlugin(pluginId: string): Promise<RuntimePluginRemoveResult>;
-  listExtensionStatuses(): Promise<RuntimeExtensionStatusList>;
-  setPluginExtensionTrust(pluginId: string, input: RuntimeExtensionTrustInput): Promise<RuntimePluginList>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;

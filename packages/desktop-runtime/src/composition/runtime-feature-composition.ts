@@ -49,6 +49,11 @@ import {
   memoryRuntimeHostCapability,
 } from '@setsuna-desktop/feature-memory/contracts';
 import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
+import {
+  pluginManagementRuntimeHostCapability,
+  type PluginManagementRuntimeHost,
+} from '@setsuna-desktop/feature-plugin-management/contracts';
+import { pluginManagementRuntimeFeature } from '@setsuna-desktop/feature-plugin-management/runtime';
 import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import { runtimeActivityRuntimeHostCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
@@ -79,6 +84,7 @@ import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 const runtimeFeatures = defineRuntimeFeatureHost({
   required: [
     browserRuntimeFeature,
+    pluginManagementRuntimeFeature,
     reviewRuntimeFeature,
     runtimeActivityRuntimeFeature,
     windowsSandboxRuntimeFeature,
@@ -157,6 +163,28 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         memoryLegacySettingsCapability,
         runtime.configStore.memoryLegacySettingsAdapter(),
+      ),
+      provideHostCapability(
+        pluginManagementRuntimeHostCapability,
+        Object.freeze({
+          catalogRevision: () => runtime.pluginStore.catalogRevision(),
+          getInstalledItem: ({ itemId, kind, pluginId }) => (
+            runtime.pluginStore.readItemContent(pluginId, kind, itemId)
+          ),
+          getMarketplaceItem: ({ itemId, kind, pluginId }) => (
+            runtime.pluginMarketplace.readItemContent(pluginId, kind, itemId)
+          ),
+          installLocal: ({ path }) => runtime.pluginStore.installPlugin({ path }),
+          installMarketplace: ({ pluginId }) => runtime.pluginMarketplace.installPlugin(pluginId),
+          listExtensions: () => runtime.extensionManager.listStatuses(),
+          listMarketplace: () => runtime.pluginMarketplace.listPlugins(),
+          listPlugins: () => runtime.pluginStore.listPlugins(),
+          remove: ({ pluginId }) => runtime.pluginStore.removePlugin(pluginId),
+          setExtensionTrust: ({ pluginId, trusted }) => (
+            runtime.pluginStore.setExtensionTrust(pluginId, trusted)
+          ),
+          updateMarketplace: ({ pluginId }) => runtime.pluginMarketplace.updatePlugin(pluginId),
+        } satisfies PluginManagementRuntimeHost),
       ),
       provideHostCapability(
         reviewRuntimeHostCapability,

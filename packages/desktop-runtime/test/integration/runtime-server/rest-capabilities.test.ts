@@ -1,4 +1,4 @@
-import { RUNTIME_LOCAL_PLUGIN_INSTALL_PATH } from '@setsuna-desktop/contracts';
+import { installLocalPlugin } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -38,10 +38,14 @@ describe('runtime server REST skills and capabilities', () => {
     });
   
   it('lists the default marketplace and installs a selected plugin by id', async () => {
-      const marketplace = await harness.runtimeFetch('/v1/plugin-marketplace');
+      const marketplace = await harness.runtimeFetch('/v1/features/plugin-management');
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/extensions')).resolves.toEqual({
+        catalogRevision: marketplace.catalogRevision,
+        extensions: [],
+      });
       expect(marketplace).toMatchObject({
-        errors: [],
-        plugins: expect.arrayContaining([
+        marketplaceErrors: [],
+        marketplace: expect.arrayContaining([
           expect.objectContaining({
             id: 'openai-docs',
             name: 'OpenAI 官方文档',
@@ -197,7 +201,7 @@ describe('runtime server REST skills and capabilities', () => {
           }),
         ]),
       });
-      expect(marketplace.plugins.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
+      expect(marketplace.marketplace.filter((plugin: { featured: boolean }) => plugin.featured).map((plugin: { id: string }) => plugin.id)).toEqual([
         'documents',
         'pdf',
         'openai-image-generation',
@@ -207,7 +211,7 @@ describe('runtime server REST skills and capabilities', () => {
       expect(JSON.stringify(marketplace)).not.toContain('{{pluginRoot}}');
       expect(JSON.stringify(marketplace)).not.toContain('.mjs');
   
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/documents/items/skill/documents.documents')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/documents/items/skill/documents.documents')).resolves.toMatchObject({
         pluginId: 'documents',
         kind: 'skill',
         files: [expect.objectContaining({
@@ -216,7 +220,7 @@ describe('runtime server REST skills and capabilities', () => {
           text: expect.stringContaining('Word'),
         })],
       });
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/documents/items/resource/sample-document-spec')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/documents/items/resource/sample-document-spec')).resolves.toMatchObject({
         pluginId: 'documents',
         kind: 'resource',
         files: [expect.objectContaining({
@@ -224,7 +228,7 @@ describe('runtime server REST skills and capabilities', () => {
           mimeType: 'application/json',
         })],
       });
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/guard-dangerous-shell/items/hook/guard-dangerous-shell')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/guard-dangerous-shell/items/hook/guard-dangerous-shell')).resolves.toMatchObject({
         pluginId: 'guard-dangerous-shell',
         kind: 'hook',
         files: [expect.objectContaining({
@@ -233,7 +237,7 @@ describe('runtime server REST skills and capabilities', () => {
           text: expect.stringContaining('process'),
         })],
       });
-      const installed = await harness.runtimeFetch('/v1/plugin-marketplace/context7-docs/install', {
+      const installed = await harness.runtimeFetch('/v1/features/plugin-management/marketplace/context7-docs/install', {
         method: 'POST',
       });
   
@@ -244,6 +248,21 @@ describe('runtime server REST skills and capabilities', () => {
         },
         installedMcpServers: ['context7'],
       });
+      const installedMarketplace = await harness.runtimeFetch('/v1/features/plugin-management');
+      expect(installedMarketplace.catalogRevision).not.toBe(marketplace.catalogRevision);
+      const duplicateInstall = await fetch(
+        `${harness.baseUrl}/v1/features/plugin-management/marketplace/context7-docs/install`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${harness.token}` },
+        },
+      );
+      expect(duplicateInstall.status).toBe(500);
+      await expect(duplicateInstall.json()).resolves.toMatchObject({
+        code: 'PLUGIN_OPERATION_FAILED',
+        error: 'Plugin is already installed: context7-docs',
+        retryable: false,
+      });
       await expect(harness.runtimeFetch('/v1/mcp/servers')).resolves.toMatchObject({
         servers: [expect.objectContaining({
           key: 'context7',
@@ -252,10 +271,13 @@ describe('runtime server REST skills and capabilities', () => {
           enabled: true,
         })],
       });
-      await expect(harness.runtimeFetch('/v1/plugins')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
         plugins: [expect.objectContaining({ id: 'context7-docs' })],
       });
-      await expect(harness.runtimeFetch('/v1/plugins/context7-docs/items/skill/context7-docs.context7-docs')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed')).resolves.toMatchObject({
+        plugins: [expect.objectContaining({ id: 'context7-docs' })],
+      });
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/context7-docs/items/skill/context7-docs.context7-docs')).resolves.toMatchObject({
         pluginId: 'context7-docs',
         kind: 'skill',
         files: [expect.objectContaining({ mimeType: 'text/markdown', text: expect.stringContaining('Context7') })],
@@ -281,17 +303,17 @@ describe('runtime server REST skills and capabilities', () => {
         }],
       });
 
-      await expect(harness.runtimeFetch('/v1/plugins/context7-docs', { method: 'DELETE' })).resolves.toEqual({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/context7-docs', { method: 'DELETE' })).resolves.toEqual({
         pluginId: 'context7-docs',
         removedMcpServers: ['context7'],
         preservedMcpServers: [],
       });
-      await expect(harness.runtimeFetch('/v1/plugins')).resolves.toEqual({ plugins: [] });
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
-        plugins: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({ plugins: [] });
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
+        marketplace: expect.arrayContaining([expect.objectContaining({ id: 'context7-docs', installed: false })]),
       });
   
-      const installedHookPlugin = await harness.runtimeFetch('/v1/plugin-marketplace/guard-dangerous-shell/install', {
+      const installedHookPlugin = await harness.runtimeFetch('/v1/features/plugin-management/marketplace/guard-dangerous-shell/install', {
         method: 'POST',
       });
       expect(installedHookPlugin).toMatchObject({
@@ -311,14 +333,14 @@ describe('runtime server REST skills and capabilities', () => {
           })],
         }],
       });
-      await expect(harness.runtimeFetch('/v1/plugins/guard-dangerous-shell', { method: 'DELETE' })).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/guard-dangerous-shell', { method: 'DELETE' })).resolves.toMatchObject({
         pluginId: 'guard-dangerous-shell',
       });
       await expect(harness.appServerRpc('hooks/list', { cwds: [] })).resolves.toMatchObject({
         data: [{ hooks: [] }],
       });
 
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/question/install', {
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/question/install', {
         method: 'POST',
       })).resolves.toMatchObject({
         plugin: {
@@ -326,13 +348,13 @@ describe('runtime server REST skills and capabilities', () => {
           extension: { trust: 'trusted' },
         },
       });
-      await expect(harness.runtimeFetch('/v1/plugins/question', { method: 'DELETE' })).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/installed/question', { method: 'DELETE' })).resolves.toMatchObject({
         pluginId: 'question',
       });
     });
   
   it('updates an installed marketplace plugin through its id-only REST endpoint', async () => {
-      await harness.runtimeFetch('/v1/plugin-marketplace/context7-docs/install', { method: 'POST' });
+      await harness.runtimeFetch('/v1/features/plugin-management/marketplace/context7-docs/install', { method: 'POST' });
       const pluginIndexPath = path.join(harness.runtimeDataDir, 'runtime', 'plugins.json');
       const pluginIndex = JSON.parse(await readFile(pluginIndexPath, 'utf8')) as {
         plugins: Array<{ id: string; version?: string }>;
@@ -342,18 +364,18 @@ describe('runtime server REST skills and capabilities', () => {
       context7Record.version = '0.9.0';
       await writeFile(pluginIndexPath, JSON.stringify(pluginIndex, null, 2));
   
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
-        plugins: expect.arrayContaining([expect.objectContaining({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
+        marketplace: expect.arrayContaining([expect.objectContaining({
           id: 'context7-docs',
           installedVersion: '0.9.0',
           updateAvailable: true,
         })]),
       });
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace/context7-docs/update', { method: 'POST' })).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management/marketplace/context7-docs/update', { method: 'POST' })).resolves.toMatchObject({
         plugin: { id: 'context7-docs', version: '1.0.1' },
       });
-      await expect(harness.runtimeFetch('/v1/plugin-marketplace')).resolves.toMatchObject({
-        plugins: expect.arrayContaining([expect.objectContaining({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
+        marketplace: expect.arrayContaining([expect.objectContaining({
           id: 'context7-docs',
           installedVersion: '1.0.1',
           updateAvailable: false,
@@ -383,7 +405,7 @@ describe('runtime server REST skills and capabilities', () => {
         }, null, 2)),
       ]);
 
-      await expect(harness.runtimeFetch(RUNTIME_LOCAL_PLUGIN_INSTALL_PATH, {
+      await expect(harness.runtimeFetch(installLocalPlugin.path, {
         method: 'POST',
         body: JSON.stringify({ path: bundleDir }),
       })).resolves.toMatchObject({
@@ -392,13 +414,13 @@ describe('runtime server REST skills and capabilities', () => {
           extension: { trust: 'untrusted' },
         },
       });
-      await expect(harness.runtimeFetch('/v1/plugins')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/plugin-management')).resolves.toMatchObject({
         plugins: [expect.objectContaining({ id: 'local-extension' })],
       });
     });
   
   it('does not expose local path side-loading through the renderer REST surface', async () => {
-      const response = await fetch(`${harness.baseUrl}/v1/plugins`, {
+      const response = await fetch(`${harness.baseUrl}/v1/features/plugin-management`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${harness.token}`,
@@ -426,7 +448,7 @@ describe('runtime server REST skills and capabilities', () => {
   it('tests the installed image plugin through its configured private provider', async () => {
       const imageServer = await createImageGenerationCaptureServer();
       try {
-        await harness.runtimeFetch('/v1/plugin-marketplace/openai-image-generation/install', { method: 'POST' });
+        await harness.runtimeFetch('/v1/features/plugin-management/marketplace/openai-image-generation/install', { method: 'POST' });
         const savedConfig = await harness.runtimeFetch('/v1/features/image-generation/settings', {
           method: 'PATCH',
           body: JSON.stringify({
@@ -519,7 +541,7 @@ describe('runtime server REST skills and capabilities', () => {
   it('tests the installed vision plugin through a selected configured model', async () => {
       const visionServer = await createVisionRecognitionCaptureServer();
       try {
-        const installed = await harness.runtimeFetch('/v1/plugin-marketplace/openai-vision-recognition/install', { method: 'POST' });
+        const installed = await harness.runtimeFetch('/v1/features/plugin-management/marketplace/openai-vision-recognition/install', { method: 'POST' });
         expect(installed).toMatchObject({
           plugin: { tools: [{ name: 'analyze_image' }] },
         });

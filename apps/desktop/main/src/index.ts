@@ -7,6 +7,7 @@ import type { MainFeatureComposition } from '@setsuna-desktop/feature-core/main'
 import {
   app,
   BrowserWindow,
+  dialog,
   Menu,
   nativeImage,
   safeStorage,
@@ -24,7 +25,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerDataRootIpc } from './ipc/data-root-ipc.js';
 import { registerDesktopIpc } from './ipc/desktop-ipc.js';
-import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
 import {
@@ -275,6 +275,22 @@ async function createWindow(): Promise<void> {
         ),
         systemFetch: fetchWithElectronSystemProxy,
       }),
+      pluginManagementHost: Object.freeze({
+        installLocal: (sourcePath: string) => requireRuntimeHost().installLocalPluginBundle(sourcePath),
+        interfaceLanguage: () => interfaceLanguage,
+        isRendererSender: (senderId: number) => (
+          !currentMainWindow.isDestroyed()
+          && !currentMainWindow.webContents.isDestroyed()
+          && currentMainWindow.webContents.id === senderId
+        ),
+        selectLocalBundle: async (title: string) => {
+          const selection = await dialog.showOpenDialog(currentMainWindow, {
+            title,
+            properties: ['openDirectory'],
+          });
+          return selection.canceled ? null : selection.filePaths[0] ?? null;
+        },
+      }),
       requestRuntime: (input) => requestRuntime(input),
       updaterHost: Object.freeze({
         currentVersion: app.getVersion(),
@@ -404,7 +420,6 @@ async function createWindow(): Promise<void> {
     },
     userDataPath: dataLayout.root,
   });
-  registerPluginIpc(currentRuntimeHost, currentMainWindow, () => interfaceLanguage);
   registerWindowIpc({
     mainWindow: currentMainWindow,
     macTrafficLightPosition: getMacTrafficLightPosition,

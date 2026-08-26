@@ -28,6 +28,12 @@ import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/featur
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
+import {
+  pluginManagementRendererHostCapability,
+  pluginManagementRendererServiceCapability,
+  type PluginManagementRendererService,
+} from '@setsuna-desktop/feature-plugin-management/contracts';
+import { pluginManagementRendererFeature } from '@setsuna-desktop/feature-plugin-management/renderer';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer/feature';
 import {
   runtimeActivityRendererServiceCapability,
@@ -81,6 +87,7 @@ const rendererFeatures = defineRendererFeatureHost({
   required: [
     browserRendererFeature,
     networkProxyRendererFeature,
+    pluginManagementRendererFeature,
     reviewRendererFeature,
     runtimeActivityRendererFeature,
     terminalRendererFeature,
@@ -107,6 +114,7 @@ export type ActiveRendererFeatures = Readonly<{
   conversationDebug: ConversationDebugRendererService;
   messages: ComposedRendererMessages<AppLocale>;
   networkProxy: NetworkProxyRendererStateService;
+  pluginManagement: PluginManagementRendererService;
   runtimeActivity: RuntimeActivityRendererService;
   updater: UpdaterRendererStateService;
   usage: UsageRendererStateService;
@@ -140,6 +148,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       provideHostCapability(
         networkProxyRendererHostCapability,
         Object.freeze({ bridge: window.setsunaDesktop?.networkProxy ?? null }),
+      ),
+      provideHostCapability(
+        pluginManagementRendererHostCapability,
+        Object.freeze({ bridge: window.setsunaDesktop?.plugins ?? null }),
       ),
       provideHostCapability(
         updaterRendererHostCapability,
@@ -176,6 +188,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         createNoopConversationDebugRendererService,
       ),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
+      pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
       runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
       updater: requiredCapability(updaterRendererStateCapability),
       usage: optionalCapability(
@@ -189,6 +202,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       conversationDebug: dependencies.conversationDebug,
       messages,
       networkProxy: dependencies.networkProxy,
+      pluginManagement: dependencies.pluginManagement,
       runtimeActivity: dependencies.runtimeActivity,
       updater: dependencies.updater,
       usage: dependencies.usage,

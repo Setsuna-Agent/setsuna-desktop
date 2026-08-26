@@ -25,6 +25,11 @@ import {
   type NetworkProxyMainService,
 } from '@setsuna-desktop/feature-network-proxy/main';
 import {
+  pluginManagementMainFeature,
+  pluginManagementMainHostCapability,
+  type PluginManagementMainHost,
+} from '@setsuna-desktop/feature-plugin-management/main';
+import {
   generateReviewCommitMessage,
   reviewCommitMessageCapability,
   reviewFilePreviewCapability,
@@ -70,6 +75,7 @@ const mainFeatures = defineMainFeatureHost({
   required: [
     browserMainFeature,
     networkProxyMainFeature,
+    pluginManagementMainFeature,
     reviewMainFeature,
     terminalMainFeature,
     updaterMainFeature,
@@ -96,6 +102,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   nativeBridge: DesktopNativeBridgeServer;
   networkProxy(): NetworkProxyMainService;
   networkProxyHost: NetworkProxyMainHost;
+  pluginManagementHost: PluginManagementMainHost;
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
   updaterHost: UpdaterMainHost;
   webDavSyncHost: WebDavSyncMainHost;
@@ -114,6 +121,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       provideHostCapability(
         networkProxyMainHostCapability,
         input.networkProxyHost,
+      ),
+      provideHostCapability(
+        pluginManagementMainHostCapability,
+        input.pluginManagementHost,
       ),
       provideHostCapability(
         reviewCommitMessageCapability,

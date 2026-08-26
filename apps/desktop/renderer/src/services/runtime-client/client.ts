@@ -20,8 +20,6 @@ import type {
   RuntimeBackgroundShellProcessTermination,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeExtensionStatusList,
-  RuntimeExtensionTrustInput,
   RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeMcpResourceReadResult,
@@ -33,12 +31,6 @@ import type {
   RuntimeMcpToolList,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
-  RuntimePluginInstallResult,
-  RuntimePluginItemContent,
-  RuntimePluginItemKind,
-  RuntimePluginList,
-  RuntimePluginMarketplaceList,
-  RuntimePluginRemoveResult,
   RuntimeRequestInput,
   RuntimeReviewStartInput,
   RuntimeSkillDetail,
@@ -294,50 +286,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<RuntimeSkillDetail>({
         path: `/v1/skills/${encodeURIComponent(skillId)}/mcp-dependencies/${encodeURIComponent(serverKey)}/login`,
         method: 'POST',
-      });
-    },
-    listPlugins() {
-      return request<RuntimePluginList>({ path: '/v1/plugins' });
-    },
-    listPluginMarketplace() {
-      return request<RuntimePluginMarketplaceList>({ path: '/v1/plugin-marketplace' });
-    },
-    getPluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string) {
-      return request<RuntimePluginItemContent>({
-        path: `/v1/plugins/${encodeURIComponent(pluginId)}/items/${kind}/${encodeURIComponent(itemId)}`,
-      });
-    },
-    getMarketplacePluginItemContent(pluginId: string, kind: RuntimePluginItemKind, itemId: string) {
-      return request<RuntimePluginItemContent>({
-        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/items/${kind}/${encodeURIComponent(itemId)}`,
-      });
-    },
-    installMarketplacePlugin(pluginId: string) {
-      return request<RuntimePluginInstallResult>({
-        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/install`,
-        method: 'POST',
-      });
-    },
-    updateMarketplacePlugin(pluginId: string) {
-      return request<RuntimePluginInstallResult>({
-        path: `/v1/plugin-marketplace/${encodeURIComponent(pluginId)}/update`,
-        method: 'POST',
-      });
-    },
-    removePlugin(pluginId: string) {
-      return request<RuntimePluginRemoveResult>({
-        path: `/v1/plugins/${encodeURIComponent(pluginId)}`,
-        method: 'DELETE',
-      });
-    },
-    listExtensionStatuses() {
-      return request<RuntimeExtensionStatusList>({ path: '/v1/extensions/status' });
-    },
-    setPluginExtensionTrust(pluginId: string, input: RuntimeExtensionTrustInput) {
-      return request<RuntimePluginList>({
-        path: `/v1/plugins/${encodeURIComponent(pluginId)}/extension/trust`,
-        method: 'PUT',
-        body: input,
       });
     },
     listProjects() {

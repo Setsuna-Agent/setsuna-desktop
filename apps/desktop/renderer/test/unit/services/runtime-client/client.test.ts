@@ -292,60 +292,6 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('installs marketplace plugins by id without sending a local path', async () => {
-    const request = installRuntimeBridge(() => ({ plugin: { id: 'openai-docs' } }));
-    const client = createDesktopRuntimeClient();
-
-    await client.installMarketplacePlugin('openai-docs');
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/plugin-marketplace/openai-docs/install',
-      method: 'POST',
-    });
-  });
-
-  it('updates marketplace plugins by id without sending a local path', async () => {
-    const request = installRuntimeBridge(() => ({ plugin: { id: 'openai-docs', version: '2.0.0' } }));
-    const client = createDesktopRuntimeClient();
-
-    await client.updateMarketplacePlugin('openai docs');
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/plugin-marketplace/openai%20docs/update',
-      method: 'POST',
-    });
-  });
-
-  it('lists extension process status and updates exact-bundle trust through narrow endpoints', async () => {
-    const request = installRuntimeBridge(() => ({ extensions: [] }));
-    const client = createDesktopRuntimeClient();
-
-    await client.listExtensionStatuses();
-    await client.setPluginExtensionTrust('local extension', { trusted: true });
-
-    expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/v1/extensions/status' },
-      {
-        path: '/v1/plugins/local%20extension/extension/trust',
-        method: 'PUT',
-        body: { trusted: true },
-      },
-    ]);
-  });
-
-  it('routes installed and marketplace plugin item previews through encoded, read-only paths', async () => {
-    const request = installRuntimeBridge(() => ({ pluginId: 'documents', itemId: 'documents.documents', kind: 'skill', files: [] }));
-    const client = createDesktopRuntimeClient();
-
-    await client.getPluginItemContent('documents', 'skill', 'documents.documents');
-    await client.getMarketplacePluginItemContent('documents', 'resource', 'sample document');
-
-    expect(request.mock.calls.map(([input]) => input)).toEqual([
-      { path: '/v1/plugins/documents/items/skill/documents.documents' },
-      { path: '/v1/plugin-marketplace/documents/items/resource/sample%20document' },
-    ]);
-  });
-
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();
