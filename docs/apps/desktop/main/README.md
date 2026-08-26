@@ -20,6 +20,7 @@ Electron main 是桌面可信边界。它负责应用生命周期、窗口、IPC
 | `packages/features/workspace-apps/main` | 外部应用检测、平台启动参数与 IPC | [本机能力](native-capabilities.md) |
 | `packages/features/updater/main` | release metadata、下载源、checksum、安装包与 IPC | [本机能力](native-capabilities.md) |
 | `packages/features/webdav-sync/main` | 加密 WebDAV 备份、还原事务、调度与 IPC | [WebDAV 设计](../../../designs/webdav-backup-and-restore.md) |
+| `packages/features/windows-sandbox/main` | sidecar、信任快照、受限出口与 IPC | [Windows 原生沙箱](../../../designs/windows-native-sandbox.md) |
 | `src/workspace/` | 宿主文件打开、生成图片动作 | [本机能力](native-capabilities.md) |
 | `src/i18n/` | main 原生菜单与提示文案 | [本机能力](native-capabilities.md) |
 

@@ -12,7 +12,6 @@ import { projectEnUS, projectZhCN } from './projectMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
 import { usageEnUS, usageZhCN } from './usageMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
-import { windowsSandboxEnUS, windowsSandboxZhCN } from './windowsSandboxMessages.js';
 
 const zhCN = {
   'common.back': '返回',
@@ -446,7 +445,7 @@ const zhCN = {
   ...runtimeActivityZhCN,
   ...settingsNavigationZhCN,
   ...keyboardShortcutZhCN,
-  ...workspaceZhCN, ...windowsSandboxZhCN,
+  ...workspaceZhCN,
   ...capabilitiesZhCN,
   ...capabilitiesManagementZhCN,
   ...chatZhCN,
@@ -891,7 +890,7 @@ const enUS = {
   ...runtimeActivityEnUS,
   ...settingsNavigationEnUS,
   ...keyboardShortcutEnUS,
-  ...workspaceEnUS, ...windowsSandboxEnUS,
+  ...workspaceEnUS,
   ...capabilitiesEnUS,
   ...capabilitiesManagementEnUS,
   ...chatEnUS,

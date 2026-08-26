@@ -27,7 +27,6 @@ import { registerDesktopIpc } from './ipc/desktop-ipc.js';
 import { registerPluginIpc } from './ipc/plugin-ipc.js';
 import { registerRuntimeIpc } from './ipc/runtime-ipc.js';
 import { registerWindowIpc } from './ipc/window-ipc.js';
-import { registerWindowsSandboxIpc } from './ipc/windows-sandbox-ipc.js';
 import {
   maintenanceProfileRoot,
   resolveDesktopDataRootBootMode,
@@ -43,15 +42,10 @@ import {
 } from './dev-relaunch-protocol.js';
 import {
   installDesktopRipgrepEnvironment,
-  installDesktopWindowsSandboxEnvironment,
-  resolveDesktopSandboxCurl,
   resolveDesktopRipgrep,
-  resolveDesktopWindowsSandbox,
 } from './runtime/bundled-tools.js';
 import { hydrateDesktopProcessEnvironment } from './runtime/desktop-environment.js';
 import { RuntimeHost } from './runtime/host.js';
-import { prepareSandboxCurlTrustBundle } from './runtime/sandbox-curl-trust.js';
-import { WindowsSandboxManager } from './windows-sandbox/manager.js';
 import { DesktopNativeBridgeServer } from './runtime/native-bridge-server.js';
 import { electronCredentialEncryption } from './security/credential-encryption.js';
 import { DesktopCredentialVault } from './security/credential-vault.js';
@@ -66,6 +60,10 @@ import {
   rollbackCommittedWebDavRestore,
   type DesktopWebDavSyncLifecycle,
 } from './composition/webdav-sync-storage-host.js';
+import {
+  createWindowsSandboxMainHost,
+  prepareDesktopWindowsSandbox,
+} from './composition/windows-sandbox-feature-host.js';
 import { registerWindowsTitlebarDoubleClick } from './window/frame.js';
 import { DesktopWindowCloseBehaviorController } from './window/close-behavior.js';
 import { DesktopWindowPreferencesStore } from './window/preferences.js';
@@ -92,6 +90,7 @@ let desktopNativeBridgeServer: DesktopNativeBridgeServer | null = null;
 let mainFeatureComposition: MainFeatureComposition | null = null;
 let desktopUpdaterLifecycle: ActivatedBuiltinMainFeatures['updater'] | null = null;
 let networkProxyMainService: ActivatedBuiltinMainFeatures['networkProxy'] | null = null;
+let windowsSandboxMainService: ActivatedBuiltinMainFeatures['windowsSandbox'] | null = null;
 let webDavSyncLifecycle: DesktopWebDavSyncLifecycle | null = null;
 let interfaceLanguage: RuntimeInterfaceLanguage = 'zh-CN';
 let isAppQuitting = false;
@@ -228,25 +227,12 @@ async function createWindow(): Promise<void> {
     resourcesPath: process.resourcesPath,
   });
   installDesktopRipgrepEnvironment(process.env, ripgrepPath, { required: app.isPackaged });
-  const windowsSandboxPath = resolveDesktopWindowsSandbox({
+  const windowsSandbox = await prepareDesktopWindowsSandbox({
     appRoot: app.getAppPath(),
+    dataRoot: dataLayout.root,
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
   });
-  installDesktopWindowsSandboxEnvironment(process.env, windowsSandboxPath, {
-    required: app.isPackaged && process.platform === 'win32',
-  });
-  const sandboxCurlPath = resolveDesktopSandboxCurl({
-    appRoot: app.getAppPath(),
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-  });
-  const sandboxCaBundlePath = sandboxCurlPath
-    ? (await prepareSandboxCurlTrustBundle({
-      bundledCaPath: path.join(path.dirname(sandboxCurlPath), 'curl-ca-bundle.crt'),
-      destination: path.join(dataLayout.root, 'sandbox-trust', 'curl-ca-bundle.pem'),
-    })).bundlePath
-    : undefined;
 
   const credentialVault = new DesktopCredentialVault(
     dataLayout.credentialVaultPath,
@@ -257,9 +243,7 @@ async function createWindow(): Promise<void> {
     deleteNetworkProxy: (proxyServerId) => requireNetworkProxyMainService().deleteServer(proxyServerId),
     openExternal: async (url) => { await shell.openExternal(url); },
     resolveNetworkProxy: (input) => requireNetworkProxyMainService().resolve(input),
-    resolveSandboxNetworkEnvironment: () => (
-      requireNetworkProxyMainService().resolveSandboxNetworkEnvironment()
-    ),
+    resolveSandboxNetworkEnvironment: () => requireWindowsSandboxMainService().resolveNetworkEnvironment(),
     systemProxyFetch: fetchWithElectronSystemProxy,
     validateNetworkProxyReferences: (proxyServerIds) =>
       requireNetworkProxyMainService().validateServerReferences(proxyServerIds),
@@ -331,13 +315,29 @@ async function createWindow(): Promise<void> {
           init?: RequestInit,
         ) => requireNetworkProxyMainService().fetch('sync', input, init),
       }),
+      windowsSandboxHost: createWindowsSandboxMainHost({
+        executablePath: windowsSandbox.executablePath,
+        isRendererSender: (senderId) => (
+          !currentMainWindow.isDestroyed()
+          && !currentMainWindow.webContents.isDestroyed()
+          && currentMainWindow.webContents.id === senderId
+        ),
+        resolveUpstreamProxy: async () => {
+          const route = await requireNetworkProxyMainService().resolve({ scope: 'runtime' });
+          return route.mode === 'proxy' ? route.proxyUrl : undefined;
+        },
+      }),
     });
     networkProxyMainService = activatedMainFeatures.networkProxy;
+    windowsSandboxMainService = activatedMainFeatures.windowsSandbox;
     nativeBridge = await currentDesktopNativeBridgeServer.start();
   } catch (error) {
     await activatedMainFeatures?.composition.dispose().catch(() => undefined);
     if (networkProxyMainService === activatedMainFeatures?.networkProxy) {
       networkProxyMainService = null;
+    }
+    if (windowsSandboxMainService === activatedMainFeatures?.windowsSandbox) {
+      windowsSandboxMainService = null;
     }
     await currentDesktopNativeBridgeServer.stop();
     throw error;
@@ -356,11 +356,6 @@ async function createWindow(): Promise<void> {
     dataDir: dataLayout.root,
     ripgrepPath,
     requireBundledRipgrep: app.isPackaged,
-    requireBundledSandboxCurl: app.isPackaged && process.platform === 'win32',
-    sandboxCaBundlePath,
-    sandboxCurlPath,
-    windowsSandboxPath,
-    requireBundledWindowsSandbox: app.isPackaged && process.platform === 'win32',
     runtimeEntry: process.env.SETSUNA_DESKTOP_RUNTIME_ENTRY,
   });
   requestRuntime = (input) => currentRuntimeHost.request(input);
@@ -389,6 +384,7 @@ async function createWindow(): Promise<void> {
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     if (networkProxyMainService === activatedMainFeatures.networkProxy) networkProxyMainService = null;
+    if (windowsSandboxMainService === activatedMainFeatures.windowsSandbox) windowsSandboxMainService = null;
     await currentDesktopNativeBridgeServer.stop();
     throw error;
   }
@@ -417,10 +413,6 @@ async function createWindow(): Promise<void> {
       ? closeBehaviorController.setCloseBehavior(behavior)
       : Promise.resolve('quit'),
   });
-  registerWindowsSandboxIpc(
-    new WindowsSandboxManager({ executablePath: windowsSandboxPath }),
-    currentMainWindow,
-  );
   currentMainWindow.on('closed', () => {
     currentWebDavSyncLifecycle.close();
     void shutdownDesktopServices();
@@ -598,6 +590,11 @@ function requireNetworkProxyMainService(): ActivatedBuiltinMainFeatures['network
   return networkProxyMainService;
 }
 
+function requireWindowsSandboxMainService(): ActivatedBuiltinMainFeatures['windowsSandbox'] {
+  if (!windowsSandboxMainService) throw new Error('Desktop Windows sandbox Feature is not available.');
+  return windowsSandboxMainService;
+}
+
 function shutdownDesktopServices(
   options: { requireRuntimeExit?: boolean } = {},
 ): Promise<void> {
@@ -608,6 +605,7 @@ function shutdownDesktopServices(
   const currentMainFeatureComposition = mainFeatureComposition;
   const currentDesktopUpdaterLifecycle = desktopUpdaterLifecycle;
   const currentNetworkProxyMainService = networkProxyMainService;
+  const currentWindowsSandboxMainService = windowsSandboxMainService;
   const currentWebDavSyncLifecycle = webDavSyncLifecycle;
 
   currentDesktopUpdaterLifecycle?.stop();
@@ -641,6 +639,7 @@ function shutdownDesktopServices(
     if (mainFeatureComposition === currentMainFeatureComposition) mainFeatureComposition = null;
     if (desktopUpdaterLifecycle === currentDesktopUpdaterLifecycle) desktopUpdaterLifecycle = null;
     if (networkProxyMainService === currentNetworkProxyMainService) networkProxyMainService = null;
+    if (windowsSandboxMainService === currentWindowsSandboxMainService) windowsSandboxMainService = null;
     if (webDavSyncLifecycle === currentWebDavSyncLifecycle) webDavSyncLifecycle = null;
     if (runtimeStopError && options.requireRuntimeExit) throw runtimeStopError;
   })();

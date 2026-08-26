@@ -18,26 +18,6 @@ export type DesktopWorkspaceFilePreviewResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
-export type DesktopWindowsSandboxState =
-  | 'unsupported'
-  | 'unavailable'
-  | 'not-installed'
-  | 'ready'
-  | 'needs-repair';
-
-export type DesktopWindowsSandboxStatus = {
-  architecture: string;
-  installSupported: boolean;
-  installedVersion?: string;
-  platform: string;
-  protocolVersion?: number;
-  reason: string;
-  sidecarVersion?: string;
-  state: DesktopWindowsSandboxState;
-};
-
-export type DesktopWindowsSandboxAction = 'install' | 'repair' | 'uninstall';
-
 export type DesktopImageActionResult =
   | { ok: true }
   | { ok: false; error: string };
@@ -130,10 +110,6 @@ export type SetsunaDesktopBridge = {
   };
   links: {
     openExternal(url: string): Promise<boolean>;
-  };
-  windowsSandbox: {
-    getStatus(): Promise<DesktopWindowsSandboxStatus>;
-    runAction(action: DesktopWindowsSandboxAction): Promise<DesktopWindowsSandboxStatus>;
   };
   plugins: {
     /** Opens the native directory picker and installs the selected local Plugin Bundle. */

@@ -10,7 +10,6 @@ import {
 import { RuntimeAccessModeMenu } from '../../../shared/ui/RuntimeAccessModeMenu.js';
 import { SettingsToggle } from '../../../shared/ui/SettingsViewUi.js';
 import { Button, IconButton, TextArea, TextField } from '../../../shared/ui/primitives.js';
-import { WindowsSandboxSettings } from '../windows-sandbox/WindowsSandboxSettings.js';
 import { SettingsPathValue } from '../components/SettingsPathValue.js';
 import { DataLocationSettings } from '../data-root/DataLocationSettings.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
@@ -75,8 +74,6 @@ export function RuntimePolicySettings({
           </label>
         </div>
       </div>
-
-      {window.setsunaDesktop?.desktop.platform === 'win32' ? <WindowsSandboxSettings /> : null}
 
       <div className="chat-user-settings__section-block">
         <div className="chat-user-settings__group-title">{t('settings.runtime.localStorage')}</div>

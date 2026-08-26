@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WindowsSandboxManager } from '../../../src/windows-sandbox/manager.js';
+import { WindowsSandboxManager } from '../../src/main/manager.js';
 
 describe('WindowsSandboxManager', () => {
   it('reports unsupported and missing-sidecar states without starting a process', async () => {

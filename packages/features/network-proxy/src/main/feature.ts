@@ -53,7 +53,6 @@ export const networkProxyMainFeature = defineMainFeature({
       environmentFor: (scope) => service.environmentFor(scope),
       fetch: (scope, input, init) => fetch.fetch(scope, input, init),
       resolve: (input) => service.resolve(input),
-      resolveSandboxNetworkEnvironment: () => service.sandboxEnvironment(),
       validateServerReferences: (proxyServerIds) => service.validateServerReferences(proxyServerIds),
     });
     context.provide(serviceProvider, publicService);

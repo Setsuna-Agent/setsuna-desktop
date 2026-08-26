@@ -1,13 +1,10 @@
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   installDesktopRipgrepEnvironment,
-  installDesktopWindowsSandboxEnvironment,
-  resolveDesktopSandboxCurl,
   resolveDesktopRipgrep,
-  resolveDesktopWindowsSandbox,
 } from '../../../src/runtime/bundled-tools.js';
 
 describe('bundled desktop tools', () => {
@@ -60,83 +57,4 @@ describe('bundled desktop tools', () => {
     expect(String(env.PATH).split(path.delimiter)[0]).toBe(path.dirname(binaryPath));
   });
 
-  it('resolves the packaged Windows sandbox only from its bundled resource', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-windows-sandbox-'));
-    const binaryPath = path.join(root, 'setsuna-sandbox', 'setsuna-sandbox-win.exe');
-    await mkdir(path.dirname(binaryPath), { recursive: true });
-    await writeFile(binaryPath, 'test sidecar');
-
-    expect(resolveDesktopWindowsSandbox({
-      appRoot: path.join(root, 'app.asar'),
-      arch: 'x64',
-      env: { PATH: '' },
-      isPackaged: true,
-      platform: 'win32',
-      resourcesPath: root,
-    })).toBe(binaryPath);
-  });
-
-  it('reports the Windows sandbox when its packaged resource is missing', () => {
-    expect(() => resolveDesktopWindowsSandbox({
-      appRoot: '/missing/app.asar',
-      arch: 'x64',
-      env: { PATH: '' },
-      isPackaged: true,
-      platform: 'win32',
-      resourcesPath: '/missing',
-    })).toThrow('Bundled Windows sandbox executable is missing or invalid');
-  });
-
-  it('installs and removes the explicit Windows sandbox path', () => {
-    const env: NodeJS.ProcessEnv = {};
-
-    installDesktopWindowsSandboxEnvironment(env, 'C:\\Setsuna\\setsuna-sandbox-win.exe', {
-      required: true,
-    });
-    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBe(
-      'C:\\Setsuna\\setsuna-sandbox-win.exe',
-    );
-
-    installDesktopWindowsSandboxEnvironment(env, undefined, { required: false });
-    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBeUndefined();
-  });
-
-  it('resolves packaged sandbox curl only with its adjacent trust files', async () => {
-    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-sandbox-curl-'));
-    const binaryPath = path.join(root, 'setsuna-path', 'curl.exe');
-    await mkdir(path.dirname(binaryPath), { recursive: true });
-    await Promise.all([
-      writeFile(binaryPath, 'test curl'),
-      writeFile(path.join(path.dirname(binaryPath), 'curl-ca-bundle.crt'), 'test CA bundle'),
-      writeFile(path.join(path.dirname(binaryPath), '_curlrc'), 'ca-native\n'),
-    ]);
-
-    expect(resolveDesktopSandboxCurl({
-      appRoot: path.join(root, 'app.asar'),
-      arch: 'x64',
-      env: { PATH: '' },
-      isPackaged: true,
-      platform: 'win32',
-      resourcesPath: root,
-    })).toBe(binaryPath);
-
-    await rm(path.join(path.dirname(binaryPath), 'curl-ca-bundle.crt'));
-    expect(() => resolveDesktopSandboxCurl({
-      appRoot: path.join(root, 'app.asar'),
-      arch: 'x64',
-      isPackaged: true,
-      platform: 'win32',
-      resourcesPath: root,
-    })).toThrow('CA bundle is missing or invalid');
-
-    await writeFile(path.join(path.dirname(binaryPath), 'curl-ca-bundle.crt'), 'test CA bundle');
-    await rm(path.join(path.dirname(binaryPath), '_curlrc'));
-    expect(() => resolveDesktopSandboxCurl({
-      appRoot: path.join(root, 'app.asar'),
-      arch: 'x64',
-      isPackaged: true,
-      platform: 'win32',
-      resourcesPath: root,
-    })).toThrow('configuration is missing or invalid');
-  });
 });

@@ -36,6 +36,11 @@
 
 ## 组件
 
+跨进程实现由 `packages/features/windows-sandbox/` 纵向拥有：`contracts` 定义 IPC、native bridge 与
+runtime Capability，`main` 管理 sidecar、信任快照和认证出口，`preload` 暴露窄桥，`renderer` 提供设置
+扩展，`runtime` 探测 provider 并物化执行请求。四个宿主 composition root 只负责注入窗口、网络路由、
+本机资源路径和通用 shell port；Core contracts 与 `PcLocalToolHost` 不持有 Windows 专用 DTO 或实现。
+
 ### Rust sidecar
 
 `native/windows-sandbox` 生成单个 `setsuna-sandbox-win.exe`，包含：
@@ -59,6 +64,8 @@ protected DACL 和与当前打包 sidecar 的 SHA-256 一致性。账户和组�
 ### Runtime provider
 
 runtime 只从 `SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH` 使用绝对 sidecar 路径，不搜索 `PATH`。
+provider 通过 runtime composition 绑定到通用 `ShellSandboxProvider` port；Core shell policy 只消费能力、
+环境补丁、control root 与 request writer，不直接导入 Windows adapter。
 每次执行创建独立临时根：
 
 - `sandbox-request.json` 留在 control root，启动前只向所选隔离账户临时授予 read/delete；账户 runner

@@ -15,6 +15,7 @@
     { "path": "./packages/features/updater/tsconfig.build.json" },
     { "path": "./packages/features/vision-recognition/tsconfig.build.json" },
     { "path": "./packages/features/webdav-sync/tsconfig.build.json" },
+    { "path": "./packages/features/windows-sandbox/tsconfig.build.json" },
     { "path": "./packages/features/workspace-apps/tsconfig.build.json" },
     { "path": "./packages/features/workspace-dependencies/tsconfig.build.json" },
     { "path": "./packages/desktop-runtime" },

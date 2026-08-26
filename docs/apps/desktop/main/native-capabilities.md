@@ -111,11 +111,23 @@ Workspace Apps 是纵向 Feature，拥有应用 DTO 与固定 IPC channel、平�
 - `packages/features/network-proxy/src/{contracts,main,preload,renderer}/`
 - `apps/desktop/{main,preload,renderer}/src/composition/`
 
-Network Proxy 是纵向 Feature：配置 store、凭据引用、受保护 loopback relay、sandbox egress gateway、浏览器 session 路由、Node fetch dispatcher、IPC/preload bridge、renderer 状态服务和完整设置页都由同一包拥有。宿主只注入配置路径、credential vault、原子 JSON writer、系统代理 fetch、主窗口和 runtime 删除入口；Updater、WebDAV、Terminal 与 native bridge 只依赖 activation 后暴露的窄 `NetworkProxyMainService`。
+Network Proxy 是纵向 Feature：配置 store、凭据引用、受保护 loopback relay、浏览器 session 路由、Node fetch dispatcher、IPC/preload bridge、renderer 状态服务和完整设置页都由同一包拥有。宿主只注入配置路径、credential vault、原子 JSON writer、系统代理 fetch、主窗口和 runtime 删除入口；Updater、WebDAV 与 Terminal 只依赖 activation 后暴露的窄 `NetworkProxyMainService`。
 
 删除代理必须经 runtime 配置 route，先校验模型 provider 引用，再由 native bridge 回调 Feature 完成真实删除。普通配置不保存密码，browser/runtime 看到的也只是 Feature 管理的 loopback relay；代理初始化失败时保持 fail-closed，但设置页仍可用于修复配置。
 
 测试位于 `packages/features/network-proxy/test/`。
+
+## Windows Sandbox
+
+源码：
+
+- `packages/features/windows-sandbox/src/{contracts,main,preload,renderer,runtime}/`
+- `native/windows-sandbox/`
+- `apps/desktop/{main,preload,renderer}/src/composition/`
+
+Windows Sandbox Feature 拥有 sidecar 定位和 fail-closed 校验、UAC 状态机、curl 信任快照、固定端口认证出口、IPC/preload bridge、renderer 设置扩展以及 runtime request provider。Network Proxy 只解析 runtime 上游路由；沙箱 Feature 自己决定 direct route 是否可安全建立出口。Core runtime 通过 `ShellSandboxProvider` port 使用该能力，不导入 Windows 实现。
+
+测试位于 `packages/features/windows-sandbox/test/`，完整安全边界见 [Windows 原生沙箱设计](../../../designs/windows-native-sandbox.md)。
 
 ## Updater
 

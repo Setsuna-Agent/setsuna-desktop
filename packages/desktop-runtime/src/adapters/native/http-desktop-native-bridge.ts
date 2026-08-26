@@ -3,15 +3,17 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
-  DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
 import {
   DESKTOP_SYSTEM_PROXY_FETCH_ERROR_HEADER,
   DESKTOP_SYSTEM_PROXY_FETCH_MAX_METADATA_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_METADATA_PREFIX_BYTES,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
-  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
 } from '@setsuna-desktop/contracts';
+import {
+  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
+  type DesktopSandboxNetworkEnvironment,
+} from '@setsuna-desktop/feature-windows-sandbox/contracts';
 import { Agent } from 'undici';
 import type { DesktopNativeBridge, SecretStoreStatus } from '../../ports/secret-store.js';
 

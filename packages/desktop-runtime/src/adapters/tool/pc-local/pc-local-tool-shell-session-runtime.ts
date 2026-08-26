@@ -4,10 +4,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
 import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
-import {
-  windowsNativeSandboxTempRoot,
-  writeWindowsSandboxRequest,
-} from '../../sandbox/windows-native/windows-native-sandbox.js';
+import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider.js';
 import {
   MAX_SHELL_BUFFER_CHARS,
   MAX_SHELL_PROGRESS_CHARS,
@@ -42,6 +39,7 @@ export async function createShellSessionTempDirectory(
   sandboxPlan: SandboxExecutionPlan,
   options: {
     platform?: NodeJS.Platform | string;
+    provider?: ShellSandboxProvider;
     tempRoot?: string;
   } = {},
 ): Promise<string> {
@@ -51,7 +49,7 @@ export async function createShellSessionTempDirectory(
   ) || sandboxPlan.provider === 'windows-native' || platform === 'win32';
   if (!needsTemporaryDirectory) return '';
   const candidates = [...new Set([
-    sandboxPlan.provider === 'windows-native' ? windowsNativeSandboxTempRoot() : '',
+    sandboxPlan.provider === 'windows-native' ? options.provider?.controlRoot() ?? '' : '',
     options.tempRoot ?? tmpdir(),
     platform === 'win32' ? '' : '/tmp',
   ])]
@@ -455,8 +453,6 @@ export function shellSpawnSpec(
     shell: false,
   };
 }
-
-export { writeWindowsSandboxRequest };
 
 function shellCommandWithPipefail(command: string): string {
   if (process.platform === 'win32') return command;

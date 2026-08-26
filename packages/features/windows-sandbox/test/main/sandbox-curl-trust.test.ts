@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { rootCertificates } from 'node:tls';
 import { afterEach, describe, expect, it } from 'vitest';
-import { prepareSandboxCurlTrustBundle } from '../../../src/runtime/sandbox-curl-trust.js';
+import { prepareSandboxCurlTrustBundle } from '../../src/main/sandbox-curl-trust.js';
 
 const temporaryRoots: string[] = [];
 

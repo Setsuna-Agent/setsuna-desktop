@@ -29,7 +29,6 @@ import { accessSync, constants as fsConstants } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import type { Readable, Writable } from 'node:stream';
-import { BUNDLED_SANDBOX_CURL_ENV } from './bundled-tools.js';
 import { desktopProcessEnvironment, prependPathDirectory } from './desktop-environment.js';
 import { RuntimeEventBatcher } from './runtime-event-batcher.js';
 import { fetchRuntimeResponse } from './runtime-request.js';
@@ -44,12 +43,7 @@ type RuntimeHostOptions = {
   dataDir: string;
   ripgrepPath?: string;
   requireBundledRipgrep?: boolean;
-  requireBundledSandboxCurl?: boolean;
-  requireBundledWindowsSandbox?: boolean;
   runtimeEntry?: string;
-  sandboxCaBundlePath?: string;
-  sandboxCurlPath?: string;
-  windowsSandboxPath?: string;
   runtimeRequestRetryDelayMs?: number;
   shutdownTimeoutMs?: number;
   sseRetryBaseDelayMs?: number;
@@ -661,20 +655,12 @@ export function runtimeProcessEnvironment(
   options: Pick<RuntimeHostOptions,
     | 'ripgrepPath'
     | 'requireBundledRipgrep'
-    | 'requireBundledSandboxCurl'
-    | 'sandboxCaBundlePath'
-    | 'sandboxCurlPath'
-    | 'windowsSandboxPath'
-    | 'requireBundledWindowsSandbox'
   >,
   baseEnv: NodeJS.ProcessEnv = process.env,
 ): NodeJS.ProcessEnv {
   const env = desktopProcessEnvironment(baseEnv);
   // 主 App 和 macOS Helper 都必须显式进入 Node 模式，否则会启动 Electron 桌面实例。
   env.ELECTRON_RUN_AS_NODE = '1';
-  // Windows sidecars monitor both runtime and Electron main. If main crashes,
-  // online commands cannot outlive the authenticated egress proxy they depend on.
-  env.SETSUNA_DESKTOP_HOST_PID = String(process.pid);
   if (options.requireBundledRipgrep && !options.ripgrepPath) {
     throw new Error('Bundled ripgrep is required for the packaged runtime.');
   }
@@ -683,33 +669,6 @@ export function runtimeProcessEnvironment(
     prependPathDirectory(env, path.dirname(options.ripgrepPath));
   }
   if (options.requireBundledRipgrep) env.SETSUNA_DESKTOP_REQUIRE_BUNDLED_RG = '1';
-  if (options.requireBundledSandboxCurl && !options.sandboxCurlPath) {
-    throw new Error('Bundled sandbox curl is required for the packaged Windows runtime.');
-  }
-  if (options.requireBundledSandboxCurl && !options.sandboxCaBundlePath) {
-    throw new Error('Sandbox curl trust bundle is required for the packaged Windows runtime.');
-  }
-  if (options.sandboxCurlPath) {
-    if (!path.isAbsolute(options.sandboxCurlPath) && !path.win32.isAbsolute(options.sandboxCurlPath)) {
-      throw new Error('Sandbox curl path must be absolute.');
-    }
-    env[BUNDLED_SANDBOX_CURL_ENV] = options.sandboxCurlPath;
-  }
-  if (options.sandboxCaBundlePath) {
-    if (!path.isAbsolute(options.sandboxCaBundlePath) && !path.win32.isAbsolute(options.sandboxCaBundlePath)) {
-      throw new Error('Sandbox curl trust bundle path must be absolute.');
-    }
-    env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE = options.sandboxCaBundlePath;
-  }
-  if (options.requireBundledWindowsSandbox && !options.windowsSandboxPath) {
-    throw new Error('Bundled Windows sandbox is required for the packaged runtime.');
-  }
-  if (options.windowsSandboxPath) {
-    if (!path.isAbsolute(options.windowsSandboxPath) && !path.win32.isAbsolute(options.windowsSandboxPath)) {
-      throw new Error('Windows sandbox sidecar path must be absolute.');
-    }
-    env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH = options.windowsSandboxPath;
-  }
   return env;
 }
 
