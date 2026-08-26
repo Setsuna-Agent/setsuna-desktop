@@ -118,7 +118,7 @@ Runtime 一轮可能包含：
 - `chatAssistantTimeline.ts`：assistant/tool 的时间线。
 - `chatAssistantGuidanceTimeline.ts` / `chatGuidanceTimeline.ts`：同 turn steer 引导展示。
 - `chatThinkingContent.ts`：reasoning 内容解析；`ChatThinkingDisclosure.tsx` 使用轻量原生 disclosure 渲染工作记录内的思考详情。
-- `chatContextUsage.ts` / `chatThreadUsage.ts`：上下文和 usage。
+- `chatContextUsage.ts`：会话上下文占用；thread usage 投影已归 `packages/features/usage/src/renderer/thread-usage.ts`。
 - `chatConversationOverview.ts`：overview 数据。
 - `chatWorkHistoryState.ts`：工作历史状态。
 - `chatWorkspaceOperationScope.ts`：workspace 操作归属。

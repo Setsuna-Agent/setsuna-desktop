@@ -417,6 +417,10 @@ export const wordCountRendererFeature = defineRendererFeature({
 export { wordCountRendererFeature } from './feature.js';
 ```
 
+完整 Settings View 默认使用宿主根据 `titleKey` / `descriptionKey` 生成的标题。若页面有必须与
+Feature 状态同生命周期的标题栏动作，可在 contribution 声明 `pageHeading: 'view'`，并在 view
+中用 `ui.PageHeading` 渲染标题和 action；不要通过宿主私有组件导入或 CSS 位移实现。
+
 不要修改通用 runtime client、Settings/Capabilities page switch 或组件生命周期 Registry。宿主只读取 renderer composition 生成的只读 catalog。
 
 ## 第五步：接入构建图

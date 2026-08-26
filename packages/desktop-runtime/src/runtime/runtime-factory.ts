@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
+import { BindableUsageRecorder } from '../adapters/feature/bindable-usage-recorder.js';
 import { DesktopReviewRuntimeHost } from '../adapters/feature/review-runtime-host.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
@@ -26,7 +27,6 @@ import { FileMemoryStore } from '../adapters/store/file-memory-store.js';
 import { FilePersistentToolApprovalStore } from '../adapters/store/file-persistent-tool-approval-store.js';
 import { FilePolicyAmendmentStore } from '../adapters/store/file-policy-amendment-store.js';
 import { FileToolResultStore } from '../adapters/store/file-tool-result-store.js';
-import { FileUsageStore } from '../adapters/store/file-usage-store.js';
 import { SqliteThreadStore } from '../adapters/store/sqlite-thread-store.js';
 import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
@@ -87,7 +87,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const featureSettings = new FileFeatureSettingsRegistry(runtimeDataDir);
   const featureManagement = new RuntimeFeatureManagement();
   const approvalGate = new InMemoryApprovalGate(clock, ids);
-  // thread/config/usage/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。
+  // thread/config/MCP/memory 分开落盘，便于后续独立迁移或排查单个数据域。Usage 由 Feature 自己落盘。
   const persistedThreadStore = new SqliteThreadStore(runtimeDataDir, clock, ids);
   const threadEventReader = new ThreadStoreEventReader(persistedThreadStore);
   const attachmentStore = new FileAttachmentStore(runtimeDataDir, clock, ids);
@@ -106,7 +106,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       nativeBridge.validateNetworkProxyReferences(proxyServerIds),
   });
   const networkProxyFetch = new NativeBridgeProxyFetch(nativeBridge);
-  const usageStore = new FileUsageStore(runtimeDataDir, ids, async () => (await configStore.getConfig()).providers);
+  const usageRecorder = new BindableUsageRecorder();
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
   const mcpElicitations = new McpElicitationCoordinator(approvalGate, eventWriter, clock, ids);
   const mcpConnections = new SdkMcpConnectionManager({
@@ -162,7 +162,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     models: configuredModelClient,
     plugins: pluginStore,
     threads: threadStore,
-    usage: usageStore,
+    usage: usageRecorder,
   });
   const extensionUi = new ExtensionUiCoordinator(approvalGate, eventWriter, clock, ids);
   const extensionManager = new ExtensionManager(pluginStore, extensionState, extensionUi, {
@@ -217,7 +217,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     debugTrace: conversationDebugTraceSink,
     skillRegistry,
     toolHost,
-    usageStore,
+    usageStore: usageRecorder,
     memoryStore,
     mcpStore,
     policyAmendmentStore,
@@ -267,7 +267,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     toolResultStore,
     threadStore,
     threadEventReader,
-    usageStore,
+    usageRecorder,
     workspaceProjects,
     workspaceSearchEngine,
   };

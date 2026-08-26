@@ -145,6 +145,7 @@ export type {
   SettingsGroupProps,
   SettingsIconButtonProps,
   SettingsNavigationRowProps,
+  SettingsPageHeadingProps,
   SettingsRowProps,
   SettingsSectionProps,
   SettingsSectionExtensionContribution,

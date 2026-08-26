@@ -52,6 +52,12 @@ import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import {
+  createNoopUsageControl,
+  usageControlCapability,
+  usageRuntimeHostCapability,
+} from '@setsuna-desktop/feature-usage/contracts';
+import { usageRuntimeFeature } from '@setsuna-desktop/feature-usage/runtime';
+import {
   visionRecognitionFeature,
   visionRecognitionRuntimeHostCapability,
   visionRecognitionServiceCapability,
@@ -76,6 +82,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     imageGenerationRuntimeFeature,
     goalRuntimeFeature,
     memoryRuntimeFeature,
+    usageRuntimeFeature,
     visionRecognitionRuntimeFeature,
     workspaceDependenciesRuntimeFeature,
   ],
@@ -149,6 +156,25 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.reviewRuntimeHost,
       ),
       provideHostCapability(
+        usageRuntimeHostCapability,
+        Object.freeze({
+          dataDir: runtime.dataDir,
+          id: (prefix: string) => runtime.ids.id(prefix),
+          listProviders: async () => (await runtime.configStore.getConfig()).providers.map((provider) => Object.freeze({
+            id: provider.id,
+            name: provider.name.trim() || provider.id,
+            provider: provider.provider,
+            baseUrl: provider.baseUrl,
+            ...(provider.icon ? { icon: provider.icon } : {}),
+            models: Object.freeze(provider.models.map((model) => Object.freeze({
+              code: model.code,
+              name: model.name,
+              ...(model.icon ? { icon: model.icon } : {}),
+            }))),
+          })),
+        }),
+      ),
+      provideHostCapability(
         visionRecognitionRuntimeHostCapability,
         runtime.visionRecognitionHost,
       ),
@@ -193,6 +219,10 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       goal: optionalCapability(goalControlCapability, createNoopGoalControl),
     }, ({ goal }) => runtime.agentLoop.bindGoalControl(goal));
+
+    host.bind({
+      usage: optionalCapability(usageControlCapability, createNoopUsageControl),
+    }, ({ usage }) => runtime.usageRecorder.bind(usage));
 
     host.bind(
       { memory: optionalCapability(memoryControlCapability, createNoopMemoryControl) },

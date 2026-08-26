@@ -129,9 +129,9 @@ Renderer 的薄 runtime facade，只持有：
 
 - Bootstrap loading/error。
 - Projects。
-- Turn 完成后的跨 capability/usage 刷新桥。
+- Turn 完成后的跨 capability 刷新桥。
 
-它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts`、`useRuntimeUsageState.ts` 和 `useRuntimeThreadState.ts`，对上层提供稳定的宿主状态面。Feature 私有状态由 renderer contribution 自己持有，不再汇入该 facade。
+它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts` 和 `useRuntimeThreadState.ts`，对上层提供稳定的宿主状态面。Feature 私有状态由 renderer contribution 自己持有，不再汇入该 facade。
 
 ### `useRuntimeThreadState.ts`
 
@@ -144,7 +144,7 @@ Renderer 的薄 runtime facade，只持有：
 
 该 hook 只依赖 12 个 thread/review/approval client 方法。一个 bridge batch 只提交一次 current-thread React state；batch 内的 SSE projection、activity、runtime error、turn transition 和跨域刷新共用同一个 thread + sequence 接受判定。旧线程或不前进的事件不会产生任何副作用。REST snapshot 也必须同时匹配请求 owner 且不回退 sequence。
 
-纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade，再由 facade 刷新 capability/usage，避免 domain hook 形成循环依赖。
+纯状态规则位于 `runtimeThreadState.ts`，覆盖 initial selection、SSE gate、snapshot adoption 和 active-turn inference。Turn settlement 通过窄 callback 通知 facade 刷新 capability；Usage Feature 根据 thread 终态刷新自己的持久化投影。
 
 ### `useRuntimeConfigState.ts`
 
@@ -166,15 +166,13 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 - Hooks 与当前 project cwd 的 latest-request guard。
 - Plugins、marketplace 和跨 Skill/MCP/config/Hook 的安装后刷新。
 
-该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、usage、Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
+该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、Usage Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
 
-### `useRuntimeUsageState.ts`
+### Usage renderer state
 
-Usage 域 owner，持有：
-
-- Global usage 与当前 thread usage。
-
-Thread usage 使用 thread identity guard，global usage 使用 latest-request guard。Turn completed 仍会刷新全局 usage 和对应 thread usage，但迟到结果不能写入已经切换的 owner。Memory 设置、preview、delete/clear 由 `packages/features/memory/renderer` 的 typed client 与 Settings View 按需持有。
+`packages/features/usage/src/renderer/` 持有 global query 与组件订阅期内存活的 thread controller。设置 contribution 按需读取全局统计；
+turn settlement 只向 Feature 发送窄失效通知，使已打开的设置页和对应 thread controller 重读持久化记录。
+会话概览同时用 thread token count 补齐运行中增量；最后一个订阅者卸载后 controller 会取消请求并释放，迟到查询由 request version gate 丢弃，状态不进入 `useRuntimeClientState`。
 
 ## Bootstrap
 
@@ -195,7 +193,6 @@ Core 失败会进入 app error。
 - MCP。
 - Plugins。
 - Plugin marketplace。
-- Usage。
 
 这些使用 `Promise.allSettled`，单项失败只记录并让对应页面降级。
 
@@ -215,7 +212,7 @@ Core 失败会进入 app error。
 运行中 turn 由每秒一次的 summaries polling 统一负责侧栏状态，不再为每条 SSE
 事件重复请求列表；current thread snapshot 仍独立 polling，作为 SSE 边界的恢复保障。
 Polling 不能覆盖已经看到终态的本地判断，因此 hook 记录 terminal turn IDs，避免延迟
-snapshot 把完成 turn 恢复成 active。Snapshot、usage、capability 等后台刷新失败时保留
+snapshot 把完成 turn 恢复成 active。Snapshot、Feature projection、capability 等后台刷新失败时保留
 最后一次有效状态并记录诊断，不提升为全局 turn 错误。
 
 ## Request guards
@@ -246,7 +243,7 @@ snapshot 把完成 turn 恢复成 active。Snapshot、usage、capability 等后�
 - `useRuntimeClientState.test.ts`
 - `useRuntimeCapabilityState.test.ts`
 - `useRuntimeConfigState.test.ts`
-- `useRuntimeUsageState.test.ts`
+- `packages/features/usage/test/renderer/`
 - `test/unit/app/controller/`
 - `test/unit/app/layout/`
 - `test/unit/app/sidebar/`

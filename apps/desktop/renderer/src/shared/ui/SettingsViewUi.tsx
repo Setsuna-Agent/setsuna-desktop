@@ -3,6 +3,7 @@ import type {
   SettingsGroupProps,
   SettingsIconButtonProps,
   SettingsNavigationRowProps,
+  SettingsPageHeadingProps,
   SettingsRowProps,
   SettingsSectionProps,
   SettingsSelectFieldProps,
@@ -34,6 +35,7 @@ export const settingsViewUi = Object.freeze({
   Group: SettingsGroup,
   IconButton: SettingsIconButton,
   NavigationRow: SettingsNavigationRow,
+  PageHeading: SettingsPageHeading,
   Row: SettingsRow,
   Section: SettingsSection,
   SelectField: SettingsSelectField,
@@ -42,6 +44,18 @@ export const settingsViewUi = Object.freeze({
   Toggle: SettingsToggle,
   Tooltip: SettingsTooltip,
 }) satisfies SettingsViewUi;
+
+export function SettingsPageHeading({ action, description, title }: SettingsPageHeadingProps) {
+  return (
+    <header className="chat-user-settings__page-heading">
+      <div className="chat-user-settings__page-heading-copy">
+        <h1>{title}</h1>
+        {description ? <p>{description}</p> : null}
+      </div>
+      {action}
+    </header>
+  );
+}
 
 export function SettingsSection({ children, className = '', featureId }: SettingsSectionProps) {
   return (

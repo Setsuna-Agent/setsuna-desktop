@@ -211,13 +211,11 @@ export function AppRouteContent({
           config={runtime.config}
           initialSection={settingsInitialSection ?? undefined}
           skillExtraRoots={runtime.skillExtraRoots}
-          usage={runtime.usage}
           networkProxy={networkProxy}
           onBack={() => setActiveView('chat')}
           onFetchProviderModels={runtime.fetchProviderModels}
           onSaveProviders={runtime.saveProviders}
           onSaveRuntimePreferences={runtime.saveRuntimePreferences}
-          onQueryUsage={runtime.queryUsage}
           onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
           onDeleteArchivedThread={runtime.permanentlyDeleteThread}
           onRestoreArchivedThread={runtime.restoreArchivedThread}
@@ -300,7 +298,6 @@ export function AppRouteContent({
       selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
       workspaceApps={workspacePanels.workspaceApps}
       skills={runtime.skills}
-      threadUsage={runtime.threadUsage}
       threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
       sidePanelSlot={workspacePanels.sidePanelSlot}

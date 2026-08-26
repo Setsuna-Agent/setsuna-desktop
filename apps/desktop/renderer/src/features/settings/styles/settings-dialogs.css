@@ -767,11 +767,6 @@
     overflow-y: auto;
   }
 
-  .desktop-settings-panel .chat-user-settings__content--usage .chat-user-settings__page-heading {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
   .desktop-settings-panel .chat-user-settings__content > .chat-user-settings__local-llm-section,
   .desktop-settings-panel .chat-user-settings__local-provider-stack,
   .desktop-settings-panel .chat-user-settings__local-provider-layout {
@@ -807,46 +802,6 @@
   .desktop-settings-panel .chat-user-settings__option-group {
     width: 100%;
     margin-left: 0;
-  }
-
-  .desktop-settings-panel .settings-usage-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .desktop-settings-panel .settings-usage-time-filter__main {
-    align-items: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .desktop-settings-panel .settings-usage-time-filter__presets {
-    order: 3;
-    width: 100%;
-  }
-
-  .desktop-settings-panel .settings-usage-breakdowns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-settings-panel .settings-usage-calendar__header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .desktop-settings-panel .settings-usage-calendar__summary {
-    grid-column: 1;
-    justify-content: flex-start;
-  }
-
-  .settings-usage-custom-range__fields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .settings-usage-custom-range__footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .settings-usage-custom-range__actions {
-    justify-content: flex-end;
   }
 
   .desktop-settings-panel .chat-user-settings__local-storage-control {

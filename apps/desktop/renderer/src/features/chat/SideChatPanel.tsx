@@ -186,7 +186,6 @@ export function SideChatPanel({
           plugins={plugins}
           skillSelectionRequest={null}
           skills={skills}
-          threadUsage={sideChat.threadUsage}
           variant="side"
           onAnswerApproval={sideChat.answerApproval}
           onAccessModeChange={onAccessModeChange}

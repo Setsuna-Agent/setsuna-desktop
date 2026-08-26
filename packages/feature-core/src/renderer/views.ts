@@ -118,6 +118,12 @@ export type SettingsNavigationRowProps = Readonly<{
   onClick(): void;
 }>;
 
+export type SettingsPageHeadingProps = Readonly<{
+  action?: ReactNode;
+  description?: string;
+  title: string;
+}>;
+
 /**
  * Host-owned controls for standard Feature settings. Features keep business
  * state and specialized presentation while the host keeps form behavior,
@@ -130,6 +136,7 @@ export type SettingsViewUi = Readonly<{
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;
   NavigationRow: ComponentType<SettingsNavigationRowProps>;
+  PageHeading: ComponentType<SettingsPageHeadingProps>;
   Row: ComponentType<SettingsRowProps>;
   Section: ComponentType<SettingsSectionProps>;
   SelectField: ComponentType<SettingsSelectFieldProps>;
@@ -157,6 +164,8 @@ export type SettingsViewContribution = Readonly<{
   /** Optional host navigation group; unknown or omitted groups fall back to Feature navigation. */
   navigationGroupId?: string;
   order: number;
+  /** `view` lets a Feature place stateful actions beside the host-styled page title. */
+  pageHeading?: 'host' | 'view';
   titleKey: string;
   render: ComponentType<SettingsViewHostProps>;
 }>;

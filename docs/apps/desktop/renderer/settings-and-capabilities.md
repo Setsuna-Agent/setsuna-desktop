@@ -16,7 +16,6 @@ Settings 管理用户与 runtime 配置；Capabilities 管理可安装或可调�
 - `sections/`
 - `providers/`
 - `data-root/`
-- `usage/`
 - `components/`
 - `styles/`
 
@@ -40,7 +39,7 @@ WebDAV Sync 也是独立 renderer Feature，并通过 setup 返回静态 `settin
 
 Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代理服务器”页面，状态订阅、编辑动作、文案与 scoped CSS 位于 `packages/features/network-proxy/renderer`。宿主 controller 只通过 composition boundary 读取代理服务器公开投影，供仍属于根 Runtime Config 的模型 provider 下拉框使用；宿主设置页不直接调用代理 bridge，也不拥有代理 section。preload 子桥类型由 Feature contract 贡献，renderer 不接触端口、凭据或本地文件。
 
-`shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。
+`shared/ui/SettingsViewUi.tsx` 是 Settings View 的宿主设计系统入口。它复用现有 `primitives.tsx` 和设置页布局样式，统一 focus、disabled、danger/primary、密度与可访问性；Feature 只为预览卡片、业务结果等特有 presentation 写 scoped CSS，并使用 `tokens.css` 公开的 `--sd-*` 语义 token。完整页面默认由宿主渲染标题；需要把 Feature 状态动作放进标题栏时，contribution 声明 `pageHeading: 'view'`，再使用注入的 `ui.PageHeading`，不能用正文定位或负 margin 模拟标题 action。
 
 ### Provider settings
 
@@ -88,19 +87,28 @@ Network Proxy 同样通过静态 `settingsViews` contribution 提供完整“代
 
 ### Usage
 
-`usage/` 负责：
+Usage 是独立纵向 Feature，源码位于 `packages/features/usage/`。renderer setup 通过
+`settingsViews` 贡献完整的“用量分析”页面，并归入宿主“模型与服务”导航组。
+`SettingsPage` 只渲染 contribution catalog，不接收 usage 数据或 query callback。
+Usage 声明 view-owned page heading，把时段筛选作为 `ui.PageHeading` 的 action 渲染在标题右侧。
+
+Feature 自己负责：
 
 - Summary metrics。
 - Provider/model breakdown。
 - Activity calendar。
 - Recent calls。
-- Branding 映射。
+- Provider/model branding 的语义输入；宿主通过 `usage.renderer-host` 注入实际图标与 Tooltip。
 - 全部时间、当天、滚动 24h/7d/30d 与分钟级自定义时间范围。
 - 最近调用明细按 10 条分页，翻页通过 usage query 的 `limit`/`offset` 按需读取。
 
-时间范围通过 `RuntimeUsageQuery.from/to` 传给 runtime，按 `[from, to)` 过滤后再统一聚合；
+时间范围通过 Feature contract 中的 `RuntimeUsageQuery.from/to` 传给 runtime，按 `[from, to)` 过滤后再统一聚合；
 renderer 只负责范围选择与展示，不重新计算计费真源。年度 Activity calendar 始终使用未筛选的
 全局过去一年数据，避免短区间筛选把长期趋势图压缩成少量格子。
+
+会话概览中的 Token/调用数也由 Usage Feature 的线程 controller 投影。它以持久化记录为基线，
+在 turn 运行或结算交接期间只补齐 thread 事件中的实时 token count，不再经过 App 级 `threadUsage` prop 链。
+宿主在确有用量的 turn 结算后发送 Feature 失效通知；已打开的全部时间统计和对应线程投影会重读，controller 在最后一个订阅者离开时释放。
 
 ### Workspace dependencies
 
@@ -201,9 +209,9 @@ Settings：
 - `packages/features/webdav-sync/test/renderer/`
 - `packages/features/network-proxy/test/renderer/`
 - `packages/features/workspace-dependencies/test/renderer/`
+- `packages/features/usage/test/renderer/`
 - Provider/model replacement、brand icon upload。
 - Data-root issue/backup UI。
-- Usage calendar/branding/page。
 - Task model settings。
 
 Capabilities：

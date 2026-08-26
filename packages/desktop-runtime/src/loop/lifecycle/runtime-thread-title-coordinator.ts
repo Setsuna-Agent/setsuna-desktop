@@ -11,7 +11,7 @@ import type { ConfigStore, RuntimeProviderConfig } from '../../ports/config-stor
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageStore } from '../../ports/usage-store.js';
+import type { UsageRecorder } from '../../ports/usage-store.js';
 import { runtimeTaskModelRequest, type RuntimeTaskModelRequest } from '../core/runtime-task-model.js';
 import type { RuntimeEventWriter } from './runtime-event-writer.js';
 import {
@@ -31,7 +31,7 @@ type RuntimeThreadTitleCoordinatorOptions = {
   ids: IdGenerator;
   modelClient: ModelClient;
   threadStore: ThreadStore;
-  usageStore?: UsageStore;
+  usageStore?: UsageRecorder;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
 

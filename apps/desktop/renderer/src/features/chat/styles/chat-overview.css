@@ -217,26 +217,6 @@
   text-align: right;
 }
 
-.chat-conversation-overview-usage-tooltip {
-  display: grid;
-  gap: 8px;
-  min-width: 220px;
-  padding: 2px 0;
-}
-
-.chat-conversation-overview-usage-tooltip__metric {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.chat-conversation-overview-usage-tooltip__value {
-  color: var(--app-text-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .chat-conversation-overview-panel__label {
   color: var(--app-text);
   font-weight: 500;

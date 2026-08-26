@@ -170,23 +170,6 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({ path: '/v1/runtime-activities' });
   });
 
-  it('serializes usage time boundaries without losing their offsets', async () => {
-    const request = installRuntimeBridge(() => ({ records: [], summary: {} }));
-    const client = createDesktopRuntimeClient();
-
-    await client.getUsage({
-      threadId: 'thread / 1',
-      limit: 25,
-      offset: 50,
-      from: '2026-08-13T08:30:00.000+08:00',
-      to: '2026-08-14T08:30:00.000+08:00',
-    });
-
-    expect(request).toHaveBeenCalledWith({
-      path: '/v1/usage?threadId=thread+%2F+1&limit=25&offset=50&from=2026-08-13T08%3A30%3A00.000%2B08%3A00&to=2026-08-14T08%3A30%3A00.000%2B08%3A00',
-    });
-  });
-
   it('uses narrow bridges for local links, managed uploads, and pending deletes', async () => {
     const linkAttachment = vi.fn(async () => ({
       id: 'attachment_link_1',

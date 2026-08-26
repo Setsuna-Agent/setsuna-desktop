@@ -10,7 +10,6 @@ import { taskModelEnUS, taskModelZhCN } from './taskModelMessages.js';
 import { networkProxyEnUS, networkProxyZhCN } from './networkProxyMessages.js';
 import { projectEnUS, projectZhCN } from './projectMessages.js';
 import { toolRunEnUS, toolRunZhCN } from './toolRunMessages.js';
-import { usageEnUS, usageZhCN } from './usageMessages.js';
 import { workspaceEnUS, workspaceZhCN } from './workspaceMessages.js';
 
 const zhCN = {
@@ -161,8 +160,6 @@ const zhCN = {
   'settings.section.localLlmDescription': '接入并管理用于对话与自动化任务的模型服务。',
   'settings.section.personalization': '个性化',
   'settings.section.runtime': '高级设置',
-  'settings.section.usage': '用量统计',
-  'settings.section.usageDescription': '追踪模型调用、Token 消耗与过去一年的活跃趋势。',
   'settings.general.appearance': '外观',
   'settings.general.appearanceMode': '外观模式',
   'settings.general.code': '代码',
@@ -454,7 +451,6 @@ const zhCN = {
   ...networkProxyZhCN,
   ...projectZhCN,
   ...toolRunZhCN,
-  ...usageZhCN,
 } as const;
 export type MessageKey = keyof typeof zhCN;
 
@@ -606,8 +602,6 @@ const enUS = {
   'settings.section.localLlmDescription': 'Connect and manage model providers for chats and automated tasks.',
   'settings.section.personalization': 'Personalization',
   'settings.section.runtime': 'Advanced',
-  'settings.section.usage': 'Usage',
-  'settings.section.usageDescription': 'Track model calls, token usage, and activity over the past year.',
   'settings.general.appearance': 'Appearance',
   'settings.general.appearanceMode': 'Appearance mode',
   'settings.general.code': 'Code',
@@ -899,7 +893,6 @@ const enUS = {
   ...networkProxyEnUS,
   ...projectEnUS,
   ...toolRunEnUS,
-  ...usageEnUS,
 } satisfies Record<MessageKey, string>;
 
 /** Host-owned copy only. Feature namespaces are composed from static Renderer Feature metadata. */

@@ -7,7 +7,6 @@ import type {
   RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
-  RuntimeUsageResponse,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
@@ -39,7 +38,6 @@ import { ChatStarter } from './conversation/ChatStarter.js';
 import { activeModelContextWindowTokens, contextTokenUsageFromThread } from './conversation/chatContextUsage.js';
 import { conversationOverviewFromMessages } from './conversation/chatConversationOverview.js';
 import { ChatTranscript } from './conversation/ChatTranscript.js';
-import { chatThreadUsageForDisplay } from './conversation/chatThreadUsage.js';
 import {
   shouldAutoHideConversationOverview,
   shouldCompactConversationOverview,
@@ -68,7 +66,6 @@ export function ChatWorkspace({
   skillSelectionRequest,
   workspaceMentionRequest,
   skills,
-  threadUsage,
   onCancelActiveTurn,
   onAccessModeChange,
   onAnswerApproval,
@@ -115,7 +112,6 @@ export function ChatWorkspace({
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   workspaceMentionRequest?: ChatWorkspaceMentionRequest | null;
   skills: RuntimeSkillSummary[];
-  threadUsage: RuntimeUsageResponse | null;
   onCancelActiveTurn: () => void;
   onAccessModeChange: (selection: RuntimeAccessModeSelection) => void;
   onAnswerApproval: AnswerApprovalHandler;
@@ -165,7 +161,6 @@ export function ChatWorkspace({
     historyThread,
     activeModelContextWindowTokens(config, historyThread),
   ), [config, historyThread]);
-  const displayedThreadUsage = useMemo(() => chatThreadUsageForDisplay(threadUsage, currentThread), [currentThread, threadUsage]);
   const contextCompactionRunning = contextCompacting || currentThread?.contextCompaction?.status === 'running';
   const conversationOverview = useMemo(() => (variant === 'main' && currentThread ? conversationOverviewFromMessages(messages) : null), [currentThread, messages, variant]);
   const overviewLayout = useConversationOverviewAutoExpand(conversationRef, contentRef);
@@ -343,7 +338,6 @@ export function ChatWorkspace({
                 }}
                 onOpenReview={onOpenFileReview}
                 currentThread={currentThread}
-                threadUsage={displayedThreadUsage}
               />
             </div>
           ) : null}

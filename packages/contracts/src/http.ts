@@ -69,7 +69,6 @@ import type {
   ThreadPatch,
   ThreadQuery,
 } from './threads.js';
-import type { RuntimeUsageQuery, RuntimeUsageResponse } from './usage.js';
 import type {
   AddWorkspaceProjectInput,
   UpdateWorkspaceProjectInput,
@@ -186,7 +185,6 @@ export type DesktopRuntimeClient = {
   readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
   saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
-  getUsage(query?: RuntimeUsageQuery): Promise<RuntimeUsageResponse>;
   listMcpServers(): Promise<RuntimeMcpServerList>;
   fetchMcpServerTools(input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList>;
   upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;

@@ -48,8 +48,6 @@ import type {
   RuntimeSkillMcpDependencyInstallResult,
   RuntimeSkillPatch,
   RuntimeThread,
-  RuntimeUsageQuery,
-  RuntimeUsageResponse,
   SendTurnInput,
   SendTurnResponse,
   StartTurnResponse,
@@ -406,16 +404,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<WorkspaceSearchResponse>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/search?q=${encodeURIComponent(query)}`,
       });
-    },
-    getUsage(query: RuntimeUsageQuery = {}) {
-      const params = new URLSearchParams();
-      if (query.threadId) params.set('threadId', query.threadId);
-      if (typeof query.limit === 'number') params.set('limit', String(query.limit));
-      if (typeof query.offset === 'number') params.set('offset', String(query.offset));
-      if (query.from) params.set('from', query.from);
-      if (query.to) params.set('to', query.to);
-      const suffix = params.size ? `?${params}` : '';
-      return request<RuntimeUsageResponse>({ path: `/v1/usage${suffix}` });
     },
     listMcpServers() {
       return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers' });

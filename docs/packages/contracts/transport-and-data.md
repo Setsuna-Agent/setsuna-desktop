@@ -101,7 +101,7 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/skills
 /v1/mcp/servers
 /v1/memories
-/v1/usage
+/v1/features/usage/query
 /v1/approvals
 /v1/plugins
 /v1/plugin-marketplace
@@ -111,7 +111,8 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 
 `/v1/features/*` 由对应 Feature contracts 声明 operation，并在 runtime Feature setup 时登记；它们不应回流为 `DesktopRuntimeClient` 的全局业务方法。
 
-`GET /v1/usage` 支持 `threadId`、`limit`、`offset` 以及 ISO-8601 `from`/`to` 查询参数；
+`POST /v1/features/usage/query` 是 Usage Feature 的 typed operation，body 支持 `threadId`、`limit`、
+`offset` 以及 ISO-8601 `from`/`to`；返回值包含脱敏的 provider/model branding 投影与 usage 记录/汇总。
 `limit`/`offset` 只分页明细，汇总仍覆盖完整筛选结果。时间范围采用 inclusive start、exclusive end，
 确保汇总与最近记录使用相同边界。
 

@@ -6,7 +6,6 @@ export type CoreSettingsSectionId =
   | 'personalization'
   | 'localLlm'
   | 'taskModels'
-  | 'usage'
   | 'archives'
   | 'runtime'
   | 'about';

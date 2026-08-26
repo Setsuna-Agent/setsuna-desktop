@@ -16,7 +16,7 @@ import type { ConfigStore } from '../../../src/ports/config-store.js';
 import type { ApprovalReviewInput } from '../../../src/ports/approval-reviewer.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
-import type { UsageStore } from '../../../src/ports/usage-store.js';
+import type { UsageRecorder } from '../../../src/ports/usage-store.js';
 
 describe('automatic approval reviewer', () => {
   it('uses the dedicated model and reviews the exact action without hidden messages', async () => {
@@ -499,7 +499,7 @@ class ReviewModelClient implements ModelClient {
 
 function createReviewer(
   modelClient: ModelClient,
-  usageStore?: Pick<UsageStore, 'recordUsage'>,
+  usageStore?: Pick<UsageRecorder, 'recordUsage'>,
   config = configFixture(),
   thread = threadFixture(),
 ) {
@@ -514,7 +514,7 @@ function createReviewer(
     configStore,
     modelClient,
     threadStore,
-    usageStore: usageStore as UsageStore | undefined,
+    usageStore: usageStore as UsageRecorder | undefined,
   });
 }
 

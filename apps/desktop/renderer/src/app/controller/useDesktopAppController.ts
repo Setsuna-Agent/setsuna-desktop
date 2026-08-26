@@ -26,6 +26,8 @@ import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
+import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
+import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
 import { useGlobalEscapeMenus } from './useGlobalEscapeMenus.js';
@@ -41,7 +43,15 @@ export function useDesktopAppController() {
 
   const networkProxy = useNetworkProxyFeatureView();
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
-  const runtime = useRuntimeClientState({ activeProjectId, setActiveProjectId });
+  const invalidateUsage = useUsageFeatureInvalidation();
+  const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
+    if (settlement.usageChanged) invalidateUsage(settlement.threadId);
+  }, [invalidateUsage]);
+  const runtime = useRuntimeClientState({
+    activeProjectId,
+    onTurnSettled: handleTurnSettled,
+    setActiveProjectId,
+  });
   const {
     activeTurnId,
     client,

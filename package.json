@@ -65,6 +65,7 @@
     "@setsuna-desktop/feature-network-proxy": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",
+    "@setsuna-desktop/feature-usage": "workspace:*",
     "@setsuna-desktop/feature-updater": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
     "@setsuna-desktop/feature-webdav-sync": "workspace:*",

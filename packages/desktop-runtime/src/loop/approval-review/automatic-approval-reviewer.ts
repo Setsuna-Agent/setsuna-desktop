@@ -11,7 +11,7 @@ import type {
   ApprovalReviewResult,
 } from '../../ports/approval-reviewer.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import type { UsageStore } from '../../ports/usage-store.js';
+import type { UsageRecorder } from '../../ports/usage-store.js';
 import { createModelStreamTextCollector } from '../../utils/model-stream-text-collector.js';
 import { resolveRuntimeTurnModel } from '../core/runtime-thread-model.js';
 import { abortReason } from '../core/runtime-turn-errors.js';
@@ -38,7 +38,7 @@ type AutomaticApprovalReviewerOptions = {
   configStore: ConfigStore;
   modelClient: ModelClient;
   threadStore: ThreadStore;
-  usageStore?: UsageStore;
+  usageStore?: UsageRecorder;
 };
 
 type AutomaticApprovalReviewerFactoryOptions = Omit<
