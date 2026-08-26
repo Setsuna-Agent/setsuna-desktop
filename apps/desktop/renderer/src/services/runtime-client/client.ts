@@ -15,12 +15,10 @@ import type {
   DeleteQueuedTurnInputResponse,
   RegenerateMessageInput,
   RuntimeApprovalList,
-  RuntimeAvailableModelsResponse,
   RuntimeBackgroundShellProcessList,
   RuntimeBackgroundShellProcessTermination,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeMcpResourceReadResult,
   RuntimeMcpServerInput,
@@ -244,9 +242,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     saveConfig(input: RuntimeConfigInput) {
       return request<RuntimeConfigState>({ path: '/v1/config', method: 'PUT', body: input });
-    },
-    fetchProviderModels(input: RuntimeFetchModelsInput) {
-      return request<RuntimeAvailableModelsResponse>({ path: '/v1/config/models', method: 'POST', body: input });
     },
     listHooks(cwds: string[] = []) {
       const params = new URLSearchParams();

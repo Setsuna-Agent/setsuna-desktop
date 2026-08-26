@@ -129,7 +129,7 @@ describe('runtime server REST config and model discovery', () => {
           }),
         });
   
-        const result = await harness.runtimeFetch('/v1/config/models', {
+        const result = await harness.runtimeFetch('/v1/features/model-provider/models', {
           method: 'POST',
           body: JSON.stringify({ providerId: 'local-models' }),
         });
@@ -144,6 +144,69 @@ describe('runtime server REST config and model discovery', () => {
       } finally {
         await modelServer.close();
       }
+    });
+
+  it('returns an actionable feature error for invalid model discovery input', async () => {
+      const response = await fetch(`${harness.baseUrl}/v1/features/model-provider/models`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${harness.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ providerId: 'missing-provider', baseUrl: '' }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toEqual({
+        code: 'INVALID_INPUT',
+        error: '请先填写模型服务地址。',
+        retryable: false,
+      });
+    });
+
+  it('preserves a safe provider error when model discovery is rejected upstream', async () => {
+      const modelServer = await createModelListCaptureServer({
+        status: 401,
+        body: { error: { message: 'API key is invalid' } },
+      });
+      try {
+        const response = await fetch(`${harness.baseUrl}/v1/features/model-provider/models`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${harness.token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            provider: 'openai-compatible',
+            baseUrl: modelServer.baseUrl,
+            apiKey: 'invalid-key',
+          }),
+        });
+
+        expect(response.status).toBe(503);
+        await expect(response.json()).resolves.toEqual({
+          code: 'PROVIDER_UNAVAILABLE',
+          error: '模型服务返回异常状态：401 - API key is invalid',
+          retryable: true,
+        });
+      } finally {
+        await modelServer.close();
+      }
+    });
+
+  it('serves the filtered Pi built-in provider catalog to the renderer Feature', async () => {
+      const catalog = await harness.runtimeFetch('/v1/features/model-provider/catalog');
+      const deepseek = catalog.providers.find((provider: { id: string }) => provider.id === 'deepseek');
+
+      expect(deepseek).toMatchObject({
+        name: 'DeepSeek',
+        plans: [expect.objectContaining({
+          provider: 'openai-compatible',
+          baseUrl: 'https://api.deepseek.com',
+        })],
+      });
+      expect(deepseek.plans[0].models.length).toBeGreaterThan(0);
+      expect(JSON.stringify(catalog)).not.toContain('apiKey');
     });
   
   it('generates git commit messages through the active model', async () => {

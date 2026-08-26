@@ -25,6 +25,7 @@ import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { useThreadGroups } from '../sidebar/useThreadGroups.js';
 import type { ChatSkillSelectionRequest, MainView } from '../types.js';
 import { useNetworkProxyFeatureView } from '../../composition/NetworkProxyFeatureBoundary.js';
+import { useModelProviderFeatureService } from '../../composition/ModelProviderFeatureBoundary.js';
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { usePluginManagementFeatureService } from '../../composition/PluginManagementFeatureBoundary.js';
@@ -44,6 +45,7 @@ export function useDesktopAppController() {
   const skillSelectionRequestIdRef = useRef(0);
 
   const networkProxy = useNetworkProxyFeatureView();
+  const modelProvider = useModelProviderFeatureService();
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const invalidateUsage = useUsageFeatureInvalidation();
   const pluginManagement = usePluginManagementFeatureService();
@@ -58,6 +60,7 @@ export function useDesktopAppController() {
   }, [pluginManagement]);
   const runtime = useRuntimeClientState({
     activeProjectId,
+    modelProvider,
     onPluginSkillMutation: handlePluginSkillMutation,
     onTurnSettled: handleTurnSettled,
     setActiveProjectId,

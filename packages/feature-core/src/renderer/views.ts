@@ -124,6 +124,18 @@ export type SettingsPageHeadingProps = Readonly<{
   title: string;
 }>;
 
+export type SettingsDialogProps = Readonly<{
+  children: ReactNode;
+  className?: string;
+  closeLabel: string;
+  footer?: ReactNode;
+  onClose(): void;
+  size?: 'small' | 'medium' | 'large';
+  subtitle?: ReactNode;
+  title: ReactNode;
+  titleIcon?: ReactNode;
+}>;
+
 /**
  * Host-owned controls for standard Feature settings. Features keep business
  * state and specialized presentation while the host keeps form behavior,
@@ -132,6 +144,7 @@ export type SettingsPageHeadingProps = Readonly<{
 export type SettingsViewUi = Readonly<{
   Button: ComponentType<SettingsButtonProps>;
   Checkbox: ComponentType<CheckboxProps>;
+  Dialog: ComponentType<SettingsDialogProps>;
   EmptyState: ComponentType<Readonly<{ action?: ReactNode; body?: string; title: string }>>;
   Group: ComponentType<SettingsGroupProps>;
   IconButton: ComponentType<SettingsIconButtonProps>;
@@ -159,6 +172,8 @@ export type SettingsViewIconProps = Readonly<{
 export type SettingsViewContribution = Readonly<{
   descriptionKey?: string;
   icon?: ComponentType<SettingsViewIconProps>;
+  /** `wide` gives workspace-like settings enough room for split panes and data tables. */
+  layout?: 'default' | 'wide';
   sectionId: string;
   location: SettingsViewLocation;
   /** Optional host navigation group; unknown or omitted groups fall back to Feature navigation. */

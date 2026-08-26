@@ -31,6 +31,16 @@ export function mergeRuntimeProviderMetadata(
       : previousClone?.openAiResponses
         ? { openAiResponses: structuredClone(previousClone.openAiResponses) }
         : {}),
+    ...(nextClone.assistantReplay
+      ? { assistantReplay: structuredClone(nextClone.assistantReplay) }
+      : previousClone?.assistantReplay
+        ? { assistantReplay: structuredClone(previousClone.assistantReplay) }
+        : {}),
+    ...(nextClone.openAiResponsesCompaction
+      ? { openAiResponsesCompaction: structuredClone(nextClone.openAiResponsesCompaction) }
+      : previousClone?.openAiResponsesCompaction
+        ? { openAiResponsesCompaction: structuredClone(previousClone.openAiResponsesCompaction) }
+        : {}),
   };
   return normalizeRuntimeMessageProviderMetadata(merged);
 }

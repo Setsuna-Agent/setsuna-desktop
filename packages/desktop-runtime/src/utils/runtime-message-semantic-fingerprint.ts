@@ -36,7 +36,9 @@ export function bindProviderMetadataToSemanticMessage(
   message: RuntimeMessage,
 ): RuntimeMessageProviderMetadata | undefined {
   const normalized = normalizeRuntimeMessageProviderMetadata(metadata);
-  if (!normalized || normalized.schemaVersion !== 2 || !normalized.source) return normalized;
+  if (!normalized || (normalized.schemaVersion !== 2 && normalized.schemaVersion !== 3) || !normalized.source) {
+    return normalized;
+  }
   return normalizeRuntimeMessageProviderMetadata({
     ...normalized,
     semanticFingerprint: runtimeMessageSemanticFingerprint(message),

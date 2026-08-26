@@ -75,14 +75,14 @@ threads.ts / events.ts
 ## 新增模型供应商或协议能力
 
 1. 扩展 `model-provider.ts`、`model-request.ts` 或 `provider.ts` 的能力 contract。
-2. 在 `ConfiguredModelClient` 注册 adapter。
-3. 分开处理 prompt conversion、HTTP/SDK transport、stream bridge、usage 和 replay metadata。
-4. 在 `model-discovery.ts` 支持模型列表与能力发现。
+2. 在 `packages/features/model-provider` 中扩展 Pi API 映射，不在 Core 新建协议 client。
+3. 分开处理 context conversion、Pi transport、stream bridge、usage 和 replay metadata。
+4. 在 Feature `model-discovery.ts` 支持模型列表与能力发现。
 5. 检查 context compaction 和跨 provider semantic fallback。
 6. 在 renderer provider 设置模型中增加配置，不把厂商私有 payload 泄漏到 UI。
 7. 添加 adapter、replay、stream ordering、settings 和 integration 测试。
 
-详细边界见 [模型适配器](../packages/desktop-runtime/model-providers.md)。
+详细边界见 [Model Provider Feature](../packages/desktop-runtime/model-providers.md)。
 
 ## 新增工具
 

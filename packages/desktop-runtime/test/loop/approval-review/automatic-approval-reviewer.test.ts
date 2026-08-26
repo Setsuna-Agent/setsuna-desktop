@@ -232,7 +232,7 @@ describe('automatic approval reviewer', () => {
     const providerError = Object.assign(
       new Error(`OpenAI compatible request failed: HTTP 400 ${secret}`),
       {
-        name: 'ProviderRequestError',
+        name: 'APIError',
         responseBody: secret,
         status: 400,
       },

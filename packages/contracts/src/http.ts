@@ -9,11 +9,9 @@ import type {
   RuntimeBackgroundShellProcessTermination,
 } from './background-shell-processes.js';
 import type {
-  RuntimeAvailableModelsResponse,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeConfiguredModelReference,
-  RuntimeFetchModelsInput,
   RuntimeHookListResponse,
   RuntimeInterfaceLanguage,
 } from './config.js';
@@ -143,7 +141,6 @@ export type DesktopRuntimeClient = {
   ): () => void;
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
-  fetchProviderModels(input: RuntimeFetchModelsInput): Promise<RuntimeAvailableModelsResponse>;
   listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listSkills(): Promise<RuntimeSkillList>;
   createSkill(input: RuntimeSkillInput): Promise<RuntimeSkillDetail>;

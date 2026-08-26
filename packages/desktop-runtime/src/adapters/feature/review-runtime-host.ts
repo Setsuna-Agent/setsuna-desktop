@@ -28,7 +28,7 @@ export class DesktopReviewRuntimeHost implements ReviewRuntimeHost {
     const collector = createModelStreamTextCollector();
     for await (const event of this.dependencies.models.stream({
       ...input,
-      // ConfiguredModelClient interprets this sentinel as "use the active model".
+      // The model-provider Feature interprets this sentinel as "use the active model".
       model: 'local-runtime-smoke',
     })) {
       collector.consume(event);

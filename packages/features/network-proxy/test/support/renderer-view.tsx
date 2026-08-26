@@ -31,6 +31,9 @@ const Checkbox: SettingsViewUi['Checkbox'] = ({
 export const testSettingsViewUi: SettingsViewUi = Object.freeze({
   Button,
   Checkbox,
+  Dialog: ({ children, footer, subtitle, title }) => (
+    <section role="dialog"><header>{title}{subtitle}</header>{children}<footer>{footer}</footer></section>
+  ),
   EmptyState: ({ action, body, title }) => <div><strong>{title}</strong>{body}{action}</div>,
   Group: ({ children }) => <section>{children}</section>,
   IconButton,

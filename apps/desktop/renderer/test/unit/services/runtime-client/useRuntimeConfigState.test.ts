@@ -9,52 +9,12 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   providerModelSelectionConfigInput,
-  providerSaveConfigInput,
   useRuntimeConfigState,
+  type ModelProviderProjectionService,
   type RuntimeConfigClient,
 } from '../../../../src/services/runtime-client/useRuntimeConfigState.js';
 
 afterEach(cleanup);
-
-describe('providerSaveConfigInput', () => {
-  it('keeps an enabled active provider and strips secret preview fields', () => {
-    const providers = [
-      provider('provider_a', true),
-      provider('provider_b', true),
-    ];
-
-    expect(providerSaveConfigInput(providers, {
-      provider_a: 'secret-a',
-    }, 'provider_b')).toEqual({
-      activeProviderId: 'provider_b',
-      providers: [
-        expect.objectContaining({
-          id: 'provider_a',
-          apiKey: 'secret-a',
-          proxyRoute: { mode: 'inherit' },
-        }),
-        expect.objectContaining({
-          id: 'provider_b',
-          apiKey: undefined,
-        }),
-      ],
-    });
-    expect(providerSaveConfigInput(providers, {}, 'provider_b').providers?.[0])
-      .not.toHaveProperty('apiKeySet');
-    expect(providerSaveConfigInput(providers, {}, 'provider_b').providers?.[0])
-      .not.toHaveProperty('apiKeyPreview');
-  });
-
-  it('falls back to the first enabled provider when the active provider is disabled', () => {
-    const providers = [
-      provider('provider_a', false),
-      provider('provider_b', true),
-    ];
-
-    expect(providerSaveConfigInput(providers, {}, 'provider_a').activeProviderId)
-      .toBe('provider_b');
-  });
-});
 
 describe('providerModelSelectionConfigInput', () => {
   it('enables only the selected model for the selected provider', () => {
@@ -67,12 +27,14 @@ describe('providerModelSelectionConfigInput', () => {
         model('model_c', true),
       ]),
     ]);
+    config.providers[0]!.catalogProviderId = 'openai';
 
     const input = providerModelSelectionConfigInput(config, 'provider_a', 'model_b');
 
     expect(input.activeProviderId).toBe('provider_a');
     expect(input.providers?.[0]).toMatchObject({
       id: 'provider_a',
+      catalogProviderId: 'openai',
       enabled: true,
       proxyRoute: { mode: 'inherit' },
       models: [
@@ -106,9 +68,10 @@ describe('providerModelSelectionConfigInput', () => {
       })),
     };
     const client = {
-      saveConfig: vi.fn(() => pending.promise),
+      saveConfig: vi.fn(),
     } as unknown as RuntimeConfigClient;
-    const { result } = renderHook(() => useRuntimeConfigState({ client }));
+    const modelProvider = projectionService(vi.fn(() => pending.promise));
+    const { result } = renderHook(() => useRuntimeConfigState({ client, modelProvider }));
     act(() => result.current.replaceConfig(initial));
 
     let selection!: Promise<void>;
@@ -141,11 +104,13 @@ describe('providerModelSelectionConfigInput', () => {
     ]);
     initial.activeProviderId = 'provider_a';
     const client = {
-      saveConfig: vi.fn()
-        .mockImplementationOnce(() => firstSave.promise)
-        .mockImplementationOnce(() => secondSave.promise),
+      saveConfig: vi.fn(),
     } as unknown as RuntimeConfigClient;
-    const { result } = renderHook(() => useRuntimeConfigState({ client }));
+    const selectProviderModel = vi.fn()
+        .mockImplementationOnce(() => firstSave.promise)
+        .mockImplementationOnce(() => secondSave.promise);
+    const modelProvider = projectionService(selectProviderModel);
+    const { result } = renderHook(() => useRuntimeConfigState({ client, modelProvider }));
     act(() => result.current.replaceConfig(initial));
 
     let selectB!: Promise<void>;
@@ -165,14 +130,14 @@ describe('providerModelSelectionConfigInput', () => {
       { id: 'model_b', enabled: false },
       { id: 'model_c', enabled: true },
     ]);
-    expect(client.saveConfig).toHaveBeenCalledTimes(1);
+    expect(selectProviderModel).toHaveBeenCalledTimes(1);
 
     const firstRejected = expect(selectB).rejects.toThrow('B save failed');
     await act(async () => {
       firstSave.reject(new Error('B save failed'));
       await firstRejected;
     });
-    expect(client.saveConfig).toHaveBeenCalledTimes(2);
+    expect(selectProviderModel).toHaveBeenCalledTimes(2);
     expect(result.current.config?.providers[0]?.models[2]).toMatchObject({
       id: 'model_c',
       enabled: true,
@@ -227,6 +192,16 @@ function runtimeConfig(providers: ProviderConfigState[]): RuntimeConfigState {
     setsunaStyle: 'developer',
     approvalPolicy: 'on-request',
     permissionProfile: 'workspace-write',
+  };
+}
+
+function projectionService(
+  selectProviderModel: ModelProviderProjectionService['selectProviderModel'],
+): ModelProviderProjectionService {
+  return {
+    providerProjection: () => null,
+    selectProviderModel,
+    subscribe: () => () => undefined,
   };
 }
 

@@ -87,7 +87,8 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 
 ```text
 /v1/config
-/v1/config/models
+/v1/features/model-provider/settings
+/v1/features/model-provider/models
 /v1/threads
 /v1/threads/:id
 /v1/threads/:id/turns

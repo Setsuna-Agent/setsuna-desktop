@@ -4,7 +4,6 @@ export type CoreSettingsSectionId =
   | 'general'
   | 'shortcuts'
   | 'personalization'
-  | 'localLlm'
   | 'taskModels'
   | 'archives'
   | 'runtime'

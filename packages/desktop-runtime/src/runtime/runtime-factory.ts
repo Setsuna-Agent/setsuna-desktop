@@ -2,6 +2,7 @@ import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
 import { BindableUsageRecorder } from '../adapters/feature/bindable-usage-recorder.js';
+import { BindableModelClient } from '../adapters/feature/bindable-model-client.js';
 import { DesktopReviewRuntimeHost } from '../adapters/feature/review-runtime-host.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
@@ -9,7 +10,6 @@ import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { McpElicitationCoordinator } from '../adapters/mcp/mcp-elicitation-coordinator.js';
 import { SdkMcpConnectionManager } from '../adapters/mcp/sdk-mcp-connection-manager.js';
-import { ConfiguredModelClient } from '../adapters/model/configured-model-client.js';
 import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
 import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-bridge.js';
 import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-fetch.js';
@@ -145,21 +145,18 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const environmentResolver = new WorkspaceRuntimeEnvironmentResolver(workspaceProjects);
   const projectInstructions = new FileProjectInstructionLoader();
   const projectWorkflow = new FileProjectWorkflowResolver();
-  const configuredModelClient = new ConfiguredModelClient(configStore, globalThis.fetch, undefined, {
-    debugTrace: conversationDebugTraceSink,
-    fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
-  });
-  const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
+  const providerModelClient = new BindableModelClient();
+  const modelClient = new ImageAssetResolvingModelClient(providerModelClient, generatedImageStore);
   const reviewRuntimeHost = new DesktopReviewRuntimeHost({
     config: configStore,
-    models: configuredModelClient,
+    models: providerModelClient,
   });
   const visionRecognitionHost = new DesktopVisionRecognitionRuntimeHost({
     attachments: attachmentStore,
     clock,
     config: configStore,
     legacySettings: configStore.visionRecognitionLegacySettingsAdapter(),
-    models: configuredModelClient,
+    models: providerModelClient,
     plugins: pluginStore,
     threads: threadStore,
     usage: usageRecorder,
@@ -251,6 +248,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     memoryStore,
     memoryToolHost,
     modelClient,
+    providerModelClient,
     networkProxyFetch,
     mcpConnections,
     mcpElicitations,

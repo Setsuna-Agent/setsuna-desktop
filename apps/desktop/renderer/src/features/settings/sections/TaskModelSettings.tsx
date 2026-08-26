@@ -9,7 +9,7 @@ import { SettingsRow } from '../../../shared/ui/SettingsViewUi.js';
 import {
   configuredTaskModelOptions,
   configuredTaskModelReferenceValue,
-} from '../providers/provider-model.js';
+} from './task-model-options.js';
 import type { RuntimePreferenceInput } from '../settings-types.js';
 
 type TaskModelField = {

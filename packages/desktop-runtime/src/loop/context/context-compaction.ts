@@ -442,6 +442,26 @@ function nativeReasoningReplayCharacters(message: RuntimeMessage): number {
     (total, part) => total + (part.type === 'reasoning' ? part.content.length : 0),
     0,
   ) ?? 0;
+  if (metadata.schemaVersion === 3) {
+    const replay = metadata.assistantReplay?.blocks ?? [];
+    let nativeText = 0;
+    let opaqueState = 0;
+    for (const block of replay) {
+      if (block.type === 'thinking') {
+        nativeText += block.text.length;
+        opaqueState += block.signature?.length ?? 0;
+      } else if (block.type === 'text') {
+        opaqueState += block.signature?.length ?? 0;
+      } else {
+        opaqueState += (block.thoughtSignature?.length ?? 0) + (block.itemId?.length ?? 0);
+      }
+    }
+    const compactedState = metadata.openAiResponsesCompaction?.items.reduce(
+      (total, item) => total + JSON.stringify(item).length,
+      0,
+    ) ?? 0;
+    return Math.max(streamedReasoning, nativeText) + opaqueState + compactedState;
+  }
   const anthropicReasoning = metadata.anthropic?.contentBlocks.filter(
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
   );

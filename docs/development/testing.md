@@ -71,7 +71,7 @@ pnpm test:integration -- packages/desktop-runtime/test/integration/agent-loop/qu
 | Runtime loop | `packages/desktop-runtime/test/loop/` + `integration/agent-loop/` |
 | Runtime route | `test/server/` + `integration/runtime-server/` |
 | Store | `test/adapters/store/` + legacy/recovery fixture |
-| Provider | `test/adapters/model/` + history/compaction |
+| Provider | `packages/features/model-provider/test/` + runtime history/compaction integration |
 | Tool/MCP/Skill/Plugin | 对应 adapter + AgentLoop integration |
 | Main | `apps/desktop/main/test/unit/<domain>/` |
 | Feature package | 使用 `packages/features/<feature>/test/` 中与进程入口镜像的 unit/integration tests |

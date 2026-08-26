@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import {
   configuredTaskModelOptions,
-} from '../../../../src/features/settings/providers/provider-model.js';
+} from '../../../../src/features/settings/sections/task-model-options.js';
 import { TaskModelSettings } from '../../../../src/features/settings/sections/TaskModelSettings.js';
 
 describe('TaskModelSettings', () => {

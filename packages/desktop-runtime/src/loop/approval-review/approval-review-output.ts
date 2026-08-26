@@ -191,7 +191,6 @@ function fencedJson(value: string): string | null {
 function providerHttpStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   const record = error as Record<string, unknown>;
-  if (record.name !== 'ProviderRequestError') return undefined;
   return typeof record.status === 'number'
     && Number.isInteger(record.status)
     && record.status >= 100

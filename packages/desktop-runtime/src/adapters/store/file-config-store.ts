@@ -545,6 +545,8 @@ function normalizeProviders(
     const id = nonEmpty(provider.id) ?? `provider-${index + 1}`;
     const previous = previousById.get(id);
     const icon = normalizeProviderIconConfig(Object.hasOwn(provider, 'icon') ? provider.icon : previous?.icon);
+    const catalogProviderId = Object.hasOwn(provider, 'catalogProviderId')
+      ? (provider.catalogProviderId === null ? null : nonEmpty(provider.catalogProviderId)) : previous?.catalogProviderId;
     if ('apiKey' in provider && typeof provider.apiKey === 'string' && provider.apiKey.trim()) {
       secrets.providerApiKeys[id] = provider.apiKey.trim();
     }
@@ -555,6 +557,7 @@ function normalizeProviders(
       id,
       // An explicit empty string means the user cleared the display name.
       name: typeof provider.name === 'string' ? provider.name : previous?.name ?? 'Local provider',
+      ...(catalogProviderId !== undefined ? { catalogProviderId } : {}),
       provider: provider.provider ?? previous?.provider ?? 'openai-compatible',
       baseUrl: normalizeBaseUrl(provider.baseUrl ?? previous?.baseUrl ?? ''),
       enabled: provider.enabled ?? previous?.enabled ?? true,

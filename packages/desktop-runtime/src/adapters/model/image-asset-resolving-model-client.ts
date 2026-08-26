@@ -7,7 +7,7 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { GeneratedImageReader } from '../../ports/generated-image-store.js';
 import type { ModelClient, ModelCompactionRequest } from '../../ports/model-client.js';
-import { providerErrorDetails } from './provider-request-error.js';
+import { modelErrorDetails } from './model-error-details.js';
 
 const IMAGE_INPUT_FALLBACK_MESSAGE = [
   'The runtime has already handled any user-facing disclosure for unavailable image inputs.',
@@ -185,7 +185,7 @@ function isModelVisibleImage(attachment: RuntimeMessageAttachment): boolean {
 }
 
 function isRejectedImageInputError(error: unknown): boolean {
-  const details = providerErrorDetails(error).toLowerCase();
+  const details = modelErrorDetails(error).toLowerCase();
   if (!details.includes('image')) return false;
   return details.includes('new_sensitive')
     || details.includes('image is sensitive')

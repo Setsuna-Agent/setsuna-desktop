@@ -62,6 +62,7 @@
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
+    "@setsuna-desktop/feature-model-provider": "workspace:*",
     "@setsuna-desktop/feature-network-proxy": "workspace:*",
     "@setsuna-desktop/feature-plugin-management": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
@@ -117,7 +118,7 @@
     "wait-on": "^8.0.1"
   },
   "engines": {
-    "node": ">=22.13.0",
+    "node": ">=22.19.0",
     "pnpm": ">=7"
   },
   "pnpm": {

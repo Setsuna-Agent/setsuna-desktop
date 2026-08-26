@@ -102,6 +102,39 @@ describe('runtime provider metadata', () => {
     })?.semanticFingerprint).toBeUndefined();
   });
 
+  it('strictly validates persisted Responses compaction items at the restore boundary', () => {
+    const valid = normalizeRuntimeMessageProviderMetadata({
+      schemaVersion: 3,
+      source,
+      openAiResponsesCompaction: {
+        items: [{
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_image', image_url: 'data:image/png;base64,YWJj', detail: 'auto' }],
+        }, { type: 'compaction', encrypted_content: 'opaque' }],
+      },
+    });
+    expect(valid?.openAiResponsesCompaction?.items).toHaveLength(2);
+
+    expect(normalizeRuntimeMessageProviderMetadata({
+      schemaVersion: 3,
+      source,
+      openAiResponsesCompaction: {
+        items: [{ type: 'unsupported', injected: true }, { type: 'compaction', encrypted_content: 'opaque' }],
+      },
+    })).toBeUndefined();
+    expect(normalizeRuntimeMessageProviderMetadata({
+      schemaVersion: 3,
+      source,
+      openAiResponsesCompaction: {
+        items: [
+          { type: 'compaction', encrypted_content: 'first' },
+          { type: 'compaction', encrypted_content: 'second' },
+        ],
+      },
+    })).toBeUndefined();
+  });
+
   it('omits a known native envelope above the per-message size limit', () => {
     expect(normalizeRuntimeMessageProviderMetadata({
       schemaVersion: 2,
@@ -176,7 +209,7 @@ describe('runtime provider metadata', () => {
 
     providerMetadata.openAiResponses.items[0]!.content[0]!.text = 'mutated';
     expect(projected.messages[0]?.providerMetadata?.openAiResponses?.items).toEqual([
-      { type: 'message', id: 'msg_1', content: [{ type: 'output_text', text: 'Hello' }] },
+      { type: 'message', id: 'msg_1', role: 'assistant', content: [{ type: 'output_text', text: 'Hello' }] },
     ]);
   });
 

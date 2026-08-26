@@ -6,7 +6,7 @@
 
 ## 环境
 
-- Node.js `>=22.13.0`（内置 `node:sqlite` 从该版本起无需 `--experimental-sqlite`）
+- Node.js `>=22.19.0`（满足 Pi runtime 与内置 `node:sqlite` 的共同要求）
 - pnpm `>=7`
 - CI 固定 pnpm `7.33.7`
 - 原生依赖：`node-pty`

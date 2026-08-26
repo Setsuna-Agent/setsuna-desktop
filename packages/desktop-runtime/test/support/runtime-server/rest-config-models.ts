@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
 
 
-export async function createModelListCaptureServer(): Promise<{
+export async function createModelListCaptureServer(responseOptions: Readonly<{
+  body?: unknown;
+  status?: number;
+}> = {}): Promise<{
   baseUrl: string;
   nextRequest: Promise<{ authorization?: string; url?: string }>;
   close(): Promise<void>;
@@ -15,8 +18,8 @@ export async function createModelListCaptureServer(): Promise<{
       authorization: request.headers.authorization,
       url: request.url,
     });
-    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    response.end(JSON.stringify({
+    response.writeHead(responseOptions.status ?? 200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(JSON.stringify(responseOptions.body ?? {
       data: [
         { id: 'llama3.1', display_name: 'Llama 3.1' },
         { model: 'qwen2.5', max_tokens: 8192, capabilities: { reasoning: true, reasoningEfforts: ['low', 'high'] }, modalities: ['text', 'image'] },

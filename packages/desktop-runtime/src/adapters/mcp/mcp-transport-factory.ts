@@ -1,7 +1,7 @@
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
-import type { FetchImpl } from '../model/provider-http.js';
+import type { FetchImpl } from '../network/fetch-impl.js';
 import type { McpOAuthCoordinator } from './mcp-oauth-coordinator.js';
 
 const RESERVED_HTTP_HEADERS = new Set([

@@ -29,6 +29,12 @@ import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-g
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import {
+  modelProviderRendererFeature,
+  modelProviderRendererHostCapability,
+  modelProviderRendererStateCapability,
+  type ModelProviderRendererStateService,
+} from '@setsuna-desktop/feature-model-provider/renderer';
+import {
   pluginManagementRendererHostCapability,
   pluginManagementRendererServiceCapability,
   type PluginManagementRendererService,
@@ -80,12 +86,14 @@ import {
 } from './feature-view-registries.js';
 import { RendererFeatureEventHub } from './renderer-feature-event-hub.js';
 import { usageRendererHost } from './UsageFeatureBoundary.js';
+import { modelProviderRendererHost } from './ModelProviderFeatureBoundary.js';
 import { hostMessages } from '../shared/i18n/messages.js';
 import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 
 const rendererFeatures = defineRendererFeatureHost({
   required: [
     browserRendererFeature,
+    modelProviderRendererFeature,
     networkProxyRendererFeature,
     pluginManagementRendererFeature,
     reviewRendererFeature,
@@ -113,6 +121,7 @@ export type ActiveRendererFeatures = Readonly<{
   composition: RendererFeatureComposition;
   conversationDebug: ConversationDebugRendererService;
   messages: ComposedRendererMessages<AppLocale>;
+  modelProvider: ModelProviderRendererStateService;
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
   runtimeActivity: RuntimeActivityRendererService;
@@ -129,6 +138,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   const { composition, messages } = await rendererFeatures.activate({
     hostMessages,
     hostCapabilities: [
+      provideHostCapability(
+        modelProviderRendererHostCapability,
+        Object.freeze({
+          ...modelProviderRendererHost,
+          networkProxyBridge: window.setsunaDesktop?.networkProxy ?? null,
+        }),
+      ),
       provideHostCapability(
         rendererFeatureOperationTransportCapability,
         createDesktopFeatureOperationTransport(runtime),
@@ -188,6 +204,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         createNoopConversationDebugRendererService,
       ),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
+      modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
       runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
       updater: requiredCapability(updaterRendererStateCapability),
@@ -201,6 +218,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       composition: host.composition,
       conversationDebug: dependencies.conversationDebug,
       messages,
+      modelProvider: dependencies.modelProvider,
       networkProxy: dependencies.networkProxy,
       pluginManagement: dependencies.pluginManagement,
       runtimeActivity: dependencies.runtimeActivity,

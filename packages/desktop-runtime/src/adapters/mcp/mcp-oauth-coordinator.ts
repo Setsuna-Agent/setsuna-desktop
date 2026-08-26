@@ -8,7 +8,7 @@ import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-deskt
 import { createHash } from 'node:crypto';
 import type { DesktopNativeBridge } from '../../ports/secret-store.js';
 import { errorMessage } from '../../shared/node-errors.js';
-import type { FetchImpl } from '../model/provider-http.js';
+import type { FetchImpl } from '../network/fetch-impl.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 
 type StoredOAuthTokens = {
