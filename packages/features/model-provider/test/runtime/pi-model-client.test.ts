@@ -35,6 +35,33 @@ describe('Pi model client protocol integration', () => {
     });
   });
 
+  it('falls back to prompt-constrained JSON when an Anthropic endpoint rejects output_config', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      return bodies.length === 1
+        ? providerValidationError('output_config is not supported')
+        : new Response(anthropicSse(), {
+            status: 200,
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+    }) as typeof globalThis.fetch;
+    const client = new PiModelClient(host(providerFixture('anthropic'), fetch));
+
+    await collect(client.stream(requestFixture({
+      responseFormat: {
+        type: 'json',
+        name: 'approval',
+        schema: { type: 'object', properties: { allow: { type: 'boolean' } }, required: ['allow'] },
+      },
+    })));
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toHaveProperty('output_config');
+    expect(bodies[1]).not.toHaveProperty('output_config');
+  });
+
   it('streams OpenAI Responses and preserves response identity in v3 replay metadata', async () => {
     const capture = captureFetch(responsesSse());
     const client = new PiModelClient(host(providerFixture('openai-responses'), capture.fetch));
@@ -55,29 +82,74 @@ describe('Pi model client protocol integration', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done' });
   });
 
-  it('dispatches catalog presets through their Pi built-in provider', async () => {
+  it('uses inferred Pi compatibility for synchronized DeepSeek models outside the catalog', async () => {
     const capture = captureFetch(openAiCompletionsSse());
     const base = providerFixture('openai-compatible', {
-      code: 'deepseek-v4-flash',
-      name: 'DeepSeek V4 Flash',
+      code: 'deepseek-v4-flash-vision-exp',
+      name: 'DeepSeek V4 Flash Vision Exp',
       thinkingEnabled: true,
       thinkingEfforts: ['low', 'high', 'max'],
       defaultThinkingEffort: 'high',
     });
     const client = new PiModelClient(host({
       ...base,
-      catalogProviderId: 'deepseek',
-      baseUrl: 'https://api.deepseek.test',
+      baseUrl: 'https://api.deepseek.com',
     }, capture.fetch));
 
-    const events = await collect(client.stream(requestFixture({ model: 'deepseek-v4-flash' })));
+    const events = await collect(client.stream(requestFixture({
+      model: 'deepseek-v4-flash-vision-exp',
+      responseFormat: {
+        type: 'json',
+        name: 'approval',
+        schema: { type: 'object', properties: { allow: { type: 'boolean' } }, required: ['allow'] },
+      },
+    })));
 
-    expect(capture.url()).toBe('https://api.deepseek.test/chat/completions');
+    expect(capture.url()).toBe('https://api.deepseek.com/chat/completions');
     expect(capture.headers().get('authorization')).toBe('Bearer secret');
-    expect(capture.body()).toMatchObject({ model: 'deepseek-v4-flash' });
+    expect(capture.body()).toMatchObject({
+      model: 'deepseek-v4-flash-vision-exp',
+      response_format: { type: 'json_object' },
+    });
     expect(events.find((event) => event.type === 'item_completed')).toMatchObject({
       item: { kind: 'agent_message', content: 'catalog response' },
     });
+  });
+
+  it('progressively relaxes unsupported structured output on compatible endpoints', async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      if (bodies.length === 1) {
+        return providerValidationError('response_format json_schema is not supported');
+      }
+      if (bodies.length === 2) {
+        return providerValidationError('Unknown parameter: response_format');
+      }
+      return new Response(openAiCompletionsSse(), {
+        status: 200,
+        headers: { 'Content-Type': 'text/event-stream' },
+      });
+    }) as typeof globalThis.fetch;
+    const client = new PiModelClient(host(providerFixture('openai-compatible'), fetch));
+
+    await collect(client.stream(requestFixture({
+      responseFormat: {
+        type: 'json',
+        name: 'approval',
+        schema: { type: 'object', properties: { allow: { type: 'boolean' } }, required: ['allow'] },
+      },
+    })));
+
+    expect(bodies).toHaveLength(3);
+    expect(bodies[0]).toMatchObject({
+      response_format: { type: 'json_schema' },
+    });
+    expect(bodies[1]).toMatchObject({
+      response_format: { type: 'json_object' },
+    });
+    expect(bodies[2]).not.toHaveProperty('response_format');
   });
 
   it('reports provider replay decisions through the optional host diagnostic boundary', async () => {
@@ -323,6 +395,13 @@ function captureFetch(sse: string) {
     headers: () => new Headers(capturedInit?.headers),
     url: () => capturedUrl,
   };
+}
+
+function providerValidationError(message: string): Response {
+  return new Response(JSON.stringify({ error: { message, type: 'invalid_request_error' } }), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' },
+  });
 }
 
 function anthropicSse(): string {

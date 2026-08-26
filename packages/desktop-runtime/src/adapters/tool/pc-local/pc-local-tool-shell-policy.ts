@@ -355,20 +355,21 @@ function networkPolicyDecision(
 
 export function shellSandboxUnavailableReason(
   state: ShellPolicyState,
-  capability: ShellSandboxCapability = shellSandboxCapability(),
+  capability?: ShellSandboxCapability,
 ): string {
+  const resolvedCapability = shellSandboxCapabilityForState(state, capability);
   if (!state?.osSandbox) return '';
   const profile = normalizePermissionProfile(state?.permissionProfile);
   if (profile === 'danger-full-access') return '';
   if (profile !== 'read-only' && profile !== 'workspace-write') {
     return 'OS sandbox 当前只支持 read-only 或 workspace-write 硬隔离；请关闭 os_sandbox，或切换权限配置。';
   }
-  if (!capability.supported) return capability.reason;
-  if (capability.provider !== 'macos-seatbelt' && capability.provider !== 'windows-native') {
+  if (!resolvedCapability.supported) return resolvedCapability.reason;
+  if (resolvedCapability.provider !== 'macos-seatbelt' && resolvedCapability.provider !== 'windows-native') {
     return '当前 OS sandbox provider 不支持 shell 硬隔离。';
   }
   if (
-    capability.provider === 'windows-native'
+    resolvedCapability.provider === 'windows-native'
     && (deniedRootsForState(state).length || deniedGlobRegExpSourcesForState(state).length)
   ) {
     return 'Windows 原生沙箱 V1 无法强制执行 denied_roots 或 denied_glob_patterns；已拒绝降级到较弱隔离。';
@@ -476,11 +477,7 @@ export function createShellSandboxExecutionPlan(
   } = {},
 ): SandboxExecutionPlan {
   const permissionProfile = normalizePermissionProfile(state?.permissionProfile);
-  const boundCapability = state.shellSandboxProvider?.capability();
-  const capability = options.capability
-    ?? (boundCapability && (boundCapability.supported || process.platform === 'win32')
-      ? boundCapability
-      : shellSandboxCapability());
+  const capability = shellSandboxCapabilityForState(state, options.capability);
   const provider = !state?.osSandbox || permissionProfile === 'danger-full-access'
     ? 'bypass'
     : capability.supported && capability.provider === 'macos-seatbelt'
@@ -537,6 +534,19 @@ export function createShellSandboxExecutionPlan(
     networkAccess: state?.sandboxWorkspaceWrite?.networkAccess === true,
     environment,
   };
+}
+
+function shellSandboxCapabilityForState(
+  state: ShellPolicyState,
+  explicitCapability?: ShellSandboxCapability,
+): ShellSandboxCapability {
+  if (explicitCapability) return explicitCapability;
+  const boundCapability = state.shellSandboxProvider?.capability();
+  // Windows has no built-in fallback, so preserve the provider's repair reason.
+  // macOS can still use the host Seatbelt provider when an optional binding is unavailable.
+  return boundCapability && (boundCapability.supported || process.platform === 'win32')
+    ? boundCapability
+    : shellSandboxCapability();
 }
 
 export function shellSandboxProfile(

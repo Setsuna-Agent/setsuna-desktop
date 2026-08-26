@@ -54,6 +54,11 @@ export type SettingsTooltipProps = Readonly<{
   title: ReactNode;
 }>;
 
+export type SettingsToastProps = Readonly<{
+  message: string;
+  tone?: 'error' | 'info' | 'success' | 'warning';
+}>;
+
 export type SettingsSelectFieldProps = Readonly<{
   'aria-label'?: string;
   'aria-labelledby'?: string;
@@ -156,6 +161,7 @@ export type SettingsViewUi = Readonly<{
   TextArea: ComponentType<TextareaHTMLAttributes<HTMLTextAreaElement>>;
   TextField: ComponentType<InputHTMLAttributes<HTMLInputElement>>;
   Toggle: ComponentType<SettingsToggleProps>;
+  Toast: ComponentType<SettingsToastProps>;
   Tooltip: ComponentType<SettingsTooltipProps>;
 }>;
 

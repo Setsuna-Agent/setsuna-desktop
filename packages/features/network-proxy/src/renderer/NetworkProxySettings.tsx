@@ -143,7 +143,12 @@ export function NetworkProxySettings({
             <strong>{translate('feature.networkProxy.settings.serversTitle')}</strong>
             <span>{translate('feature.networkProxy.settings.serversDescription')}</span>
           </div>
-          <Button icon={<Plus size={13} />} disabled={proxy.busy} onClick={openCreateDialog}>
+          <Button
+            icon={<Plus size={13} />}
+            variant="primary"
+            disabled={proxy.busy}
+            onClick={openCreateDialog}
+          >
             {translate('feature.networkProxy.settings.addServer')}
           </Button>
         </header>

@@ -43,7 +43,11 @@
 }
 
 .app-toast--error {
-  border-color: color-mix(in srgb, var(--app-danger) 36%, var(--app-border));
+  padding: 12px 10px 12px 14px;
+  border-color: transparent;
+  border-radius: 12px;
+  color: color-mix(in srgb, var(--app-danger) 78%, var(--app-text));
+  background: color-mix(in srgb, var(--app-danger) 22%, var(--app-surface));
 }
 
 .app-toast__icon {
@@ -64,6 +68,11 @@
 
 .app-toast--error .app-toast__icon {
   color: var(--app-danger);
+}
+
+.app-toast--error .app-toast__message {
+  font-weight: 500;
+  line-height: 20px;
 }
 
 .app-toast__message {
@@ -93,6 +102,15 @@
 .app-toast > button:focus-visible {
   outline: 0;
   box-shadow: var(--app-focus-ring);
+}
+
+.app-toast--error > button {
+  color: color-mix(in srgb, var(--app-danger) 68%, var(--app-text-muted));
+}
+
+.app-toast--error > button:hover {
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 12%, transparent);
 }
 
 @keyframes app-toast-enter {

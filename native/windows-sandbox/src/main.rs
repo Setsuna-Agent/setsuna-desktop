@@ -37,7 +37,8 @@ fn run() -> Result<CommandOutput, SandboxError> {
 
     match command.as_str() {
         "version" | "--version" | "-V" => Ok(CommandOutput::version()),
-        "status" | "doctor" => platform::status(),
+        "status" => platform::status(),
+        "doctor" => platform::doctor(),
         "install" => platform::install(false),
         "repair" => platform::install(true),
         "uninstall" => platform::uninstall(),

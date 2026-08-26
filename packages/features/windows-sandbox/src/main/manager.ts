@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const STATUS_TIMEOUT_MS = 10_000;
+const STATUS_TIMEOUT_MS = 30_000;
 const ACTION_TIMEOUT_MS = 10 * 60_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 const SIDECAR_PROTOCOL_VERSION = 1;
@@ -58,7 +58,7 @@ export class WindowsSandboxManager {
     const unavailable = this.unavailableStatus();
     if (unavailable) return unavailable;
     try {
-      return this.parseStatus(await this.runSidecar('status', STATUS_TIMEOUT_MS));
+      return this.parseStatus(await this.runSidecar('doctor', STATUS_TIMEOUT_MS));
     } catch (error) {
       return this.status('needs-repair', errorMessage(error), true);
     }

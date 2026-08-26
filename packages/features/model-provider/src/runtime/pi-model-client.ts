@@ -37,6 +37,11 @@ import {
   bridgePiStream,
   type ProviderTransportFailure,
 } from './pi-stream-bridge.js';
+import {
+  nextPiCompatibilityRetry,
+  piResponseFormatPayload,
+  withKnownPiRequestCompatibility,
+} from './pi-request-compatibility.js';
 import { builtinCatalogProviderIdForConfig, getBuiltinCatalogProvider } from './provider-catalog.js';
 
 const EMPTY_API_KEY = 'setsuna-no-provider-api-key';
@@ -54,20 +59,25 @@ export class PiModelClient implements ModelProviderSamplingService {
     }
 
     const modelId = provider.activeModel?.code || request.model;
-    const configuredRequest = withProviderDefaults(request, provider, modelId);
-    let emitted = false;
-    try {
-      for await (const event of this.streamConfigured(provider, configuredRequest)) {
-        emitted = true;
-        yield event;
+    const compatibilityModel = createPiModel(provider, modelId);
+    let currentRequest = withKnownPiRequestCompatibility(
+      withProviderDefaults(request, provider, modelId),
+      compatibilityModel,
+    );
+    while (true) {
+      let emitted = false;
+      try {
+        for await (const event of this.streamConfigured(provider, currentRequest)) {
+          emitted = true;
+          yield event;
+        }
+        return;
+      } catch (error) {
+        if (emitted || request.signal?.aborted) throw error;
+        const retryRequest = nextPiCompatibilityRetry(currentRequest, error, compatibilityModel.api);
+        if (!retryRequest) throw error;
+        currentRequest = retryRequest;
       }
-    } catch (error) {
-      if (
-        emitted
-        || request.signal?.aborted
-        || !shouldRetryWithoutTemperature(configuredRequest, error)
-      ) throw error;
-      yield* this.streamConfigured(provider, { ...configuredRequest, temperature: undefined });
     }
   }
 
@@ -205,7 +215,7 @@ function streamForProvider(
       toolChoice: openAiResponsesToolChoice(input.toolChoice),
       reasoningEffort: reasoningEffort(input),
       reasoningSummary: input.thinking ? 'auto' : null,
-      onPayload: (payload) => responseFormatPayload(payload, input, 'openai-responses'),
+      onPayload: (payload) => piResponseFormatPayload(payload, input, 'openai-responses'),
     } satisfies OpenAIResponsesOptions;
     return builtinProvider
       ? builtinProvider.stream(typedModel, context, options)
@@ -218,7 +228,7 @@ function streamForProvider(
       toolChoice: anthropicToolChoice(input.toolChoice),
       ...anthropicThinkingOptions(input, typedModel),
       cacheRetention: input.stepSnapshot ? 'short' : 'none',
-      onPayload: (payload) => responseFormatPayload(payload, input, 'anthropic-messages'),
+      onPayload: (payload) => piResponseFormatPayload(payload, input, 'anthropic-messages'),
     } satisfies AnthropicOptions;
     return builtinProvider
       ? builtinProvider.stream(typedModel, context, options)
@@ -229,7 +239,7 @@ function streamForProvider(
     ...common,
     toolChoice: openAiCompletionsToolChoice(input.toolChoice),
     reasoningEffort: reasoningEffort(input),
-    onPayload: (payload) => responseFormatPayload(payload, input, 'openai-completions'),
+    onPayload: (payload) => piResponseFormatPayload(payload, input, 'openai-completions'),
   } satisfies OpenAICompletionsOptions;
   return builtinProvider
     ? builtinProvider.stream(typedModel, context, options)
@@ -353,79 +363,9 @@ function anthropicToolChoice(choice: ModelRequest['toolChoice']): AnthropicOptio
   return { type: 'tool', name: choice.name };
 }
 
-function responseFormatPayload(payload: unknown, request: ModelRequest, api: PiApi): unknown {
-  if (request.responseFormat?.type !== 'json' || !payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return undefined;
-  }
-  const body = { ...(payload as Record<string, unknown>) };
-  const schema = request.responseFormat.schema;
-  const name = request.responseFormat.name || 'setsuna_response';
-  if (api === 'anthropic-messages') {
-    // Anthropic structured output requires a JSON Schema; it has no json_object mode.
-    if (!schema) return undefined;
-    body.output_config = {
-      ...objectRecord(body.output_config),
-      format: { type: 'json_schema', schema },
-    };
-    return body;
-  }
-  if (api === 'openai-responses') {
-    body.text = {
-      ...objectRecord(body.text),
-      format: schema
-        ? {
-            type: 'json_schema',
-            name,
-            schema,
-            strict: true,
-            ...(request.responseFormat.description ? { description: request.responseFormat.description } : {}),
-          }
-        : { type: 'json_object' },
-    };
-    return body;
-  }
-  body.response_format = schema
-    ? {
-        type: 'json_schema',
-        json_schema: {
-          name,
-          schema,
-          strict: true,
-          ...(request.responseFormat.description ? { description: request.responseFormat.description } : {}),
-        },
-      }
-    : { type: 'json_object' };
-  return body;
-}
-
-function objectRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 function positiveInt(value: unknown): number | undefined {
   const parsed = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
-}
-
-function shouldRetryWithoutTemperature(request: Pick<ModelRequest, 'temperature'>, error: unknown): boolean {
-  if (typeof request.temperature !== 'number') return false;
-  const details = providerErrorDetails(error).toLowerCase();
-  return details.includes('temperature')
-    && /\b(?:invalid|unsupported|not supported|not allowed|only|must(?:\s+be)?|does not support|unknown|unrecognized)\b/u.test(details);
-}
-
-function providerErrorDetails(value: unknown, seen = new Set<object>(), depth = 0): string {
-  if (depth > 4 || value === null || value === undefined) return '';
-  if (typeof value === 'string') return value;
-  if (typeof value !== 'object' || seen.has(value)) return '';
-  seen.add(value);
-  const record = value as Record<string, unknown>;
-  return ['name', 'message', 'responseBody', 'data', 'error', 'cause']
-    .map((key) => providerErrorDetails(record[key], seen, depth + 1))
-    .filter(Boolean)
-    .join(' ');
 }
 
 async function* localSmokeStream(): AsyncGenerator<ModelStreamEvent> {

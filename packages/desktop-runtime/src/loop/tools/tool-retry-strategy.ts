@@ -185,6 +185,7 @@ export class ToolRetryStrategy {
       toolError,
     } = input;
     const suggestedReadableRoots = suggestedSandboxReadableRoots(toolError, context);
+    let bypassError = toolError;
 
     if (suggestedReadableRoots.length) {
       const narrowReason = `Sandbox could not read the resolved toolchain for ${toolCall.name}. Approve read-only access to: ${suggestedReadableRoots.join(', ')}.`;
@@ -228,8 +229,12 @@ export class ToolRetryStrategy {
             status: 'error',
           };
         }
+        bypassError = error;
       }
     }
+
+    const firstFailure = sandboxFailureSummary(bypassError);
+    const failureDetails = firstFailure ? `\nFirst sandbox failure: ${firstFailure}` : '';
 
     // “无需确认”只关闭审批交互，不得自动扩大为无沙箱执行。
     if (
@@ -238,14 +243,13 @@ export class ToolRetryStrategy {
     ) {
       return {
         kind: 'terminal',
-        content: `Tool ${toolCall.name} was denied by the OS sandbox. No unsandboxed retry was attempted because the current mode disables prompts but keeps workspace sandboxing.`,
+        content: `Tool ${toolCall.name} was denied by the OS sandbox. No unsandboxed retry was attempted because the current mode disables prompts but keeps workspace sandboxing.${failureDetails}`,
         processed: true,
         status: 'error',
       };
     }
 
-    // The first-attempt output is already retained; approval text stays concise.
-    const retryReason = `The OS sandbox blocked the first ${toolCall.name} attempt. Approve retry without the OS sandbox.`;
+    const retryReason = `The OS sandbox blocked the first ${toolCall.name} attempt. Approve retry without the OS sandbox.${failureDetails}`;
     const answer = await this.options.approvals.approveSandboxBypassRetry(
       toolCall,
       parsedArguments,
@@ -344,4 +348,20 @@ function errorMessage(error: unknown): string {
 
 function rejectionMessage(fallback: string, rationale: string | undefined): string {
   return rationale ? `${fallback} ${rationale}` : fallback;
+}
+
+function sandboxFailureSummary(error: ToolExecutionError): string {
+  if (!error.data || typeof error.data !== 'object' || Array.isArray(error.data)) return '';
+  const data = error.data as Record<string, unknown>;
+  const code = typeof data.sandbox_error_code === 'string'
+    ? data.sandbox_error_code.trim()
+    : '';
+  const message = typeof data.sandbox_error_message === 'string'
+    ? data.sandbox_error_message.trim()
+    : '';
+  if (!code && !message) return '';
+  return [code ? `[${code}]` : '', message]
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, 2_000);
 }

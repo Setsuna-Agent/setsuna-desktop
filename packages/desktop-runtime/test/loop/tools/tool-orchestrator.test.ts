@@ -359,7 +359,19 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     const toolHost = stubToolHost(async (_name, _input, context) => {
       contexts.push(context);
       attempts += 1;
-      if (attempts === 1) throw new ToolExecutionError('retry required', { failureKind });
+      if (attempts === 1) {
+        throw new ToolExecutionError('retry required', {
+          failureKind,
+          ...(failureKind === 'sandbox_unavailable'
+            ? {
+                data: {
+                  sandbox_error_code: 'spawn-failed',
+                  sandbox_error_message: 'CreateProcessWithLogonW failed: Access is denied. (os error 5)',
+                },
+              }
+            : {}),
+        });
+      }
       return { content: 'retried result', data: { attempt: attempts } };
     });
     const postHook = vi.fn(async () => ({
@@ -390,6 +402,10 @@ describe('ToolOrchestrator terminal and retry handling', () => {
         reason: expect.stringContaining('Approve retry without the OS sandbox'),
       });
       expect(retryApproval?.reason).not.toContain('retry required');
+      if (failureKind === 'sandbox_unavailable') {
+        expect(retryApproval?.reason).toContain('[spawn-failed]');
+        expect(retryApproval?.reason).toContain('os error 5');
+      }
     }
     expect(postProcessResult).toHaveBeenCalledTimes(1);
     expect(postHook).toHaveBeenCalledTimes(1);

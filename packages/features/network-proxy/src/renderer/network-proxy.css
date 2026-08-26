@@ -35,7 +35,7 @@
   line-height: 18px;
 }
 
-.desktop-settings-panel .settings-network-proxy__section-head span,
+.desktop-settings-panel .settings-network-proxy__section-head > div > span,
 .desktop-settings-panel .settings-network-proxy__route-row small {
   color: var(--app-text-muted);
   font-size: 11px;
@@ -88,8 +88,7 @@
 }
 
 .desktop-settings-panel .settings-network-proxy__server-card-icon,
-.desktop-settings-panel .settings-network-proxy__server-empty > span,
-.settings-network-proxy-dialog__title > span {
+.desktop-settings-panel .settings-network-proxy__server-empty > span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -244,72 +243,17 @@
   line-height: 17px;
 }
 
-.settings-network-proxy-dialog-backdrop {
-  z-index: 150;
-}
-
-.settings-network-proxy-dialog {
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  width: min(580px, calc(100vw - 48px));
-  max-height: min(680px, calc(100vh - 48px));
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.settings-network-proxy-dialog__header {
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px 12px;
-  border-bottom: 1px solid var(--chat-settings-divider);
-  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
-}
-
-.settings-network-proxy-dialog__title {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  min-width: 0;
-}
-
-.settings-network-proxy-dialog__title > span {
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-}
-
-.settings-network-proxy-dialog__title > div,
 .settings-network-proxy-dialog__field,
 .settings-network-proxy-dialog__field > span {
   display: grid;
   min-width: 0;
 }
 
-.settings-network-proxy-dialog__title > div {
-  gap: 2px;
-}
-
-.settings-network-proxy-dialog__title strong {
-  color: var(--app-text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 18px;
-}
-
-.settings-network-proxy-dialog__title small {
-  color: var(--app-text-muted);
-  font-size: 11px;
-  line-height: 16px;
-}
-
-.settings-network-proxy-dialog__body {
+.settings-network-proxy-dialog__form {
   display: grid;
   align-content: start;
   gap: 12px;
   min-width: 0;
-  padding: 16px;
-  overflow: auto;
 }
 
 .settings-network-proxy-dialog__fields {
@@ -354,13 +298,6 @@
   line-height: 16px;
 }
 
-.settings-network-proxy-dialog__footer {
-  align-items: center;
-  padding: 12px 16px 14px;
-  border-top: 1px solid var(--chat-settings-divider);
-  background: color-mix(in srgb, var(--app-surface) 96%, var(--app-bg));
-}
-
 @media (max-width: 860px) {
   .desktop-settings-panel .settings-network-proxy__route-row {
     grid-template-columns: 1fr;
@@ -403,12 +340,4 @@
     grid-template-columns: 1fr;
   }
 
-  .settings-network-proxy-dialog-backdrop {
-    padding: 12px;
-  }
-
-  .settings-network-proxy-dialog {
-    width: min(580px, calc(100vw - 24px));
-    max-height: calc(100vh - 24px);
-  }
 }

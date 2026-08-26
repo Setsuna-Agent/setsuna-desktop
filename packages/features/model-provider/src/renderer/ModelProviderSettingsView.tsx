@@ -144,6 +144,7 @@ export function ModelProviderSettingsView({
       proxyRoute: selectedProvider.proxyRoute,
       apiKey: apiKeys[selectedProvider.id] || undefined,
     } satisfies ProviderConfigDiscoveryInput;
+    setOperationError('');
     setDiscoveringProviderId(selectedProvider.id);
     try {
       const result = await service.discover(input);
@@ -171,12 +172,10 @@ export function ModelProviderSettingsView({
   return (
     <ui.Section className="model-provider-settings" featureId="model-provider">
       <ui.PageHeading
-        action={operationError ? (
-          <span className="model-provider-settings__error" role="alert">{operationError}</span>
-        ) : null}
         description={translate('feature.modelProvider.description')}
         title={translate('feature.modelProvider.title')}
       />
+      {operationError ? <ui.Toast message={operationError} tone="error" /> : null}
       {snapshot.loading && !snapshot.state ? (
         <ui.EmptyState title={translate('feature.modelProvider.loading')} />
       ) : snapshot.error && !snapshot.state ? (

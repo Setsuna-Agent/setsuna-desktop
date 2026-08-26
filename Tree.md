@@ -195,7 +195,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 729 total files
+packages/features/ — 0 direct / 730 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -249,11 +249,11 @@ packages/features/ — 0 direct / 729 total files
 │   │   └── runtime/ — 10 direct / 10 total files
 │   └── test/ — 4 files
 │       └── runtime/ — 4 direct / 4 total files
-├── model-provider/ — 2 direct / 45 total files
-│   ├── src/ — 34 files
+├── model-provider/ — 2 direct / 46 total files
+│   ├── src/ — 35 files
 │   │   ├── contracts/ — 4 direct / 4 total files
 │   │   ├── renderer/ — 19 direct / 19 total files
-│   │   └── runtime/ — 11 direct / 11 total files
+│   │   └── runtime/ — 12 direct / 12 total files
 │   └── test/ — 9 files
 │       ├── renderer/ — 3 direct / 3 total files
 │       └── runtime/ — 6 direct / 6 total files

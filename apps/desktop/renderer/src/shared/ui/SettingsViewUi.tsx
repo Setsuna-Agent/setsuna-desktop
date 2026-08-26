@@ -7,11 +7,14 @@ import type {
   SettingsRowProps,
   SettingsSectionProps,
   SettingsSelectFieldProps,
+  SettingsToastProps,
   SettingsTooltipProps,
   SettingsToggleProps,
   SettingsViewUi,
 } from '@setsuna-desktop/feature-core/renderer';
 import { ChevronRight } from 'lucide-react';
+import { useEffect } from 'react';
+import { useToast } from '../../app/providers/ToastProvider.js';
 import {
   Button,
   Checkbox,
@@ -44,6 +47,7 @@ export const settingsViewUi = Object.freeze({
   TextArea,
   TextField,
   Toggle: SettingsToggle,
+  Toast: SettingsToast,
   Tooltip: SettingsTooltip,
 }) satisfies SettingsViewUi;
 
@@ -175,6 +179,16 @@ function SettingsSelectField(props: SettingsSelectFieldProps) {
 
 function SettingsTooltip(props: SettingsTooltipProps) {
   return <AppTooltip {...props} />;
+}
+
+function SettingsToast({ message, tone = 'info' }: SettingsToastProps) {
+  const toast = useToast();
+
+  useEffect(() => {
+    toast.show(message, { tone });
+  }, [message, toast, tone]);
+
+  return null;
 }
 
 function classNames(...values: string[]): string {

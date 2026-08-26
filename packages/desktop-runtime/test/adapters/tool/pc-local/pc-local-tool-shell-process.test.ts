@@ -46,6 +46,26 @@ describe('classifyShellSessionFailure', () => {
       failure_kind: 'process_exit',
     });
   });
+
+  it('preserves a structured Windows sidecar error as sandbox diagnostics', () => {
+    const failure = classifyShellSessionFailure(shellSession({
+      sandboxProvider: 'windows-native',
+      stdout: JSON.stringify({
+        ok: false,
+        error: {
+          code: 'spawn-failed',
+          message: 'CreateProcessWithLogonW failed: Access is denied. (os error 5)',
+        },
+      }),
+    }));
+
+    expect(failure).toMatchObject({
+      failure_kind: 'sandbox_unavailable',
+      failure_stage: 'preflight',
+      sandbox_error_code: 'spawn-failed',
+      sandbox_error_message: expect.stringContaining('os error 5'),
+    });
+  });
 });
 
 describe('applyShellEnvironmentPatch', () => {

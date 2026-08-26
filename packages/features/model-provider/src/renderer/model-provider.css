@@ -5,19 +5,6 @@
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-.model-provider-settings__error {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 8px;
-  border: 1px solid color-mix(in srgb, var(--app-danger) 45%, var(--chat-settings-divider));
-  border-radius: var(--app-radius-sm);
-  color: var(--app-danger);
-  background: color-mix(in srgb, var(--app-danger) 8%, var(--app-surface));
-  font-size: 12px;
-  line-height: 16px;
-}
-
 .model-provider-settings__layout {
   --model-provider-divider: color-mix(in srgb, var(--app-border) 68%, transparent);
 
