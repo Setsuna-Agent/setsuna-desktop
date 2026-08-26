@@ -205,7 +205,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 551 total files
+packages/features/ — 0 direct / 557 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -269,22 +269,24 @@ packages/features/ — 0 direct / 551 total files
 │       ├── main/ — 3 direct / 3 total files
 │       ├── renderer/ — 2 direct / 2 total files
 │       └── support/ — 1 direct / 1 total files
-├── review/ — 2 direct / 59 total files
-│   ├── src/ — 48 files
-│   │   ├── contracts/ — 6 direct / 6 total files
+├── review/ — 2 direct / 65 total files
+│   ├── src/ — 53 files
+│   │   ├── contracts/ — 8 direct / 8 total files
 │   │   ├── main/ — 8 direct / 8 total files
 │   │   ├── preload/ — 2 direct / 2 total files
-│   │   └── renderer/ — 23 direct / 32 total files
-│   │       ├── git/ — 2 direct / 2 total files
-│   │       ├── hooks/ — 2 direct / 2 total files
-│   │       ├── model/ — 1 direct / 1 total files
-│   │       └── styles/ — 4 direct / 4 total files
-│   └── test/ — 9 files
+│   │   ├── renderer/ — 23 direct / 32 total files
+│   │   │   ├── git/ — 2 direct / 2 total files
+│   │   │   ├── hooks/ — 2 direct / 2 total files
+│   │   │   ├── model/ — 1 direct / 1 total files
+│   │   │   └── styles/ — 4 direct / 4 total files
+│   │   └── runtime/ — 3 direct / 3 total files
+│   └── test/ — 10 files
 │       ├── integration/ — 2 files
 │       │   └── main/ — 2 direct / 2 total files
 │       ├── main/ — 2 direct / 2 total files
-│       └── renderer/ — 4 direct / 5 total files
-│           └── hooks/ — 1 direct / 1 total files
+│       ├── renderer/ — 4 direct / 5 total files
+│       │   └── hooks/ — 1 direct / 1 total files
+│       └── runtime/ — 1 direct / 1 total files
 ├── terminal/ — 2 direct / 24 total files
 │   ├── src/ — 18 files
 │   │   ├── contracts/ — 3 direct / 3 total files
@@ -345,12 +347,12 @@ packages/features/ — 0 direct / 551 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 558 total files
+packages/desktop-runtime/ — 4 direct / 557 total files
 ├── src/ — 2 direct / 327 total files
-│   ├── adapters/ — 137 files
+│   ├── adapters/ — 138 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
-│   │   ├── feature/ — 2 direct / 2 total files
+│   │   ├── feature/ — 3 direct / 3 total files
 │   │   ├── id/ — 1 direct / 1 total files
 │   │   ├── mcp/ — 6 direct / 6 total files
 │   │   ├── model/ — 30 direct / 30 total files
@@ -380,14 +382,14 @@ packages/desktop-runtime/ — 4 direct / 558 total files
 │   │   ├── lifecycle/ — 12 direct / 12 total files
 │   │   └── tools/ — 12 direct / 12 total files
 │   ├── ports/ — 32 direct / 32 total files
-│   ├── runtime/ — 3 direct / 11 total files
-│   │   └── use-cases/ — 8 direct / 8 total files
+│   ├── runtime/ — 3 direct / 10 total files
+│   │   └── use-cases/ — 7 direct / 7 total files
 │   ├── security/ — 5 direct / 5 total files
 │   ├── server/ — 25 direct / 48 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 227 files
+└── test/ — 226 files
     ├── adapters/ — 65 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
@@ -427,8 +429,8 @@ packages/desktop-runtime/ — 4 direct / 558 total files
     │   ├── core/ — 6 direct / 6 total files
     │   ├── lifecycle/ — 6 direct / 6 total files
     │   └── tools/ — 5 direct / 5 total files
-    ├── runtime/ — 2 direct / 7 total files
-    │   └── use-cases/ — 5 direct / 5 total files
+    ├── runtime/ — 2 direct / 6 total files
+    │   └── use-cases/ — 4 direct / 4 total files
     ├── security/ — 3 direct / 3 total files
     ├── server/ — 6 direct / 11 total files
     │   └── app-server/ — 5 direct / 5 total files

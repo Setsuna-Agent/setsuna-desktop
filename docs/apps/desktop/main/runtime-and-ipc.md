@@ -100,7 +100,7 @@ Runtime 的 `secrets.json` 只保存适合 runtime 管理的 secret 状态；需
 | `window-ipc.ts` | minimize/maximize/close、标题栏 scale |
 | `sender.ts` | 可信主窗口 sender 校验 |
 
-Review 的固定 handler、Git 状态和变更监控已由 `packages/features/review/src/main/` 拥有。它监听 worktree、worktree Git 目录及共享 Git 目录，合并事件并过滤 ignored 文件后，只向 renderer 发布失效通知；具体 diff 仍由带当前比较基准的 `get-state` 请求生成。宿主 composition 只注入 commit-message、preview registry 与 sender policy。
+Review 的固定 handler、Git 状态和变更监控已由 `packages/features/review/src/main/` 拥有。它监听 worktree、worktree Git 目录及共享 Git 目录，合并事件并过滤 ignored 文件后，只向 renderer 发布失效通知；具体 diff 仍由带当前比较基准的 `get-state` 请求生成。Commit message typed operation 由 `packages/features/review/src/runtime/` 登记；宿主 composition 只注入默认模型 adapter、preview registry 与 sender policy。
 
 Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` 拥有，并通过 Main Feature scope 注册/撤销；app main 的 composition root 只提供环境与 renderer event 出口。
 

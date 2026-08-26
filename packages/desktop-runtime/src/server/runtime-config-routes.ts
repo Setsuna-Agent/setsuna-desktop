@@ -3,7 +3,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import { fetchAvailableModels } from '../adapters/model/model-discovery.js';
 import { ProviderProxyReferenceError } from '../adapters/store/file-config-store.js';
-import { generateRuntimeCommitMessage } from '../runtime/use-cases/commit-message-generation.js';
 import { RuntimeHttpError } from './http-error.js';
 import { readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
@@ -51,19 +50,6 @@ export async function handleRuntimeConfigRequest(
         input,
         savedProvider,
         runtime.networkProxyFetch.forRoute(input.proxyRoute ?? savedProvider?.proxyRoute),
-      ),
-    });
-    return true;
-  }
-
-  if (
-    request.method === 'POST'
-    && url.pathname === '/v1/git/commit-message/generate'
-  ) {
-    sendJson(response, 200, {
-      message: await generateRuntimeCommitMessage(
-        runtime,
-        await readBody(request, {}),
       ),
     });
     return true;

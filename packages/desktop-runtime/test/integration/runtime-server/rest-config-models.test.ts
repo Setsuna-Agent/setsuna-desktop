@@ -151,7 +151,7 @@ describe('runtime server REST config and model discovery', () => {
       try {
         await harness.configureOpenAiProvider('commit-message', modelServer.baseUrl);
   
-        const result = await harness.runtimeFetch('/v1/git/commit-message/generate', {
+        const result = await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
           method: 'POST',
           body: JSON.stringify({
             branch: 'master',
@@ -173,7 +173,7 @@ describe('runtime server REST config and model discovery', () => {
       try {
         await harness.configureOpenAiProvider('empty-commit-message', modelServer.baseUrl);
   
-        const result = await harness.runtimeFetch('/v1/git/commit-message/generate', {
+        const result = await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
           method: 'POST',
           body: JSON.stringify({
             branch: 'master',
@@ -193,7 +193,7 @@ describe('runtime server REST config and model discovery', () => {
       try {
         await harness.configureOpenAiProvider('invisible-commit-message', modelServer.baseUrl);
   
-        const result = await harness.runtimeFetch('/v1/git/commit-message/generate', {
+        const result = await harness.runtimeFetch('/v1/features/desktop-review/commit-message', {
           method: 'POST',
           body: JSON.stringify({
             branch: 'master',

@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-gate.js';
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
+import { DesktopReviewRuntimeHost } from '../adapters/feature/review-runtime-host.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
@@ -149,6 +150,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     fetchForProvider: (provider) => networkProxyFetch.forRoute(provider.proxyRoute),
   });
   const modelClient = new ImageAssetResolvingModelClient(configuredModelClient, generatedImageStore);
+  const reviewRuntimeHost = new DesktopReviewRuntimeHost({
+    config: configStore,
+    models: configuredModelClient,
+  });
   const visionRecognitionHost = new DesktopVisionRecognitionRuntimeHost({
     attachments: attachmentStore,
     clock,
@@ -260,6 +265,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     pluginStore,
     pluginMarketplace,
     projectWorkflow,
+    reviewRuntimeHost,
     skillRegistry,
     toolHost,
     toolResultStore,

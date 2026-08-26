@@ -231,7 +231,7 @@ RuntimeEvent log
 - [x] 把“归档项目之前先串行归档活动线程”的事务下沉到 `workspace-operations.ts`，顺序和失败路径有 characterization test。
 - [x] 把 thread/turn、config/extension 和 resource 继续拆为窄 domain handler。
 - [x] 顶层降至 53 行，只负责有序分发和 404。
-- [x] 把 `generateCommitMessage` 的模型编排、prompt 安全和 fallback 下沉到 `commit-message-generation.ts` use case。
+- [x] 把 `generateCommitMessage` 的模型编排、prompt 安全和 fallback 下沉；随后随 Review Feature 化迁入 `packages/features/review/src/runtime/commit-message-generation.ts`。
 - [x] 保持普通函数 dispatcher，不为拆文件引入 router DSL。
 
 ### P1：高风险状态机
