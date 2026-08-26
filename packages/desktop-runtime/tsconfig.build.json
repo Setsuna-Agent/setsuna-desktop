@@ -25,6 +25,7 @@
     { "path": "../features/memory/tsconfig.build.json" },
     { "path": "../features/review/tsconfig.build.json" },
     { "path": "../features/vision-recognition/tsconfig.build.json" },
+    { "path": "../features/windows-sandbox/tsconfig.build.json" },
     { "path": "../features/workspace-dependencies/tsconfig.build.json" }
   ]
 }

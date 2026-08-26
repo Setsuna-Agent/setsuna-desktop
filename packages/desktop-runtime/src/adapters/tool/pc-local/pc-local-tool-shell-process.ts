@@ -70,7 +70,6 @@ import {
   shellSpawnSpec,
   terminateShellSession,
   waitForShellSession,
-  writeWindowsSandboxRequest,
 } from './pc-local-tool-shell-session-runtime.js';
 
 export {
@@ -546,7 +545,9 @@ async function startShellSession({
   // 包管理器目录；若这里只在 spawn 时补充，Seatbelt 会把这些命令隐藏掉。
   let environment = shellEnvironment(state?.shellEnvironment);
   let sandboxPlan = createShellSandboxExecutionPlan(state, { cwd, environment });
-  const temporaryRoot = await createShellSessionTempDirectory(sandboxPlan);
+  const temporaryRoot = await createShellSessionTempDirectory(sandboxPlan, {
+    provider: state.shellSandboxProvider,
+  });
   session.temporaryRoot = temporaryRoot;
   let child: ChildProcessWithoutNullStreams;
   try {
@@ -572,7 +573,7 @@ async function startShellSession({
       });
     }
     const windowsRequestPath = sandboxPlan.provider === 'windows-native'
-      ? await writeWindowsSandboxRequest(command, sandboxPlan, session.id, temporaryRoot)
+      ? await writeNativeSandboxRequest(state, command, sandboxPlan, session.id, temporaryRoot)
       : '';
     const spawnSpec = shellSpawnSpec(command, sandboxPlan, windowsRequestPath);
     session.sandboxed = Boolean(spawnSpec.sandboxed);
@@ -631,4 +632,16 @@ async function startShellSession({
   });
   child.on('close', finish);
   return session;
+}
+
+function writeNativeSandboxRequest(
+  state: ShellProcessState,
+  command: string,
+  plan: Parameters<NonNullable<ShellProcessState['shellSandboxProvider']>['writeRequest']>[0]['plan'],
+  executionId: string,
+  controlRoot: string,
+): Promise<string> {
+  const provider = state.shellSandboxProvider;
+  if (!provider) throw new Error('Native shell sandbox provider is unavailable.');
+  return provider.writeRequest({ command, controlRoot, executionId, plan });
 }

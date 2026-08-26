@@ -106,7 +106,9 @@ Terminal 的固定 handler 已由 `packages/features/terminal/src/main/ipc.ts` �
 
 Updater 的固定 handler、channel contract 和状态机由 `packages/features/updater/{contracts,main}` 拥有。Main composition 只注入版本、路径、代理 fetch、窗口与语言；Feature scope 排空在途检查后撤销全部 handler。
 
-Network Proxy 的固定 handler 和 channel contract 由 `packages/features/network-proxy/{contracts,main}` 拥有。Main composition 注入配置、凭据、系统 fetch 与 runtime 删除入口；Feature scope 负责撤销 handler、停止 browser proxy 更新并关闭 fetch dispatcher 与 relay。
+Network Proxy 的固定 handler 和 channel contract 由 `packages/features/network-proxy/{contracts,main}` 拥有。Main composition 注入配置、凭据、系统 fetch 与 runtime 删除入口；Feature scope 负责撤销 handler、停止 browser proxy 更新并关闭 fetch dispatcher 与通用 relay。
+
+Windows Sandbox 的 sidecar 资源、UAC 生命周期、固定 IPC、curl 信任快照与受限出口由 `packages/features/windows-sandbox/{contracts,main}` 拥有。Main composition 只注入可信 renderer 判定和 runtime 路由解析；native bridge 通过激活后的窄服务取得一次性认证环境。
 
 Workspace Apps 的固定 handler、应用检测和平台启动参数由 `packages/features/workspace-apps/{contracts,main}` 拥有。Feature scope 会先排空在途打开/检测操作，再撤销全部 handler；宿主 composition 只登记该 Feature，不再持有业务实现。
 

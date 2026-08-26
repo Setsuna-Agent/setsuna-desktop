@@ -1,7 +1,7 @@
 import {
   DESKTOP_WINDOWS_SANDBOX_PROXY_PORTS,
   type DesktopSandboxNetworkEnvironment,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/index.js';
 import { randomBytes } from 'node:crypto';
 import { Server as ProxyChainServer } from 'proxy-chain';
 import {

@@ -2,7 +2,6 @@ import type {
   DesktopNetworkProxyScope,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
-  DesktopSandboxNetworkEnvironment,
   DesktopNetworkProxyState,
 } from '@setsuna-desktop/contracts';
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
@@ -38,7 +37,6 @@ export interface NetworkProxyMainService {
     init?: Parameters<typeof globalThis.fetch>[1],
   ): Promise<Response>;
   resolve(input: DesktopResolveNetworkProxyInput): Promise<DesktopResolvedNetworkProxy>;
-  resolveSandboxNetworkEnvironment(): Promise<DesktopSandboxNetworkEnvironment>;
   validateServerReferences(proxyServerIds: readonly string[]): Promise<void>;
 }
 

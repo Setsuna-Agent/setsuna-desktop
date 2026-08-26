@@ -2,7 +2,7 @@ import type {
   DesktopWindowsSandboxAction,
   DesktopWindowsSandboxState,
   DesktopWindowsSandboxStatus,
-} from '@setsuna-desktop/contracts';
+} from '../contracts/index.js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 

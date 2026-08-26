@@ -135,11 +135,6 @@ const links: SetsunaDesktopBridge['links'] = {
   openExternal: (url) => ipcRenderer.invoke('desktop:open-external', url),
 };
 
-const windowsSandbox: SetsunaDesktopBridge['windowsSandbox'] = {
-  getStatus: () => ipcRenderer.invoke('windows-sandbox:get-status'),
-  runAction: (action) => ipcRenderer.invoke('windows-sandbox:run-action', action),
-};
-
 const hostBridge: SetsunaDesktopBridge = {
   dataRoot,
   desktop,
@@ -147,7 +142,6 @@ const hostBridge: SetsunaDesktopBridge = {
   plugins,
   runtime,
   windowControls,
-  windowsSandbox,
 };
 const bridge = composeBuiltinPreloadBridge(hostBridge);
 contextBridge.exposeInMainWorld('setsunaDesktop', bridge);

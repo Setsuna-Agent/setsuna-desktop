@@ -1,6 +1,6 @@
-import type { DesktopWindowsSandboxStatus } from '@setsuna-desktop/contracts';
+import type { DesktopWindowsSandboxStatus } from '../../src/contracts/index.js';
 import { describe, expect, it, vi } from 'vitest';
-import { runWindowsSandboxActionAndReconcile } from '../../../../../src/features/settings/windows-sandbox/useWindowsSandbox.js';
+import { runWindowsSandboxActionAndReconcile } from '../../src/renderer/controller.js';
 
 const notInstalled: DesktopWindowsSandboxStatus = {
   architecture: 'x64',

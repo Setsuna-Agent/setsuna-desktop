@@ -166,6 +166,7 @@ export type PcLocalToolState = PcLocalFileState & {
   workspaceSearchEngine?: WorkspaceSearchEngine;
   shellEnvironment?: Record<string, string>;
   shellToolchain?: ShellToolchain;
+  shellSandboxProvider?: import('../../../ports/shell-sandbox-provider.js').ShellSandboxProvider;
 };
 
 export type LocalToolTurnContext = {

@@ -49,6 +49,10 @@ import {
 } from '@setsuna-desktop/feature-webdav-sync/renderer';
 import { workspaceDependenciesRendererFeature } from '@setsuna-desktop/feature-workspace-dependencies/renderer';
 import { workspaceAppsRendererFeature } from '@setsuna-desktop/feature-workspace-apps/renderer';
+import {
+  windowsSandboxRendererFeature,
+  windowsSandboxRendererHostCapability,
+} from '@setsuna-desktop/feature-windows-sandbox/renderer';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
 import {
   createRendererFeatureViews,
@@ -65,6 +69,7 @@ const rendererFeatures = defineRendererFeatureHost({
     reviewRendererFeature,
     terminalRendererFeature,
     updaterRendererFeature,
+    windowsSandboxRendererFeature,
     workspaceAppsRendererFeature,
   ],
   optional: [
@@ -129,6 +134,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       provideHostCapability(
         webDavSyncRendererHostCapability,
         Object.freeze({ bridge: window.setsunaDesktop?.webdavSync ?? null }),
+      ),
+      provideHostCapability(
+        windowsSandboxRendererHostCapability,
+        Object.freeze({
+          bridge: window.setsunaDesktop?.windowsSandbox ?? null,
+          platform: desktop.platform,
+        }),
       ),
     ],
   });

@@ -67,13 +67,30 @@ describe('Windows sandbox curl environment', () => {
       writeFile(curlConfig, 'ca-native', 'utf8'),
       writeFile(trustBundle, 'public CA material', 'utf8'),
     ]);
-    vi.stubEnv('SETSUNA_DESKTOP_SANDBOX_CURL_PATH', curlExecutable);
-    vi.stubEnv('SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE', trustBundle);
-
     const plan = createShellSandboxExecutionPlan({
       root: workspace,
       osSandbox: true,
       permissionProfile: 'read-only',
+      shellSandboxProvider: {
+        capability: () => ({
+          executablePath: path.join(root, 'setsuna-sandbox-win.exe'),
+          provider: 'windows-native',
+          reason: '',
+          supported: true,
+        }),
+        controlRoot: () => '',
+        networkEnvironment: async () => ({}),
+        prepareEnvironment: (environment) => ({
+          environment: {
+            ...environment,
+            PATH: `${curlDirectory}${path.delimiter}${environment.PATH ?? ''}`,
+            CURL_HOME: curlDirectory,
+            CURL_CA_BUNDLE: trustBundle,
+          },
+          readableRoots: [curlExecutable, curlConfig, trustBundle],
+        }),
+        writeRequest: async () => '',
+      },
     }, {
       capability: {
         executablePath: path.join(root, 'setsuna-sandbox-win.exe'),

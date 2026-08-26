@@ -106,6 +106,8 @@ renderer 只负责范围选择与展示，不重新计算计费真源。年度 A
 
 Workspace Dependencies 是独立纵向 Feature，源码位于 `packages/features/workspace-dependencies/`。renderer setup 通过 `settingsSectionExtensions` 把设置追加到“运行时”区域；设置视图、controller、文案和 scoped CSS 都由 Feature 自己持有，宿主页不读取包源或工具链状态。
 
+Windows Sandbox 同样由 `packages/features/windows-sandbox/` 纵向拥有。renderer setup 仅在 Windows 返回“运行时”设置扩展；状态 controller、安装/修复/卸载动作、文案和 scoped CSS 均留在 Feature 内，宿主 Runtime Settings 不再读取平台或 sandbox bridge。
+
 Feature 的 typed operations 读取 Node.js/Python/uv 状态、更新 npm/Python 包源，并执行诊断或修复。修复会复用健康的本机或托管工具，只补齐缺失、损坏或版本过低的环境；实际下载、校验和安装在 Feature runtime，不在 renderer 执行进程。旧 `config.json.desktopSettings` 包源字段只作为一次性迁移输入，迁移成功后退役，不再通过统一 `DesktopRuntimeClient` 或根 Config 修改。
 
 ## Capabilities

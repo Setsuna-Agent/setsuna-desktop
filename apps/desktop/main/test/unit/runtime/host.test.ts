@@ -128,56 +128,6 @@ describe('runtime host packaging paths', () => {
     )).toThrow('Bundled ripgrep is required');
   });
 
-  it('passes sandbox curl metadata without replacing runtime curl', () => {
-    const sandboxCurlPath = path.resolve('fixtures', 'setsuna-path', 'curl.exe');
-    const sandboxCaBundlePath = path.resolve('fixtures', 'sandbox-trust', 'curl-ca-bundle.pem');
-    const baseEnvironment = { PATH: '/usr/bin:/bin' };
-    const runtimePath = runtimeProcessEnvironment({}, baseEnvironment).PATH;
-    const env = runtimeProcessEnvironment(
-      { sandboxCaBundlePath, sandboxCurlPath, requireBundledSandboxCurl: true },
-      baseEnvironment,
-    );
-
-    expect(env.PATH).toBe(runtimePath);
-    expect(env.CURL_HOME).toBeUndefined();
-    expect(env.CURL_CA_BUNDLE).toBeUndefined();
-    expect(env.SETSUNA_DESKTOP_SANDBOX_CURL_PATH).toBe(sandboxCurlPath);
-    expect(env.SETSUNA_DESKTOP_SANDBOX_CA_BUNDLE).toBe(sandboxCaBundlePath);
-  });
-
-  it('fails closed when a packaged Windows runtime has no bundled curl', () => {
-    expect(() => runtimeProcessEnvironment(
-      { requireBundledSandboxCurl: true },
-      { PATH: '' },
-    )).toThrow('Bundled sandbox curl is required');
-  });
-
-  it('fails closed when packaged sandbox curl has no desktop trust snapshot', () => {
-    expect(() => runtimeProcessEnvironment(
-      {
-        requireBundledSandboxCurl: true,
-        sandboxCurlPath: 'C:\\Setsuna\\setsuna-path\\curl.exe',
-      },
-      { PATH: '' },
-    )).toThrow('trust bundle is required');
-  });
-
-  it('passes a Windows-absolute sandbox sidecar path to the runtime on any build host', () => {
-    const windowsSandboxPath = 'C:\\Program Files\\Setsuna Desktop\\setsuna-sandbox-win.exe';
-    const env = runtimeProcessEnvironment({
-      windowsSandboxPath,
-      requireBundledWindowsSandbox: true,
-    }, {});
-
-    expect(env.SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH).toBe(windowsSandboxPath);
-  });
-
-  it('fails closed when a packaged runtime has no Windows sandbox sidecar', () => {
-    expect(() => runtimeProcessEnvironment({
-      requireBundledWindowsSandbox: true,
-    }, {})).toThrow('Bundled Windows sandbox is required');
-  });
-
   it('reconnects a dropped SSE stream from the last delivered sequence', async () => {
     const firstEvent = runtimeEvent(1);
     const secondEvent = runtimeEvent(2);

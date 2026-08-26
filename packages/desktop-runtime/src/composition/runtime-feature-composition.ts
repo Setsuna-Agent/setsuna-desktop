@@ -64,10 +64,12 @@ import {
   workspaceDependenciesRuntimeHostCapability,
 } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import { workspaceDependenciesRuntimeFeature } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
+import { windowsSandboxRuntimeServiceCapability } from '@setsuna-desktop/feature-windows-sandbox/contracts';
+import { windowsSandboxRuntimeFeature } from '@setsuna-desktop/feature-windows-sandbox/runtime';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
-  required: [browserRuntimeFeature, reviewRuntimeFeature],
+  required: [browserRuntimeFeature, reviewRuntimeFeature, windowsSandboxRuntimeFeature],
   optional: [
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
@@ -207,6 +209,37 @@ export async function activateBuiltinRuntimeFeatures(
     }, ({ workspaceDependencies }) => (
       runtime.backgroundShellProcesses.bindWorkspaceDependencies(workspaceDependencies)
     ));
+
+    host.bind({
+      windowsSandbox: requiredCapability(windowsSandboxRuntimeServiceCapability),
+    }, ({ windowsSandbox }) => runtime.backgroundShellProcesses.bindShellSandboxProvider({
+      capability: () => windowsSandbox.capability(),
+      controlRoot: () => windowsSandbox.controlRoot(),
+      networkEnvironment: () => runtime.networkProxyFetch.environmentForSandboxRoute(),
+      prepareEnvironment: (environment) => windowsSandbox.prepareEnvironment(environment),
+      writeRequest: ({ command, controlRoot, executionId, plan }) => {
+        if (!plan.providerExecutable) {
+          throw new Error('Windows sandbox execution plan has no provider executable.');
+        }
+        return windowsSandbox.writeRequest({
+          command,
+          controlRoot,
+          cwd: plan.cwd,
+          deniedGlobRegExpSources: plan.deniedGlobRegExpSources,
+          deniedRoots: plan.deniedRoots,
+          environment: plan.environment,
+          ephemeralWritableRoots: plan.ephemeralWritableRoots ?? [],
+          executionId,
+          networkAccess: plan.networkAccess,
+          permissionProfile: plan.permissionProfile,
+          protectedWritableRoots: plan.protectedWritableRoots,
+          providerExecutable: plan.providerExecutable,
+          readableRoots: plan.readableRoots,
+          workspaceRoot: plan.workspaceRoot,
+          writableRoots: plan.writableRoots,
+        });
+      },
+    }));
 
     host.add(runtime.featureManagement.attach(host.composition));
     return host.composition;

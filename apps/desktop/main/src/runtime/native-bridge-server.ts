@@ -1,13 +1,15 @@
 import {
   DESKTOP_NETWORK_PROXY_SCOPES,
-  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
   DESKTOP_SYSTEM_PROXY_FETCH_PATH,
   normalizeDesktopNetworkProxyRoute,
   type DesktopNetworkProxyState,
   type DesktopResolveNetworkProxyInput,
   type DesktopResolvedNetworkProxy,
-  type DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
+import {
+  DESKTOP_SANDBOX_NETWORK_ENVIRONMENT_PATH,
+  type DesktopSandboxNetworkEnvironment,
+} from '@setsuna-desktop/feature-windows-sandbox/contracts';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { createReadStream } from 'node:fs';

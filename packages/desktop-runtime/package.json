@@ -24,6 +24,7 @@
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
+    "@setsuna-desktop/feature-windows-sandbox": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
     "ai": "^7.0.0",
     "node-pty": "^1.1.0",

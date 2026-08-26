@@ -16,6 +16,8 @@ import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/featu
 import { webDavSyncPreloadFeature } from '@setsuna-desktop/feature-webdav-sync/preload';
 import type { WorkspaceAppsPreloadBridgeContribution } from '@setsuna-desktop/feature-workspace-apps/contracts';
 import { workspaceAppsPreloadFeature } from '@setsuna-desktop/feature-workspace-apps/preload';
+import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/feature-windows-sandbox/contracts';
+import { windowsSandboxPreloadFeature } from '@setsuna-desktop/feature-windows-sandbox/preload';
 
 export type DesktopPreloadBridge = SetsunaDesktopBridge
   & BrowserPreloadBridgeContribution
@@ -24,6 +26,7 @@ export type DesktopPreloadBridge = SetsunaDesktopBridge
   & TerminalPreloadBridgeContribution
   & UpdaterPreloadBridgeContribution
   & WebDavSyncPreloadBridgeContribution
+  & WindowsSandboxPreloadBridgeContribution
   & WorkspaceAppsPreloadBridgeContribution;
 
 const desktopPreloadBridgeKeys = [
@@ -52,6 +55,7 @@ const preloadFeatures = definePreloadFeatureHost<DesktopPreloadBridge>({
     terminalPreloadFeature,
     updaterPreloadFeature,
     webDavSyncPreloadFeature,
+    windowsSandboxPreloadFeature,
     workspaceAppsPreloadFeature,
   ],
 });

@@ -182,11 +182,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
         path.join(runtimeDataDir, 'pc-local-policies', 'legacy-shell-policy.json'),
       ],
       mcpConfigPath: path.join(runtimeDataDir, 'mcp.json'),
-      resolveShellEnvironment: ({ sandboxNetworkAccess }) => (
-        process.platform === 'win32' && sandboxNetworkAccess
-          ? networkProxyFetch.environmentForSandboxRoute()
-          : networkProxyFetch.environmentForRoute()
-      ),
+      resolveShellEnvironment: () => networkProxyFetch.environmentForRoute(),
     },
   );
   const browserToolHost = new BrowserToolHost();

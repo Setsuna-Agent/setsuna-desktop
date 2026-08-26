@@ -1,7 +1,8 @@
 import type {
   DesktopWindowsSandboxAction,
   DesktopWindowsSandboxStatus,
-} from '@setsuna-desktop/contracts';
+  WindowsSandboxDesktopBridge,
+} from '../contracts/index.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 type WindowsSandboxController = {
@@ -12,17 +13,12 @@ type WindowsSandboxController = {
   status: DesktopWindowsSandboxStatus | null;
 };
 
-type WindowsSandboxApi = {
-  getStatus(): Promise<DesktopWindowsSandboxStatus>;
-  runAction(action: DesktopWindowsSandboxAction): Promise<DesktopWindowsSandboxStatus>;
-};
-
 type WindowsSandboxActionResult = {
   error: string | null;
   status: DesktopWindowsSandboxStatus | null;
 };
 
-export function useWindowsSandbox(): WindowsSandboxController {
+export function useWindowsSandbox(api: WindowsSandboxDesktopBridge | null): WindowsSandboxController {
   const requestSequence = useRef(0);
   const [status, setStatus] = useState<DesktopWindowsSandboxStatus | null>(null);
   const [busyAction, setBusyAction] = useState<WindowsSandboxController['busyAction']>('refresh');
@@ -30,7 +26,6 @@ export function useWindowsSandbox(): WindowsSandboxController {
 
   const refresh = useCallback(async () => {
     const requestId = ++requestSequence.current;
-    const api = window.setsunaDesktop?.windowsSandbox;
     if (!api) {
       setBusyAction(null);
       setError('Windows sandbox management is unavailable.');
@@ -46,11 +41,10 @@ export function useWindowsSandbox(): WindowsSandboxController {
     } finally {
       if (requestId === requestSequence.current) setBusyAction(null);
     }
-  }, []);
+  }, [api]);
 
   const runAction = useCallback(async (action: DesktopWindowsSandboxAction) => {
     const requestId = ++requestSequence.current;
-    const api = window.setsunaDesktop?.windowsSandbox;
     if (!api) {
       setBusyAction(null);
       setError('Windows sandbox management is unavailable.');
@@ -67,7 +61,7 @@ export function useWindowsSandbox(): WindowsSandboxController {
     } finally {
       if (requestId === requestSequence.current) setBusyAction(null);
     }
-  }, []);
+  }, [api]);
 
   useEffect(() => {
     void refresh();
@@ -81,7 +75,7 @@ export function useWindowsSandbox(): WindowsSandboxController {
 
 /** Elevated setup may commit before its final validation fails; always reconcile the displayed state. */
 export async function runWindowsSandboxActionAndReconcile(
-  api: WindowsSandboxApi,
+  api: WindowsSandboxDesktopBridge,
   action: DesktopWindowsSandboxAction,
 ): Promise<WindowsSandboxActionResult> {
   try {

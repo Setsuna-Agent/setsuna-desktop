@@ -10,6 +10,7 @@ import type { TerminalPreloadBridgeContribution } from '@setsuna-desktop/feature
 import type { UpdaterPreloadBridgeContribution } from '@setsuna-desktop/feature-updater/contracts';
 import type { WebDavSyncPreloadBridgeContribution } from '@setsuna-desktop/feature-webdav-sync/contracts';
 import type { WorkspaceAppsPreloadBridgeContribution } from '@setsuna-desktop/feature-workspace-apps/contracts';
+import type { WindowsSandboxPreloadBridgeContribution } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 
 declare global {
   interface Window {
@@ -20,6 +21,7 @@ declare global {
       & TerminalPreloadBridgeContribution
       & UpdaterPreloadBridgeContribution
       & WebDavSyncPreloadBridgeContribution
+      & WindowsSandboxPreloadBridgeContribution
       & WorkspaceAppsPreloadBridgeContribution;
   }
 }

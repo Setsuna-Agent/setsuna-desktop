@@ -2,19 +2,20 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import type { SandboxExecutionPlan } from '../../../ports/sandbox-execution-plan.js';
+import type {
+  WindowsNativeSandboxCapability,
+  WindowsSandboxCommandRequest,
+  WindowsSandboxRuntimeService,
+} from '../contracts/index.js';
+import {
+  WINDOWS_SANDBOX_CA_BUNDLE_ENV,
+  WINDOWS_SANDBOX_CURL_ENV,
+  WINDOWS_SANDBOX_EXECUTABLE_ENV,
+  WINDOWS_SANDBOX_HOST_PID_ENV,
+} from '../contracts/index.js';
 
-export const WINDOWS_SANDBOX_EXECUTABLE_ENV = 'SETSUNA_DESKTOP_WINDOWS_SANDBOX_PATH';
-export const WINDOWS_SANDBOX_HOST_PID_ENV = 'SETSUNA_DESKTOP_HOST_PID';
 const WINDOWS_SANDBOX_PROTOCOL_VERSION = 1;
 const STATUS_CACHE_MS = 5_000;
-
-export type WindowsNativeSandboxCapability = {
-  supported: boolean;
-  provider: 'windows-native' | '';
-  reason: string;
-  executablePath?: string;
-};
 
 type SidecarStatusEnvelope = {
   ok?: unknown;
@@ -79,6 +80,87 @@ export function clearWindowsNativeSandboxCapabilityCache(): void {
   cachedCapability = null;
 }
 
+export class WindowsNativeSandboxService implements WindowsSandboxRuntimeService {
+  capability(): WindowsNativeSandboxCapability {
+    return windowsNativeSandboxCapability();
+  }
+
+  controlRoot(): string {
+    return windowsNativeSandboxTempRoot();
+  }
+
+  prepareEnvironment(environment: Record<string, string>) {
+    return prepareWindowsSandboxEnvironment(environment);
+  }
+
+  writeRequest(input: WindowsSandboxCommandRequest): Promise<string> {
+    return writeWindowsSandboxRequest(input);
+  }
+}
+
+function prepareWindowsSandboxEnvironment(environment: Record<string, string>): Readonly<{
+  environment: Record<string, string>;
+  readableRoots: readonly string[];
+}> {
+  const nextEnvironment = { ...environment };
+  const executablePath = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_CURL_ENV]);
+  const caBundlePath = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_CA_BUNDLE_ENV]);
+  if (!executablePath || !caBundlePath) {
+    return { environment: nextEnvironment, readableRoots: [] };
+  }
+  const pathApi = usesWindowsPathSemantics(executablePath) ? path.win32 : path;
+  const directory = pathApi.dirname(executablePath);
+  const configPath = existingAbsoluteFile(pathApi.join(directory, '_curlrc'));
+  const delimiter = usesWindowsPathSemantics(executablePath) ? ';' : path.delimiter;
+  const existingPath = environmentValue(nextEnvironment, 'PATH');
+  const comparison = (value: string) => usesWindowsPathSemantics(executablePath)
+    ? value.toLowerCase()
+    : value;
+  const directoryKey = comparison(directory);
+  const pathEntries = existingPath
+    .split(delimiter)
+    .map((entry) => entry.trim())
+    .filter((entry) => entry && comparison(entry) !== directoryKey);
+  setEnvironmentValue(nextEnvironment, 'PATH', [directory, ...pathEntries].join(delimiter));
+  setEnvironmentValue(nextEnvironment, 'CURL_HOME', directory);
+  setEnvironmentValue(nextEnvironment, 'CURL_CA_BUNDLE', caBundlePath);
+  return {
+    environment: nextEnvironment,
+    readableRoots: [executablePath, caBundlePath, configPath].filter(Boolean),
+  };
+}
+
+function existingAbsoluteFile(value: unknown): string {
+  const candidate = String(value ?? '').trim();
+  if (!candidate || (!path.isAbsolute(candidate) && !path.win32.isAbsolute(candidate))) return '';
+  try {
+    return statSync(candidate).isFile() ? candidate : '';
+  } catch {
+    return '';
+  }
+}
+
+function usesWindowsPathSemantics(value: string): boolean {
+  if (process.platform === 'win32') return true;
+  return /^[a-z]:[\\/]/iu.test(value) || /^\\\\/u.test(value);
+}
+
+function environmentValue(environment: Record<string, string>, name: string): string {
+  const key = Object.keys(environment).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
+  return key ? environment[key] ?? '' : '';
+}
+
+function setEnvironmentValue(
+  environment: Record<string, string>,
+  name: string,
+  value: string,
+): void {
+  for (const key of Object.keys(environment)) {
+    if (key !== name && key.toLowerCase() === name.toLowerCase()) delete environment[key];
+  }
+  environment[name] = value;
+}
+
 /**
  * Keep command control files outside the interactive user's private profile.
  * Windows Temp lets ordinary accounts create and traverse randomized children
@@ -94,34 +176,31 @@ export function windowsNativeSandboxTempRoot(env: NodeJS.ProcessEnv = process.en
 }
 
 export async function writeWindowsSandboxRequest(
-  command: string,
-  plan: SandboxExecutionPlan,
-  executionId: string,
-  temporaryRoot: string,
+  input: WindowsSandboxCommandRequest,
 ): Promise<string> {
-  if (plan.provider !== 'windows-native' || !plan.providerExecutable) {
+  if (!input.providerExecutable) {
     throw new Error('Windows sandbox request requires a resolved native provider.');
   }
-  if (!temporaryRoot || !path.isAbsolute(temporaryRoot)) {
+  if (!input.controlRoot || !path.isAbsolute(input.controlRoot)) {
     throw new Error('Windows sandbox request requires an isolated temporary directory.');
   }
-  const requestPath = path.join(temporaryRoot, 'sandbox-request.json');
+  const requestPath = path.join(input.controlRoot, 'sandbox-request.json');
   const request = {
     protocolVersion: WINDOWS_SANDBOX_PROTOCOL_VERSION,
-    executionId,
+    executionId: input.executionId,
     supervisorPids: sandboxSupervisorPids(process.env),
-    command,
-    cwd: plan.cwd,
-    workspaceRoot: plan.workspaceRoot,
-    permissionProfile: plan.permissionProfile,
-    readableRoots: plan.readableRoots,
-    writableRoots: plan.writableRoots,
-    ephemeralWritableRoots: plan.ephemeralWritableRoots ?? [],
-    deniedRoots: plan.deniedRoots,
-    deniedGlobRegExpSources: plan.deniedGlobRegExpSources,
-    protectedWritableRoots: plan.protectedWritableRoots,
-    networkAccess: plan.networkAccess,
-    environment: plan.environment,
+    command: input.command,
+    cwd: input.cwd,
+    workspaceRoot: input.workspaceRoot,
+    permissionProfile: input.permissionProfile,
+    readableRoots: input.readableRoots,
+    writableRoots: input.writableRoots,
+    ephemeralWritableRoots: input.ephemeralWritableRoots,
+    deniedRoots: input.deniedRoots,
+    deniedGlobRegExpSources: input.deniedGlobRegExpSources,
+    protectedWritableRoots: input.protectedWritableRoots,
+    networkAccess: input.networkAccess,
+    environment: input.environment,
   };
   await writeFile(requestPath, `${JSON.stringify(request)}\n`, { encoding: 'utf8', mode: 0o600 });
   return requestPath;

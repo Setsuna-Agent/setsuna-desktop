@@ -54,6 +54,13 @@ import {
   type WebDavSyncMainHost,
 } from '@setsuna-desktop/feature-webdav-sync/main';
 import { workspaceAppsMainFeature } from '@setsuna-desktop/feature-workspace-apps/main';
+import {
+  windowsSandboxMainFeature,
+  windowsSandboxMainHostCapability,
+  windowsSandboxMainServiceCapability,
+  type WindowsSandboxMainHost,
+  type WindowsSandboxMainService,
+} from '@setsuna-desktop/feature-windows-sandbox/main';
 import type { BrowserWindow } from 'electron';
 import type { DesktopNativeBridgeServer } from '../runtime/native-bridge-server.js';
 import { desktopShellPath } from '../runtime/desktop-environment.js';
@@ -67,6 +74,7 @@ const mainFeatures = defineMainFeatureHost({
     terminalMainFeature,
     updaterMainFeature,
     webDavSyncMainFeature,
+    windowsSandboxMainFeature,
     workspaceAppsMainFeature,
   ],
   optional: [],
@@ -78,6 +86,7 @@ export type ActivatedBuiltinMainFeatures = Readonly<{
   networkProxy: NetworkProxyMainService;
   updater: UpdaterLifecycle;
   webDavSync: WebDavSyncLifecycle;
+  windowsSandbox: WindowsSandboxMainService;
 }>;
 
 export async function activateBuiltinMainFeatures(input: Readonly<{
@@ -90,6 +99,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
   requestRuntime(input: RuntimeRequestInput): Promise<unknown>;
   updaterHost: UpdaterMainHost;
   webDavSyncHost: WebDavSyncMainHost;
+  windowsSandboxHost: WindowsSandboxMainHost;
 }>): Promise<ActivatedBuiltinMainFeatures> {
   const composition = await mainFeatures.activate({
     hostCapabilities: [
@@ -181,6 +191,10 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         webDavSyncMainHostCapability,
         input.webDavSyncHost,
       ),
+      provideHostCapability(
+        windowsSandboxMainHostCapability,
+        input.windowsSandboxHost,
+      ),
     ],
   });
   return completeFeatureHostActivation(composition, (host) => {
@@ -189,6 +203,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       networkProxy: requiredCapability(networkProxyMainServiceCapability),
       updater: requiredCapability(updaterLifecycleCapability),
       webDavSync: requiredCapability(webDavSyncLifecycleCapability),
+      windowsSandbox: requiredCapability(windowsSandboxMainServiceCapability),
     });
     return Object.freeze({
       browserControl: dependencies.browserControl,
@@ -196,6 +211,7 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
       networkProxy: dependencies.networkProxy,
       updater: dependencies.updater,
       webDavSync: dependencies.webDavSync,
+      windowsSandbox: dependencies.windowsSandbox,
     });
   });
 }

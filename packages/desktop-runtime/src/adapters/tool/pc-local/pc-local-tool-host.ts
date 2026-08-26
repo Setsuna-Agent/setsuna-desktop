@@ -22,6 +22,7 @@ import type {
 } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
 import type { WorkspaceProjectStore } from '../../../ports/workspace-project-store.js';
 import type { WorkspaceSearchEngine } from '../../../ports/workspace-search-engine.js';
+import type { ShellSandboxProvider } from '../../../ports/shell-sandbox-provider.js';
 import { recordInput } from '../../../shared/unknown.js';
 import { JavaScriptWorkspaceSearchEngine } from '../../search/javascript-workspace-search-engine.js';
 import { WorkspaceRuntimeEnvironmentResolver } from '../../workspace/workspace-runtime-environment-resolver.js';
@@ -47,9 +48,7 @@ type PcLocalToolHostOptions = {
   globalPolicyPaths?: readonly string[];
   mcpConfigPath?: string;
   shellSandboxCapability?: () => ReturnType<typeof pcTools.shellSandboxCapability>;
-  resolveShellEnvironment?: (options: {
-    sandboxNetworkAccess: boolean;
-  }) => Promise<Record<string, string | null>>;
+  resolveShellEnvironment?: () => Promise<Record<string, string | null>>;
 };
 
 const EXCLUDED_PC_TOOLS = new Set(['configure_mcp_server']);
@@ -227,6 +226,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
   private readonly shellProcessStore = pcTools.createShellProcessStore();
   private readonly environmentResolver: WorkspaceRuntimeEnvironmentResolver;
   private workspaceDependencies?: WorkspaceDependenciesControl;
+  private shellSandboxProvider?: ShellSandboxProvider;
 
   constructor(
     projects: WorkspaceProjectStore,
@@ -244,6 +244,14 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
     this.workspaceDependencies = control;
     return () => {
       if (this.workspaceDependencies === control) this.workspaceDependencies = previous;
+    };
+  }
+
+  bindShellSandboxProvider(provider: ShellSandboxProvider): () => void {
+    const previous = this.shellSandboxProvider;
+    this.shellSandboxProvider = provider;
+    return () => {
+      if (this.shellSandboxProvider === provider) this.shellSandboxProvider = previous;
     };
   }
 
@@ -293,7 +301,11 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       }
     }
     if (this.normalizeToolName(name) === 'run_shell_command' && context.permissionProfile !== 'danger-full-access') {
-      const capability = this.options.shellSandboxCapability?.() ?? pcTools.shellSandboxCapability();
+      const boundCapability = this.shellSandboxProvider?.capability();
+      const capability = this.options.shellSandboxCapability?.()
+        ?? (boundCapability && (boundCapability.supported || process.platform === 'win32')
+          ? boundCapability
+          : pcTools.shellSandboxCapability());
       if (!capability.supported) profile.requiresSandboxBypassApproval = true;
     }
     return Object.keys(profile).length ? profile : null;
@@ -442,9 +454,16 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       const sandboxNetworkAccess = toolState.osSandbox
         && toolState.permissionProfile !== 'danger-full-access'
         && toolState.sandboxWorkspaceWrite.networkAccess === true;
+      const sandboxCapability = this.shellSandboxProvider?.capability();
+      const usesNativeSandboxNetwork = sandboxNetworkAccess
+        && sandboxCapability?.supported === true
+        && sandboxCapability.provider === 'windows-native';
+      const environmentPatch = usesNativeSandboxNetwork && this.shellSandboxProvider
+        ? await this.shellSandboxProvider.networkEnvironment()
+        : await this.options.resolveShellEnvironment();
       toolState.shellEnvironment = applyShellEnvironmentPatch(
         toolState.shellEnvironment,
-        await this.options.resolveShellEnvironment({ sandboxNetworkAccess }),
+        environmentPatch,
       );
     }
     const preview = await previewForTool(normalized.name, normalized.args, toolState);
@@ -600,6 +619,7 @@ export class PcLocalToolHost implements ToolHost, BackgroundShellProcessManager 
       osSandbox: context.sandbox?.mode !== 'bypass',
       shellPolicyRules: [...(projectState.toolState.shellPolicyRules ?? [])],
       networkPolicyAmendments: [...(projectState.toolState.networkPolicyAmendments ?? [])],
+      shellSandboxProvider: this.shellSandboxProvider,
     };
   }
 

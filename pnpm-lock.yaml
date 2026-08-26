@@ -29,6 +29,7 @@ importers:
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-webdav-sync': workspace:*
+      '@setsuna-desktop/feature-windows-sandbox': workspace:*
       '@setsuna-desktop/feature-workspace-apps': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
       '@tailwindcss/vite': ^4.1.8
@@ -91,6 +92,7 @@ importers:
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
       '@setsuna-desktop/feature-webdav-sync': link:packages/features/webdav-sync
+      '@setsuna-desktop/feature-windows-sandbox': link:packages/features/windows-sandbox
       '@setsuna-desktop/feature-workspace-apps': link:packages/features/workspace-apps
       '@setsuna-desktop/feature-workspace-dependencies': link:packages/features/workspace-dependencies
       '@xterm/addon-fit': 0.11.0
@@ -153,6 +155,7 @@ importers:
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
+      '@setsuna-desktop/feature-windows-sandbox': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
       ai: ^7.0.0
       node-pty: ^1.1.0
@@ -174,6 +177,7 @@ importers:
       '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
+      '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
       '@setsuna-desktop/feature-workspace-dependencies': link:../features/workspace-dependencies
       ai: 7.0.51_zod@4.4.3
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
@@ -376,6 +380,22 @@ importers:
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
+
+  packages/features/windows-sandbox:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      electron: '>=30'
+      lucide-react: ^0.468.0
+      proxy-chain: 3.0.0
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
+      electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      proxy-chain: 3.0.0
+      react: 18.3.1
 
   packages/features/workspace-apps:
     specifiers:

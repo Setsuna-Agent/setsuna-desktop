@@ -2,8 +2,8 @@ import type {
   DesktopNetworkProxyState,
   DesktopResolveNetworkProxyInput,
   DesktopResolvedNetworkProxy,
-  DesktopSandboxNetworkEnvironment,
 } from '@setsuna-desktop/contracts';
+import type { DesktopSandboxNetworkEnvironment } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 import { defaultDesktopNetworkProxyRouting } from '@setsuna-desktop/contracts';
 import type {
   DesktopNativeBridge,

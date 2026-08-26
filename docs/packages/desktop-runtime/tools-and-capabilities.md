@@ -157,6 +157,8 @@ Factory 当前按顺序组合：
 
 工作区 Node.js/Python/uv 工具链由 `packages/features/workspace-dependencies/` 纵向拥有：contracts 定义包源、状态、typed operations 与 `workspace-dependencies.control` Capability，runtime 负责发现、下载、校验、原子安装和缓存。`PcLocalToolHost` 只在 runtime composition 中绑定该窄 Capability；Feature 不可用时 shell 仍可使用宿主 PATH，不在通用 ToolHost 内复制一套安装逻辑。
 
+Windows 原生 shell provider 由 `packages/features/windows-sandbox/runtime` 拥有，并在 runtime composition 中绑定到通用 `ShellSandboxProvider` port。`PcLocalToolHost` 只消费 capability、control root、sandbox-only 网络环境、curl 环境补丁和 request writer；Windows sidecar 探测、环境变量与请求协议不进入 Core adapter。
+
 `security/shell-command-analysis.ts`：
 
 - 解析 command structure。
