@@ -22,6 +22,7 @@
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
+    "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",
     "@setsuna-desktop/feature-workspace-dependencies": "workspace:*",
     "ai": "^7.0.0",

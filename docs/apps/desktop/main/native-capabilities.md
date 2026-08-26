@@ -32,6 +32,7 @@
 源码：
 
 - `packages/features/review/src/main/`
+- `packages/features/review/src/runtime/`
 - `apps/desktop/main/src/composition/builtin-main-features.ts`
 
 职责：
@@ -41,6 +42,7 @@
 - Branch diff 使用 `merge-base(baseRef, HEAD)`，并合并 untracked summary。
 - Stage、unstage、discard unstaged。
 - 限制 diff 行数、文件数和 untracked 文件大小。
+- 通过 typed runtime operation 生成 commit message，并在 Feature 内维护 prompt 安全、输出归一化与 fallback。
 
 安全规则：
 
@@ -49,7 +51,7 @@
 - Untracked discard 只删除普通文件，不递归猜测用户意图。
 - Git 命令参数使用结构化数组，不拼接 shell。
 
-宿主 composition 只提供 commit-message runtime adapter、受认证文件预览 registry 与主 renderer sender policy。Main integration 测试：`packages/features/review/test/integration/main/`。
+宿主 composition 只提供默认模型 runtime host adapter、受认证文件预览 registry 与主 renderer sender policy。Main integration 测试：`packages/features/review/test/integration/main/`。
 
 Renderer 的 review 编排见 [Workspace](../renderer/workspace-and-debug.md)。
 

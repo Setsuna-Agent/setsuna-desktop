@@ -44,6 +44,10 @@
     "./renderer/state": {
       "types": "./dist/renderer/state.d.ts",
       "default": "./dist/renderer/state.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
     }
   },
   "dependencies": {

@@ -25,6 +25,7 @@ import {
   type NetworkProxyMainService,
 } from '@setsuna-desktop/feature-network-proxy/main';
 import {
+  generateReviewCommitMessage,
   reviewCommitMessageCapability,
   reviewFilePreviewCapability,
   reviewRendererSenderCapability,
@@ -109,14 +110,11 @@ export async function activateBuiltinMainFeatures(input: Readonly<{
         Object.freeze({
           generate: async (source: DesktopCommitMessageGenerationSource) => {
             const result = await input.requestRuntime({
-              path: '/v1/git/commit-message/generate',
-              method: 'POST',
+              path: generateReviewCommitMessage.path,
+              method: generateReviewCommitMessage.method,
               body: source,
             });
-            const message = result && typeof result === 'object'
-              ? (result as { message?: unknown }).message
-              : undefined;
-            return String(message ?? '').trim();
+            return generateReviewCommitMessage.output.parse(result).message;
           },
         }),
       ),

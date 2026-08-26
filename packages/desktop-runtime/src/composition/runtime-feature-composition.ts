@@ -49,6 +49,8 @@ import {
   memoryRuntimeHostCapability,
 } from '@setsuna-desktop/feature-memory/contracts';
 import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
+import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/contracts';
+import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import {
   visionRecognitionFeature,
   visionRecognitionRuntimeHostCapability,
@@ -65,7 +67,7 @@ import { workspaceDependenciesRuntimeFeature } from '@setsuna-desktop/feature-wo
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
-  required: [browserRuntimeFeature],
+  required: [browserRuntimeFeature, reviewRuntimeFeature],
   optional: [
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
@@ -139,6 +141,10 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         memoryLegacySettingsCapability,
         runtime.configStore.memoryLegacySettingsAdapter(),
+      ),
+      provideHostCapability(
+        reviewRuntimeHostCapability,
+        runtime.reviewRuntimeHost,
       ),
       provideHostCapability(
         visionRecognitionRuntimeHostCapability,

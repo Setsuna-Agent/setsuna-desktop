@@ -151,6 +151,7 @@ importers:
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
+      '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-workspace-dependencies': workspace:*
       ai: ^7.0.0
@@ -171,6 +172,7 @@ importers:
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
       '@setsuna-desktop/feature-memory': link:../features/memory
+      '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-workspace-dependencies': link:../features/workspace-dependencies
       ai: 7.0.51_zod@4.4.3
