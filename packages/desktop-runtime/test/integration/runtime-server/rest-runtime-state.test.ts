@@ -236,7 +236,7 @@ describe('runtime server REST runtime state', () => {
     });
 
   it('exposes the aggregate runtime activity projection', async () => {
-      const activities = await harness.runtimeFetch('/v1/runtime-activities');
+      const activities = await harness.runtimeFetch('/v1/features/runtime-activity');
 
       expect(activities).toMatchObject({
         backgroundServices: [],

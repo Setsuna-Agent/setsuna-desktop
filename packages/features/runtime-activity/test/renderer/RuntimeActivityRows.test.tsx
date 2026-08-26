@@ -3,15 +3,16 @@
 import type {
   RuntimeActiveTask,
   RuntimeBackgroundServiceActivity,
-} from '@setsuna-desktop/contracts';
+} from '../../src/contracts/index.js';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   RuntimeActiveTaskRows,
   RuntimeBackgroundServiceRows,
-} from '../../../../src/features/runtime-activity/RuntimeActivityRows.js';
-import { runtimeTaskActivityKey } from '../../../../src/features/runtime-activity/runtimeActivityModel.js';
+} from '../../src/renderer/RuntimeActivityRows.js';
+import { runtimeTaskActivityKey } from '../../src/renderer/runtime-activity-model.js';
+import { runtimeActivityTestTranslate } from './support.js';
 
 const task: RuntimeActiveTask = {
   archived: false,
@@ -63,6 +64,7 @@ describe('RuntimeActiveTaskRows', () => {
         projectNameById={new Map()}
         services={[orphanedService]}
         stoppingKeys={new Set()}
+        translate={runtimeActivityTestTranslate}
       />,
     );
 
@@ -93,6 +95,7 @@ describe('RuntimeActiveTaskRows', () => {
           projectNameById={new Map()}
           stoppingKeys={new Set()}
           tasks={[sideTask]}
+          translate={runtimeActivityTestTranslate}
         />
         <RuntimeBackgroundServiceRows
           nowMs={Date.parse('2026-08-06T07:02:00.000Z')}
@@ -101,6 +104,7 @@ describe('RuntimeActiveTaskRows', () => {
           projectNameById={new Map()}
           services={[sideService]}
           stoppingKeys={new Set()}
+          translate={runtimeActivityTestTranslate}
         />
       </>,
     );
@@ -123,6 +127,7 @@ function renderTaskRows(stoppingKeys: Set<string>): string {
       projectNameById={new Map()}
       stoppingKeys={stoppingKeys}
       tasks={[task]}
+      translate={runtimeActivityTestTranslate}
     />,
   );
 }

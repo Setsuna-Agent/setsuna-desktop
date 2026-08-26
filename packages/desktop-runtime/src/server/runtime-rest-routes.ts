@@ -1,6 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
-import { handleRuntimeActivityRequest } from './runtime-activity-routes.js';
 import { handleRuntimeCapabilityRequest } from './runtime-capability-routes.js';
 import { handleRuntimeConfigRequest } from './runtime-config-routes.js';
 import { handleRuntimeExtensionRequest } from './runtime-extension-routes.js';
@@ -26,9 +25,6 @@ export async function handleRuntimeRestRequest(
 ): Promise<boolean> {
   if (await runtime.featureRoutes.handle(request, response, url)) return true;
   if (await handleRuntimeFeatureManagementRequest(runtime, request, response, url)) return true;
-  if (await handleRuntimeActivityRequest(runtime, request, response, url)) {
-    return true;
-  }
   if (await handleRuntimeThreadCommandRequest(runtime, request, response, url)) {
     return true;
   }

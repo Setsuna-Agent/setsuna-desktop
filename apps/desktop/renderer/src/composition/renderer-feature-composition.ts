@@ -30,6 +30,11 @@ import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer/feature';
 import {
+  runtimeActivityRendererServiceCapability,
+  type RuntimeActivityRendererService,
+} from '@setsuna-desktop/feature-runtime-activity/contracts';
+import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
+import {
   networkProxyRendererFeature,
   networkProxyRendererHostCapability,
   networkProxyRendererStateCapability,
@@ -77,6 +82,7 @@ const rendererFeatures = defineRendererFeatureHost({
     browserRendererFeature,
     networkProxyRendererFeature,
     reviewRendererFeature,
+    runtimeActivityRendererFeature,
     terminalRendererFeature,
     updaterRendererFeature,
     windowsSandboxRendererFeature,
@@ -101,6 +107,7 @@ export type ActiveRendererFeatures = Readonly<{
   conversationDebug: ConversationDebugRendererService;
   messages: ComposedRendererMessages<AppLocale>;
   networkProxy: NetworkProxyRendererStateService;
+  runtimeActivity: RuntimeActivityRendererService;
   updater: UpdaterRendererStateService;
   usage: UsageRendererStateService;
   views: RendererFeatureViews;
@@ -169,6 +176,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         createNoopConversationDebugRendererService,
       ),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
+      runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
       updater: requiredCapability(updaterRendererStateCapability),
       usage: optionalCapability(
         usageRendererStateCapability,
@@ -181,6 +189,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       conversationDebug: dependencies.conversationDebug,
       messages,
       networkProxy: dependencies.networkProxy,
+      runtimeActivity: dependencies.runtimeActivity,
       updater: dependencies.updater,
       usage: dependencies.usage,
       views,

@@ -1,8 +1,8 @@
 import type {
   RuntimeActiveTask,
   RuntimeBackgroundServiceActivity,
-} from '@setsuna-desktop/contracts';
-import type { Translate } from '../../shared/i18n/I18nProvider.js';
+} from '../contracts/index.js';
+import type { RendererTranslate } from '@setsuna-desktop/feature-core/renderer';
 
 export type RuntimeActivityLoadView = 'loading' | 'error' | 'ready';
 
@@ -45,27 +45,27 @@ export function runtimeActivityCanOpenThread(
 export function formatRuntimeActivityDuration(
   startedAt: string | null,
   nowMs: number,
-  t: Translate,
+  t: RendererTranslate,
 ): string {
   const startedAtMs = Date.parse(startedAt ?? '');
   if (!Number.isFinite(startedAtMs)) return '—';
   const elapsedMinutes = Math.max(0, Math.floor((nowMs - startedAtMs) / 60_000));
-  if (elapsedMinutes < 1) return t('runtimeActivity.duration.lessThanMinute');
+  if (elapsedMinutes < 1) return t('feature.runtimeActivity.duration.lessThanMinute');
   if (elapsedMinutes < 60) {
-    return t('runtimeActivity.duration.minutes', { count: elapsedMinutes });
+    return t('feature.runtimeActivity.duration.minutes', { count: elapsedMinutes });
   }
   const elapsedHours = Math.floor(elapsedMinutes / 60);
   const minutes = elapsedMinutes % 60;
   if (elapsedHours < 24) {
     return minutes
-      ? t('runtimeActivity.duration.hoursMinutes', { hours: elapsedHours, minutes })
-      : t('runtimeActivity.duration.hours', { count: elapsedHours });
+      ? t('feature.runtimeActivity.duration.hoursMinutes', { hours: elapsedHours, minutes })
+      : t('feature.runtimeActivity.duration.hours', { count: elapsedHours });
   }
   const days = Math.floor(elapsedHours / 24);
   const hours = elapsedHours % 24;
   return hours
-    ? t('runtimeActivity.duration.daysHours', { days, hours })
-    : t('runtimeActivity.duration.days', { count: days });
+    ? t('feature.runtimeActivity.duration.daysHours', { days, hours })
+    : t('feature.runtimeActivity.duration.days', { count: days });
 }
 
 export function singleLineActivityCommand(command: string, fallback: string): string {

@@ -25,6 +25,7 @@ importers:
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-network-proxy': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
+      '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
@@ -89,6 +90,7 @@ importers:
       '@setsuna-desktop/feature-memory': link:packages/features/memory
       '@setsuna-desktop/feature-network-proxy': link:packages/features/network-proxy
       '@setsuna-desktop/feature-review': link:packages/features/review
+      '@setsuna-desktop/feature-runtime-activity': link:packages/features/runtime-activity
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-usage': link:packages/features/usage
@@ -156,6 +158,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
+      '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
@@ -179,6 +182,7 @@ importers:
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
       '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-review': link:../features/review
+      '@setsuna-desktop/feature-runtime-activity': link:../features/runtime-activity
       '@setsuna-desktop/feature-usage': link:../features/usage
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
@@ -313,6 +317,20 @@ importers:
       '@setsuna-desktop/feature-workspace-apps': link:../workspace-apps
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
       electron: 43.2.0
+      lucide-react: 0.468.0_react@18.3.1
+      react: 18.3.1
+      react-dom: 18.3.1_react@18.3.1
+
+  packages/features/runtime-activity:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      lucide-react: ^0.468.0
+      react: ^18.3.1
+      react-dom: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1

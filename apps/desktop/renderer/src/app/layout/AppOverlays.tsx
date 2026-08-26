@@ -1,6 +1,6 @@
 import type { DesktopRuntimeClient, RuntimeThreadSummary, WorkspaceProject } from '@setsuna-desktop/contracts';
 import type { RefObject } from 'react';
-import { RuntimeActivityCenter } from '../../features/runtime-activity/RuntimeActivityCenter.js';
+import { RuntimeActivityFeatureCenter } from '../../composition/RuntimeActivityFeatureBoundary.js';
 import type { DesktopNavigationState } from '../controller/useDesktopNavigation.js';
 import { SidebarSearchOverlay } from '../sidebar/SidebarSearchOverlay.js';
 import { RenameThreadDialog } from './RenameThreadDialog.js';
@@ -68,8 +68,7 @@ export function AppOverlays({
         />
       ) : null}
       {runtimeActivityOpen ? (
-        <RuntimeActivityCenter
-          client={client}
+        <RuntimeActivityFeatureCenter
           projects={projects}
           returnFocusRef={runtimeActivityTriggerRef}
           onActivitiesChanged={onActivitiesChanged}

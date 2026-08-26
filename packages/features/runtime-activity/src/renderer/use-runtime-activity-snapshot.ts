@@ -1,37 +1,31 @@
 import type {
-  DesktopRuntimeClient,
   RuntimeActiveTask,
   RuntimeActivityList,
   RuntimeBackgroundServiceActivity,
-} from '@setsuna-desktop/contracts';
-import { useCallback, useEffect, useState } from 'react';
-import { useLatestRequestGuard } from '../../shared/hooks/useLatestRequestGuard.js';
+  RuntimeActivityRendererService,
+} from '../contracts/index.js';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const RUNTIME_ACTIVITY_POLL_INTERVAL_MS = 2_000;
 
-export type RuntimeActivityClient = Pick<
-  DesktopRuntimeClient,
-  'cancelTurn' | 'listRuntimeActivities' | 'terminateBackgroundShellProcess'
->;
-
 export function useRuntimeActivitySnapshot({
-  client,
+  service,
   onActivitiesChanged,
 }: {
-  client: RuntimeActivityClient;
+  service: RuntimeActivityRendererService;
   onActivitiesChanged?: () => unknown;
 }) {
   const [snapshot, setSnapshot] = useState<RuntimeActivityList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stoppingKeys, setStoppingKeys] = useState<Set<string>>(() => new Set());
-  const requests = useLatestRequestGuard();
+  const requests = useRuntimeActivityRequestGuard();
 
   const refresh = useCallback(async (showLoading = false) => {
     const isLatest = requests.begin();
     if (showLoading) setLoading(true);
     try {
-      const next = await client.listRuntimeActivities();
+      const next = await service.list();
       if (!isLatest()) return;
       setSnapshot(next);
       setError(null);
@@ -40,7 +34,7 @@ export function useRuntimeActivitySnapshot({
     } finally {
       if (isLatest()) setLoading(false);
     }
-  }, [client, requests]);
+  }, [requests, service]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,23 +82,23 @@ export function useRuntimeActivitySnapshot({
 
   const stopTask = useCallback((task: RuntimeActiveTask, key: string) => runStop(
     key,
-    () => client.cancelTurn(task.threadId, task.turnId),
+    () => service.stopTask({ threadId: task.threadId, turnId: task.turnId }),
     (current) => ({
       ...current,
       tasks: current.tasks.filter((item) => item.threadId !== task.threadId || item.turnId !== task.turnId),
     }),
-  ), [client, runStop]);
+  ), [runStop, service]);
 
-  const stopService = useCallback((service: RuntimeBackgroundServiceActivity, key: string) => runStop(
+  const stopService = useCallback((activity: RuntimeBackgroundServiceActivity, key: string) => runStop(
     key,
-    () => client.terminateBackgroundShellProcess(service.threadId, service.id),
+    () => service.stopService({ processId: activity.id, threadId: activity.threadId }),
     (current) => ({
       ...current,
       backgroundServices: current.backgroundServices.filter((item) => (
-        item.threadId !== service.threadId || item.id !== service.id
+        item.threadId !== activity.threadId || item.id !== activity.id
       )),
     }),
-  ), [client, runStop]);
+  ), [runStop, service]);
 
   return {
     error,
@@ -115,6 +109,20 @@ export function useRuntimeActivitySnapshot({
     stopService,
     stopTask,
   };
+}
+
+function useRuntimeActivityRequestGuard() {
+  const revisionRef = useRef(0);
+  const guardRef = useRef({
+    begin: () => {
+      const requestRevision = ++revisionRef.current;
+      return () => requestRevision === revisionRef.current;
+    },
+    invalidate: () => {
+      revisionRef.current += 1;
+    },
+  });
+  return guardRef.current;
 }
 
 function runtimeActivityErrorMessage(error: unknown): string {

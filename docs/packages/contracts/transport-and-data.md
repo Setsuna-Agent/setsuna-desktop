@@ -88,7 +88,6 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 ```text
 /v1/config
 /v1/config/models
-/v1/runtime-activities
 /v1/threads
 /v1/threads/:id
 /v1/threads/:id/turns
@@ -96,6 +95,9 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/threads/:id/events
 /v1/features/conversation-debug/threads/:id/events/:afterSeq/:throughSeq/:limit
 /v1/features/conversation-debug/threads/:id/traces/:afterSeq
+/v1/features/runtime-activity
+/v1/features/runtime-activity/tasks/:threadId/:turnId
+/v1/features/runtime-activity/services/:threadId/:processId
 /v1/features/workspace-dependencies
 /v1/projects
 /v1/skills

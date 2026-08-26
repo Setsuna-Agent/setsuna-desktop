@@ -15,6 +15,7 @@ import { App } from './app/App.js';
 import { CollaborationFeatureServiceBoundary } from './composition/CollaborationFeatureBoundary.js';
 import { ConversationDebugFeatureServiceBoundary } from './composition/ConversationDebugFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './composition/NetworkProxyFeatureBoundary.js';
+import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './composition/UsageFeatureBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
@@ -49,7 +50,6 @@ import './shared/styles/loading-indicators.css';
 import './features/chat/styles/markdown.css';
 import './features/chat/styles/chat-composer.css';
 import './features/chat/styles/chat-send-queue.css';
-import './features/runtime-activity/styles/runtime-activity.css';
 import './app/styles/sidebar-search.css';
 import './shared/styles/code-theme.css';
 
@@ -76,11 +76,13 @@ async function bootstrapRenderer(): Promise<void> {
               <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
                 <CollaborationFeatureServiceBoundary service={features.collaboration}>
                   <UsageFeatureServiceBoundary service={features.usage}>
-                    <KeyboardShortcutsProvider>
-                      <CodeAppearanceProvider>
-                        <App />
-                      </CodeAppearanceProvider>
-                    </KeyboardShortcutsProvider>
+                    <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
+                      <KeyboardShortcutsProvider>
+                        <CodeAppearanceProvider>
+                          <App />
+                        </CodeAppearanceProvider>
+                      </KeyboardShortcutsProvider>
+                    </RuntimeActivityFeatureServiceBoundary>
                   </UsageFeatureServiceBoundary>
                 </CollaborationFeatureServiceBoundary>
               </ConversationDebugFeatureServiceBoundary>

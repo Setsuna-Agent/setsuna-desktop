@@ -1,8 +1,14 @@
 import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
+import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
 import { createElement, createRef, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { AgentSidebar } from '../../../../src/app/sidebar/AgentSidebar.js';
+import { I18nProvider } from '../../../../src/shared/i18n/I18nProvider.js';
+import { hostMessages } from '../../../../src/shared/i18n/messages.js';
+
+const messageCatalog = composeRendererMessages(hostMessages, [{ module: runtimeActivityRendererFeature }]);
 
 vi.mock('../../../../src/app/sidebar/SidebarFloatingMenu.js', () => ({
   SidebarFloatingMenu: ({ children }: { children: ReactNode }) => children,
@@ -18,7 +24,7 @@ describe('AgentSidebar project actions', () => {
       updatedAt: '2026-07-13T00:00:00.000Z',
     };
     const noop = () => undefined;
-    const html = renderToStaticMarkup(createElement(AgentSidebar, {
+    const sidebar = createElement(AgentSidebar, {
       activeProjectId: project.id,
       activeThreadId: null,
       activeView: 'chat',
@@ -59,7 +65,12 @@ describe('AgentSidebar project actions', () => {
       onToggleSessionsCollapsed: noop,
       onToggleThreadActions: noop,
       runtimeActivityTriggerRef: createRef<HTMLButtonElement>(),
-    }));
+    });
+    const html = renderToStaticMarkup(createElement(
+      I18nProvider,
+      { initialLocale: 'zh-CN', messageCatalog },
+      sidebar,
+    ));
 
     expect(html).toContain('aria-label="新建项目"');
     expect(html).toContain('class="desktop-agent-project is-menu-open"');

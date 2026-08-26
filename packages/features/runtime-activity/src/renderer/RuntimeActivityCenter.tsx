@@ -1,4 +1,8 @@
-import type { WorkspaceProject } from '@setsuna-desktop/contracts';
+import type {
+  RendererTranslate,
+  SettingsButtonProps,
+  SettingsIconButtonProps,
+} from '@setsuna-desktop/feature-core/renderer';
 import { CircleAlert, Gauge, LoaderCircle, X } from 'lucide-react';
 import {
   useCallback,
@@ -6,40 +10,50 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useI18n } from '../../shared/i18n/I18nProvider.js';
-import { Button, IconButton } from '../../shared/ui/primitives.js';
 import {
   RuntimeActiveTaskRows,
   RuntimeBackgroundServiceRows,
 } from './RuntimeActivityRows.js';
-import { resolveRuntimeActivityLoadView } from './runtimeActivityModel.js';
+import { resolveRuntimeActivityLoadView } from './runtime-activity-model.js';
 import {
   useRuntimeActivitySnapshot,
-  type RuntimeActivityClient,
-} from './useRuntimeActivitySnapshot.js';
+} from './use-runtime-activity-snapshot.js';
+import type { RuntimeActivityRendererService } from '../contracts/index.js';
+import './runtime-activity.css';
 
 type RuntimeActivityTab = 'tasks' | 'services';
 
+export type RuntimeActivityUi = Readonly<{
+  Button: ComponentType<SettingsButtonProps>;
+  IconButton: ComponentType<SettingsIconButtonProps>;
+}>;
+
+export type RuntimeActivityCenterProps = Readonly<{
+  onActivitiesChanged?: () => unknown;
+  onClose: () => void;
+  onOpenThread: (threadId: string) => void | Promise<void>;
+  projects: readonly Readonly<{ id: string; name: string }>[];
+  returnFocusRef: RefObject<HTMLButtonElement>;
+  service: RuntimeActivityRendererService;
+  translate: RendererTranslate;
+  ui: RuntimeActivityUi;
+}>;
+
 export function RuntimeActivityCenter({
-  client,
   onActivitiesChanged,
   onClose,
   onOpenThread,
   projects,
   returnFocusRef,
-}: {
-  client: RuntimeActivityClient;
-  onActivitiesChanged?: () => unknown;
-  onClose: () => void;
-  onOpenThread: (threadId: string) => void | Promise<void>;
-  projects: WorkspaceProject[];
-  returnFocusRef: RefObject<HTMLButtonElement>;
-}) {
-  const { t } = useI18n();
+  service,
+  translate: t,
+  ui: { Button, IconButton },
+}: RuntimeActivityCenterProps) {
   const [activeTab, setActiveTab] = useState<RuntimeActivityTab>('tasks');
   const dialogRef = useRef<HTMLElement | null>(null);
   const nowMs = useRuntimeActivityClock();
@@ -55,7 +69,7 @@ export function RuntimeActivityCenter({
     stoppingKeys,
     stopService,
     stopTask,
-  } = useRuntimeActivitySnapshot({ client, onActivitiesChanged });
+  } = useRuntimeActivitySnapshot({ service, onActivitiesChanged });
   const tasks = snapshot?.tasks ?? [];
   const services = snapshot?.backgroundServices ?? [];
   const loadView = resolveRuntimeActivityLoadView({
@@ -116,12 +130,12 @@ export function RuntimeActivityCenter({
             <Gauge size={17} />
           </span>
           <span className="runtime-activity-dialog__heading">
-            <strong id="runtime-activity-title">{t('runtimeActivity.title')}</strong>
-            <small>{t('runtimeActivity.description')}</small>
+            <strong id="runtime-activity-title">{t('feature.runtimeActivity.title')}</strong>
+            <small>{t('feature.runtimeActivity.description')}</small>
           </span>
           <IconButton
             className="runtime-activity-dialog__close"
-            label={t('runtimeActivity.close')}
+            label={t('feature.runtimeActivity.close')}
             onClick={closeAndRestoreFocus}
           >
             <X size={15} />
@@ -131,21 +145,21 @@ export function RuntimeActivityCenter({
         <div
           className="runtime-activity-tabs"
           role="tablist"
-          aria-label={t('runtimeActivity.tabs')}
+          aria-label={t('feature.runtimeActivity.tabs')}
           onKeyDown={handleRuntimeActivityTabKeyDown}
         >
           <RuntimeActivityTabButton
             active={activeTab === 'tasks'}
             count={tasks.length}
             id="tasks"
-            label={t('runtimeActivity.tasks.title')}
+            label={t('feature.runtimeActivity.tasks.title')}
             onSelect={() => setActiveTab('tasks')}
           />
           <RuntimeActivityTabButton
             active={activeTab === 'services'}
             count={services.length}
             id="services"
-            label={t('runtimeActivity.services.title')}
+            label={t('feature.runtimeActivity.services.title')}
             onSelect={() => setActiveTab('services')}
           />
         </div>
@@ -160,15 +174,15 @@ export function RuntimeActivityCenter({
           {loadView === 'loading' ? (
             <div className="runtime-activity-empty">
               <LoaderCircle className="is-spinning" size={18} />
-              <span>{t('runtimeActivity.loading')}</span>
+              <span>{t('feature.runtimeActivity.loading')}</span>
             </div>
           ) : loadView === 'error' ? (
             <div className="runtime-activity-empty runtime-activity-empty--error" role="alert">
               <CircleAlert size={20} aria-hidden="true" />
-              <strong>{t('runtimeActivity.loadFailed')}</strong>
-              <span>{t('runtimeActivity.refreshFailed', { error: error ?? '' })}</span>
+              <strong>{t('feature.runtimeActivity.loadFailed')}</strong>
+              <span>{t('feature.runtimeActivity.refreshFailed', { error: error ?? '' })}</span>
               <Button variant="ghost" onClick={() => void refresh(true)}>
-                {t('common.retry')}
+                {t('feature.runtimeActivity.retry')}
               </Button>
             </div>
           ) : activeTab === 'tasks' && tasks.length ? (
@@ -179,6 +193,7 @@ export function RuntimeActivityCenter({
               projectNameById={projectNameById}
               stoppingKeys={stoppingKeys}
               tasks={tasks}
+              translate={t}
             />
           ) : activeTab === 'services' && services.length ? (
             <RuntimeBackgroundServiceRows
@@ -188,12 +203,13 @@ export function RuntimeActivityCenter({
               projectNameById={projectNameById}
               services={services}
               stoppingKeys={stoppingKeys}
+              translate={t}
             />
           ) : (
             <div className="runtime-activity-empty">
               <Gauge size={20} aria-hidden="true" />
-              <strong>{t(activeTab === 'tasks' ? 'runtimeActivity.tasks.empty' : 'runtimeActivity.services.empty')}</strong>
-              <span>{t(activeTab === 'tasks' ? 'runtimeActivity.tasks.emptyDescription' : 'runtimeActivity.services.emptyDescription')}</span>
+              <strong>{t(activeTab === 'tasks' ? 'feature.runtimeActivity.tasks.empty' : 'feature.runtimeActivity.services.empty')}</strong>
+              <span>{t(activeTab === 'tasks' ? 'feature.runtimeActivity.tasks.emptyDescription' : 'feature.runtimeActivity.services.emptyDescription')}</span>
             </div>
           )}
         </div>
@@ -201,10 +217,10 @@ export function RuntimeActivityCenter({
         {error && snapshot ? (
           <footer className="runtime-activity-dialog__footer">
             <span className="runtime-activity-dialog__status" role="status" title={error}>
-              {t('runtimeActivity.refreshFailed', { error })}
+              {t('feature.runtimeActivity.refreshFailed', { error })}
             </span>
             <Button variant="ghost" onClick={() => void refresh(true)}>
-              {t('common.retry')}
+              {t('feature.runtimeActivity.retry')}
             </Button>
           </footer>
         ) : null}

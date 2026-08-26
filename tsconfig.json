@@ -11,6 +11,7 @@
     { "path": "./packages/features/memory/tsconfig.build.json" },
     { "path": "./packages/features/network-proxy/tsconfig.build.json" },
     { "path": "./packages/features/review/tsconfig.build.json" },
+    { "path": "./packages/features/runtime-activity/tsconfig.build.json" },
     { "path": "./packages/features/terminal/tsconfig.build.json" },
     { "path": "./packages/features/usage/tsconfig.build.json" },
     { "path": "./packages/features/updater/tsconfig.build.json" },

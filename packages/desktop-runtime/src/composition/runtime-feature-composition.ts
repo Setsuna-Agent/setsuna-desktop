@@ -51,6 +51,8 @@ import {
 import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/contracts';
 import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
+import { runtimeActivityRuntimeHostCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
+import { runtimeActivityRuntimeFeature } from '@setsuna-desktop/feature-runtime-activity/runtime';
 import {
   createNoopUsageControl,
   usageControlCapability,
@@ -75,7 +77,12 @@ import { windowsSandboxRuntimeFeature } from '@setsuna-desktop/feature-windows-s
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
-  required: [browserRuntimeFeature, reviewRuntimeFeature, windowsSandboxRuntimeFeature],
+  required: [
+    browserRuntimeFeature,
+    reviewRuntimeFeature,
+    runtimeActivityRuntimeFeature,
+    windowsSandboxRuntimeFeature,
+  ],
   optional: [
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
@@ -154,6 +161,28 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         reviewRuntimeHostCapability,
         runtime.reviewRuntimeHost,
+      ),
+      provideHostCapability(
+        runtimeActivityRuntimeHostCapability,
+        Object.freeze({
+          activeTurnId: (threadId: string) => runtime.agentLoop.activeTurnId(threadId),
+          cancelTurn: (threadId: string, turnId: string) => runtime.agentLoop.cancelTurn(threadId, turnId),
+          getTurnActivity: (threadId: string, turnId: string) => (
+            runtime.threadStore.getTurnActivity(threadId, turnId)
+          ),
+          listApprovals: async () => (await runtime.approvalGate.listApprovals()).approvals,
+          listBackgroundShellProcesses: () => (
+            runtime.backgroundShellProcesses.listAllBackgroundShellProcesses()
+          ),
+          listThreads: () => runtime.threadStore.listThreads({
+            includeArchived: true,
+            includeSide: true,
+          }),
+          now: () => runtime.clock.now(),
+          terminateBackgroundShellProcess: (threadId: string, processId: string) => (
+            runtime.backgroundShellProcesses.terminateBackgroundShellProcess(threadId, processId)
+          ),
+        }),
       ),
       provideHostCapability(
         usageRuntimeHostCapability,

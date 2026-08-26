@@ -57,22 +57,20 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 
 ## REST route
 
-`runtime-rest-routes.ts` 是 53 行有序分发入口，只组合窄 domain handler：
+`runtime-rest-routes.ts` 是小型有序分发入口，只组合窄 domain handler：
 
 - `runtime-config-routes.ts`：Config 与 provider model discovery。
-- `runtime-activity-routes.ts`：跨线程 active turn 与后台服务投影。
 - `runtime-extension-routes.ts`：Skills、MCP、Hooks、Plugins 和 Approvals。
 - `runtime-resource-routes.ts`：Attachment 创建、读取与清理。
-- `RuntimeRouteRegistry`：由各 runtime Feature setup 登记的 typed operations；在中央 route family 之前分发。
+- `RuntimeRouteRegistry`：由 Usage、Runtime Activity 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel 与 review。
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
 - `runtime-capability-routes.ts`：Hook、MCP status/resource/tool 与 Skill extra roots。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
 - `runtime-memory-routes.ts`：旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
-- `RuntimeRouteRegistry`：Usage 等 Feature 在 setup 期间登记 typed operations。
 
-Route family 只做 method/path/body 解析、错误映射和 response DTO。跨 port 的业务事务下沉到 `runtime/use-cases/`；例如项目归档由 `workspace-operations.ts` 持有。Feature-owned typed operation 则由对应 Feature runtime 入口登记；Review 的 commit message prompt、安全边界与 fallback 位于 `packages/features/review/src/runtime/commit-message-generation.ts`，Core 仅提供默认模型的窄 host adapter。
+Route family 只做 method/path/body 解析、错误映射和 response DTO。跨 port 的业务事务下沉到 `runtime/use-cases/`；例如项目归档由 `workspace-operations.ts` 持有。Feature-owned typed operation 则由对应 Feature runtime 入口登记；Runtime Activity 在 `packages/features/runtime-activity/src/runtime/` 聚合 active turn、approval 与后台服务，Core 只注入线程和生命周期窄接口。Review 的 commit message prompt、安全边界与 fallback 位于 `packages/features/review/src/runtime/commit-message-generation.ts`。
 
 覆盖领域：
 

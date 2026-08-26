@@ -1,6 +1,6 @@
 import { MoreHorizontal, Settings } from 'lucide-react';
 import { useCallback, useState, type RefObject } from 'react';
-import { RuntimeActivityMenuItem } from '../../features/runtime-activity/RuntimeActivityMenuItem.js';
+import { RuntimeActivityFeatureMenuItem } from '../../composition/RuntimeActivityFeatureBoundary.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { ShortcutTooltip } from '../../shared/ui/ShortcutTooltip.js';
 import { SidebarFloatingMenu } from './SidebarFloatingMenu.js';
@@ -48,7 +48,7 @@ export function SidebarUserMenu({
         triggerRef={runtimeActivityTriggerRef}
         onClose={closeMenu}
       >
-        <RuntimeActivityMenuItem
+        <RuntimeActivityFeatureMenuItem
           onClick={() => {
             closeMenu();
             onOpenRuntimeActivity();

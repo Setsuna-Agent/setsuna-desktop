@@ -161,15 +161,6 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('loads the aggregate runtime activity projection', async () => {
-    const request = installRuntimeBridge(() => ({ tasks: [], backgroundServices: [] }));
-    const client = createDesktopRuntimeClient();
-
-    await client.listRuntimeActivities();
-
-    expect(request).toHaveBeenCalledWith({ path: '/v1/runtime-activities' });
-  });
-
   it('uses narrow bridges for local links, managed uploads, and pending deletes', async () => {
     const linkAttachment = vi.fn(async () => ({
       id: 'attachment_link_1',
