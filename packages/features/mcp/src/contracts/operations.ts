@@ -142,7 +142,8 @@ export function normalizeMcpServerKey(value: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gu, '_')
-    .replace(/^_+|_+$/gu, '');
+    .replace(/^_+/u, '')
+    .replace(/_+$/u, '');
   if (!key) throw new Error('MCP server key is required.');
   return key;
 }
