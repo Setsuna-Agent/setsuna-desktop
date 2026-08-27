@@ -17,15 +17,6 @@ import type {
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
 import type {
-  RuntimeMcpResourceReadResult,
-  RuntimeMcpServerInput,
-  RuntimeMcpServerList,
-  RuntimeMcpServerPatch,
-  RuntimeMcpServerStatusList,
-  RuntimeMcpToolCallResult,
-  RuntimeMcpToolList,
-} from './mcp.js';
-import type {
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
@@ -161,16 +152,6 @@ export type DesktopRuntimeClient = {
   readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
   saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
-  listMcpServers(): Promise<RuntimeMcpServerList>;
-  fetchMcpServerTools(input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList>;
-  upsertMcpServer(input: RuntimeMcpServerInput): Promise<RuntimeMcpServerList>;
-  updateMcpServer(key: string, patch: RuntimeMcpServerPatch): Promise<RuntimeMcpServerList>;
-  deleteMcpServer(key: string): Promise<void>;
-  loginMcpServer(key: string): Promise<RuntimeMcpServerList>;
-  logoutMcpServer(key: string): Promise<RuntimeMcpServerList>;
-  listMcpServerStatuses(): Promise<RuntimeMcpServerStatusList>;
-  readMcpServerResource(threadId: string, server: string, uri: string): Promise<RuntimeMcpResourceReadResult>;
-  callMcpServerTool(threadId: string, server: string, tool: string, args?: unknown): Promise<RuntimeMcpToolCallResult>;
   setSkillExtraRoots(extraRoots: string[]): Promise<void>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;

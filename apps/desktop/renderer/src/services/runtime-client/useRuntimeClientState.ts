@@ -149,7 +149,6 @@ export function useRuntimeClientState({
         threadList,
       } = bootstrap.core;
       const {
-        mcpResult,
         skillResult,
       } = bootstrap.optional;
       replaceConfig(nextConfig);
@@ -161,11 +160,9 @@ export function useRuntimeClientState({
       });
       applyCapabilityBootstrapResults({
         skillResult,
-        mcpResult,
       });
       reportOptionalRuntimeLoadFailures([
         ['skills', skillResult],
-        ['MCP', mcpResult],
       ]);
       await threadBootstrap;
       setLoadState('ready');
@@ -207,7 +204,6 @@ export type RuntimeClientState = ReturnType<typeof useRuntimeClientState>;
 type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
   | 'getConfig'
-  | 'listMcpServers'
   | 'listProjects'
   | 'listSkills'
   | 'listThreads'
@@ -221,18 +217,14 @@ export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
       client.listThreads({ includeArchived: true }),
       client.listProjects(),
     ]),
-    Promise.allSettled([
-      client.listSkills(),
-      client.listMcpServers(),
-    ]),
+    Promise.allSettled([client.listSkills()]),
   ]);
   const [nextConfig, threadList, allThreadList, projectList] = core;
-  const [skillResult, mcpResult] = optional;
+  const [skillResult] = optional;
   return {
     core: { nextConfig, threadList, allThreadList, projectList },
     optional: {
       skillResult,
-      mcpResult,
     },
   };
 }

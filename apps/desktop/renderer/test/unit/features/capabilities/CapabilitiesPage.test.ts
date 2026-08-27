@@ -3,15 +3,15 @@ import {
   capabilityCatalogTitle,
   capabilityTabIds,
   pluginActionError,
-  shouldRenderCapabilitiesTabsInPage,
 } from '../../../../src/features/capabilities/CapabilitiesPage.js';
+import { shouldRenderCapabilitiesNavigationInPage } from '../../../../src/features/capabilities/capabilitiesLayout.js';
 
 describe('capabilities tabs placement', () => {
   it('moves the tabs into page content on Windows only', () => {
-    expect(shouldRenderCapabilitiesTabsInPage('win32')).toBe(true);
-    expect(shouldRenderCapabilitiesTabsInPage('darwin')).toBe(false);
-    expect(shouldRenderCapabilitiesTabsInPage('linux')).toBe(false);
-    expect(shouldRenderCapabilitiesTabsInPage('browser')).toBe(false);
+    expect(shouldRenderCapabilitiesNavigationInPage('win32')).toBe(true);
+    expect(shouldRenderCapabilitiesNavigationInPage('darwin')).toBe(false);
+    expect(shouldRenderCapabilitiesNavigationInPage('linux')).toBe(false);
+    expect(shouldRenderCapabilitiesNavigationInPage('browser')).toBe(false);
   });
 
   it('keeps hooks inside plugins instead of exposing a standalone directory', () => {

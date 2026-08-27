@@ -61,6 +61,7 @@
     "@setsuna-desktop/feature-conversation-debug": "workspace:*",
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
+    "@setsuna-desktop/feature-mcp": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-model-provider": "workspace:*",
     "@setsuna-desktop/feature-network-proxy": "workspace:*",

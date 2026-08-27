@@ -32,6 +32,7 @@ describe('renderer feature composition', () => {
 
     const features = await activateBuiltinRendererFeatures();
 
+    expect(features.mcp.getSnapshot()).toBeNull();
     expect(features.networkProxy.available).toBe(false);
     await features.composition.dispose();
   });

@@ -13,7 +13,7 @@ describe('loadRuntimeBootstrap', () => {
 
     expect(bootstrap.core.threadList.threads).toEqual([]);
     expect(bootstrap.optional.skillResult).toMatchObject({ status: 'rejected' });
-    expect(bootstrap.optional.mcpResult).toMatchObject({ status: 'fulfilled' });
+    expect(bootstrap.optional).not.toHaveProperty('mcpResult');
   });
 
   it('still rejects when required runtime state cannot load', async () => {
@@ -28,11 +28,10 @@ describe('loadRuntimeBootstrap', () => {
 
 function bootstrapClient(): Pick<
   DesktopRuntimeClient,
-  'getConfig' | 'listMcpServers' | 'listProjects' | 'listSkills' | 'listThreads'
+  'getConfig' | 'listProjects' | 'listSkills' | 'listThreads'
 > {
   return {
     getConfig: async () => ({ providers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['getConfig']>>,
-    listMcpServers: async () => ({ servers: [] }) as unknown as Awaited<ReturnType<DesktopRuntimeClient['listMcpServers']>>,
     listProjects: async () => ({ projects: [] }),
     listSkills: async () => ({ skills: [], extraRoots: [] }),
     listThreads: async () => ({ threads: [] }),

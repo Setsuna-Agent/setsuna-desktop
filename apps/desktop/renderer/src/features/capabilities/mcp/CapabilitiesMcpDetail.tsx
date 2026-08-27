@@ -116,8 +116,8 @@ export function CapabilitiesMcpDetail({
                   { label: t('capabilities.mcp.args'), value: server.args },
                   { label: t('capabilities.mcp.cwd'), value: server.cwd },
                 ]
-              : [
-                  { label: 'URL', value: endpoint },
+                : [
+                  { label: 'URL', value: endpoint, wide: true },
                 ]}
           />
           {server.authError ? <small className="is-error">{server.authError}</small> : null}

@@ -15,8 +15,8 @@ describe('runtime server MCP API', () => {
     await harness.close();
   });
 
-  it('stores local MCP server config through the runtime API', async () => {
-      const created = await harness.runtimeFetch('/v1/mcp/servers', {
+  it('stores renderer MCP config through Feature operations and keeps REST compatibility', async () => {
+      const created = await harness.runtimeFetch('/v1/features/mcp/servers', {
         method: 'POST',
         body: JSON.stringify({
           key: 'docs',
@@ -32,9 +32,9 @@ describe('runtime server MCP API', () => {
           }],
         }),
       });
-      const updated = await harness.runtimeFetch('/v1/mcp/servers/docs', {
+      const updated = await harness.runtimeFetch('/v1/features/mcp/servers/docs', {
         method: 'PATCH',
-        body: JSON.stringify({ enabled: false }),
+        body: JSON.stringify({ patch: { enabled: false } }),
       });
   
       expect(created.servers[0]).toMatchObject({
@@ -78,7 +78,7 @@ describe('runtime server MCP API', () => {
         error: { code: -32600, message: 'invalid cursor: invalid' },
       });
   
-      await harness.runtimeFetch('/v1/mcp/servers/docs', { method: 'DELETE' });
+      await harness.runtimeFetch('/v1/features/mcp/servers/docs', { method: 'DELETE' });
       await expect(harness.runtimeFetch('/v1/mcp/servers')).resolves.toMatchObject({ servers: [] });
       await expect(harness.appServerRpc('mcpServerStatus/list', {})).resolves.toEqual({ data: [], nextCursor: null });
     });

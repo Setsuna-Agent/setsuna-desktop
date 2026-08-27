@@ -29,6 +29,7 @@ import { useModelProviderFeatureService } from '../../composition/ModelProviderF
 import { useConversationDebugFeatureEnabled } from '../../composition/ConversationDebugFeatureBoundary.js';
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { usePluginManagementFeatureService } from '../../composition/PluginManagementFeatureBoundary.js';
+import { useMcpFeatureService } from '../../composition/McpFeatureBoundary.js';
 import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
@@ -48,13 +49,17 @@ export function useDesktopAppController() {
   const modelProvider = useModelProviderFeatureService();
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const invalidateUsage = useUsageFeatureInvalidation();
+  const mcp = useMcpFeatureService();
   const pluginManagement = usePluginManagementFeatureService();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
     void pluginManagement.refreshExtensions().catch((unknownError) => {
       reportRuntimeBackgroundFailure('plugin status refresh after turn', unknownError);
     });
-  }, [invalidateUsage, pluginManagement]);
+    void mcp.refresh().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('MCP refresh after turn', unknownError);
+    });
+  }, [invalidateUsage, mcp, pluginManagement]);
   const handlePluginSkillMutation = useCallback(async () => {
     await pluginManagement.refreshInstalled();
   }, [pluginManagement]);
@@ -86,6 +91,12 @@ export function useDesktopAppController() {
       reportRuntimeBackgroundFailure('plugin management refresh', unknownError);
     });
   }, [loadState, pluginManagement]);
+  useEffect(() => {
+    if (loadState !== 'ready') return;
+    void mcp.refresh().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('MCP management refresh', unknownError);
+    });
+  }, [loadState, mcp]);
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,

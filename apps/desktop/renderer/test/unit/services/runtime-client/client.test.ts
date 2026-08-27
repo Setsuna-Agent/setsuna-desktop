@@ -229,15 +229,8 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('routes hooks, MCP operations, and skill roots through first-party REST', async () => {
+  it('routes hooks and skill roots through first-party REST', async () => {
     const request = installRuntimeBridge((input) => {
-      if (input.path === '/v1/mcp/statuses') return { data: [], nextCursor: null };
-      if (input.path === '/v1/mcp/resources/read') {
-        return { contents: [{ text: 'hello' }] };
-      }
-      if (input.path === '/v1/mcp/tools/call') {
-        return { content: [{ type: 'text', text: 'done' }], isError: false };
-      }
       if (input.path.startsWith('/v1/hooks')) {
         return { data: [] };
       }
@@ -246,43 +239,11 @@ describe('desktop runtime client advanced thread methods', () => {
     const client = createDesktopRuntimeClient();
 
     await client.listHooks(['/repo one', '/repo/two']);
-    await expect(client.listMcpServerStatuses()).resolves.toEqual({
-      data: [],
-      nextCursor: null,
-    });
-    await expect(
-      client.readMcpServerResource('thread_1', 'docs', 'memory://one'),
-    ).resolves.toEqual({
-      contents: [{ text: 'hello' }],
-    });
-    await expect(
-      client.callMcpServerTool('thread_1', 'docs', 'search', { q: 'setsuna' }),
-    ).resolves.toMatchObject({
-      isError: false,
-    });
     await client.setSkillExtraRoots(['/skills/one']);
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       {
         path: '/v1/hooks?cwd=%2Frepo+one&cwd=%2Frepo%2Ftwo',
-      },
-      {
-        path: '/v1/mcp/statuses',
-      },
-      {
-        path: '/v1/mcp/resources/read',
-        method: 'POST',
-        body: { threadId: 'thread_1', server: 'docs', uri: 'memory://one' },
-      },
-      {
-        path: '/v1/mcp/tools/call',
-        method: 'POST',
-        body: {
-          threadId: 'thread_1',
-          server: 'docs',
-          tool: 'search',
-          arguments: { q: 'setsuna' },
-        },
       },
       {
         path: '/v1/skills/extra-roots',

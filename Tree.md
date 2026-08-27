@@ -71,17 +71,17 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 557 total files
-├── src/ — 2 direct / 396 total files
+apps/desktop/renderer/ — 0 direct / 560 total files
+├── src/ — 2 direct / 399 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 6 direct / 6 total files
 │   │   ├── layout/ — 17 direct / 17 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 26 direct / 26 total files
-│   ├── features/ — 237 files
-│   │   ├── capabilities/ — 22 direct / 32 total files
+│   ├── composition/ — 28 direct / 28 total files
+│   ├── features/ — 238 files
+│   │   ├── capabilities/ — 23 direct / 33 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
 │   │   │   └── styles/ — 5 direct / 5 total files
@@ -194,7 +194,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 765 total files
+packages/features/ — 0 direct / 772 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -241,15 +241,18 @@ packages/features/ — 0 direct / 765 total files
 │   │   └── runtime/ — 3 direct / 3 total files
 │   └── test/ — 2 files
 │       └── runtime/ — 2 direct / 2 total files
-├── mcp/ — 4 direct / 35 total files
-│   ├── src/ — 21 files
-│   │   ├── contracts/ — 7 direct / 7 total files
+├── mcp/ — 4 direct / 42 total files
+│   ├── src/ — 26 files
+│   │   ├── contracts/ — 8 direct / 8 total files
+│   │   ├── renderer/ — 4 direct / 4 total files
 │   │   └── runtime/ — 6 direct / 14 total files
 │   │       ├── adapters/ — 5 files
 │   │       │   └── sdk/ — 5 direct / 5 total files
 │   │       └── tools/ — 3 direct / 3 total files
-│   └── test/ — 7 direct / 10 total files
+│   └── test/ — 7 direct / 12 total files
+│       ├── contracts/ — 1 direct / 1 total files
 │       ├── fixtures/ — 2 direct / 2 total files
+│       ├── renderer/ — 1 direct / 1 total files
 │       └── support/ — 1 direct / 1 total files
 ├── memory/ — 2 direct / 29 total files
 │   ├── src/ — 23 files

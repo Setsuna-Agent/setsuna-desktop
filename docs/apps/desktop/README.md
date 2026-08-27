@@ -47,17 +47,17 @@ local runtime
 
 ### Renderer 调 Runtime
 
-使用 `DesktopRuntimeClient`：
+Core renderer 能力使用 `DesktopRuntimeClient`：
 
 ```text
-feature
+Core renderer module
   → services/runtime-client/client.ts
   → preload runtime bridge
   → main RuntimeHost
   → runtime REST/SSE
 ```
 
-不要在 feature 中直接拼 `/v1/*`，也不要从 renderer 访问 `127.0.0.1`。
+纵向 Feature 通过 contracts 声明 typed operation，并使用宿主注入的 `FeatureOperationTransport`；两类 renderer 代码都不能直接拼 `/v1/*` 或访问 `127.0.0.1`。
 
 ### Renderer 调本机能力
 

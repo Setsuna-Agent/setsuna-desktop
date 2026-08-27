@@ -12,6 +12,10 @@
     "./runtime": {
       "types": "./dist/runtime/index.d.ts",
       "default": "./dist/runtime/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "default": "./dist/renderer/index.js"
     }
   },
   "dependencies": {

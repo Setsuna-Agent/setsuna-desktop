@@ -44,3 +44,42 @@ export function mergeRuntimeProviderMetadata(
   };
   return normalizeRuntimeMessageProviderMetadata(merged);
 }
+
+/**
+ * Keeps provider replay metadata aligned with the tool calls the runtime will actually execute.
+ *
+ * OpenAI response IDs are detached whenever a model-emitted call is removed: the remote response
+ * still contains that call, so continuing from it would require a tool result that the runtime
+ * intentionally did not create.
+ */
+export function retainRuntimeProviderToolCalls(
+  metadata: RuntimeMessage['providerMetadata'],
+  retainedToolCallIds: ReadonlySet<string>,
+): RuntimeMessage['providerMetadata'] {
+  const normalized = metadata
+    ? normalizeRuntimeMessageProviderMetadata(metadata)
+    : undefined;
+  if (!normalized) return undefined;
+
+  const next = structuredClone(normalized);
+  if (next.assistantReplay) {
+    next.assistantReplay.blocks = next.assistantReplay.blocks.filter((block) => (
+      block.type !== 'tool_call' || retainedToolCallIds.has(block.id)
+    ));
+    delete next.assistantReplay.responseId;
+  }
+  if (next.anthropic) {
+    next.anthropic.contentBlocks = next.anthropic.contentBlocks.filter((block) => (
+      block.type !== 'tool_use' || retainedToolCallIds.has(block.id)
+    ));
+  }
+  if (next.openAiResponses) {
+    next.openAiResponses.items = next.openAiResponses.items.filter((item) => (
+      item.type !== 'function_call'
+      || typeof item.call_id !== 'string'
+      || retainedToolCallIds.has(item.call_id)
+    ));
+    delete next.openAiResponses.responseId;
+  }
+  return normalizeRuntimeMessageProviderMetadata(next);
+}

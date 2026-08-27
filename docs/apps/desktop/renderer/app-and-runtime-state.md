@@ -157,11 +157,11 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 能力域 owner，持有：
 
 - Skills 与 extra roots。
-- MCP server state。
 - Hooks 与当前 project cwd 的 latest-request guard。
-- Plugins、marketplace 和跨 Skill/MCP/config/Hook 的安装后刷新。
+- 跨 Skill/config/Hook 的安装后刷新。
 
 该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、Usage Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
+MCP server state 与命令由 `packages/features/mcp/src/renderer/` 持有；宿主 composition 只在 Plugin/Skill mutation 或 turn settlement 后协调一次跨域刷新。
 
 ### Usage renderer state
 
@@ -185,11 +185,10 @@ Core 失败会进入 app error。
 ### Optional
 
 - Skills。
-- MCP。
-- Plugins。
-- Plugin marketplace。
 
-这些使用 `Promise.allSettled`，单项失败只记录并让对应页面降级。
+MCP、Plugin 与其他纵向 Feature 在各自 renderer service 中独立加载和降级，不进入 Core bootstrap result。
+
+Skill bootstrap 使用 `Promise.allSettled`；各 Feature service 也各自捕获后台加载失败，只让对应能力降级。
 
 恢复选择时优先读取本地保存的 active thread ID；线程不存在或加载失败时回退到可用 project。
 
