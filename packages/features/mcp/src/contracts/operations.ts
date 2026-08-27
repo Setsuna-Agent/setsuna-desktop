@@ -138,12 +138,15 @@ export const logoutMcpServer = defineFeatureOperation({
 });
 
 export function normalizeMcpServerKey(value: string): string {
-  const key = value
+  const normalized = value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9_-]+/gu, '_')
-    .replace(/^_+/u, '')
-    .replace(/_+$/u, '');
+    .replace(/[^a-z0-9_-]+/gu, '_');
+  let start = 0;
+  let end = normalized.length;
+  while (normalized[start] === '_') start += 1;
+  while (end > start && normalized[end - 1] === '_') end -= 1;
+  const key = normalized.slice(start, end);
   if (!key) throw new Error('MCP server key is required.');
   return key;
 }

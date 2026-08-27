@@ -11,7 +11,7 @@ describe('MCP management operation codecs', () => {
       command: 'node',
       env: { EMPTY_VALUE: '', TOKEN: 'secret' },
       headers: { Authorization: 'Bearer secret' },
-      key: ' Docs Server ',
+      key: ' _Docs Server_ ',
       transport: 'stdio',
     })).toEqual({
       command: 'node',
@@ -23,7 +23,7 @@ describe('MCP management operation codecs', () => {
 
     expect(updateMcpServer.input.parse({
       patch: { enabled: false },
-      serverKey: ' Docs Server ',
+      serverKey: ' _Docs Server_ ',
     })).toEqual({
       patch: { enabled: false },
       serverKey: 'docs_server',
