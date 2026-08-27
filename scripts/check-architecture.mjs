@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { checkFeatureBoundaries } from './check-feature-boundaries.mjs';
 
-const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const defaultRepositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The optional root keeps the checker testable without creating fixtures in the working tree.
+const repositoryRoot = process.argv[2] ? path.resolve(process.argv[2]) : defaultRepositoryRoot;
+const featureDirectories = await childDirectories(path.join(repositoryRoot, 'packages/features'));
+const featureSourceRoots = featureDirectories.map((directory) => path.join(directory, 'src'));
 const layerRoots = new Map([
   ['contracts', path.join(repositoryRoot, 'packages/contracts/src')],
   ['feature-core', path.join(repositoryRoot, 'packages/feature-core/src')],
@@ -21,6 +25,7 @@ const testRoots = [
   path.join(repositoryRoot, 'apps/desktop/preload/test'),
   path.join(repositoryRoot, 'apps/desktop/renderer/test'),
   path.join(repositoryRoot, 'scripts/test'),
+  ...featureDirectories.map((directory) => path.join(directory, 'test')),
 ];
 const allowedLayerDependencies = new Map([
   ['contracts', new Set()],
@@ -49,6 +54,13 @@ const productionEntrypoints = new Set([
   path.join(repositoryRoot, 'apps/desktop/main/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/preload/src/index.ts'),
   path.join(repositoryRoot, 'apps/desktop/renderer/src/main.tsx'),
+  ...featureDirectories.flatMap((directory) => [
+    'contracts',
+    'runtime',
+    'renderer',
+    'main',
+    'preload',
+  ].map((entry) => path.join(directory, 'src', entry, 'index.ts'))),
 ]);
 // Existing hotspots may be reduced in place, but cannot grow without first
 // extracting a responsibility and updating this deliberately reviewed budget.
@@ -56,11 +68,12 @@ const legacyHotspotLineBudgets = new Map([
   ['apps/desktop/main/src/data-root/coordinator.ts', 965],
   ['apps/desktop/renderer/src/features/chat/conversation/ChatMessageItem.tsx', 1_005],
   ['apps/desktop/renderer/src/shared/i18n/messages.ts', 1_172],
-  ['packages/desktop-runtime/src/adapters/mcp/sdk-mcp-connection-manager.ts', 993],
   ['packages/desktop-runtime/src/adapters/store/sqlite-thread-store.ts', 974],
   ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-policy.ts', 1_009],
   ['packages/desktop-runtime/src/adapters/tool/pc-local/pc-local-tool-shell-process.ts', 1_070],
   ['packages/desktop-runtime/src/loop/tools/tool-orchestrator-policy.ts', 939],
+  ['packages/features/goal/src/runtime/runtime-goal-coordinator.ts', 922],
+  ['packages/features/mcp/src/runtime/adapters/sdk/sdk-mcp-connection-manager.ts', 993],
 ]);
 const legacyTestHotspotLineBudgets = new Map([
   ['packages/desktop-runtime/test/support/agent-loop/shared.ts', 901],
@@ -74,6 +87,14 @@ async function collectFiles(directory, files = []) {
     else if (entry.isFile()) files.push(fullPath);
   }
   return files;
+}
+
+async function childDirectories(directory) {
+  if (!existsSync(directory)) return [];
+  return (await readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => path.join(directory, entry.name))
+    .sort();
 }
 
 function repositoryPath(filePath) {
@@ -181,7 +202,7 @@ const violations = [];
 violations.push(...await checkFeatureBoundaries(repositoryRoot));
 const productionFiles = [];
 let reviewHotspotCount = 0;
-for (const root of layerRoots.values()) {
+for (const root of [...layerRoots.values(), ...featureSourceRoots]) {
   productionFiles.push(...await collectFiles(root));
 }
 
@@ -327,6 +348,7 @@ const buildRoots = [
   path.join(repositoryRoot, 'packages/contracts/dist'),
   path.join(repositoryRoot, 'packages/feature-core/dist'),
   path.join(repositoryRoot, 'packages/desktop-runtime/dist'),
+  ...featureDirectories.map((directory) => path.join(directory, 'dist')),
 ];
 for (const buildRoot of buildRoots) {
   for (const filePath of await collectFiles(buildRoot)) {

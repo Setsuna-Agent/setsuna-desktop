@@ -1,13 +1,26 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import type { McpElicitationHandler } from '../../../src/adapters/mcp/mcp-elicitation-coordinator.js';
+import type { McpElicitationHandler } from '../src/contracts/elicitation.js';
 import {
   SdkMcpConnectionManager,
   stdioTransportEnvironment,
   threadScopeId,
-} from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
-import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
+  type SdkMcpConnectionManagerOptions,
+} from '../src/runtime/adapters/sdk/sdk-mcp-connection-manager.js';
+import { InMemoryMcpHost } from './support/in-memory-mcp-host.js';
+
+
+function createManager(
+  options: Partial<SdkMcpConnectionManagerOptions> = {},
+  host = new InMemoryMcpHost(),
+): SdkMcpConnectionManager {
+  return new SdkMcpConnectionManager({
+    credentials: host,
+    openExternal: (url) => host.openExternal(url),
+    ...options,
+  });
+}
 
 describe('SdkMcpConnectionManager', () => {
   it('preserves Electron Node mode only when stdio reuses the current executable', () => {
@@ -40,7 +53,7 @@ describe('SdkMcpConnectionManager', () => {
   });
 
   it('resolves the Runtime proxy environment before starting a stdio server', async () => {
-    const manager = new SdkMcpConnectionManager({
+    const manager = createManager({
       resolveNetworkEnvironment: async () => {
         throw new Error('stdio proxy environment reached');
       },
@@ -58,12 +71,12 @@ describe('SdkMcpConnectionManager', () => {
   });
 
   it('uses newline-delimited stdio, paginates inventory, reuses state and propagates cancellation', async () => {
-    const manager = new SdkMcpConnectionManager();
+    const manager = createManager();
     const server = {
       key: 'stdio_fixture',
       transport: 'stdio' as const,
       command: process.execPath,
-      args: [fileURLToPath(new URL('../../fixtures/mcp/test-mcp-stdio-server.mjs', import.meta.url))],
+      args: [fileURLToPath(new URL('./fixtures/test-mcp-stdio-server.mjs', import.meta.url))],
       timeoutMs: 2_000,
       startupTimeoutMs: 2_000,
       toolTimeoutMs: 2_000,
@@ -116,7 +129,7 @@ describe('SdkMcpConnectionManager', () => {
   it('negotiates the current protocol, keeps an HTTP session, refreshes list_changed, and deletes the session', async () => {
     const testServer = await createStatefulHttpMcpServer();
     const routedRequests: string[] = [];
-    const manager = new SdkMcpConnectionManager({
+    const manager = createManager({
       fetchImpl: async (input, init) => {
         routedRequests.push(input.toString());
         return fetch(input, init);
@@ -156,7 +169,7 @@ describe('SdkMcpConnectionManager', () => {
   });
 
   it('routes form and URL elicitations through the active tool context and retries URL-required tools', async () => {
-    const bridge = new InMemoryDesktopNativeBridge();
+    const bridge = new InMemoryMcpHost();
     const seenModes: string[] = [];
     const elicitationCoordinator: McpElicitationHandler = {
       request: async (_serverKey, params, context) => {
@@ -172,12 +185,12 @@ describe('SdkMcpConnectionManager', () => {
           : { action: 'accept', content: { displayName: 'Setsuna' } };
       },
     };
-    const manager = new SdkMcpConnectionManager({ nativeBridge: bridge, elicitationCoordinator });
+    const manager = createManager({ elicitation: elicitationCoordinator }, bridge);
     const server = {
       key: 'elicitation_fixture',
       transport: 'stdio' as const,
       command: process.execPath,
-      args: [fileURLToPath(new URL('../../fixtures/mcp/test-mcp-elicitation-server.mjs', import.meta.url))],
+      args: [fileURLToPath(new URL('./fixtures/test-mcp-elicitation-server.mjs', import.meta.url))],
       timeoutMs: 2_000,
       startupTimeoutMs: 2_000,
       toolTimeoutMs: 2_000,

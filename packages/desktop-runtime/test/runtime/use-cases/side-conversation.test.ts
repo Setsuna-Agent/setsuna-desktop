@@ -79,7 +79,6 @@ describe('side conversations', () => {
       )).resolves.toMatchObject({ content: 'fork lifecycle output' });
     } finally {
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -283,7 +282,6 @@ describe('side conversations', () => {
       await expect(access(sideEnvironment.workspaceRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();

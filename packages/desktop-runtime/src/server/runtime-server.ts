@@ -57,7 +57,6 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   } catch (error) {
     await featureComposition?.dispose().catch(() => undefined);
     await runtime.extensionManager.shutdown().catch(() => undefined);
-    await runtime.mcpConnections.shutdown().catch(() => undefined);
     await runtime.networkProxyFetch.close().catch(() => undefined);
     await runtime.nativeBridge.close().catch(() => undefined);
     await runtime.threadStore.close().catch(() => undefined);
@@ -201,19 +200,15 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
                 await runtime.backgroundShellProcesses.shutdown();
               } finally {
                 try {
-                  await runtime.mcpConnections.shutdown();
+                  await runtime.networkProxyFetch.close();
                 } finally {
                   try {
-                    await runtime.networkProxyFetch.close();
+                    await runtime.nativeBridge.close();
                   } finally {
                     try {
-                      await runtime.nativeBridge.close();
+                      await runtime.threadStore.close();
                     } finally {
-                      try {
-                        await runtime.threadStore.close();
-                      } finally {
-                        await serverClosed;
-                      }
+                      await serverClosed;
                     }
                   }
                 }

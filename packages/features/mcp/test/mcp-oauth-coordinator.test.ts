@@ -1,14 +1,30 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { describe, expect, it } from 'vitest';
-import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from '../../../src/adapters/mcp/mcp-oauth-coordinator.js';
-import { SdkMcpConnectionManager } from '../../../src/adapters/mcp/sdk-mcp-connection-manager.js';
-import { InMemoryDesktopNativeBridge } from '../../support/in-memory-secret-store.js';
+import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from '../src/runtime/adapters/sdk/mcp-oauth-coordinator.js';
+import { SdkMcpConnectionManager } from '../src/runtime/adapters/sdk/sdk-mcp-connection-manager.js';
+import { InMemoryMcpHost } from './support/in-memory-mcp-host.js';
+
+
+function createCoordinator(
+  host: InMemoryMcpHost,
+  now: () => number = Date.now,
+  fetchImpl: (input: string | URL, init?: RequestInit) => Promise<Response> = globalThis.fetch,
+): McpOAuthCoordinator {
+  return new McpOAuthCoordinator(host, (url) => host.openExternal(url), now, fetchImpl);
+}
+
+function createManager(host: InMemoryMcpHost): SdkMcpConnectionManager {
+  return new SdkMcpConnectionManager({
+    credentials: host,
+    openExternal: (url) => host.openExternal(url),
+  });
+}
 
 describe('McpOAuthCoordinator', () => {
   it('opens the system authorization URL, validates callback state, and persists tokens', async () => {
     const oauthServer = await createOAuthServer();
     const nativeBridge = new AutoCallbackNativeBridge();
-    const coordinator = new McpOAuthCoordinator(nativeBridge);
+    const coordinator = createCoordinator(nativeBridge);
     const server = {
       key: 'docs',
       transport: 'streamableHttp' as const,
@@ -30,7 +46,7 @@ describe('McpOAuthCoordinator', () => {
   });
 
   it('does not open a browser during a normal non-interactive connection', async () => {
-    const provider = new McpOAuthCoordinator(new InMemoryDesktopNativeBridge()).providerFor({
+    const provider = createCoordinator(new InMemoryMcpHost()).providerFor({
       key: 'docs',
       transport: 'streamableHttp',
       url: 'https://example.com/mcp',
@@ -43,7 +59,7 @@ describe('McpOAuthCoordinator', () => {
   it('authenticates persistent MCP manager connections after login', async () => {
     const oauthServer = await createOAuthServer();
     const nativeBridge = new AutoCallbackNativeBridge();
-    const manager = new SdkMcpConnectionManager({ nativeBridge });
+    const manager = createManager(nativeBridge);
     const server = {
       key: 'docs',
       transport: 'streamableHttp' as const,
@@ -75,8 +91,8 @@ describe('McpOAuthCoordinator', () => {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Expected OAuth refresh test address.');
     let routedFetchCount = 0;
-    const fetchFn = new McpOAuthCoordinator(
-      new InMemoryDesktopNativeBridge(),
+    const fetchFn = createCoordinator(
+      new InMemoryMcpHost(),
       Date.now,
       async (input, init) => {
         routedFetchCount += 1;
@@ -100,7 +116,7 @@ describe('McpOAuthCoordinator', () => {
   });
 });
 
-class AutoCallbackNativeBridge extends InMemoryDesktopNativeBridge {
+class AutoCallbackNativeBridge extends InMemoryMcpHost {
   override async openExternal(url: string): Promise<void> {
     await super.openExternal(url);
     const authorizationUrl = new URL(url);

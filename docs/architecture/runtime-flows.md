@@ -191,7 +191,7 @@ BrowserToolHost（通用 ToolHost adapter）
 1. Main 先停止 Updater 定时检查与 WebDAV 调度等新的外围工作。
 2. Runtime server 停止接收新请求并关闭 SSE。
 3. 终止 app-server command/fs manager，`AgentLoop.shutdown()` 取消并排空 turn 与后台 memory。
-4. 等待已进入的 HTTP handler 完成，再关闭后台 shell、MCP connections 和 thread store。
+4. 等待已进入的 HTTP handler 完成，dispose Runtime Feature composition（其中 MCP scope 关闭连接），再关闭后台 shell 和 thread store。
 5. Main dispose Feature composition；scope 先拒绝新 IPC，排空已进入的操作，再关闭 Browser server、Network Proxy 的 browser/fetch/relay、Terminal PTY 和 Updater 传输并撤销 handler。
 6. 关闭 native bridge。
 

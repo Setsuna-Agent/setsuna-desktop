@@ -17,6 +17,7 @@ describe('McpElicitationCoordinator', () => {
     const resultPromise = harness.coordinator.request('profile_server', {
       mode: 'form',
       message: 'Provide your profile.',
+      elicitationId: 'elicit_form',
       requestedSchema: {
         type: 'object',
         properties: {

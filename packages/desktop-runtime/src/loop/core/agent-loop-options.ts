@@ -1,5 +1,6 @@
-import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { MemoryStore } from '@setsuna-desktop/feature-memory/contracts';
+import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -8,7 +9,6 @@ import type { EventBus } from '../../ports/event-bus.js';
 import type { ExtensionRuntime } from '../../ports/extension-runtime.js';
 import type { GeneratedImageStore } from '../../ports/generated-image-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { McpStore } from '../../ports/mcp-store.js';
 import type { ModelClient } from '../../ports/model-client.js';
 import type { PersistentToolApprovalStore } from '../../ports/persistent-tool-approval-store.js';
 import type { PolicyAmendmentStore } from '../../ports/policy-amendment-store.js';

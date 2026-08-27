@@ -9,7 +9,8 @@ import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-ap
 import { InMemoryEventBus } from '../adapters/event/in-memory-event-bus.js';
 import { RandomIdGenerator } from '../adapters/id/random-id-generator.js';
 import { McpElicitationCoordinator } from '../adapters/mcp/mcp-elicitation-coordinator.js';
-import { SdkMcpConnectionManager } from '../adapters/mcp/sdk-mcp-connection-manager.js';
+import { BindableMcpControl } from '../adapters/mcp/bindable-mcp-control.js';
+import { McpToolHostAdapter } from '../adapters/mcp/mcp-tool-host-adapter.js';
 import { ImageAssetResolvingModelClient } from '../adapters/model/image-asset-resolving-model-client.js';
 import { HttpDesktopNativeBridge } from '../adapters/native/http-desktop-native-bridge.js';
 import { NativeBridgeProxyFetch } from '../adapters/network/native-bridge-proxy-fetch.js';
@@ -32,8 +33,6 @@ import { ArtifactToolHost } from '../adapters/tool/artifact-tool-host.js';
 import { BrowserToolHost } from '../adapters/tool/browser-tool-host.js';
 import { CompositeToolHost } from '../adapters/tool/composite-tool-host.js';
 import { ExtensionToolHost } from '../adapters/tool/extension-tool-host.js';
-import { McpManagementToolHost } from '../adapters/tool/mcp-management-tool-host.js';
-import { McpRuntimeToolHost } from '../adapters/tool/mcp-runtime-tool-host.js';
 import { MemoryToolHost } from '../adapters/tool/memory-tool-host.js';
 import { PcLocalToolHost } from '../adapters/tool/pc-local/pc-local-tool-host.js';
 import { PluginBundleToolHost } from '../adapters/tool/plugin-bundle-tool-host.js';
@@ -109,19 +108,15 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const usageRecorder = new BindableUsageRecorder();
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
   const mcpElicitations = new McpElicitationCoordinator(approvalGate, eventWriter, clock, ids);
-  const mcpConnections = new SdkMcpConnectionManager({
-    nativeBridge,
-    elicitationCoordinator: mcpElicitations,
-    fetchImpl: networkProxyFetch.forRoute(),
-    resolveNetworkEnvironment: () => networkProxyFetch.environmentForRoute(),
-  });
+  const mcpControl = new BindableMcpControl();
+  const mcpToolHost = new McpToolHostAdapter();
   const policyAmendmentStore = new FilePolicyAmendmentStore(runtimeDataDir);
   const persistentToolApprovalStore = new FilePersistentToolApprovalStore(runtimeDataDir);
   const memoryStore = new FileMemoryStore(runtimeDataDir, clock, ids);
   const builtinSkillsDir =
     options.builtinSkillsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_SKILLS_DIR ?? path.join(process.cwd(), 'skills');
   const fileSkillRegistry = new FileSkillRegistry(builtinSkillsDir, runtimeDataDir);
-  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpConnections);
+  const skillRegistry = new SkillMcpDependencyCoordinator(fileSkillRegistry, mcpStore, mcpControl);
   const builtinPluginsDir =
     options.builtinPluginsDir ?? process.env.SETSUNA_DESKTOP_BUILTIN_PLUGINS_DIR ?? path.join(process.cwd(), 'plugins');
   const extensionState = new FileExtensionStateStore(runtimeDataDir);
@@ -129,7 +124,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     runtimeDataDir,
     fileSkillRegistry,
     mcpStore,
-    mcpConnections,
+    mcpControl,
     configStore,
     clock,
     extensionState,
@@ -188,8 +183,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const toolHost = new CompositeToolHost([
     new UserInputToolHost(approvalGate, eventWriter, clock, ids),
     browserToolHost,
-    new McpManagementToolHost(mcpStore, mcpConnections),
-    new McpRuntimeToolHost(mcpStore, mcpConnections),
+    mcpToolHost,
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
     new ExtensionToolHost(extensionManager),
     new WorkspaceImageToolHost(workspaceProjects),
@@ -250,9 +244,10 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     modelClient,
     providerModelClient,
     networkProxyFetch,
-    mcpConnections,
+    mcpControl,
     mcpElicitations,
     mcpStore,
+    mcpToolHost,
     nativeBridge,
     persistentToolApprovalStore,
     policyAmendmentStore,

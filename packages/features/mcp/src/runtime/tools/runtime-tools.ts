@@ -5,21 +5,17 @@ import type {
   RuntimeMcpToolInfo,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { McpClientRuntime, McpRequestContext } from '../../ports/mcp-client-runtime.js';
-import type { McpStore } from '../../ports/mcp-store.js';
+import type { McpControl, McpOperationContext } from '../../contracts/control.js';
 import type {
-  ToolExecutionContext,
-  ToolExecutionPreview,
-  ToolExecutionResult,
-  ToolExternalContext,
-  ToolHost,
-  ToolRuntimeProfile,
-} from '../../ports/tool-host.js';
-import { errorMessage } from '../../shared/node-errors.js';
-import { recordInput } from '../../shared/unknown.js';
-import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../../loop/tools/tool-output-budget.js';
-import { mcpToolExecutionResult } from '../mcp/mcp-tool-result.js';
-import { threadScopeId } from '../mcp/sdk-mcp-connection-manager.js';
+  McpToolExternalContext,
+  McpToolExecutionPreview,
+  McpToolExecutionResult,
+  McpToolRunContext,
+  McpToolRuntimeProfile,
+} from '../../contracts/runtime-tools.js';
+import { TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS } from '../tool-output-budget.js';
+import { errorMessage, recordInput } from '../shared.js';
+import { mcpToolExecutionResult } from './mcp-tool-result.js';
 
 type McpToolMapping = {
   name: string;
@@ -79,17 +75,17 @@ const readMcpResourceTool: RuntimeToolDefinition = {
  * 将实时 MCP 清单映射为模型工具。
  *
  * 启用 server 并限定 allowed/disabled tools 是 MCP 的执行授权边界；产品不再提供
- * 逐次调用确认或信任级别，因此这里有意不返回 ToolHost approval requirement。
+ * 逐次调用确认或信任级别，因此这里有意不返回 approval requirement。
  */
-export class McpRuntimeToolHost implements ToolHost {
-  private readonly mappingsByContext = new WeakMap<ToolExecutionContext, McpToolMapping[]>();
+export class McpRuntimeTools {
+  private readonly mappingsByContext = new WeakMap<object, McpToolMapping[]>();
 
   constructor(
-    private readonly mcpStore: McpStore,
-    private readonly mcpClient: McpClientRuntime,
+    private readonly mcpStore: { listServerInputs(): Promise<RuntimeMcpServerInput[]> },
+    private readonly mcpControl: McpControl,
   ) {}
 
-  async listTools(context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+  async listTools(context: McpOperationContext): Promise<RuntimeToolDefinition[]> {
     const servers = await this.enabledServers();
     const mappings = await this.listToolMappings(servers, context);
     this.mappingsByContext.set(context, mappings);
@@ -104,18 +100,19 @@ export class McpRuntimeToolHost implements ToolHost {
     return [...resourceTools, ...mappedTools];
   }
 
-  /**
-   * MCP 工具与 MCP resource 工具统一走 deferred 暴露,并在结果进入模型上下文前
-   * 应用 8k token 预算。
-   */
-  toolRuntimeProfile(): ToolRuntimeProfile | null {
+  toolRuntimeProfile(): McpToolRuntimeProfile | null {
     return {
       exposure: 'deferred',
       modelOutputTokenLimit: TOOL_OUTPUT_BUDGET_SHELL_GIT_MCP_TOKENS,
     };
   }
 
-  systemPrompt(): string {
+  systemPrompt(_context: McpOperationContext, request?: { tools: RuntimeToolDefinition[] }): string | null {
+    if (request) {
+      const hasRuntime = request.tools.some((tool) => tool.name.startsWith('mcp__'));
+      const hasResource = request.tools.some((tool) => RESOURCE_TOOL_NAMES.has(tool.name));
+      if (!hasRuntime && !hasResource) return null;
+    }
     return [
       'Enabled MCP server tools are runtime capabilities with names prefixed by their server key.',
       'MCP tools are deferred: use tool_search to activate the concrete tools you need, then call them after their definitions are appended to your next request.',
@@ -126,23 +123,27 @@ export class McpRuntimeToolHost implements ToolHost {
   }
 
   async externalContext(
-    context: ToolExecutionContext,
+    context: McpOperationContext,
     request?: { tools: RuntimeToolDefinition[] },
-  ): Promise<ToolExternalContext[]> {
+  ): Promise<McpToolExternalContext[]> {
     const servers = await this.enabledServers();
     const selectedServers = request
       ? await this.serversOwningAdvertisedTools(context, request.tools, servers)
       : servers;
     const snapshots = await Promise.all(selectedServers.map(async (server) => {
-      const snapshot = await this.mcpClient.snapshot(server, mcpContext(context)).catch(() => null);
+      const snapshot = await this.mcpControl.snapshot(server.key, mcpContext(context)).catch(() => null);
       return snapshot?.instructions
         ? { id: `mcp_${safeToolNamePart(server.key)}`, label: server.label ?? server.key, content: snapshot.instructions }
         : null;
     }));
-    return snapshots.filter((item): item is ToolExternalContext => Boolean(item));
+    return snapshots.filter((item): item is McpToolExternalContext => Boolean(item));
   }
 
-  async previewToolCall(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
+  async approvalForTool(): Promise<null> {
+    return null;
+  }
+
+  async previewToolCall(name: string, input: unknown, context: McpOperationContext): Promise<McpToolExecutionPreview | null> {
     if (RESOURCE_TOOL_NAMES.has(name)) {
       return { argumentsPreview: JSON.stringify(input ?? {}), resultPreview: name };
     }
@@ -157,15 +158,15 @@ export class McpRuntimeToolHost implements ToolHost {
     };
   }
 
-  async runTool(name: string, input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  async runTool(name: string, input: unknown, context: McpToolRunContext): Promise<McpToolExecutionResult> {
     if (name === LIST_MCP_RESOURCES_TOOL_NAME) return this.listResources(input, context);
     if (name === LIST_MCP_RESOURCE_TEMPLATES_TOOL_NAME) return this.listResourceTemplates(input, context);
     if (name === READ_MCP_RESOURCE_TOOL_NAME) return this.readResource(input, context);
 
     const mapping = await this.findToolMapping(name, context);
     if (!mapping) throw new Error(`Unknown MCP tool: ${name}`);
-    const result = await this.mcpClient.callTool(
-      mapping.server,
+    const result = await this.mcpControl.callTool(
+      mapping.server.key,
       mapping.tool.name,
       input,
       mcpContext(context, name),
@@ -175,11 +176,11 @@ export class McpRuntimeToolHost implements ToolHost {
     return execution;
   }
 
-  private async listResources(input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  private async listResources(input: unknown, context: McpOperationContext): Promise<McpToolExecutionResult> {
     const servers = await this.selectedServers(input);
     const results = await Promise.all(servers.map(async (server) => {
       try {
-        const resources = await this.mcpClient.listResources(server, mcpContext(context));
+        const resources = await this.mcpControl.listResources(server.key, mcpContext(context));
         return { server: server.key, resources };
       } catch (error) {
         return { server: server.key, resources: [] as RuntimeMcpResource[], error: errorMessage(error) };
@@ -188,11 +189,11 @@ export class McpRuntimeToolHost implements ToolHost {
     return externalJsonResult(results);
   }
 
-  private async listResourceTemplates(input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  private async listResourceTemplates(input: unknown, context: McpOperationContext): Promise<McpToolExecutionResult> {
     const servers = await this.selectedServers(input);
     const results = await Promise.all(servers.map(async (server) => {
       try {
-        const resourceTemplates = await this.mcpClient.listResourceTemplates(server, mcpContext(context));
+        const resourceTemplates = await this.mcpControl.listResourceTemplates(server.key, mcpContext(context));
         return { server: server.key, resourceTemplates };
       } catch (error) {
         return { server: server.key, resourceTemplates: [] as RuntimeMcpResourceTemplate[], error: errorMessage(error) };
@@ -201,18 +202,18 @@ export class McpRuntimeToolHost implements ToolHost {
     return externalJsonResult(results);
   }
 
-  private async readResource(input: unknown, context: ToolExecutionContext): Promise<ToolExecutionResult> {
+  private async readResource(input: unknown, context: McpOperationContext): Promise<McpToolExecutionResult> {
     const record = recordInput(input);
     const serverKey = requiredString(record.server, 'server');
     const uri = requiredString(record.uri, 'uri');
     const server = (await this.enabledServers()).find((candidate) => candidate.key === serverKey);
     if (!server) throw new Error(`Enabled MCP server not found: ${serverKey}`);
-    const response = await this.mcpClient.readResource(server, uri, mcpContext(context));
+    const response = await this.mcpControl.readResource(serverKey, uri, mcpContext(context));
     return mcpToolExecutionResult({
       content: response.contents.map((resource) => ({ type: 'resource', resource })),
       isError: false,
       ...(response._meta !== undefined ? { _meta: response._meta } : {}),
-    }, context, server.key, READ_MCP_RESOURCE_TOOL_NAME);
+    }, context as McpToolRunContext, server.key, READ_MCP_RESOURCE_TOOL_NAME);
   }
 
   private async selectedServers(input: unknown): Promise<RuntimeMcpServerInput[]> {
@@ -224,7 +225,7 @@ export class McpRuntimeToolHost implements ToolHost {
     return [server];
   }
 
-  private async findToolMapping(name: string, context: ToolExecutionContext): Promise<McpToolMapping | null> {
+  private async findToolMapping(name: string, context: McpOperationContext): Promise<McpToolMapping | null> {
     let mappings = this.mappingsByContext.get(context);
     if (!mappings) {
       mappings = await this.listToolMappings(await this.enabledServers(), context);
@@ -234,7 +235,7 @@ export class McpRuntimeToolHost implements ToolHost {
   }
 
   private async serversOwningAdvertisedTools(
-    context: ToolExecutionContext,
+    context: McpOperationContext,
     tools: RuntimeToolDefinition[],
     servers: RuntimeMcpServerInput[],
   ): Promise<RuntimeMcpServerInput[]> {
@@ -260,11 +261,11 @@ export class McpRuntimeToolHost implements ToolHost {
 
   private async listToolMappings(
     servers: RuntimeMcpServerInput[],
-    context: ToolExecutionContext,
+    context: McpOperationContext,
   ): Promise<McpToolMapping[]> {
     const liveInventories = await Promise.all(servers.map(async (server) => {
       try {
-        return { server, tools: await this.mcpClient.listTools(server, mcpContext(context)) };
+        return { server, tools: await this.mcpControl.listTools(server.key, mcpContext(context)) };
       } catch {
         return { server, tools: [] };
       }
@@ -283,24 +284,14 @@ export class McpRuntimeToolHost implements ToolHost {
   }
 }
 
-function mcpContext(context: ToolExecutionContext, toolName?: string): McpRequestContext {
+function mcpContext(context: McpOperationContext, toolName?: string): McpOperationContext {
   return {
-    scopeId: threadScopeId(context.threadId),
-    threadId: context.threadId,
+    ...(context.threadId ? { threadId: context.threadId } : {}),
     ...(context.turnId ? { turnId: context.turnId } : {}),
     ...(context.toolCallId ? { toolCallId: context.toolCallId } : {}),
     ...(toolName ? { toolName } : {}),
     ...(context.signal ? { signal: context.signal } : {}),
-    ...(context.onToolOutputDelta
-      ? {
-          onProgress: (progress: { progress: number; total?: number; message?: string }) => {
-            const total = progress.total !== undefined ? `/${progress.total}` : '';
-            context.onToolOutputDelta?.({
-              delta: `${progress.message ? `${progress.message} ` : ''}${progress.progress}${total}\n`,
-            });
-          },
-        }
-      : {}),
+    ...(context.onProgress ? { onProgress: context.onProgress } : {}),
   };
 }
 
@@ -333,7 +324,7 @@ function validInputSchema(value: Record<string, unknown> | undefined): Record<st
   return value;
 }
 
-function externalJsonResult(value: unknown): ToolExecutionResult {
+function externalJsonResult(value: unknown): McpToolExecutionResult {
   const content = JSON.stringify(value, null, 2);
   return {
     content,

@@ -1,0 +1,26 @@
+{
+  "name": "@setsuna-desktop/feature-mcp",
+  "version": "0.1.0",
+  "description": "MCP SDK client, server configuration, and runtime MCP tools for Setsuna Desktop.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@setsuna-desktop/feature-core": "workspace:*"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

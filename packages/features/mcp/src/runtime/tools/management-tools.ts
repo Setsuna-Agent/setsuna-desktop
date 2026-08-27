@@ -1,19 +1,12 @@
 import {
-  mergeRuntimeMcpServerInput,
   type RuntimeMcpServer,
   type RuntimeMcpServerInput,
   type RuntimeMcpTransport,
   type RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
-import type { McpStore } from '../../ports/mcp-store.js';
-import type {
-  ToolExecutionContext,
-  ToolExecutionPreview,
-  ToolExecutionResult,
-  ToolHost,
-} from '../../ports/tool-host.js';
-import { recordInput } from '../../shared/unknown.js';
+import type { McpControl } from '../../contracts/control.js';
+import type { McpToolApprovalRequirement, McpToolExecutionResult } from '../../contracts/runtime-tools.js';
+import { recordInput } from '../shared.js';
 
 const configureMcpToolName = 'configure_mcp_server';
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -168,13 +161,12 @@ const configureMcpTool: RuntimeToolDefinition = {
   },
 };
 
-export class McpManagementToolHost implements ToolHost {
-  constructor(
-    private readonly mcpStore: McpStore,
-    private readonly mcpClient: McpClientRuntime,
-  ) {}
+export const configureMcpServerToolName = configureMcpToolName;
 
-  async listTools(_context: ToolExecutionContext): Promise<RuntimeToolDefinition[]> {
+export class McpManagementTools {
+  constructor(private readonly mcpControl: McpControl) {}
+
+  listTools(): RuntimeToolDefinition[] {
     return [configureMcpTool];
   }
 
@@ -186,35 +178,39 @@ export class McpManagementToolHost implements ToolHost {
     ].join('\n');
   }
 
-  async approvalForTool(name: string, input: unknown, _context?: ToolExecutionContext): Promise<{ reason: string; argumentsPreview?: string } | null> {
+  async approvalForTool(name: string, input: unknown): Promise<McpToolApprovalRequirement | null> {
     if (name !== configureMcpToolName) return null;
-    const preview = await this.mcpPreview(input);
+    const list = await this.mcpControl.listServers();
+    const normalized = normalizeMcpInput(input);
+    const existing = list.servers.find((server) => server.key === normalized.key);
+    const preview = mcpPreviewPayload(normalized, list.configPath, existing);
     return {
       reason: `${preview.action === 'update' ? '更新' : '创建'} MCP 服务：${preview.label || preview.key}`,
       argumentsPreview: JSON.stringify(preview).slice(0, 1200),
     };
   }
 
-  async previewToolCall(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionPreview | null> {
+  async previewToolCall(name: string, input: unknown): Promise<{ argumentsPreview?: string; resultPreview?: string; integrityToken?: string } | null> {
     if (name !== configureMcpToolName) return null;
+    const normalized = normalizeMcpInput(input);
+    const list = await this.mcpControl.listServers();
+    const existing = list.servers.find((server) => server.key === normalized.key);
     return {
-      resultPreview: JSON.stringify(await this.mcpPreview(input)),
+      resultPreview: JSON.stringify(mcpPreviewPayload(normalized, list.configPath, existing)),
     };
   }
 
-  async runTool(name: string, input: unknown, _context?: ToolExecutionContext): Promise<ToolExecutionResult> {
+  async runTool(name: string, input: unknown): Promise<McpToolExecutionResult> {
     if (name !== configureMcpToolName) throw new Error(`Unknown tool: ${name}`);
 
     const normalized = normalizeMcpInput(input);
-    const before = await this.mcpStore.listServers();
+    const before = await this.mcpControl.listServers();
     const existing = before.servers.find((server) => server.key === normalized.key);
-    const existingInput = (await this.mcpStore.listServerInputs()).find((server) => server.key === normalized.key);
-    const discovery = await discoverToolsForSave(mergeRuntimeMcpServerInput(existingInput, normalized), this.mcpClient);
+    const discovery = await this.discoverToolsForSave(normalized);
     const inputToSave = discovery.tools.length ? { ...normalized, tools: discovery.tools } : normalized;
-    const savedList = await this.mcpStore.upsertServer(inputToSave);
+    const savedList = await this.mcpControl.upsertServer(inputToSave);
     const saved = savedList.servers.find((server) => server.key === normalized.key);
     if (!saved) throw new Error(`MCP server was not saved: ${normalized.key}`);
-    await this.mcpClient.invalidateServer(saved.key);
     const enabledToolCount = mcpEnabledToolCount(saved);
 
     return {
@@ -237,17 +233,61 @@ export class McpManagementToolHost implements ToolHost {
     };
   }
 
-  private async mcpPreview(input: unknown): Promise<ReturnType<typeof mcpPreviewPayload>> {
-    const normalized = normalizeMcpInput(input);
-    const list = await this.mcpStore.listServers();
-    const existing = list.servers.find((server) => server.key === normalized.key);
-    return mcpPreviewPayload(existing ? 'update' : 'create', normalized, list.configPath, existing);
+  private async discoverToolsForSave(input: RuntimeMcpServerInput) {
+    if (input.tools?.length) return { tools: input.tools, errors: [] };
+    return this.mcpControl.discoverTools(input);
   }
 }
 
-async function discoverToolsForSave(input: RuntimeMcpServerInput, mcpClient: McpClientRuntime) {
-  if (input.tools?.length) return { tools: input.tools, errors: [] };
-  return mcpClient.discoverTools(input);
+function mcpPreviewPayload(
+  input: RuntimeMcpServerInput,
+  configPath: string,
+  existing?: RuntimeMcpServer,
+) {
+  return {
+    action: existing ? 'update' : 'create',
+    key: input.key,
+    label: input.label ?? existing?.label ?? input.key,
+    description: input.description ?? existing?.description,
+    transport: input.transport ?? existing?.transport ?? inferTransport(input),
+    command: input.command ?? existing?.command,
+    args: input.args ?? existing?.args ?? [],
+    url: input.url ?? existing?.url,
+    timeoutMs: input.timeoutMs ?? existing?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    enabled: input.enabled ?? existing?.enabled ?? true,
+    allowedTools: input.allowedTools ?? existing?.allowedTools ?? [],
+    disabledTools: input.disabledTools ?? existing?.disabledTools ?? [],
+    oauthClientId: input.oauthClientId ?? existing?.oauthClientId,
+    oauthResource: input.oauthResource ?? existing?.oauthResource,
+    envKeys: input.env || input.envHttpHeaders || input.bearerTokenEnvVar
+      ? mcpEnvKeys(input)
+      : existing?.envKeys ?? [],
+    headerKeys: input.headers || input.envHttpHeaders || input.bearerTokenEnvVar
+      ? mcpHeaderKeys(input)
+      : existing?.headerKeys ?? [],
+    configPath,
+  };
+}
+
+export function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer, configPath: string) {
+  return {
+    action,
+    key: server.key,
+    label: server.label,
+    transport: server.transport,
+    command: server.command,
+    args: server.args,
+    url: server.url,
+    timeoutMs: server.timeoutMs,
+    enabled: server.enabled,
+    allowedTools: server.allowedTools,
+    disabledTools: server.disabledTools,
+    oauthClientId: server.oauthClientId,
+    oauthResource: server.oauthResource,
+    envKeys: server.envKeys,
+    headerKeys: server.headerKeys,
+    configPath,
+  };
 }
 
 function mcpEnabledToolCount(server: RuntimeMcpServer): number {
@@ -285,58 +325,6 @@ function normalizeMcpInput(input: unknown): RuntimeMcpServerInput {
   };
 
   return omitUndefined(normalized);
-}
-
-function mcpPreviewPayload(
-  action: 'create' | 'update',
-  input: RuntimeMcpServerInput,
-  configPath: string,
-  existing?: RuntimeMcpServer,
-) {
-  return {
-    action,
-    key: input.key,
-    label: input.label ?? existing?.label ?? input.key,
-    description: input.description ?? existing?.description,
-    transport: input.transport ?? existing?.transport ?? inferTransport(input),
-    command: input.command ?? existing?.command,
-    args: input.args ?? existing?.args ?? [],
-    url: input.url ?? existing?.url,
-    timeoutMs: input.timeoutMs ?? existing?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    enabled: input.enabled ?? existing?.enabled ?? true,
-    allowedTools: input.allowedTools ?? existing?.allowedTools ?? [],
-    disabledTools: input.disabledTools ?? existing?.disabledTools ?? [],
-    oauthClientId: input.oauthClientId ?? existing?.oauthClientId,
-    oauthResource: input.oauthResource ?? existing?.oauthResource,
-    envKeys: input.env || input.envHttpHeaders || input.bearerTokenEnvVar
-      ? mcpEnvKeys(input)
-      : existing?.envKeys ?? [],
-    headerKeys: input.headers || input.envHttpHeaders || input.bearerTokenEnvVar
-      ? mcpHeaderKeys(input)
-      : existing?.headerKeys ?? [],
-    configPath,
-  };
-}
-
-function mcpResultPreview(action: 'create' | 'update', server: RuntimeMcpServer, configPath: string) {
-  return {
-    action,
-    key: server.key,
-    label: server.label,
-    transport: server.transport,
-    command: server.command,
-    args: server.args,
-    url: server.url,
-    timeoutMs: server.timeoutMs,
-    enabled: server.enabled,
-    allowedTools: server.allowedTools,
-    disabledTools: server.disabledTools,
-    oauthClientId: server.oauthClientId,
-    oauthResource: server.oauthResource,
-    envKeys: server.envKeys,
-    headerKeys: server.headerKeys,
-    configPath,
-  };
 }
 
 function inferTransport(input: RuntimeMcpServerInput): RuntimeMcpTransport {

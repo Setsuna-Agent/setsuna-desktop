@@ -1,7 +1,7 @@
 import { StdioClientTransport, getDefaultEnvironment } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
-import type { FetchImpl } from '../network/fetch-impl.js';
+import type { McpNetworkEnvironment } from '../../../contracts/control.js';
 import type { McpOAuthCoordinator } from './mcp-oauth-coordinator.js';
 
 const RESERVED_HTTP_HEADERS = new Set([
@@ -13,7 +13,7 @@ const RESERVED_HTTP_HEADERS = new Set([
 ]);
 
 export type ManagedMcpTransport = StdioClientTransport | StreamableHTTPClientTransport;
-export type McpNetworkEnvironment = Record<string, string | null>;
+export type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
 
 export async function createMcpTransport(
   server: RuntimeMcpServerInput,

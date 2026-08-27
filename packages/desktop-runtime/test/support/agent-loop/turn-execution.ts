@@ -3,8 +3,8 @@ import type {
   ModelStreamEvent,
   RuntimeToolDefinition
 } from '@setsuna-desktop/contracts';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
-import type { McpStore } from '../../../src/ports/mcp-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import { type ToolExecutionContext, type ToolHost, type ToolTurnCleanupOutcome } from '../../../src/ports/tool-host.js';
 

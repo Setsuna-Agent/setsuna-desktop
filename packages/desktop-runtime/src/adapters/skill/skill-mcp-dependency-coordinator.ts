@@ -9,8 +9,7 @@ import type {
   RuntimeSkillPatch,
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
-import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
-import type { McpStore } from '../../ports/mcp-store.js';
+import type { McpControl, McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type {
   SkillActivationContext,
   SkillInjection,
@@ -20,7 +19,7 @@ import type {
 } from '../../ports/skill-registry.js';
 import { errorMessage } from '../../shared/node-errors.js';
 
-type SkillMcpClient = Pick<McpClientRuntime, 'authStatus' | 'invalidateServer' | 'login'>;
+type SkillMcpClient = Pick<McpControl, 'authStatus' | 'invalidateServer' | 'login'>;
 
 /** 将声明式 Skill 元数据与实时 MCP 安装及认证状态结合。 */
 export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDependencyManager {
@@ -128,7 +127,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
     if (!compatibleDependency(server, dependency)) throw new Error(`MCP dependency '${serverKey}' conflicts with the installed server.`);
     if (server.enabled === false) await this.mcpStore.updateServer(server.key, { enabled: true });
     const current = (await this.mcpStore.listServerInputs()).find((item) => item.key === serverKey) ?? server;
-    await this.mcpClient.login(current);
+    await this.mcpClient.login(current.key);
     return this.requiredSkill(skillId, true);
   }
 
@@ -169,7 +168,7 @@ export class SkillMcpDependencyCoordinator implements SkillRegistry, SkillMcpDep
         return { ...dependency, status: 'conflict', error: 'An incompatible MCP server already uses this key.' };
       }
       if (server.enabled === false) return { ...dependency, status: 'disabled' };
-      const auth = await this.mcpClient.authStatus(server).catch((error) => ({ status: 'oAuthError' as const, error: errorMessage(error) }));
+      const auth = await this.mcpClient.authStatus(server.key).catch((error) => ({ status: 'oAuthError' as const, error: errorMessage(error) }));
       if (auth.status === 'notLoggedIn' || auth.status === 'oAuthExpired' || auth.status === 'oAuthLoggingIn') {
         return { ...dependency, status: 'authRequired', authStatus: auth.status, ...(auth.error ? { error: auth.error } : {}) };
       }

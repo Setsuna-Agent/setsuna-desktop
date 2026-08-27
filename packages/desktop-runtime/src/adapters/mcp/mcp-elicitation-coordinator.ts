@@ -1,10 +1,14 @@
-import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/types.js';
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeMcpElicitation,
   RuntimeMcpElicitationResponse,
   RuntimeMcpElicitationSchema,
 } from '@setsuna-desktop/contracts';
+import type {
+  McpElicitationContext,
+  McpElicitationHandler,
+  McpElicitationRequest,
+} from '@setsuna-desktop/feature-mcp/contracts';
 import type { RuntimeEventWriter } from '../../loop/lifecycle/runtime-event-writer.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { Clock } from '../../ports/clock.js';
@@ -15,21 +19,11 @@ const MAX_SCHEMA_BYTES = 64 * 1024;
 const MAX_FORM_FIELDS = 50;
 const MAX_ELICITATION_URL_BYTES = 16 * 1024;
 
-export type McpElicitationExecutionContext = {
-  threadId: string;
-  turnId: string;
-  toolCallId: string;
-  toolName: string;
-  signal?: AbortSignal;
-};
-
-export type McpElicitationHandler = Pick<McpElicitationCoordinator, 'request'>;
-
 /**
- * 将协议级 MCP 信息征询桥接到 runtime 的可审计审批生命周期。
+ * 将协议无关的 MCP 信息征询桥接到 runtime 的可审计审批生命周期。
  * 表单回答保留在内存门控中，绝不会复制到仅追加事件里。
  */
-export class McpElicitationCoordinator {
+export class McpElicitationCoordinator implements McpElicitationHandler {
   constructor(
     private readonly approvalGate: ApprovalGate,
     private readonly eventWriter: RuntimeEventWriter,
@@ -39,10 +33,10 @@ export class McpElicitationCoordinator {
 
   async request(
     serverKey: string,
-    params: ElicitRequest['params'],
-    context: McpElicitationExecutionContext,
-  ): Promise<ElicitResult> {
-    const elicitation = normalizeElicitation(serverKey, params);
+    request: McpElicitationRequest,
+    context: McpElicitationContext,
+  ): Promise<RuntimeMcpElicitationResponse> {
+    const elicitation = normalizeElicitation(serverKey, request);
     const approval = await this.approvalGate.createApproval({
       threadId: context.threadId,
       turnId: context.turnId,
@@ -87,7 +81,7 @@ export class McpElicitationCoordinator {
   }
 
   private async publishResolved(
-    context: McpElicitationExecutionContext,
+    context: McpElicitationContext,
     approvalId: string,
     decision: AnswerRuntimeApprovalInput['decision'],
     message?: string,
@@ -104,30 +98,31 @@ export class McpElicitationCoordinator {
   }
 }
 
-function normalizeElicitation(serverKey: string, params: ElicitRequest['params']): RuntimeMcpElicitation {
-  assertBoundedText(params.message, MAX_MESSAGE_BYTES, 'MCP elicitation message');
-  if (params.mode === 'url') {
-    assertBoundedText(params.url, MAX_ELICITATION_URL_BYTES, 'MCP elicitation URL');
-    const url = secureElicitationUrl(params.url);
+function normalizeElicitation(serverKey: string, request: McpElicitationRequest): RuntimeMcpElicitation {
+  assertBoundedText(request.message, MAX_MESSAGE_BYTES, 'MCP elicitation message');
+  if (request.mode === 'url') {
+    assertBoundedText(request.url, MAX_ELICITATION_URL_BYTES, 'MCP elicitation URL');
+    const url = secureElicitationUrl(request.url);
     return {
       mode: 'url',
       serverKey,
-      message: params.message,
+      message: request.message,
       displayUrl: `${url.origin}${url.pathname}`,
-      elicitationId: params.elicitationId,
+      elicitationId: request.elicitationId,
     };
   }
 
-  const schemaJson = JSON.stringify(params.requestedSchema);
+  const requestedSchema = request.requestedSchema as RuntimeMcpElicitationSchema;
+  const schemaJson = JSON.stringify(request.requestedSchema);
   assertBoundedText(schemaJson, MAX_SCHEMA_BYTES, 'MCP elicitation schema');
-  if (Object.keys(params.requestedSchema.properties).length > MAX_FORM_FIELDS) {
+  if (Object.keys(requestedSchema.properties).length > MAX_FORM_FIELDS) {
     throw new Error(`MCP elicitation form exceeds ${MAX_FORM_FIELDS} fields.`);
   }
   return {
     mode: 'form',
     serverKey,
-    message: params.message,
-    requestedSchema: structuredClone(params.requestedSchema) as RuntimeMcpElicitationSchema,
+    message: request.message,
+    requestedSchema: structuredClone(requestedSchema),
   };
 }
 
@@ -151,12 +146,9 @@ function elicitationPreview(elicitation: RuntimeMcpElicitation): string {
   });
 }
 
-function elicitationResult(response: RuntimeMcpElicitationResponse | undefined): ElicitResult {
+function elicitationResult(response: RuntimeMcpElicitationResponse | undefined): RuntimeMcpElicitationResponse {
   if (!response) throw new Error('MCP elicitation response is missing.');
-  return {
-    action: response.action,
-    ...(response.action === 'accept' && response.content ? { content: response.content } : {}),
-  };
+  return response;
 }
 
 function assertBoundedText(value: string, maxBytes: number, label: string): void {

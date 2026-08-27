@@ -12,13 +12,13 @@ import {
 } from '@setsuna-desktop/contracts';
 import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
-import type { McpStore } from '../../ports/mcp-store.js';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';

@@ -170,6 +170,8 @@ Bundle 规则见 [Plugin Bundle](../../../plugins/bundles.md)。
 
 保存时保持结构化字段，不把 command/args 拼成 shell 文本。List/status 不显示 secret 值。
 
+MCP renderer 首轮仍由宿主 Capabilities 页面持有；协议连接、OAuth、tools/resources、Agent 工具和生命周期已由 `packages/features/mcp/runtime` 统一拥有，宿主 REST/App Server 只通过 `McpControl` 兼容现有接口。
+
 ### Skills
 
 - `CapabilitiesSkillDetail.tsx`：详情、启用、默认选择、依赖状态。

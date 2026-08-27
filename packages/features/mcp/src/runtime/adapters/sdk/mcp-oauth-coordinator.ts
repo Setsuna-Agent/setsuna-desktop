@@ -6,9 +6,8 @@ import type {
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { RuntimeMcpAuthStatus, RuntimeMcpServerInput } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
-import type { DesktopNativeBridge } from '../../ports/secret-store.js';
-import { errorMessage } from '../../shared/node-errors.js';
-import type { FetchImpl } from '../network/fetch-impl.js';
+import type { McpCredentialStore } from '../../../contracts/control.js';
+import { errorMessage } from '../../shared.js';
 import { McpOAuthCallbackServer } from './mcp-oauth-callback-server.js';
 
 type StoredOAuthTokens = {
@@ -28,6 +27,8 @@ type LoginOptions = {
   timeoutMs?: number;
 };
 
+type FetchImpl = (input: string | URL, init?: RequestInit) => Promise<Response>;
+
 export class McpOAuthLoginRequiredError extends Error {
   constructor(readonly serverKey: string) {
     super(`MCP server '${serverKey}' requires OAuth login.`);
@@ -42,7 +43,8 @@ export class McpOAuthCoordinator {
   private readonly errors = new Map<string, string>();
 
   constructor(
-    private readonly nativeBridge: DesktopNativeBridge,
+    private readonly credentials: McpCredentialStore,
+    private readonly openExternal: (url: string) => Promise<void>,
     private readonly now: () => number = Date.now,
     private readonly fetchImpl: FetchImpl = globalThis.fetch,
   ) {}
@@ -50,7 +52,8 @@ export class McpOAuthCoordinator {
   providerFor(server: RuntimeMcpServerInput): OAuthClientProvider {
     return new SecureMcpOAuthProvider({
       interactive: false,
-      nativeBridge: this.nativeBridge,
+      credentials: this.credentials,
+      openExternal: this.openExternal,
       redirectUrl: 'http://127.0.0.1/oauth/callback',
       server,
       state: '',
@@ -90,10 +93,10 @@ export class McpOAuthCoordinator {
     this.loginControllers.get(server.key)?.abort(new Error(`MCP OAuth login for '${server.key}' was cancelled by logout.`));
     const keys = oauthCredentialKeys(server);
     await Promise.allSettled([
-      this.nativeBridge.delete(keys.tokens),
-      this.nativeBridge.delete(keys.client),
-      this.nativeBridge.delete(keys.verifier),
-      this.nativeBridge.delete(keys.discovery),
+      this.credentials.delete(keys.tokens),
+      this.credentials.delete(keys.client),
+      this.credentials.delete(keys.verifier),
+      this.credentials.delete(keys.discovery),
     ]);
     this.errors.delete(server.key);
   }
@@ -111,7 +114,7 @@ export class McpOAuthCoordinator {
     const error = this.errors.get(server.key);
     if (error) return { status: 'oAuthError', error };
     try {
-      const stored = await readStoredTokens(this.nativeBridge, oauthCredentialKeys(server).tokens, true);
+      const stored = await readStoredTokens(this.credentials, oauthCredentialKeys(server).tokens, true);
       if (!stored) return { status: server.oauthClientId || server.oauthResource ? 'notLoggedIn' : 'unsupported' };
       const expiresIn = stored.tokens.expires_in;
       const savedAt = Date.parse(stored.savedAt);
@@ -133,7 +136,7 @@ export class McpOAuthCoordinator {
   }
 
   private async performLogin(server: RuntimeMcpServerInput, options: LoginOptions): Promise<void> {
-    const status = await this.nativeBridge.status();
+    const status = await this.credentials.status();
     if (!status.available) {
       throw new Error(`Secure credential storage is unavailable (backend: ${status.backend}).`);
     }
@@ -141,7 +144,8 @@ export class McpOAuthCoordinator {
     const redirectUrl = await callback.start();
     const provider = new SecureMcpOAuthProvider({
       interactive: true,
-      nativeBridge: this.nativeBridge,
+      credentials: this.credentials,
+      openExternal: this.openExternal,
       redirectUrl,
       server,
       state: callback.state,
@@ -178,7 +182,8 @@ class SecureMcpOAuthProvider implements OAuthClientProvider {
 
   constructor(private readonly options: {
     interactive: boolean;
-    nativeBridge: DesktopNativeBridge;
+    credentials: McpCredentialStore;
+    openExternal: (url: string) => Promise<void>;
     redirectUrl: string;
     server: RuntimeMcpServerInput;
     state: string;
@@ -209,33 +214,33 @@ class SecureMcpOAuthProvider implements OAuthClientProvider {
 
   async clientInformation(): Promise<OAuthClientInformationMixed | undefined> {
     if (this.options.server.oauthClientId) return { client_id: this.options.server.oauthClientId };
-    return readJsonCredential<OAuthClientInformationMixed>(this.options.nativeBridge, this.keys.client, this.options.tolerateUnavailable);
+    return readJsonCredential<OAuthClientInformationMixed>(this.options.credentials, this.keys.client, this.options.tolerateUnavailable);
   }
 
   saveClientInformation(clientInformation: OAuthClientInformationMixed): Promise<void> {
-    return this.options.nativeBridge.set(this.keys.client, JSON.stringify(clientInformation));
+    return this.options.credentials.set(this.keys.client, JSON.stringify(clientInformation));
   }
 
   async tokens(): Promise<OAuthTokens | undefined> {
-    return (await readStoredTokens(this.options.nativeBridge, this.keys.tokens, this.options.tolerateUnavailable))?.tokens;
+    return (await readStoredTokens(this.options.credentials, this.keys.tokens, this.options.tolerateUnavailable))?.tokens;
   }
 
   saveTokens(tokens: OAuthTokens): Promise<void> {
     const stored: StoredOAuthTokens = { savedAt: new Date().toISOString(), tokens };
-    return this.options.nativeBridge.set(this.keys.tokens, JSON.stringify(stored));
+    return this.options.credentials.set(this.keys.tokens, JSON.stringify(stored));
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     if (!this.options.interactive) throw new McpOAuthLoginRequiredError(this.options.server.key);
-    await this.options.nativeBridge.openExternal(authorizationUrl.toString());
+    await this.options.openExternal(authorizationUrl.toString());
   }
 
   saveCodeVerifier(codeVerifier: string): Promise<void> {
-    return this.options.nativeBridge.set(this.keys.verifier, codeVerifier);
+    return this.options.credentials.set(this.keys.verifier, codeVerifier);
   }
 
   async codeVerifier(): Promise<string> {
-    const verifier = await this.options.nativeBridge.get(this.keys.verifier);
+    const verifier = await this.options.credentials.get(this.keys.verifier);
     if (!verifier) throw new Error('MCP OAuth PKCE verifier is missing.');
     return verifier;
   }
@@ -255,15 +260,15 @@ class SecureMcpOAuthProvider implements OAuthClientProvider {
     const keys = scope === 'all'
       ? [this.keys.client, this.keys.tokens, this.keys.verifier, this.keys.discovery]
       : [this.keys[scope]];
-    await Promise.allSettled(keys.map((key) => this.options.nativeBridge.delete(key)));
+    await Promise.allSettled(keys.map((key) => this.options.credentials.delete(key)));
   }
 
   saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
-    return this.options.nativeBridge.set(this.keys.discovery, JSON.stringify(state));
+    return this.options.credentials.set(this.keys.discovery, JSON.stringify(state));
   }
 
   discoveryState(): Promise<OAuthDiscoveryState | undefined> {
-    return readJsonCredential<OAuthDiscoveryState>(this.options.nativeBridge, this.keys.discovery, this.options.tolerateUnavailable);
+    return readJsonCredential<OAuthDiscoveryState>(this.options.credentials, this.keys.discovery, this.options.tolerateUnavailable);
   }
 }
 
@@ -279,20 +284,20 @@ function oauthCredentialKeys(server: RuntimeMcpServerInput) {
 }
 
 async function readStoredTokens(
-  nativeBridge: DesktopNativeBridge,
+  credentials: McpCredentialStore,
   key: string,
   tolerateUnavailable: boolean,
 ): Promise<StoredOAuthTokens | undefined> {
-  return readJsonCredential<StoredOAuthTokens>(nativeBridge, key, tolerateUnavailable);
+  return readJsonCredential<StoredOAuthTokens>(credentials, key, tolerateUnavailable);
 }
 
 async function readJsonCredential<T>(
-  nativeBridge: DesktopNativeBridge,
+  credentials: McpCredentialStore,
   key: string,
   tolerateUnavailable: boolean,
 ): Promise<T | undefined> {
   try {
-    const value = await nativeBridge.get(key);
+    const value = await credentials.get(key);
     return value ? JSON.parse(value) as T : undefined;
   } catch (error) {
     if (tolerateUnavailable) return undefined;

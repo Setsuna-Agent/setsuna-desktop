@@ -88,7 +88,7 @@ describe('AppServer dispatcher thread deletion', () => {
           calls.push(`tools:${threadId}`);
         },
       },
-      mcpConnections: {
+      mcpControl: {
         async releaseThread(threadId: string) {
           calls.push(`mcp:${threadId}`);
         },
@@ -168,7 +168,7 @@ describe('AppServer dispatcher thread deletion', () => {
           throw new Error('dynamic tools are locked');
         },
       },
-      mcpConnections: {
+      mcpControl: {
         releaseThread: async () => {
           cleanups.push('mcp');
         },
@@ -230,7 +230,7 @@ describe('AppServer dispatcher thread deletion', () => {
         withThreadDeletionBarrier: (_threadId: string, operation: () => Promise<unknown>) => operation(),
         clearAppServerDynamicTools: () => calls.push('tools'),
       },
-      mcpConnections: { releaseThread: async () => { calls.push('mcp'); } },
+      mcpControl: { releaseThread: async () => { calls.push('mcp'); } },
       threadStore: {
         async listThreads() {
           return [];

@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { chmod, copyFile, mkdir, readFile, readdir, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
-import type { McpClientRuntime } from '../../ports/mcp-client-runtime.js';
+import type { McpControl } from '@setsuna-desktop/feature-mcp/contracts';
 import type {
   InstalledPluginExtensionRecord,
   InstalledPluginRecord,
@@ -102,7 +102,7 @@ export const HOOK_EVENTS = new Set<RuntimeHookEventName>([
   'Stop',
 ]);
 
-export type PluginMcpClient = Pick<McpClientRuntime, 'invalidateServer'>;
+export type PluginMcpClient = Pick<McpControl, 'invalidateServer'>;
 
 export type PluginMcpUpdateAction =
   | { type: 'upsert'; server: RuntimeMcpServerInput }

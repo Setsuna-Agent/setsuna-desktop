@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { McpOAuthCallbackServer } from '../../../src/adapters/mcp/mcp-oauth-callback-server.js';
+import { McpOAuthCallbackServer } from '../src/runtime/adapters/sdk/mcp-oauth-callback-server.js';
 
 describe('McpOAuthCallbackServer', () => {
   it('accepts one callback only after validating OAuth state', async () => {
