@@ -23,9 +23,12 @@ import { WorkspaceFileLink } from './WorkspaceFileLink.js';
 import { markdownUrlTransform, resolveMarkdownFileReference, resolveMarkdownLinkTarget } from './markdownLinks.js';
 import { remarkAutolinkBoundaries } from './remarkAutolinkBoundaries.js';
 import {
-  resolveStreamingRevealAnimation,
+  initialStreamingRevealTimeline,
+  resolveStreamingRevealTimelineAnimation,
+  splitStreamingRevealUnits,
   type StreamingRevealAnimation,
   type StreamingRevealRange,
+  type StreamingRevealTimeline,
 } from './streamingReveal.js';
 
 type MarkdownContentBlockProps = {
@@ -56,15 +59,22 @@ type HastNode = {
 const baseRehypePlugins: MarkdownRehypePlugins = [rehypeKatex];
 const remarkPlugins = [remarkGfm, remarkAutolinkBoundaries, remarkMath];
 const streamingRevealExcludedTags = new Set(['code', 'math', 'pre', 'script', 'style']);
-const StreamingRevealTimelineContext = createContext<Map<string, number> | null>(null);
+const StreamingRevealTimelineContext = createContext<StreamingRevealTimeline | null>(null);
 
 export const MarkdownContentBlock = memo(function MarkdownContentBlock({
   content,
   revealRanges,
 }: MarkdownContentBlockProps) {
-  const revealStartedAtByKeyRef = useRef(new Map<string, number>());
-  if (!revealRanges?.length && revealStartedAtByKeyRef.current.size) {
-    revealStartedAtByKeyRef.current.clear();
+  const revealTimelineRef = useRef(initialStreamingRevealTimeline());
+  const revealTimeline = revealTimelineRef.current;
+  if (revealTimeline.startedAtByKey.size) {
+    const activeRangeKeys = new Set((revealRanges ?? []).map((range) => String(range.key)));
+    for (const key of revealTimeline.startedAtByKey.keys()) {
+      const separatorIndex = key.indexOf(':');
+      const rangeKey = separatorIndex >= 0 ? key.slice(0, separatorIndex) : key;
+      if (!activeRangeKeys.has(rangeKey)) revealTimeline.startedAtByKey.delete(key);
+    }
+    if (!revealTimeline.startedAtByKey.size) revealTimeline.nextStartAt = 0;
   }
   const rehypePlugins = useMemo<MarkdownRehypePlugins>(() => {
     if (!revealRanges?.length) return baseRehypePlugins;
@@ -75,7 +85,7 @@ export const MarkdownContentBlock = memo(function MarkdownContentBlock({
   }, [revealRanges]);
 
   return (
-    <StreamingRevealTimelineContext.Provider value={revealStartedAtByKeyRef.current}>
+    <StreamingRevealTimelineContext.Provider value={revealTimeline}>
       <ReactMarkdown
         components={markdownComponents}
         rehypePlugins={rehypePlugins}
@@ -150,7 +160,9 @@ function streamingRevealTextNodes(
     const containingRange = intersectingRanges.find((range) => (
       range.start <= startOffset && range.end >= endOffset
     ));
-    return containingRange ? [streamingRevealSpan(node, containingRange.key)] : [node];
+    return containingRange
+      ? streamingRevealSpans(node, containingRange.key, startOffset)
+      : [node];
   }
 
   const result: HastNode[] = [];
@@ -161,7 +173,9 @@ function streamingRevealTextNodes(
     if (rangeStart > cursor) result.push(streamingTextNode(node, value.slice(cursor, rangeStart)));
     if (rangeEnd > rangeStart) {
       const textNode = streamingTextNode(node, value.slice(rangeStart, rangeEnd));
-      result.push(textNode.value?.trim() ? streamingRevealSpan(textNode, range.key) : textNode);
+      result.push(...(textNode.value?.trim()
+        ? streamingRevealSpans(textNode, range.key, startOffset + rangeStart)
+        : [textNode]));
     }
     cursor = Math.max(cursor, rangeEnd);
   }
@@ -173,11 +187,22 @@ function streamingTextNode(node: HastNode, value: string): HastNode {
   return { ...node, position: undefined, value };
 }
 
-function streamingRevealSpan(textNode: HastNode, revealKey: number): HastNode {
+function streamingRevealSpans(
+  textNode: HastNode,
+  revealKey: number,
+  sourceOffset: number,
+): HastNode[] {
+  return splitStreamingRevealUnits(textNode.value ?? '').map((unit) => streamingRevealSpan(
+    streamingTextNode(textNode, unit.text),
+    `${revealKey}:${sourceOffset + unit.start}`,
+  ));
+}
+
+function streamingRevealSpan(textNode: HastNode, revealKey: string): HastNode {
   return {
     children: [textNode],
     properties: { 'data-stream-reveal': revealKey },
-    // Intercepted below and emitted as a keyed span so every chunk restarts its transition.
+    // Intercepted below and emitted as a keyed span on the shared visual timeline.
     tagName: 'mark',
     type: 'element',
   };
@@ -204,7 +229,7 @@ function MarkdownStreamingReveal({
   ...props
 }: MarkdownStreamingRevealProps) {
   const revealKey = String(props['data-stream-reveal'] ?? '');
-  const startedAtByKey = useContext(StreamingRevealTimelineContext);
+  const timeline = useContext(StreamingRevealTimelineContext);
   const animationRef = useRef<{
     key: string;
     value: StreamingRevealAnimation;
@@ -213,7 +238,9 @@ function MarkdownStreamingReveal({
     const now = typeof performance === 'undefined' ? Date.now() : performance.now();
     animationRef.current = {
       key: revealKey,
-      value: resolveStreamingRevealAnimation(startedAtByKey ?? new Map(), revealKey, now),
+      value: timeline
+        ? resolveStreamingRevealTimelineAnimation(timeline, revealKey, now)
+        : { active: false, delayMs: 0 },
     };
   }
   const animation = animationRef.current.value;

@@ -30,24 +30,26 @@
 }
 
 .chat-markdown__stream-reveal.is-entering {
-  position: relative;
-  /* Do not retain the filter layer after the reveal; the final keyframe already
-     matches ordinary text, so releasing it cannot change the visual result. */
+  display: inline-block;
+  white-space: pre-wrap;
   animation: chat-markdown-stream-reveal 280ms cubic-bezier(0.16, 1, 0.3, 1)
     var(--chat-markdown-stream-reveal-delay, 0ms);
+  /* Positive stagger delays must stay hidden before starting. `backwards` releases
+     the filter/transform layer after completion instead of retaining every word. */
+  animation-fill-mode: backwards;
 }
 
 @keyframes chat-markdown-stream-reveal {
   from {
-    top: 3px;
     opacity: 0;
-    filter: blur(1.6px);
+    filter: blur(2px);
+    transform: translateY(0.18em);
   }
 
   to {
-    top: 0;
     opacity: 1;
     filter: blur(0);
+    transform: translateY(0);
   }
 }
 

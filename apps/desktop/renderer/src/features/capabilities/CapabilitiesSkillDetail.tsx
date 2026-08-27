@@ -5,6 +5,7 @@ import { useI18n, type Translate } from '../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { Button, EmptyState, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginFilePreview } from './CapabilitiesPluginItemDialog.js';
+import { CapabilitiesTopbarBreadcrumb } from './CapabilitiesTopbarBreadcrumb.js';
 
 export function CapabilitiesSkillDetail({
   detail,
@@ -65,9 +66,14 @@ export function CapabilitiesSkillDetail({
     if (key === 'use-in-conversation') onUseInConversation(activeSkill.id);
   };
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
-      <PageHeader
+    <>
+      <CapabilitiesTopbarBreadcrumb
+        currentLabel={activeSkill.name || t('capabilities.skill.detailFallback')}
+        parentLabel={t('capabilities.tab.skills')}
         onBack={onBack}
+      />
+      <section className="desktop-capabilities-detail desktop-capabilities-skill-detail">
+      <PageHeader
         title={activeSkill.name || t('capabilities.skill.detailFallback')}
         subtitle={t(skillKindLabel(activeSkill.kind))}
         actions={
@@ -169,7 +175,8 @@ export function CapabilitiesSkillDetail({
           </section>
         </>
       ) : null}
-    </section>
+      </section>
+    </>
   );
 }
 

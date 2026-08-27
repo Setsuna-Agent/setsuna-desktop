@@ -2,7 +2,6 @@ import type { RuntimePluginMarketplaceItem } from '@setsuna-desktop/contracts';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
 import { CapabilitiesPluginInstallButton } from './CapabilitiesPluginInstallButton.js';
-import { pluginCapabilitySummary } from './pluginDisplay.js';
 import { localizedPluginCopy } from './pluginLocalization.js';
 
 export function CapabilitiesPluginListItem({
@@ -25,7 +24,6 @@ export function CapabilitiesPluginListItem({
         <span className="desktop-capability-list-item__copy">
           <strong>{copy.name}</strong>
           <span>{copy.description || t('capabilities.market.listFallback')}</span>
-          <small>{plugin.publisher || 'Setsuna'} · {pluginCapabilitySummary(plugin, t)}</small>
         </span>
       </button>
       <CapabilitiesPluginInstallButton plugin={plugin} installing={installing} onInstall={onInstall} />

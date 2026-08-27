@@ -1,5 +1,5 @@
 import type { RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { BookOpen } from 'lucide-react';
+import { WandSparkles } from 'lucide-react';
 import { PluginIcon } from './PluginIcon.js';
 
 type SkillIconSource = Pick<RuntimeSkillSummary, 'icon' | 'kind' | 'pluginId'>;
@@ -39,7 +39,7 @@ export function SkillIcon({
       data-skill-icon="skill"
       aria-hidden="true"
     >
-      <BookOpen strokeWidth={1.75} />
+      <WandSparkles strokeWidth={2} />
     </span>
   );
 }

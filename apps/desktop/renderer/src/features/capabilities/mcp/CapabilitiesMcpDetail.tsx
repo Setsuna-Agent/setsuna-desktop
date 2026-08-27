@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { EditIcon } from '../../../shared/ui/EditIcon.js';
 import { Button, IconButton, PageHeader } from '../../../shared/ui/primitives.js';
+import { CapabilitiesTopbarBreadcrumb } from '../CapabilitiesTopbarBreadcrumb.js';
 import { mcpToolStats } from './mcp-editor-model.js';
 
 export function CapabilitiesMcpDetail({
@@ -64,9 +65,10 @@ export function CapabilitiesMcpDetail({
   };
 
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-skill-detail desktop-capabilities-mcp-detail">
+    <>
+      <CapabilitiesTopbarBreadcrumb currentLabel={server.label} parentLabel="MCP" onBack={onBack} />
+      <section className="desktop-capabilities-detail desktop-capabilities-skill-detail desktop-capabilities-mcp-detail">
       <PageHeader
-        onBack={onBack}
         title={server.label}
         subtitle={t(mcpSourceLabel(server.source))}
         actions={
@@ -164,7 +166,8 @@ export function CapabilitiesMcpDetail({
           <div className="desktop-capabilities-skill-empty">{t('capabilities.mcp.toolsNotFetched')}</div>
         )}
       </section>
-    </section>
+      </section>
+    </>
   );
 }
 

@@ -312,7 +312,7 @@
 }
 
 .desktop-capabilities-skill-detail {
-  width: min(940px, 100%);
+  width: min(var(--desktop-capabilities-content-width), 100%);
   min-height: 0;
   margin-right: auto;
   margin-left: auto;
@@ -535,7 +535,7 @@
 
 .desktop-capabilities-skill-editor,
 .desktop-capabilities-mcp-editor {
-  width: min(940px, 100%);
+  width: min(var(--desktop-capabilities-content-width), 100%);
   margin-right: auto;
   margin-left: auto;
 }

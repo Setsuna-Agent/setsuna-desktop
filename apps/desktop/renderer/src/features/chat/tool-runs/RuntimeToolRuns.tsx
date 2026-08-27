@@ -16,7 +16,6 @@ import { FeatureContributionBoundary } from '../../../composition/FeatureContrib
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { useChatThreadId } from '../conversation/ChatThreadProvider.js';
 import { WorkspaceFileLink } from '../markdown/WorkspaceFileLink.js';
-import { ChatEntryTransition } from '../motion/ChatEntryTransition.js';
 import type {
   AnswerApprovalHandler,
   ToolRunDisplayGroup,
@@ -128,17 +127,17 @@ export function RuntimeToolRuns({
   const replacement = singleRun ? featureViews.toolResults.resolve(singleRun.data) : null;
   if (singleRun && replacement?.contribution.presentation === 'replace') {
     return (
-      <ChatEntryTransition className="chat-tool-runs">
+      <div className="chat-tool-runs">
         <FeatureToolResultView result={replacement} runId={singleRun.id} />
-      </ChatEntryTransition>
+      </div>
     );
   }
   const group = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode)[0];
   if (!group) return null;
   return (
-    <ChatEntryTransition className="chat-tool-runs">
+    <div className="chat-tool-runs">
       <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
-    </ChatEntryTransition>
+    </div>
   );
 }
 
@@ -279,13 +278,15 @@ function toolRunPanelNode(
   const pendingApprovalId = pendingApproval ? run.approvalId : undefined;
   const summary = toolRunSummary(run, t);
   const kind = toolRunGroupKind(run);
+  const autoOpenKey = pendingApprovalDisclosureKey([run]);
   const fileChanges = kind === 'fileMutation' ? fileChangesFromToolRun(run) : [];
   const summaryInspectionKind = kind === 'inspection' ? inspectionEntryKind(run) : undefined;
   if (!toolRunHasDetails(run, pendingApprovalId, t)) return <FlatToolRunRow run={run} nestedDetails={nestedDetails} />;
   return (
     <ToolRunDisclosure
-      autoOpenKey={pendingApprovalDisclosureKey([run])}
+      autoOpenKey={autoOpenKey}
       className={`chat-tool-run chat-tool-run--panel ${toolRunGroupKindClassName(kind)} chat-tool-run--${run.status}`}
+      key={kind === 'shell' ? autoOpenKey ?? 'shell-running' : undefined}
       lazy={fileChanges.some((change) => change.lines.length > 0)}
       summary={(
         <>
@@ -319,6 +320,7 @@ function toolRunGroupPanelNode(
   const focusedActiveRun = activeRuns.length === 1 ? activeRuns[0] : undefined;
   const showRunTitles = group.kind !== 'shell' && group.kind !== 'fileMutation';
   const shellGroup = group.kind === 'shell';
+  const autoOpenKey = pendingApprovalDisclosureKey(group.runs);
   const fileOperationGroup = group.kind === 'fileMutation';
   const stableFileRuns = fileOperationGroup && focusedActiveRun && isPreparingToolRun(focusedActiveRun)
     ? group.runs.filter((run) => !isPreparingToolRun(run))
@@ -331,8 +333,9 @@ function toolRunGroupPanelNode(
     : undefined;
   return (
     <ToolRunDisclosure
-      autoOpenKey={pendingApprovalDisclosureKey(group.runs)}
+      autoOpenKey={autoOpenKey}
       className={`chat-tool-run chat-tool-run--group ${toolRunGroupKindClassName(group.kind)} chat-tool-run--${status}`}
+      key={shellGroup ? autoOpenKey ?? 'shell-running' : undefined}
       summary={(
         <>
           <span className="chat-tool-run__icon">{toolRunGroupIcon(group.kind, status)}</span>

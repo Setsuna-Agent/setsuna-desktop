@@ -7,7 +7,6 @@ import { Button, Dropdown } from 'antd';
 import {
   ArrowUp,
   Check,
-  Paperclip,
   Plus,
   Sparkles,
   Square,
@@ -27,11 +26,6 @@ import type { ChatThinkingConfig } from './chatComposerModeState.js';
 
 type ChatComposerFooterCommandControl = {
   active: boolean;
-  disabled: boolean;
-  onOpen: () => void;
-};
-
-type ChatComposerFooterAttachmentControl = {
   disabled: boolean;
   onOpen: () => void;
 };
@@ -72,7 +66,6 @@ type ChatComposerFooterThinkingControl = {
 };
 
 export function ChatComposerFooter({
-  attachmentControl,
   commandControl,
   config,
   contextCompacting,
@@ -90,7 +83,6 @@ export function ChatComposerFooter({
   onAccessModeChange,
   onSelectModel,
 }: {
-  attachmentControl: ChatComposerFooterAttachmentControl;
   commandControl: ChatComposerFooterCommandControl;
   config: RuntimeConfigState | null;
   contextCompacting: boolean;
@@ -169,17 +161,6 @@ export function ChatComposerFooter({
         ) : null}
       </div>
       <div className="chat-sender__right-actions">
-        <button
-          className="chat-sender-icon-button"
-          type="button"
-          aria-label={t('chat.composer.uploadAttachment')}
-          title={t('chat.composer.uploadAttachmentHint')}
-          disabled={attachmentControl.disabled}
-          onClick={attachmentControl.onOpen}
-        >
-          <Paperclip size={13} />
-        </button>
-        <span className="chat-sender-divider" aria-hidden="true" />
         <ChatModelPicker
           config={config}
           contextCompacting={contextCompacting}
@@ -190,7 +171,6 @@ export function ChatComposerFooter({
           provider={modelProvider}
           onSelect={onSelectModel}
         />
-        <span className="chat-sender-divider" aria-hidden="true" />
         <ChatComposerPrimaryAction
           hasActiveTurn={hasActiveTurn}
           primaryAction={primaryAction}

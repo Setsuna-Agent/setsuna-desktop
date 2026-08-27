@@ -28,6 +28,8 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
 }: MarkdownVirtualBlockProps) {
   const viewport = useMarkdownViewport();
   const blockRef = useRef<HTMLDivElement | null>(null);
+  // Existing content may mount while replaying history or when a Markdown tail is
+  // repartitioned. Treat it as settled so only text appended after mount can animate.
   const revealStateRef = useRef<StreamingRevealState>(initialStreamingRevealState(content));
   const revealRanges = useMemo(() => {
     const nextState = reconcileStreamingRevealState(revealStateRef.current, content, mutable);
@@ -50,7 +52,9 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
   }, [canVirtualize, viewport]);
 
   useEffect(() => {
-    if (!shouldRender) return undefined;
+    // Non-virtualized blocks never need a placeholder height. Avoid attaching one
+    // ResizeObserver per Markdown block in ordinary conversations.
+    if (!canVirtualize || !shouldRender) return undefined;
     const block = blockRef.current;
     if (!block) return undefined;
 
@@ -68,7 +72,7 @@ export const MarkdownVirtualBlock = memo(function MarkdownVirtualBlock({
     const observer = new ResizeObserver(measure);
     observer.observe(block);
     return () => observer.disconnect();
-  }, [content, shouldRender]);
+  }, [canVirtualize, content, shouldRender]);
 
   const className = [
     'chat-markdown__block',

@@ -4,18 +4,18 @@ import { useId, useState, type ReactNode } from 'react';
 export function CapabilitiesPluginDetailSection({
   children,
   count,
-  empty,
   icon,
   title,
 }: {
   children: ReactNode;
   count: number;
-  empty: string;
   icon: ReactNode;
   title: string;
 }) {
   const [expanded, setExpanded] = useState(count > 0);
   const contentId = useId();
+
+  if (count === 0) return null;
 
   return (
     <section className={`desktop-capabilities-plugin-detail__section${expanded ? ' is-expanded' : ''}`}>
@@ -38,9 +38,7 @@ export function CapabilitiesPluginDetailSection({
         </h3>
       </header>
       <div className="desktop-capabilities-plugin-detail__section-content" id={contentId} hidden={!expanded}>
-        {count ? <div className="desktop-capabilities-plugin-detail__list">{children}</div> : (
-          <p className="desktop-capabilities-plugin-detail__empty">{empty}</p>
-        )}
+        <div className="desktop-capabilities-plugin-detail__list">{children}</div>
       </div>
     </section>
   );

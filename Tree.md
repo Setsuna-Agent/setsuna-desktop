@@ -71,7 +71,7 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 555 total files
+apps/desktop/renderer/ — 0 direct / 557 total files
 ├── src/ — 2 direct / 396 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 6 direct / 6 total files
@@ -80,22 +80,21 @@ apps/desktop/renderer/ — 0 direct / 555 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
 │   ├── composition/ — 26 direct / 26 total files
-│   ├── features/ — 238 files
-│   │   ├── capabilities/ — 21 direct / 31 total files
+│   ├── features/ — 237 files
+│   │   ├── capabilities/ — 22 direct / 32 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
 │   │   │   └── styles/ — 5 direct / 5 total files
-│   │   ├── chat/ — 8 direct / 141 total files
+│   │   ├── chat/ — 8 direct / 139 total files
 │   │   │   ├── artifacts/ — 6 direct / 6 total files
 │   │   │   ├── composer/ — 31 direct / 31 total files
 │   │   │   ├── conversation/ — 34 direct / 34 total files
 │   │   │   ├── hooks/ — 11 direct / 11 total files
 │   │   │   ├── markdown/ — 13 direct / 13 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files
-│   │   │   ├── motion/ — 1 direct / 1 total files
 │   │   │   ├── references/ — 1 direct / 1 total files
 │   │   │   ├── skills/ — 2 direct / 2 total files
-│   │   │   ├── styles/ — 11 direct / 11 total files
+│   │   │   ├── styles/ — 10 direct / 10 total files
 │   │   │   ├── subagents/ — 1 files
 │   │   │   │   └── avatars/ — 1 direct / 1 total files
 │   │   │   └── tool-runs/ — 18 direct / 18 total files
@@ -111,33 +110,33 @@ apps/desktop/renderer/ — 0 direct / 555 total files
 │   │       └── styles/ — 6 direct / 6 total files
 │   ├── services/ — 9 files
 │   │   └── runtime-client/ — 9 direct / 9 total files
-│   └── shared/ — 81 files
+│   └── shared/ — 82 files
 │       ├── assets/ — 1 direct / 21 total files
 │       │   └── provider-logos/ — 20 direct / 20 total files
 │       ├── branding/ — 4 direct / 4 total files
 │       ├── code/ — 4 direct / 4 total files
-│       ├── hooks/ — 3 direct / 3 total files
+│       ├── hooks/ — 4 direct / 4 total files
 │       ├── i18n/ — 15 direct / 15 total files
 │       ├── lib/ — 6 direct / 6 total files
 │       ├── preferences/ — 6 direct / 6 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 9 direct / 9 total files
 │       └── ui/ — 10 direct / 10 total files
-└── test/ — 159 files
-    └── unit/ — 159 files
+└── test/ — 161 files
+    └── unit/ — 161 files
         ├── app/ — 1 direct / 17 total files
         │   ├── controller/ — 4 direct / 4 total files
         │   ├── layout/ — 7 direct / 7 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── composition/ — 5 direct / 5 total files
-        ├── features/ — 110 files
-        │   ├── capabilities/ — 11 direct / 12 total files
+        ├── features/ — 112 files
+        │   ├── capabilities/ — 12 direct / 13 total files
         │   │   └── hooks/ — 1 direct / 1 total files
-        │   ├── chat/ — 3 direct / 79 total files
+        │   ├── chat/ — 3 direct / 80 total files
         │   │   ├── artifacts/ — 4 direct / 4 total files
         │   │   ├── composer/ — 21 direct / 21 total files
-        │   │   ├── conversation/ — 25 direct / 25 total files
+        │   │   ├── conversation/ — 26 direct / 26 total files
         │   │   ├── hooks/ — 6 direct / 6 total files
         │   │   ├── markdown/ — 8 direct / 8 total files
         │   │   ├── mentions/ — 3 direct / 3 total files

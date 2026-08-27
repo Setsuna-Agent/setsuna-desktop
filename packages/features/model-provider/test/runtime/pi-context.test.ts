@@ -13,6 +13,22 @@ import {
 } from '../../src/runtime/pi-context.js';
 
 describe('Pi model context', () => {
+  it('preserves privileged instruction order in the provider system prompt', () => {
+    const provider = providerFixture('provider-a', 'openai-compatible');
+    const context = toPiContext(requestFixture([
+      messageFixture({ id: 'system', role: 'system', content: 'Base policy.' }),
+      messageFixture({ id: 'tool-policy', role: 'developer', content: 'Tool policy.' }),
+      messageFixture({ id: 'response-language', role: 'developer', content: '始终使用简体中文回答。' }),
+      messageFixture({ id: 'user', role: 'user', content: '检查文件。' }),
+    ]), createPiReplayContext(provider, 'gpt-test'));
+
+    expect(context.systemPrompt).toBe([
+      'Base policy.',
+      'Tool policy.',
+      '始终使用简体中文回答。',
+    ].join('\n\n'));
+  });
+
   it('uses canonical Pi provider identities while retaining the Setsuna replay boundary', () => {
     const provider = providerFixture('setsuna-custom-openai', 'openai-responses');
 

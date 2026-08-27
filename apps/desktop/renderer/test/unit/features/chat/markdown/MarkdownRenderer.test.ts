@@ -55,17 +55,18 @@ describe('MarkdownRenderer', () => {
     expect(html).not.toContain('<input');
   });
 
-  it('repairs the mutable streaming tail without changing stable block markers', () => {
+  it('repairs the mutable streaming tail without replaying content present at mount', () => {
     const html = renderMarkdown('Stable.\n\nStreaming **bold', true);
 
     expect(html).toContain('data-markdown-block="stable"');
     expect(html).toContain('data-markdown-block="mutable"');
     expect(html).toContain('<strong>bold</strong>');
+    expect(html).not.toContain('chat-markdown__stream-reveal');
     expect(html).not.toContain('is-streaming');
     expect(html).not.toContain('chat-markdown__empty-tail');
   });
 
-  it('keeps consecutive streamed chunks in separate transition nodes', () => {
+  it('splits consecutive streamed chunks into flowing visual words', () => {
     const html = renderToStaticMarkup(createElement(MarkdownContentBlock, {
       content: '开始输出一段内容',
       revealRanges: [
@@ -74,9 +75,8 @@ describe('MarkdownRenderer', () => {
       ],
     }));
 
-    expect(html.match(/chat-markdown__stream-reveal/g)).toHaveLength(2);
-    expect(html).toContain('>始输出</span>');
-    expect(html).toContain('>一段内容</span>');
+    expect(html.match(/chat-markdown__stream-reveal/g)?.length).toBeGreaterThan(2);
+    expect(html.replace(/<[^>]+>/g, '')).toContain('开始输出一段内容');
   });
 
   it('keeps reference definitions with their mutable uses while preserving the stable prefix', () => {

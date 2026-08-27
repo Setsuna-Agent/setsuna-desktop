@@ -25,6 +25,8 @@ describe('createAssistantGuidanceTimelinePlan', () => {
         ? entry.messages.map((message) => message.id).join(',')
         : entry.item.type === 'pluginUses'
           ? entry.item.id
+          : entry.item.type === 'contextCompaction'
+            ? entry.item.id
           : entry.item.segment.id,
     )).toEqual(['assistant_before:content', 'user_steer', 'assistant_after:content']);
   });
@@ -47,6 +49,8 @@ describe('createAssistantGuidanceTimelinePlan', () => {
         ? entry.messages.map((message) => message.id).join(',')
         : entry.item.type === 'pluginUses'
           ? entry.item.id
+          : entry.item.type === 'contextCompaction'
+            ? entry.item.id
           : entry.item.segment.id,
     )).toEqual(['assistant_before:content', 'user_steer', 'assistant_after:content']);
   });

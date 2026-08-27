@@ -155,7 +155,7 @@ describe('createChatDisplayItems', () => {
     ]);
   });
 
-  it('restores a legacy compaction boundary to its event time without splitting the retained assistant turn', () => {
+  it('restores a legacy compaction boundary inside the continuing assistant turn', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'old_user',
@@ -234,16 +234,20 @@ describe('createChatDisplayItems', () => {
       'user:old_user',
       'assistant:old_assistant_before__assistant_run__old_assistant_after',
       'user:continue_user',
-      'context:compact_legacy',
       'assistant:new_assistant',
     ]);
     expect(items[1]).toMatchObject({
       type: 'assistant',
       messageIds: ['old_assistant_before', 'old_tool', 'old_assistant_after'],
     });
+    expect(items[3]).toMatchObject({
+      type: 'assistant',
+      contextCompactions: [expect.objectContaining({ id: 'compact_legacy' })],
+      messageIds: ['compact_legacy', 'new_assistant'],
+    });
   });
 
-  it('uses the recorded transcript anchor instead of model-window position', () => {
+  it('uses the recorded transcript anchor when embedding compaction in its assistant turn', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'compact_anchored',
@@ -292,9 +296,13 @@ describe('createChatDisplayItems', () => {
     expect(createChatDisplayItems(messages).map((item) => `${item.type}:${item.id}`)).toEqual([
       'user:user_1',
       'user:user_2',
-      'context:compact_anchored',
       'assistant:assistant_2',
     ]);
+    expect(createChatDisplayItems(messages)[2]).toMatchObject({
+      type: 'assistant',
+      contextCompactions: [expect.objectContaining({ id: 'compact_anchored' })],
+      messageIds: ['compact_anchored', 'assistant_2'],
+    });
   });
 
   it('folds the completed review into the assistant row without lifecycle headings', () => {

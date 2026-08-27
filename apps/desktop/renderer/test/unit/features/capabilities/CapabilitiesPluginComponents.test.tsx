@@ -47,8 +47,8 @@ describe('capabilities plugin components', () => {
     );
 
     expect(html).toContain('OpenAI 官方文档');
-    expect(html).toContain('1 个技能');
-    expect(html).toContain('1 个服务');
+    expect(html).not.toContain('1 个技能');
+    expect(html).not.toContain('1 个服务');
     expect(html).toContain('获取');
     expect(html).not.toContain('desktop-capability-card');
     expect(html).not.toContain('目录');

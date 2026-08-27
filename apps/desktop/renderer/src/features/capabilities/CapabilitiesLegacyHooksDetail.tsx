@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
+import { CapabilitiesPluginItemIcon } from './CapabilitiesPluginItemButton.js';
+import { CapabilitiesTopbarBreadcrumb } from './CapabilitiesTopbarBreadcrumb.js';
 
 export function CapabilitiesLegacyHooksDetail({
   hooks,
@@ -39,12 +41,16 @@ export function CapabilitiesLegacyHooksDetail({
   }
 
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail desktop-capabilities-legacy-hooks">
+    <>
+      <CapabilitiesTopbarBreadcrumb
+        currentLabel={t('capabilities.legacyHooks.name')}
+        parentLabel={t('capabilities.tab.plugins')}
+        onBack={onBack}
+      />
+      <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail desktop-capabilities-legacy-hooks">
       <PageHeader
         title={t('capabilities.legacyHooks.name')}
         subtitle={t('capabilities.legacyHooks.description')}
-        backLabel={t('capabilities.detail.back')}
-        onBack={onBack}
       />
       {error ? <div className="desktop-capabilities-errors" role="alert">{error}</div> : null}
       <div className="desktop-capabilities-usage-note">
@@ -55,7 +61,6 @@ export function CapabilitiesLegacyHooksDetail({
         icon={<Workflow size={15} />}
         title="Hooks"
         count={hooks.length}
-        empty={t('capabilities.legacyHooks.empty')}
       >
         {hooks.map((hook) => {
           const pending = pendingKeys.has(hook.key);
@@ -64,7 +69,7 @@ export function CapabilitiesLegacyHooksDetail({
           const enabledLabel = t(hook.enabled ? 'capabilities.hookAction.disable' : 'capabilities.hookAction.enable');
           return (
             <div className="desktop-capabilities-plugin-detail__item is-static" key={hook.key}>
-              <span className="desktop-capabilities-plugin-detail__item-icon"><Workflow size={16} /></span>
+              <CapabilitiesPluginItemIcon><Workflow size={16} /></CapabilitiesPluginItemIcon>
               <span className="desktop-capabilities-plugin-detail__item-body">
                 <strong>{hook.eventName}{hook.matcher ? ` · ${hook.matcher}` : ''}</strong>
                 <small title={hook.command ?? undefined}>{hook.command ?? hook.statusMessage ?? hook.sourcePath}</small>
@@ -107,6 +112,7 @@ export function CapabilitiesLegacyHooksDetail({
           );
         })}
       </CapabilitiesPluginDetailSection>
-    </section>
+      </section>
+    </>
   );
 }

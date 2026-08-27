@@ -5,9 +5,22 @@ import type {
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
 import { describe, expect, it } from 'vitest';
-import { runtimePluginUsesByTurn } from '../../../../../src/features/chat/artifacts/runtimePluginUsage.js';
+import {
+  reconcileRuntimePluginUsesByTurn,
+  runtimePluginUsesByTurn,
+} from '../../../../../src/features/chat/artifacts/runtimePluginUsage.js';
 
 describe('runtimePluginUsesByTurn', () => {
+  it('retains unchanged per-turn references across streamed thread projections', () => {
+    const previous = new Map([['turn_1', [{ id: 'documents', installed: true, name: 'Documents' }]]]);
+    const next = new Map([['turn_1', [{ id: 'documents', installed: true, name: 'Documents' }]]]);
+
+    const reconciled = reconcileRuntimePluginUsesByTurn(previous, next);
+
+    expect(reconciled).toBe(previous);
+    expect(reconciled.get('turn_1')).toBe(previous.get('turn_1'));
+  });
+
   it('keeps persisted Plugin Skill attribution without the installed Plugin list', () => {
     const thread = runtimeThread({
       selectedSkills: [{

@@ -15,10 +15,30 @@ export type StreamingRevealAnimation = {
   delayMs: number;
 };
 
+export type StreamingRevealTimeline = {
+  nextStartAt: number;
+  startedAtByKey: Map<string, number>;
+};
+
+export type StreamingRevealUnit = {
+  start: number;
+  text: string;
+};
+
 export const streamingRevealDurationMs = 280;
+export const streamingRevealUnitStaggerMs = 14;
+export const maximumStreamingRevealRanges = 20;
+
+const streamingWordSegmenter = typeof Intl !== 'undefined' && 'Segmenter' in Intl
+  ? new Intl.Segmenter(undefined, { granularity: 'word' })
+  : null;
 
 export function initialStreamingRevealState(content: string): StreamingRevealState {
   return { content, nextKey: 0, ranges: [] };
+}
+
+export function initialStreamingRevealTimeline(): StreamingRevealTimeline {
+  return { nextStartAt: 0, startedAtByKey: new Map() };
 }
 
 /**
@@ -49,7 +69,13 @@ export function reconcileStreamingRevealState(
     nextKey += 1;
   }
 
-  return { content, nextKey, ranges };
+  // The smoother emits at most a few chunks during one reveal duration. Older
+  // ranges are already visually settled and should not keep producing spans.
+  return {
+    content,
+    nextKey,
+    ranges: ranges.slice(-maximumStreamingRevealRanges),
+  };
 }
 
 /**
@@ -61,18 +87,71 @@ export function resolveStreamingRevealAnimation(
   startedAtByKey: Map<string, number>,
   key: string,
   now: number,
+  scheduledStartAt = now,
 ): StreamingRevealAnimation {
   const startedAt = startedAtByKey.get(key);
   if (startedAt === undefined) {
-    startedAtByKey.set(key, now);
-    return { active: true, delayMs: 0 };
+    startedAtByKey.set(key, scheduledStartAt);
+    return {
+      active: scheduledStartAt + streamingRevealDurationMs > now,
+      delayMs: scheduledStartAt - now,
+    };
   }
 
-  const elapsed = Math.max(0, now - startedAt);
+  const elapsed = now - startedAt;
   return {
     active: elapsed < streamingRevealDurationMs,
     delayMs: -Math.min(elapsed, streamingRevealDurationMs),
   };
+}
+
+/** Schedules visual units on one persistent timeline, independent of transport chunks. */
+export function resolveStreamingRevealTimelineAnimation(
+  timeline: StreamingRevealTimeline,
+  key: string,
+  now: number,
+): StreamingRevealAnimation {
+  const existingStart = timeline.startedAtByKey.get(key);
+  if (existingStart !== undefined) {
+    return resolveStreamingRevealAnimation(timeline.startedAtByKey, key, now);
+  }
+  const scheduledStart = Math.max(now, timeline.nextStartAt);
+  timeline.nextStartAt = scheduledStart + streamingRevealUnitStaggerMs;
+  return resolveStreamingRevealAnimation(
+    timeline.startedAtByKey,
+    key,
+    now,
+    scheduledStart,
+  );
+}
+
+/**
+ * Mirrors FlowToken's word separation while using Intl segmentation so CJK text
+ * flows as short language-aware words instead of one sentence-sized chunk.
+ */
+export function splitStreamingRevealUnits(value: string): StreamingRevealUnit[] {
+  if (!value) return [];
+  if (!streamingWordSegmenter) {
+    return Array.from(value).map((text, index) => ({ start: index, text }));
+  }
+
+  const units: StreamingRevealUnit[] = [];
+  let leading = '';
+  for (const part of streamingWordSegmenter.segment(value)) {
+    if (!part.isWordLike) {
+      const previous = units.at(-1);
+      if (previous) previous.text += part.segment;
+      else leading += part.segment;
+      continue;
+    }
+    units.push({
+      start: part.index - leading.length,
+      text: `${leading}${part.segment}`,
+    });
+    leading = '';
+  }
+  if (leading) units.push({ start: 0, text: leading });
+  return units;
 }
 
 function commonPrefixLength(previousContent: string, content: string): number {

@@ -352,6 +352,10 @@
     border-bottom: 1px solid var(--desktop-agent-subtle-divider);
   }
 
+  :root[data-desktop-platform='darwin'] .app-shell:is(.desktop-agent-page--capabilities-open, .desktop-agent-page--settings-open):not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__right {
+    border-bottom: 0;
+  }
+
   :root[data-desktop-platform='darwin'] .app-shell:not(.data-root-maintenance-shell) > .app-topbar::before {
     position: absolute;
     z-index: -1;
@@ -378,6 +382,14 @@
     position: relative;
     border-right: 0;
     border-bottom: 1px solid var(--desktop-agent-subtle-divider);
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell:is(.desktop-agent-page--capabilities-open, .desktop-agent-page--settings-open).desktop-agent-page--sidebar-collapsed:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand {
+    border-bottom: 0;
+  }
+
+  :root[data-desktop-platform='darwin'] .app-shell.desktop-agent-page--capabilities-open.desktop-agent-page--sidebar-collapsed:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__right {
+    padding-left: var(--app-topbar-navigation-divider-inset);
   }
 
   :root[data-desktop-platform='darwin'] .app-shell.desktop-agent-page--sidebar-collapsed:not(.data-root-maintenance-shell) > .app-topbar > .app-topbar__brand::after {

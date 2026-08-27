@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { splitStreamingRevealUnits } from './streamingReveal.js';
 
-const streamCadenceMs = 40;
-const streamBoundaryCadenceMs = 28;
+const streamCadenceMs = 48;
+const streamBoundaryCadenceMs = 44;
 const streamMaximumHoldMs = 96;
 const streamMinimumChunkCharacters = 4;
+const streamMaximumRevealUnits = 3;
 
 /**
  * Keeps transport-sized deltas out of the Markdown renderer. Providers may emit one
- * character at a time; the UI instead reveals short, readable chunks at a steady pace.
+ * character at a time or a large burst; the UI releases at most a few visual words per
+ * commit so the compositor animation can always progress in source order.
  */
 export function useSmoothedStreamingContent(content: string, streaming: boolean): string {
   const [visibleContent, setVisibleContent] = useState(content);
@@ -67,30 +70,12 @@ export function useSmoothedStreamingContent(content: string, streaming: boolean)
 }
 
 export function nextStreamingChunkLength(pendingContent: string): number {
-  const characters = Array.from(pendingContent);
-  if (characters.length === 0) return 0;
-
-  const targetLength = streamingChunkTarget(characters.length);
-  if (characters.length <= targetLength) return pendingContent.length;
-
-  const earliestBoundary = Math.max(1, Math.floor(targetLength * 0.6));
-  const latestBoundary = Math.min(characters.length, targetLength + 6);
-  for (let index = latestBoundary - 1; index >= earliestBoundary - 1; index -= 1) {
-    if (isNaturalStreamingBoundary(characters[index] ?? '')) {
-      return characters.slice(0, index + 1).join('').length;
-    }
-  }
-
-  // Array.from keeps surrogate pairs intact; converting the selected characters
-  // back to a string gives us the correct UTF-16 offset for String.slice.
-  return characters.slice(0, targetLength).join('').length;
-}
-
-function streamingChunkTarget(pendingLength: number): number {
-  if (pendingLength > 240) return 48;
-  if (pendingLength > 120) return 32;
-  if (pendingLength > 48) return 20;
-  return 10;
+  if (!pendingContent) return 0;
+  const units = splitStreamingRevealUnits(pendingContent);
+  const nextUnit = units[streamMaximumRevealUnits];
+  return nextUnit?.start && nextUnit.start > 0
+    ? nextUnit.start
+    : pendingContent.length;
 }
 
 function hasNaturalStreamingBoundary(content: string): boolean {

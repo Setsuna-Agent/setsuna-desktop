@@ -42,7 +42,7 @@ export const chatZhCN = {
   'chat.goal.exit.complete': '目标已完成',
   'chat.goal.exit.usage': '用时 {duration} · {tokens} Token',
   'chat.composer.closeBadge': '关闭{label}',
-  'chat.composer.uploadAttachment': '添加附件',
+  'chat.composer.uploadAttachment': '附件',
   'chat.composer.uploadAttachmentHint': '添加本地文件或图片',
   'chat.composer.steer': '插入引导',
   'chat.composer.queue': '加入发送队列',

@@ -20,7 +20,7 @@ const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, par
 
 export type ChatTranscriptItem =
   | { type: 'user'; id: string; assistantTimelineSteerMessageIds: string[]; handledSteerMessageIds: string[]; message: RuntimeMessage; messageIds: string[]; guidanceProcessed: boolean; steered: boolean; steerMessages: RuntimeMessage[] }
-  | { type: 'assistant'; id: string; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
+  | { type: 'assistant'; id: string; contextCompactions?: RuntimeMessage[]; goalExit?: RuntimeGoalExitNotice; reviewExit?: RuntimeReviewModeNotice; handledSteerMessageIds: string[]; messageIds: string[]; segments: RuntimeMessage[]; steerMessages: RuntimeMessage[]; toolAttachments?: RuntimeMessageAttachment[]; turnId?: string }
   | { type: 'context'; id: string; message: RuntimeMessage }
   | { type: 'review'; id: string; message: RuntimeMessage };
 
@@ -61,6 +61,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   const items: ChatTranscriptItem[] = [];
   const orderedMessages = messagesInTranscriptOrder(messages);
   let assistantRun: RuntimeMessage[] = [];
+  let assistantRunContextCompactions: RuntimeMessage[] = [];
   let assistantRunHandledSteerMessageIds: string[] = [];
   let assistantRunMessageIds: string[] = [];
   let assistantRunToolAttachments: RuntimeMessageAttachment[] = [];
@@ -74,19 +75,27 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
   const orphanSteerMessages: RuntimeMessage[] = [];
 
   const flushAssistantRun = () => {
-    if (!assistantRun.length) return;
-    // 一个 assistant run 可能由“回答段 + 工具段 + 最终回答段”组成，UI 上合并成一组。
-    items.push({
-      type: 'assistant',
-      id: assistantRun.map((message) => message.id).join('__assistant_run__'),
-      handledSteerMessageIds: assistantRunHandledSteerMessageIds,
-      messageIds: assistantRunMessageIds,
-      segments: assistantRun,
-      steerMessages: [],
-      ...(assistantRunToolAttachments.length ? { toolAttachments: assistantRunToolAttachments } : {}),
-      turnId: assistantRunTurnId,
-    });
+    if (assistantRun.length) {
+      // 一个 assistant run 可能由“回答段 + 工具段 + 压缩段 + 最终回答段”组成，UI 上合并成一组。
+      items.push({
+        type: 'assistant',
+        id: assistantRun.map((message) => message.id).join('__assistant_run__'),
+        contextCompactions: assistantRunContextCompactions,
+        handledSteerMessageIds: assistantRunHandledSteerMessageIds,
+        messageIds: assistantRunMessageIds,
+        segments: assistantRun,
+        steerMessages: [],
+        ...(assistantRunToolAttachments.length ? { toolAttachments: assistantRunToolAttachments } : {}),
+        turnId: assistantRunTurnId,
+      });
+    } else {
+      // 没有 assistant 片段可归属时（例如独立手动压缩），仍保留原有 transcript 分隔符。
+      assistantRunContextCompactions.forEach((message) => {
+        items.push({ type: 'context', id: message.id, message });
+      });
+    }
     assistantRun = [];
+    assistantRunContextCompactions = [];
     assistantRunHandledSteerMessageIds = [];
     assistantRunMessageIds = [];
     assistantRunToolAttachments = [];
@@ -115,8 +124,15 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
       continue;
     }
     if (message.contextCompaction) {
-      flushAssistantRun();
-      items.push({ type: 'context', id: message.id, message });
+      if (!message.turnId) {
+        flushAssistantRun();
+        items.push({ type: 'context', id: message.id, message });
+        continue;
+      }
+      if (assistantRunTurnId && assistantRunTurnId !== message.turnId) flushAssistantRun();
+      assistantRunTurnId = message.turnId;
+      assistantRunContextCompactions.push(message);
+      assistantRunMessageIds.push(message.id);
       continue;
     }
     if (message.role === 'system' || message.role === 'developer') {
@@ -144,7 +160,7 @@ export function buildChatTranscript(messages: RuntimeMessage[]): ChatTranscriptI
     }
     if (message.role === 'assistant') {
       // 同一 turn 的连续 assistant 消息代表同一个可见 run，只是 runtime 分成了多段。
-      if (assistantRun.length && !sameTurn(message.turnId, assistantRunTurnId)) flushAssistantRun();
+      if ((assistantRun.length || assistantRunContextCompactions.length) && !sameTurn(message.turnId, assistantRunTurnId)) flushAssistantRun();
       assistantRunTurnId = assistantRunTurnId ?? message.turnId;
       const turnId = message.turnId;
       if (turnId && !userItemByTurnId.has(turnId) && lastUserItem && (!lastUserItem.message.turnId || lastUserItem.message.turnId === turnId)) {
@@ -317,6 +333,68 @@ function inferredTranscriptBoundaryIndex(timeline: TranscriptMessageEntry[], bou
 
 export function createChatDisplayItems(messages: RuntimeMessage[]): ChatDisplayItem[] {
   return buildChatTranscript(messages);
+}
+
+/**
+ * Reuses rows whose source messages and derived metadata did not change. Event
+ * projection already preserves old message references, so retaining the row lets
+ * memoized transcript items skip work while only the active run keeps streaming.
+ */
+export function reconcileChatDisplayItems(
+  previous: ChatDisplayItem[],
+  next: ChatDisplayItem[],
+): ChatDisplayItem[] {
+  if (!previous.length) return next;
+  const previousByKey = new Map(previous.map((item) => [chatDisplayItemRenderKey(item), item]));
+  let changed = previous.length !== next.length;
+  const reconciled = next.map((item, index) => {
+    const candidate = previousByKey.get(chatDisplayItemRenderKey(item));
+    const retained = candidate && sameChatDisplayItem(candidate, item) ? candidate : item;
+    if (retained !== previous[index]) changed = true;
+    return retained;
+  });
+  return changed ? reconciled : previous;
+}
+
+function sameChatDisplayItem(left: ChatDisplayItem, right: ChatDisplayItem): boolean {
+  if (left.type !== right.type || left.id !== right.id) return false;
+  if (left.type === 'context' || left.type === 'review') {
+    return right.type === left.type && left.message === right.message;
+  }
+  if (left.type === 'user') {
+    return right.type === 'user'
+      && left.message === right.message
+      && left.guidanceProcessed === right.guidanceProcessed
+      && left.steered === right.steered
+      && sameArray(left.assistantTimelineSteerMessageIds, right.assistantTimelineSteerMessageIds)
+      && sameArray(left.handledSteerMessageIds, right.handledSteerMessageIds)
+      && sameArray(left.messageIds, right.messageIds)
+      && sameArray(left.steerMessages, right.steerMessages);
+  }
+  if (right.type !== 'assistant') return false;
+  return left.turnId === right.turnId
+    && sameGoalExit(left.goalExit, right.goalExit)
+    && left.reviewExit === right.reviewExit
+    && sameArray(left.contextCompactions ?? [], right.contextCompactions ?? [])
+    && sameArray(left.handledSteerMessageIds, right.handledSteerMessageIds)
+    && sameArray(left.messageIds, right.messageIds)
+    && sameArray(left.segments, right.segments)
+    && sameArray(left.steerMessages, right.steerMessages)
+    && sameArray(left.toolAttachments ?? [], right.toolAttachments ?? []);
+}
+
+function sameGoalExit(
+  left: RuntimeGoalExitNotice | undefined,
+  right: RuntimeGoalExitNotice | undefined,
+): boolean {
+  return left === right || Boolean(
+    left && right && left.kind === right.kind && left.goal === right.goal,
+  );
+}
+
+function sameArray<T>(left: T[], right: T[]): boolean {
+  return left.length === right.length
+    && left.every((value, index) => value === right[index]);
 }
 
 /**
@@ -511,7 +589,7 @@ function transcriptItemMessageCount(item: ChatTranscriptItem): number {
 
 function transcriptItemScrollSignal(item: ChatTranscriptItem): string {
   if (item.type === 'assistant') {
-    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:goal-exit:${item.goalExit?.goal.updatedAt ?? ''}`;
+    return `assistant:${item.id}:${item.segments.map(messageScrollSignal).join(',')}:compaction:${item.contextCompactions?.map(messageScrollSignal).join(',') ?? ''}:tool-attachments:${item.toolAttachments?.length ?? 0}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:goal-exit:${item.goalExit?.goal.updatedAt ?? ''}`;
   }
   if (item.type === 'user') {
     return `user:${messageScrollSignal(item.message)}:steer:${item.steerMessages.map(messageScrollSignal).join(',')}:${item.handledSteerMessageIds.join(',')}`;

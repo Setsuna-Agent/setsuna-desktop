@@ -12,6 +12,7 @@ export type ChatSlashCommandItemsOptions = {
   activeModelName: string | null;
   activeProjectSelected: boolean;
   activeTurnId: string | null;
+  attachmentDisabled: boolean;
   canClearContext: boolean;
   contextCompactPercent: number;
   contextCompacting: boolean;
@@ -30,6 +31,7 @@ export function createChatSlashCommandItems({
   activeModelName,
   activeProjectSelected,
   activeTurnId,
+  attachmentDisabled,
   canClearContext,
   contextCompactPercent,
   contextCompacting,
@@ -44,6 +46,14 @@ export function createChatSlashCommandItems({
   t,
 }: ChatSlashCommandItemsOptions): SlashCommandMenuItem[] {
   const actions: SlashQuickAction[] = [
+    {
+      key: 'attachment',
+      kind: 'action',
+      type: 'attachment',
+      title: t('chat.composer.uploadAttachment'),
+      description: t('chat.composer.uploadAttachmentHint'),
+      disabled: attachmentDisabled,
+    },
     {
       key: 'model',
       kind: 'model',
