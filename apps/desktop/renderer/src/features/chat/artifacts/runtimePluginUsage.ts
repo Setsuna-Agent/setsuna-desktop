@@ -10,6 +10,22 @@ export type RuntimePluginUse = RuntimePluginReference & {
   installed: boolean;
 };
 
+/** Retains per-turn arrays when streamed thread fields did not change plugin usage. */
+export function reconcileRuntimePluginUsesByTurn(
+  previous: Map<string, RuntimePluginUse[]>,
+  next: Map<string, RuntimePluginUse[]>,
+): Map<string, RuntimePluginUse[]> {
+  let changed = previous.size !== next.size;
+  const reconciled = new Map<string, RuntimePluginUse[]>();
+  for (const [turnId, uses] of next) {
+    const current = previous.get(turnId);
+    const retained = current && samePluginUses(current, uses) ? current : uses;
+    if (retained !== current) changed = true;
+    reconciled.set(turnId, retained);
+  }
+  return changed ? reconciled : previous;
+}
+
 const pluginResourceToolNames = new Set(['list_plugin_resources', 'read_plugin_resource']);
 
 /**
@@ -88,6 +104,16 @@ function mergePluginReference(current: RuntimePluginUse, next: RuntimePluginUse)
     name: current.name === current.id && next.name !== next.id ? next.name : current.name,
     ...(current.icon || next.icon ? { icon: current.icon ?? next.icon } : {}),
   };
+}
+
+function samePluginUses(left: RuntimePluginUse[], right: RuntimePluginUse[]): boolean {
+  return left.length === right.length && left.every((use, index) => {
+    const other = right[index];
+    return use.id === other?.id
+      && use.name === other.name
+      && use.icon === other.icon
+      && use.installed === other.installed;
+  });
 }
 
 function pluginIdsForToolRun(run: RuntimeToolRun, plugins: RuntimePluginSummary[]): string[] {

@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   initialStreamingRevealState,
+  initialStreamingRevealTimeline,
+  maximumStreamingRevealRanges,
   reconcileStreamingRevealState,
   resolveStreamingRevealAnimation,
+  resolveStreamingRevealTimelineAnimation,
+  splitStreamingRevealUnits,
+  streamingRevealDurationMs,
+  streamingRevealUnitStaggerMs,
 } from '../../../../../src/features/chat/markdown/streamingReveal.js';
 
 describe('reconcileStreamingRevealState', () => {
@@ -41,9 +47,47 @@ describe('reconcileStreamingRevealState', () => {
       active: true,
       delayMs: -120,
     });
-    expect(resolveStreamingRevealAnimation(startedAtByKey, '7', 1_300)).toEqual({
+    expect(resolveStreamingRevealAnimation(startedAtByKey, '7', 1_500)).toEqual({
       active: false,
-      delayMs: -280,
+      delayMs: -streamingRevealDurationMs,
     });
+  });
+
+  it('stagger-schedules visual words across transport chunks on one timeline', () => {
+    const timeline = initialStreamingRevealTimeline();
+
+    expect(resolveStreamingRevealTimelineAnimation(timeline, '0:0', 1_000)).toEqual({
+      active: true,
+      delayMs: 0,
+    });
+    expect(resolveStreamingRevealTimelineAnimation(timeline, '0:6', 1_000)).toEqual({
+      active: true,
+      delayMs: streamingRevealUnitStaggerMs,
+    });
+    expect(resolveStreamingRevealTimelineAnimation(timeline, '1:12', 1_000)).toEqual({
+      active: true,
+      delayMs: streamingRevealUnitStaggerMs * 2,
+    });
+    expect(resolveStreamingRevealTimelineAnimation(timeline, '0:6', 1_100)).toEqual({
+      active: true,
+      delayMs: -(100 - streamingRevealUnitStaggerMs),
+    });
+  });
+
+  it('splits prose into flowing words instead of one transport-sized unit', () => {
+    expect(splitStreamingRevealUnits('Hello, world!')).toEqual([
+      { start: 0, text: 'Hello, ' },
+      { start: 7, text: 'world!' },
+    ]);
+  });
+
+  it('bounds animated ranges during long streams', () => {
+    let state = initialStreamingRevealState('');
+    for (let index = 0; index < maximumStreamingRevealRanges + 8; index += 1) {
+      state = reconcileStreamingRevealState(state, `${state.content}x`, true);
+    }
+
+    expect(state.ranges).toHaveLength(maximumStreamingRevealRanges);
+    expect(state.ranges[0]?.key).toBe(8);
   });
 });

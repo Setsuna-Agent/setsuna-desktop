@@ -74,11 +74,6 @@
   box-shadow: var(--app-focus-ring);
 }
 
-.desktop-plugin-installed-shortcut button:hover .desktop-plugin-icon {
-  border-color: color-mix(in srgb, var(--desktop-plugin-icon-color) 48%, var(--app-border));
-  background: color-mix(in srgb, var(--desktop-plugin-icon-color) 6%, var(--app-surface));
-}
-
 .desktop-plugin-installed-shortcut__name {
   position: absolute;
   top: calc(100% + 5px);
@@ -178,30 +173,17 @@
   border-bottom: 1px solid color-mix(in srgb, var(--app-border) 68%, transparent);
 }
 
-.desktop-plugin-market__section h3,
-.desktop-plugin-market__section p {
-  margin: 0;
-}
-
 .desktop-plugin-market__section h3 {
+  margin: 0;
   color: var(--app-text);
   font-size: 15px;
   font-weight: 600;
   line-height: 22px;
 }
 
-.desktop-plugin-market__section p {
-  overflow: hidden;
-  color: var(--app-text-muted);
-  font-size: 12px;
-  line-height: 18px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .desktop-capabilities-plugin-detail {
   align-self: start;
-  width: min(960px, 100%);
+  width: min(var(--desktop-capabilities-content-width), 100%);
   margin-right: auto;
   margin-left: auto;
   padding-bottom: 18px;
@@ -223,9 +205,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--app-border) 76%, transparent);
-  color: var(--app-text);
-  background: color-mix(in srgb, var(--app-bg) 82%, var(--app-primary) 5%);
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  color: var(--app-text-muted);
+  background: color-mix(in srgb, var(--app-surface) 94%, #ffffff);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000000 8%, transparent),
+    0 3px 10px color-mix(in srgb, #000000 4%, transparent);
+}
+
+.desktop-capabilities-plugin-detail__item-icon > svg {
+  width: 60%;
+  height: 60%;
+  stroke-width: 2;
+}
+
+.desktop-capabilities-plugin-detail__item-icon[data-kind='mcp'] {
+  color: var(--app-primary);
 }
 
 .desktop-capabilities-plugin-detail__item-badges span {
@@ -440,7 +435,7 @@
   appearance: none;
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -486,7 +481,7 @@
 
 .desktop-capabilities-plugin-detail__skill-open {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -515,9 +510,9 @@
 }
 
 .desktop-capabilities-plugin-detail__item-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--app-radius-sm);
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
 }
 
 .desktop-capabilities-plugin-detail__item-body {

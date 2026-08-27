@@ -16,7 +16,11 @@ import {
 } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import type { DesktopReviewOpenHandler, DesktopReviewState } from '../../workspace/model.js';
-import { runtimePluginUsesByTurn } from '../artifacts/runtimePluginUsage.js';
+import {
+  reconcileRuntimePluginUsesByTurn,
+  runtimePluginUsesByTurn,
+  type RuntimePluginUse,
+} from '../artifacts/runtimePluginUsage.js';
 import { useChatMessageOperations } from '../hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from '../hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.js';
@@ -41,9 +45,12 @@ import {
   createChatDisplayItems,
   createChatRenderWindow,
   createChatScrollSignal,
+  reconcileChatDisplayItems,
 } from './chatMessageDisplay.js';
 
 export type ChatTranscriptMessageHistory = ReturnType<typeof useThreadMessageHistory>;
+
+const emptyRuntimePluginUses: RuntimePluginUse[] = [];
 
 type ChatTranscriptMutationProps =
   | {
@@ -112,10 +119,28 @@ export function ChatTranscript({
     () => currentThread ? { ...currentThread, messages } : null,
     [currentThread, messages],
   );
-  const displayItems = useMemo(() => createChatDisplayItems(messages), [messages]);
+  const displayItemsRef = useRef<{ items: ReturnType<typeof createChatDisplayItems>; threadId: string | null }>({
+    items: [],
+    threadId: null,
+  });
+  const displayItems = useMemo(() => {
+    const threadId = currentThread?.id ?? null;
+    const next = createChatDisplayItems(messages);
+    const items = displayItemsRef.current.threadId === threadId
+      ? reconcileChatDisplayItems(displayItemsRef.current.items, next)
+      : next;
+    displayItemsRef.current = { items, threadId };
+    return items;
+  }, [currentThread?.id, messages]);
   const historyScrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const pluginUsesByTurnIdRef = useRef<ReturnType<typeof runtimePluginUsesByTurn>>(new Map());
   const pluginUsesByTurnId = useMemo(
-    () => runtimePluginUsesByTurn(historyThread, skills, plugins),
+    () => {
+      const next = runtimePluginUsesByTurn(historyThread, skills, plugins);
+      const reconciled = reconcileRuntimePluginUsesByTurn(pluginUsesByTurnIdRef.current, next);
+      pluginUsesByTurnIdRef.current = reconciled;
+      return reconciled;
+    },
     [historyThread, plugins, skills],
   );
   const {
@@ -159,6 +184,7 @@ export function ChatTranscript({
   useEffect(() => {
     onDeleteModeChange?.(readOnly ? false : deleteMode);
   }, [deleteMode, onDeleteModeChange, readOnly]);
+  const assistantItemIdByTurnIdRef = useRef(new Map<string, string>());
   const assistantItemIdByTurnId = useMemo(() => {
     const itemIdByTurnId = new Map<string, string>();
     for (const item of displayItems) {
@@ -167,6 +193,10 @@ export function ChatTranscript({
         if (segment.turnId) itemIdByTurnId.set(segment.turnId, chatDisplayItemRenderKey(item));
       }
     }
+    if (sameStringMap(assistantItemIdByTurnIdRef.current, itemIdByTurnId)) {
+      return assistantItemIdByTurnIdRef.current;
+    }
+    assistantItemIdByTurnIdRef.current = itemIdByTurnId;
     return itemIdByTurnId;
   }, [displayItems]);
   const handleWorkHistoryExpandedChange = useCallback<WorkHistoryExpandedChangeHandler>((itemId, expanded) => {
@@ -263,6 +293,7 @@ export function ChatTranscript({
                           activeAssistantItemId={activeAssistantItemId}
                           activeTurnId={activeTurnId}
                           assistantItemIdByTurnId={assistantItemIdByTurnId}
+                          contextCompactionRunning={contextCompactionRunning}
                           deleteMode={!readOnly && deleteMode}
                           editingDraft={editingDraft}
                           editingMessageId={readOnly ? null : editingMessageId}
@@ -275,7 +306,7 @@ export function ChatTranscript({
                           onEditDraftChange={setEditingDraft}
                           onOpenFileReview={onOpenFileReview}
                           onWorkHistoryExpandedChange={handleWorkHistoryExpandedChange}
-                          pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? []) : []}
+                          pluginUses={item.type === 'assistant' && item.turnId ? (pluginUsesByTurnId.get(item.turnId) ?? emptyRuntimePluginUses) : emptyRuntimePluginUses}
                           selectedForDelete={!readOnly && selectedDeleteItemIds.has(item.id)}
                           showThinkingInTranscript={showThinkingInTranscript}
                         />
@@ -291,7 +322,7 @@ export function ChatTranscript({
                         segments={[]}
                       />
                     ) : null}
-                    {contextCompactionRunning ? <ContextCompactionStatus active /> : null}
+                    {contextCompactionRunning && !activeAssistantVisible ? <ContextCompactionStatus active /> : null}
                     <div className="chat-bubble-list__bottom-spacer" aria-hidden="true" />
                   </div>
                 </SkillReferenceCatalogProvider>
@@ -326,4 +357,9 @@ export function ChatTranscript({
       ) : null}
     </>
   );
+}
+
+function sameStringMap(left: Map<string, string>, right: Map<string, string>): boolean {
+  return left.size === right.size
+    && [...left].every(([key, value]) => right.get(key) === value);
 }

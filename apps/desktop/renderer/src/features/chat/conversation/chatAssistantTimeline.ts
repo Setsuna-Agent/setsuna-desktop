@@ -34,6 +34,7 @@ export type AssistantWorkThinkingSegment = {
 
 export type AssistantWorkItem =
   | { type: 'content'; segment: AssistantWorkContentSegment }
+  | { type: 'contextCompaction'; active: boolean; id: string; message?: RuntimeMessage }
   | { type: 'thinking'; segment: AssistantWorkThinkingSegment }
   | { type: 'pluginUses'; id: string; plugins: RuntimePluginUse[] }
   | { type: 'toolRuns'; id: string; segment: RuntimeMessage; toolRuns: NonNullable<RuntimeMessage['toolRuns']> };
@@ -41,7 +42,12 @@ export type AssistantWorkItem =
 export function createAssistantRunTimeline(
   segments: RuntimeMessage[],
   pluginUses: RuntimePluginUse[] = [],
-  options: { showThinkingInTranscript?: boolean } = {},
+  options: {
+    contextCompactionActive?: boolean;
+    contextCompactions?: RuntimeMessage[];
+    messageOrderIds?: string[];
+    showThinkingInTranscript?: boolean;
+  } = {},
 ): AssistantRunTimelineBlock[] {
   const parsedSegments = segments.map((segment) => parseAssistantSegment(
     segment,
@@ -111,7 +117,23 @@ export function createAssistantRunTimeline(
     });
   }
 
-  parsedSegments.forEach((parsed, index) => {
+  const parsedSegmentById = new Map(parsedSegments.map((parsed, index) => [parsed.segment.id, { index, parsed }]));
+  const timelineMessages = orderedAssistantTimelineMessages(
+    segments,
+    options.contextCompactions ?? [],
+    options.messageOrderIds ?? [],
+  );
+
+  timelineMessages.forEach((message) => {
+    if (message.contextCompaction) {
+      appendWork(message, {
+        items: [{ type: 'contextCompaction', active: false, id: message.id, message }],
+      });
+      return;
+    }
+    const parsedEntry = parsedSegmentById.get(message.id);
+    if (!parsedEntry) return;
+    const { index, parsed } = parsedEntry;
     const inFinalAnswer = finalStarted && index >= finalStartIndex;
     // Walk the item stream directly so retained thinking and any work that follows
     // final content stay at their real transcript positions.
@@ -144,10 +166,12 @@ export function createAssistantRunTimeline(
         appendWork(parsed.segment, { items: [item] });
         return;
       }
-      appendWork(parsed.segment, {
-        items: [item],
-        toolRuns: item.toolRuns,
-      });
+      if (item.type === 'toolRuns') {
+        appendWork(parsed.segment, {
+          items: [item],
+          toolRuns: item.toolRuns,
+        });
+      }
     });
 
     if (isEmptyStreamingAssistantSegment(parsed.segment)) {
@@ -160,8 +184,31 @@ export function createAssistantRunTimeline(
     }
   });
 
+  if (options.contextCompactionActive && segments.length) {
+    appendWork(segments[segments.length - 1]!, {
+      items: [{ type: 'contextCompaction', active: true, id: 'context-compaction-active' }],
+    });
+  }
+
   flushWork();
   return blocks;
+}
+
+function orderedAssistantTimelineMessages(
+  segments: RuntimeMessage[],
+  contextCompactions: RuntimeMessage[],
+  messageOrderIds: string[],
+): RuntimeMessage[] {
+  if (!contextCompactions.length) return segments;
+  const messages = [...segments, ...contextCompactions];
+  const messageById = new Map(messages.map((message) => [message.id, message]));
+  const ordered = messageOrderIds.flatMap((id) => {
+    const message = messageById.get(id);
+    if (!message) return [];
+    messageById.delete(id);
+    return [message];
+  });
+  return [...ordered, ...messages.filter((message) => messageById.has(message.id))];
 }
 
 type ParsedAssistantSegment = {

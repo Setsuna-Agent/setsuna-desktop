@@ -89,7 +89,7 @@ describe('chat message guidance display', () => {
     });
   });
 
-  it('transfers guidance to the assistant run after an intervening context boundary', () => {
+  it('keeps guidance and an intervening compaction in one assistant run', () => {
     const messages: RuntimeMessage[] = [
       {
         id: 'user_initial',
@@ -146,16 +146,12 @@ describe('chat message guidance display', () => {
     const items = createChatDisplayItems(messages);
     const assistantItems = items.filter((item) => item.type === 'assistant');
 
-    expect(assistantItems).toHaveLength(2);
+    expect(assistantItems).toHaveLength(1);
     expect(assistantItems[0]).toMatchObject({
-      id: 'assistant_before',
-      messageIds: ['assistant_before'],
-      steerMessages: [],
-    });
-    expect(assistantItems[1]).toMatchObject({
-      id: 'assistant_after',
+      id: 'assistant_before__assistant_run__assistant_after',
+      contextCompactions: [expect.objectContaining({ id: 'compact_1' })],
       handledSteerMessageIds: ['user_steer'],
-      messageIds: ['user_steer', 'assistant_after'],
+      messageIds: ['assistant_before', 'user_steer', 'compact_1', 'assistant_after'],
       steerMessages: [expect.objectContaining({ id: 'user_steer' })],
     });
     expect(assistantItems.flatMap((item) => item.steerMessages)).toHaveLength(1);

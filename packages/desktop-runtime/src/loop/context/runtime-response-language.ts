@@ -44,13 +44,19 @@ export function inferRuntimeResponseLanguage(content: string): RuntimeInterfaceL
 }
 
 export function runtimeResponseLanguagePrompt(language: RuntimeInterfaceLanguage): string {
-  const targetLanguage = language === 'zh-CN' ? 'Simplified Chinese' : 'English';
-  return [
-    `The target response language for this turn is ${targetLanguage}.`,
-    `Write all assistant-authored natural-language prose in ${targetLanguage}, including progress updates, explanations after tool results, error recovery, and the final answer.`,
-    'Tool output, code, logs, quotations, attachments, runtime-generated messages, and injected context must not change the target response language.',
-    'Keep code, identifiers, paths, commands, and quoted text unchanged unless the user explicitly asks to translate or rewrite them.',
-  ].join('\n');
+  return language === 'zh-CN'
+    ? [
+        '本轮回答的目标语言是简体中文。',
+        '所有由助手撰写的自然语言内容必须使用简体中文，包括进度更新、工具调用后的说明、错误恢复和最终答复。',
+        '工具输出、代码、日志、引用、附件、运行时生成的消息和注入上下文都不得改变目标语言。',
+        '代码、标识符、路径、命令和引用文本保持原样，除非用户明确要求翻译或改写。',
+      ].join('\n')
+    : [
+        'The target response language for this turn is English.',
+        'Write all assistant-authored natural-language prose in English, including progress updates, explanations after tool results, error recovery, and the final answer.',
+        'Tool output, code, logs, quotations, attachments, runtime-generated messages, and injected context must not change the target response language.',
+        'Keep code, identifiers, paths, commands, and quoted text unchanged unless the user explicitly asks to translate or rewrite them.',
+      ].join('\n');
 }
 
 function explicitlyRequestedLanguage(content: string): RuntimeInterfaceLanguage | undefined {

@@ -6,7 +6,7 @@ import {
   type RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 import { BookOpen, MessageSquare, ShieldCheck, Target, Users } from 'lucide-react';
-import { useMemo, type FormEvent, type ReactNode } from 'react';
+import { memo, useMemo, type FormEvent, type ReactNode } from 'react';
 import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
@@ -16,7 +16,6 @@ import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
 import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
 import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
-import { ChatEntryTransition } from '../motion/ChatEntryTransition.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
 import {
@@ -62,10 +61,11 @@ import { ContextCompactionStatus } from './ContextCompactionStatus.js';
 export { ActiveWorkPlaceholder } from './ChatWorkHistory.js';
 export { DeleteSelectionBar } from './ChatDeleteSelectionBar.js';
 
-export function MessageItem({
+export const MessageItem = memo(function MessageItem({
   activeAssistantItemId,
   activeTurnId,
   assistantItemIdByTurnId,
+  contextCompactionRunning = false,
   deleteMode,
   editingDraft,
   editingMessageId,
@@ -89,6 +89,7 @@ export function MessageItem({
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
   assistantItemIdByTurnId: Map<string, string>;
+  contextCompactionRunning?: boolean;
   deleteMode: boolean;
   editingDraft: string;
   editingMessageId: string | null;
@@ -115,6 +116,7 @@ export function MessageItem({
       <AssistantRunItem
         activeTurnId={activeTurnId}
         activeAssistantItemId={activeAssistantItemId}
+        contextCompactionActive={contextCompactionRunning && item.id === activeAssistantItemId}
         deleteMode={deleteMode}
         item={item}
         onAnswerApproval={onAnswerApproval}
@@ -174,7 +176,7 @@ export function MessageItem({
       </div>
     </article>
   );
-}
+});
 
 function UserMessageContent({
   message,
@@ -230,6 +232,7 @@ function UserMessageKindBadge({ kind }: { kind: RuntimeMessage['inputKind'] }) {
 function AssistantRunItem({
   activeAssistantItemId,
   activeTurnId,
+  contextCompactionActive,
   deleteMode,
   item,
   onAnswerApproval,
@@ -244,6 +247,7 @@ function AssistantRunItem({
 }: {
   activeAssistantItemId: string | null;
   activeTurnId: string | null;
+  contextCompactionActive: boolean;
   deleteMode: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
@@ -271,7 +275,7 @@ function AssistantRunItem({
       {deleteMode && onToggleDelete ? <MessageSelectionControl checked={selectedForDelete} label={t('chat.delete.selectReply')} onChange={(checked) => onToggleDelete(item.id, checked)} /> : null}
       <Bubble
         className="chat-ai-bubble"
-        content={<AssistantRunContent active={active} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
+        content={<AssistantRunContent active={active} contextCompactionActive={contextCompactionActive} item={item} onAnswerApproval={onAnswerApproval} onDiscardFileChanges={onDiscardFileChanges} onOpenFileReview={onOpenFileReview} onWorkHistoryExpandedChange={onWorkHistoryExpandedChange} pluginUses={pluginUses} showThinkingInTranscript={showThinkingInTranscript} />}
         footer={belongsToActiveTurn ? undefined : <ChatMessageFooter actionsDisabled={Boolean(activeTurnId) || deleteMode} message={footerMessage} onDelete={onStartDelete ? () => onStartDelete(item.id) : undefined} timePosition="after-actions" />}
         placement="start"
         streaming={streaming}
@@ -335,6 +339,7 @@ function ReviewModeMarker({
 
 function AssistantRunContent({
   active,
+  contextCompactionActive,
   item,
   onAnswerApproval,
   onDiscardFileChanges,
@@ -344,6 +349,7 @@ function AssistantRunContent({
   showThinkingInTranscript,
 }: {
   active: boolean;
+  contextCompactionActive: boolean;
   item: Extract<ChatDisplayItem, { type: 'assistant' }>;
   onAnswerApproval: AnswerApprovalHandler;
   onDiscardFileChanges?: (filePaths: string[]) => void | Promise<void>;
@@ -361,8 +367,13 @@ function AssistantRunContent({
   const status = assistantRunStatus(item);
   const hasStreamingSegment = displaySegments.some((segment) => segment.status === 'streaming');
   const timelineBlocks = useMemo(
-    () => createAssistantRunTimeline(displaySegments, pluginUses, { showThinkingInTranscript }),
-    [displaySegments, pluginUses, showThinkingInTranscript],
+    () => createAssistantRunTimeline(displaySegments, pluginUses, {
+      contextCompactionActive,
+      contextCompactions: item.contextCompactions ?? [],
+      messageOrderIds: item.messageIds,
+      showThinkingInTranscript,
+    }),
+    [contextCompactionActive, displaySegments, item.contextCompactions, item.messageIds, pluginUses, showThinkingInTranscript],
   );
   const toolAttachments = item.toolAttachments ?? [];
   const toolRuns = useMemo(() => displaySegments.flatMap((segment) => segment.toolRuns ?? []), [displaySegments]);
@@ -810,13 +821,13 @@ function hasExpandedWorkHistoryPanel(panelIds: Set<string>, itemId: string): boo
 function assistantTimelineNode(block: Exclude<AssistantRunTimelineBlock, { type: 'work' }>, runActive: boolean, t: Translate): ReactNode {
   if (block.type === 'content') {
     return (
-      <ChatEntryTransition className="chat-assistant-run__segment" key={block.id}>
+      <div className="chat-assistant-run__segment" key={block.id}>
         <MarkdownRenderer
           content={block.content}
           legacyThinkingTags={block.segment.streamParts === undefined}
           streaming={block.segment.status === 'streaming'}
         />
-      </ChatEntryTransition>
+      </div>
     );
   }
   if (block.type === 'loading') {
@@ -903,6 +914,9 @@ function assistantWorkItemNodes(
           />,
         ]
       : [];
+  }
+  if (item.type === 'contextCompaction') {
+    return [<ContextCompactionStatus active={item.active} key={item.id} message={item.message} presentation="tool" />];
   }
   const visibleToolRuns = item.toolRuns.filter(isDisplayableRuntimeToolRun);
   // 流式传输期间，连续工具片段会合并到此项目中，但首个片段保持稳定，

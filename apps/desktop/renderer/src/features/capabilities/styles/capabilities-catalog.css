@@ -53,7 +53,7 @@
   align-items: center;
   gap: 12px;
   min-width: 0;
-  min-height: 76px;
+  min-height: 64px;
   padding: 9px 7px;
   border-radius: var(--app-radius-md);
   transition: background 140ms ease;
@@ -92,15 +92,23 @@ button.desktop-capability-list-item__identity {
   justify-content: center;
   width: 40px;
   height: 40px;
-  border: 1px solid color-mix(in srgb, var(--app-border) 74%, transparent);
-  border-radius: var(--app-radius-md);
+  border: 1px solid color-mix(in srgb, var(--app-border) 80%, transparent);
+  border-radius: 11px;
   color: var(--app-text-muted);
-  background: color-mix(in srgb, var(--app-bg) 82%, var(--app-text) 3%);
+  background: color-mix(in srgb, var(--app-surface) 94%, #ffffff);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000000 8%, transparent),
+    0 3px 10px color-mix(in srgb, #000000 4%, transparent);
+}
+
+.desktop-capability-list-item__icon > svg {
+  width: 60%;
+  height: 60%;
+  stroke-width: 2;
 }
 
 .desktop-capability-list-item__icon[data-kind='mcp'] {
   color: var(--app-primary);
-  border-color: color-mix(in srgb, var(--app-primary) 32%, var(--app-border));
 }
 
 .desktop-capability-list-item__copy {
@@ -110,8 +118,7 @@ button.desktop-capability-list-item__identity {
 }
 
 .desktop-capability-list-item__copy strong,
-.desktop-capability-list-item__copy > span,
-.desktop-capability-list-item__copy small {
+.desktop-capability-list-item__copy > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -130,12 +137,6 @@ button.desktop-capability-list-item__identity {
   color: var(--app-text-muted);
   font-size: 12px;
   line-height: 18px;
-}
-
-.desktop-capability-list-item__copy small {
-  color: var(--app-text-subtle);
-  font-size: 10px;
-  line-height: 16px;
 }
 
 button.desktop-capability-list-item__identity:hover .desktop-capability-list-item__copy strong {

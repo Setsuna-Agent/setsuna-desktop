@@ -21,6 +21,7 @@ import { startThreadReview } from '../../features/workspace/hooks/startThreadRev
 import { isPrimaryConversationThread } from './runtimeThreadRelations.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
+import { useAnimationFrameCommit } from '../../shared/hooks/useAnimationFrameCommit.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { readBrowserStorageValue, writeBrowserStorageValue } from '../../shared/preferences/browserStorage.js';
 import {
@@ -33,6 +34,7 @@ import {
   applyCurrentThreadEventBatch,
   isThreadContextCompacting,
   selectInitialThreadSummary,
+  shouldFrameCoalesceThreadEvents,
   updateThreadApprovalRun,
 } from './runtimeThreadState.js';
 
@@ -89,6 +91,7 @@ export function useRuntimeThreadState({
   const [threads, setThreads] = useState<RuntimeThreadSummary[]>([]);
   const [archivedThreads, setArchivedThreads] = useState<RuntimeThreadSummary[]>([]);
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
+  const currentThreadCommit = useAnimationFrameCommit(setCurrentThreadState);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
   const [activityEvents, setActivityEvents] = useState<CoreRuntimeEvent[]>([]);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
@@ -103,16 +106,6 @@ export function useRuntimeThreadState({
   const currentThreadId = currentThread?.id ?? null;
   const contextRequests = useIdentityRequestGuard(currentThreadId ?? 'no-current-thread');
 
-  if (currentThreadRef.current?.id !== currentThreadId) {
-    currentThreadLastSeqRef.current = currentThread?.lastSeq ?? 0;
-  } else {
-    currentThreadLastSeqRef.current = Math.max(
-      currentThreadLastSeqRef.current,
-      currentThread?.lastSeq ?? 0,
-    );
-  }
-  currentThreadRef.current = currentThread;
-
   /** Keep local mutations and the synchronous SSE owner on one ordered state path. */
   const setCurrentThread = useCallback<Dispatch<SetStateAction<RuntimeThread | null>>>(
     (action) => {
@@ -124,9 +117,9 @@ export function useRuntimeThreadState({
         : action;
       currentThreadRef.current = next;
       currentThreadLastSeqRef.current = next?.lastSeq ?? 0;
-      setCurrentThreadState(next);
+      currentThreadCommit.commitNow(next);
     },
-    [],
+    [currentThreadCommit],
   );
 
   const contextCompacting = isThreadContextCompacting(
@@ -152,9 +145,9 @@ export function useRuntimeThreadState({
     if (adopted === current) return false;
     currentThreadRef.current = adopted;
     currentThreadLastSeqRef.current = adopted?.lastSeq ?? 0;
-    setCurrentThreadState(adopted);
+    currentThreadCommit.commitNow(adopted);
     return true;
-  }, []);
+  }, [currentThreadCommit]);
 
   const applyBootstrapThreads = useCallback(async ({
     allThreads,
@@ -265,8 +258,13 @@ export function useRuntimeThreadState({
         currentThreadLastSeqRef.current = projection.thread?.lastSeq
           ?? projection.acceptedEvents.at(-1)?.seq
           ?? currentThreadLastSeqRef.current;
-        // The bridge batch owns one React projection commit, independent of its token count.
-        setCurrentThreadState(projection.thread);
+        // Pure delta batches only need the latest projection for the next paint. The
+        // synchronous owner ref still advances immediately, preserving event order.
+        if (!projection.resynced && shouldFrameCoalesceThreadEvents(projection.acceptedEvents)) {
+          currentThreadCommit.schedule(projection.thread);
+        } else {
+          currentThreadCommit.commitNow(projection.thread);
+        }
 
         if (projection.resynced) {
           if (projection.thread) {
@@ -318,7 +316,7 @@ export function useRuntimeThreadState({
       unsubscribeRef.current?.();
       unsubscribeRef.current = null;
     };
-  }, [client, currentThreadId, featureViews.events, onError, onTurnSettled, refreshThreadsSoon]);
+  }, [client, currentThreadCommit, currentThreadId, featureViews.events, onError, onTurnSettled, refreshThreadsSoon]);
 
   useEffect(() => {
     if (!effectiveActiveTurnId || !currentThreadId) {

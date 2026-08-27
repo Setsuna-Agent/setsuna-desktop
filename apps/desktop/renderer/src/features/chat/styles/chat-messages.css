@@ -991,7 +991,7 @@
   border-radius: 999px;
   color: var(--app-text-muted);
   background: var(--desktop-agent-main-surface);
-  box-shadow: var(--desktop-agent-input-shadow);
+  box-shadow: var(--desktop-agent-composer-shadow);
   cursor: pointer;
   pointer-events: auto;
   transform: translateX(var(--chat-scroll-bottom-shift-x)) translateY(var(--chat-scroll-bottom-shift-y));

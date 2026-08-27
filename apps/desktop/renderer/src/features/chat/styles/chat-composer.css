@@ -281,7 +281,7 @@
   border: 1px solid var(--desktop-agent-panel-border);
   border-radius: var(--app-radius-xl);
   background: var(--desktop-agent-main-surface);
-  box-shadow: var(--desktop-agent-input-shadow);
+  box-shadow: var(--desktop-agent-composer-shadow);
   animation: chat-command-menu-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -300,7 +300,7 @@
 .chat-sender > .chat-command-menu {
   --chat-command-menu-shift: 0px;
   position: absolute;
-  bottom: calc(100% - 4px);
+  bottom: calc(100% - 6px);
   left: 50%;
   z-index: 30;
   width: min(var(--chat-content-max-width), calc(100% - var(--chat-content-inline-padding) - var(--chat-content-inline-padding)));
@@ -316,7 +316,7 @@
 }
 
 .chat-sender--starter > .chat-command-menu {
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 6px);
   width: 100%;
 }
 
@@ -746,7 +746,7 @@
 .chat-model-command-menu {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 12px);
+  bottom: calc(100% + 6px);
   left: 0;
   z-index: 30;
   box-sizing: border-box;

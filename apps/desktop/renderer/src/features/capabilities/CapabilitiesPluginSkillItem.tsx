@@ -1,7 +1,7 @@
 import type { RuntimePluginSkill, RuntimeSkillSummary } from '@setsuna-desktop/contracts';
-import { BookOpen } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
+import { SkillIcon } from '../../shared/ui/SkillIcon.js';
 
 export function CapabilitiesPluginSkillItem({
   runtimeSkill,
@@ -37,7 +37,7 @@ export function CapabilitiesPluginSkillItem({
         disabled={removed}
         onClick={onOpen}
       >
-        <span className="desktop-capabilities-plugin-detail__item-icon"><BookOpen size={16} /></span>
+        <SkillIcon skill={runtimeSkill} variant="list" />
         <span className="desktop-capabilities-plugin-detail__item-body">
           <strong>{skill.name}</strong>
           <small>{skill.description || t('capabilities.detail.skillFallback')}</small>

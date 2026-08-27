@@ -20,9 +20,10 @@ import { Button, IconButton, PageHeader } from '../../shared/ui/primitives.js';
 import { settingsViewUi } from '../../shared/ui/SettingsViewUi.js';
 import { CapabilitiesPluginDetailSection } from './CapabilitiesPluginDetailSection.js';
 import { CapabilitiesPluginIcon } from './CapabilitiesPluginIcon.js';
-import { CapabilitiesPluginItemButton } from './CapabilitiesPluginItemButton.js';
+import { CapabilitiesPluginItemButton, CapabilitiesPluginItemIcon } from './CapabilitiesPluginItemButton.js';
 import { CapabilitiesPluginItemDialog, type CapabilitiesPluginItem } from './CapabilitiesPluginItemDialog.js';
 import { CapabilitiesPluginSkillItem } from './CapabilitiesPluginSkillItem.js';
+import { CapabilitiesTopbarBreadcrumb } from './CapabilitiesTopbarBreadcrumb.js';
 import { formatPluginFileSize, mergePluginHooks, mergePluginMcpServers, mergePluginSkills, mergePluginTools } from './pluginDisplay.js';
 import { localizedPluginCopy } from './pluginLocalization.js';
 
@@ -162,7 +163,13 @@ export function CapabilitiesPluginDetail({
   };
 
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
+    <>
+      <CapabilitiesTopbarBreadcrumb
+        currentLabel={copy.name}
+        parentLabel={t('capabilities.tab.plugins')}
+        onBack={onBack}
+      />
+      <section className="desktop-capabilities-detail desktop-capabilities-plugin-detail">
       <PageHeader
         className="desktop-capabilities-plugin-detail__header"
         leading={(
@@ -174,8 +181,6 @@ export function CapabilitiesPluginDetail({
         )}
         title={copy.name}
         subtitle={subtitle}
-        backLabel={t('capabilities.detail.back')}
-        onBack={onBack}
         actions={installedPlugin ? (
           <Dropdown
             destroyOnHidden
@@ -290,14 +295,13 @@ export function CapabilitiesPluginDetail({
         icon={<Wrench size={15} />}
         title={t('capabilities.detail.tools')}
         count={tools.length}
-        empty={t('capabilities.detail.toolsEmpty')}
       >
         {tools.map((tool) => (
           <CapabilitiesPluginItemButton
             key={tool.name}
             title={tool.name}
             description={tool.description || t('capabilities.detail.toolFallback')}
-            icon={<Wrench size={16} />}
+            icon={<CapabilitiesPluginItemIcon><Wrench size={16} /></CapabilitiesPluginItemIcon>}
             badges={[t('capabilities.detail.runtimeTool')]}
           />
         ))}
@@ -307,7 +311,6 @@ export function CapabilitiesPluginDetail({
         icon={<BookOpen size={15} />}
         title={t('capabilities.detail.skills')}
         count={skills.length}
-        empty={t('capabilities.detail.skillsEmpty')}
       >
         {skills.map((skill) => (
           installedPlugin ? (
@@ -323,7 +326,13 @@ export function CapabilitiesPluginDetail({
               key={skill.id}
               title={skill.name}
               description={skill.description || t('capabilities.detail.skillFallback')}
-              icon={<BookOpen size={16} />}
+              icon={(
+                <CapabilitiesPluginIcon
+                  name={marketplaceMetadata?.icon ?? plugin.icon}
+                  pluginId={marketplaceMetadata?.id ?? plugin.id}
+                  variant="list"
+                />
+              )}
               onClick={() => setSelectedItem({ kind: 'skill', value: skill })}
             />
           )
@@ -334,14 +343,13 @@ export function CapabilitiesPluginDetail({
         icon={<Plug size={15} />}
         title={t('capabilities.detail.mcp')}
         count={mcpServers.length}
-        empty={t('capabilities.detail.mcpEmpty')}
       >
         {mcpServers.map((server) => (
           <CapabilitiesPluginItemButton
             key={server.key}
             title={server.label}
             description={server.description || t('capabilities.detail.mcpFallback')}
-            icon={<Plug size={16} />}
+            icon={<CapabilitiesPluginItemIcon kind="mcp"><Plug size={16} /></CapabilitiesPluginItemIcon>}
             badges={[
               t(server.transport === 'streamableHttp' ? 'capabilities.detail.remoteMcp' : 'capabilities.detail.localMcp'),
               ...(server.owned === false ? [t('capabilities.detail.reuseExisting')] : []),
@@ -355,7 +363,6 @@ export function CapabilitiesPluginDetail({
         icon={<Workflow size={15} />}
         title="Hooks"
         count={hookCount}
-        empty={t('capabilities.detail.hooksEmpty')}
       >
         {hooks.map((hook) => (
           <CapabilitiesPluginItemButton
@@ -364,7 +371,7 @@ export function CapabilitiesPluginDetail({
             description={hook.description || hook.statusMessage || (marketplaceMetadata
               ? t('capabilities.detail.managedHookFallback')
               : t('capabilities.detail.localHookFallback'))}
-            icon={<Workflow size={16} />}
+            icon={<CapabilitiesPluginItemIcon><Workflow size={16} /></CapabilitiesPluginItemIcon>}
             onClick={() => setSelectedItem({ kind: 'hook', value: hook })}
           />
         ))}
@@ -378,14 +385,13 @@ export function CapabilitiesPluginDetail({
           icon={<FileText size={15} />}
           title={t('capabilities.detail.resources')}
           count={resourceCount}
-          empty={t('capabilities.detail.resourcesEmpty')}
         >
           {resources.map((resource) => (
             <CapabilitiesPluginItemButton
               key={resource.id}
               title={resource.label}
               description={resource.path}
-              icon={<FileText size={16} />}
+              icon={<CapabilitiesPluginItemIcon><FileText size={16} /></CapabilitiesPluginItemIcon>}
               badges={[formatPluginFileSize(resource.size)]}
               onClick={() => setSelectedItem({ kind: 'resource', value: resource })}
             />
@@ -412,7 +418,8 @@ export function CapabilitiesPluginDetail({
             : onGetItemContent}
         />
       ) : null}
-    </section>
+      </section>
+    </>
   );
 }
 

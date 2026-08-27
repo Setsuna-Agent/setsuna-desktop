@@ -315,6 +315,10 @@ export function ChatComposer({
     setSubmitting,
     submitting,
   });
+  const attachmentPickerDisabled = attachmentLimitReached
+    || submitting
+    || queuedTurnEdit.retrieving
+    || modeController.reviewModeEnabled;
   const commandController = useChatCommandController({
     activeProject,
     draft,
@@ -327,6 +331,7 @@ export function ChatComposer({
     activeModelName: modeController.activeModelName,
     activeProjectSelected: Boolean(activeProject),
     activeTurnId,
+    attachmentDisabled: attachmentPickerDisabled,
     canClearContext,
     contextCompactPercent,
     contextCompacting,
@@ -342,6 +347,7 @@ export function ChatComposer({
   }), [
     activeProject,
     activeTurnId,
+    attachmentPickerDisabled,
     canClearContext,
     commandController.slashQuery,
     contextCompactPercent,
@@ -565,6 +571,10 @@ export function ChatComposer({
       modeController.openModelPicker();
       return;
     }
+    if (item.kind === 'action' && item.type === 'attachment') {
+      fileInputRef.current?.click();
+      return;
+    }
     if (item.kind === 'action' && item.type === 'collaboration') {
       if (!multiAgentEnabled) void onSetMultiAgentEnabled(true);
       commandController.focusComposer();
@@ -764,13 +774,6 @@ export function ChatComposer({
         }
         footer={(actions) => (
           <ChatComposerFooter
-            attachmentControl={{
-              disabled: attachmentLimitReached
-                || submitting
-                || queuedTurnEdit.retrieving
-                || modeController.reviewModeEnabled,
-              onOpen: () => fileInputRef.current?.click(),
-            }}
             commandControl={{
               active: commandController.forcedSlashMenuOpen,
               disabled: queuedTurnEdit.editing || queuedTurnEdit.retrieving,

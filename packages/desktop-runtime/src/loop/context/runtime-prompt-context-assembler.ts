@@ -106,7 +106,6 @@ export class RuntimePromptContextAssembler {
     return {
       fragments: [
         baseInstructionFragment(),
-        ...(responseLanguage ? [responseLanguageFragment(responseLanguage)] : []),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
         ...(tools.some((tool) => tool.name === 'spawn_agent') ? [collaborationModeFragment()] : []),
         environmentFragment(environment),
@@ -120,6 +119,9 @@ export class RuntimePromptContextAssembler {
         // 目标或邮箱式轮次上下文与当前请求最接近，因此应排在项目规则或 Skill 等
         // 可复用用户上下文之后。
         ...runtimeContextFragments(hookContextMessages),
+        // Provider 会把 system/developer 片段按当前顺序合并。语言规则必须是最后一条
+        // 高权限指令，避免紧邻采样的英文工具策略或注入上下文削弱其显著性。
+        ...(responseLanguage ? [responseLanguageFragment(responseLanguage)] : []),
       ],
       selectedSkills: skillContext.selectedSkills,
     };

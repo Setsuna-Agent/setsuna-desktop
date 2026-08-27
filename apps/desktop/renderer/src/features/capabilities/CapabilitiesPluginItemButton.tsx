@@ -18,7 +18,7 @@ export function CapabilitiesPluginItemButton({
   const { t } = useI18n();
   const content = (
     <>
-      <span className="desktop-capabilities-plugin-detail__item-icon">{icon}</span>
+      {icon}
       <span className="desktop-capabilities-plugin-detail__item-body">
         <strong>{title}</strong>
         <small>{description}</small>
@@ -43,5 +43,23 @@ export function CapabilitiesPluginItemButton({
     >
       {content}
     </button>
+  );
+}
+
+export function CapabilitiesPluginItemIcon({
+  children,
+  kind,
+}: {
+  children: ReactNode;
+  kind?: 'mcp';
+}) {
+  return (
+    <span
+      className="desktop-capabilities-plugin-detail__item-icon"
+      data-kind={kind}
+      aria-hidden="true"
+    >
+      {children}
+    </span>
   );
 }

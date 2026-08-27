@@ -21,7 +21,7 @@ import {
 
 const scrollBottomThresholdPx = 96;
 const stickyBottomThresholdPx = 4;
-const pinnedScrollSettleFrameCount = 3;
+const pinnedScrollSettleFrameCount = 1;
 const keyboardScrollIntentKeys = new Set([
   'ArrowDown',
   'ArrowUp',
@@ -169,7 +169,7 @@ export function usePinnedChatScroll({ contentRef, scrollSignal, showEmptyStarter
         return;
       }
 
-      // 流式 Markdown 和工具面板可能连续几帧增高，多帧 settle 可以避免滚动少一截。
+      // 后续异步增高由下方 ResizeObserver 接管；每次内容提交只排一个 frame。
       const token = scrollScheduleTokenRef.current + 1;
       scrollScheduleTokenRef.current = token;
       if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);

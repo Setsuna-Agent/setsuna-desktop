@@ -11,7 +11,6 @@ describe('RuntimeToolRuns disclosure behavior', () => {
     ]);
 
     expect(html).toContain('chat-tool-run__chevron');
-    expect(html).toContain('chat-entry-transition');
     expect(html.match(/chat-tool-run__detail-icon/gu)).toHaveLength(2);
   });
 

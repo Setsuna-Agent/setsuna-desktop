@@ -12,6 +12,7 @@ import {
   inferActiveTurnIdFromThread,
   isThreadContextCompacting,
   selectInitialThreadSummary,
+  shouldFrameCoalesceThreadEvents,
 } from '../../../../src/services/runtime-client/runtimeThreadState.js';
 
 describe('applyCurrentThreadEvent', () => {
@@ -111,6 +112,18 @@ describe('applyCurrentThreadEvent', () => {
     expect(projection.resynced).toBe(true);
     expect(projection.acceptedEvents.map((event) => event.seq)).toEqual([9]);
     expect(projection.thread).toMatchObject({ lastSeq: 9, title: 'After resync' });
+  });
+});
+
+describe('shouldFrameCoalesceThreadEvents', () => {
+  it('coalesces transport deltas but keeps structural and terminal batches immediate', () => {
+    const events = canonicalCompletionEvents();
+    const delta = events.get(3)!;
+
+    expect(delta.type).toBe('message.delta');
+    expect(shouldFrameCoalesceThreadEvents([delta])).toBe(true);
+    expect(shouldFrameCoalesceThreadEvents([delta, events.get(5)!])).toBe(false);
+    expect(shouldFrameCoalesceThreadEvents([])).toBe(false);
   });
 });
 

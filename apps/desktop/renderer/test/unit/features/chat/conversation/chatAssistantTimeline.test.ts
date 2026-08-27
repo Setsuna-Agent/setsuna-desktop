@@ -6,6 +6,55 @@ import {
 } from '../../../../../src/features/chat/conversation/chatAssistantTimeline.js';
 
 describe('createAssistantRunTimeline', () => {
+  it('keeps context compaction in order inside one assistant work timeline', () => {
+    const before: RuntimeMessage = {
+      id: 'assistant_before',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: 'Inspecting files.',
+      createdAt: '2026-08-27T00:00:00.000Z',
+      status: 'complete',
+      phase: 'commentary',
+    };
+    const compaction: RuntimeMessage = {
+      id: 'compact_1',
+      turnId: 'turn_1',
+      role: 'user',
+      content: '<context_compaction_summary>summary</context_compaction_summary>',
+      createdAt: '2026-08-27T00:00:01.000Z',
+      status: 'complete',
+      contextCompaction: {
+        compactedMessageCount: 273,
+        compactedTokens: 1508,
+        keptRecentMessageCount: 8,
+        maxContextTokensK: 256,
+        originalMessageCount: 281,
+        originalTokens: 217747,
+      },
+    };
+    const after: RuntimeMessage = {
+      id: 'assistant_after',
+      turnId: 'turn_1',
+      role: 'assistant',
+      content: 'Continuing with the next file.',
+      createdAt: '2026-08-27T00:00:02.000Z',
+      status: 'complete',
+      phase: 'commentary',
+    };
+
+    expect(createAssistantRunTimeline([before, after], [], {
+      contextCompactions: [compaction],
+      messageOrderIds: [before.id, compaction.id, after.id],
+    })).toMatchObject([{
+      type: 'work',
+      items: [
+        { type: 'content', segment: { segment: { id: before.id } } },
+        { type: 'contextCompaction', active: false, message: { id: compaction.id } },
+        { type: 'content', segment: { segment: { id: after.id } } },
+      ],
+    }]);
+  });
+
   it('places Plugin attribution in the work body before a final answer', () => {
     const segments: RuntimeMessage[] = [{
       id: 'assistant_final',
@@ -737,6 +786,7 @@ describe('createAssistantRunTimeline', () => {
 function workItemOrder(items: Extract<ReturnType<typeof createAssistantRunTimeline>[number], { type: 'work' }>['items']): string[] {
   return items.flatMap((item) => {
     if (item.type === 'content') return [`content:${item.segment.id}`];
+    if (item.type === 'contextCompaction') return [`compaction:${item.id}`];
     if (item.type === 'thinking') return [`thinking:${item.segment.id}`];
     if (item.type === 'pluginUses') return [`plugins:${item.id}`];
     return item.toolRuns.map((run) => `tool:${run.id}`);

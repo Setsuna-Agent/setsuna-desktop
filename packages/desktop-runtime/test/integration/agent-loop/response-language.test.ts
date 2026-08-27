@@ -39,14 +39,18 @@ describe('agent loop response language', () => {
     expect(languageMessages).toEqual([
       expect.objectContaining({
         role: 'developer',
-        content: expect.stringContaining('target response language for this turn is Simplified Chinese'),
+        content: expect.stringContaining('本轮回答的目标语言是简体中文'),
       }),
       expect.objectContaining({
         role: 'developer',
-        content: expect.stringContaining('target response language for this turn is Simplified Chinese'),
+        content: expect.stringContaining('本轮回答的目标语言是简体中文'),
       }),
     ]);
     expect(languageMessages[0]?.content).toBe(languageMessages[1]?.content);
+    expect(modelClient.requests.every((request) => (
+      request.messages.filter((message) => message.role === 'system' || message.role === 'developer').at(-1)?.id
+        === RUNTIME_RESPONSE_LANGUAGE_PROMPT_ID
+    ))).toBe(true);
     expect(modelClient.requests.every((request) => request.stepSnapshot?.promptManifest?.some(
       (entry) => entry.id === RUNTIME_RESPONSE_LANGUAGE_PROMPT_ID
         && entry.role === 'developer'

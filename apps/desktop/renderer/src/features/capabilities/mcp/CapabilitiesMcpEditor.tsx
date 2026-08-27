@@ -15,6 +15,7 @@ import {
   TextArea,
   TextField,
 } from '../../../shared/ui/primitives.js';
+import { CapabilitiesTopbarBreadcrumb } from '../CapabilitiesTopbarBreadcrumb.js';
 import {
   mcpDraftToInput,
   mcpToolStats,
@@ -93,11 +94,13 @@ export function CapabilitiesMcpEditor({
   const allowedTools = new Set(splitList(draft.allowedTools, t));
   const disabledTools = new Set(splitList(draft.disabledTools, t));
   const toolStats = mcpToolStats(draft.tools, [...allowedTools], [...disabledTools]);
+  const title = editingMcpServer ? editingMcpServer.label || editingMcpServer.key : t('capabilities.mcp.editor.new');
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-mcp-editor">
+    <>
+      <CapabilitiesTopbarBreadcrumb currentLabel={title} parentLabel="MCP" onBack={onBack} />
+      <section className="desktop-capabilities-detail desktop-capabilities-mcp-editor">
       <PageHeader
-        onBack={onBack}
-        title={editingMcpServer ? editingMcpServer.label || editingMcpServer.key : t('capabilities.mcp.editor.new')}
+        title={title}
         subtitle={t(editingMcpServer?.readOnly ? 'capabilities.mcp.editor.readOnly' : 'capabilities.mcp.editor.localOnly')}
         actions={
           <Button
@@ -217,7 +220,8 @@ export function CapabilitiesMcpEditor({
           )}
         </section>
       </div>
-    </section>
+      </section>
+    </>
   );
 }
 

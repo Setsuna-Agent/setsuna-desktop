@@ -13,11 +13,13 @@ describe('chat slash command items', () => {
     const items = createChatSlashCommandItems(options({
       activeProjectSelected: false,
       activeTurnId: 'turn-1',
+      attachmentDisabled: true,
       canClearContext: true,
       sideChatAvailable: false,
     }));
 
     expect(items.map((item) => item.key)).toEqual([
+      'attachment',
       'model',
       'collaboration',
       'goal',
@@ -26,6 +28,7 @@ describe('chat slash command items', () => {
       'compact-context',
       'clear-context',
     ]);
+    expect(action(items, 'attachment').disabled).toBe(true);
     expect(action(items, 'side-chat').disabled).toBe(true);
     expect(action(items, 'review').disabled).toBe(true);
     expect(action(items, 'compact-context').disabled).toBe(true);
@@ -58,7 +61,8 @@ describe('chat slash command items', () => {
       skills,
     }));
 
-    expect(items.slice(0, 7).map((item) => item.key)).toEqual([
+    expect(items.slice(0, 8).map((item) => item.key)).toEqual([
+      'attachment',
       'model',
       'collaboration',
       'goal',
@@ -67,7 +71,7 @@ describe('chat slash command items', () => {
       'compact-context',
       'clear-context',
     ]);
-    expect(items.slice(7).map((item) => item.key)).toEqual(
+    expect(items.slice(8).map((item) => item.key)).toEqual(
       skills.slice(2).map((item) => `skill:${item.id}`),
     );
   });
@@ -81,7 +85,7 @@ describe('chat slash command items', () => {
   it('keeps side conversations lightweight by hiding persistent task actions', () => {
     const items = createChatSlashCommandItems(options({ sideConversation: true }));
 
-    expect(items.map((item) => item.key)).toEqual(['model']);
+    expect(items.map((item) => item.key)).toEqual(['attachment', 'model']);
   });
 });
 
@@ -90,6 +94,7 @@ function options(overrides: Partial<ChatSlashCommandItemsOptions> = {}): ChatSla
     activeModelName: 'Current model',
     activeProjectSelected: true,
     activeTurnId: null,
+    attachmentDisabled: false,
     canClearContext: true,
     contextCompactPercent: 42,
     contextCompacting: false,

@@ -50,6 +50,24 @@ export type CurrentThreadEventBatchProjection = {
   thread: RuntimeThread | null;
 };
 
+const frameCoalescedThreadEventTypes = new Set<StoredThreadEvent['type']>([
+  'item.delta',
+  'message.delta',
+  'plan.delta',
+  'reasoning.raw_delta',
+  'reasoning.summary_delta',
+  'token.count',
+  'tool.output_delta',
+  'turn.diff',
+]);
+
+/** Only transport-sized deltas may wait for the next paint. Structural and terminal
+ * events commit immediately so controls, approvals, and completion state stay exact. */
+export function shouldFrameCoalesceThreadEvents(events: StoredThreadEvent[]): boolean {
+  return events.length > 0
+    && events.every((event) => frameCoalescedThreadEventTypes.has(event.type));
+}
+
 /** Applies one ordered bridge batch while retaining the owner and sequence gate. */
 export function applyCurrentThreadEventBatch(
   thread: RuntimeThread | null,

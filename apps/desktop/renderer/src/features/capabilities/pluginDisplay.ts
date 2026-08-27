@@ -15,7 +15,6 @@ export type PluginMcpDetail = RuntimePluginMcpServerDescriptor & { owned?: boole
 export type PluginMarketplaceSection = {
   id: 'automation' | 'creation' | 'featured' | 'utilities';
   title: string;
-  description: string;
   plugins: RuntimePluginMarketplaceItem[];
 };
 
@@ -67,7 +66,6 @@ export function pluginMarketplacePresentation(
     sections.push({
       id: 'featured',
       title: t('capabilities.market.featured'),
-      description: t('capabilities.market.featuredDescription'),
       plugins: featured,
     });
   }
@@ -75,7 +73,6 @@ export function pluginMarketplacePresentation(
     sections.push({
       id: 'utilities',
       title: t('capabilities.market.utilities'),
-      description: t('capabilities.market.utilitiesDescription'),
       plugins: utilities,
     });
   }
@@ -83,7 +80,6 @@ export function pluginMarketplacePresentation(
     sections.push({
       id: 'creation',
       title: t('capabilities.market.creation'),
-      description: t('capabilities.market.creationDescription'),
       plugins: creation,
     });
   }
@@ -91,7 +87,6 @@ export function pluginMarketplacePresentation(
     sections.push({
       id: 'automation',
       title: t('capabilities.market.automation'),
-      description: t('capabilities.market.automationDescription'),
       plugins: automation,
     });
   }

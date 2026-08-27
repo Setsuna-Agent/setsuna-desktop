@@ -31,6 +31,7 @@ describe('capability catalog list items', () => {
 
     expect(document.querySelector('.desktop-capability-list-item')).toBeTruthy();
     expect(document.querySelector('.desktop-capability-card')).toBeNull();
+    expect(document.querySelector('.desktop-capability-list-item__copy small')).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: 'Docs MCP' }));
     await userEvent.click(screen.getByRole('checkbox', { name: '启用' }));
     expect(onOpen).toHaveBeenCalledOnce();
@@ -52,6 +53,7 @@ describe('capability catalog list items', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: '启用' }));
     expect(document.querySelector('[data-skill-icon="skill"]')).toBeTruthy();
     expect(document.querySelector('.desktop-capability-list-item__actions')).toBeNull();
+    expect(document.querySelector('.desktop-capability-list-item__copy small')).toBeNull();
     expect(onOpen).toHaveBeenCalledOnce();
     expect(onUpdate).toHaveBeenCalledWith({ enabled: false });
   });

@@ -21,7 +21,7 @@ describe('useSmoothedStreamingContent', () => {
     );
 
     view.rerender({ content: '这是' });
-    act(() => vi.advanceTimersByTime(40));
+    act(() => vi.advanceTimersByTime(48));
     expect(view.result.current).toBe('这');
 
     view.rerender({ content: '这是一段' });
@@ -42,11 +42,13 @@ describe('useSmoothedStreamingContent', () => {
     }
 
     expect(view.result.current).toBe('这');
-    act(() => vi.advanceTimersByTime(28));
+    act(() => vi.advanceTimersByTime(44));
     expect(view.result.current.length).toBeGreaterThan(2);
     expect(view.result.current.length).toBeLessThan(completeContent.length);
 
-    act(() => vi.advanceTimersByTime(500));
+    for (let index = 0; index < 16; index += 1) {
+      act(() => vi.advanceTimersByTime(48));
+    }
     expect(view.result.current).toBe(completeContent);
   });
 
@@ -79,10 +81,10 @@ describe('useSmoothedStreamingContent', () => {
 
 describe('nextStreamingChunkLength', () => {
   it('prefers nearby phrase boundaries and never splits surrogate pairs', () => {
-    expect(nextStreamingChunkLength('abcdefghij klmnopqrstuvwxyz')).toBe(11);
+    expect(nextStreamingChunkLength('one two three four five')).toBe(14);
 
     const emojiContent = '😀'.repeat(20);
     const chunkLength = nextStreamingChunkLength(emojiContent);
-    expect(emojiContent.slice(0, chunkLength)).toBe('😀'.repeat(10));
+    expect(emojiContent.slice(0, chunkLength)).toBe(emojiContent);
   });
 });

@@ -3,6 +3,7 @@ import { Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import { Button, PageHeader, TextArea, TextField } from '../../shared/ui/primitives.js';
+import { CapabilitiesTopbarBreadcrumb } from './CapabilitiesTopbarBreadcrumb.js';
 
 type SkillEditorDraft = {
   id: string;
@@ -33,11 +34,17 @@ export function CapabilitiesSkillEditor({
   }, [skill]);
 
   const creating = mode === 'create';
+  const title = creating ? t('capabilities.skill.editor.create') : skill?.name || t('capabilities.skill.editor.edit');
   return (
-    <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
-      <PageHeader
+    <>
+      <CapabilitiesTopbarBreadcrumb
+        currentLabel={title}
+        parentLabel={t('capabilities.tab.skills')}
         onBack={onBack}
-        title={creating ? t('capabilities.skill.editor.create') : skill?.name || t('capabilities.skill.editor.edit')}
+      />
+      <section className="desktop-capabilities-detail desktop-capabilities-skill-editor">
+      <PageHeader
+        title={title}
         subtitle={t(creating ? 'capabilities.skill.editor.createSubtitle' : 'capabilities.skill.editor.editSubtitle')}
         actions={
           <Button
@@ -87,7 +94,8 @@ export function CapabilitiesSkillEditor({
           </label>
         </div>
       </div>
-    </section>
+      </section>
+    </>
   );
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   inferRuntimeResponseLanguage,
   resolveRuntimeResponseLanguage,
+  runtimeResponseLanguagePrompt,
 } from '../../../src/loop/context/runtime-response-language.js';
 
 describe('runtime response language', () => {
@@ -29,5 +30,10 @@ describe('runtime response language', () => {
       conversationMessages,
       fallback: 'en-US',
     })).toBe('zh-CN');
+  });
+
+  it('states the response constraint in the target language', () => {
+    expect(runtimeResponseLanguagePrompt('zh-CN')).toMatch(/^本轮回答的目标语言是简体中文。/u);
+    expect(runtimeResponseLanguagePrompt('en-US')).toMatch(/^The target response language for this turn is English\./u);
   });
 });

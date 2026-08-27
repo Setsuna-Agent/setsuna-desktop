@@ -1,6 +1,6 @@
 .capabilities-page {
-  --desktop-capabilities-content-width: 940px;
-  --desktop-capabilities-page-padding-top: 8px;
+  --desktop-capabilities-content-width: 750px;
+  --desktop-capabilities-page-padding-top: 56px;
   --desktop-capabilities-page-padding-inline: 20px;
 
   grid-column: 2 / -1;
@@ -42,12 +42,8 @@
   padding-left: 0;
 }
 
-:root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail {
-  padding-top: var(--desktop-capabilities-page-padding-inline);
-}
-
-:root[data-desktop-platform='win32'] .desktop-capabilities-panel__inner--detail > .desktop-capabilities-detail {
-  /* 详情组件原有的 2px 光学校正会破坏与外层页面的统一顶部基线。 */
+.desktop-capabilities-panel__inner--detail > .desktop-capabilities-detail {
+  /* 顶部留白由详情容器统一控制，避免各页面再叠加光学校正。 */
   padding-top: 0;
 }
 
@@ -76,7 +72,7 @@
 
 .desktop-capabilities-panel__inner--page-tabs {
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-  padding-top: var(--desktop-capabilities-page-padding-inline);
+  padding-top: var(--desktop-capabilities-page-padding-top);
 }
 
 .desktop-capabilities-panel__inner--skills.desktop-capabilities-panel__inner--page-tabs {
@@ -285,6 +281,66 @@
 
 .app-topbar__route-slot .desktop-capabilities-tabs {
   width: 100%;
+}
+
+.desktop-capabilities-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-width: 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 18px;
+  user-select: none;
+}
+
+.desktop-capabilities-breadcrumb button {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--app-radius-sm);
+  color: var(--app-text-muted);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.desktop-capabilities-breadcrumb button:hover {
+  color: var(--app-text);
+  border-color: var(--desktop-agent-panel-border);
+  background: var(--desktop-agent-control-hover-bg);
+}
+
+.desktop-capabilities-breadcrumb button:focus-visible {
+  outline: 0;
+  border-radius: var(--app-radius-xs);
+  box-shadow: var(--app-focus-ring);
+}
+
+.desktop-capabilities-breadcrumb svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  stroke-width: 1.8;
+}
+
+.desktop-capabilities-breadcrumb > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--app-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-desktop-platform='darwin'] .app-topbar__route-slot .desktop-capabilities-tabs {
+  --desktop-capabilities-tab-padding-inline: 9px;
+}
+
+:root[data-desktop-platform='darwin'] .app-topbar__route-slot .desktop-capabilities-tabs button {
+  height: 26px;
+  font-size: 12px;
 }
 
 .desktop-capabilities-panel__inner--page-tabs .desktop-capabilities-tabs {
