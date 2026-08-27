@@ -577,7 +577,7 @@ export class RuntimeToolCallExecutor {
     };
     partialToolCalls.set(id, next);
     if (!next.name) return;
-    if (!toolRouter.hasTool(next.name)) return;
+    if (!toolRouter.canRouteTool(next.name)) return;
 
     const previous = announcedToolPreviews.get(id);
     const argumentsLength = next.arguments.length;

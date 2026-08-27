@@ -394,8 +394,8 @@ packages/features/ — 0 direct / 765 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 504 total files
-├── src/ — 2 direct / 293 total files
+packages/desktop-runtime/ — 4 direct / 507 total files
+├── src/ — 2 direct / 294 total files
 │   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
@@ -420,9 +420,9 @@ packages/desktop-runtime/ — 4 direct / 504 total files
 │   │   ├── routes/ — 1 direct / 1 total files
 │   │   └── settings/ — 3 direct / 3 total files
 │   ├── hooks/ — 3 direct / 3 total files
-│   ├── loop/ — 65 files
+│   ├── loop/ — 66 files
 │   │   ├── approval-review/ — 5 direct / 5 total files
-│   │   ├── context/ — 15 direct / 15 total files
+│   │   ├── context/ — 16 direct / 16 total files
 │   │   ├── core/ — 21 direct / 21 total files
 │   │   ├── lifecycle/ — 12 direct / 12 total files
 │   │   └── tools/ — 12 direct / 12 total files
@@ -434,7 +434,7 @@ packages/desktop-runtime/ — 4 direct / 504 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 207 files
+└── test/ — 209 files
     ├── adapters/ — 49 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
@@ -458,16 +458,16 @@ packages/desktop-runtime/ — 4 direct / 504 total files
     │   ├── history/ — 2 direct / 2 total files
     │   └── legacy-thread-store/ — 3 files
     │       └── threads/ — 3 direct / 3 total files
-    ├── integration/ — 47 files
+    ├── integration/ — 48 files
     │   ├── adapters/ — 8 files
     │   │   ├── skill/ — 1 direct / 1 total files
     │   │   ├── store/ — 1 direct / 1 total files
     │   │   └── tool/ — 6 direct / 6 total files
-    │   ├── agent-loop/ — 24 direct / 24 total files
+    │   ├── agent-loop/ — 25 direct / 25 total files
     │   └── runtime-server/ — 15 direct / 15 total files
-    ├── loop/ — 30 files
+    ├── loop/ — 31 files
     │   ├── approval-review/ — 1 direct / 1 total files
-    │   ├── context/ — 12 direct / 12 total files
+    │   ├── context/ — 13 direct / 13 total files
     │   ├── core/ — 6 direct / 6 total files
     │   ├── lifecycle/ — 6 direct / 6 total files
     │   └── tools/ — 5 direct / 5 total files

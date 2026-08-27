@@ -64,7 +64,7 @@ export const READ_TOOL_RESULT_PAGE_BYTES = READ_TOOL_RESULT_OUTPUT_BYTES
 
 const TOOL_SEARCH_TOOL: RuntimeToolDefinition = {
   name: TOOL_SEARCH_TOOL_NAME,
-  description: 'Search the deferred tool catalog for a capability. Returns matching concrete tool names with short descriptions; activated tools get appended to the tools of your next request.',
+  description: 'Some tools are intentionally omitted from the current tool list. Search the deferred catalog when you need a capability but do not already know its exact registered tool name. Matching definitions are appended to the tools of your next request.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
@@ -217,10 +217,12 @@ export class RuntimeToolRouter {
     ];
   }
 
-  hasTool(name: string): boolean {
-    return this.directTools.some((tool) => tool.name === name)
-      || this.advertisedDeferredToolNames.has(name)
-      || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
+  /**
+   * 是否属于当前 turn 可路由的工具目录。advertised 只控制发送给模型的
+   * Schema，不是执行权限；真正的权限与审批仍由 catalog 过滤和 orchestrator 负责。
+   */
+  canRouteTool(name: string): boolean {
+    return this.catalogToolNames.has(name) || RUNTIME_PROVIDED_TOOL_NAMES.has(name);
   }
 
   /** host catalog 与 runtime 自带工具始终阻止同名动态工具接管。 */
@@ -277,14 +279,14 @@ export class RuntimeToolRouter {
   }
 
   async previewPartialToolCall(name: string, rawArguments: string): Promise<ToolExecutionPreview | null> {
-    if (!this.hasTool(name)) return null;
+    if (!this.canRouteTool(name)) return null;
     const preview = this.options.toolHost.previewPartialToolCall;
     if (!preview) return null;
     return preview.call(this.options.toolHost, name, rawArguments, this.options.context).catch(() => null);
   }
 
   async canRunInParallel(toolCall: RuntimeToolCall, parsedArguments: unknown): Promise<boolean> {
-    if (!this.hasTool(toolCall.name)) return false;
+    if (!this.canRouteTool(toolCall.name)) return false;
     if (!isPlainRecord(parsedArguments)) return false;
     if (this.options.strictApprovalRequiresSerial) return false;
     if (!this.options.orchestrator) return false;
@@ -303,10 +305,10 @@ export class RuntimeToolRouter {
     parsedArguments: unknown,
     options: ToolOrchestratorRunOptions = {},
   ): Promise<ToolOrchestratorRunResult> {
-    // 执行门禁使用构建本 sampling step 时的不可变快照。tool_search 在本 step
-    // 新激活的工具只能进入下一次模型请求，不能被同一批 tool_calls 越权执行。
-    if (!this.hasTool(toolCall.name)) {
-      throw new Error(`Tool ${toolCall.name} was not advertised in this sampling step.`);
+    // 模型可能准确调用未下发 Schema 的 deferred 工具。只要它仍在经过 hidden、
+    // allowTool 等过滤的 host catalog 中，就进入与 direct 工具相同的审批和执行链路。
+    if (!this.catalogToolNames.has(toolCall.name)) {
+      throw new Error(`Tool ${toolCall.name} is not registered in the allowed tool catalog.`);
     }
     if (!this.options.orchestrator) throw new Error('Tool runtime is unavailable.');
     const profile = await this.profileFor(toolCall.name);
