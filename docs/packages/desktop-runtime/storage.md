@@ -173,7 +173,7 @@ Legacy import 测试使用冻结的历史 JSON/JSONL fixture，避免由当前�
 - List 只返回 key，不返回 value。
 - 启动时迁移 legacy secrets。
 
-MCP connection 是内存 adapter，不持久化 socket/session。
+MCP connection 由 `packages/features/mcp/runtime` 在内存中管理，不持久化 socket/session；`FileMcpStore` 与 legacy secret migration 仍由 desktop runtime 宿主持有。
 
 ## Memory
 

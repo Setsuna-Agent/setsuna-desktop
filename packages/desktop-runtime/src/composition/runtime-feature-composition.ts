@@ -21,6 +21,13 @@ import {
 } from '@setsuna-desktop/feature-conversation-debug/contracts';
 import { conversationDebugRuntimeFeature } from '@setsuna-desktop/feature-conversation-debug/runtime';
 import {
+  mcpControlCapability,
+  mcpRuntimeHostCapability,
+  mcpRuntimeToolServiceCapability,
+  type McpRuntimeHost,
+} from '@setsuna-desktop/feature-mcp/contracts';
+import { mcpRuntimeFeature } from '@setsuna-desktop/feature-mcp/runtime';
+import {
   collaborationControlCapability,
   collaborationRuntimeHostCapability,
   createNoopCollaborationControl,
@@ -96,6 +103,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     reviewRuntimeFeature,
     runtimeActivityRuntimeFeature,
     windowsSandboxRuntimeFeature,
+    mcpRuntimeFeature,
   ],
   optional: [
     collaborationRuntimeFeature,
@@ -296,6 +304,17 @@ export async function activateBuiltinRuntimeFeatures(
         workspaceDependenciesLegacySettingsCapability,
         runtime.configStore.workspaceDependenciesLegacySettingsAdapter(),
       ),
+      provideHostCapability(
+        mcpRuntimeHostCapability,
+        Object.freeze({
+          store: runtime.mcpStore,
+          credentials: runtime.nativeBridge,
+          fetch: runtime.networkProxyFetch.forRoute(),
+          resolveNetworkEnvironment: () => runtime.networkProxyFetch.environmentForRoute(),
+          openExternal: (url: string) => runtime.nativeBridge.openExternal(url),
+          elicitation: runtime.mcpElicitations,
+        } satisfies McpRuntimeHost),
+      ),
     ],
   });
 
@@ -340,6 +359,14 @@ export async function activateBuiltinRuntimeFeatures(
     host.bindWhenFeatureAvailable(visionRecognitionFeature.id, {
       visionRecognition: requiredCapability(visionRecognitionServiceCapability),
     }, ({ visionRecognition }) => runtime.extensionManager.setVisionRecognitionService(visionRecognition));
+
+    host.bind({
+      mcpControl: requiredCapability(mcpControlCapability),
+    }, ({ mcpControl }) => runtime.mcpControl.bind(mcpControl));
+
+    host.bind({
+      mcpTools: requiredCapability(mcpRuntimeToolServiceCapability),
+    }, ({ mcpTools }) => runtime.mcpToolHost.bind(mcpTools));
 
     host.bindWhenFeatureAvailable(workspaceDependenciesFeature.id, {
       workspaceDependencies: requiredCapability(workspaceDependenciesControlCapability),

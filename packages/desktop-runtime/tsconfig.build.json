@@ -22,6 +22,7 @@
     { "path": "../features/conversation-debug/tsconfig.build.json" },
     { "path": "../features/image-generation/tsconfig.build.json" },
     { "path": "../features/goal/tsconfig.build.json" },
+    { "path": "../features/mcp/tsconfig.build.json" },
     { "path": "../features/memory/tsconfig.build.json" },
     { "path": "../features/model-provider/tsconfig.build.json" },
     { "path": "../features/plugin-management/tsconfig.build.json" },

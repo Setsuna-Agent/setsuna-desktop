@@ -10,7 +10,6 @@
     "setsuna-desktop-runtime": "dist/cli.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
     "@setsuna-desktop/contracts": "workspace:*",
     "@setsuna-desktop/feature-core": "workspace:*",
     "@setsuna-desktop/feature-browser": "workspace:*",
@@ -18,6 +17,7 @@
     "@setsuna-desktop/feature-conversation-debug": "workspace:*",
     "@setsuna-desktop/feature-image-generation": "workspace:*",
     "@setsuna-desktop/feature-goal": "workspace:*",
+    "@setsuna-desktop/feature-mcp": "workspace:*",
     "@setsuna-desktop/feature-memory": "workspace:*",
     "@setsuna-desktop/feature-model-provider": "workspace:*",
     "@setsuna-desktop/feature-plugin-management": "workspace:*",

@@ -6,7 +6,7 @@
 - `packages/desktop-runtime/src/adapters/`
 - `packages/desktop-runtime/src/runtime/`
 
-Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实现放 adapter。`runtime-factory.ts` 负责把两者接起来。
+Runtime 的核心业务依赖 port；文件、网络和平台实现放 adapter。MCP 协议与工具业务由 `packages/features/mcp` 持有，`runtime-factory.ts` 只组装宿主 adapter 与 Feature capability。
 
 ## Port 分类
 
@@ -30,7 +30,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 - `ModelClient`
 - `ToolHost`
 - `ApprovalGate`
-- `McpClientRuntime`
+- MCP Feature 的 `McpControl` / `McpRuntimeToolService` capability bridge
 - `BackgroundShellProcessManager`
 - `WorkspaceDependencyManager`
 
@@ -69,7 +69,7 @@ Runtime 的核心业务依赖 port；文件、网络、模型、MCP 和平台实
 1. Clock、IDs、event/debug/notification buses、approval gate。
 2. Thread/attachment/image/config/MCP/policy stores，Usage recorder proxy，以及提供给 Memory Feature 的 store adapter。
 3. Event writer 与 `EventCoordinatedThreadStore`。
-4. MCP connection 与 elicitation。
+4. MCP bindable control、ToolHost bridge 与 elicitation host adapter。
 5. Skill registry 和 MCP dependency wrapper。
 6. Plugin store 与 marketplace。
 7. Workspace search/project/dependency/environment/instruction/workflow。
@@ -99,7 +99,7 @@ Factory 接受 data root、builtin Skill/Plugin 和 bundled ripgrep 等 options�
 | `adapters/feature/` | Feature host adapter 与激活后绑定 proxy，包括 `BindableUsageRecorder` |
 | `adapters/model/` | 模型图片资产解析 wrapper 与 Feature sampling 绑定；协议、stream/replay/discovery 位于 `packages/features/model-provider/` |
 | `adapters/tool/` | ToolHost implementations |
-| `adapters/mcp/` | SDK connection、OAuth、elicitation、result normalize |
+| `adapters/mcp/` | Feature control/ToolHost bridge 与 approval/event elicitation；SDK/OAuth/result 位于 `packages/features/mcp/` |
 | `adapters/skill/` | File Skill registry 与 MCP dependency |
 | `adapters/plugin/` | Bundle store、manifest model、marketplace |
 | `adapters/workspace/` | Project store、environment、instructions、workflow、dependencies |

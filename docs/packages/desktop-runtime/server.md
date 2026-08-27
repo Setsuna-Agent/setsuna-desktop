@@ -32,11 +32,11 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 3. 恢复 thread store 和 owner lease。
 4. 恢复 generated image / attachment store。
 5. 结算异常退出遗留的 streaming turn。
-6. 排队 startup memory extraction。
-7. 创建 app-server command/fs manager 和 connection registry。
-8. 创建 HTTP server。
+6. 激活 Runtime Feature composition；MCP Feature 此时只建立 control 与生命周期 owner，不连接 server。
+7. 排队 startup memory extraction。
+8. 创建 app-server command/fs manager、connection registry 和 HTTP server。
 
-恢复失败时必须关闭已启动的 MCP connection 和 thread store，再把错误交给 main。
+恢复失败时必须 dispose 已激活的 Feature scope，并关闭 thread store，再把错误交给 main。
 
 ## HTTP 分发
 
@@ -200,8 +200,8 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 5. 终止 app-server command/fs managers。
 6. `agentLoop.shutdown()` 取消并排空任务。
 7. 等待 in-flight HTTP idle。
-8. 关闭 background shell。
-9. 关闭 MCP connections。
+8. Dispose Runtime Feature composition；MCP Feature scope 在这里关闭全部连接。
+9. 关闭 extension、background shell、network/native bridge。
 10. 关闭 thread store/lease/checkpoint。
 11. 等待 server closed。
 

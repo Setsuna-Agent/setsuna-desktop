@@ -78,7 +78,7 @@ export async function deleteRuntimeThread(
     // retry a deletion merely because one secondary cleanup failed.
     const cleanupTasks = [
       { label: 'dynamic tools', run: () => runtime.agentLoop.clearAppServerDynamicTools(threadId) },
-      { label: 'MCP connections', run: () => runtime.mcpConnections.releaseThread(threadId) },
+      { label: 'MCP connections', run: () => runtime.mcpControl.releaseThread(threadId) },
       { label: 'attachments', run: () => runtime.attachmentStore.releaseThread(threadId) },
       { label: 'tool results', run: () => runtime.toolResultStore.releaseThread(threadId) },
       ...(!thread.projectId || thread.kind === 'side'

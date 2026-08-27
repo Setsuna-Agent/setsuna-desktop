@@ -1,11 +1,7 @@
 import type {
   AnswerRuntimeApprovalInput,
   RuntimeMcpServerInput,
-  RuntimeMcpServerList,
   RuntimeMcpServerPatch,
-} from '@setsuna-desktop/contracts';
-import {
-  mergeRuntimeMcpServerInput,
 } from '@setsuna-desktop/contracts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
@@ -106,7 +102,7 @@ export async function handleRuntimeExtensionRequest(
     sendJson(
       response,
       200,
-      await withMcpAuthStatuses(runtime, await runtime.mcpStore.listServers()),
+      await runtime.mcpControl.listServers({ includeAuthStatus: true }),
     );
     return true;
   }
@@ -114,15 +110,10 @@ export async function handleRuntimeExtensionRequest(
   if (request.method === 'POST' && url.pathname === '/v1/mcp/tools') {
     const input = await readBody<RuntimeMcpServerInput>(request);
     const serverKey = normalizeMcpServerKey(input.key);
-    const existing = (await runtime.mcpStore.listServerInputs())
-      .find((server) => server.key === serverKey);
     sendJson(
       response,
       200,
-      await runtime.mcpConnections.discoverTools(
-        mergeRuntimeMcpServerInput(existing, input),
-        { scopeId: `discovery:${serverKey}` },
-      ),
+      await runtime.mcpControl.discoverTools({ ...input, key: serverKey }),
     );
     return true;
   }
@@ -130,9 +121,8 @@ export async function handleRuntimeExtensionRequest(
   if (request.method === 'POST' && url.pathname === '/v1/mcp/servers') {
     const input = await readBody<RuntimeMcpServerInput>(request);
     const key = normalizeMcpServerKey(input.key);
-    const result = await runtime.mcpStore.upsertServer(input);
-    await runtime.mcpConnections.invalidateServer(key);
-    sendJson(response, 201, await withMcpAuthStatuses(runtime, result));
+    await runtime.mcpControl.upsertServer({ ...input, key });
+    sendJson(response, 201, await runtime.mcpControl.listServers({ includeAuthStatus: true }));
     return true;
   }
 
@@ -141,20 +131,18 @@ export async function handleRuntimeExtensionRequest(
     const serverKey = normalizeMcpServerKey(
       decodeURIComponent(mcpServerMatch[1]),
     );
-    const result = await runtime.mcpStore.updateServer(
+    await runtime.mcpControl.updateServer(
       serverKey,
       await readBody<RuntimeMcpServerPatch>(request),
     );
-    await runtime.mcpConnections.invalidateServer(serverKey);
-    sendJson(response, 200, await withMcpAuthStatuses(runtime, result));
+    sendJson(response, 200, await runtime.mcpControl.listServers({ includeAuthStatus: true }));
     return true;
   }
   if (mcpServerMatch && request.method === 'DELETE') {
     const serverKey = normalizeMcpServerKey(
       decodeURIComponent(mcpServerMatch[1]),
     );
-    await runtime.mcpStore.deleteServer(serverKey);
-    await runtime.mcpConnections.invalidateServer(serverKey);
+    await runtime.mcpControl.deleteServer(serverKey);
     sendJson(response, 200, { ok: true });
     return true;
   }
@@ -176,19 +164,19 @@ export async function handleRuntimeExtensionRequest(
       );
     }
     if (mcpOAuthMatch[2] === 'logout') {
-      await runtime.mcpConnections.logout(server);
+      await runtime.mcpControl.logout(serverKey);
     } else {
       const abort = new AbortController();
       request.once(
         'aborted',
         () => abort.abort(new Error('MCP OAuth login request disconnected.')),
       );
-      await runtime.mcpConnections.login(server, { signal: abort.signal });
+      await runtime.mcpControl.login(serverKey, { signal: abort.signal });
     }
     sendJson(
       response,
       200,
-      await withMcpAuthStatuses(runtime, await runtime.mcpStore.listServers()),
+      await runtime.mcpControl.listServers({ includeAuthStatus: true }),
     );
     return true;
   }
@@ -210,21 +198,4 @@ function normalizeMcpServerKey(value: string): string {
     );
   }
   return key;
-}
-
-async function withMcpAuthStatuses(
-  runtime: RuntimeFactory,
-  list: RuntimeMcpServerList,
-): Promise<RuntimeMcpServerList> {
-  return {
-    ...list,
-    servers: await Promise.all(list.servers.map(async (server) => {
-      const auth = await runtime.mcpConnections.authStatus(server);
-      return {
-        ...server,
-        authStatus: auth.status,
-        ...(auth.error ? { authError: auth.error } : {}),
-      };
-    })),
-  };
 }

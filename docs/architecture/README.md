@@ -35,7 +35,7 @@ React renderer
   → Runtime server
   → AgentLoop
   → ports
-  → adapters: model / tool / store / MCP / workspace
+  → adapters + Feature runtime: model / tool / store / MCP / workspace
 ```
 
 | 组件 | 持有的能力 | 不应持有的能力 |
@@ -46,7 +46,7 @@ React renderer
 | Runtime server | HTTP/SSE/API 准入、runtime container | Electron API、renderer 状态 |
 | Agent loop | turn 生命周期、prompt、模型采样、工具、审批、事件 | 具体文件/网络实现细节 |
 | Ports | runtime 内部抽象边界 | 文件格式和厂商协议细节 |
-| Adapters | store、model、MCP、tool、workspace 的具体实现 | UI 编排 |
+| Adapters | store、model、tool、workspace 的具体实现与 Feature host bridge | UI 编排 |
 | Contracts | Core 跨层类型、事件 union、投影 reducer | I/O 和副作用 |
 | Feature Core | 组合、Capability、Scope、状态与通用 contribution contract | 具体业务语义 |
 | Feature package | 业务 contracts、use case、设置、私有事件和 presentation | 全局容器、其他 Feature 实现 |
@@ -68,7 +68,7 @@ React renderer
 - Feature 私有持久状态使用 `feature.event` envelope，由所属 Feature codec/migration/reducer 解释。
 - `RuntimeThread` 是 reducer 投影出的 snapshot，不是另一套可独立修改的数据。
 - REST 返回可重拉的 snapshot，SSE 返回活跃线程的增量事件。
-- runtime 业务逻辑依赖 ports；SQLite、JSON、provider HTTP、MCP SDK 和本地工具都是 adapters。
+- runtime 业务逻辑依赖 ports/Capabilities；SQLite、JSON 和本地工具由宿主 adapters 实现，provider 与 MCP SDK 由各自 Feature runtime 私有实现。
 - 所有用户持久化数据收敛到选定的 Setsuna 数据根；系统默认 `appData` 只保留启动定位和迁移事务元数据。
 
 详细说明见 [数据与安全边界](data-and-security.md)。

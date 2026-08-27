@@ -10,9 +10,8 @@ import type {
   RuntimeMcpToolCallResult,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
-import { threadScopeId } from '../../adapters/mcp/sdk-mcp-connection-manager.js';
 import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
-import type { McpServerRuntimeSnapshot } from '../../ports/mcp-client-runtime.js';
+import type { McpServerRuntimeSnapshot } from '@setsuna-desktop/feature-mcp/contracts';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { RuntimeUseCaseError } from './errors.js';
 import { requireRuntimeThread } from './thread-operations.js';
@@ -55,7 +54,7 @@ export async function listRuntimeMcpServerStatuses(
 ): Promise<RuntimeMcpServerStatusList> {
   const detail = runtimeMcpStatusDetail(rawDetail);
   const [list, inventory] = await Promise.all([
-    runtime.mcpStore.listServers(),
+    runtime.mcpControl.listServers(),
     runtimeMcpStatusInventory(runtime, detail),
   ]);
   return {
@@ -75,9 +74,9 @@ export async function readRuntimeMcpServerResource(
   if (threadId) await requireRuntimeThread(runtime, threadId);
   const serverKey = requiredRuntimeString(input.server, 'server');
   const uri = requiredRuntimeString(input.uri, 'uri');
-  const server = await requireRuntimeMcpServer(runtime, serverKey);
-  return runtime.mcpConnections.readResource(server, uri, {
-    scopeId: threadId ? threadScopeId(threadId) : 'runtime:mcp-resources',
+  await requireRuntimeMcpServer(runtime, serverKey);
+  return runtime.mcpControl.readResource(serverKey, uri, {
+    ...(threadId ? { threadId } : {}),
   });
 }
 
@@ -90,9 +89,9 @@ export async function callRuntimeMcpServerTool(
   await requireRuntimeThread(runtime, threadId);
   const serverKey = requiredRuntimeString(input.server, 'server');
   const toolName = requiredRuntimeString(input.tool, 'tool');
-  const server = await requireRuntimeMcpServer(runtime, serverKey);
-  return runtime.mcpConnections.callTool(server, toolName, input.arguments, {
-    scopeId: threadScopeId(threadId),
+  await requireRuntimeMcpServer(runtime, serverKey);
+  return runtime.mcpControl.callTool(serverKey, toolName, input.arguments, {
+    threadId,
   });
 }
 
@@ -143,9 +142,7 @@ async function runtimeMcpStatusInventory(
   const servers = (await runtime.mcpStore.listServerInputs())
     .filter((server) => server.enabled !== false);
   const entries = await Promise.all(servers.map(async (server) => {
-    const snapshot = await runtime.mcpConnections.snapshot(server, {
-      scopeId: 'runtime:mcp-status',
-    }, {
+    const snapshot = await runtime.mcpControl.snapshot(server.key, {}, {
       includeTools: true,
       includeResources: true,
     });

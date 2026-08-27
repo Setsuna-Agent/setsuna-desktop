@@ -3,9 +3,9 @@ import type {
   RuntimeMcpServerInput,
   RuntimeSkillDetail,
 } from '@setsuna-desktop/contracts';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { SkillMcpDependencyCoordinator } from '../../../src/adapters/skill/skill-mcp-dependency-coordinator.js';
-import type { McpStore } from '../../../src/ports/mcp-store.js';
 import type { SkillRegistry } from '../../../src/ports/skill-registry.js';
 
 describe('SkillMcpDependencyCoordinator', () => {
@@ -43,7 +43,7 @@ describe('SkillMcpDependencyCoordinator', () => {
     expect(invalidateServer).toHaveBeenCalledWith('sentry');
 
     const authenticated = await coordinator.authenticateMcpDependency(skill.id, 'sentry');
-    expect(login).toHaveBeenCalledWith(expect.objectContaining({ key: 'sentry' }));
+    expect(login).toHaveBeenCalledWith('sentry');
     expect(authenticated.mcpDependencies).toEqual([
       expect.objectContaining({ value: 'sentry', status: 'ready', authStatus: 'oAuth' }),
     ]);

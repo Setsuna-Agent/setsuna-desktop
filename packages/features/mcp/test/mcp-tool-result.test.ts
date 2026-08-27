@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mcpToolExecutionResult } from '../../../src/adapters/mcp/mcp-tool-result.js';
+import { mcpToolExecutionResult } from '../src/runtime/tools/mcp-tool-result.js';
 
 describe('mcpToolExecutionResult', () => {
   it('maps image content to model attachments without persisting base64 in result data', () => {

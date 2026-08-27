@@ -8,13 +8,13 @@ import type {
   RuntimePluginRemoveResult,
   RuntimePluginSkill
 } from '@setsuna-desktop/contracts';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { ExtensionStateStore } from '../../ports/extension-runtime.js';
-import type { McpStore } from '../../ports/mcp-store.js';
 import type {
   InstalledPluginRecord,
   PluginBundleInspection,

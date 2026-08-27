@@ -25,26 +25,27 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { createHash } from 'node:crypto';
 import type {
-  McpClientRuntime,
-  McpRequestContext,
+  McpAuthStatusResult,
   McpResourceReadResponse,
   McpServerRuntimeSnapshot,
   McpSnapshotOptions,
   McpToolCallResponse,
-} from '../../ports/mcp-client-runtime.js';
-import type { DesktopNativeBridge } from '../../ports/secret-store.js';
-import { recordInput } from '../../shared/unknown.js';
-import { UnavailableDesktopNativeBridge } from '../native/http-desktop-native-bridge.js';
-import type { FetchImpl } from '../network/fetch-impl.js';
-import type { McpElicitationExecutionContext, McpElicitationHandler } from './mcp-elicitation-coordinator.js';
+} from '../../../contracts/control.js';
+import type {
+  McpElicitationContext,
+  McpElicitationHandler,
+  McpElicitationRequest,
+} from '../../../contracts/elicitation.js';
+import { recordInput } from '../../shared.js';
 import { McpOAuthCoordinator, McpOAuthLoginRequiredError } from './mcp-oauth-coordinator.js';
 import {
   createMcpTransport,
   normalizedMcpTransport,
   resolvedMcpHttpHeaders,
+  type FetchImpl,
   type ManagedMcpTransport,
-  type McpNetworkEnvironment,
 } from './mcp-transport-factory.js';
+import type { McpNetworkEnvironment } from '../../../contracts/control.js';
 
 export { stdioTransportEnvironment } from './mcp-transport-factory.js';
 
@@ -56,6 +57,7 @@ const DEFAULT_IDLE_TTL_MS = 10 * 60 * 1000;
 const DEFAULT_CLEANUP_INTERVAL_MS = 60_000;
 const MAX_LIST_PAGES = 100;
 const MAX_INSTRUCTIONS_BYTES = 32 * 1024;
+
 type ManagedConnection = {
   key: string;
   scopeId: string;
@@ -86,7 +88,7 @@ type ManagedConnection = {
   closing: boolean;
   callQueue: Promise<void>;
   activeCall?: {
-    context: McpRequestContext;
+    context: McpConnectionContext;
     toolName: string;
   };
   pendingUrlElicitations: Map<string, PendingUrlElicitation>;
@@ -97,15 +99,33 @@ type PendingUrlElicitation = {
   reject(error: Error): void;
 };
 
+type McpConnectionContext = {
+  scopeId: string;
+  threadId?: string;
+  turnId?: string;
+  toolCallId?: string;
+  toolName?: string;
+  signal?: AbortSignal;
+  onProgress?(progress: { progress: number; total?: number; message?: string }): void;
+};
+
 export type SdkMcpConnectionManagerOptions = {
   idleTtlMs?: number;
   cleanupIntervalMs?: number;
-  nativeBridge?: DesktopNativeBridge;
+  credentials: McpCredentialStoreLike;
+  openExternal(url: string): Promise<void>;
   now?: () => number;
   oauthCoordinator?: McpOAuthCoordinator;
-  elicitationCoordinator?: McpElicitationHandler;
+  elicitation?: McpElicitationHandler;
   fetchImpl?: FetchImpl;
   resolveNetworkEnvironment?: () => Promise<McpNetworkEnvironment>;
+};
+
+type McpCredentialStoreLike = {
+  status(): Promise<{ available: boolean; backend: string }>;
+  get(key: string): Promise<string | undefined>;
+  set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
 };
 
 /**
@@ -114,27 +134,27 @@ export type SdkMcpConnectionManagerOptions = {
  * 管理器以 runtime 为作用域，单个连接则以业务作用域和服务器为作用域。
  * 这样既能复用进程及会话，又不会在无关桌面线程之间共享有状态 MCP 会话。
  */
-export class SdkMcpConnectionManager implements McpClientRuntime {
+export class SdkMcpConnectionManager {
   private readonly connections = new Map<string, ManagedConnection>();
   private readonly idleTtlMs: number;
   private readonly now: () => number;
   private readonly cleanupTimer: NodeJS.Timeout;
   private readonly oauth: McpOAuthCoordinator;
-  private readonly nativeBridge: DesktopNativeBridge;
   private readonly elicitations?: McpElicitationHandler;
   private readonly fetchImpl: FetchImpl;
   private readonly resolveNetworkEnvironment: () => Promise<McpNetworkEnvironment>;
+  private readonly openExternal: (url: string) => Promise<void>;
   private shuttingDown = false;
 
-  constructor(options: SdkMcpConnectionManagerOptions = {}) {
+  constructor(options: SdkMcpConnectionManagerOptions) {
     this.idleTtlMs = positiveMilliseconds(options.idleTtlMs, DEFAULT_IDLE_TTL_MS);
     this.now = options.now ?? Date.now;
-    this.nativeBridge = options.nativeBridge ?? new UnavailableDesktopNativeBridge();
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.resolveNetworkEnvironment = options.resolveNetworkEnvironment ?? (async () => ({}));
+    this.openExternal = options.openExternal;
     this.oauth = options.oauthCoordinator
-      ?? new McpOAuthCoordinator(this.nativeBridge, this.now, this.fetchImpl);
-    this.elicitations = options.elicitationCoordinator;
+      ?? new McpOAuthCoordinator(options.credentials, options.openExternal, this.now, this.fetchImpl);
+    this.elicitations = options.elicitation;
     const cleanupIntervalMs = positiveMilliseconds(options.cleanupIntervalMs, DEFAULT_CLEANUP_INTERVAL_MS);
     this.cleanupTimer = setInterval(() => {
       void this.closeIdleConnections();
@@ -142,7 +162,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     this.cleanupTimer.unref();
   }
 
-  async discoverTools(server: RuntimeMcpServerInput, context: Partial<McpRequestContext> = {}): Promise<RuntimeMcpToolList> {
+  async discoverTools(server: RuntimeMcpServerInput, context: Partial<McpConnectionContext> = {}): Promise<RuntimeMcpToolList> {
     try {
       const tools = await this.listTools(server, {
         scopeId: context.scopeId ?? `discovery:${server.key}`,
@@ -155,21 +175,21 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     }
   }
 
-  async listTools(server: RuntimeMcpServerInput, context: McpRequestContext): Promise<RuntimeMcpToolInfo[]> {
+  async listTools(server: RuntimeMcpServerInput, context: McpConnectionContext): Promise<RuntimeMcpToolInfo[]> {
     return this.withConnectionRetry(server, context, async (connection) => {
       if (connection.toolsLoaded) return connection.tools;
       return this.refreshTools(connection, context.signal);
     });
   }
 
-  async listResources(server: RuntimeMcpServerInput, context: McpRequestContext): Promise<RuntimeMcpResource[]> {
+  async listResources(server: RuntimeMcpServerInput, context: McpConnectionContext): Promise<RuntimeMcpResource[]> {
     return this.withConnectionRetry(server, context, async (connection) => {
       if (connection.resourcesLoaded) return connection.resources;
       return this.refreshResources(connection, context.signal);
     });
   }
 
-  async listResourceTemplates(server: RuntimeMcpServerInput, context: McpRequestContext): Promise<RuntimeMcpResourceTemplate[]> {
+  async listResourceTemplates(server: RuntimeMcpServerInput, context: McpConnectionContext): Promise<RuntimeMcpResourceTemplate[]> {
     return this.withConnectionRetry(server, context, async (connection) => {
       if (connection.resourceTemplatesLoaded) return connection.resourceTemplates;
       return this.refreshResourceTemplates(connection, context.signal);
@@ -179,7 +199,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   async readResource(
     server: RuntimeMcpServerInput,
     uri: string,
-    context: McpRequestContext,
+    context: McpConnectionContext,
   ): Promise<McpResourceReadResponse> {
     return this.withConnectionRetry(server, context, async (connection) => {
       const result = await connection.client.readResource(
@@ -198,7 +218,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     server: RuntimeMcpServerInput,
     toolName: string,
     args: unknown,
-    context: McpRequestContext,
+    context: McpConnectionContext,
   ): Promise<McpToolCallResponse> {
     return this.withConnectionRetry(server, context, async (connection) => {
       return this.enqueueToolCall(connection, context, async () => {
@@ -224,7 +244,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   async snapshot(
     server: RuntimeMcpServerInput,
-    context: McpRequestContext,
+    context: McpConnectionContext,
     options: McpSnapshotOptions = {},
   ): Promise<McpServerRuntimeSnapshot> {
     try {
@@ -269,7 +289,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     await this.oauth.logout(server);
   }
 
-  async authStatus(server: RuntimeMcpServerInput) {
+  async authStatus(server: RuntimeMcpServerInput): Promise<McpAuthStatusResult> {
     try {
       const authorization = normalizedMcpTransport(server) === 'streamableHttp'
         && Object.keys(resolvedMcpHttpHeaders(server)).some((name) => name.toLowerCase() === 'authorization');
@@ -306,7 +326,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   private async withConnectionRetry<T>(
     server: RuntimeMcpServerInput,
-    context: McpRequestContext,
+    context: McpConnectionContext,
     operation: (connection: ManagedConnection) => Promise<T>,
   ): Promise<T> {
     let connection = await this.connectionFor(server, context);
@@ -328,7 +348,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     }
   }
 
-  private async connectionFor(server: RuntimeMcpServerInput, context: McpRequestContext): Promise<ManagedConnection> {
+  private async connectionFor(server: RuntimeMcpServerInput, context: McpConnectionContext): Promise<ManagedConnection> {
     if (this.shuttingDown) throw new Error('MCP runtime is shutting down.');
     const key = connectionKey(context.scopeId, server.key);
     const fingerprint = connectionFingerprint(server);
@@ -477,7 +497,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     server: RuntimeMcpServerInput,
     toolName: string,
     args: unknown,
-    context: McpRequestContext,
+    context: McpConnectionContext,
   ) {
     return connection.client.callTool(
       { name: toolName, arguments: recordInput(args) },
@@ -493,9 +513,9 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
     const active = connection.activeCall;
     const context = active ? elicitationContext(active.context, active.toolName) : null;
     if (!this.elicitations || !context) return { action: 'decline' as const };
-    const result = await this.elicitations.request(connection.serverKey, params, context);
+    const result = await this.elicitations.request(connection.serverKey, toElicitationRequest(params), context);
     if (params.mode === 'url' && result.action === 'accept') {
-      await this.nativeBridge.openExternal(params.url);
+      await this.openExternal(params.url);
     }
     return result;
   }
@@ -503,7 +523,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
   private async handleRequiredUrlElicitations(
     connection: ManagedConnection,
     requests: Extract<ElicitRequest['params'], { mode: 'url' }>[],
-    context: McpRequestContext,
+    context: McpConnectionContext,
     toolName: string,
     timeoutMs: number | undefined,
   ): Promise<void> {
@@ -519,11 +539,11 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
         context.signal,
       );
       try {
-        const result = await this.elicitations.request(connection.serverKey, request, executionContext);
+        const result = await this.elicitations.request(connection.serverKey, toElicitationRequest(request), executionContext);
         if (result.action !== 'accept') {
           throw new Error(result.action === 'cancel' ? 'MCP URL elicitation was cancelled.' : 'MCP URL elicitation was declined.');
         }
-        await this.nativeBridge.openExternal(request.url);
+        await this.openExternal(request.url);
         await completion.promise;
       } catch (error) {
         completion.cancel();
@@ -590,7 +610,7 @@ export class SdkMcpConnectionManager implements McpClientRuntime {
 
   private enqueueToolCall<T>(
     connection: ManagedConnection,
-    context: McpRequestContext,
+    context: McpConnectionContext,
     operation: () => Promise<T>,
   ): Promise<T> {
     const run = connection.callQueue.then(() => {
@@ -740,7 +760,7 @@ function connectionFingerprint(server: RuntimeMcpServerInput): string {
   return createHash('sha256').update(stableJson(connectionConfig)).digest('hex');
 }
 
-function requestOptions(timeout: number | undefined, context: Pick<McpRequestContext, 'signal' | 'onProgress'>) {
+function requestOptions(timeout: number | undefined, context: Pick<McpConnectionContext, 'signal' | 'onProgress'>) {
   const timeoutMs = timeoutMilliseconds(timeout);
   return {
     timeout: timeoutMs,
@@ -750,7 +770,7 @@ function requestOptions(timeout: number | undefined, context: Pick<McpRequestCon
   };
 }
 
-function toolRequestOptions(timeout: number | undefined, context: McpRequestContext) {
+function toolRequestOptions(timeout: number | undefined, context: McpConnectionContext) {
   const maxTotalTimeout = timeoutMilliseconds(timeout);
   return {
     timeout: Math.min(maxTotalTimeout, 60_000),
@@ -774,9 +794,9 @@ function normalizeToolCallResult(result: unknown): McpToolCallResponse {
 }
 
 function elicitationContext(
-  context: McpRequestContext,
+  context: McpConnectionContext,
   toolName: string,
-): McpElicitationExecutionContext | null {
+): McpElicitationContext | null {
   if (!context.threadId || !context.turnId || !context.toolCallId) return null;
   return {
     threadId: context.threadId,
@@ -784,6 +804,25 @@ function elicitationContext(
     toolCallId: context.toolCallId,
     toolName: context.toolName ?? toolName,
     ...(context.signal ? { signal: context.signal } : {}),
+  };
+}
+
+function toElicitationRequest(params: ElicitRequest['params']): McpElicitationRequest {
+  const elicitationId = (params as Record<string, unknown>).elicitationId as string | undefined
+    ?? `${params.message.slice(0, 32) || 'elicitation'}:${Date.now()}`;
+  if (params.mode === 'url') {
+    return {
+      mode: 'url',
+      message: params.message,
+      url: params.url,
+      elicitationId,
+    };
+  }
+  return {
+    mode: 'form',
+    message: params.message,
+    requestedSchema: params.requestedSchema as Record<string, unknown>,
+    elicitationId,
   };
 }
 
@@ -830,7 +869,7 @@ function snapshotFor(connection: ManagedConnection, error?: unknown): McpServerR
 
 function withAuthSnapshot(
   snapshot: McpServerRuntimeSnapshot,
-  auth: Awaited<ReturnType<McpOAuthCoordinator['authStatus']>>,
+  auth: McpAuthStatusResult,
 ): McpServerRuntimeSnapshot {
   return {
     ...snapshot,

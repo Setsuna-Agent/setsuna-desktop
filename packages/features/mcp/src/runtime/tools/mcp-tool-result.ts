@@ -1,7 +1,7 @@
 import type { RuntimeMessageAttachment } from '@setsuna-desktop/contracts';
-import type { McpToolCallResponse } from '../../ports/mcp-client-runtime.js';
-import type { ToolExecutionContext, ToolExecutionResult } from '../../ports/tool-host.js';
-import { recordInput } from '../../shared/unknown.js';
+import type { McpToolCallResponse } from '../../contracts/control.js';
+import type { McpToolExecutionResult, McpToolRunContext } from '../../contracts/runtime-tools.js';
+import { recordInput } from '../shared.js';
 
 const MAX_MODEL_TEXT_BYTES = 512 * 1024;
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
@@ -10,10 +10,10 @@ const SAFE_IMAGE_MIME_TYPES = new Set(['image/gif', 'image/jpeg', 'image/png', '
 
 export function mcpToolExecutionResult(
   response: McpToolCallResponse,
-  context: ToolExecutionContext,
+  context: McpToolRunContext,
   serverKey: string,
   toolName: string,
-): ToolExecutionResult {
+): McpToolExecutionResult {
   const textParts: string[] = [];
   const attachments: RuntimeMessageAttachment[] = [];
 
@@ -83,7 +83,7 @@ export function mcpToolExecutionResult(
 function imageAttachment(
   rawData: unknown,
   rawMimeType: unknown,
-  context: ToolExecutionContext,
+  context: McpToolRunContext,
   serverKey: string,
   toolName: string,
   index: number,

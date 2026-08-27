@@ -6,10 +6,10 @@ import type {
   RuntimeMcpToolInfo,
   RuntimeMcpTransport,
 } from '@setsuna-desktop/contracts';
+import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
-import type { McpStore } from '../../ports/mcp-store.js';
 import type { SecretStore } from '../../ports/secret-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';

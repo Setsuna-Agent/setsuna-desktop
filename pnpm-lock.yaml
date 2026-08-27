@@ -149,7 +149,6 @@ importers:
 
   packages/desktop-runtime:
     specifiers:
-      '@modelcontextprotocol/sdk': ^1.30.0
       '@setsuna-desktop/contracts': workspace:*
       '@setsuna-desktop/feature-browser': workspace:*
       '@setsuna-desktop/feature-collaboration': workspace:*
@@ -157,6 +156,7 @@ importers:
       '@setsuna-desktop/feature-core': workspace:*
       '@setsuna-desktop/feature-goal': workspace:*
       '@setsuna-desktop/feature-image-generation': workspace:*
+      '@setsuna-desktop/feature-mcp': workspace:*
       '@setsuna-desktop/feature-memory': workspace:*
       '@setsuna-desktop/feature-model-provider': workspace:*
       '@setsuna-desktop/feature-plugin-management': workspace:*
@@ -171,7 +171,6 @@ importers:
       yaml: ^2.8.1
       zod: ^4.4.3
     dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0_zod@4.4.3
       '@setsuna-desktop/contracts': link:../contracts
       '@setsuna-desktop/feature-browser': link:../features/browser
       '@setsuna-desktop/feature-collaboration': link:../features/collaboration
@@ -179,6 +178,7 @@ importers:
       '@setsuna-desktop/feature-core': link:../feature-core
       '@setsuna-desktop/feature-goal': link:../features/goal
       '@setsuna-desktop/feature-image-generation': link:../features/image-generation
+      '@setsuna-desktop/feature-mcp': link:../features/mcp
       '@setsuna-desktop/feature-memory': link:../features/memory
       '@setsuna-desktop/feature-model-provider': link:../features/model-provider
       '@setsuna-desktop/feature-plugin-management': link:../features/plugin-management
@@ -262,6 +262,16 @@ importers:
       antd: 6.5.3_nnrd3gsncyragczmpvfhocinkq
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
+
+  packages/features/mcp:
+    specifiers:
+      '@modelcontextprotocol/sdk': ^1.30.0
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.30.0_zod@4.4.3
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
 
   packages/features/memory:
     specifiers:

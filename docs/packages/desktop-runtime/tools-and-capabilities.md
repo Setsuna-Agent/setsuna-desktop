@@ -230,21 +230,11 @@ Chat 通过 thread-scoped runtime REST 查看后台进程；Runtime Activity Fea
 
 ## MCP
 
-### Connection
-
-`adapters/mcp/`：
-
-- `sdk-mcp-connection-manager.ts`：stdio/HTTP connection、tools/resources。
-- `mcp-oauth-coordinator.ts` / callback server：OAuth。
-- `mcp-elicitation-coordinator.ts`：MCP elicitation 接入 approval/event。
-- `mcp-tool-result.ts`：外部结果 normalize/truncate。
-
-### Tool hosts
-
-- `McpManagementToolHost`：让 Agent 管理 server。
-- `McpRuntimeToolHost`：把启用 server tools 暴露为 `mcp__server__tool`。
+`packages/features/mcp/runtime` 持有 SDK connection、stdio/HTTP transport、OAuth、tools/resources、结果归一化、管理工具和 `mcp__server__tool` 映射。Desktop runtime 的 `BindableMcpControl` 与 `McpToolHostAdapter` 只负责激活前稳定引用、Capability 绑定和类型转换；`McpElicitationCoordinator` 留在宿主，把协议征询接入 approval/event。
 
 MCP server 只维护启用状态和工具可用范围，不再提供必需、调用确认或信任级别配置。Result/resource 仍统一作为外部不可信上下文处理。
+
+连接 scope 与 SDK 生命周期不进入宿主 contract。Feature setup 不主动连接，`FeatureScope` 在 runtime shutdown 时统一关闭 manager。完整边界见 [MCP Feature](mcp.md)。
 
 ## Skills
 

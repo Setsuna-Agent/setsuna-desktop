@@ -204,8 +204,7 @@ export async function dispatchAppServerRpcRequest(
   }
 
   if (method === 'config/mcpServer/reload') {
-    const servers = await runtime.mcpStore.listServerInputs();
-    await Promise.all(servers.map((server) => runtime.mcpConnections.invalidateServer(server.key)));
+    await runtime.mcpControl.reloadServers();
     return {};
   }
 
@@ -220,7 +219,7 @@ export async function dispatchAppServerRpcRequest(
       throw new AppServerRpcError(-32600, 'OAuth login is only supported for streamable HTTP servers.');
     }
     const timeoutSecs = numericInput(input.timeoutSecs ?? input.timeout_secs);
-    void runtime.mcpConnections.login(server, {
+    void runtime.mcpControl.login(name, {
       timeoutMs: timeoutSecs === undefined ? undefined : Math.min(10 * 60_000, Math.max(1_000, timeoutSecs * 1_000)),
     }).then(() => {
       runtime.appServerNotificationBus.publish({
@@ -246,7 +245,7 @@ export async function dispatchAppServerRpcRequest(
     const name = requiredString(input.name, 'name');
     const server = (await runtime.mcpStore.listServerInputs()).find((item) => item.key === name);
     if (!server) throw new AppServerRpcError(-32600, `No MCP server named '${name}' found.`);
-    await runtime.mcpConnections.logout(server);
+    await runtime.mcpControl.logout(name);
     return {};
   }
 

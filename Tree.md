@@ -195,7 +195,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 730 total files
+packages/features/ — 0 direct / 765 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -242,6 +242,16 @@ packages/features/ — 0 direct / 730 total files
 │   │   └── runtime/ — 3 direct / 3 total files
 │   └── test/ — 2 files
 │       └── runtime/ — 2 direct / 2 total files
+├── mcp/ — 4 direct / 35 total files
+│   ├── src/ — 21 files
+│   │   ├── contracts/ — 7 direct / 7 total files
+│   │   └── runtime/ — 6 direct / 14 total files
+│   │       ├── adapters/ — 5 files
+│   │       │   └── sdk/ — 5 direct / 5 total files
+│   │       └── tools/ — 3 direct / 3 total files
+│   └── test/ — 7 direct / 10 total files
+│       ├── fixtures/ — 2 direct / 2 total files
+│       └── support/ — 1 direct / 1 total files
 ├── memory/ — 2 direct / 29 total files
 │   ├── src/ — 23 files
 │   │   ├── contracts/ — 7 direct / 7 total files
@@ -384,14 +394,14 @@ packages/features/ — 0 direct / 730 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 517 total files
-├── src/ — 2 direct / 299 total files
-│   ├── adapters/ — 111 files
+packages/desktop-runtime/ — 4 direct / 504 total files
+├── src/ — 2 direct / 293 total files
+│   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 5 direct / 5 total files
 │   │   ├── id/ — 1 direct / 1 total files
-│   │   ├── mcp/ — 6 direct / 6 total files
+│   │   ├── mcp/ — 4 direct / 4 total files
 │   │   ├── model/ — 2 direct / 2 total files
 │   │   ├── native/ — 1 direct / 1 total files
 │   │   ├── network/ — 2 direct / 2 total files
@@ -399,7 +409,7 @@ packages/desktop-runtime/ — 4 direct / 517 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 4 direct / 4 total files
 │   │   ├── store/ — 33 direct / 33 total files
-│   │   ├── tool/ — 15 direct / 37 total files
+│   │   ├── tool/ — 13 direct / 35 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 5 direct / 5 total files
 │   ├── composition/ — 2 direct / 2 total files
@@ -416,7 +426,7 @@ packages/desktop-runtime/ — 4 direct / 517 total files
 │   │   ├── core/ — 21 direct / 21 total files
 │   │   ├── lifecycle/ — 12 direct / 12 total files
 │   │   └── tools/ — 12 direct / 12 total files
-│   ├── ports/ — 33 direct / 33 total files
+│   ├── ports/ — 31 direct / 31 total files
 │   ├── runtime/ — 3 direct / 9 total files
 │   │   └── use-cases/ — 6 direct / 6 total files
 │   ├── security/ — 5 direct / 5 total files
@@ -424,11 +434,11 @@ packages/desktop-runtime/ — 4 direct / 517 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 214 files
-    ├── adapters/ — 54 files
+└── test/ — 207 files
+    ├── adapters/ — 49 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
-    │   ├── mcp/ — 5 direct / 5 total files
+    │   ├── mcp/ — 2 direct / 2 total files
     │   ├── model/ — 1 direct / 1 total files
     │   ├── native/ — 1 direct / 1 total files
     │   ├── network/ — 1 direct / 1 total files
@@ -436,7 +446,7 @@ packages/desktop-runtime/ — 4 direct / 517 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 14 direct / 14 total files
-    │   ├── tool/ — 10 direct / 15 total files
+    │   ├── tool/ — 8 direct / 13 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 5 direct / 5 total files
     ├── extensions/ — 7 direct / 7 total files
@@ -444,11 +454,10 @@ packages/desktop-runtime/ — 4 direct / 517 total files
     │   ├── events/ — 1 direct / 1 total files
     │   ├── routes/ — 1 direct / 1 total files
     │   └── settings/ — 1 direct / 1 total files
-    ├── fixtures/ — 7 files
+    ├── fixtures/ — 5 files
     │   ├── history/ — 2 direct / 2 total files
-    │   ├── legacy-thread-store/ — 3 files
-    │   │   └── threads/ — 3 direct / 3 total files
-    │   └── mcp/ — 2 direct / 2 total files
+    │   └── legacy-thread-store/ — 3 files
+    │       └── threads/ — 3 direct / 3 total files
     ├── integration/ — 47 files
     │   ├── adapters/ — 8 files
     │   │   ├── skill/ — 1 direct / 1 total files
@@ -477,9 +486,9 @@ packages/desktop-runtime/ — 4 direct / 517 total files
 ### `scripts/`
 
 ```text
-scripts/ — 23 direct / 36 total files
+scripts/ — 23 direct / 37 total files
 ├── ripgrep/ — 3 direct / 3 total files
-├── test/ — 4 direct / 6 total files
+├── test/ — 5 direct / 7 total files
 │   ├── ripgrep/ — 1 direct / 1 total files
 │   └── windows-sandbox/ — 1 direct / 1 total files
 └── windows-sandbox/ — 4 direct / 4 total files
@@ -575,7 +584,7 @@ plugins/ — 1 direct / 61 total files
 ### `docs/`
 
 ```text
-docs/ — 1 direct / 49 total files
+docs/ — 1 direct / 50 total files
 ├── apps/ — 13 files
 │   └── desktop/ — 1 direct / 13 total files
 │       ├── main/ — 5 direct / 5 total files
@@ -584,9 +593,9 @@ docs/ — 1 direct / 49 total files
 ├── architecture/ — 6 direct / 6 total files
 ├── designs/ — 9 direct / 9 total files
 ├── development/ — 3 direct / 3 total files
-├── packages/ — 12 files
+├── packages/ — 13 files
 │   ├── contracts/ — 4 direct / 4 total files
-│   └── desktop-runtime/ — 8 direct / 8 total files
+│   └── desktop-runtime/ — 9 direct / 9 total files
 ├── plugins/ — 3 direct / 3 total files
 ├── scripts/ — 1 direct / 1 total files
 └── skills/ — 1 direct / 1 total files

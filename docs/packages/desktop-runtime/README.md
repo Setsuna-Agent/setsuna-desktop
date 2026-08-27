@@ -17,6 +17,7 @@ Desktop runtime 是本地 Agent service。它通过认证的 HTTP/SSE 服务 Ele
 | `src/loop/tools/` | Tool router/orchestrator/executor/user shell | [工具与能力](tools-and-capabilities.md) |
 | `../features/memory/` | Memory contracts、runtime coordinator、typed operations 与 renderer 设置 | [Feature Composition](../../designs/feature-composition-architecture.md) |
 | `../features/model-provider/` | Pi-backed 模型采样、provider 配置、模型发现、replay 与设置视图 | [Model Provider Feature](model-providers.md) |
+| `../features/mcp/` | MCP SDK、OAuth、tools/resources、Agent 工具与连接生命周期 | [MCP Feature](mcp.md) |
 | `../features/conversation-debug/` | 非持久化诊断 trace、device-local settings、typed operations 与 renderer 面板 | [Feature Composition](../../architecture/feature-composition.md) |
 | `../features/plugin-management/` | Plugin 聚合查询、安装/更新/卸载、extension 信任与本地目录安装桥 | [Plugin Bundle](../../plugins/bundles.md) |
 | `../features/workspace-dependencies/` | Node.js/Python/uv 工具链、包源 settings、typed operations 与 renderer 设置 | [Feature Composition](../../architecture/feature-composition.md) |
@@ -24,8 +25,8 @@ Desktop runtime 是本地 Agent service。它通过认证的 HTTP/SSE 服务 Ele
 | `src/ports/` | Runtime 内部抽象 | [Ports 与 adapters](ports-and-adapters.md) |
 | `src/adapters/store/` | SQLite、JSON、附件、memory | [存储](storage.md) |
 | `src/adapters/model/` | 模型可见图片资产解析 wrapper | [Model Provider Feature](model-providers.md) |
-| `src/adapters/tool/` | 本地、MCP、Browser、Skill、Plugin 等工具 | [工具与能力](tools-and-capabilities.md) |
-| `src/adapters/{mcp,skill,plugin,workspace,search}/` | 外部能力实现 | [工具与能力](tools-and-capabilities.md) |
+| `src/adapters/tool/` | 本地、Browser、Skill、Plugin 与 Feature ToolHost bridge | [工具与能力](tools-and-capabilities.md) |
+| `src/adapters/{mcp,skill,plugin,workspace,search}/` | 宿主适配、依赖协调与外部能力实现 | [工具与能力](tools-and-capabilities.md) |
 | `src/security/` | 文件、shell、网络和 ID 规则 | [工具与能力](tools-and-capabilities.md) |
 | `src/hooks/` | Hook discovery、执行和输出解析 | [工具与能力](tools-and-capabilities.md) |
 
@@ -37,7 +38,7 @@ cli
   → createRuntimeFactory
       ├── stores / event buses / approval gate
       ├── bindable model port + Model Provider Feature
-      ├── MCP / Skill / Plugin / workspace adapters
+      ├── MCP Feature + Skill / Plugin / workspace adapters
       ├── Runtime Feature composition + narrow host capabilities
       ├── CompositeToolHost
       └── AgentLoop
@@ -122,4 +123,5 @@ packages/desktop-runtime/test/
 - 新 port/adapter： [ports-and-adapters.md](ports-and-adapters.md)
 - 数据文件/SQLite： [storage.md](storage.md)
 - Provider： [model-providers.md](model-providers.md)
+- MCP： [mcp.md](mcp.md)
 - Tool/MCP/Skill/Plugin/Hook： [tools-and-capabilities.md](tools-and-capabilities.md)

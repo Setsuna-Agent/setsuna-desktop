@@ -40,7 +40,6 @@ describe('runtime factory tool wiring', () => {
     } finally {
       releaseBlockingGoal();
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -67,7 +66,6 @@ describe('runtime factory tool wiring', () => {
     } finally {
       await composition.dispose();
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -136,7 +134,6 @@ describe('runtime factory tool wiring', () => {
     } finally {
       await composition.dispose();
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -207,7 +204,6 @@ describe('runtime factory tool wiring', () => {
       });
     } finally {
       await runtime.extensionManager.shutdown();
-      await runtime.mcpConnections.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
@@ -355,46 +351,56 @@ describe('runtime factory tool wiring', () => {
     }
   });
 
-  it('routes streamable HTTP MCP requests through the runtime network proxy adapter', async () => {
+  it('binds streamable HTTP MCP requests to the runtime network proxy adapter', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-mcp-proxy-test-'));
     const nativeBridge = new RejectingProxyBridge();
     const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
 
     try {
-      await expect(runtime.mcpConnections.listTools({
+      await runtime.mcpControl.upsertServer({
         key: 'remote-docs',
         transport: 'streamableHttp',
         url: 'https://mcp.example.test/api',
-      }, { scopeId: 'thread:proxy-test' })).rejects.toThrow('proxy resolution reached');
+      });
+      await expect(runtime.mcpControl.listTools('remote-docs', {
+        threadId: 'proxy-test',
+      })).rejects.toThrow('proxy resolution reached');
       expect(nativeBridge.proxyInputs).toEqual([{
         scope: 'runtime',
         override: undefined,
       }]);
     } finally {
-      await runtime.mcpConnections.shutdown();
+      await composition.dispose();
+      await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
     }
   });
 
-  it('routes stdio MCP process environments through the runtime network proxy adapter', async () => {
+  it('binds stdio MCP process environments to the runtime network proxy adapter', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-stdio-mcp-proxy-test-'));
     const nativeBridge = new RejectingProxyBridge();
     const runtime = createRuntimeFactory({ dataDir, nativeBridge });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
 
     try {
-      await expect(runtime.mcpConnections.listTools({
+      await runtime.mcpControl.upsertServer({
         key: 'local-docs',
         transport: 'stdio',
         command: process.execPath,
-      }, { scopeId: 'thread:stdio-proxy-test' })).rejects.toThrow('proxy resolution reached');
+      });
+      await expect(runtime.mcpControl.listTools('local-docs', {
+        threadId: 'stdio-proxy-test',
+      })).rejects.toThrow('proxy resolution reached');
       expect(nativeBridge.proxyInputs).toEqual([{
         scope: 'runtime',
         override: undefined,
       }]);
     } finally {
-      await runtime.mcpConnections.shutdown();
+      await composition.dispose();
+      await runtime.extensionManager.shutdown();
       await runtime.networkProxyFetch.close();
       await runtime.nativeBridge.close();
       await runtime.threadStore.close();
