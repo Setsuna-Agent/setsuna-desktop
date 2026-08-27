@@ -1,5 +1,6 @@
 import type {
   RuntimeConfigState,
+  RuntimeInterfaceLanguage,
   RuntimeMessage,
   RuntimeModelRequestStepSnapshot,
   RuntimeThread,
@@ -29,6 +30,10 @@ import { RUNTIME_PROACTIVE_COLLABORATION_PROMPT } from './runtime-collaboration-
 import { runtimeEnvironmentPrompt } from './runtime-environment-prompt.js';
 import { runtimePermissionsPrompt } from './runtime-permissions-prompt.js';
 import { runtimeProjectWorkflowPrompt } from './runtime-project-workflow-prompt.js';
+import {
+  RUNTIME_RESPONSE_LANGUAGE_PROMPT_ID,
+  runtimeResponseLanguagePrompt,
+} from './runtime-response-language.js';
 import { runtimeSkillCatalogPrompt } from './runtime-skill-catalog-prompt.js';
 
 const DEFAULT_SKILL_PROMPT_MAX_BYTES = 48 * 1024;
@@ -54,6 +59,7 @@ export class RuntimePromptContextAssembler {
   async build({
     config,
     hookContextMessages,
+    responseLanguage,
     skillCatalogContextWindowTokens,
     skillActivationText = '',
     skillIds,
@@ -65,6 +71,7 @@ export class RuntimePromptContextAssembler {
   }: {
     config: RuntimeConfigState | null | undefined;
     hookContextMessages: RuntimeMessage[];
+    responseLanguage?: RuntimeInterfaceLanguage;
     skillCatalogContextWindowTokens?: number;
     skillActivationText?: string;
     skillIds: string[];
@@ -99,6 +106,7 @@ export class RuntimePromptContextAssembler {
     return {
       fragments: [
         baseInstructionFragment(),
+        ...(responseLanguage ? [responseLanguageFragment(responseLanguage)] : []),
         ...(toolPrompt ? [toolPolicyFragment(toolPrompt)] : []),
         ...(tools.some((tool) => tool.name === 'spawn_agent') ? [collaborationModeFragment()] : []),
         environmentFragment(environment),
@@ -249,6 +257,17 @@ function baseInstructionFragment(): RuntimePromptFragment {
     trust: 'runtime',
     lifecycle: 'runtime',
     content: RUNTIME_BASE_INSTRUCTIONS,
+  };
+}
+
+function responseLanguageFragment(language: RuntimeInterfaceLanguage): RuntimePromptFragment {
+  return {
+    id: RUNTIME_RESPONSE_LANGUAGE_PROMPT_ID,
+    role: 'developer',
+    source: 'product',
+    trust: 'runtime',
+    lifecycle: 'turn',
+    content: runtimeResponseLanguagePrompt(language),
   };
 }
 

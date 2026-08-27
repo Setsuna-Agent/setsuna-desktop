@@ -18,11 +18,11 @@ import { CapturingToolHost, mkDataDir } from '../../support/agent-loop/shared.js
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop deferred tools and stored results', () => {
-  it('does not let a colliding dynamic tool bypass the next-step deferred gate', async () => {
+  it('executes an omitted deferred host tool and preserves host name ownership', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
-    const thread = await threadStore.createThread({ title: 'Deferred execution gate' });
-    const modelClient = new SameStepDeferredModelClient();
+    const thread = await threadStore.createThread({ title: 'Deferred tool routing' });
+    const modelClient = new DeferredFirstCallModelClient();
     const toolHost = new DeferredShellToolHost();
     const loop = new AgentLoop({
       threadStore,
@@ -50,14 +50,12 @@ describe('agent loop deferred tools and stored results', () => {
       message.role === 'tool' && message.toolName === 'run_shell_command'
     )) ?? [];
 
-    expect(modelClient.requests).toHaveLength(3);
+    expect(modelClient.requests).toHaveLength(2);
     expect(modelClient.requests[0].tools?.map((tool) => tool.name))
       .not.toContain('run_shell_command');
-    expect(modelClient.requests[1].tools?.at(-1)?.name).toBe('run_shell_command');
-    expect(toolHost.calls).toEqual([{ command: 'printf next-step' }]);
-    expect(shellMessages).toHaveLength(2);
-    expect(shellMessages[0]?.content).toContain('was not advertised in this sampling step');
-    expect(shellMessages[1]?.content).toBe('next-step command output');
+    expect(toolHost.calls).toEqual([{ command: 'printf direct-deferred' }]);
+    expect(shellMessages).toHaveLength(1);
+    expect(shellMessages[0]?.content).toBe('deferred command output');
   });
 
   it('recovers a stored result page by page without re-truncating read_tool_result output', async () => {
@@ -102,7 +100,7 @@ describe('agent loop deferred tools and stored results', () => {
   });
 });
 
-class SameStepDeferredModelClient implements ModelClient {
+class DeferredFirstCallModelClient implements ModelClient {
   readonly requests: ModelRequest[] = [];
 
   async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
@@ -110,29 +108,10 @@ class SameStepDeferredModelClient implements ModelClient {
     if (this.requests.length === 1) {
       yield {
         type: 'tool_calls',
-        toolCalls: [
-          {
-            id: 'call_search_shell',
-            name: 'tool_search',
-            arguments: JSON.stringify({ query: 'shell command' }),
-          },
-          {
-            id: 'call_shell_same_step',
-            name: 'run_shell_command',
-            arguments: JSON.stringify({ command: 'printf same-step' }),
-          },
-        ],
-      };
-      yield { type: 'done', finishReason: 'tool_calls' };
-      return;
-    }
-    if (this.requests.length === 2) {
-      yield {
-        type: 'tool_calls',
         toolCalls: [{
-          id: 'call_shell_next_step',
+          id: 'call_shell_deferred',
           name: 'run_shell_command',
-          arguments: JSON.stringify({ command: 'printf next-step' }),
+          arguments: JSON.stringify({ command: 'printf direct-deferred' }),
         }],
       };
       yield { type: 'done', finishReason: 'tool_calls' };
@@ -193,7 +172,7 @@ class DeferredShellToolHost implements ToolHost {
 
   async runTool(_name: string, input: unknown, _context: ToolExecutionContext) {
     this.calls.push(input as { command: string });
-    return { content: 'next-step command output' };
+    return { content: 'deferred command output' };
   }
 }
 

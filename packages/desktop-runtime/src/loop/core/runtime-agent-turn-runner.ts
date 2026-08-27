@@ -15,6 +15,10 @@ import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
 import { HookStoppedTurnError } from '../context/runtime-context-compactor.js';
+import {
+  inferRuntimeResponseLanguage,
+  resolveRuntimeResponseLanguage,
+} from '../context/runtime-response-language.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import type { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
@@ -116,6 +120,15 @@ export class RuntimeAgentTurnRunner {
     let modelUserMessage: RuntimeMessage = options.modelInput ? { ...userMessage, content: options.modelInput } : userMessage;
     const includeUserMessageInConversation = publishUserMessage || options.includeUserMessageInModel === true;
     let runtimeConfig = await this.options.configStore?.getConfig().catch(() => null);
+    let responseLanguage = options.review?.language ?? resolveRuntimeResponseLanguage({
+      currentUserContent: publishUserMessage && !userMessage.promptSource
+        ? userMessage.content
+        : taskKind === 'subagent'
+          ? userMessage.content
+          : undefined,
+      conversationMessages: thread.messages,
+      fallback: runtimeConfig?.desktopSettings?.interfaceLanguage ?? 'zh-CN',
+    });
     let activeSkillIds = [...selectedSkillIds];
     let activeThinkingOptions = thinkingOptions;
 
@@ -207,6 +220,9 @@ export class RuntimeAgentTurnRunner {
         // 与现有 turn/steer 语义对齐：steer 是同一 turn 的原始用户输入，
         // 不在 runtime 侧改写成额外提示词，只在下一个 sampling step 并入上下文。
         conversationMessages.push(...messages);
+        for (const message of messages) {
+          responseLanguage = inferRuntimeResponseLanguage(message.content) ?? responseLanguage;
+        }
         activeSkillIds = [...new Set([...activeSkillIds, ...steers.flatMap((steer) => steer.skillIds)])];
         const thinkingSteer = [...steers].reverse().find((steer) => typeof steer.thinking === 'boolean');
         if (thinkingSteer) {
@@ -241,6 +257,7 @@ export class RuntimeAgentTurnRunner {
         const stepContext = await this.options.samplingContexts.build({
           conversationMessages,
           hookContextMessages: additionalContextMessages,
+          responseLanguage,
           runtimeConfig,
           signal,
           skillIds: activeSkillIds,

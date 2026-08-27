@@ -30,15 +30,20 @@ describe('RuntimeToolRouter', () => {
     ]);
   });
 
-  it('continues to exclude explicitly hidden tools', async () => {
+  it('continues to exclude explicitly hidden tools from routing', async () => {
+    const runToolCall = vi.fn();
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
       context: runtimeToolContext(),
-      orchestrator: null,
+      orchestrator: { runToolCall } as unknown as ToolOrchestrator,
       toolHost: hiddenToolHost(),
     });
 
     expect(router.advertisedToolNames()).toEqual(['direct_tool', ...RUNTIME_PROVIDED_NAMES]);
+    expect(router.canRouteTool('internal_tool')).toBe(false);
+    await expect(router.runToolCall({ id: 'call_hidden', name: 'internal_tool', arguments: '{}' }, {}))
+      .rejects.toThrow('is not registered in the allowed tool catalog');
+    expect(runToolCall).not.toHaveBeenCalled();
   });
 
   it('keeps deferred tools out of the initial advertised set and reports them as deferred', async () => {
@@ -79,8 +84,8 @@ describe('RuntimeToolRouter', () => {
     expect(result).toContain('browser_snapshot');
     expect(router.loadedDeferredToolNames()).toEqual(['browser_snapshot']);
 
-    // The router belongs to the request that called tool_search, so its
-    // execution/advertising snapshot must not mutate in the same step.
+    // The router belongs to the request that called tool_search, so the model-facing
+    // advertising snapshot must not mutate in the same step.
     expect(router.advertisedToolNames().slice(0, 3).join('\0')).toBe(prefixBefore);
     expect(router.advertisedToolNames()).toEqual([
       'read_file',
@@ -126,19 +131,7 @@ describe('RuntimeToolRouter', () => {
     ]);
   });
 
-  it('rejects execution of deferred tools that were never activated', async () => {
-    const router = await RuntimeToolRouter.create({
-      approvalPolicy: 'on-request',
-      context: runtimeToolContext(),
-      orchestrator: null,
-      toolHost: deferredToolHost(),
-    });
-
-    await expect(router.runToolCall({ id: 'call_1', name: 'run_shell_command', arguments: '{}' }, {}))
-      .rejects.toThrow('was not advertised');
-  });
-
-  it('rejects a deferred tool in the search step and executes it from the next step', async () => {
+  it('routes an allowed deferred tool even when it was not advertised', async () => {
     const runToolCall = vi.fn(async () => ({ content: 'done', processed: true, status: 'success' as const }));
     const router = await RuntimeToolRouter.create({
       approvalPolicy: 'on-request',
@@ -146,19 +139,9 @@ describe('RuntimeToolRouter', () => {
       orchestrator: { runToolCall } as unknown as ToolOrchestrator,
       toolHost: deferredToolHost(),
     });
-    await router.runToolSearch('shell command', undefined);
 
-    await expect(router.runToolCall({ id: 'call_same_step', name: 'run_shell_command', arguments: '{}' }, {}))
-      .rejects.toThrow('was not advertised');
-
-    const nextStepRouter = await RuntimeToolRouter.create({
-      approvalPolicy: 'on-request',
-      context: runtimeToolContext(),
-      orchestrator: { runToolCall } as unknown as ToolOrchestrator,
-      toolHost: deferredToolHost(),
-      loadedDeferredToolNames: router.loadedDeferredToolNames(),
-    });
-    await nextStepRouter.runToolCall({ id: 'call_1', name: 'run_shell_command', arguments: '{}' }, {});
+    expect(router.advertisedToolNames()).not.toContain('run_shell_command');
+    await router.runToolCall({ id: 'call_1', name: 'run_shell_command', arguments: '{}' }, {});
 
     expect(runToolCall).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'run_shell_command' }),
@@ -179,6 +162,8 @@ describe('RuntimeToolRouter', () => {
     });
 
     expect(router.deferredCatalogSize()).toBe(1);
+    expect(router.canRouteTool('run_shell_command')).toBe(false);
+    expect(router.canRouteTool('git_status')).toBe(true);
     const result = await router.runToolSearch('shell', undefined);
     expect(result).toContain('No deferred tools matched');
     expect(router.loadedDeferredToolNames()).toEqual([]);

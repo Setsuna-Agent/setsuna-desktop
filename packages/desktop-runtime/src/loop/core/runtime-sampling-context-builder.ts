@@ -3,6 +3,7 @@ import {
   isRuntimeInputMessageAttachment,
   type ModelRequest,
   type RuntimeConfigState,
+  type RuntimeInterfaceLanguage,
   type RuntimeMessage,
   type RuntimeModelRequestStepSnapshot,
   type RuntimeTaskKind,
@@ -124,6 +125,7 @@ export class RuntimeSamplingContextBuilder {
   async build({
     conversationMessages,
     hookContextMessages,
+    responseLanguage,
     runtimeConfig,
     signal,
     skillIds,
@@ -137,6 +139,7 @@ export class RuntimeSamplingContextBuilder {
   }: {
     conversationMessages: RuntimeMessage[];
     hookContextMessages: RuntimeMessage[];
+    responseLanguage: RuntimeInterfaceLanguage;
     runtimeConfig: RuntimeConfigState | null | undefined;
     signal: AbortSignal;
     skillIds: string[];
@@ -290,6 +293,7 @@ export class RuntimeSamplingContextBuilder {
         ...hookContextMessages,
         ...(attachmentContext.contextMessage ? [attachmentContext.contextMessage] : []),
       ],
+      responseLanguage,
       skillCatalogContextWindowTokens: contextBudget?.maxContextTokens,
       skillActivationText: currentTurnSkillActivationText(orderedConversationMessages, turnId),
       skillIds,
