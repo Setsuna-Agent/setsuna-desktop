@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Headset girl app icon concept</title>
+  <desc id="description">A calm bob-haired assistant mascot with simple headphones and a tiny status light.</desc>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="#EAF4F5"/>
+  <path d="M201 557c0-188 124-331 311-331s311 143 311 331v96H201Z" fill="#78C9D0"/>
+  <g stroke="#173B73" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M276 598c0-183 92-301 236-301s236 118 236 301c0 170-89 272-236 272S276 768 276 598Z" fill="#326DC5" stroke-width="28"/>
+    <path d="M346 616c0-139 64-226 166-226s166 87 166 226c0 121-64 198-166 198s-166-77-166-198Z" fill="#FFF8EA" stroke-width="22"/>
+    <path d="M344 565c14-112 76-175 170-175 76 0 133 41 157 118-72 10-123-13-156-70-30 63-87 106-171 127Z" fill="#8CB5EA" stroke-width="22"/>
+    <path d="M326 500c-45 16-69 57-69 119v60c0 39 21 62 58 62h37V531c0-23-10-36-26-31Zm372 0c45 16 69 57 69 119v60c0 39-21 62-58 62h-37V531c0-23 10-36 26-31Z" fill="#FFF8EA" stroke-width="25"/>
+    <path d="M767 674c0 70-50 108-145 108" fill="none" stroke-width="22"/>
+    <circle cx="611" cy="782" r="18" fill="#F18B75" stroke-width="12"/>
+    <path d="M430 616v13M580 616v13" fill="none" stroke-width="21"/>
+    <path d="M482 692c20 12 39 12 59-1" fill="none" stroke-width="16"/>
+    <path d="M397 677h26M601 677h26" fill="none" stroke="#F18B75" stroke-width="13"/>
+  </g>
+</svg>

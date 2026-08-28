@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Cat hood girl app icon concept</title>
+  <desc id="description">A compact flat mascot with cat ears, a bob haircut, and a quiet off-center expression.</desc>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="#245DB5"/>
+  <g stroke="#122E5B" stroke-linecap="round" stroke-linejoin="round">
+    <path d="m251 407 40-179 145 102c48-17 105-18 154-3l143-99 43 181c65 69 93 166 71 268-30 143-151 218-295 218S247 820 217 677c-21-101 6-199 34-270Z" fill="#EAF3FF" stroke-width="30"/>
+    <path d="m285 333 23-81 75 70c-36-2-69 2-98 11Zm454 0-23-81-75 70c36-2 69 2 98 11Z" fill="#F2A088" stroke-width="18"/>
+    <path d="M298 621c0-160 89-265 214-265s214 105 214 265c0 130-86 211-214 211s-214-81-214-211Z" fill="#FFF8EA" stroke-width="24"/>
+    <path d="M300 576c14-138 92-220 215-220 103 0 178 61 204 170-59-5-107-31-142-79-35 71-136 121-277 129Z" fill="#89B7EC" stroke-width="24"/>
+    <path d="M409 617c12-13 27-13 39 0M579 617c12-13 27-13 39 0" fill="none" stroke-width="18"/>
+    <path d="M413 645v18M601 645v18" fill="none" stroke-width="20"/>
+    <path d="M482 711c21 13 41 12 60-2" fill="none" stroke-width="16"/>
+    <path d="M377 698h31M617 698h31" fill="none" stroke="#F2A088" stroke-width="14"/>
+    <path d="m640 405 12 18 21 5-18 13-2 22-17-13-21 8 8-21-14-17 22 1Z" fill="#FFF8EA" stroke-width="12"/>
+  </g>
+</svg>
