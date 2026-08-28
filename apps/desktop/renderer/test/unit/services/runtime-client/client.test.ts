@@ -229,7 +229,7 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('routes hooks and skill roots through first-party REST', async () => {
+  it('routes Hook discovery through first-party REST', async () => {
     const request = installRuntimeBridge((input) => {
       if (input.path.startsWith('/v1/hooks')) {
         return { data: [] };
@@ -239,16 +239,10 @@ describe('desktop runtime client advanced thread methods', () => {
     const client = createDesktopRuntimeClient();
 
     await client.listHooks(['/repo one', '/repo/two']);
-    await client.setSkillExtraRoots(['/skills/one']);
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       {
         path: '/v1/hooks?cwd=%2Frepo+one&cwd=%2Frepo%2Ftwo',
-      },
-      {
-        path: '/v1/skills/extra-roots',
-        method: 'PUT',
-        body: { extraRoots: ['/skills/one'] },
       },
     ]);
   });

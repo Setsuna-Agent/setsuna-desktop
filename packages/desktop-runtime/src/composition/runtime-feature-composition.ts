@@ -72,6 +72,11 @@ import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import { runtimeActivityRuntimeHostCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRuntimeFeature } from '@setsuna-desktop/feature-runtime-activity/runtime';
 import {
+  skillsRuntimeHostCapability,
+  type SkillsRuntimeHost,
+} from '@setsuna-desktop/feature-skills/contracts';
+import { skillsRuntimeFeature } from '@setsuna-desktop/feature-skills/runtime';
+import {
   createNoopUsageControl,
   usageControlCapability,
   usageRuntimeHostCapability,
@@ -102,6 +107,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     pluginManagementRuntimeFeature,
     reviewRuntimeFeature,
     runtimeActivityRuntimeFeature,
+    skillsRuntimeFeature,
     windowsSandboxRuntimeFeature,
     mcpRuntimeFeature,
   ],
@@ -265,6 +271,15 @@ export async function activateBuiltinRuntimeFeatures(
             runtime.backgroundShellProcesses.terminateBackgroundShellProcess(threadId, processId)
           ),
         }),
+      ),
+      provideHostCapability(
+        skillsRuntimeHostCapability,
+        Object.freeze({
+          control: runtime.skillRegistry,
+          publishChanged: () => {
+            runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
+          },
+        } satisfies SkillsRuntimeHost),
       ),
       provideHostCapability(
         usageRuntimeHostCapability,

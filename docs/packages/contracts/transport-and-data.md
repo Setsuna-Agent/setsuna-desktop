@@ -31,9 +31,9 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 - Threads、messages、turns、queue、goal、review、context。
 - Attachments、background shell process 与跨线程运行活动列表。
 - Config、provider models、task models。
-- Hooks、Skills。
+- Hooks。
 - Projects、files、search、workspace status。
-- Usage、Memory、MCP、Plugin Management、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
+- Skills、Usage、Memory、MCP、Plugin Management、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
 - Approvals。
 - Debug traces。
 
@@ -104,11 +104,13 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/features/plugin-management/installed
 /v1/features/plugin-management/marketplace/:pluginId/install
 /v1/features/plugin-management/installed/:pluginId
+/v1/features/skills
+/v1/features/skills/:skillId
+/v1/features/skills/extra-roots
 /v1/features/mcp/servers
 /v1/features/mcp/servers/:serverKey
 /v1/features/mcp/tools/discover
 /v1/projects
-/v1/skills
 /v1/mcp/servers  # compatibility adapter
 /v1/memories
 /v1/features/usage/query

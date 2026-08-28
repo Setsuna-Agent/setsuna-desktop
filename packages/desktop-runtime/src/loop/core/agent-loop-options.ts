@@ -1,5 +1,6 @@
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { MemoryStore } from '@setsuna-desktop/feature-memory/contracts';
+import type { SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { AppServerNotificationBus } from '../../ports/app-server-notification-bus.js';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
@@ -16,7 +17,6 @@ import type { ProjectInstructionLoader } from '../../ports/project-instruction-l
 import type { ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
 import type { RuntimeDebugTraceSink } from '../../ports/runtime-debug-trace.js';
 import type { RuntimeEnvironmentResolver } from '../../ports/runtime-environment-resolver.js';
-import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';

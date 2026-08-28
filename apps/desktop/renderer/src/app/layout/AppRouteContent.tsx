@@ -21,6 +21,7 @@ import type { SettingsSectionId } from '../../features/settings/settings-types.j
 import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
 import { usePluginManagementCapabilities } from '../../composition/usePluginManagementCapabilities.js';
 import { useMcpCapabilities } from '../../composition/useMcpCapabilities.js';
+import { useSkillsCapabilities } from '../../composition/useSkillsCapabilities.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {
@@ -119,39 +120,44 @@ export function AppRouteContent({
 }) {
   const { t } = useI18n();
   const mcp = useMcpCapabilities();
+  const skills = useSkillsCapabilities();
   const refreshCapabilities = useCallback(async () => {
-    await Promise.all([runtime.refreshCapabilities(), mcp.refresh()]);
-  }, [mcp.refresh, runtime.refreshCapabilities]);
+    await Promise.all([runtime.refreshCapabilities(), mcp.refresh(), skills.refresh()]);
+  }, [mcp.refresh, runtime.refreshCapabilities, skills.refresh]);
   const refreshCapabilityDependencies = useCallback(async () => {
-    const [runtimeResult, mcpResult] = await Promise.allSettled([
+    const [runtimeResult, mcpResult, skillsResult] = await Promise.allSettled([
       runtime.refreshCapabilityDependencies(),
       mcp.refresh(),
+      skills.refresh(),
     ]);
     if (mcpResult.status === 'rejected') {
       reportRuntimeBackgroundFailure('MCP refresh after plugin mutation', mcpResult.reason);
     }
+    if (skillsResult.status === 'rejected') {
+      reportRuntimeBackgroundFailure('Skill refresh after plugin mutation', skillsResult.reason);
+    }
     if (runtimeResult.status === 'rejected') throw runtimeResult.reason;
     return runtimeResult.value;
-  }, [mcp.refresh, runtime.refreshCapabilityDependencies]);
+  }, [mcp.refresh, runtime.refreshCapabilityDependencies, skills.refresh]);
   const pluginManagement = usePluginManagementCapabilities({
     refreshCapabilities,
     refreshCapabilityDependencies,
   });
   const installSkillMcpDependencies = useCallback(async (
-    skill: Parameters<typeof runtime.installSkillMcpDependencies>[0],
+    skill: Parameters<typeof skills.installMcpDependencies>[0],
   ) => {
-    const detail = await runtime.installSkillMcpDependencies(skill);
+    const detail = await skills.installMcpDependencies(skill);
     await mcp.refresh();
     return detail;
-  }, [mcp.refresh, runtime.installSkillMcpDependencies]);
+  }, [mcp.refresh, skills.installMcpDependencies]);
   const authenticateSkillMcpDependency = useCallback(async (
-    skill: Parameters<typeof runtime.authenticateSkillMcpDependency>[0],
+    skill: Parameters<typeof skills.authenticateMcpDependency>[0],
     serverKey: string,
   ) => {
-    const detail = await runtime.authenticateSkillMcpDependency(skill, serverKey);
+    const detail = await skills.authenticateMcpDependency(skill, serverKey);
     await mcp.refresh();
     return detail;
-  }, [mcp.refresh, runtime.authenticateSkillMcpDependency]);
+  }, [mcp.refresh, skills.authenticateMcpDependency]);
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
   const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
@@ -244,13 +250,13 @@ export function AppRouteContent({
           archivedThreads={runtime.archivedThreads}
           config={runtime.config}
           initialSection={settingsInitialSection ?? undefined}
-          skillExtraRoots={runtime.skillExtraRoots}
+          skillExtraRoots={skills.extraRoots}
           onBack={() => setActiveView('chat')}
           onSaveRuntimePreferences={runtime.saveRuntimePreferences}
           onDeleteAllArchivedThreads={runtime.permanentlyDeleteArchivedThreads}
           onDeleteArchivedThread={runtime.permanentlyDeleteThread}
           onRestoreArchivedThread={runtime.restoreArchivedThread}
-          onSetSkillExtraRoots={runtime.setSkillExtraRoots}
+          onSetSkillExtraRoots={skills.setExtraRoots}
         />
       </Suspense>
     );
@@ -260,7 +266,7 @@ export function AppRouteContent({
     return (
       <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
         <CapabilitiesPage
-          skills={runtime.skills}
+          skills={skills.skills}
           mcpState={mcp.snapshot}
           hookState={runtime.hookState}
           plugins={pluginManagement.plugins}
@@ -268,15 +274,15 @@ export function AppRouteContent({
           pluginMarketplaceErrors={pluginManagement.marketplaceErrors}
           extensionStatuses={pluginManagement.extensions}
           selectedPluginId={selectedCapabilitiesPluginId}
-          onCreateSkill={runtime.createSkill}
-          onDeleteSkill={runtime.deleteSkill}
+          onCreateSkill={skills.createSkill}
+          onDeleteSkill={skills.deleteSkill}
           onGetPluginItemContent={pluginManagement.getItemContent}
-          onGetSkillDetail={runtime.getSkillDetail}
+          onGetSkillDetail={skills.getSkillDetail}
           onInstallSkillMcpDependencies={installSkillMcpDependencies}
           onAuthenticateSkillMcpDependency={authenticateSkillMcpDependency}
           onCreateInConversation={onSelectSkillForChat}
           onRefresh={pluginManagement.refresh}
-          onUpdateSkill={runtime.updateSkill}
+          onUpdateSkill={skills.updateSkill}
           onFetchMcpTools={mcp.discoverTools}
           onSaveMcpServer={mcp.saveServer}
           onUpdateMcpServer={mcp.updateServer}
@@ -328,7 +334,7 @@ export function AppRouteContent({
       reviewState={workspacePanels.reviewState}
       selectedWorkspaceApp={workspacePanels.selectedWorkspaceApp}
       workspaceApps={workspacePanels.workspaceApps}
-      skills={runtime.skills}
+      skills={skills.skills}
       threads={runtime.threads}
       sideActivePanel={workspacePanels.sideActivePanel}
       sidePanelSlot={workspacePanels.sidePanelSlot}

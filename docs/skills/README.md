@@ -35,7 +35,10 @@ main RuntimeHost
       ├── installed plugin skills
       ├── user skills
       └── optional extra roots
-  → SkillRegistry port
+  → Skills Feature `SkillsControl`
+      ├── typed runtime operations
+      ├── SWE compatibility notification
+      └── renderer service snapshot
   → RuntimeSamplingContextBuilder
   → prompt injection
 ```
@@ -128,7 +131,9 @@ Skill 本身不能把 secret 写入 manifest；认证仍走 MCP/native secret �
 - `packages/desktop-runtime/src/adapters/skill/file-skill-registry.ts`
 - `skill-mcp-dependency-coordinator.ts`
 - `packages/desktop-runtime/src/adapters/tool/skill-management-tool-host.ts`
-- `packages/desktop-runtime/src/ports/skill-registry.ts`
+- `packages/features/skills/src/contracts/`
+- `packages/features/skills/src/runtime/`
+- `packages/features/skills/src/renderer/`
 - `packages/contracts/src/skills.ts`
 - Renderer `features/capabilities/CapabilitiesSkill*.tsx`
 

@@ -9,18 +9,18 @@ import type {
   RuntimeSkillPatch,
   RuntimeSkillSummary,
 } from '@setsuna-desktop/contracts';
-import { watch, type FSWatcher } from 'node:fs';
-import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
-import path from 'node:path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import type {
   PluginSkillRegistry,
   SkillActivationContext,
   SkillInjection,
   SkillPromptContextSnapshot,
   SkillRegistry,
-} from '../../ports/skill-registry.js';
+} from '@setsuna-desktop/feature-skills/contracts';
+import { watch, type FSWatcher } from 'node:fs';
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import type { InstalledPluginRecord } from '../../ports/plugin-bundle-store.js';
 import { errorMessage } from '../../shared/node-errors.js';
 import { skillContentVersion } from '../../shared/skill-content-version.js';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';

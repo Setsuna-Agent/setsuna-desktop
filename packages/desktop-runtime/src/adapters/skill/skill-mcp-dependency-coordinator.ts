@@ -16,7 +16,7 @@ import type {
   SkillMcpDependencyManager,
   SkillPromptContextSnapshot,
   SkillRegistry,
-} from '../../ports/skill-registry.js';
+} from '@setsuna-desktop/feature-skills/contracts';
 import { errorMessage } from '../../shared/node-errors.js';
 
 type SkillMcpClient = Pick<McpControl, 'authStatus' | 'invalidateServer' | 'login'>;

@@ -19,10 +19,7 @@ import {
   updateScopedRuntimeError,
   type ScopedRuntimeError,
 } from './runtimeErrorState.js';
-import {
-  reportOptionalRuntimeLoadFailures,
-  useRuntimeCapabilityState,
-} from './useRuntimeCapabilityState.js';
+import { useRuntimeCapabilityState } from './useRuntimeCapabilityState.js';
 import { useRuntimeConfigState, type ModelProviderProjectionService } from './useRuntimeConfigState.js';
 import {
   useRuntimeThreadState,
@@ -34,7 +31,6 @@ export type LoadState = 'loading' | 'ready' | 'error';
 type RuntimeClientStateOptions = {
   activeProjectId: string | null;
   modelProvider: ModelProviderProjectionService;
-  onPluginSkillMutation?: () => Promise<void>;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
@@ -46,7 +42,6 @@ type RuntimeClientStateOptions = {
 export function useRuntimeClientState({
   activeProjectId,
   modelProvider,
-  onPluginSkillMutation,
   onTurnSettled,
   setActiveProjectId,
 }: RuntimeClientStateOptions) {
@@ -77,7 +72,6 @@ export function useRuntimeClientState({
     ...configState
   } = useRuntimeConfigState({ client, modelProvider });
   const {
-    applyBootstrapResults: applyCapabilityBootstrapResults,
     refreshCapabilities,
     ...capabilityState
   } = useRuntimeCapabilityState({
@@ -86,7 +80,6 @@ export function useRuntimeClientState({
     config: configState.config,
     enabled: loadState === 'ready',
     onConfigChange: replaceConfig,
-    onPluginSkillMutation,
   });
   const {
     applyBootstrapThreads,
@@ -148,9 +141,6 @@ export function useRuntimeClientState({
         projectList,
         threadList,
       } = bootstrap.core;
-      const {
-        skillResult,
-      } = bootstrap.optional;
       replaceConfig(nextConfig);
       setProjects(projectList.projects);
       const threadBootstrap = applyBootstrapThreads({
@@ -158,12 +148,6 @@ export function useRuntimeClientState({
         projects: projectList.projects,
         visibleThreads: threadList.threads,
       });
-      applyCapabilityBootstrapResults({
-        skillResult,
-      });
-      reportOptionalRuntimeLoadFailures([
-        ['skills', skillResult],
-      ]);
       await threadBootstrap;
       setLoadState('ready');
     } catch (unknownError) {
@@ -173,7 +157,6 @@ export function useRuntimeClientState({
     }
   }, [
     applyBootstrapThreads,
-    applyCapabilityBootstrapResults,
     client,
     replaceConfig,
     setError,
@@ -205,26 +188,17 @@ type RuntimeBootstrapClient = Pick<
   DesktopRuntimeClient,
   | 'getConfig'
   | 'listProjects'
-  | 'listSkills'
   | 'listThreads'
 >;
 
 export async function loadRuntimeBootstrap(client: RuntimeBootstrapClient) {
-  const [core, optional] = await Promise.all([
-    Promise.all([
-      client.getConfig(),
-      client.listThreads(),
-      client.listThreads({ includeArchived: true }),
-      client.listProjects(),
-    ]),
-    Promise.allSettled([client.listSkills()]),
+  const [nextConfig, threadList, allThreadList, projectList] = await Promise.all([
+    client.getConfig(),
+    client.listThreads(),
+    client.listThreads({ includeArchived: true }),
+    client.listProjects(),
   ]);
-  const [nextConfig, threadList, allThreadList, projectList] = core;
-  const [skillResult] = optional;
   return {
     core: { nextConfig, threadList, allThreadList, projectList },
-    optional: {
-      skillResult,
-    },
   };
 }

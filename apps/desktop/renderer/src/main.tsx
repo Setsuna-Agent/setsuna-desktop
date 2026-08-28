@@ -19,6 +19,7 @@ import { ModelProviderFeatureServiceBoundary } from './composition/ModelProvider
 import { McpFeatureServiceBoundary } from './composition/McpFeatureBoundary.js';
 import { PluginManagementFeatureServiceBoundary } from './composition/PluginManagementFeatureBoundary.js';
 import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
+import { SkillsFeatureServiceBoundary } from './composition/SkillsFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './composition/UsageFeatureBoundary.js';
 import { activateBuiltinRendererFeatures } from './composition/renderer-feature-composition.js';
@@ -82,13 +83,15 @@ async function bootstrapRenderer(): Promise<void> {
                   <UsageFeatureServiceBoundary service={features.usage}>
                     <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
                       <PluginManagementFeatureServiceBoundary service={features.pluginManagement}>
-                        <McpFeatureServiceBoundary service={features.mcp}>
-                          <KeyboardShortcutsProvider>
-                            <CodeAppearanceProvider>
-                              <App />
-                            </CodeAppearanceProvider>
-                          </KeyboardShortcutsProvider>
-                        </McpFeatureServiceBoundary>
+                        <SkillsFeatureServiceBoundary service={features.skills}>
+                          <McpFeatureServiceBoundary service={features.mcp}>
+                            <KeyboardShortcutsProvider>
+                              <CodeAppearanceProvider>
+                                <App />
+                              </CodeAppearanceProvider>
+                            </KeyboardShortcutsProvider>
+                          </McpFeatureServiceBoundary>
+                        </SkillsFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>
                     </RuntimeActivityFeatureServiceBoundary>
                   </UsageFeatureServiceBoundary>

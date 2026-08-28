@@ -74,9 +74,6 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
   const maintenanceGate = new RuntimeMaintenanceGate(runtime, inFlightRequests);
   let shuttingDown = false;
   let closingPromise: Promise<void> | null = null;
-  const unsubscribeSkillChanges = runtime.skillRegistry.subscribeChanges(() => {
-    runtime.appServerNotificationBus.publish({ method: 'skills/changed', params: {} });
-  });
   const server = http.createServer(async (request, response) => {
     const finishRequest = inFlightRequests.begin();
     try {
@@ -182,7 +179,6 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
         for (const response of sseResponses) response.end();
         sseResponses.clear();
         server.closeAllConnections();
-        unsubscribeSkillChanges();
         commandExecManager.terminateAll();
         fsManager.terminateAll();
         try {

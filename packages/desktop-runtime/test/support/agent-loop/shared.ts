@@ -22,7 +22,7 @@ import { type Clock } from '../../../src/ports/clock.js';
 import type { ConfigStore, RuntimeProviderConfig } from '../../../src/ports/config-store.js';
 import type { ModelClient } from '../../../src/ports/model-client.js';
 import type { PolicyAmendmentStore, RuntimePolicyAmendments } from '../../../src/ports/policy-amendment-store.js';
-import type { SkillRegistry } from '../../../src/ports/skill-registry.js';
+import type { SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { ThreadStore } from '../../../src/ports/thread-store.js';
 import { type ToolExecutionContext, type ToolHost, type ToolTurnCleanupOutcome } from '../../../src/ports/tool-host.js';
 import type { UsageRecorder } from '../../../src/ports/usage-store.js';

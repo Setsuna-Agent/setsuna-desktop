@@ -68,6 +68,7 @@
     "@setsuna-desktop/feature-plugin-management": "workspace:*",
     "@setsuna-desktop/feature-review": "workspace:*",
     "@setsuna-desktop/feature-runtime-activity": "workspace:*",
+    "@setsuna-desktop/feature-skills": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",
     "@setsuna-desktop/feature-usage": "workspace:*",
     "@setsuna-desktop/feature-updater": "workspace:*",

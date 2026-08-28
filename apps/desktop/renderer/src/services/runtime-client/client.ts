@@ -24,11 +24,6 @@ import type {
   RuntimeMessagePageQuery,
   RuntimeRequestInput,
   RuntimeReviewStartInput,
-  RuntimeSkillDetail,
-  RuntimeSkillInput,
-  RuntimeSkillList,
-  RuntimeSkillMcpDependencyInstallResult,
-  RuntimeSkillPatch,
   RuntimeThread,
   SendTurnInput,
   SendTurnResponse,
@@ -242,40 +237,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       const suffix = params.size ? `?${params}` : '';
       return request<RuntimeHookListResponse>({ path: `/v1/hooks${suffix}` });
     },
-    listSkills() {
-      return request<RuntimeSkillList>({ path: '/v1/skills' });
-    },
-    createSkill(input: RuntimeSkillInput) {
-      return request<RuntimeSkillDetail>({ path: '/v1/skills', method: 'POST', body: input });
-    },
-    getSkill(skillId: string) {
-      return request<RuntimeSkillDetail>({ path: `/v1/skills/${encodeURIComponent(skillId)}` });
-    },
-    updateSkill(skillId: string, patch: RuntimeSkillPatch) {
-      return request<RuntimeSkillDetail>({
-        path: `/v1/skills/${encodeURIComponent(skillId)}`,
-        method: 'PATCH',
-        body: patch,
-      });
-    },
-    deleteSkill(skillId: string) {
-      return request<void>({
-        path: `/v1/skills/${encodeURIComponent(skillId)}`,
-        method: 'DELETE',
-      });
-    },
-    installSkillMcpDependencies(skillId: string) {
-      return request<RuntimeSkillMcpDependencyInstallResult>({
-        path: `/v1/skills/${encodeURIComponent(skillId)}/mcp-dependencies/install`,
-        method: 'POST',
-      });
-    },
-    authenticateSkillMcpDependency(skillId: string, serverKey: string) {
-      return request<RuntimeSkillDetail>({
-        path: `/v1/skills/${encodeURIComponent(skillId)}/mcp-dependencies/${encodeURIComponent(serverKey)}/login`,
-        method: 'POST',
-      });
-    },
     listProjects() {
       return request<WorkspaceProjectList>({ path: '/v1/projects' });
     },
@@ -335,13 +296,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     searchProject(projectId: string, query: string) {
       return request<WorkspaceSearchResponse>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/search?q=${encodeURIComponent(query)}`,
-      });
-    },
-    setSkillExtraRoots(extraRoots: string[]) {
-      return request<void>({
-        path: '/v1/skills/extra-roots',
-        method: 'PUT',
-        body: { extraRoots },
       });
     },
     listApprovals() {

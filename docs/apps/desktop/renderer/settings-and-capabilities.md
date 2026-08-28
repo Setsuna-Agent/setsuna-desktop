@@ -179,6 +179,8 @@ MCP 的 renderer 状态与命令由 `packages/features/mcp/renderer` 持有。Fe
 
 内置和 Plugin Skill 只读；用户 Skill 才能修改正文。MCP dependency 的安装与认证通过 runtime coordinator。
 
+Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer/` 持有。Feature service 通过 `/v1/features/skills/*` typed operations 管理 catalog、extra roots、CRUD 和 MCP dependency，并串行化 mutation、阻止迟到 refresh 回退最新结果；宿主 `CapabilitiesPage` 与 Settings 只通过 composition boundary 消费该 service。
+
 “用对话创建 Skill”发出面向下一次主聊天 composer 的待消费请求，不绑定短生命周期 `composerKey`；切换到聊天或 composer 重建后，请求仍会插入对应 Skill slot 并聚焦输入框。
 
 ### Hooks
@@ -189,11 +191,11 @@ MCP 的 renderer 状态与命令由 `packages/features/mcp/renderer` 持有。Fe
 
 ## State 与 refresh
 
-宿主 Settings/Capabilities 通过 `useRuntimeClientState` facade 获取通用 Config、Skill 和 Hook 数据；MCP 与 Plugin 列表、市场和 extension 状态由各自 renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
+宿主 Settings/Capabilities 通过 `useRuntimeClientState` facade 获取通用 Config 和 Hook 数据；Skills、MCP 与 Plugin 列表、市场和 extension 状态由各自 renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
 
 - Config save 后更新统一 config state。
 - Image Generation、Vision Recognition 与 Workspace Dependencies 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
-- Core capabilities refresh 使用 `Promise.allSettled`，单个 Skill/Hook 请求失败不抹掉其他成功数据；MCP 与 Plugin Management 分别维护独立 snapshot，迟到的旧 refresh 不覆盖新状态。
+- Skills、MCP 与 Plugin Management 分别维护独立 snapshot，迟到的旧 refresh 不覆盖新状态；Hook 后台刷新失败保留最后一次有效投影。
 - Hook 请求受当前 project cwd 影响，使用 latest request guard。
 - Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再让宿主刷新可能被 Bundle 改变的 Skill、MCP、Hook 和 Hook config，而不是靠局部猜测所有权变化；turn 结算读取 extension 状态时会同时比较 runtime 的全局 Plugin catalog revision，只有 revision 变化才刷新完整 Plugin snapshot，因此协作子线程的插件变更也能收敛。Plugin Skill 编辑/删除只刷新已安装插件摘要。
 

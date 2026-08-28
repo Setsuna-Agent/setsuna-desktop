@@ -32,7 +32,7 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 3. 恢复 thread store 和 owner lease。
 4. 恢复 generated image / attachment store。
 5. 结算异常退出遗留的 streaming turn。
-6. 激活 Runtime Feature composition；MCP Feature 此时只建立 control 与生命周期 owner，不连接 server。
+6. 激活 Runtime Feature composition；MCP Feature 此时只建立 control 与生命周期 owner、不连接 server，Skills Feature 登记 typed routes 和 change-notification cleanup。
 7. 排队 startup memory extraction。
 8. 创建 app-server command/fs manager、connection registry 和 HTTP server。
 
@@ -60,13 +60,13 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 `runtime-rest-routes.ts` 是小型有序分发入口，只组合窄 domain handler：
 
 - `runtime-config-routes.ts`：Config 与 provider model discovery。
-- `runtime-extension-routes.ts`：Skills、MCP 和 Approvals。
+- `runtime-extension-routes.ts`：MCP 和 Approvals 兼容入口。
 - `runtime-resource-routes.ts`：Attachment 创建、读取与清理。
-- `RuntimeRouteRegistry`：由 Usage、Runtime Activity、Plugin Management 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
+- `RuntimeRouteRegistry`：由 Skills、Usage、Runtime Activity、Plugin Management 等 runtime Feature setup 登记 typed operations；在中央 route family 之前分发。
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel 与 review。
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
-- `runtime-capability-routes.ts`：Hook、MCP status/resource/tool 与 Skill extra roots。
+- `runtime-capability-routes.ts`：Hook 与 MCP status/resource/tool 兼容入口。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
 - `runtime-memory-routes.ts`：旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
 
@@ -96,7 +96,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 
 ### 能力
 
-- Skills 和 MCP dependencies。
+- Skills catalog、extra roots、CRUD 与 MCP dependencies 通过 Skills Feature typed operations 暴露。
 - MCP servers/tools/resources/OAuth。
 - Hooks。
 - Plugins、marketplace、image generation 配置/测试与 vision recognition 模型选择/测试。
@@ -196,14 +196,13 @@ Contract 映射详见 [SWE/app-server](../contracts/swe-app-server.md)。
 1. 设置 `shuttingDown`，拒绝新请求。
 2. 停止 HTTP listener。
 3. End 所有 SSE 并关闭连接。
-4. 取消 Skill change subscription。
-5. 终止 app-server command/fs managers。
-6. `agentLoop.shutdown()` 取消并排空任务。
-7. 等待 in-flight HTTP idle。
-8. Dispose Runtime Feature composition；MCP Feature scope 在这里关闭全部连接。
-9. 关闭 extension、background shell、network/native bridge。
-10. 关闭 thread store/lease/checkpoint。
-11. 等待 server closed。
+4. 终止 app-server command/fs managers。
+5. `agentLoop.shutdown()` 取消并排空任务。
+6. 等待 in-flight HTTP idle。
+7. Dispose Runtime Feature composition；Skills change subscription 和 MCP 连接都由各自 Feature scope 在这里释放。
+8. 关闭 extension、background shell、network/native bridge。
+9. 关闭 thread store/lease/checkpoint。
+10. 等待 server closed。
 
 嵌套 `finally` 确保前一层失败也会释放后续资源。
 

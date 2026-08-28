@@ -23,7 +23,7 @@ import type {
   PluginRuntimeMutationCoordinator,
   PluginResourceRead,
 } from '../../ports/plugin-bundle-store.js';
-import type { PluginSkillRegistry } from '../../ports/skill-registry.js';
+import type { PluginSkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import { withFileStateUpdate } from '../store/file-state-coordinator.js';
 import { readJsonFile, renameWithRetry, writeJsonFile } from '../store/json-file.js';
 import type {
