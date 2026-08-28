@@ -22,21 +22,21 @@ describe('runtime server REST skills and capabilities', () => {
   });
 
   it('lists and updates local skills', async () => {
-      const list = await harness.runtimeFetch('/v1/skills');
-      expect(list.skills.some((skill: { id: string }) => skill.id === 'create-skill-in-chat')).toBe(true);
-      expect(list.skills.some((skill: { id: string }) => skill.id === 'create-plugin-in-chat')).toBe(true);
-  
-      const updated = await harness.runtimeFetch('/v1/skills/create-skill-in-chat', {
-        method: 'PATCH',
-        body: JSON.stringify({ enabled: false }),
-      });
-  
-      expect(updated).toMatchObject({
-        id: 'create-skill-in-chat',
-        enabled: false,
-      });
+    const list = await harness.runtimeFetch('/v1/features/skills');
+    expect(list.skills.some((skill: { id: string }) => skill.id === 'create-skill-in-chat')).toBe(true);
+    expect(list.skills.some((skill: { id: string }) => skill.id === 'create-plugin-in-chat')).toBe(true);
+
+    const updated = await harness.runtimeFetch('/v1/features/skills/create-skill-in-chat', {
+      method: 'PATCH',
+      body: JSON.stringify({ patch: { enabled: false } }),
     });
-  
+
+    expect(updated).toMatchObject({
+      id: 'create-skill-in-chat',
+      enabled: false,
+    });
+  });
+
   it('lists the default marketplace and installs a selected plugin by id', async () => {
       const marketplace = await harness.runtimeFetch('/v1/features/plugin-management');
       await expect(harness.runtimeFetch('/v1/features/plugin-management/extensions')).resolves.toEqual({
@@ -282,7 +282,7 @@ describe('runtime server REST skills and capabilities', () => {
         kind: 'skill',
         files: [expect.objectContaining({ mimeType: 'text/markdown', text: expect.stringContaining('Context7') })],
       });
-      await expect(harness.runtimeFetch('/v1/skills')).resolves.toMatchObject({
+      await expect(harness.runtimeFetch('/v1/features/skills')).resolves.toMatchObject({
         skills: expect.arrayContaining([
           expect.objectContaining({
             id: 'context7-docs.context7-docs',
@@ -664,10 +664,14 @@ describe('runtime server REST skills and capabilities', () => {
           }],
         });
   
-        await expect(harness.runtimeFetch('/v1/skills/extra-roots', {
+        await expect(harness.runtimeFetch('/v1/features/skills/extra-roots', {
           method: 'PUT',
           body: JSON.stringify({ extraRoots: [extraRoot] }),
-        })).resolves.toEqual({ ok: true });
+        })).resolves.toMatchObject({
+          skills: expect.arrayContaining([
+            expect.objectContaining({ id: 'appserver-extra' }),
+          ]),
+        });
         await expect(stream.readNotification((notification) => notification.method === 'skills/changed', { timeoutMs: harness.eventStreamTimeoutMs }))
           .resolves.toMatchObject({ method: 'skills/changed', params: {} });
   

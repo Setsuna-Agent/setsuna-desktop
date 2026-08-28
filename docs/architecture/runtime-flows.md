@@ -53,7 +53,7 @@ Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装
 正常工作台的 `useRuntimeClientState()` 会把初始化分成两类：
 
 - 核心状态：config、可见 threads、包含归档的 threads、projects。失败会使工作台进入 error。
-- 可选 Core 状态：skills。MCP、plugins、usage 等纵向 Feature 由各自 renderer service 独立加载，单域失败只降级该功能。
+- 纵向 Feature 状态：Skills、MCP、plugins、usage 等由各自 renderer service 独立加载，不进入 Core bootstrap result。
 
 恢复上次线程后，renderer 以该线程的 `lastSeq` 建立 SSE 订阅。
 
@@ -79,7 +79,7 @@ Core feature / hook
 - Runtime 先鉴权再进入 REST 或 app-server 分发。
 - 错误应保持结构化语义；不能靠解析任意日志文本判断业务结果。
 
-REST 适合可重拉状态，例如 config、thread snapshot、projects、usage、MCP 和 plugins。
+REST 适合可重拉状态，例如 config、thread snapshot、projects、usage、Skills、MCP 和 plugins。
 
 ## Thread SSE
 

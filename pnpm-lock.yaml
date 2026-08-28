@@ -29,6 +29,7 @@ importers:
       '@setsuna-desktop/feature-plugin-management': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
+      '@setsuna-desktop/feature-skills': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
@@ -97,6 +98,7 @@ importers:
       '@setsuna-desktop/feature-plugin-management': link:packages/features/plugin-management
       '@setsuna-desktop/feature-review': link:packages/features/review
       '@setsuna-desktop/feature-runtime-activity': link:packages/features/runtime-activity
+      '@setsuna-desktop/feature-skills': link:packages/features/skills
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-usage': link:packages/features/usage
@@ -164,6 +166,7 @@ importers:
       '@setsuna-desktop/feature-plugin-management': workspace:*
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
+      '@setsuna-desktop/feature-skills': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
@@ -186,6 +189,7 @@ importers:
       '@setsuna-desktop/feature-plugin-management': link:../features/plugin-management
       '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-runtime-activity': link:../features/runtime-activity
+      '@setsuna-desktop/feature-skills': link:../features/skills
       '@setsuna-desktop/feature-usage': link:../features/usage
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
@@ -373,6 +377,14 @@ importers:
       lucide-react: 0.468.0_react@18.3.1
       react: 18.3.1
       react-dom: 18.3.1_react@18.3.1
+
+  packages/features/skills:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
 
   packages/features/terminal:
     specifiers:

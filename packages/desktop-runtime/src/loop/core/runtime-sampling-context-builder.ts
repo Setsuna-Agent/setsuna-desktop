@@ -15,6 +15,7 @@ import type { GoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
+import type { SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { ApprovalGate } from '../../ports/approval-gate.js';
 import type { AttachmentStore } from '../../ports/attachment-store.js';
 import type { Clock } from '../../ports/clock.js';
@@ -28,7 +29,6 @@ import {
   runtimeDebugTraceEnabled,
   type RuntimeDebugTraceSink,
 } from '../../ports/runtime-debug-trace.js';
-import type { SkillRegistry } from '../../ports/skill-registry.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { RuntimeToolExecutionContext, ToolHost } from '../../ports/tool-host.js';
 import type { ToolResultStore } from '../../ports/tool-result-store.js';

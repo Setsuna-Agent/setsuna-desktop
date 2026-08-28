@@ -5,7 +5,6 @@ import {
   listRuntimeHooks,
   listRuntimeMcpServerStatuses,
   readRuntimeMcpServerResource,
-  setRuntimeSkillExtraRoots,
 } from '../runtime/use-cases/capability-operations.js';
 import { readBody, sendJson } from './http-utils.js';
 import type { RuntimeFactory } from './types.js';
@@ -26,13 +25,6 @@ export async function handleRuntimeCapabilityRequest(
       200,
       await listRuntimeHooks(runtime, url.searchParams.getAll('cwd')),
     );
-    return true;
-  }
-
-  if (request.method === 'PUT' && url.pathname === '/v1/skills/extra-roots') {
-    const input = await readBody<{ extraRoots?: unknown }>(request);
-    await setRuntimeSkillExtraRoots(runtime, input.extraRoots);
-    sendJson(response, 200, { ok: true });
     return true;
   }
 

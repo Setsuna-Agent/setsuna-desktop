@@ -30,6 +30,7 @@ import { useConversationDebugFeatureEnabled } from '../../composition/Conversati
 import { useUsageFeatureInvalidation } from '../../composition/UsageFeatureBoundary.js';
 import { usePluginManagementFeatureService } from '../../composition/PluginManagementFeatureBoundary.js';
 import { useMcpFeatureService } from '../../composition/McpFeatureBoundary.js';
+import { useSkillsFeatureService } from '../../composition/SkillsFeatureBoundary.js';
 import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
@@ -50,6 +51,7 @@ export function useDesktopAppController() {
   const conversationDebugEnabled = useConversationDebugFeatureEnabled();
   const invalidateUsage = useUsageFeatureInvalidation();
   const mcp = useMcpFeatureService();
+  const skills = useSkillsFeatureService();
   const pluginManagement = usePluginManagementFeatureService();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
@@ -59,14 +61,13 @@ export function useDesktopAppController() {
     void mcp.refresh().catch((unknownError) => {
       reportRuntimeBackgroundFailure('MCP refresh after turn', unknownError);
     });
-  }, [invalidateUsage, mcp, pluginManagement]);
-  const handlePluginSkillMutation = useCallback(async () => {
-    await pluginManagement.refreshInstalled();
-  }, [pluginManagement]);
+    void skills.refresh().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('Skill refresh after turn', unknownError);
+    });
+  }, [invalidateUsage, mcp, pluginManagement, skills]);
   const runtime = useRuntimeClientState({
     activeProjectId,
     modelProvider,
-    onPluginSkillMutation: handlePluginSkillMutation,
     onTurnSettled: handleTurnSettled,
     setActiveProjectId,
   });
@@ -97,6 +98,12 @@ export function useDesktopAppController() {
       reportRuntimeBackgroundFailure('MCP management refresh', unknownError);
     });
   }, [loadState, mcp]);
+  useEffect(() => {
+    if (loadState !== 'ready') return;
+    void skills.refresh().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('Skill catalog refresh', unknownError);
+    });
+  }, [loadState, skills]);
   const chatTargetIdentity = chatComposerTargetIdentity(
     currentThread?.id,
     currentThread ? null : activeProjectId,

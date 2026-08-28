@@ -52,6 +52,11 @@ import {
 } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
 import {
+  skillsRendererServiceCapability,
+  type SkillsRendererService,
+} from '@setsuna-desktop/feature-skills/contracts';
+import { skillsRendererFeature } from '@setsuna-desktop/feature-skills/renderer';
+import {
   networkProxyRendererFeature,
   networkProxyRendererHostCapability,
   networkProxyRendererStateCapability,
@@ -104,6 +109,7 @@ const rendererFeatures = defineRendererFeatureHost({
     pluginManagementRendererFeature,
     reviewRendererFeature,
     runtimeActivityRendererFeature,
+    skillsRendererFeature,
     terminalRendererFeature,
     updaterRendererFeature,
     windowsSandboxRendererFeature,
@@ -132,6 +138,7 @@ export type ActiveRendererFeatures = Readonly<{
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
   runtimeActivity: RuntimeActivityRendererService;
+  skills: SkillsRendererService;
   updater: UpdaterRendererStateService;
   usage: UsageRendererStateService;
   views: RendererFeatureViews;
@@ -215,6 +222,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
       runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
+      skills: requiredCapability(skillsRendererServiceCapability),
       updater: requiredCapability(updaterRendererStateCapability),
       usage: optionalCapability(
         usageRendererStateCapability,
@@ -231,6 +239,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       networkProxy: dependencies.networkProxy,
       pluginManagement: dependencies.pluginManagement,
       runtimeActivity: dependencies.runtimeActivity,
+      skills: dependencies.skills,
       updater: dependencies.updater,
       usage: dependencies.usage,
       views,

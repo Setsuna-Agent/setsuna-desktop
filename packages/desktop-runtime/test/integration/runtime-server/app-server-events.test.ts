@@ -59,7 +59,7 @@ describe('runtime server AppServer events and shell turns', () => {
             ],
           }),
         });
-        const skill = await harness.runtimeFetch('/v1/skills', {
+        const skill = await harness.runtimeFetch('/v1/features/skills', {
           method: 'POST',
           body: JSON.stringify({
             name: 'Runtime API Skill',

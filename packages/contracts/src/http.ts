@@ -17,13 +17,6 @@ import type {
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
 import type {
-  RuntimeSkillDetail,
-  RuntimeSkillInput,
-  RuntimeSkillList,
-  RuntimeSkillMcpDependencyInstallResult,
-  RuntimeSkillPatch,
-} from './skills.js';
-import type {
   CreateThreadInput,
   DeleteQueuedTurnInputResponse,
   MessageDeleteInput,
@@ -133,13 +126,6 @@ export type DesktopRuntimeClient = {
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
   listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
-  listSkills(): Promise<RuntimeSkillList>;
-  createSkill(input: RuntimeSkillInput): Promise<RuntimeSkillDetail>;
-  getSkill(skillId: string): Promise<RuntimeSkillDetail>;
-  updateSkill(skillId: string, patch: RuntimeSkillPatch): Promise<RuntimeSkillDetail>;
-  deleteSkill(skillId: string): Promise<void>;
-  installSkillMcpDependencies(skillId: string): Promise<RuntimeSkillMcpDependencyInstallResult>;
-  authenticateSkillMcpDependency(skillId: string, serverKey: string): Promise<RuntimeSkillDetail>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;
@@ -152,7 +138,6 @@ export type DesktopRuntimeClient = {
   readProjectFileForEdit(projectId: string, path: string): Promise<WorkspaceFileRead>;
   saveProjectFile(projectId: string, path: string, input: WorkspaceFileSaveInput): Promise<WorkspaceFileRead>;
   searchProject(projectId: string, query: string): Promise<WorkspaceSearchResponse>;
-  setSkillExtraRoots(extraRoots: string[]): Promise<void>;
   listApprovals(): Promise<RuntimeApprovalList>;
   answerApproval(approvalId: string, input: AnswerRuntimeApprovalInput): Promise<void>;
 };

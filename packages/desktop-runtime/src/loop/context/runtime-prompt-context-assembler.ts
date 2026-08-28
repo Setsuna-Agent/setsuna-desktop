@@ -7,9 +7,9 @@ import type {
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
+import type { SkillInjection, SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 import type { ProjectInstructionLoader } from '../../ports/project-instruction-loader.js';
 import type { ProjectWorkflow, ProjectWorkflowResolver } from '../../ports/project-workflow-resolver.js';
-import type { SkillInjection, SkillRegistry } from '../../ports/skill-registry.js';
 import type {
   RuntimeToolExecutionContext,
   ToolExecutionEnvironment,

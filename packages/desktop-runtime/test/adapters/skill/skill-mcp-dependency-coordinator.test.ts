@@ -6,7 +6,7 @@ import type {
 import type { McpStore } from '@setsuna-desktop/feature-mcp/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import { SkillMcpDependencyCoordinator } from '../../../src/adapters/skill/skill-mcp-dependency-coordinator.js';
-import type { SkillRegistry } from '../../../src/ports/skill-registry.js';
+import type { SkillRegistry } from '@setsuna-desktop/feature-skills/contracts';
 
 describe('SkillMcpDependencyCoordinator', () => {
   it('detects, installs, enables and authenticates declared MCP dependencies', async () => {

@@ -4,7 +4,10 @@ import type {
   RuntimeSkillMcpDependencyInput,
   RuntimeToolDefinition,
 } from '@setsuna-desktop/contracts';
-import type { SkillMcpDependencyManager, SkillRegistry } from '../../ports/skill-registry.js';
+import type {
+  SkillMcpDependencyManager,
+  SkillRegistry,
+} from '@setsuna-desktop/feature-skills/contracts';
 import type {
   ToolExecutionContext,
   ToolExecutionPreview,

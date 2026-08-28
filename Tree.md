@@ -71,15 +71,15 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 560 total files
-├── src/ — 2 direct / 399 total files
+apps/desktop/renderer/ — 0 direct / 562 total files
+├── src/ — 2 direct / 401 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 6 direct / 6 total files
 │   │   ├── layout/ — 17 direct / 17 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 28 direct / 28 total files
+│   ├── composition/ — 30 direct / 30 total files
 │   ├── features/ — 238 files
 │   │   ├── capabilities/ — 23 direct / 33 total files
 │   │   │   ├── hooks/ — 2 direct / 2 total files
@@ -194,7 +194,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 772 total files
+packages/features/ — 0 direct / 789 total files
 ├── browser/ — 2 direct / 70 total files
 │   ├── src/ — 51 files
 │   │   ├── contracts/ — 8 direct / 8 total files
@@ -316,6 +316,15 @@ packages/features/ — 0 direct / 772 total files
 │   └── test/ — 5 files
 │       ├── renderer/ — 4 direct / 4 total files
 │       └── runtime/ — 1 direct / 1 total files
+├── skills/ — 4 direct / 17 total files
+│   ├── src/ — 10 files
+│   │   ├── contracts/ — 4 direct / 4 total files
+│   │   ├── renderer/ — 4 direct / 4 total files
+│   │   └── runtime/ — 2 direct / 2 total files
+│   └── test/ — 3 files
+│       ├── contracts/ — 1 direct / 1 total files
+│       ├── renderer/ — 1 direct / 1 total files
+│       └── runtime/ — 1 direct / 1 total files
 ├── terminal/ — 2 direct / 24 total files
 │   ├── src/ — 18 files
 │   │   ├── contracts/ — 3 direct / 3 total files
@@ -396,8 +405,8 @@ packages/features/ — 0 direct / 772 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 507 total files
-├── src/ — 2 direct / 294 total files
+packages/desktop-runtime/ — 4 direct / 506 total files
+├── src/ — 2 direct / 293 total files
 │   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
@@ -428,7 +437,7 @@ packages/desktop-runtime/ — 4 direct / 507 total files
 │   │   ├── core/ — 21 direct / 21 total files
 │   │   ├── lifecycle/ — 12 direct / 12 total files
 │   │   └── tools/ — 12 direct / 12 total files
-│   ├── ports/ — 31 direct / 31 total files
+│   ├── ports/ — 30 direct / 30 total files
 │   ├── runtime/ — 3 direct / 9 total files
 │   │   └── use-cases/ — 6 direct / 6 total files
 │   ├── security/ — 5 direct / 5 total files

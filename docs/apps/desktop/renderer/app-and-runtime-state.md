@@ -154,14 +154,14 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 
 ### `useRuntimeCapabilityState.ts`
 
-能力域 owner，持有：
+Core Hook 兼容域 owner，持有：
 
-- Skills 与 extra roots。
 - Hooks 与当前 project cwd 的 latest-request guard。
-- 跨 Skill/config/Hook 的安装后刷新。
+- Plugin mutation 后的 config/Hook 刷新。
 
-该 hook 依赖显式 `RuntimeCapabilityClient`，不能调用 thread、Usage Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
-MCP server state 与命令由 `packages/features/mcp/src/renderer/` 持有；宿主 composition 只在 Plugin/Skill mutation 或 turn settlement 后协调一次跨域刷新。
+该 hook 依赖只含 Hook 方法的显式 `RuntimeCapabilityClient`，不能调用 thread、Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
+
+Skills catalog、extra roots、CRUD 与 MCP dependency 命令由 `packages/features/skills/src/renderer/` 的外部 store service 持有；MCP server state 与命令由 `packages/features/mcp/src/renderer/` 持有。宿主 composition 只在 Plugin mutation 或 turn settlement 后协调必要的跨域刷新，不把 Feature snapshot 合回 `useRuntimeClientState`。
 
 ### Usage renderer state
 
@@ -180,15 +180,7 @@ turn settlement 只向 Feature 发送窄失效通知，使已打开的设置页�
 - 包含 archived 的 threads。
 - Projects。
 
-Core 失败会进入 app error。
-
-### Optional
-
-- Skills。
-
-MCP、Plugin 与其他纵向 Feature 在各自 renderer service 中独立加载和降级，不进入 Core bootstrap result。
-
-Skill bootstrap 使用 `Promise.allSettled`；各 Feature service 也各自捕获后台加载失败，只让对应能力降级。
+Core 失败会进入 app error。Skills、MCP、Plugin 与其他纵向 Feature 在各自 renderer service 中加载，不进入 Core bootstrap result；Skills 在 Core ready 后由宿主触发首次 refresh，并在 turn 结算或 Plugin mutation 后按边界重读。
 
 恢复选择时优先读取本地保存的 active thread ID；线程不存在或加载失败时回退到可用 project。
 

@@ -238,6 +238,8 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 
 ## Skills
 
+`packages/features/skills` 持有 Skill registry/control contract、typed runtime operations、change-notification 生命周期和 renderer external-store service。Desktop runtime 注入下面这些文件系统、MCP 与 ToolHost adapter；prompt/turn 仍通过同一个 Feature-owned `SkillRegistry` contract 读取，不复制 catalog 真源。
+
 `FileSkillRegistry`：
 
 - 读取 packaged builtins。

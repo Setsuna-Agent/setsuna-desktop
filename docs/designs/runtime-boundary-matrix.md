@@ -23,7 +23,6 @@
 | `deleteThread` | `DELETE /v1/threads/:id` | `thread/delete` | `thread-operations.ts` |
 | `startReview` | `POST /v1/threads/:id/reviews` | `review/start` | `thread-operations.ts` |
 | `listHooks` | `GET /v1/hooks` | `hooks/list` | `capability-operations.ts` |
-| `setSkillExtraRoots` | `PUT /v1/skills/extra-roots` | `skills/extraRoots/set` | `capability-operations.ts` |
 
 `appServerRequest` 和公开 raw `request` 已从 renderer business client 删除。底层 request closure 只存在于 client adapter 内部。架构检查会拒绝 renderer 源码重新引用 `/v1/swe/app-server`；app-server 自身仍作为 SWE 客户端兼容协议保留。
 
@@ -34,6 +33,8 @@ MCP renderer 管理已退出 `DesktopRuntimeClient`，由 `@setsuna-desktop/feat
 | MCP server status | `GET /v1/mcp/statuses` | `mcpServerStatus/list` | `capability-operations.ts` |
 | MCP resource read | `POST /v1/mcp/resources/read` | `mcpServer/resource/read` | `capability-operations.ts` |
 | MCP tool call | `POST /v1/mcp/tools/call` | `mcpServer/tool/call` | `capability-operations.ts` |
+
+Skills renderer 管理也已退出 `DesktopRuntimeClient`。`@setsuna-desktop/feature-skills` 拥有 Skill contract、`/v1/features/skills/*` typed operations、runtime route 和 renderer service；宿主注入文件 registry、MCP dependency coordinator 与 `skills/changed` 发布能力。SWE `skills/list`、`skills/config/write`、`skills/extraRoots/set` 及通知继续作为兼容 adapter，复用同一个 `SkillsControl`，不再要求 renderer 保留旧 `/v1/skills*` REST。
 
 Goal 已退出 `DesktopRuntimeClient`：renderer 使用 `@setsuna-desktop/feature-goal/renderer` 的 typed client，经 `GET/PATCH/DELETE /v1/features/goal/threads/:threadId/state` 调用同一个 `GoalControl`。现有 SWE `thread/goal/set` / `thread/goal/clear` 作为协议 adapter 保留，也只转发该 capability，不再拥有另一份业务实现或旧 REST 真源。
 
