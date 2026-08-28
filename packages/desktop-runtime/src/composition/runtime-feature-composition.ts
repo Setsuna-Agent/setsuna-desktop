@@ -262,9 +262,9 @@ export async function activateBuiltinRuntimeFeatures(
             runtime.threadStore.getTurnActivity(threadId, turnId)
           ),
           listApprovals: async () => (await runtime.approvalGate.listApprovals()).approvals,
-          listBackgroundShellProcesses: () => (
-            runtime.backgroundShellProcesses.listAllBackgroundShellProcesses()
-          ),
+          listBackgroundShellProcesses: (threadId?: string) => threadId
+            ? runtime.backgroundShellProcesses.listBackgroundShellProcesses(threadId)
+            : runtime.backgroundShellProcesses.listAllBackgroundShellProcesses(),
           listThreads: () => runtime.threadStore.listThreads({
             includeArchived: true,
             includeSide: true,

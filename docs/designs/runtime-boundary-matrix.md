@@ -39,6 +39,8 @@ Skills renderer 管理也已退出 `DesktopRuntimeClient`。`@setsuna-desktop/fe
 
 Goal 已退出 `DesktopRuntimeClient`：renderer 使用 `@setsuna-desktop/feature-goal/renderer` 的 typed client，经 `GET/PATCH/DELETE /v1/features/goal/threads/:threadId/state` 调用同一个 `GoalControl`。现有 SWE `thread/goal/set` / `thread/goal/clear` 作为协议 adapter 保留，也只转发该 capability，不再拥有另一份业务实现或旧 REST 真源。
 
+后台 shell service 的 renderer 管理也已退出 `DesktopRuntimeClient`。`@setsuna-desktop/feature-runtime-activity` 通过 `GET /v1/features/runtime-activity/services/:threadId` 和 `DELETE /v1/features/runtime-activity/services/:threadId/:processId` 同时服务当前对话概览与全局运行中心；Core 仅保留 pc-local 进程生命周期与窄 host capability。
+
 ### 双协议能力的准入规则
 
 | 消费者 | 应使用的 adapter | 是否需要共享 use case |

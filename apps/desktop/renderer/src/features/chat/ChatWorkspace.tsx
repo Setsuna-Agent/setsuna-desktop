@@ -325,7 +325,6 @@ export function ChatWorkspace({
                 contextPercent={contextUsage.visiblePercent || contextUsage.percent}
                 overview={conversationOverview}
                 reviewControls={reviewControls}
-                shellProcessClient={client}
                 reviewError={reviewError}
                 reviewState={reviewState}
                 onCollapse={() => {

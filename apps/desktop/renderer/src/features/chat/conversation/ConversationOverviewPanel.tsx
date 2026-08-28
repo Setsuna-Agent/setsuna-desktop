@@ -6,6 +6,7 @@ import {
   CollaborationFeatureTaskList,
   useCollaborationFeatureState,
 } from '../../../composition/CollaborationFeatureBoundary.js';
+import { RuntimeActivityFeatureConversationServices } from '../../../composition/RuntimeActivityFeatureBoundary.js';
 import { UsageFeatureConversationSummary } from '../../../composition/UsageFeatureBoundary.js';
 import { localFeatureReviewChangeStats } from '../../../composition/review-feature-adapter.js';
 import type { DesktopReviewState } from '@setsuna-desktop/feature-review/contracts';
@@ -14,7 +15,6 @@ import type { ReactNode } from 'react';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { ChangeCountText } from './ChangeCountText.js';
 import type { ConversationOverviewState } from './chatConversationOverview.js';
-import { ConversationBackgroundServices, type BackgroundShellProcessClient } from './ConversationBackgroundServices.js';
 import { ConversationPlanSummary } from './ConversationPlanSummary.js';
 
 export function ConversationOverviewPanel({
@@ -25,7 +25,6 @@ export function ConversationOverviewPanel({
   currentThread,
   overview,
   reviewControls,
-  shellProcessClient,
   reviewState,
   onCollapse,
   onExpand,
@@ -39,7 +38,6 @@ export function ConversationOverviewPanel({
   currentThread: RuntimeThread;
   overview: ConversationOverviewState;
   reviewControls?: ReactNode;
-  shellProcessClient?: BackgroundShellProcessClient;
   reviewState: DesktopReviewState | null;
   onCollapse: () => void;
   onExpand: () => void;
@@ -109,7 +107,7 @@ export function ConversationOverviewPanel({
         </div>
         <UsageFeatureConversationSummary thread={currentThread} />
       </div>
-      {shellProcessClient ? <ConversationBackgroundServices client={shellProcessClient} threadId={currentThread.id} /> : null}
+      <RuntimeActivityFeatureConversationServices threadId={currentThread.id} />
       <CollaborationFeatureTaskList
         parentThreadId={currentThread.id}
         tasks={collaboration.state.tasks}

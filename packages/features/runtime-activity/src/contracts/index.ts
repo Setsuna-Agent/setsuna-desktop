@@ -10,6 +10,7 @@ export {
 export { runtimeActivityFeature } from './definition.js';
 export {
   listRuntimeActivities,
+  listRuntimeActivityServices,
   stopRuntimeActivityService,
   stopRuntimeActivityTask,
 } from './operations.js';
@@ -17,6 +18,8 @@ export type {
   RuntimeActiveTask,
   RuntimeActiveTaskState,
   RuntimeActivityList,
+  RuntimeActivityServiceList,
+  RuntimeActivityServiceListTarget,
   RuntimeActivityServiceTarget,
   RuntimeActivityTaskTarget,
   RuntimeActivityTaskTermination,

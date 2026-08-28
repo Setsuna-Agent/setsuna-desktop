@@ -6,6 +6,7 @@ import type {
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  listRuntimeActivityServices,
   runtimeActivityFeature,
   stopRuntimeActivityService,
   stopRuntimeActivityTask,
@@ -106,15 +107,28 @@ describe('runtime activity use case', () => {
     });
   });
 
-  it('registers Feature-owned stop operations against the narrow runtime host', async () => {
+  it('registers Feature-owned service listing and stop operations against the narrow runtime host', async () => {
     const cancelTurn = vi.fn(async () => true);
+    const listedService: RuntimeBackgroundShellProcess = {
+      command: 'pnpm dev',
+      directory: '.',
+      expiresAt: null,
+      id: 'process_listed',
+      startedAt: '2026-08-06T08:00:00.000Z',
+      threadId: 'thread_services',
+      toolCallId: 'call_listed',
+      turnId: 'turn_listed',
+    };
+    const listBackgroundShellProcesses = vi.fn(async (threadId?: string) => (
+      threadId === listedService.threadId ? [listedService] : []
+    ));
     const terminateBackgroundShellProcess = vi.fn(async () => ({ terminated: true }));
     const host: RuntimeActivityRuntimeHost = {
       activeTurnId: () => null,
       cancelTurn,
       getTurnActivity: async () => null,
       listApprovals: async () => [],
-      listBackgroundShellProcesses: async () => [],
+      listBackgroundShellProcesses,
       listThreads: async () => [],
       now: () => new Date('2026-08-06T09:03:00.000Z'),
       terminateBackgroundShellProcess,
@@ -147,11 +161,15 @@ describe('runtime activity use case', () => {
       threadId: 'thread_1',
       turnId: 'turn_1',
     })).resolves.toEqual({ cancelled: true });
+    await expect(routes.get(listRuntimeActivityServices.id)?.({
+      threadId: listedService.threadId,
+    })).resolves.toEqual({ services: [listedService] });
     await expect(routes.get(stopRuntimeActivityService.id)?.({
       processId: 'process_1',
       threadId: 'thread_1',
     })).resolves.toEqual({ terminated: true });
     expect(cancelTurn).toHaveBeenCalledWith('thread_1', 'turn_1');
+    expect(listBackgroundShellProcesses).toHaveBeenCalledWith(listedService.threadId);
     expect(terminateBackgroundShellProcess).toHaveBeenCalledWith('thread_1', 'process_1');
 
     await scope.finishDispose();

@@ -10,6 +10,8 @@ import type {
   RuntimeActiveTask,
   RuntimeActiveTaskState,
   RuntimeActivityList,
+  RuntimeActivityServiceList,
+  RuntimeActivityServiceListTarget,
   RuntimeActivityServiceTarget,
   RuntimeActivityTaskTarget,
   RuntimeActivityTaskTermination,
@@ -38,6 +40,11 @@ const serviceTargetCodec = defineRuntimeCodec<RuntimeActivityServiceTarget>((val
   });
 });
 
+const serviceListTargetCodec = defineRuntimeCodec<RuntimeActivityServiceListTarget>((value) => {
+  const record = objectRecord(value, 'Runtime Activity service list target must be an object.');
+  return Object.freeze({ threadId: runtimeId(record.threadId, 'threadId') });
+});
+
 const activityListCodec = defineRuntimeCodec<RuntimeActivityList>((value) => {
   const record = objectRecord(value, 'Runtime Activity list must be an object.');
   if (!Array.isArray(record.backgroundServices)) {
@@ -61,6 +68,18 @@ const serviceTerminationCodec = defineRuntimeCodec<RuntimeBackgroundShellProcess
   return Object.freeze({ terminated: booleanValue(record.terminated, 'terminated') });
 });
 
+const serviceListCodec = defineRuntimeCodec<RuntimeActivityServiceList>((value) => {
+  const record = objectRecord(value, 'Runtime Activity service list must be an object.');
+  if (!Array.isArray(record.services)) {
+    throw new Error('Runtime Activity services must be an array.');
+  }
+  return Object.freeze({
+    services: Object.freeze(record.services.map((service) => (
+      backgroundShellProcess(objectRecord(service, 'Runtime Activity service must be an object.'))
+    ))),
+  });
+});
+
 export const listRuntimeActivities = defineFeatureOperation({
   id: 'runtime-activity.list',
   method: 'GET',
@@ -79,6 +98,16 @@ export const stopRuntimeActivityTask = defineFeatureOperation({
   output: taskTerminationCodec,
   errors: Object.freeze({}),
   idempotency: 'idempotent',
+});
+
+export const listRuntimeActivityServices = defineFeatureOperation({
+  id: 'runtime-activity.service.list',
+  method: 'GET',
+  path: '/v1/features/runtime-activity/services/:threadId',
+  input: serviceListTargetCodec,
+  output: serviceListCodec,
+  errors: Object.freeze({}),
+  idempotency: 'safe',
 });
 
 export const stopRuntimeActivityService = defineFeatureOperation({
