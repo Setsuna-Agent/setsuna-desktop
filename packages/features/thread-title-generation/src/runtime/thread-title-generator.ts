@@ -89,8 +89,7 @@ export async function generateThreadTitle({
 }
 
 export function normalizeGeneratedThreadTitle(value: string): string | null {
-  let candidate = value
-    .replace(/<think>[\s\S]*?<\/think>/giu, '')
+  let candidate = removeClosedThinkBlocks(value)
     .split(/\r?\n/u)
     .map((line) => line.trim())
     .find(Boolean) ?? '';
@@ -178,8 +177,36 @@ function clippedTitleSource(userContent: string, attachmentCount: number): strin
 }
 
 function fencedJson(value: string): string | null {
-  const match = /^```(?:json)?\s*([\s\S]*?)\s*```$/iu.exec(value);
-  return match?.[1]?.trim() || null;
+  if (!value.startsWith('```') || !value.endsWith('```')) return null;
+  let content = value.slice(3, -3);
+  if (content.slice(0, 4).toLowerCase() === 'json') content = content.slice(4);
+  return content.trim() || null;
+}
+
+function removeClosedThinkBlocks(value: string): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  while (cursor < value.length) {
+    const start = indexOfAsciiTag(value, '<think>', cursor);
+    if (start < 0) break;
+    const end = indexOfAsciiTag(value, '</think>', start + '<think>'.length);
+    if (end < 0) break;
+    chunks.push(value.slice(cursor, start));
+    cursor = end + '</think>'.length;
+  }
+  chunks.push(value.slice(cursor));
+  return chunks.join('');
+}
+
+function indexOfAsciiTag(value: string, tag: string, from: number): number {
+  let cursor = from;
+  while (cursor < value.length) {
+    const candidate = value.indexOf('<', cursor);
+    if (candidate < 0) return -1;
+    if (value.slice(candidate, candidate + tag.length).toLowerCase() === tag) return candidate;
+    cursor = candidate + 1;
+  }
+  return -1;
 }
 
 function stripWrappingQuotes(value: string): string {

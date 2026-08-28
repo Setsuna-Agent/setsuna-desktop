@@ -62,6 +62,9 @@ describe('thread title generator', () => {
     expect(normalizeGeneratedThreadTitle('New chat!')).toBeNull();
     expect(normalizeGeneratedThreadTitle('新对话')).toBeNull();
     expect(normalizeGeneratedThreadTitle('日常问候')).toBe('日常问候');
+    expect(normalizeGeneratedThreadTitle('<THINK>分析</THINK><think>更多分析</think>安全标题'))
+      .toBe('安全标题');
+    expect(normalizeGeneratedThreadTitle('İ<THINK>分析</THINK>安全标题')).toBe('İ安全标题');
     expect(normalizeGeneratedThreadTitle('<think>仍在分析标题但输出已被截断')).toBeNull();
     expect(normalizeGeneratedThreadTitle(
       '这个 URL 看起来是一个**远程（HTTP）MCP 服务**，配置方法取决于你用的客户端。常见配置方式如下。',
@@ -69,6 +72,8 @@ describe('thread title generator', () => {
     expect(parseGeneratedThreadTitleOutput('{"title":"安装远程 MCP 服务"}')).toBe('安装远程 MCP 服务');
     expect(parseGeneratedThreadTitleOutput('```json\n{"title":"安装远程 MCP 服务"}\n```'))
       .toBe('安装远程 MCP 服务');
+    expect(parseGeneratedThreadTitleOutput(`\`\`\`json${' '.repeat(10_000)}{"title":"安全解析标题"}\n\`\`\``))
+      .toBe('安全解析标题');
     expect(parseGeneratedThreadTitleOutput('安装远程 MCP 服务')).toBeNull();
     expect(parseGeneratedThreadTitleOutput('{"title":"安装远程 MCP 服务","extra":true}')).toBeNull();
   });
