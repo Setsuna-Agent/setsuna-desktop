@@ -429,6 +429,7 @@ export function AppChatSurface({
             config={config}
             currentThread={currentThread}
             draft={draft}
+            focusComposerOnReveal
             focusComposerRequest={focusComposerRequest}
             imageAttachmentRequest={imageAttachmentRequest}
             plugins={plugins}

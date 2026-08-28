@@ -129,13 +129,11 @@ export function createWorkspaceMentionInsertion(
 ): WorkspaceMentionInsertion | null {
   if (hasWorkspaceMentionSlot(currentSlots, entry)) return null;
 
-  const trailingWhitespace = currentValue.match(/\s+$/)?.[0] ?? '';
-  const contentBeforeTrailingWhitespace = trailingWhitespace
-    ? currentValue.slice(0, -trailingWhitespace.length)
-    : currentValue;
+  const needsLeadingSpace = Boolean(currentValue) && !/\s$/u.test(currentValue);
   return {
-    replaceCharacters: trailingWhitespace || undefined,
-    slots: createWorkspaceMentionSlots(entry, contentBeforeTrailingWhitespace.trim() ? ' ' : ''),
+    // Sender cannot reliably replace a trailing text node after multiple imperative
+    // insertions. Preserve existing whitespace and only add a separator when needed.
+    slots: createWorkspaceMentionSlots(entry, needsLeadingSpace ? ' ' : ''),
   };
 }
 
