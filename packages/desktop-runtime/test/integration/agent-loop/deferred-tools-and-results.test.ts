@@ -18,6 +18,54 @@ import { CapturingToolHost, mkDataDir } from '../../support/agent-loop/shared.js
 import { createTestThreadStore } from '../../support/thread-store.js';
 
 describe('agent loop deferred tools and stored results', () => {
+  it('executes at most one tool search from the same sampling step', async () => {
+    const ids = new RandomIdGenerator();
+    const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
+    const thread = await threadStore.createThread({ title: 'Duplicate deferred search' });
+    const modelClient = new DuplicateToolSearchModelClient();
+    const loop = new AgentLoop({
+      threadStore,
+      modelClient,
+      eventBus: new InMemoryEventBus(),
+      clock: systemClock,
+      ids,
+      toolHost: new DeferredShellToolHost(),
+    });
+
+    await loop.sendTurn(thread.id, { input: 'find the relevant deferred tool' });
+    const saved = await threadStore.getThread(thread.id);
+    const events = await threadStore.listEvents(thread.id, 0);
+    const searchedAssistant = saved?.messages.find((message) => (
+      message.role === 'assistant' && message.toolCalls?.some((call) => call.name === 'tool_search')
+    ));
+    const replay = searchedAssistant?.providerMetadata?.assistantReplay;
+
+    expect(searchedAssistant?.toolCalls).toEqual([{
+      id: 'search_1',
+      name: 'tool_search',
+      arguments: '{"query":"shell command"}',
+    }]);
+    expect(saved?.messages.filter((message) => message.role === 'tool' && message.toolName === 'tool_search'))
+      .toHaveLength(1);
+    expect(events.filter((event) => event.type === 'tool.completed' && event.payload.toolName === 'tool_search'))
+      .toHaveLength(1);
+    expect(events.some((event) => (
+      (event.type === 'item.started' || event.type === 'item.completed')
+      && (event.payload.item.id === 'pi_search_2' || event.payload.item.toolCall?.id === 'search_2')
+    ))).toBe(false);
+    expect(saved?.turns?.flatMap((turn) => turn.items).some((item) => (
+      item.id === 'pi_search_2' || item.toolCall?.id === 'search_2'
+    )))
+      .toBe(false);
+    expect(replay?.responseId).toBeUndefined();
+    expect(replay?.blocks.filter((block) => block.type === 'tool_call')).toEqual([{
+      type: 'tool_call',
+      id: 'search_1',
+      name: 'tool_search',
+      arguments: { query: 'shell command' },
+    }]);
+  });
+
   it('executes an omitted deferred host tool and preserves host name ownership', async () => {
     const ids = new RandomIdGenerator();
     const threadStore = createTestThreadStore(await mkDataDir(), systemClock, ids);
@@ -118,6 +166,88 @@ class DeferredFirstCallModelClient implements ModelClient {
       return;
     }
     yield { type: 'text_delta', text: 'Deferred command completed.' };
+    yield { type: 'done', finishReason: 'stop' };
+  }
+}
+
+class DuplicateToolSearchModelClient implements ModelClient {
+  readonly requests: ModelRequest[] = [];
+
+  async *stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent> {
+    this.requests.push(request);
+    if (this.requests.length === 1) {
+      yield {
+        type: 'assistant_metadata',
+        providerMetadata: {
+          schemaVersion: 3,
+          source: {
+            providerId: 'provider-1',
+            providerKind: 'openai-responses',
+            model: 'gpt-test',
+            endpointFingerprint: 'a'.repeat(64),
+          },
+          assistantReplay: {
+            responseId: 'resp_1',
+            blocks: [
+              { type: 'tool_call', id: 'search_1', name: 'tool_search', arguments: { query: 'shell command' } },
+              { type: 'tool_call', id: 'search_2', name: 'tool_search', arguments: { query: 'terminal execution' } },
+            ],
+          },
+        },
+      };
+      yield {
+        type: 'item_started',
+        item: {
+          id: 'pi_search_1',
+          kind: 'tool_call',
+          status: 'in_progress',
+        },
+      };
+      yield {
+        type: 'tool_call_delta',
+        call: { id: 'search_1', name: 'tool_search', argumentsDelta: '{"query":"shell command"}' },
+      };
+      yield {
+        type: 'item_completed',
+        item: {
+          id: 'pi_search_1',
+          kind: 'tool_call',
+          status: 'completed',
+          toolCall: { id: 'search_1', name: 'tool_search', arguments: '{"query":"shell command"}' },
+        },
+      };
+      yield {
+        type: 'item_started',
+        item: {
+          id: 'pi_search_2',
+          kind: 'tool_call',
+          status: 'in_progress',
+        },
+      };
+      yield {
+        type: 'tool_call_delta',
+        call: { id: 'search_2', name: 'tool_search', argumentsDelta: '{"query":"terminal execution"}' },
+      };
+      yield {
+        type: 'item_completed',
+        item: {
+          id: 'pi_search_2',
+          kind: 'tool_call',
+          status: 'completed',
+          toolCall: { id: 'search_2', name: 'tool_search', arguments: '{"query":"terminal execution"}' },
+        },
+      };
+      yield {
+        type: 'tool_calls',
+        toolCalls: [
+          { id: 'search_1', name: 'tool_search', arguments: '{"query":"shell command"}' },
+          { id: 'search_2', name: 'tool_search', arguments: '{"query":"terminal execution"}' },
+        ],
+      };
+      yield { type: 'done', finishReason: 'tool_calls' };
+      return;
+    }
+    yield { type: 'text_delta', text: 'Deferred tool found.' };
     yield { type: 'done', finishReason: 'stop' };
   }
 }

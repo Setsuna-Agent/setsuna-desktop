@@ -31,14 +31,13 @@ Main 的 `RuntimeHost` 再限制 path 为 `/health` 或 `/v1/*`。
 - Threads、messages、turns、queue、goal、review、context。
 - Attachments、background shell process 与跨线程运行活动列表。
 - Config、provider models、task models。
-- Hooks、Skills、Plugins、marketplace。
+- Hooks、Skills。
 - Projects、files、search、workspace status。
-- Usage；Memory、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
-- MCP server/tool/resource/OAuth。
+- Usage、Memory、MCP、Plugin Management、Workspace Dependencies 等管理面通过独立 typed Feature operations，不扩展统一 client。
 - Approvals。
 - Debug traces。
 
-Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。Feature 依赖 interface method，不依赖具体 path。
+Renderer 的 `services/runtime-client/client.ts` 必须完整实现它。纵向 Feature 依赖自己的 operation contract 与宿主 transport，不依赖统一 interface method 或具体 path。
 
 ## `SetsunaDesktopBridge`
 
@@ -105,9 +104,12 @@ Bridge 类型约束 preload 和 renderer；main handler 的输入输出也应复
 /v1/features/plugin-management/installed
 /v1/features/plugin-management/marketplace/:pluginId/install
 /v1/features/plugin-management/installed/:pluginId
+/v1/features/mcp/servers
+/v1/features/mcp/servers/:serverKey
+/v1/features/mcp/tools/discover
 /v1/projects
 /v1/skills
-/v1/mcp/servers
+/v1/mcp/servers  # compatibility adapter
 /v1/memories
 /v1/features/usage/query
 /v1/approvals

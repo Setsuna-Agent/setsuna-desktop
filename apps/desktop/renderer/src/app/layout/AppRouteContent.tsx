@@ -20,6 +20,7 @@ import { markdownLinkOpenModeFromConfig } from '../../features/chat/markdown/mar
 import type { SettingsSectionId } from '../../features/settings/settings-types.js';
 import { latestBrowserFeatureOpenRequest } from '../../composition/browser-feature-adapter.js';
 import { usePluginManagementCapabilities } from '../../composition/usePluginManagementCapabilities.js';
+import { useMcpCapabilities } from '../../composition/useMcpCapabilities.js';
 import type { DesktopWorkspacePanelsState } from '../../features/workspace/hooks/useDesktopWorkspacePanels.js';
 import type { ProjectWorkspaceState } from '../../features/workspace/hooks/useProjectWorkspace.js';
 import type {
@@ -27,6 +28,7 @@ import type {
   DesktopReviewOpenHandler,
 } from '../../features/workspace/model.js';
 import type { RuntimeClientState } from '../../services/runtime-client/useRuntimeClientState.js';
+import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { ChatSkillSelectionRequest, ConversationOverviewVisibility, MainView } from '../types.js';
 import { AppChatSurface } from './AppChatSurface.js';
@@ -116,10 +118,40 @@ export function AppRouteContent({
   workspaceWidth: number;
 }) {
   const { t } = useI18n();
+  const mcp = useMcpCapabilities();
+  const refreshCapabilities = useCallback(async () => {
+    await Promise.all([runtime.refreshCapabilities(), mcp.refresh()]);
+  }, [mcp.refresh, runtime.refreshCapabilities]);
+  const refreshCapabilityDependencies = useCallback(async () => {
+    const [runtimeResult, mcpResult] = await Promise.allSettled([
+      runtime.refreshCapabilityDependencies(),
+      mcp.refresh(),
+    ]);
+    if (mcpResult.status === 'rejected') {
+      reportRuntimeBackgroundFailure('MCP refresh after plugin mutation', mcpResult.reason);
+    }
+    if (runtimeResult.status === 'rejected') throw runtimeResult.reason;
+    return runtimeResult.value;
+  }, [mcp.refresh, runtime.refreshCapabilityDependencies]);
   const pluginManagement = usePluginManagementCapabilities({
-    refreshCapabilities: runtime.refreshCapabilities,
-    refreshCapabilityDependencies: runtime.refreshCapabilityDependencies,
+    refreshCapabilities,
+    refreshCapabilityDependencies,
   });
+  const installSkillMcpDependencies = useCallback(async (
+    skill: Parameters<typeof runtime.installSkillMcpDependencies>[0],
+  ) => {
+    const detail = await runtime.installSkillMcpDependencies(skill);
+    await mcp.refresh();
+    return detail;
+  }, [mcp.refresh, runtime.installSkillMcpDependencies]);
+  const authenticateSkillMcpDependency = useCallback(async (
+    skill: Parameters<typeof runtime.authenticateSkillMcpDependency>[0],
+    serverKey: string,
+  ) => {
+    const detail = await runtime.authenticateSkillMcpDependency(skill, serverKey);
+    await mcp.refresh();
+    return detail;
+  }, [mcp.refresh, runtime.authenticateSkillMcpDependency]);
   const [scopedReviewFocusRequest, setScopedReviewFocusRequest] = useState<ScopedReviewFocusRequest | null>(null);
   const reviewFocusOwnerKey = `${runtime.currentThread?.id ?? ''}:${activeWorkspace?.id ?? ''}`;
   const reviewFocusRequest = scopedReviewFocusRequest?.ownerKey === reviewFocusOwnerKey
@@ -229,7 +261,7 @@ export function AppRouteContent({
       <Suspense fallback={<RouteLoadingState label={t('common.loading')} />}>
         <CapabilitiesPage
           skills={runtime.skills}
-          mcpState={runtime.mcpState}
+          mcpState={mcp.snapshot}
           hookState={runtime.hookState}
           plugins={pluginManagement.plugins}
           pluginMarketplace={pluginManagement.marketplace}
@@ -240,17 +272,17 @@ export function AppRouteContent({
           onDeleteSkill={runtime.deleteSkill}
           onGetPluginItemContent={pluginManagement.getItemContent}
           onGetSkillDetail={runtime.getSkillDetail}
-          onInstallSkillMcpDependencies={runtime.installSkillMcpDependencies}
-          onAuthenticateSkillMcpDependency={runtime.authenticateSkillMcpDependency}
+          onInstallSkillMcpDependencies={installSkillMcpDependencies}
+          onAuthenticateSkillMcpDependency={authenticateSkillMcpDependency}
           onCreateInConversation={onSelectSkillForChat}
           onRefresh={pluginManagement.refresh}
           onUpdateSkill={runtime.updateSkill}
-          onFetchMcpTools={runtime.fetchMcpServerTools}
-          onSaveMcpServer={runtime.saveMcpServer}
-          onUpdateMcpServer={runtime.updateMcpServer}
-          onDeleteMcpServer={runtime.deleteMcpServer}
-          onLoginMcpServer={runtime.loginMcpServer}
-          onLogoutMcpServer={runtime.logoutMcpServer}
+          onFetchMcpTools={mcp.discoverTools}
+          onSaveMcpServer={mcp.saveServer}
+          onUpdateMcpServer={mcp.updateServer}
+          onDeleteMcpServer={mcp.deleteServer}
+          onLoginMcpServer={mcp.login}
+          onLogoutMcpServer={mcp.logout}
           onInstallLocalPlugin={pluginManagement.installLocal}
           onInstallMarketplacePlugin={pluginManagement.installMarketplace}
           onUpdateMarketplacePlugin={pluginManagement.updateMarketplace}

@@ -41,6 +41,7 @@ import { CapabilitiesPluginMarket } from './CapabilitiesPluginMarket.js';
 import { CapabilitiesSkillDetail } from './CapabilitiesSkillDetail.js';
 import { CapabilitiesSkillEditor } from './CapabilitiesSkillEditor.js';
 import { CapabilitiesSkillCatalog } from './CapabilitiesSkillCatalog.js';
+import { shouldRenderCapabilitiesNavigationInPage } from './capabilitiesLayout.js';
 import { installedPluginsOutsideCatalog, pluginMatchesQuery } from './pluginDisplay.js';
 import { CapabilitiesMcpEditor } from './mcp/CapabilitiesMcpEditor.js';
 import { CapabilitiesMcpDetail } from './mcp/CapabilitiesMcpDetail.js';
@@ -566,7 +567,7 @@ export function CapabilitiesPage({
     }
   }
 
-  const tabsInPage = shouldRenderCapabilitiesTabsInPage(getDesktopPlatform());
+  const tabsInPage = shouldRenderCapabilitiesNavigationInPage(getDesktopPlatform());
   const capabilityTabs = (
     <CapabilitiesTabs
       activeFilter={capabilityFilter}
@@ -711,10 +712,6 @@ export function CapabilitiesPage({
       </main>
     </>
   );
-}
-
-export function shouldRenderCapabilitiesTabsInPage(platform: string): boolean {
-  return platform === 'win32';
 }
 
 function CapabilitiesTabs({

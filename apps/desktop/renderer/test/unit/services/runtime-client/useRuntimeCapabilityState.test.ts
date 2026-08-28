@@ -16,16 +16,12 @@ import {
 afterEach(cleanup);
 
 describe('capabilityBootstrapValues', () => {
-  it('applies successful optional domains without manufacturing failed state', () => {
+  it('does not manufacture Skill state when the optional bootstrap fails', () => {
     const values = capabilityBootstrapValues({
-      skillResult: fulfilled({ skills: [] }),
-      mcpResult: rejected(new Error('MCP unavailable')),
+      skillResult: rejected(new Error('Skills unavailable')),
     });
 
-    expect(values).toEqual({
-      skills: [],
-    });
-    expect(values).not.toHaveProperty('mcpState');
+    expect(values).toEqual({});
   });
 });
 
@@ -73,10 +69,6 @@ describe('plugin Skill mutations', () => {
     expect(onPluginSkillMutation).toHaveBeenCalledTimes(2);
   });
 });
-
-function fulfilled<T>(value: T): PromiseFulfilledResult<T> {
-  return { status: 'fulfilled', value };
-}
 
 function rejected(reason: unknown): PromiseRejectedResult {
   return { status: 'rejected', reason };

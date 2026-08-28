@@ -2,12 +2,21 @@ import { declareCapabilityProvider, requiredCapability } from '@setsuna-desktop/
 import {
   defineRuntimeDependencies,
   defineRuntimeFeature,
+  runtimeRouteRegistrarCapability,
 } from '@setsuna-desktop/feature-core/runtime';
+import { FeatureOperationFailure } from '@setsuna-desktop/feature-core/operation';
 import {
+  deleteMcpServer,
+  discoverMcpServerTools,
+  loginMcpServer,
+  logoutMcpServer,
   mcpControlCapability,
   mcpFeature,
   mcpRuntimeHostCapability,
   mcpRuntimeToolServiceCapability,
+  readMcpServers,
+  saveMcpServer,
+  updateMcpServer,
 } from '../contracts/index.js';
 import { McpControlService } from './mcp-control-service.js';
 import { McpRuntimeToolServiceImpl } from './mcp-runtime-tool-service.js';
@@ -17,6 +26,7 @@ import { SdkMcpProtocolAdapter } from './adapters/sdk/sdk-mcp-protocol-adapter.j
 
 const dependencies = defineRuntimeDependencies({
   host: requiredCapability(mcpRuntimeHostCapability),
+  routes: requiredCapability(runtimeRouteRegistrarCapability),
 });
 
 /**
@@ -34,7 +44,7 @@ export const mcpRuntimeFeature = defineRuntimeFeature({
     declareCapabilityProvider(mcpRuntimeToolServiceCapability),
   ],
   setup(context) {
-    const host = context.dependencies.host;
+    const { host, routes } = context.dependencies;
     const oauth = new McpOAuthCoordinator(
       host.credentials,
       host.openExternal,
@@ -58,7 +68,62 @@ export const mcpRuntimeFeature = defineRuntimeFeature({
     const control = new McpControlService(host.store, protocol);
     const toolService = new McpRuntimeToolServiceImpl(control, host.store);
 
+    routes.register(context.scope, readMcpServers, () => (
+      preserveMcpOperationError(() => control.listServers({ includeAuthStatus: true }))
+    ));
+    routes.register(context.scope, discoverMcpServerTools, (input, { signal }) => (
+      preserveMcpOperationError(() => control.discoverTools(input, { signal }))
+    ));
+    routes.register(context.scope, saveMcpServer, (input) => (
+      preserveMcpOperationError(async () => {
+        await control.upsertServer(input);
+        return control.listServers({ includeAuthStatus: true });
+      })
+    ));
+    routes.register(context.scope, updateMcpServer, (input) => (
+      preserveMcpOperationError(async () => {
+        await control.updateServer(input.serverKey, input.patch);
+        return control.listServers({ includeAuthStatus: true });
+      })
+    ));
+    routes.register(context.scope, deleteMcpServer, (input) => (
+      preserveMcpOperationError(async () => {
+        await control.deleteServer(input.serverKey);
+        return control.listServers({ includeAuthStatus: true });
+      })
+    ));
+    routes.register(context.scope, loginMcpServer, (input, { signal }) => (
+      preserveMcpOperationError(async () => {
+        await control.login(input.serverKey, { signal });
+        return control.listServers({ includeAuthStatus: true });
+      })
+    ));
+    routes.register(context.scope, logoutMcpServer, (input) => (
+      preserveMcpOperationError(async () => {
+        await control.logout(input.serverKey);
+        return control.listServers({ includeAuthStatus: true });
+      })
+    ));
+
     context.provide(declareCapabilityProvider(mcpControlCapability), control);
     context.provide(declareCapabilityProvider(mcpRuntimeToolServiceCapability), toolService);
   },
 });
+
+async function preserveMcpOperationError<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof FeatureOperationFailure) throw error;
+    const message = error instanceof Error && error.message.trim()
+      ? error.message
+      : 'MCP operation failed.';
+    throw new FeatureOperationFailure({
+      code: message.startsWith('MCP server not found:')
+        ? 'MCP_SERVER_NOT_FOUND'
+        : 'MCP_OPERATION_FAILED',
+      message,
+      retryable: false,
+    });
+  }
+}

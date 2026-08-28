@@ -23,12 +23,17 @@
 | `deleteThread` | `DELETE /v1/threads/:id` | `thread/delete` | `thread-operations.ts` |
 | `startReview` | `POST /v1/threads/:id/reviews` | `review/start` | `thread-operations.ts` |
 | `listHooks` | `GET /v1/hooks` | `hooks/list` | `capability-operations.ts` |
-| `listMcpServerStatuses` | `GET /v1/mcp/statuses` | `mcpServerStatus/list` | `capability-operations.ts` |
-| `readMcpServerResource` | `POST /v1/mcp/resources/read` | `mcpServer/resource/read` | `capability-operations.ts` |
-| `callMcpServerTool` | `POST /v1/mcp/tools/call` | `mcpServer/tool/call` | `capability-operations.ts` |
 | `setSkillExtraRoots` | `PUT /v1/skills/extra-roots` | `skills/extraRoots/set` | `capability-operations.ts` |
 
 `appServerRequest` 和公开 raw `request` 已从 renderer business client 删除。底层 request closure 只存在于 client adapter 内部。架构检查会拒绝 renderer 源码重新引用 `/v1/swe/app-server`；app-server 自身仍作为 SWE 客户端兼容协议保留。
+
+MCP renderer 管理已退出 `DesktopRuntimeClient`，由 `@setsuna-desktop/feature-mcp/renderer` 经 `/v1/features/mcp/*` typed operations 调用 `McpControl`。以下 status/resource/tool REST 仍作为非 renderer 的第一方兼容协议保留，并与 SWE adapter 共享原有 use case：
+
+| 兼容能力 | 第一方兼容 REST | SWE adapter | 共享业务所有者 |
+| --- | --- | --- | --- |
+| MCP server status | `GET /v1/mcp/statuses` | `mcpServerStatus/list` | `capability-operations.ts` |
+| MCP resource read | `POST /v1/mcp/resources/read` | `mcpServer/resource/read` | `capability-operations.ts` |
+| MCP tool call | `POST /v1/mcp/tools/call` | `mcpServer/tool/call` | `capability-operations.ts` |
 
 Goal 已退出 `DesktopRuntimeClient`：renderer 使用 `@setsuna-desktop/feature-goal/renderer` 的 typed client，经 `GET/PATCH/DELETE /v1/features/goal/threads/:threadId/state` 调用同一个 `GoalControl`。现有 SWE `thread/goal/set` / `thread/goal/clear` 作为协议 adapter 保留，也只转发该 capability，不再拥有另一份业务实现或旧 REST 真源。
 

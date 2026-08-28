@@ -20,13 +20,6 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeHookListResponse,
-  RuntimeMcpResourceReadResult,
-  RuntimeMcpServerInput,
-  RuntimeMcpServerList,
-  RuntimeMcpServerPatch,
-  RuntimeMcpServerStatusList,
-  RuntimeMcpToolCallResult,
-  RuntimeMcpToolList,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeRequestInput,
@@ -342,53 +335,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     searchProject(projectId: string, query: string) {
       return request<WorkspaceSearchResponse>({
         path: `/v1/projects/${encodeURIComponent(projectId)}/search?q=${encodeURIComponent(query)}`,
-      });
-    },
-    listMcpServers() {
-      return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers' });
-    },
-    fetchMcpServerTools(input: RuntimeMcpServerInput) {
-      return request<RuntimeMcpToolList>({ path: '/v1/mcp/tools', method: 'POST', body: input });
-    },
-    upsertMcpServer(input: RuntimeMcpServerInput) {
-      return request<RuntimeMcpServerList>({ path: '/v1/mcp/servers', method: 'POST', body: input });
-    },
-    updateMcpServer(key: string, patch: RuntimeMcpServerPatch) {
-      return request<RuntimeMcpServerList>({
-        path: `/v1/mcp/servers/${encodeURIComponent(key)}`,
-        method: 'PATCH',
-        body: patch,
-      });
-    },
-    deleteMcpServer(key: string) {
-      return request<void>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}`, method: 'DELETE' });
-    },
-    loginMcpServer(key: string) {
-      return request<RuntimeMcpServerList>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}/oauth/login`, method: 'POST' });
-    },
-    logoutMcpServer(key: string) {
-      return request<RuntimeMcpServerList>({ path: `/v1/mcp/servers/${encodeURIComponent(key)}/oauth/logout`, method: 'POST' });
-    },
-    listMcpServerStatuses() {
-      return request<RuntimeMcpServerStatusList>({ path: '/v1/mcp/statuses' });
-    },
-    readMcpServerResource(threadId: string, server: string, uri: string) {
-      return request<RuntimeMcpResourceReadResult>({
-        path: '/v1/mcp/resources/read',
-        method: 'POST',
-        body: { threadId, server, uri },
-      });
-    },
-    callMcpServerTool(threadId: string, server: string, tool: string, args?: unknown) {
-      return request<RuntimeMcpToolCallResult>({
-        path: '/v1/mcp/tools/call',
-        method: 'POST',
-        body: {
-          threadId,
-          server,
-          tool,
-          arguments: args ?? {},
-        },
       });
     },
     setSkillExtraRoots(extraRoots: string[]) {

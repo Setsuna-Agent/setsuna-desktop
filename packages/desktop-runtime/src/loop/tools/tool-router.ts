@@ -64,7 +64,7 @@ export const READ_TOOL_RESULT_PAGE_BYTES = READ_TOOL_RESULT_OUTPUT_BYTES
 
 const TOOL_SEARCH_TOOL: RuntimeToolDefinition = {
   name: TOOL_SEARCH_TOOL_NAME,
-  description: 'Some tools are intentionally omitted from the current tool list. Search the deferred catalog when you need a capability but do not already know its exact registered tool name. Matching definitions are appended to the tools of your next request.',
+  description: 'Some tools are intentionally omitted from the current tool list. When no advertised tool clearly covers a requested capability, search the deferred catalog before claiming the capability is unavailable. Matching definitions are appended to the tools of your next request.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,

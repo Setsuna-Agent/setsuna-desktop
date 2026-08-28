@@ -29,6 +29,11 @@ import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-g
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
 import {
+  mcpRendererServiceCapability,
+  type McpRendererService,
+} from '@setsuna-desktop/feature-mcp/contracts';
+import { mcpRendererFeature } from '@setsuna-desktop/feature-mcp/renderer';
+import {
   modelProviderRendererFeature,
   modelProviderRendererHostCapability,
   modelProviderRendererStateCapability,
@@ -93,6 +98,7 @@ import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 const rendererFeatures = defineRendererFeatureHost({
   required: [
     browserRendererFeature,
+    mcpRendererFeature,
     modelProviderRendererFeature,
     networkProxyRendererFeature,
     pluginManagementRendererFeature,
@@ -121,6 +127,7 @@ export type ActiveRendererFeatures = Readonly<{
   composition: RendererFeatureComposition;
   conversationDebug: ConversationDebugRendererService;
   messages: ComposedRendererMessages<AppLocale>;
+  mcp: McpRendererService;
   modelProvider: ModelProviderRendererStateService;
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
@@ -203,6 +210,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
         conversationDebugRendererStateCapability,
         createNoopConversationDebugRendererService,
       ),
+      mcp: requiredCapability(mcpRendererServiceCapability),
       networkProxy: requiredCapability(networkProxyRendererStateCapability),
       modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
@@ -217,6 +225,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       collaboration: dependencies.collaboration,
       composition: host.composition,
       conversationDebug: dependencies.conversationDebug,
+      mcp: dependencies.mcp,
       messages,
       modelProvider: dependencies.modelProvider,
       networkProxy: dependencies.networkProxy,

@@ -53,14 +53,14 @@ Runtime 的 `src/cli.ts` 创建 server；`src/runtime/runtime-factory.ts` 组装
 正常工作台的 `useRuntimeClientState()` 会把初始化分成两类：
 
 - 核心状态：config、可见 threads、包含归档的 threads、projects。失败会使工作台进入 error。
-- 可选状态：skills、MCP、plugins、marketplace、usage。单域失败只降级该功能。
+- 可选 Core 状态：skills。MCP、plugins、usage 等纵向 Feature 由各自 renderer service 独立加载，单域失败只降级该功能。
 
 恢复上次线程后，renderer 以该线程的 `lastSeq` 建立 SSE 订阅。
 
 ## 普通 REST 请求
 
 ```text
-feature / hook
+Core feature / hook
   → DesktopRuntimeClient method
   → window.setsunaDesktop.runtime.request()
   → ipcRenderer.invoke("runtime:request")
@@ -73,7 +73,7 @@ feature / hook
 
 关键规则：
 
-- Feature 不能自己拼 URL；统一调用 `DesktopRuntimeClient`。
+- Core renderer 模块不能自己拼 URL；使用 `DesktopRuntimeClient`。纵向 Feature 使用 contracts 声明的 typed operation 与宿主注入的 `FeatureOperationTransport`。
 - Renderer 只提交 `path`、`method`、`body`，不能设置 token 或任意 header。
 - Main 只代理 `/health` 和 `/v1/*`。
 - Runtime 先鉴权再进入 REST 或 app-server 分发。

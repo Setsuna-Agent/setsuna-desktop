@@ -2,10 +2,6 @@ import type {
   DesktopRuntimeClient,
   RuntimeConfigState,
   RuntimeHookListResponse,
-  RuntimeMcpServer,
-  RuntimeMcpServerInput,
-  RuntimeMcpServerList,
-  RuntimeMcpToolList,
   RuntimeSkillDetail,
   RuntimeSkillInput,
   RuntimeSkillList,
@@ -18,34 +14,25 @@ import { reportRuntimeBackgroundFailure } from './runtimeClientErrors.js';
 
 export type RuntimeCapabilityBootstrapResults = {
   skillResult: PromiseSettledResult<RuntimeSkillList>;
-  mcpResult: PromiseSettledResult<RuntimeMcpServerList>;
 };
 
 export type RuntimeCapabilityBootstrapValues = {
   skills?: RuntimeSkillSummary[];
-  mcpState?: RuntimeMcpServerList;
 };
 
 export type RuntimeCapabilityClient = Pick<
   DesktopRuntimeClient,
   | 'authenticateSkillMcpDependency'
   | 'createSkill'
-  | 'deleteMcpServer'
   | 'deleteSkill'
-  | 'fetchMcpServerTools'
   | 'getConfig'
   | 'getSkill'
   | 'installSkillMcpDependencies'
   | 'listHooks'
-  | 'listMcpServers'
   | 'listSkills'
-  | 'loginMcpServer'
-  | 'logoutMcpServer'
   | 'saveConfig'
   | 'setSkillExtraRoots'
-  | 'updateMcpServer'
   | 'updateSkill'
-  | 'upsertMcpServer'
 >;
 
 type RuntimeCapabilityStateOptions = {
@@ -64,9 +51,6 @@ export function capabilityBootstrapValues(
   if (results.skillResult.status === 'fulfilled') {
     values.skills = results.skillResult.value.skills;
   }
-  if (results.mcpResult.status === 'fulfilled') {
-    values.mcpState = results.mcpResult.value;
-  }
   return values;
 }
 
@@ -84,7 +68,7 @@ export function reportOptionalRuntimeLoadFailures(
   }
 }
 
-/** Owns renderer state and commands for the shared Skill, MCP, and Hook domains. */
+/** Owns the remaining Core renderer state and commands for Skill and Hook domains. */
 export function useRuntimeCapabilityState({
   activeProjectPath,
   client,
@@ -95,7 +79,6 @@ export function useRuntimeCapabilityState({
 }: RuntimeCapabilityStateOptions) {
   const [skills, setSkills] = useState<RuntimeSkillSummary[]>([]);
   const [skillExtraRoots, setSkillExtraRootsState] = useState<string[]>([]);
-  const [mcpState, setMcpState] = useState<RuntimeMcpServerList | null>(null);
   const [hookState, setHookState] = useState<RuntimeHookListResponse | null>(null);
   const capabilityRequests = useLatestRequestGuard();
   const activeHookCwds = useMemo(
@@ -106,25 +89,21 @@ export function useRuntimeCapabilityState({
   const applyBootstrapResults = useCallback((results: RuntimeCapabilityBootstrapResults) => {
     const values = capabilityBootstrapValues(results);
     if (values.skills) setSkills(values.skills);
-    if (values.mcpState) setMcpState(values.mcpState);
   }, []);
 
   const refreshCapabilities = useCallback(async () => {
     const isLatestRequest = capabilityRequests.begin();
     const results = await Promise.allSettled([
       client.listSkills(),
-      client.listMcpServers(),
       client.listHooks(activeHookCwds),
     ]);
-    const [skillResult, mcpResult, hookResult] = results;
+    const [skillResult, hookResult] = results;
     if (isLatestRequest()) {
       if (skillResult.status === 'fulfilled') setSkills(skillResult.value.skills);
-      if (mcpResult.status === 'fulfilled') setMcpState(mcpResult.value);
       if (hookResult.status === 'fulfilled') setHookState(hookResult.value);
     }
     reportOptionalRuntimeLoadFailures([
       ['skills', skillResult],
-      ['MCP', mcpResult],
       ['hooks', hookResult],
     ]);
     const firstFailure = results.find(
@@ -192,12 +171,8 @@ export function useRuntimeCapabilityState({
   const installSkillMcpDependencies = useCallback(
     async (skill: RuntimeSkillSummary): Promise<RuntimeSkillDetail> => {
       const result = await client.installSkillMcpDependencies(skill.id);
-      const [skillList, nextMcpState] = await Promise.all([
-        client.listSkills(),
-        client.listMcpServers(),
-      ]);
+      const skillList = await client.listSkills();
       setSkills(skillList.skills);
-      setMcpState(nextMcpState);
       return result.skill;
     },
     [client],
@@ -206,12 +181,8 @@ export function useRuntimeCapabilityState({
   const authenticateSkillMcpDependency = useCallback(
     async (skill: RuntimeSkillSummary, serverKey: string): Promise<RuntimeSkillDetail> => {
       const updated = await client.authenticateSkillMcpDependency(skill.id, serverKey);
-      const [skillList, nextMcpState] = await Promise.all([
-        client.listSkills(),
-        client.listMcpServers(),
-      ]);
+      const skillList = await client.listSkills();
       setSkills(skillList.skills);
-      setMcpState(nextMcpState);
       return updated;
     },
     [client],
@@ -225,50 +196,8 @@ export function useRuntimeCapabilityState({
     setSkills(skillList.skills);
   }, [client]);
 
-  const saveMcpServer = useCallback(
-    async (input: RuntimeMcpServerInput) => {
-      const next = await client.upsertMcpServer(input);
-      setMcpState(next);
-    },
-    [client],
-  );
-
-  const fetchMcpServerTools = useCallback(
-    async (input: RuntimeMcpServerInput): Promise<RuntimeMcpToolList> => (
-      client.fetchMcpServerTools(input)
-    ),
-    [client],
-  );
-
-  const updateMcpServer = useCallback(
-    async (
-      server: RuntimeMcpServer,
-      patch: Pick<RuntimeMcpServer, 'enabled'>,
-    ) => {
-      const next = await client.updateMcpServer(server.key, patch);
-      setMcpState(next);
-    },
-    [client],
-  );
-
-  const deleteMcpServer = useCallback(
-    async (server: RuntimeMcpServer) => {
-      await client.deleteMcpServer(server.key);
-      const next = await client.listMcpServers();
-      setMcpState(next);
-    },
-    [client],
-  );
-
-  const loginMcpServer = useCallback(async (server: RuntimeMcpServer) => {
-    setMcpState(await client.loginMcpServer(server.key));
-  }, [client]);
-
-  const logoutMcpServer = useCallback(async (server: RuntimeMcpServer) => {
-    setMcpState(await client.logoutMcpServer(server.key));
-  }, [client]);
-
-  // Plugin bundle mutations may add/remove Skills, MCP servers, Hooks, and Hook config.
+  // Plugin bundle mutations may add/remove Skills, Hooks, and Hook config. The
+  // composition host refreshes the independent MCP Feature service alongside this call.
   const refreshCapabilityDependencies = useCallback(async () => {
     const [nextConfig] = await Promise.all([
       client.getConfig(),
@@ -282,23 +211,16 @@ export function useRuntimeCapabilityState({
     applyBootstrapResults,
     authenticateSkillMcpDependency,
     createSkill,
-    deleteMcpServer,
     deleteSkill,
-    fetchMcpServerTools,
     getSkillDetail,
     hookState,
     ...hookManagement,
     installSkillMcpDependencies,
-    loginMcpServer,
-    logoutMcpServer,
-    mcpState,
     refreshCapabilities,
     refreshCapabilityDependencies,
-    saveMcpServer,
     setSkillExtraRoots,
     skillExtraRoots,
     skills,
-    updateMcpServer,
     updateSkill,
   };
 }

@@ -16,6 +16,7 @@ import { CollaborationFeatureServiceBoundary } from './composition/Collaboration
 import { ConversationDebugFeatureServiceBoundary } from './composition/ConversationDebugFeatureBoundary.js';
 import { NetworkProxyFeatureServiceBoundary } from './composition/NetworkProxyFeatureBoundary.js';
 import { ModelProviderFeatureServiceBoundary } from './composition/ModelProviderFeatureBoundary.js';
+import { McpFeatureServiceBoundary } from './composition/McpFeatureBoundary.js';
 import { PluginManagementFeatureServiceBoundary } from './composition/PluginManagementFeatureBoundary.js';
 import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
@@ -81,11 +82,13 @@ async function bootstrapRenderer(): Promise<void> {
                   <UsageFeatureServiceBoundary service={features.usage}>
                     <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
                       <PluginManagementFeatureServiceBoundary service={features.pluginManagement}>
-                        <KeyboardShortcutsProvider>
-                          <CodeAppearanceProvider>
-                            <App />
-                          </CodeAppearanceProvider>
-                        </KeyboardShortcutsProvider>
+                        <McpFeatureServiceBoundary service={features.mcp}>
+                          <KeyboardShortcutsProvider>
+                            <CodeAppearanceProvider>
+                              <App />
+                            </CodeAppearanceProvider>
+                          </KeyboardShortcutsProvider>
+                        </McpFeatureServiceBoundary>
                       </PluginManagementFeatureServiceBoundary>
                     </RuntimeActivityFeatureServiceBoundary>
                   </UsageFeatureServiceBoundary>
