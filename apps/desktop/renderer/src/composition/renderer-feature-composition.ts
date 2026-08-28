@@ -33,6 +33,7 @@ import { imageGenerationRendererAssetsCapability } from '@setsuna-desktop/featur
 import { imageGenerationRendererFeature } from '@setsuna-desktop/feature-image-generation/renderer';
 import { goalRendererFeature } from '@setsuna-desktop/feature-goal/renderer';
 import { memoryRendererFeature } from '@setsuna-desktop/feature-memory/renderer';
+import { threadTitleGenerationRendererFeature } from '@setsuna-desktop/feature-thread-title-generation/renderer';
 import {
   mcpRendererServiceCapability,
   type McpRendererService,
@@ -127,6 +128,7 @@ const rendererFeatures = defineRendererFeatureHost({
     imageGenerationRendererFeature,
     goalRendererFeature,
     memoryRendererFeature,
+    threadTitleGenerationRendererFeature,
     usageRendererFeature,
     visionRecognitionRendererFeature,
     webDavSyncRendererFeature,

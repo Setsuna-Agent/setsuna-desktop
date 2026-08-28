@@ -4,10 +4,6 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeDesktopSettings,
-  RuntimeHookEventName,
-  RuntimeHookHandlerConfig,
-  RuntimeHookMatcherGroup,
-  RuntimeHooksConfig,
 } from '@setsuna-desktop/contracts';
 import {
   defaultModelMaxOutputTokens,
@@ -26,6 +22,10 @@ import type {
   MemoryPreferences,
 } from '@setsuna-desktop/feature-memory/contracts';
 import type {
+  ThreadTitleGenerationLegacySettingsAdapter,
+  ThreadTitleGenerationModelSelection,
+} from '@setsuna-desktop/feature-thread-title-generation/contracts';
+import type {
   WorkspaceDependenciesLegacySettingsAdapter,
   WorkspaceDependencySettings,
 } from '@setsuna-desktop/feature-workspace-dependencies/contracts';
@@ -40,6 +40,7 @@ import type {
   RuntimeProviderConfig,
 } from '../../ports/config-store.js';
 import { withFileStateUpdate } from './file-state-coordinator.js';
+import { normalizeHooksConfig } from './hook-config.js';
 import { readJsonFile, writeJsonFile } from './json-file.js';
 import {
   legacyWorkspaceDependencySettingsForSave,
@@ -75,19 +76,6 @@ const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
 const PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION = 5;
 const APPROVAL_REVIEWER_MIGRATION_SCHEMA_VERSION = 6;
-
-const HOOK_EVENT_NAMES: RuntimeHookEventName[] = [
-  'PreToolUse',
-  'PermissionRequest',
-  'PostToolUse',
-  'PreCompact',
-  'PostCompact',
-  'SessionStart',
-  'UserPromptSubmit',
-  'SubagentStart',
-  'SubagentStop',
-  'Stop',
-];
 
 type StoredImageGenerationConfig = Readonly<{
   baseUrl: string;
@@ -164,6 +152,13 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  threadTitleGenerationLegacySettingsAdapter(): ThreadTitleGenerationLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyThreadTitleGenerationSelection(),
+      retire: () => this.retireLegacyThreadTitleGenerationSelection(),
+    });
+  }
+
   conversationDebugLegacySettingsAdapter(): ConversationDebugLegacySettingsAdapter {
     return Object.freeze({
       read: () => this.readLegacyConversationDebugSettings(),
@@ -232,7 +227,10 @@ export class FileConfigStore implements ConfigStore {
       await this.validateProviderProxyReferences(providers);
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
+      const legacyThreadTitle = normalizeConfiguredModelReference(previous.taskModels?.threadTitle);
       const taskModels: StoredTaskModelSettings = {
+        // Preserve unconsumed Feature migration input across unrelated config saves.
+        ...(legacyThreadTitle ? { threadTitle: legacyThreadTitle } : {}),
         ...legacyMemoryTaskModels(previous.taskModels),
         ...taskModelSettingsForSave(input.taskModels, previous.taskModels),
       };
@@ -308,6 +306,13 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  private async readLegacyThreadTitleGenerationSelection(): Promise<ThreadTitleGenerationModelSelection> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return normalizeConfiguredModelReference(stored.taskModels?.threadTitle) ?? null;
+    });
+  }
+
   private async readLegacyConversationDebugSettings() {
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
@@ -342,6 +347,17 @@ export class FileConfigStore implements ConfigStore {
         delete taskModels.memoryConsolidation;
         stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
       }
+      await writeJsonFile(this.configPath, stored);
+    });
+  }
+
+  private async retireLegacyThreadTitleGenerationSelection(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      if (!stored.taskModels || !Object.hasOwn(stored.taskModels, 'threadTitle')) return;
+      const taskModels = { ...stored.taskModels };
+      delete taskModels.threadTitle;
+      stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
       await writeJsonFile(this.configPath, stored);
     });
   }
@@ -795,80 +811,6 @@ function normalizeSandboxWorkspaceWrite(
     excludeTmpdirEnvVar: record.excludeTmpdirEnvVar === true,
     excludeSlashTmp: record.excludeSlashTmp === true,
   };
-}
-
-function normalizeHooksConfig(value: unknown): RuntimeHooksConfig {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const record = value as Record<string, unknown>;
-  const hooks: RuntimeHooksConfig = {};
-  for (const eventName of HOOK_EVENT_NAMES) {
-    const groups = normalizeHookMatcherGroups(record[eventName]);
-    if (groups.length) hooks[eventName] = groups;
-  }
-  const state = normalizeHookState(record.state);
-  if (Object.keys(state).length) hooks.state = state;
-  return hooks;
-}
-
-function normalizeHookMatcherGroups(value: unknown): RuntimeHookMatcherGroup[] {
-  if (!Array.isArray(value)) return [];
-  const groups: RuntimeHookMatcherGroup[] = [];
-  for (const item of value) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const record = item as Record<string, unknown>;
-    const hooks = normalizeHookHandlers(record.hooks);
-    if (!hooks.length) continue;
-    const matcher = nonEmpty(record.matcher);
-    groups.push({
-      ...(matcher ? { matcher } : {}),
-      hooks,
-    });
-  }
-  return groups;
-}
-
-function normalizeHookHandlers(value: unknown): RuntimeHookHandlerConfig[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-      const record = item as Record<string, unknown>;
-      const type = record.type;
-      if (type !== 'command' && type !== 'prompt' && type !== 'agent') return null;
-      const handler: RuntimeHookHandlerConfig = { type };
-      const command = nonEmpty(record.command);
-      if (command) handler.command = command;
-      const commandWindows = nonEmpty(record.commandWindows ?? record.command_windows);
-      if (commandWindows) handler.commandWindows = commandWindows;
-      const timeout = positiveOptionalInt(record.timeoutSec ?? record.timeout_sec ?? record.timeout);
-      if (timeout !== undefined) handler.timeoutSec = timeout;
-      if (record.async === true) handler.async = true;
-      const statusMessage = nonEmpty(record.statusMessage ?? record.status_message);
-      if (statusMessage) handler.statusMessage = statusMessage;
-      const pluginId = nonEmpty(record.pluginId ?? record.plugin_id);
-      if (pluginId) handler.pluginId = pluginId;
-      const pluginHookId = nonEmpty(record.pluginHookId ?? record.plugin_hook_id);
-      if (pluginHookId) handler.pluginHookId = pluginHookId;
-      const sourcePath = nonEmpty(record.sourcePath ?? record.source_path);
-      if (sourcePath) handler.sourcePath = sourcePath;
-      return handler;
-    })
-    .filter((item): item is RuntimeHookHandlerConfig => Boolean(item));
-}
-
-function normalizeHookState(value: unknown): NonNullable<RuntimeHooksConfig['state']> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  const state: NonNullable<RuntimeHooksConfig['state']> = {};
-  for (const [key, rawState] of Object.entries(value)) {
-    if (!rawState || typeof rawState !== 'object' || Array.isArray(rawState)) continue;
-    const record = rawState as Record<string, unknown>;
-    const next = {
-      enabled: booleanOrUndefined(record.enabled),
-      trustedHash: nonEmpty(record.trustedHash ?? record.trusted_hash),
-    };
-    if (next.enabled !== undefined || next.trustedHash) state[key] = next;
-  }
-  return state;
 }
 
 function normalizeDesktopSettings(value: unknown): RuntimeDesktopSettings {

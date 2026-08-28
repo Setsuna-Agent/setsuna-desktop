@@ -100,7 +100,6 @@ export type RuntimeDesktopSettings = {
 };
 
 export const RUNTIME_TASK_MODEL_IDS = [
-  'threadTitle',
   'review',
   'approvalReview',
   'contextCompaction',

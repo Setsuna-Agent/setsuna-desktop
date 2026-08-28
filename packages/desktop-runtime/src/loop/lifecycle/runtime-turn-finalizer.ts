@@ -7,15 +7,15 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { parseRuntimeReviewResult } from '@setsuna-desktop/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
+import type {
+  ThreadTitleGeneration,
+  ThreadTitleGenerationControl,
+} from '@setsuna-desktop/feature-thread-title-generation/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import type { UsageRecorder } from '../../ports/usage-store.js';
 import type { RuntimeModelStreamEventPublisher } from '../core/runtime-model-stream-event-publisher.js';
-import type {
-  RuntimeThreadTitleCoordinator,
-  RuntimeThreadTitleGeneration,
-} from './runtime-thread-title-coordinator.js';
 
 export type RuntimeAssistantTurnFinalization = {
   content?: string;
@@ -27,7 +27,7 @@ export type RuntimeAssistantTurnFinalization = {
     language: RuntimeInterfaceLanguage;
   };
   taskKind?: RuntimeTaskKind;
-  threadTitle?: RuntimeThreadTitleGeneration | null;
+  threadTitle?: ThreadTitleGeneration | null;
 };
 
 type RuntimeTurnFinalizerOptions = {
@@ -35,7 +35,7 @@ type RuntimeTurnFinalizerOptions = {
   ids: IdGenerator;
   memoryControl(): Pick<MemoryControl, 'schedulePassiveMemoriesForTurn' | 'rememberExplicitUserMemory'>;
   streamEvents: Pick<RuntimeModelStreamEventPublisher, 'completeMessage' | 'publishMessage'>;
-  threadTitles: Pick<RuntimeThreadTitleCoordinator, 'commit'>;
+  threadTitleGeneration(): Pick<ThreadTitleGenerationControl, 'commit'>;
   usageStore?: UsageRecorder;
   appendEvent(threadId: string, event: Parameters<ThreadStore['appendEvent']>[1]): Promise<void>;
 };
@@ -74,7 +74,7 @@ export class RuntimeTurnFinalizer {
       memoryCitation: finalization.memoryCitation,
       providerMetadata: finalization.providerMetadata,
     });
-    await this.options.threadTitles.commit(threadId, turnId, finalization.threadTitle);
+    await this.options.threadTitleGeneration().commit(threadId, turnId, finalization.threadTitle);
     if (finalization.review !== undefined) {
       const rawReview = finalization.review.content.trim();
       const parsedReview = parseRuntimeReviewResult(rawReview, { legacyThinkTags: false });

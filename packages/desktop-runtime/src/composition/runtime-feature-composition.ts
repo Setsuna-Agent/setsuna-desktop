@@ -62,6 +62,13 @@ import {
 } from '@setsuna-desktop/feature-memory/contracts';
 import { memoryRuntimeFeature } from '@setsuna-desktop/feature-memory/runtime';
 import {
+  createNoopThreadTitleGenerationControl,
+  threadTitleGenerationControlCapability,
+  threadTitleGenerationLegacySettingsCapability,
+  threadTitleGenerationRuntimeHostCapability,
+} from '@setsuna-desktop/feature-thread-title-generation/contracts';
+import { threadTitleGenerationRuntimeFeature } from '@setsuna-desktop/feature-thread-title-generation/runtime';
+import {
   modelProviderRuntimeHostCapability,
   modelProviderSamplingCapability,
   type ModelProviderRuntimeHost,
@@ -123,6 +130,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     imageGenerationRuntimeFeature,
     goalRuntimeFeature,
     memoryRuntimeFeature,
+    threadTitleGenerationRuntimeFeature,
     usageRuntimeFeature,
     visionRecognitionRuntimeFeature,
     workspaceDependenciesRuntimeFeature,
@@ -230,6 +238,14 @@ export async function activateBuiltinRuntimeFeatures(
       provideHostCapability(
         memoryLegacySettingsCapability,
         runtime.configStore.memoryLegacySettingsAdapter(),
+      ),
+      provideHostCapability(
+        threadTitleGenerationRuntimeHostCapability,
+        runtime.agentLoop.threadTitleGenerationRuntimeHost(),
+      ),
+      provideHostCapability(
+        threadTitleGenerationLegacySettingsCapability,
+        runtime.configStore.threadTitleGenerationLegacySettingsAdapter(),
       ),
       provideHostCapability(
         pluginManagementRuntimeHostCapability,
@@ -384,6 +400,15 @@ export async function activateBuiltinRuntimeFeatures(
       ({ memory }) => runtime.agentLoop.bindMemoryControl(memory),
       ({ memory }) => runtime.memoryToolHost.bind(memory),
     );
+
+    host.bind({
+      threadTitleGeneration: optionalCapability(
+        threadTitleGenerationControlCapability,
+        createNoopThreadTitleGenerationControl,
+      ),
+    }, ({ threadTitleGeneration }) => (
+      runtime.agentLoop.bindThreadTitleGenerationControl(threadTitleGeneration)
+    ));
 
     host.bindWhenFeatureAvailable(visionRecognitionFeature.id, {
       visionRecognition: requiredCapability(visionRecognitionServiceCapability),

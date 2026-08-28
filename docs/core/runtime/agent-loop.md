@@ -2,7 +2,7 @@
 
 源码：`packages/desktop-runtime/src/loop/`
 
-`AgentLoop` 是 runtime 对 thread/turn 行为的 facade。实际工作按 `core / context / lifecycle / tools` 拆给协作者；Goal、Collaboration、Memory 等纵向能力通过 Feature control 延迟绑定，避免一个类同时承担所有状态机。
+`AgentLoop` 是 runtime 对 thread/turn 行为的 facade。实际工作按 `core / context / lifecycle / tools` 拆给协作者；Goal、Collaboration、Memory、自动标题等纵向能力通过 Feature control 延迟绑定，避免一个类同时承担所有状态机。
 
 ## Facade
 
@@ -38,6 +38,7 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `runtime-provider-metadata.ts` | 最终 provider metadata 绑定 |
 | `runtime-task-model.ts` | 根据 task kind 选择模型 |
 | `runtime-usage.ts` | Sampling usage 累计 |
+| `runtime-thread-title-generation-host.ts` | 向自动标题 Feature 提供窄模型/事件/usage adapter |
 | `model-stream-output.ts` | Stream 输出收集 |
 | `runtime-turn-errors.ts` | Cancel/termination error |
 
@@ -53,9 +54,7 @@ Facade 负责依赖组装、准入和窄事件桥接。新增横切能力时先�
 | `collaboration-coordinator.ts` | 子 Agent 协作与 mailbox |
 | `runtime-compaction-turn-coordinator.ts` | 显式 compaction task |
 | `runtime-hook-coordinator.ts` | Session/UserPrompt/Stop/Compact hooks |
-| `runtime-thread-title-coordinator.ts` | 自动标题提交和竞争保护 |
-| `runtime-thread-title-generator.ts` | 模型标题与 fallback |
-| `runtime-turn-finalizer.ts` | Usage、message、title、memory、completed |
+| `runtime-turn-finalizer.ts` | Usage、message、Feature title commit、memory、completed |
 | `runtime-turn-termination-coordinator.ts` | Cancel/error terminal event 串行化 |
 | `runtime-background-task-queue.ts` | 可取消后台任务 |
 | `turn-input-queue.ts` | Active turn 内部 steer 队列 |

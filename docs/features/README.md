@@ -42,6 +42,7 @@ packages/features/<feature>/
 | `runtime-activity` | `runtime-activity` | R | — | — | R | 活跃 turn、approval、后台 shell/service 的统一活动中心 |
 | `skills` | `skills` | R | — | — | R | Skill catalog、CRUD、extra roots 与 MCP 依赖安装 |
 | `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane |
+| `thread-title-generation` | `thread-title-generation` | O | — | — | O | 首轮自动标题、专用模型设置与重命名竞争保护 |
 | `updater` | `updater` | — | R | B | R | 更新检查、下载源、校验、安装与 UI 状态 |
 | `usage` | `usage` | O | — | — | O | Usage 持久化、聚合、线程实时补齐与统计 UI |
 | `vision-recognition` | `vision-recognition` | O | — | — | O | 视觉模型选择、附件识别、测试与 Plugin 详情贡献 |
@@ -56,7 +57,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 
 ### Agent 状态与上下文
 
-- [Collaboration、Goal、Memory 与 Conversation Debug](agent-state.md)
+- [Collaboration、Goal、Memory、自动标题与 Conversation Debug](agent-state.md)
 - [Model Provider](model-provider.md)
 
 这组 Feature 与 Agent loop 关系最紧密，但业务状态仍由 Feature coordinator/projection 拥有。Agent loop 只通过窄 host/control Capability 协作。

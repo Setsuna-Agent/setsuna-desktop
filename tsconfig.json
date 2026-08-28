@@ -18,6 +18,7 @@
     { "path": "./packages/features/runtime-activity/tsconfig.build.json" },
     { "path": "./packages/features/skills/tsconfig.build.json" },
     { "path": "./packages/features/terminal/tsconfig.build.json" },
+    { "path": "./packages/features/thread-title-generation/tsconfig.build.json" },
     { "path": "./packages/features/usage/tsconfig.build.json" },
     { "path": "./packages/features/updater/tsconfig.build.json" },
     { "path": "./packages/features/vision-recognition/tsconfig.build.json" },

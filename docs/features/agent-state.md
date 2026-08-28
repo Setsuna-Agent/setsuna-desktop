@@ -1,6 +1,6 @@
 # Agent 状态与上下文 Features
 
-本页覆盖 Collaboration、Goal、Memory 和 Conversation Debug。它们都参与 runtime/renderer，但不拥有模型协议或通用 Agent turn 状态机；Feature 通过窄 Capability 接到 AgentLoop，并把自己的状态、操作和 presentation 留在 owner 包内。
+本页覆盖 Collaboration、Goal、Memory、Thread Title Generation 和 Conversation Debug。它们都参与 runtime/renderer，但不拥有模型协议或通用 Agent turn 状态机；Feature 通过窄 Capability 接到 AgentLoop，并把自己的状态、操作和 presentation 留在 owner 包内。
 
 ## 共同结构
 
@@ -64,6 +64,20 @@ Memory 拥有记忆设置、查询/删除/清空、后台提取协调和模型�
 - Renderer settings 和列表状态由 Feature client/controller 持有。
 
 `FileMemoryStore` 仍是宿主 adapter，因为数据文件、时钟和 runtime data root 属于基础设施；记忆业务规则属于 Feature。
+
+## Thread Title Generation
+
+源码：`packages/features/thread-title-generation/`
+
+Thread Title Generation 拥有新对话首轮的模型标题生成、专用模型设置、输出规范化和手动重命名竞争保护。Core 仍拥有通用 `thread.updated` 事件、手动重命名以及首消息确定性 fallback；Feature 不改变线程标题的基础 contract。
+
+关键边界：
+
+- Runtime 激活后把 `threadTitleGenerationControlCapability` 延迟绑定到 AgentLoop；Feature optional 失败时 no-op control 保留首消息 fallback，不影响正常回答。
+- AgentLoop 只在首个 regular turn 调用 `start/commit` 接缝；Feature 通过 Pi 兼容的 `responseFormat` JSON Schema 请求 `{ title }`，并负责模型解析、生成超时、usage 记录和迟到标题取舍。
+- `threadTitleGenerationRuntimeHostCapability` 只暴露模型请求、线程读取/事件写入和 usage 所需的窄宿主能力。
+- 专用模型存入 Feature settings document；旧 `RuntimeConfig.taskModels.threadTitle` 由一次性 adapter 导入并在成功初始化后退休。
+- Renderer 通过 typed operation 读写设置，并向宿主 `taskModels` section 注入自己的 selector。
 
 ## Conversation Debug
 

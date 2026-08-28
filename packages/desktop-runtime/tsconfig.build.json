@@ -30,6 +30,7 @@
     { "path": "../features/review/tsconfig.build.json" },
     { "path": "../features/runtime-activity/tsconfig.build.json" },
     { "path": "../features/skills/tsconfig.build.json" },
+    { "path": "../features/thread-title-generation/tsconfig.build.json" },
     { "path": "../features/usage/tsconfig.build.json" },
     { "path": "../features/vision-recognition/tsconfig.build.json" },
     { "path": "../features/windows-sandbox/tsconfig.build.json" },

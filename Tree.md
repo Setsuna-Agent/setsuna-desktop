@@ -192,7 +192,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 799 total files
+packages/features/ — 0 direct / 817 total files
 ├── artifact/ — 2 direct / 22 total files
 │   ├── src/ — 16 files
 │   │   ├── contracts/ — 4 direct / 4 total files
@@ -342,6 +342,13 @@ packages/features/ — 0 direct / 799 total files
 │       │   └── main/ — 1 direct / 1 total files
 │       ├── main/ — 1 direct / 1 total files
 │       └── renderer/ — 2 direct / 2 total files
+├── thread-title-generation/ — 2 direct / 18 total files
+│   ├── src/ — 14 files
+│   │   ├── contracts/ — 5 direct / 5 total files
+│   │   ├── renderer/ — 5 direct / 5 total files
+│   │   └── runtime/ — 4 direct / 4 total files
+│   └── test/ — 2 files
+│       └── runtime/ — 2 direct / 2 total files
 ├── updater/ — 2 direct / 30 total files
 │   ├── src/ — 24 files
 │   │   ├── contracts/ — 4 direct / 4 total files
@@ -411,9 +418,9 @@ packages/features/ — 0 direct / 799 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 507 total files
-├── src/ — 2 direct / 294 total files
-│   ├── adapters/ — 107 files
+packages/desktop-runtime/ — 4 direct / 508 total files
+├── src/ — 2 direct / 295 total files
+│   ├── adapters/ — 108 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
 │   │   ├── feature/ — 5 direct / 5 total files
@@ -425,7 +432,7 @@ packages/desktop-runtime/ — 4 direct / 507 total files
 │   │   ├── plugin/ — 7 direct / 7 total files
 │   │   ├── search/ — 5 direct / 5 total files
 │   │   ├── skill/ — 4 direct / 4 total files
-│   │   ├── store/ — 33 direct / 33 total files
+│   │   ├── store/ — 34 direct / 34 total files
 │   │   ├── tool/ — 13 direct / 35 total files
 │   │   │   └── pc-local/ — 22 direct / 22 total files
 │   │   └── workspace/ — 5 direct / 5 total files
@@ -440,8 +447,8 @@ packages/desktop-runtime/ — 4 direct / 507 total files
 │   ├── loop/ — 66 files
 │   │   ├── approval-review/ — 5 direct / 5 total files
 │   │   ├── context/ — 16 direct / 16 total files
-│   │   ├── core/ — 21 direct / 21 total files
-│   │   ├── lifecycle/ — 12 direct / 12 total files
+│   │   ├── core/ — 23 direct / 23 total files
+│   │   ├── lifecycle/ — 10 direct / 10 total files
 │   │   └── tools/ — 12 direct / 12 total files
 │   ├── ports/ — 30 direct / 30 total files
 │   ├── runtime/ — 3 direct / 9 total files
@@ -486,8 +493,8 @@ packages/desktop-runtime/ — 4 direct / 507 total files
     ├── loop/ — 31 files
     │   ├── approval-review/ — 1 direct / 1 total files
     │   ├── context/ — 13 direct / 13 total files
-    │   ├── core/ — 6 direct / 6 total files
-    │   ├── lifecycle/ — 6 direct / 6 total files
+    │   ├── core/ — 7 direct / 7 total files
+    │   ├── lifecycle/ — 5 direct / 5 total files
     │   └── tools/ — 5 direct / 5 total files
     ├── runtime/ — 2 direct / 5 total files
     │   └── use-cases/ — 3 direct / 3 total files

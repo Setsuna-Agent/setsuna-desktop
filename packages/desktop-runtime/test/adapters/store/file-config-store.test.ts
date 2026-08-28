@@ -251,7 +251,7 @@ describe('file config store', () => {
       .rejects.toThrow('Local models');
   });
 
-  it('keeps host task models separate while the Memory adapter imports and retires legacy fields', async () => {
+  it('keeps Feature-owned task-model migrations separate from host task models', async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
     const store = new FileConfigStore(dataDir);
     const initial = await store.getConfig();
@@ -261,14 +261,12 @@ describe('file config store', () => {
 
     await expect(store.saveConfig({
       taskModels: {
-        threadTitle: { providerId: provider.id, modelId: model.id },
         review: { providerId: provider.id, modelId: model.id },
         approvalReview: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     })).resolves.toMatchObject({
       taskModels: {
-        threadTitle: { providerId: provider.id, modelId: model.id },
         review: { providerId: provider.id, modelId: model.id },
         approvalReview: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
@@ -286,13 +284,18 @@ describe('file config store', () => {
     stored.memoryEnabled = true;
     stored.taskModels = {
       ...(stored.taskModels as Record<string, unknown>),
+      threadTitle: { providerId: provider.id, modelId: model.id },
       memoryExtraction: { providerId: provider.id, modelId: model.id },
       memoryConsolidation: { providerId: provider.id, modelId: model.id },
     };
     await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
 
-    const legacy = store.memoryLegacySettingsAdapter();
-    await expect(legacy.read()).resolves.toMatchObject({
+    // An unrelated host config save must not erase migration input that a Feature has not consumed yet.
+    await store.saveConfig({ setsunaStyle: 'daily' });
+
+    const memoryLegacy = store.memoryLegacySettingsAdapter();
+    const titleLegacy = store.threadTitleGenerationLegacySettingsAdapter();
+    await expect(memoryLegacy.read()).resolves.toMatchObject({
       value: {
         useMemories: false,
         generateMemories: true,
@@ -301,19 +304,24 @@ describe('file config store', () => {
         extractionModelCode: model.code,
       },
     });
+    await expect(titleLegacy.read()).resolves.toEqual({
+      providerId: provider.id,
+      modelId: model.id,
+    });
     expect((await store.getConfig()).taskModels).toEqual({
-      threadTitle: { providerId: provider.id, modelId: model.id },
       review: { providerId: provider.id, modelId: model.id },
       approvalReview: { providerId: provider.id, modelId: model.id },
       contextCompaction: { providerId: provider.id, modelId: model.id },
     });
 
-    await legacy.retire();
+    await memoryLegacy.retire();
+    await titleLegacy.retire();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated).not.toHaveProperty('memory');
     expect(migrated).not.toHaveProperty('memoryEnabled');
     expect(migrated.taskModels).not.toHaveProperty('memoryExtraction');
     expect(migrated.taskModels).not.toHaveProperty('memoryConsolidation');
+    expect(migrated.taskModels).not.toHaveProperty('threadTitle');
   });
 
   it('normalizes missing Anthropic output limits to the provider-specific fallback', async () => {
