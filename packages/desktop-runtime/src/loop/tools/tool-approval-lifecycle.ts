@@ -13,7 +13,6 @@ import {
   isAbortError,
   TurnCancelledError,
 } from '../core/runtime-turn-errors.js';
-import { approvalReviewTechnicalFailureRationale } from '../approval-review/approval-review-output.js';
 
 export type ApprovalResolutionMetadata = {
   source: RuntimeApprovalResolutionSource;
@@ -185,7 +184,7 @@ async function requestAutomaticApproval({
     }
     assessment = {
       status: 'failed',
-      rationale: approvalReviewTechnicalFailureRationale(error),
+      rationale: automaticReviewFailureRationale(error),
     };
   }
 
@@ -246,4 +245,9 @@ function resolveAutomaticApproval(
     throw new Error('The approval gate does not expose the runtime-only automatic resolver.');
   }
   return approvalGate.resolveApproval(approvalId, input);
+}
+
+/** Provider-controlled error text must never be copied into the persistent approval audit. */
+function automaticReviewFailureRationale(_error: unknown): string {
+  return 'Automatic approval review failed: Unexpected reviewer error.';
 }

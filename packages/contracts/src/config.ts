@@ -101,7 +101,6 @@ export type RuntimeDesktopSettings = {
 
 export const RUNTIME_TASK_MODEL_IDS = [
   'review',
-  'approvalReview',
   'contextCompaction',
 ] as const;
 
@@ -165,7 +164,7 @@ export function runtimeAccessModeForConfig(config: RuntimeAccessModeConfig): Run
     return 'full-access';
   }
   if (
-    config.approvalPolicy === 'strict'
+    config.approvalPolicy === 'on-request'
     && config.permissionProfile === 'workspace-write'
     && config.approvalReviewer !== 'automatic'
   ) {
@@ -190,7 +189,7 @@ export function runtimeAccessModeSelection(mode: RuntimeAccessMode): RuntimeAcce
     };
   }
   return {
-    approvalPolicy: 'strict',
+    approvalPolicy: 'on-request',
     approvalReviewer: 'user',
     permissionProfile: 'workspace-write',
   };

@@ -708,6 +708,7 @@ export type RuntimeToolRun = {
   approvalReason?: string;
   approvalReviewer?: RuntimeApprovalReviewer;
   approvalRetryKind?: RuntimeApprovalRetryKind;
+  approvalAdditionalPermissions?: unknown;
   approvalStatus?: 'pending' | 'approved' | 'rejected' | 'cancelled';
   approvalMessage?: string;
   approvalResolutionSource?: RuntimeApprovalResolutionSource;

@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type {
@@ -16,6 +16,27 @@ import {
 
 const WINDOWS_SANDBOX_PROTOCOL_VERSION = 1;
 const STATUS_CACHE_MS = 5_000;
+const SETSUNA_DESKTOP_DATA_DIR_ENV = 'SETSUNA_DESKTOP_DATA_DIR';
+
+// Match Codex's Windows full-read boundary, with product-owned state added to
+// the credential-oriented exclusions. AppData itself remains usable for
+// per-user toolchains; the active Setsuna data root is carved out below.
+const WINDOWS_PROFILE_READ_EXCLUSIONS = new Set([
+  '.ssh',
+  '.tsh',
+  '.brev',
+  '.gnupg',
+  '.aws',
+  '.azure',
+  '.kube',
+  '.docker',
+  '.config',
+  '.npm',
+  '.pki',
+  '.terraform.d',
+  '.codex',
+  '.setsuna',
+].map((name) => name.toLowerCase()));
 
 type SidecarStatusEnvelope = {
   ok?: unknown;
@@ -103,10 +124,11 @@ function prepareWindowsSandboxEnvironment(environment: Record<string, string>): 
   readableRoots: readonly string[];
 }> {
   const nextEnvironment = { ...environment };
+  const readableRoots = windowsSandboxDefaultReadableRoots(process.env);
   const executablePath = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_CURL_ENV]);
   const caBundlePath = existingAbsoluteFile(process.env[WINDOWS_SANDBOX_CA_BUNDLE_ENV]);
   if (!executablePath || !caBundlePath) {
-    return { environment: nextEnvironment, readableRoots: [] };
+    return { environment: nextEnvironment, readableRoots };
   }
   const pathApi = usesWindowsPathSemantics(executablePath) ? path.win32 : path;
   const directory = pathApi.dirname(executablePath);
@@ -126,8 +148,125 @@ function prepareWindowsSandboxEnvironment(environment: Record<string, string>): 
   setEnvironmentValue(nextEnvironment, 'CURL_CA_BUNDLE', caBundlePath);
   return {
     environment: nextEnvironment,
-    readableRoots: [executablePath, caBundlePath, configPath].filter(Boolean),
+    readableRoots: uniqueWindowsPaths([
+      ...readableRoots,
+      executablePath,
+      caBundlePath,
+      configPath,
+    ].filter(Boolean)),
   };
+}
+
+/**
+ * Resolve the stable Windows read baseline once per execution plan. System
+ * directories cover machine-wide tools; user-profile children cover per-user
+ * toolchains without granting the profile root or known credential stores.
+ */
+export function windowsSandboxDefaultReadableRoots(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): string[] {
+  const systemRoot = environmentValue(env, 'SystemRoot') || environmentValue(env, 'WINDIR');
+  const platformRoots = [
+    systemRoot,
+    environmentValue(env, 'ProgramFiles'),
+    environmentValue(env, 'ProgramFiles(x86)'),
+    environmentValue(env, 'ProgramData'),
+  ].map(existingAbsolutePath).filter(Boolean);
+  const profileRoot = existingAbsoluteDirectory(environmentValue(env, 'USERPROFILE'));
+  if (!profileRoot) return uniqueWindowsPaths(platformRoots);
+
+  const protectedRoots = [
+    existingAbsolutePath(environmentValue(env, SETSUNA_DESKTOP_DATA_DIR_ENV)),
+    ...[...WINDOWS_PROFILE_READ_EXCLUSIONS]
+      .map((name) => existingAbsolutePath(path.join(profileRoot, name))),
+  ].filter(Boolean);
+  let profileEntries: string[];
+  try {
+    profileEntries = readdirSync(profileRoot)
+      .filter((name) => !WINDOWS_PROFILE_READ_EXCLUSIONS.has(name.toLowerCase()))
+      .map((name) => existingAbsolutePath(path.join(profileRoot, name)))
+      .filter((entry) => entry !== '' && isPathWithin(entry, profileRoot));
+  } catch {
+    // Do not fall back to the whole profile: that would bypass the exclusions.
+    profileEntries = [];
+  }
+
+  return uniqueWindowsPaths([
+    ...readableRootsExcluding(platformRoots, protectedRoots),
+    ...readableRootsExcluding(profileEntries, protectedRoots),
+  ]);
+}
+
+function readableRootsExcluding(
+  candidates: readonly string[],
+  protectedRoots: readonly string[],
+  depth = 0,
+): string[] {
+  if (depth >= 32) return [];
+  const roots: string[] = [];
+  for (const candidate of candidates) {
+    const resolvedCandidate = existingAbsolutePath(candidate);
+    if (!resolvedCandidate) continue;
+    const nestedProtectedRoots = protectedRoots.filter((protectedRoot) => (
+      isPathWithin(protectedRoot, resolvedCandidate)
+      || isPathWithin(resolvedCandidate, protectedRoot)
+    ));
+    if (!nestedProtectedRoots.length) {
+      roots.push(candidate);
+      continue;
+    }
+    if (nestedProtectedRoots.some((protectedRoot) => isPathWithin(resolvedCandidate, protectedRoot))) {
+      continue;
+    }
+    let children: string[];
+    try {
+      children = readdirSync(resolvedCandidate).map((name) => path.join(resolvedCandidate, name));
+    } catch {
+      continue;
+    }
+    roots.push(...readableRootsExcluding(children, nestedProtectedRoots, depth + 1));
+  }
+  return roots;
+}
+
+function existingAbsolutePath(value: unknown): string {
+  const candidate = String(value ?? '').trim();
+  if (!candidate || (!path.isAbsolute(candidate) && !path.win32.isAbsolute(candidate))) return '';
+  try {
+    statSync(candidate);
+    return realpathSync.native(candidate);
+  } catch {
+    return '';
+  }
+}
+
+function existingAbsoluteDirectory(value: unknown): string {
+  const candidate = existingAbsolutePath(value);
+  if (!candidate) return '';
+  try {
+    return statSync(candidate).isDirectory() ? candidate : '';
+  } catch {
+    return '';
+  }
+}
+
+function isPathWithin(candidate: string, root: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (
+    relative !== '..'
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+  );
+}
+
+function uniqueWindowsPaths(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = process.platform === 'win32' ? value.toLowerCase() : value;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function existingAbsoluteFile(value: unknown): string {
@@ -145,7 +284,10 @@ function usesWindowsPathSemantics(value: string): boolean {
   return /^[a-z]:[\\/]/iu.test(value) || /^\\\\/u.test(value);
 }
 
-function environmentValue(environment: Record<string, string>, name: string): string {
+function environmentValue(
+  environment: Readonly<Record<string, string | undefined>>,
+  name: string,
+): string {
   const key = Object.keys(environment).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
   return key ? environment[key] ?? '' : '';
 }

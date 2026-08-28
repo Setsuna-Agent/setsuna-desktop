@@ -1,3 +1,7 @@
+// The sidecar is pipe-driven. A GUI subsystem prevents the trusted launcher and
+// cross-account runner from allocating transient console windows on Windows.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 #[cfg_attr(not(windows), allow(dead_code))]
 mod capability;
 mod platform;

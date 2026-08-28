@@ -2,21 +2,38 @@ import type {
   ModelRequest,
   ModelStreamEvent,
   RuntimeConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeThread,
   RuntimeUsageRecord,
 } from '@setsuna-desktop/contracts';
+import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
-import { AutomaticApprovalReviewer } from '../../../src/loop/approval-review/automatic-approval-reviewer.js';
+import type {
+  ApprovalReviewInput,
+  ApprovalReviewModelSelection,
+  ApprovalReviewRuntimeHost,
+} from '../../src/contracts/index.js';
+import { approvalReviewFeature } from '../../src/contracts/index.js';
+import { AutomaticApprovalReviewControl } from '../../src/runtime/automatic-approval-reviewer.js';
 import {
   parseApprovalReviewOutput,
   policyConstrainedApprovalReviewOutcome,
-} from '../../../src/loop/approval-review/approval-review-output.js';
-import { buildApprovalReviewPrompt } from '../../../src/loop/approval-review/approval-review-prompt.js';
-import type { ConfigStore } from '../../../src/ports/config-store.js';
-import type { ApprovalReviewInput } from '../../../src/ports/approval-reviewer.js';
-import type { ModelClient } from '../../../src/ports/model-client.js';
-import type { ThreadStore } from '../../../src/ports/thread-store.js';
-import type { UsageRecorder } from '../../../src/ports/usage-store.js';
+} from '../../src/runtime/approval-review-output.js';
+import { buildApprovalReviewPrompt } from '../../src/runtime/approval-review-prompt.js';
+
+type TestModelClient = Readonly<{
+  stream(request: ModelRequest): AsyncGenerator<ModelStreamEvent>;
+}>;
+
+type TestUsageStore = Readonly<{
+  recordUsage(input: Omit<RuntimeUsageRecord, 'id'>): Promise<RuntimeUsageRecord>;
+}>;
+
+type ApprovalReviewTestConfig = Omit<RuntimeConfigState, 'taskModels'> & Readonly<{
+  taskModels?: RuntimeConfigState['taskModels'] & Readonly<{
+    approvalReview?: RuntimeConfiguredModelReference;
+  }>;
+}>;
 
 describe('automatic approval reviewer', () => {
   it('uses the dedicated model and reviews the exact action without hidden messages', async () => {
@@ -83,6 +100,102 @@ describe('automatic approval reviewer', () => {
     ]);
     expect(reviewMessage?.content).not.toContain('hidden chain of thought');
     expect(recordUsage).toHaveBeenCalledOnce();
+  });
+
+  it('exposes a pre-cancelled caller operation as an AbortError', async () => {
+    const controller = new AbortController();
+    controller.abort('turn cancelled before review');
+    const input = {
+      ...reviewInput({ cmd: 'pnpm test' }),
+      signal: controller.signal,
+    };
+
+    await expect(createReviewer(new ReviewModelClient(() => '')).review(input))
+      .rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Feature operation was cancelled.',
+      });
+  });
+
+  it('exposes Feature draining during review as an AbortError', async () => {
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const modelClient: TestModelClient = {
+      async *stream(request): AsyncGenerator<ModelStreamEvent> {
+        markStarted();
+        await new Promise<never>((_resolve, reject) => {
+          const rejectForAbort = () => reject(request.signal?.reason);
+          if (request.signal?.aborted) rejectForAbort();
+          else request.signal?.addEventListener('abort', rejectForAbort, { once: true });
+        });
+        yield { type: 'done', finishReason: 'stop' };
+      },
+    };
+    const fixture = createReviewerWithScope(modelClient);
+    const review = fixture.reviewer.review(reviewInput({ cmd: 'pnpm test' }));
+    await started;
+
+    const draining = fixture.scope.finishDispose();
+
+    await expect(review).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'Feature scope is draining.',
+    });
+    await draining;
+  });
+
+  it('preserves cancellation when runtime context loading finishes without a thread', async () => {
+    let finishLoading!: (thread: RuntimeThread | null) => void;
+    const loading = new Promise<RuntimeThread | null>((resolve) => { finishLoading = resolve; });
+    const getThread = vi.fn(() => loading);
+    const controller = new AbortController();
+    const fixture = createReviewerWithScope(
+      new ReviewModelClient(() => ''),
+      undefined,
+      configFixture(),
+      threadFixture(),
+      { getThread },
+    );
+    const review = fixture.reviewer.review({
+      ...reviewInput({ cmd: 'pnpm test' }),
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(getThread).toHaveBeenCalledOnce());
+
+    controller.abort(new DOMException('turn cancelled while loading context', 'AbortError'));
+    finishLoading(null);
+
+    await expect(review).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'turn cancelled while loading context',
+    });
+  });
+
+  it('preserves cancellation when model resolution fails after the turn is cancelled', async () => {
+    let rejectResolution!: (error: Error) => void;
+    const resolution = new Promise<never>((_resolve, reject) => { rejectResolution = reject; });
+    const resolveModel = vi.fn(() => resolution);
+    const controller = new AbortController();
+    const fixture = createReviewerWithScope(
+      new ReviewModelClient(() => ''),
+      undefined,
+      configFixture(),
+      threadFixture(),
+      { resolveModel },
+    );
+    const review = fixture.reviewer.review({
+      ...reviewInput({ cmd: 'pnpm test' }),
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(resolveModel).toHaveBeenCalledOnce());
+
+    controller.abort(new DOMException('turn cancelled while resolving model', 'AbortError'));
+    rejectResolution(new Error('model resolution failed'));
+
+    await expect(review).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'turn cancelled while resolving model',
+    });
   });
 
   it('keeps delimiter-like untrusted data inside the prompt JSON envelopes', () => {
@@ -237,7 +350,7 @@ describe('automatic approval reviewer', () => {
         status: 400,
       },
     );
-    const modelClient: ModelClient = {
+    const modelClient: TestModelClient = {
       async *stream(): AsyncGenerator<ModelStreamEvent> {
         yield { type: 'text_delta', text: '' };
         throw providerError;
@@ -470,7 +583,7 @@ describe('approval review output', () => {
   });
 });
 
-class ReviewModelClient implements ModelClient {
+class ReviewModelClient implements TestModelClient {
   readonly requests: ModelRequest[] = [];
 
   constructor(
@@ -498,24 +611,60 @@ class ReviewModelClient implements ModelClient {
 }
 
 function createReviewer(
-  modelClient: ModelClient,
-  usageStore?: Pick<UsageRecorder, 'recordUsage'>,
+  modelClient: TestModelClient,
+  usageStore?: TestUsageStore,
   config = configFixture(),
   thread = threadFixture(),
 ) {
-  const configStore = {
-    getConfig: async () => config,
-  } as unknown as ConfigStore;
-  const threadStore = {
-    getThread: async () => thread,
-  } as unknown as ThreadStore;
-  return new AutomaticApprovalReviewer({
-    clock: { now: () => new Date('2026-08-13T00:00:00.000Z') },
-    configStore,
-    modelClient,
-    threadStore,
-    usageStore: usageStore as UsageRecorder | undefined,
+  return createReviewerWithScope(modelClient, usageStore, config, thread).reviewer;
+}
+
+function createReviewerWithScope(
+  modelClient: TestModelClient,
+  usageStore?: TestUsageStore,
+  config = configFixture(),
+  thread = threadFixture(),
+  hostOverrides: Partial<ApprovalReviewRuntimeHost> = {},
+) {
+  const controller = createFeatureScope({
+    featureId: approvalReviewFeature.id,
+    process: 'runtime',
+    scopeId: 'approval-review:test',
   });
+  controller.activate();
+  const selection = config.taskModels?.approvalReview ?? null;
+  const host: ApprovalReviewRuntimeHost = {
+    now: () => new Date('2026-08-13T00:00:00.000Z'),
+    getThread: async () => thread,
+    resolveModel: async ({ selection: requestedSelection, thread: currentThread }) => (
+      resolveTestModel(config, currentThread, requestedSelection)
+    ),
+    listModelOptions: async () => [],
+    generateText: async (request) => {
+      let content = '';
+      let usage;
+      for await (const event of modelClient.stream(request as ModelRequest)) {
+        if (event.type === 'text_delta') content += event.text;
+        if (event.type === 'usage' || event.type === 'token_count') usage = event.usage;
+      }
+      return { content, ...(usage ? { usage } : {}) };
+    },
+    recordUsage: async (threadId, turnId, usage) => {
+      await usageStore?.recordUsage({
+        threadId,
+        turnId,
+        createdAt: '2026-08-13T00:00:00.000Z',
+        ...usage,
+      });
+    },
+    ...hostOverrides,
+  };
+  const reviewer = new AutomaticApprovalReviewControl(controller.scope, {
+    read: async () => ({ value: selection, revision: 0 }),
+    readPublic: async () => ({ value: selection, revision: 0 }),
+    update: async ({ patch }) => ({ value: patch, revision: 1 }),
+  }, host);
+  return { reviewer, scope: controller };
 }
 
 function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalReviewInput {
@@ -527,7 +676,6 @@ function reviewInput(argumentsValue: unknown, toolCallId = 'call_1'): ApprovalRe
       toolCallId,
       toolName: 'exec_command',
       reason: 'Command requires elevated execution.',
-      argumentsPreview: '{"cmd":"truncated"}',
       environmentId: 'local',
     },
     signal: new AbortController().signal,
@@ -623,7 +771,7 @@ function taggedJson(content: string, tag: string): unknown {
   return match?.[1] ? JSON.parse(match[1]) : null;
 }
 
-function configFixture(): RuntimeConfigState {
+function configFixture(): ApprovalReviewTestConfig {
   const model = {
     id: 'approval-review-model',
     name: 'Approval review model',
@@ -672,4 +820,27 @@ function configFixture(): RuntimeConfigState {
     approvalReviewer: 'automatic',
     permissionProfile: 'workspace-write',
   };
+}
+
+function resolveTestModel(
+  config: ApprovalReviewTestConfig,
+  thread: RuntimeThread,
+  selection: ApprovalReviewModelSelection,
+): { model: string; providerId?: string } {
+  if (selection) {
+    const provider = config.providers.find((item) => item.enabled && item.id === selection.providerId);
+    const model = provider?.models.find((item) => item.id === selection.modelId && item.code.trim());
+    if (provider && model) return { providerId: provider.id, model: model.code.trim() };
+  }
+  const activeTurnBinding = thread.activeTurnId
+    ? thread.turns?.find((turn) => turn.id === thread.activeTurnId && turn.status === 'in_progress')?.modelBinding
+    : undefined;
+  const binding = activeTurnBinding ?? thread.modelBinding;
+  if (binding) return { providerId: binding.providerId, model: binding.modelCode };
+  const provider = config.providers.find((item) => item.enabled && item.id === config.activeProviderId)
+    ?? config.providers.find((item) => item.enabled);
+  const model = provider?.models.find((item) => item.enabled) ?? provider?.models[0];
+  return provider && model
+    ? { providerId: provider.id, model: model.code.trim() }
+    : { model: 'local-runtime-smoke' };
 }

@@ -1,4 +1,8 @@
 import {
+  createNoopApprovalReviewControl,
+  type ApprovalReviewControl,
+} from '@setsuna-desktop/feature-approval-review/contracts';
+import {
   createNoopCollaborationControl,
   type CollaborationControl,
 } from '@setsuna-desktop/feature-collaboration/contracts';
@@ -17,10 +21,21 @@ import {
 
 /** Owns late-bound optional Feature controls and restores no-op fallbacks on disposal. */
 export class RuntimeAgentFeatureControls {
+  approvalReviews: ApprovalReviewControl = createNoopApprovalReviewControl();
   collaboration: CollaborationControl = createNoopCollaborationControl();
   goals: GoalControl = createNoopGoalControl();
   memory: MemoryControl = createNoopMemoryControl();
   threadTitles: ThreadTitleGenerationControl = createNoopThreadTitleGenerationControl();
+
+  bindApprovalReview(control: ApprovalReviewControl): () => void {
+    if (this.approvalReviews.available && this.approvalReviews !== control) {
+      throw new Error('Approval review control is already bound.');
+    }
+    this.approvalReviews = control;
+    return () => {
+      if (this.approvalReviews === control) this.approvalReviews = createNoopApprovalReviewControl();
+    };
+  }
 
   bindCollaboration(control: CollaborationControl): () => void {
     if (this.collaboration.available && this.collaboration !== control) {

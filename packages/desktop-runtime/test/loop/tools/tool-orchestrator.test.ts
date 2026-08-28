@@ -469,6 +469,7 @@ describe('ToolOrchestrator terminal and retry handling', () => {
     expect(execution.status).toBe('success');
     expect(contexts[1]?.sandbox).toMatchObject({ mode: 'default' });
     expect(contexts[1]?.sandboxWorkspaceWrite?.readableRoots).toContain(readableRoot);
+    expect(approvalInput?.retryKind).toBe('sandbox_readable_root');
     expect(approvalInput?.additionalPermissions).toMatchObject({ file_system: { read: [readableRoot] } });
   });
 

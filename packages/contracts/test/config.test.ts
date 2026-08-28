@@ -39,7 +39,7 @@ describe('defaultModelMaxOutputTokens', () => {
 
 describe('runtime access modes', () => {
   it.each([
-    ['request-approval', 'strict', 'user', 'workspace-write'],
+    ['request-approval', 'on-request', 'user', 'workspace-write'],
     ['agent-approval', 'on-request', 'automatic', 'workspace-write'],
     ['full-access', 'full', 'user', 'danger-full-access'],
   ] as const)('keeps the %s mode atomic', (mode, approvalPolicy, approvalReviewer, permissionProfile) => {
@@ -50,6 +50,7 @@ describe('runtime access modes', () => {
   });
 
   it.each([
+    ['strict', 'workspace-write'],
     ['strict', 'read-only'],
     ['strict', 'danger-full-access'],
     ['on-request', 'read-only'],

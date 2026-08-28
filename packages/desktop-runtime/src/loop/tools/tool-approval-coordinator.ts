@@ -270,6 +270,7 @@ export class ToolApprovalCoordinator {
         environmentId: environment.id,
         reason,
         argumentsPreview: previewArguments(parsedArguments),
+        retryKind: 'sandbox_readable_root',
         additionalPermissions: requestPermissionProfileFromSandbox({ readableRoots }),
         availableDecisions: [
           { type: 'approve' },

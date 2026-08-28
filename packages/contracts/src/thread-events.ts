@@ -419,11 +419,12 @@ export function applyRuntimeEventToThread(thread: RuntimeThread, event: StoredTh
         argumentsPreview: approval.argumentsPreview,
         // The failed sandbox attempt stays in the append-only event log for
         // diagnostics, but it is not output from the approved retry attempt.
-        resultPreview: approval.retryKind === 'sandbox_bypass' ? '' : undefined,
+        resultPreview: approval.retryKind !== undefined ? '' : undefined,
         approvalId: approval.id,
         approvalReason: approval.reason,
         approvalReviewer: approval.reviewer ?? 'user',
         approvalRetryKind: approval.retryKind,
+        approvalAdditionalPermissions: approval.additionalPermissions,
         approvalStatus: approval.status,
         availableApprovalDecisions: approval.availableDecisions,
         proposedExecPolicyAmendment: approval.proposedExecPolicyAmendment,

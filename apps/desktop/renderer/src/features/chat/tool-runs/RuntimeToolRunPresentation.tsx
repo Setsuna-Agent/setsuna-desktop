@@ -26,6 +26,7 @@ import {
 } from './runtimeToolRunState.js';
 import {
   activeToolRunOrLast,
+  pendingApprovalRun,
   toolRunGroupKind,
   toolRunGroupingKey,
   toolRunGroupStatus,
@@ -178,9 +179,7 @@ export function mixedToolRunGroupSummary(
   summaryMode: ToolRunSummaryMode,
   t: Translate = defaultTranslate,
 ): CompactToolRunSummary {
-  const reviewingRun = groups
-    .flatMap(toolRunGroupRuns)
-    .find(isAutomaticApprovalReviewPending);
+  const reviewingRun = pendingApprovalRun(groups.flatMap(toolRunGroupRuns));
   if (reviewingRun) {
     const kind = toolRunGroupKind(reviewingRun);
     return {
@@ -197,6 +196,8 @@ export function compactToolRunGroupSummary(group: ToolRunGroup | undefined, t: T
   if (!group) return { title: '' };
   const runs = toolRunGroupRuns(group);
   const kind = group.type === 'single' ? toolRunGroupKind(group.run) : group.kind;
+  const pendingRun = pendingApprovalRun(runs);
+  if (pendingRun) return { ...toolRunSummary(pendingRun, t), targetKind: kind };
   if (kind === 'fileMutation') return { ...fileOperationGroupSummary(runs, t), targetKind: kind };
   if (group.type === 'single') {
     return {
@@ -317,7 +318,7 @@ export function toolRunGroupSummary(
   group: Extract<ToolRunGroup, { type: 'group' }>,
   t: Translate = defaultTranslate,
 ): { title: string; target?: string } {
-  const reviewingRun = group.runs.find(isAutomaticApprovalReviewPending);
+  const reviewingRun = pendingApprovalRun(group.runs);
   if (reviewingRun) return toolRunSummary(reviewingRun, t);
   if (group.kind === 'inspection') return inspectionGroupSummary(group.runs, t);
   if (group.kind === 'shell') return shellGroupSummary(group.runs, t);
@@ -816,6 +817,14 @@ export function searchRunSummary(
 export function shellRunSummary(run: RuntimeToolRun, command: string, t: Translate = defaultTranslate): { title: string; target?: string } {
   const displayCommand = command || shellCommand(run);
   if (run.status === 'pending_approval') {
+    if (run.approvalRetryKind === 'sandbox_readable_root') {
+      const action = t('toolRun.action.allowToolchainRead');
+      return {
+        title: automaticApprovalReviewTitle(run, action, t)
+          ?? t('toolRun.aware.awaiting', { action }),
+        target: approvalReadableRoot(run),
+      };
+    }
     const action = displayCommand
       ? t('toolRun.action.runCommand', { command: displayCommand })
       : t('toolRun.action.runShell');
@@ -834,6 +843,16 @@ export function shellRunSummary(run: RuntimeToolRun, command: string, t: Transla
   if (run.status === 'cancelled') return { title: displayCommand ? t('toolRun.shell.cancelledCommand', { command: displayCommand }) : t('toolRun.shell.cancelled') };
   if (run.status === 'rejected') return { title: displayCommand ? t('toolRun.shell.rejectedCommand', { command: displayCommand }) : t('toolRun.shell.rejected') };
   return { title: displayCommand ? t('toolRun.shell.completedCommand', { command: displayCommand }) : t('toolRun.shell.completed') };
+}
+
+function approvalReadableRoot(run: RuntimeToolRun): string | undefined {
+  if (!isRecord(run.approvalAdditionalPermissions)) return undefined;
+  const fileSystem = run.approvalAdditionalPermissions.file_system
+    ?? run.approvalAdditionalPermissions.fileSystem;
+  if (!isRecord(fileSystem)) return undefined;
+  const roots = fileSystem.read ?? fileSystem.read_roots ?? fileSystem.readRoots;
+  if (!Array.isArray(roots)) return undefined;
+  return roots.map(stringField).find(Boolean);
 }
 
 export function runningAware(run: RuntimeToolRun, running: string, complete: string, t: Translate = defaultTranslate) {

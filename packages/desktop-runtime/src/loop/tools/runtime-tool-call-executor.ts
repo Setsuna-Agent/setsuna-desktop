@@ -84,7 +84,7 @@ type PendingAppServerDynamicToolCall = {
 
 type RuntimeToolCallExecutorOptions = {
   approvalGate?: ApprovalGate;
-  approvalReviewer?: ApprovalReviewer;
+  approvalReviewer?(): ApprovalReviewer | undefined;
   appServerNotificationBus?: AppServerNotificationBus;
   clock: Clock;
   ids: IdGenerator;
@@ -730,7 +730,7 @@ export class RuntimeToolCallExecutor {
     return new ToolOrchestrator({
       toolHost: this.options.toolHost,
       approvalGate: this.options.approvalGate,
-      approvalReviewer: this.options.approvalReviewer,
+      approvalReviewer: this.options.approvalReviewer?.(),
       approvalReviewerMode: runtimeConfig?.approvalReviewer ?? 'user',
       approvalStore: this.toolApprovalStore,
       policyAmendmentStore: this.options.policyAmendmentStore,

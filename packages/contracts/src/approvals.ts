@@ -24,7 +24,7 @@ export type RuntimeApprovalReviewAssessment = {
   model?: string;
 };
 
-export type RuntimeApprovalRetryKind = 'sandbox_bypass';
+export type RuntimeApprovalRetryKind = 'sandbox_readable_root' | 'sandbox_bypass';
 
 export type RuntimeApprovalDecision =
   | 'approve'

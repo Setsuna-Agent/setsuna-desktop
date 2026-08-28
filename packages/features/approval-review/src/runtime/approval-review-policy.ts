@@ -1,5 +1,5 @@
 /**
- * Approval review policy kept separate from prompt assembly so the security
+ * Approval review policy stays separate from prompt assembly so the security
  * rules can evolve without mixing them with transcript serialization.
  */
 export function approvalReviewPolicy(): string {

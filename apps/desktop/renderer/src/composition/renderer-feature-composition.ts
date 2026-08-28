@@ -15,6 +15,7 @@ import {
   artifactRendererHostCapability,
   type ArtifactRendererHost,
 } from '@setsuna-desktop/feature-artifact/contracts';
+import { approvalReviewRendererFeature } from '@setsuna-desktop/feature-approval-review/renderer';
 import { artifactRendererFeature } from '@setsuna-desktop/feature-artifact/renderer';
 import { browserRendererFeature } from '@setsuna-desktop/feature-browser/renderer';
 import {
@@ -123,6 +124,7 @@ const rendererFeatures = defineRendererFeatureHost({
     workspaceAppsRendererFeature,
   ],
   optional: [
+    approvalReviewRendererFeature,
     collaborationRendererFeature,
     conversationDebugRendererFeature,
     imageGenerationRendererFeature,

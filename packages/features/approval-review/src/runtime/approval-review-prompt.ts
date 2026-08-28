@@ -3,7 +3,7 @@ import type {
   RuntimeThread,
   RuntimeUserInputRequest,
 } from '@setsuna-desktop/contracts';
-import type { ApprovalReviewInput } from '../../ports/approval-reviewer.js';
+import type { ApprovalReviewInput } from '../contracts/index.js';
 import { serializeApprovalReviewAction } from './approval-review-action.js';
 import { approvalReviewPolicy } from './approval-review-policy.js';
 

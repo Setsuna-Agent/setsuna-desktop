@@ -26,6 +26,7 @@ import type {
   SteerTurnInput,
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
+import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
 import {
   type CollaborationControl,
   type CollaborationRuntimeHost,
@@ -43,7 +44,6 @@ import {
   type ThreadTitleGenerationRuntimeHost,
 } from '@setsuna-desktop/feature-thread-title-generation/contracts';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
 import { RuntimeContextCompactor } from '../context/runtime-context-compactor.js';
 import { runtimeEnvironmentResolver } from '../context/runtime-environment-resolver.js';
@@ -110,7 +110,9 @@ export class AgentLoop {
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
     this.toolExecutor = new RuntimeToolCallExecutor({
       approvalGate: options.approvalGate,
-      approvalReviewer: createAutomaticApprovalReviewer(options),
+      approvalReviewer: () => this.featureControls.approvalReviews.available
+        ? this.featureControls.approvalReviews
+        : undefined,
       appServerNotificationBus: options.appServerNotificationBus,
       clock: options.clock,
       ids: options.ids,
@@ -541,6 +543,9 @@ export class AgentLoop {
    */
   activeTurnId(threadId: string): string | null {
     return this.turnTasks.activeForThread(threadId)?.turnId ?? null;
+  }
+  bindApprovalReviewControl(control: ApprovalReviewControl): () => void {
+    return this.featureControls.bindApprovalReview(control);
   }
   /** Binds the optional Goal Feature after runtime composition has activated it. */
   bindGoalControl(control: GoalControl): () => void {

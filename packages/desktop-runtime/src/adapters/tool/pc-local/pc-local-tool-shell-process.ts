@@ -520,6 +520,7 @@ async function startShellSession({
     temporaryRoot: '',
     environment: {},
     toolchainCommands: {},
+    toolchainReadableRoots: [],
     threadId: '',
     turnId: '',
     toolCallId: '',
@@ -580,6 +581,7 @@ async function startShellSession({
     session.sandboxProvider = spawnSpec.sandboxProvider;
     session.environment = environment;
     session.toolchainCommands = state?.shellToolchain?.commands ?? {};
+    session.toolchainReadableRoots = [...(state?.shellToolchain?.readableRoots ?? [])];
     child = spawn(spawnSpec.command, spawnSpec.args, {
       cwd,
       shell: spawnSpec.shell,

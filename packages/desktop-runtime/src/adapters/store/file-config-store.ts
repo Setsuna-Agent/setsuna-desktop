@@ -12,6 +12,10 @@ import {
   normalizeProviderIconConfig,
   normalizeRuntimeAccessModeConfig,
 } from '@setsuna-desktop/contracts';
+import type {
+  ApprovalReviewLegacySettingsAdapter,
+  ApprovalReviewModelSelection,
+} from '@setsuna-desktop/feature-approval-review/contracts';
 import {
   normalizeImageGenerationServiceUrl,
   type ImageGenerationLegacySettingsAdapter,
@@ -69,13 +73,14 @@ import {
 } from './task-model-config.js';
 
 const MAX_GLOBAL_PROMPT_CHARS = 8000;
-const CONFIG_SCHEMA_VERSION = 6;
+const CONFIG_SCHEMA_VERSION = 7;
 // Network access changed from an implicit deny to an explicit, user-controllable
 // setting in schema v2. Later schema changes must not replay that one-time migration.
 const NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION = 2;
 const ACCESS_MODE_MIGRATION_SCHEMA_VERSION = 4;
 const PROVIDER_PROXY_ROUTE_MIGRATION_SCHEMA_VERSION = 5;
 const APPROVAL_REVIEWER_MIGRATION_SCHEMA_VERSION = 6;
+const REQUEST_APPROVAL_SEMANTICS_MIGRATION_SCHEMA_VERSION = 7;
 
 type StoredImageGenerationConfig = Readonly<{
   baseUrl: string;
@@ -149,6 +154,13 @@ export class FileConfigStore implements ConfigStore {
     return Object.freeze({
       read: () => this.readLegacyMemorySettings(),
       retire: () => this.retireLegacyMemorySettings(),
+    });
+  }
+
+  approvalReviewLegacySettingsAdapter(): ApprovalReviewLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyApprovalReviewSelection(),
+      retire: () => this.retireLegacyApprovalReviewSelection(),
     });
   }
 
@@ -227,9 +239,11 @@ export class FileConfigStore implements ConfigStore {
       await this.validateProviderProxyReferences(providers);
       pruneRemovedProviderSecrets(secrets, providers);
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
+      const legacyApprovalReview = normalizeConfiguredModelReference(previous.taskModels?.approvalReview);
       const legacyThreadTitle = normalizeConfiguredModelReference(previous.taskModels?.threadTitle);
       const taskModels: StoredTaskModelSettings = {
         // Preserve unconsumed Feature migration input across unrelated config saves.
+        ...(legacyApprovalReview ? { approvalReview: legacyApprovalReview } : {}),
         ...(legacyThreadTitle ? { threadTitle: legacyThreadTitle } : {}),
         ...legacyMemoryTaskModels(previous.taskModels),
         ...taskModelSettingsForSave(input.taskModels, previous.taskModels),
@@ -306,6 +320,13 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
+  private async readLegacyApprovalReviewSelection(): Promise<ApprovalReviewModelSelection> {
+    return withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      return normalizeConfiguredModelReference(stored.taskModels?.approvalReview) ?? null;
+    });
+  }
+
   private async readLegacyThreadTitleGenerationSelection(): Promise<ThreadTitleGenerationModelSelection> {
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
@@ -357,6 +378,17 @@ export class FileConfigStore implements ConfigStore {
       if (!stored.taskModels || !Object.hasOwn(stored.taskModels, 'threadTitle')) return;
       const taskModels = { ...stored.taskModels };
       delete taskModels.threadTitle;
+      stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
+      await writeJsonFile(this.configPath, stored);
+    });
+  }
+
+  private async retireLegacyApprovalReviewSelection(): Promise<void> {
+    await withFileStateUpdate(this.configPath, async () => {
+      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
+      if (!stored.taskModels || !Object.hasOwn(stored.taskModels, 'approvalReview')) return;
+      const taskModels = { ...stored.taskModels };
+      delete taskModels.approvalReview;
       stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
       await writeJsonFile(this.configPath, stored);
     });
@@ -725,6 +757,17 @@ function migrateStoredConfig(stored: StoredConfig): boolean {
   const schemaVersion = stored.schemaVersion ?? 0;
   if (schemaVersion >= CONFIG_SCHEMA_VERSION) return false;
 
+  // Before schema v7 the desktop's "request approval" preset was represented by
+  // strict + user + workspace-write, which prompted even for ordinary reads. Keep
+  // enough pre-migration state to distinguish that preset from agent approval.
+  const migrateRequestApprovalPreset = schemaVersion < REQUEST_APPROVAL_SEMANTICS_MIGRATION_SCHEMA_VERSION
+    && normalizeApprovalPolicy(stored.approvalPolicy) === 'strict'
+    && normalizeApprovalReviewer(
+      stored.approvalReviewer,
+      legacyApprovalReviewer(stored),
+    ) === 'user'
+    && normalizePermissionProfile(stored.permissionProfile) === 'workspace-write';
+
   if (schemaVersion < NETWORK_ACCESS_MIGRATION_SCHEMA_VERSION) {
     stored.sandboxWorkspaceWrite = normalizeSandboxWorkspaceWrite(stored.sandboxWorkspaceWrite, {
       migrateNetworkDefault: true,
@@ -743,6 +786,11 @@ function migrateStoredConfig(stored: StoredConfig): boolean {
   }
   if (schemaVersion < APPROVAL_REVIEWER_MIGRATION_SCHEMA_VERSION) {
     stored.approvalReviewer = legacyApprovalReviewer(stored);
+  }
+  if (migrateRequestApprovalPreset) {
+    stored.approvalPolicy = 'on-request';
+    stored.approvalReviewer = 'user';
+    stored.permissionProfile = 'workspace-write';
   }
   stored.schemaVersion = CONFIG_SCHEMA_VERSION;
   return true;

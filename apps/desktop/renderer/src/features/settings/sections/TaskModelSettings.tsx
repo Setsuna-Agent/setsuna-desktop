@@ -32,11 +32,6 @@ const taskModelGroups: Array<{
         labelKey: 'settings.taskModels.review',
         descriptionKey: 'settings.taskModels.reviewDescription',
       },
-      {
-        id: 'approvalReview',
-        labelKey: 'settings.taskModels.approvalReview',
-        descriptionKey: 'settings.taskModels.approvalReviewDescription',
-      },
     ],
   },
   {

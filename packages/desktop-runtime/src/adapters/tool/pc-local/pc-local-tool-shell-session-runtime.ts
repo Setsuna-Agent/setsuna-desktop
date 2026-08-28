@@ -1,5 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { accessSync, existsSync, constants as fsConstants } from 'node:fs';
+import {
+  accessSync,
+  existsSync,
+  lstatSync,
+  constants as fsConstants,
+} from 'node:fs';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import path from 'node:path';
@@ -16,6 +21,7 @@ import {
 } from './pc-local-tool-constants.js';
 import {
   formatPath,
+  isPathInsideRoot,
   realPathIfExists,
 } from './pc-local-tool-paths.js';
 import { shellSandboxProfile } from './pc-local-tool-shell-policy.js';
@@ -236,7 +242,67 @@ function sandboxDeniedReadableRoots(session: ShellFailureSession): string[] {
     if (!descriptor) continue;
     roots.push(path.dirname(descriptor.executablePath), descriptor.installationRoot);
   }
+  roots.push(...permissionDeniedToolchainRoots(output, session));
   return [...new Set(roots.map((root) => path.resolve(root)).filter((root) => root !== path.parse(root).root))];
+}
+
+function permissionDeniedToolchainRoots(
+  output: string,
+  session: ShellFailureSession,
+): string[] {
+  if (
+    session.sandboxProvider !== 'windows-native'
+    || !/\b(?:EPERM|EACCES)\b/iu.test(output)
+  ) {
+    return [];
+  }
+  const knownRoots = (session.toolchainReadableRoots ?? [])
+    .map((root) => path.resolve(root))
+    .filter((root) => root !== path.parse(root).root);
+  if (!knownRoots.length) return [];
+
+  const roots: string[] = [];
+  for (const deniedPath of windowsPermissionDeniedPaths(output)) {
+    if (!path.win32.isAbsolute(deniedPath) || !existsSync(deniedPath)) continue;
+    let deniedRoot: string;
+    try {
+      deniedRoot = lstatSync(deniedPath).isDirectory()
+        ? path.resolve(deniedPath)
+        : path.dirname(path.resolve(deniedPath));
+    } catch {
+      continue;
+    }
+    if (deniedRoot === path.parse(deniedRoot).root) continue;
+    if (!knownRoots.some((knownRoot) => isNarrowToolchainRelativeRoot(deniedRoot, knownRoot))) continue;
+    roots.push(deniedRoot);
+  }
+  return roots;
+}
+
+function windowsPermissionDeniedPaths(output: string): string[] {
+  const values = new Set<string>();
+  for (const pattern of [
+    /\bpath\s*:\s*'((?:\\.|[^'])+)'/giu,
+    /\bpath\s*:\s*"((?:\\.|[^"])+)"/giu,
+    /\b(?:EPERM|EACCES)\b[^\r\n]*?,\s*(?:access|lstat|open|realpath|stat)\s+['"]([^'"\r\n]+)['"]/giu,
+  ]) {
+    for (const match of output.matchAll(pattern)) {
+      const value = String(match[1] ?? '')
+        .replaceAll('\\\\', '\\')
+        .replaceAll('\\\'', '\'')
+        .replaceAll('\\"', '"')
+        .trim();
+      if (value) values.add(path.win32.normalize(value));
+    }
+  }
+  return [...values];
+}
+
+function isNarrowToolchainRelativeRoot(candidate: string, knownRoot: string): boolean {
+  if (isPathInsideRoot(candidate, knownRoot)) return true;
+  if (!isPathInsideRoot(knownRoot, candidate)) return false;
+  const relative = path.relative(candidate, knownRoot);
+  return relative.split(path.sep).filter(Boolean).length <= 1;
 }
 
 function hostExecutableExists(

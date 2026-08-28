@@ -127,7 +127,7 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 
 “替我审批”保持既有 policy、sandbox、filesystem、network 和 hook 边界，只替代原本等待用户回答的交互审批：
 
-- `AutomaticApprovalReviewer` 使用 `taskModels.approvalReview` 发起无工具、低温、结构化的独立模型请求；未配置时跟随当前对话模型。
+- `packages/features/approval-review/` 通过可选 control capability 发起无工具、低温、结构化的独立模型请求；专用模型保存在 Feature settings，未配置或引用失效时跟随当前对话模型。
 - Reviewer 接收精确工具参数和紧凑的可见对话记录。用户原话与 runtime 验证过的 `request_user_input` 回答作为可建立授权的可信证据单独传递；assistant、其他 tool output、文件内容和审批理由只能用于判断风险，不能扩大用户授权。精确参数仅存在于本次调用内，不写入 thread event；持久化审计只包含 reviewer、来源、风险、授权判断、理由和模型标识。
 - Reviewer 先分别判断 `riskLevel` 与 `userAuthorization`，再按矩阵决策：低/中风险默认允许，高风险仅在授权至少为中且范围明确时允许，严重风险始终拒绝。`require_escalated`、`sudo`、工作区外路径或危险命令名本身不直接决定风险，必须判断精确目标和副作用。
 - 允许只批准当前这一项精确操作，不创建 session/persistent grant，也不能放宽确定性的安全策略。
@@ -136,6 +136,8 @@ Stream publisher 把可见状态转成 runtime events；provider raw event 不�
 - 超时、无效结构化输出、模型或配置故障均先记录失败审计，再创建新的人工审批请求；用户输入和 MCP elicitation 始终由用户回答。
 
 外部 API 只能调用 `ApprovalGate.answerApproval()` 回答人工请求；自动请求使用 runtime 内部 resolver，防止 renderer 或 app-server 抢答。
+
+Core 保留 sandbox/policy、人工审批、事件投影和审计 DTO；Feature 只拥有模型判定。Feature 激活失败或 reviewer 返回技术故障时，`tool-approval-lifecycle` 仍必须 fail closed 并转人工确认。
 
 ### 6. Finalize
 

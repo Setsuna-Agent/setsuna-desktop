@@ -1,6 +1,7 @@
 import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import type { ToolRunGroupKind } from './runtime-tool-run-types.js';
 import { isRuntimeFileMutationRun } from './runtimeFileChanges.js';
+import { isPendingRuntimeToolApproval } from './runtimeToolRunState.js';
 
 export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
   if (run.name === 'workspace_read_file' || run.name === 'workspace_list_directory' || run.name === 'read_file' || run.name === 'list_directory' || run.name === 'find_files' || run.name === 'read_diff' || run.name === 'git_status') return 'inspection';
@@ -27,12 +28,21 @@ function toolResultKind(value: unknown): string {
 }
 
 export function toolRunGroupStatus(runs: RuntimeToolRun[]): RuntimeToolRun['status'] {
-  if (runs.some((run) => run.status === 'error')) return 'error';
+  // Current work governs the group summary; terminal history must not hide an approval or execution in progress.
   if (runs.some((run) => run.status === 'pending_approval')) return 'pending_approval';
   if (runs.some((run) => run.status === 'running')) return 'running';
+  if (runs.some((run) => run.status === 'error')) return 'error';
   if (runs.some((run) => run.status === 'cancelled')) return 'cancelled';
   if (runs.some((run) => run.status === 'rejected')) return 'rejected';
   return 'success';
+}
+
+export function pendingApprovalRun(runs: RuntimeToolRun[]): RuntimeToolRun | undefined {
+  for (let index = runs.length - 1; index >= 0; index -= 1) {
+    const run = runs[index];
+    if (run && isPendingRuntimeToolApproval(run)) return run;
+  }
+  return undefined;
 }
 
 export function activeToolRunOrLast(runs: RuntimeToolRun[]): RuntimeToolRun | undefined {
