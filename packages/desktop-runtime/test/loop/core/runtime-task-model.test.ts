@@ -3,19 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { runtimeTaskModelRequest } from '../../../src/loop/core/runtime-task-model.js';
 
 describe('runtime task model selection', () => {
-  it('resolves the dedicated thread title model', () => {
-    const config = taskModelConfig();
-
-    expect(runtimeTaskModelRequest(
-      config,
-      'threadTitle',
-      'chat-model-code',
-    )).toEqual({
-      model: 'background-model-code',
-      providerId: 'background-provider',
-    });
-  });
-
   it('resolves the dedicated review model', () => {
     const config = taskModelConfig();
 
@@ -48,7 +35,7 @@ describe('runtime task model selection', () => {
 
     expect(runtimeTaskModelRequest(
       config,
-      'threadTitle',
+      'review',
       'chat-model-code',
     )).toEqual({ model: 'chat-model-code' });
   });
@@ -100,10 +87,6 @@ function taskModelConfig(): RuntimeConfigState {
     ],
     globalPrompt: '',
     taskModels: {
-      threadTitle: {
-        providerId: 'background-provider',
-        modelId: 'background-model',
-      },
       review: {
         providerId: 'background-provider',
         modelId: 'background-model',

@@ -1,11 +1,8 @@
 export const taskModelZhCN = {
   'settings.section.taskModels': '专用模型',
-  'settings.section.taskModelsDescription': '为标题生成、代码与审批审查和上下文压缩指定独立模型。',
-  'settings.taskModels.groupConversation': '对话辅助',
+  'settings.section.taskModelsDescription': '为审查、上下文处理等后台任务指定独立模型。',
   'settings.taskModels.groupReviewSafety': '审查与安全',
   'settings.taskModels.groupContext': '上下文',
-  'settings.taskModels.threadTitle': '标题生成',
-  'settings.taskModels.threadTitleDescription': '根据新对话的首条用户消息生成简洁标题。',
   'settings.taskModels.review': '代码审查',
   'settings.taskModels.reviewDescription': '审查工作区更改、分支或提交；建议选择擅长代码分析和工具调用的模型。',
   'settings.taskModels.approvalReview': '审批审查',
@@ -18,12 +15,9 @@ export const taskModelZhCN = {
 
 export const taskModelEnUS = {
   'settings.section.taskModels': 'Task models',
-  'settings.section.taskModelsDescription': 'Assign dedicated models to title generation, code and approval review, and context compaction.',
-  'settings.taskModels.groupConversation': 'Conversation assistance',
+  'settings.section.taskModelsDescription': 'Assign dedicated models to review, context processing, and other background tasks.',
   'settings.taskModels.groupReviewSafety': 'Review and safety',
   'settings.taskModels.groupContext': 'Context',
-  'settings.taskModels.threadTitle': 'Title generation',
-  'settings.taskModels.threadTitleDescription': 'Generate a concise title from the first user message in a new chat.',
   'settings.taskModels.review': 'Code review',
   'settings.taskModels.reviewDescription': 'Review workspace changes, branches, or commits. A model strong at code analysis and tool calling is recommended.',
   'settings.taskModels.approvalReview': 'Approval review',

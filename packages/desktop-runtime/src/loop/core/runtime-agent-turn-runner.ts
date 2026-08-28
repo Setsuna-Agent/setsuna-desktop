@@ -14,13 +14,15 @@ import type { ThreadStore } from '../../ports/thread-store.js';
 import type { ToolExecutionContext, ToolHost, ToolTurnCleanupOutcome } from '../../ports/tool-host.js';
 import type { CollaborationControl } from '@setsuna-desktop/feature-collaboration/contracts';
 import type { MemoryControl } from '@setsuna-desktop/feature-memory/contracts';
+import type {
+  ThreadTitleGenerationControl,
+} from '@setsuna-desktop/feature-thread-title-generation/contracts';
 import { HookStoppedTurnError } from '../context/runtime-context-compactor.js';
 import {
   inferRuntimeResponseLanguage,
   resolveRuntimeResponseLanguage,
 } from '../context/runtime-response-language.js';
 import type { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
-import type { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import type { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
 import type { RuntimeTurnInputCoordinator } from '../lifecycle/runtime-turn-input-coordinator.js';
 import type { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
@@ -43,7 +45,7 @@ type RuntimeAgentTurnRunnerOptions = {
   ids: IdGenerator;
   modelSampler: Pick<RuntimeModelSampler, 'sample'>;
   samplingContexts: Pick<RuntimeSamplingContextBuilder, 'build' | 'cleanupTurn'>;
-  threadTitles: Pick<RuntimeThreadTitleCoordinator, 'start'>;
+  threadTitleGeneration(): Pick<ThreadTitleGenerationControl, 'start'>;
   toolExecutor: Pick<RuntimeToolCallExecutor, 'cleanupTurn' | 'runToolCalls'>;
   toolHost?: ToolHost;
   turnFinalizer: Pick<RuntimeTurnFinalizer, 'finish' | 'publishReviewModeMessage'>;
@@ -193,8 +195,8 @@ export class RuntimeAgentTurnRunner {
         ...turnStartHooks.contextMessages,
       ];
       // 标题请求与主回答并行，避免额外增加首轮回复延迟；失败时首条消息投影已经提供 fallback。
-      const threadTitleGeneration = this.options.threadTitles.start({
-        attachments,
+      const threadTitleGeneration = this.options.threadTitleGeneration().start({
+        attachmentCount: attachments.length,
         conversationModel: turnModel
           ? {
               providerId: turnModel.binding.providerId,

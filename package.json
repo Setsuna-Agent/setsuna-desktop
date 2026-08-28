@@ -71,6 +71,7 @@
     "@setsuna-desktop/feature-runtime-activity": "workspace:*",
     "@setsuna-desktop/feature-skills": "workspace:*",
     "@setsuna-desktop/feature-terminal": "workspace:*",
+    "@setsuna-desktop/feature-thread-title-generation": "workspace:*",
     "@setsuna-desktop/feature-usage": "workspace:*",
     "@setsuna-desktop/feature-updater": "workspace:*",
     "@setsuna-desktop/feature-vision-recognition": "workspace:*",

@@ -32,6 +32,7 @@ importers:
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-skills': workspace:*
       '@setsuna-desktop/feature-terminal': workspace:*
+      '@setsuna-desktop/feature-thread-title-generation': workspace:*
       '@setsuna-desktop/feature-updater': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
@@ -102,6 +103,7 @@ importers:
       '@setsuna-desktop/feature-runtime-activity': link:packages/features/runtime-activity
       '@setsuna-desktop/feature-skills': link:packages/features/skills
       '@setsuna-desktop/feature-terminal': link:packages/features/terminal
+      '@setsuna-desktop/feature-thread-title-generation': link:packages/features/thread-title-generation
       '@setsuna-desktop/feature-updater': link:packages/features/updater
       '@setsuna-desktop/feature-usage': link:packages/features/usage
       '@setsuna-desktop/feature-vision-recognition': link:packages/features/vision-recognition
@@ -170,6 +172,7 @@ importers:
       '@setsuna-desktop/feature-review': workspace:*
       '@setsuna-desktop/feature-runtime-activity': workspace:*
       '@setsuna-desktop/feature-skills': workspace:*
+      '@setsuna-desktop/feature-thread-title-generation': workspace:*
       '@setsuna-desktop/feature-usage': workspace:*
       '@setsuna-desktop/feature-vision-recognition': workspace:*
       '@setsuna-desktop/feature-windows-sandbox': workspace:*
@@ -194,6 +197,7 @@ importers:
       '@setsuna-desktop/feature-review': link:../features/review
       '@setsuna-desktop/feature-runtime-activity': link:../features/runtime-activity
       '@setsuna-desktop/feature-skills': link:../features/skills
+      '@setsuna-desktop/feature-thread-title-generation': link:../features/thread-title-generation
       '@setsuna-desktop/feature-usage': link:../features/usage
       '@setsuna-desktop/feature-vision-recognition': link:../features/vision-recognition
       '@setsuna-desktop/feature-windows-sandbox': link:../features/windows-sandbox
@@ -424,6 +428,16 @@ importers:
       electron: 43.2.0
       lucide-react: 0.468.0_react@18.3.1
       node-pty: 1.1.0_ehtrmlw75n3v2ehcvwsdrctske
+      react: 18.3.1
+
+  packages/features/thread-title-generation:
+    specifiers:
+      '@setsuna-desktop/contracts': workspace:*
+      '@setsuna-desktop/feature-core': workspace:*
+      react: ^18.3.1
+    dependencies:
+      '@setsuna-desktop/contracts': link:../../contracts
+      '@setsuna-desktop/feature-core': link:../../feature-core
       react: 18.3.1
 
   packages/features/updater:

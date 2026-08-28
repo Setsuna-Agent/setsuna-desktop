@@ -27,20 +27,21 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import {
-  createNoopCollaborationControl,
   type CollaborationControl,
   type CollaborationRuntimeHost,
 } from '@setsuna-desktop/feature-collaboration/contracts';
 import {
-  createNoopGoalControl,
   type GoalControl,
   type GoalRuntimeHost,
 } from '@setsuna-desktop/feature-goal/contracts';
 import {
-  createNoopMemoryControl,
   type MemoryControl,
   type MemoryRuntimeHost,
 } from '@setsuna-desktop/feature-memory/contracts';
+import {
+  type ThreadTitleGenerationControl,
+  type ThreadTitleGenerationRuntimeHost,
+} from '@setsuna-desktop/feature-thread-title-generation/contracts';
 import type { ThreadStore } from '../../ports/thread-store.js';
 import { createAutomaticApprovalReviewer } from '../approval-review/automatic-approval-reviewer.js';
 import { RuntimeCompactionTurnCoordinator } from '../context/runtime-compaction-turn-coordinator.js';
@@ -49,7 +50,6 @@ import { runtimeEnvironmentResolver } from '../context/runtime-environment-resol
 import { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeHookCoordinator } from '../lifecycle/runtime-hook-coordinator.js';
 import { RuntimeQueuedTurnCoordinator } from '../lifecycle/runtime-queued-turn-coordinator.js';
-import { RuntimeThreadTitleCoordinator } from '../lifecycle/runtime-thread-title-coordinator.js';
 import { RuntimeTurnFinalizer } from '../lifecycle/runtime-turn-finalizer.js';
 import { RuntimeTurnInputCoordinator, type DeliverMailboxInput, type DeliverMailboxResponse } from '../lifecycle/runtime-turn-input-coordinator.js';
 import { RuntimeTurnTerminationCoordinator } from '../lifecycle/runtime-turn-termination-coordinator.js';
@@ -59,6 +59,7 @@ import { RuntimeUserShellRunner } from '../tools/runtime-user-shell-runner.js';
 import type { AgentLoopOptions } from './agent-loop-options.js';
 import { normalizeAttachments } from './runtime-attachment-input.js';
 import { RuntimeAgentTurnRunner } from './runtime-agent-turn-runner.js';
+import { RuntimeAgentFeatureControls } from './runtime-agent-feature-controls.js';
 import { createRuntimeCollaborationHost } from './runtime-collaboration-host.js';
 import { createRuntimeGoalHost } from './runtime-goal-host.js';
 import { createRuntimeMemoryHost } from './runtime-memory-host.js';
@@ -66,6 +67,7 @@ import { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
 import { RuntimeModelSampler } from './runtime-model-sampler.js';
 import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-publisher.js';
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
+import { createRuntimeThreadTitleGenerationHost } from './runtime-thread-title-generation-host.js';
 import { TurnCancelledError } from './runtime-turn-errors.js';
 import { RuntimeTurnRunFactory, type RuntimeReviewTurnInput } from './runtime-turn-run-factory.js';
 import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
@@ -75,17 +77,14 @@ export type { DeliverMailboxInput, DeliverMailboxResponse } from '../lifecycle/r
 export class AgentLoop {
   private readonly turnTasks = new RuntimeTurnTaskRegistry();
   private readonly eventWriter: RuntimeEventWriter;
-  private memory: MemoryControl = createNoopMemoryControl();
+  private readonly featureControls = new RuntimeAgentFeatureControls();
   private readonly modelStreamEvents: RuntimeModelStreamEventPublisher;
   private readonly inputGuard: RuntimeModelInputGuard;
   private readonly contextCompactor: RuntimeContextCompactor;
   private readonly compactionTurns: RuntimeCompactionTurnCoordinator;
-  private collaboration: CollaborationControl = createNoopCollaborationControl();
-  private goals: GoalControl = createNoopGoalControl();
   private readonly hooks: RuntimeHookCoordinator;
   private readonly queuedTurns: RuntimeQueuedTurnCoordinator;
   private readonly samplingContexts: RuntimeSamplingContextBuilder;
-  private readonly threadTitles: RuntimeThreadTitleCoordinator;
   private readonly toolExecutor: RuntimeToolCallExecutor;
   private readonly turnFinalizer: RuntimeTurnFinalizer;
   private readonly turnInputs: RuntimeTurnInputCoordinator;
@@ -105,7 +104,7 @@ export class AgentLoop {
     this.modelStreamEvents = new RuntimeModelStreamEventPublisher({
       clock: options.clock,
       ids: options.ids,
-      memoryControl: () => this.memory,
+      memoryControl: () => this.featureControls.memory,
       appendEvent: (threadId, event) => this.appendAndPublishWithResult(threadId, event),
     });
     this.inputGuard = new RuntimeModelInputGuard(options.configStore);
@@ -116,14 +115,14 @@ export class AgentLoop {
       clock: options.clock,
       ids: options.ids,
       imageStore: options.imageStore,
-      memoryControl: () => this.memory,
+      memoryControl: () => this.featureControls.memory,
       policyAmendmentStore: options.policyAmendmentStore,
       persistentToolApprovalStore: options.persistentToolApprovalStore,
       extensions: options.extensionManager,
       toolHost: options.toolHost,
       toolResultStore: options.toolResultStore,
-      collaborationControl: () => this.collaboration,
-      goalCoordinator: () => this.goals,
+      collaborationControl: () => this.featureControls.collaboration,
+      goalCoordinator: () => this.featureControls.goals,
       threadStore: options.threadStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
       publishMessage: (threadId, turnId, message) => this.publishMessage(threadId, turnId, message),
@@ -154,10 +153,10 @@ export class AgentLoop {
       debugTrace: options.debugTrace,
       environmentResolver,
       ids: options.ids,
-      goalControl: () => this.goals,
-      collaborationControl: () => this.collaboration,
+      goalControl: () => this.featureControls.goals,
+      collaborationControl: () => this.featureControls.collaboration,
       mcpStore: options.mcpStore,
-      memoryControl: () => this.memory,
+      memoryControl: () => this.featureControls.memory,
       projectInstructions: options.projectInstructions,
       projectWorkflow: options.projectWorkflow,
       skillRegistry: options.skillRegistry,
@@ -169,27 +168,17 @@ export class AgentLoop {
     this.modelSampler = new RuntimeModelSampler({
       clock: options.clock,
       ids: options.ids,
-      memoryControl: () => this.memory,
+      memoryControl: () => this.featureControls.memory,
       modelClient: options.modelClient,
       streamEvents: this.modelStreamEvents,
       toolExecutor: this.toolExecutor,
     });
-    this.threadTitles = new RuntimeThreadTitleCoordinator({
-      clock: options.clock,
-      configStore: options.configStore,
-      eventWriter: this.eventWriter,
-      ids: options.ids,
-      modelClient: options.modelClient,
-      threadStore: options.threadStore,
-      usageStore: options.usageStore,
-      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
-    });
     this.turnFinalizer = new RuntimeTurnFinalizer({
       clock: options.clock,
       ids: options.ids,
-      memoryControl: () => this.memory,
+      memoryControl: () => this.featureControls.memory,
       streamEvents: this.modelStreamEvents,
-      threadTitles: this.threadTitles,
+      threadTitleGeneration: () => this.featureControls.threadTitles,
       usageStore: options.usageStore,
       appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
     });
@@ -232,14 +221,14 @@ export class AgentLoop {
     });
     this.turnRunner = new RuntimeAgentTurnRunner({
       clock: options.clock,
-      collaborationControl: () => this.collaboration,
-      memoryControl: () => this.memory,
+      collaborationControl: () => this.featureControls.collaboration,
+      memoryControl: () => this.featureControls.memory,
       configStore: options.configStore,
       hooks: this.hooks,
       ids: options.ids,
       modelSampler: this.modelSampler,
       samplingContexts: this.samplingContexts,
-      threadTitles: this.threadTitles,
+      threadTitleGeneration: () => this.featureControls.threadTitles,
       toolExecutor: this.toolExecutor,
       toolHost: options.toolHost,
       turnFinalizer: this.turnFinalizer,
@@ -278,7 +267,7 @@ export class AgentLoop {
         options.attachmentStore?.claimForThread(threadId, attachments) ?? Promise.resolve(attachments),
       normalizeAttachments,
       validateGoalInput: (threadId, objective) =>
-        this.goals.validateQueuedGoal(threadId, objective),
+        this.featureControls.goals.validateQueuedGoal(threadId, objective),
       startRegularTurn: (threadId, input, queuedInputId) =>
         this.withThreadMutation(
           threadId,
@@ -287,13 +276,13 @@ export class AgentLoop {
       startGoalTurn: (threadId, input) =>
         this.withThreadMutation(
           threadId,
-          () => this.goals.startQueuedGoal(threadId, input),
+          () => this.featureControls.goals.startQueuedGoal(threadId, input),
         ),
       steerQueuedInput: (threadId, activeTurnId, input) =>
         this.turnInputs.steerQueuedInput(threadId, activeTurnId, input),
       // 队列协调器已经观察自己的 run；这里只接入目标计量与续轮调度。
       onRunCreated: (threadId, turnId, taskKind, done) =>
-        this.goals.observeRun(threadId, turnId, taskKind, done),
+        this.featureControls.goals.observeRun(threadId, turnId, taskKind, done),
     });
     this.userShellRunner = new RuntimeUserShellRunner({
       clock: options.clock,
@@ -325,7 +314,7 @@ export class AgentLoop {
     const registeredTasks = this.turnTasks.registeredTaskCount();
     const pendingMutations = Math.max(0, additionalPendingMutations)
       + this.threadMutationAdmissions.count()
-      + this.memory.pendingBackgroundTaskCount();
+      + this.featureControls.memory.pendingBackgroundTaskCount();
     const ready = !this.shuttingDown
       && !this.dataMigrationPreparing
       && registeredTasks === 0
@@ -340,21 +329,21 @@ export class AgentLoop {
 
   async shutdown(reason = 'Desktop runtime is shutting down.', timeoutMs = 5_000): Promise<boolean> {
     this.shuttingDown = true;
-    this.collaboration.shutdown();
-    this.goals.shutdown();
+    this.featureControls.collaboration.shutdown();
+    this.featureControls.goals.shutdown();
     this.queuedTurns.shutdown();
     const error = new TurnCancelledError(reason);
     const tasks = this.turnTasks.cancelAll(error);
     this.options.approvalGate?.rejectPending?.(error);
     this.toolExecutor.shutdown(error);
     this.turnInputs.clear();
-    const memoryDrained = this.memory.shutdown(timeoutMs);
+    const memoryDrained = this.featureControls.memory.shutdown(timeoutMs);
     await Promise.allSettled(tasks.map((task) =>
       this.turnTermination.publishCancelledOnce(task.threadId, task.turnId, task.taskKind, reason, { marker: true }),
     ));
     const drained = await this.turnTasks.drain(timeoutMs);
     // Drain Goal observers before flushing so accounting cannot arrive after shutdown.
-    if (drained) await this.goals.waitForSettlements();
+    if (drained) await this.featureControls.goals.waitForSettlements();
     const backgroundDrained = await memoryDrained;
     await this.eventWriter.flushAll();
     return drained && backgroundDrained;
@@ -366,7 +355,7 @@ export class AgentLoop {
    * 真正的全局 stage1/phase2 状态机仍由后续 storage/consolidation 层承接。
    */
   async runMemoryStartupExtraction(): Promise<{ claimed: number; extracted: number }> {
-    return this.memory.runStartupExtraction();
+    return this.featureControls.memory.runStartupExtraction();
   }
 
   /**
@@ -424,7 +413,7 @@ export class AgentLoop {
    * 必须在 settleStaleRuntimeTurns 之后调用。
    */
   reconcileCollaborationTasks(): Promise<void> {
-    return this.collaboration.reconcileInterruptedTasks();
+    return this.featureControls.collaboration.reconcileInterruptedTasks();
   }
 
   /**
@@ -458,7 +447,7 @@ export class AgentLoop {
     await run.done;
     // 传统命令式调用方会在 sendTurn 中等待被动记忆处理完成。
     // HTTP 和界面调用方使用 startTurn，并在 turn.completed 持久化后立即返回。
-    await this.memory.waitForPassiveMemoriesForTurn(threadId, run.turnId);
+    await this.featureControls.memory.waitForPassiveMemoriesForTurn(threadId, run.turnId);
   }
 
   /**
@@ -501,7 +490,7 @@ export class AgentLoop {
   async cancelTurn(threadId: string, turnId: string): Promise<boolean> {
     const task = this.turnTasks.taskFor(threadId, turnId);
     // 中止前先暂停，防止任务的 finally 或空闲观察器竞态进入下一个目标轮次。
-    if (task?.taskKind === 'goal') await this.goals.pauseForCancellation(threadId);
+    if (task?.taskKind === 'goal') await this.featureControls.goals.pauseForCancellation(threadId);
     const cancelled = this.turnTasks.cancel(threadId, turnId, new TurnCancelledError());
     if (!cancelled) return false;
     // 取消是最高优先级交互：先落终态事件释放 UI，不等待 provider/tool 主动响应 AbortSignal。
@@ -522,7 +511,7 @@ export class AgentLoop {
       this.deletingThreads.delete(threadId);
       throw error;
     }
-    this.goals.beginThreadDeletion(threadId);
+    this.featureControls.goals.beginThreadDeletion(threadId);
     let deleted = false;
     try {
       // Drain tasks first so an admitted synchronous caller waiting on task.done can observe abort.
@@ -533,13 +522,13 @@ export class AgentLoop {
       await this.drainRegisteredTasksForDeletion(threadId);
       // A concurrent user cancel can hide the task from activeTurnId before its terminal writes settle.
       await this.turnTermination.waitForThread(threadId);
-      await this.goals.waitForThreadDeletionPause(threadId);
+      await this.featureControls.goals.waitForThreadDeletionPause(threadId);
       await this.eventWriter.flushThread(threadId);
       const result = await operation();
       deleted = true;
       return result;
     } finally {
-      this.goals.finishThreadDeletion(threadId, deleted);
+      this.featureControls.goals.finishThreadDeletion(threadId, deleted);
       this.turnTasks.unblockThread(threadId);
       this.deletingThreads.delete(threadId);
     }
@@ -555,30 +544,22 @@ export class AgentLoop {
   }
   /** Binds the optional Goal Feature after runtime composition has activated it. */
   bindGoalControl(control: GoalControl): () => void {
-    if (this.goals.available && this.goals !== control) {
-      throw new Error('Goal control is already bound.');
-    }
-    this.goals = control;
-    return () => { if (this.goals === control) this.goals = createNoopGoalControl(); };
+    return this.featureControls.bindGoal(control);
   }
   /** Binds the optional Collaboration Feature after runtime composition activates it. */
   bindCollaborationControl(control: CollaborationControl): () => void {
-    if (this.collaboration.available && this.collaboration !== control) {
-      throw new Error('Collaboration control is already bound.');
-    }
-    this.collaboration = control;
-    return () => { if (this.collaboration === control) this.collaboration = createNoopCollaborationControl(); };
+    return this.featureControls.bindCollaboration(control);
   }
   /** Binds the optional Memory Feature after runtime composition activates it. */
   bindMemoryControl(control: MemoryControl): () => void {
-    if (this.memory.available && this.memory !== control) {
-      throw new Error('Memory control is already bound.');
-    }
-    this.memory = control;
-    return () => { if (this.memory === control) this.memory = createNoopMemoryControl(); };
+    return this.featureControls.bindMemory(control);
+  }
+  /** Binds optional automatic title generation after runtime Feature activation. */
+  bindThreadTitleGenerationControl(control: ThreadTitleGenerationControl): () => void {
+    return this.featureControls.bindThreadTitles(control);
   }
   memoryControl(): MemoryControl {
-    return this.memory;
+    return this.featureControls.memory;
   }
   /** Narrow host surface supplied to Memory by the runtime composition root. */
   memoryRuntimeHost(): MemoryRuntimeHost {
@@ -624,24 +605,38 @@ export class AgentLoop {
     });
   }
 
+  /** Narrow host surface supplied to the automatic title generation Feature. */
+  threadTitleGenerationRuntimeHost(): ThreadTitleGenerationRuntimeHost {
+    return createRuntimeThreadTitleGenerationHost({
+      clock: this.options.clock,
+      configStore: this.options.configStore,
+      eventWriter: this.eventWriter,
+      ids: this.options.ids,
+      modelClient: this.options.modelClient,
+      threadStore: this.options.threadStore,
+      usageStore: this.options.usageStore,
+      appendEvent: (threadId, event) => this.appendAndPublish(threadId, event),
+    });
+  }
+
   getThreadGoal(threadId: string): Promise<RuntimeThreadGoal | null> {
-    return this.goals.getGoal(threadId);
+    return this.featureControls.goals.getGoal(threadId);
   }
 
   setThreadGoal(threadId: string, patch: RuntimeThreadGoalPatch): Promise<RuntimeThreadGoal> {
-    return this.withThreadMutation(threadId, () => this.goals.setGoal(threadId, patch));
+    return this.withThreadMutation(threadId, () => this.featureControls.goals.setGoal(threadId, patch));
   }
 
   clearThreadGoal(threadId: string): Promise<void> {
-    return this.withThreadMutation(threadId, () => this.goals.clearGoal(threadId));
+    return this.withThreadMutation(threadId, () => this.featureControls.goals.clearGoal(threadId));
   }
 
   resumeThreadGoal(threadId: string): Promise<void> {
-    return this.withThreadMutation(threadId, () => this.goals.resumeGoal(threadId));
+    return this.withThreadMutation(threadId, () => this.featureControls.goals.resumeGoal(threadId));
   }
 
   reconcileRestoredGoals(): Promise<void> {
-    return this.goals.reconcileRestoredGoals();
+    return this.featureControls.goals.reconcileRestoredGoals();
   }
 
   registerAppServerDynamicTools(threadId: string, tools: RuntimeDynamicToolDefinition[], connectionId: string): void {
@@ -837,7 +832,7 @@ export class AgentLoop {
     // Collaboration owns child lifecycle projection; Core only forwards persisted Core events.
     void saved.then((savedEvent) => {
       if (savedEvent && isCoreRuntimeEvent(savedEvent)) {
-        return this.collaboration.observeCoreEvent(savedEvent);
+        return this.featureControls.collaboration.observeCoreEvent(savedEvent);
       }
       return undefined;
     }).catch(() => undefined);
@@ -856,7 +851,7 @@ export class AgentLoop {
     taskKind: RuntimeTaskKind,
     done: Promise<void>,
   ): void {
-    this.goals.observeRun(threadId, turnId, taskKind, done);
+    this.featureControls.goals.observeRun(threadId, turnId, taskKind, done);
     this.queuedTurns.observeRun(threadId, turnId, taskKind, done);
   }
 

@@ -24,15 +24,6 @@ const taskModelGroups: Array<{
   labelKey: MessageKey;
 }> = [
   {
-    id: 'conversation',
-    labelKey: 'settings.taskModels.groupConversation',
-    fields: [{
-      id: 'threadTitle',
-      labelKey: 'settings.taskModels.threadTitle',
-      descriptionKey: 'settings.taskModels.threadTitleDescription',
-    }],
-  },
-  {
     id: 'review',
     labelKey: 'settings.taskModels.groupReviewSafety',
     fields: [
