@@ -145,6 +145,20 @@ dev 启动流程：
 - Windows x64：NSIS EXE + ZIP。
 - Linux x64：AppImage + deb + tar.gz。
 
+## CI
+
+`.github/workflows/ci.yml` 在面向 `master` 的 pull request 和手动运行时触发。分支保护要求 PR 基于最新基线通过 `CI / typecheck, lint, test`。
+
+Ubuntu `verify` job 固定 pnpm `7.33.7`、Node.js `22` 和 Python `3.11`，依次执行：
+
+1. `node scripts/configure-node-gyp-python.mjs`。
+2. `pnpm install --frozen-lockfile`。
+3. `pnpm typecheck`（包含 architecture check）。
+4. `pnpm lint`。
+5. `pnpm test`（unit + integration）。
+
+Windows `windows-sandbox` job 对原生 sidecar 执行 Rust 格式、Clippy、测试、协议 smoke test，以及账户、ACL、防火墙和受限进程验证。
+
 ## Release Workflow
 
 `.github/workflows/release.yml` 手动触发，输入 tag、release name、draft、prerelease。

@@ -50,6 +50,7 @@ pnpm build
 - Electron Builder。
 - Native dependency。
 - Bundled ripgrep。
+- PR CI。
 - Release artifacts/manifest/checksum。
 
 [仓库脚本](repository-scripts.md) 逐个说明 `scripts/`。
