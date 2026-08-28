@@ -42,6 +42,7 @@ const GENERIC_THREAD_TITLE_KEYS = new Set([
   '无标题聊天',
   '无标题会话',
 ]);
+const ENDING_TITLE_PUNCTUATION = new Set(['。', '.', '!', '！', '?', '？']);
 
 export async function generateThreadTitle({
   attachmentCount,
@@ -99,8 +100,8 @@ export function normalizeGeneratedThreadTitle(value: string): string | null {
     .trim();
   candidate = stripWrappingQuotes(candidate)
     .replace(/\s+/gu, ' ')
-    .replace(/[。.!！?？]+$/u, '')
     .trim();
+  candidate = stripEndingPunctuation(candidate).trim();
   if (/<think>/iu.test(candidate)) return null;
   if (Array.from(candidate).length > THREAD_TITLE_MAX_LENGTH) return null;
   if (candidate.length < 2 || GENERIC_THREAD_TITLE_KEYS.has(candidate.toLowerCase())) return null;
@@ -219,4 +220,10 @@ function stripWrappingQuotes(value: string): string {
     }
   }
   return result;
+}
+
+function stripEndingPunctuation(value: string): string {
+  let end = value.length;
+  while (end > 0 && ENDING_TITLE_PUNCTUATION.has(value[end - 1]!)) end -= 1;
+  return value.slice(0, end);
 }

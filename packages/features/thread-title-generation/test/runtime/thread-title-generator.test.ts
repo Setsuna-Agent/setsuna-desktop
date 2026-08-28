@@ -59,6 +59,7 @@ describe('thread title generator', () => {
     expect(normalizeGeneratedThreadTitle('`模型生成对话标题。`')).toBe('模型生成对话标题');
     expect(normalizeGeneratedThreadTitle('Title: Fix automatic conversation titles!\nextra explanation'))
       .toBe('Fix automatic conversation titles');
+    expect(normalizeGeneratedThreadTitle(`安全标题${'!'.repeat(10_000)}`)).toBe('安全标题');
     expect(normalizeGeneratedThreadTitle('New chat!')).toBeNull();
     expect(normalizeGeneratedThreadTitle('新对话')).toBeNull();
     expect(normalizeGeneratedThreadTitle('日常问候')).toBe('日常问候');
