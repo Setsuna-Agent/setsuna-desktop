@@ -31,68 +31,14 @@
 </p>
 
 <p align="center">
-  <img src="assets/readme/setsuna-demo.gif" alt="Setsuna Desktop project task walkthrough" width="100%">
+  <img src="assets/readme/setsuna-home.png" alt="Start a new task in Setsuna Desktop" width="100%">
 </p>
-
-Setsuna Desktop combines an AI coding agent with project files, search, diff review, terminals, a built-in browser, model configuration, and extensible capabilities. Start from a repository, ask the agent to investigate or implement a change, follow its tool activity, and review the result without leaving the workspace.
-
-## What you can do
-
-- **Start with the whole project** — give the agent access to project instructions, files, content search, and the active workspace instead of pasting context by hand.
-- **Edit, run, and review in one flow** — let the agent read and modify files, run shell commands, inspect diffs, stage or unstage changes, and continue in the integrated terminal.
-- **Work with the web when a task needs it** — open sites in the built-in browser and use approval-aware tools for navigation, page inspection, clicks, typing, and waits.
-- **Choose the right model per task** — configure OpenAI-compatible Chat Completions, OpenAI Responses, or Anthropic Messages providers, including reasoning and image-capable models.
-- **Handle longer workflows** — queue follow-up messages, steer an active turn, switch between Plan and Goal modes, and reuse saved memory when useful.
-- **Extend the agent without rebuilding the app** — connect MCP servers, install Skills and Plugins, configure Hooks, and manage them from one capability center.
-- **Stay in control** — inspect tool previews, approve sensitive file, shell, browser, and network actions, then review usage and optional debug traces.
 
 ## Product tour
 
-<table>
-  <tr>
-    <td colspan="2">
-      <img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation with code review open" width="100%">
-      <br>
-      <strong>Conversation and code review in one flow</strong>
-      <br>
-      <sub>Follow the agent's work in the conversation, then inspect the resulting diff without switching applications.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <img src="assets/readme/workspace-start.png" alt="Start an AI agent task from a project workspace" width="100%">
-      <br>
-      <strong>An agent workspace for real projects</strong>
-      <br>
-      <sub>Start with project navigation, files, review, and workspace context ready, then keep tool activity and results in the same conversation.</sub>
-    </td>
-    <td width="50%">
-      <img src="assets/readme/workspace-tools.png" alt="Open workspace tools beside the active conversation" width="100%">
-      <br>
-      <strong>Workspace tools within reach</strong>
-      <br>
-      <sub>Open review, files, a terminal, side chat, a browser, or conversation debugging beside the active task.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <img src="assets/readme/capabilities.png" alt="Browse and install plugins in the Setsuna Desktop marketplace" width="100%">
-      <br>
-      <strong>Extensible capabilities</strong>
-      <br>
-      <sub>Discover and install Plugins, then manage the MCP servers, Skills, and Hooks they add.</sub>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2">
-      <img src="assets/readme/local-models.png" alt="Configure model providers and models" width="100%">
-      <br>
-      <strong>Provider and model choice</strong>
-      <br>
-      <sub>Configure endpoints, credentials, models, reasoning levels, context limits, and multimodal support.</sub>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/readme/chat-review.png" alt="Setsuna Desktop conversation with code review open" width="100%">
+</p>
 
 ## Download
 
@@ -113,45 +59,7 @@ Each release also includes `SHA256SUMS` and `release-manifest.json` for checksum
 > [!WARNING]
 > Setsuna Desktop is under active development on the path to 1.0. Features, interfaces, and local data formats may change between releases.
 
-## How it works
-
-<p align="center">
-  <img src="assets/readme/runtime-architecture.png" alt="Setsuna Desktop agent runtime architecture" width="100%">
-</p>
-
-The renderer never connects directly to the runtime port, provider credentials, or the local file system. Electron main owns native capabilities and the runtime token, while the runtime owns agent behavior, tool execution, events, and persistence.
-
-### Inside the Agent loop
-
-<p align="center">
-  <img src="assets/readme/agent-loop-architecture.png" alt="Setsuna Agent Loop turn lifecycle and tool feedback architecture" width="100%">
-</p>
-
-Each turn is admitted and serialized per thread. Before every model sample, the runtime rebuilds the current environment, history, memory, Skills, MCP, and tool surface. Tool results flow back into the next sampling step, while completion, cancellation, Hooks, queues, collaboration, usage, titles, and memory converge on the same persisted event spine.
-
-| Module | Responsibility |
-| --- | --- |
-| [`apps/desktop`](apps/desktop) | Electron main, preload bridge, React renderer, and desktop-native capabilities |
-| [`packages/contracts`](packages/contracts) | Shared DTOs, events, projections, and client contracts |
-| [`packages/desktop-runtime`](packages/desktop-runtime) | HTTP/SSE service, agent loop, ports/adapters, tools, and local stores |
-| [`plugins`](plugins) | Curated capability bundles distributed with the application |
-| [`skills`](skills) | Built-in Skills available without a separate Plugin installation |
-| [`docs`](docs/README.md) | Module-oriented architecture, runtime flows, extension points, and validation guides |
-
-Three boundaries shape the implementation:
-
-1. **Contract first** — cross-process data structures live in `packages/contracts`.
-2. **Event driven** — append-only runtime events are the source of truth; snapshots are projections.
-3. **Narrow and permissioned** — native access stays behind preload APIs, workspace paths are constrained, and sensitive tools are policy-controlled.
-
-For a guided codebase tour, start with the [documentation index](docs/README.md) and use [Tree.md](Tree.md) when you need a file-level map.
-
 ## Run from source
-
-### Requirements
-
-- Node.js `>=22.19.0`
-- pnpm `7.33.7`
 
 ### Development
 
@@ -164,16 +72,6 @@ pnpm dev
 ```
 
 `pnpm dev` starts both the Vite renderer and the Electron desktop shell. If no model provider is configured, the local smoke fallback can be used to verify the runtime path; add a provider under **Settings → Model providers** to use a real model.
-
-## Model APIs
-
-| Provider type | API endpoint |
-| --- | --- |
-| OpenAI-compatible Chat Completions | `/chat/completions` |
-| OpenAI Responses | `/responses` |
-| Anthropic Messages | `/v1/messages` |
-
-Provider endpoints, API keys, model IDs, reasoning levels, output limits, and image support are managed from the desktop settings. Saved secrets are not exposed to renderer state.
 
 ## Development commands
 
