@@ -282,16 +282,12 @@ function permissionDeniedToolchainRoots(
 function windowsPermissionDeniedPaths(output: string): string[] {
   const values = new Set<string>();
   for (const pattern of [
-    /\bpath\s*:\s*'((?:\\.|[^'])+)'/giu,
-    /\bpath\s*:\s*"((?:\\.|[^"])+)"/giu,
+    /\bpath\s*:\s*'([^'\r\n]*)'/giu,
+    /\bpath\s*:\s*"([^"\r\n]*)"/giu,
     /\b(?:EPERM|EACCES)\b[^\r\n]*?,\s*(?:access|lstat|open|realpath|stat)\s+['"]([^'"\r\n]+)['"]/giu,
   ]) {
     for (const match of output.matchAll(pattern)) {
-      const value = String(match[1] ?? '')
-        .replaceAll('\\\\', '\\')
-        .replaceAll('\\\'', '\'')
-        .replaceAll('\\"', '"')
-        .trim();
+      const value = String(match[1] ?? '').trim();
       if (value) values.add(path.win32.normalize(value));
     }
   }
