@@ -1,116 +1,96 @@
 # Setsuna Desktop 文档
 
-这里记录源码模块的职责、关键链路、扩展点和验证入口。文档目录尽量与仓库目录保持同构；看到一个源码目录时，通常可以在这里找到同名模块说明。
+这里记录当前源码的架构边界、业务所有权、运行链路和开发约束。文档不再机械复制仓库目录，而是按“先理解系统，再定位 owner”的顺序组织：
 
-`Tree.md` 回答“文件在哪里”，本目录回答“模块为什么这样分、改动要经过哪些边界、应该验证什么”。
+```text
+docs/
+├── architecture/   # 全局依赖方向、进程边界、时序与安全
+├── core/           # contracts、feature-core、desktop-runtime
+├── desktop/        # Electron main、preload、React renderer 宿主
+├── features/       # packages/features/* 的纵向业务所有权
+├── extensions/     # Plugin、Skill 与可执行扩展
+├── development/    # 开发、测试、构建、脚本与发布
+└── designs/        # 跨模块状态机；区分 current 与 history
+```
 
-## 第一次阅读
+根目录 [Tree.md](../Tree.md) 回答“文件在哪里”，本目录回答“为什么这样分、谁拥有状态、改动要穿过哪些边界”。
 
-建议按下面的顺序建立全局认识：
+## 当前架构结论
 
-1. [总体架构](architecture/README.md)：进程边界、依赖方向和核心约束。
-2. [Feature Composition](architecture/feature-composition.md)：纵向业务所有权、状态语义和变更路径。
-3. [运行链路](architecture/runtime-flows.md)：启动、REST、SSE、Agent turn 和浏览器控制。
-4. [Desktop 应用](apps/desktop/README.md)：Electron main、preload、React renderer 如何协作。
-5. [共享契约](packages/contracts/README.md)：跨进程 DTO、线程事件和 client contract。
-6. [本地 Runtime](packages/desktop-runtime/README.md)：server、Agent loop、ports/adapters 和持久化。
-7. 根目录 [Tree.md](../Tree.md)：需要继续定位具体文件时再查生成的目录索引。
+Setsuna Desktop 不是传统的 `main → preload → renderer` 三层 Electron 应用。现在同时存在两条互补的组织轴：
 
-## 与源码对应的模块
+1. Core 横向链路：`contracts → desktop-runtime → Electron main/preload → renderer`，负责通用线程、Agent turn、安全边界和宿主能力。
+2. Feature 纵向链路：`feature-core + packages/features/*/{contracts,runtime,main,preload,renderer}`，负责具有单一业务 owner、可以整体删除的功能闭环。
 
-| 源码目录 | 模块文档 | 主要职责 |
+四个进程各有且只有一个 Feature composition root。业务 Feature 只在真实参与的进程提供入口，Feature 之间只能依赖对方 `/contracts`；`packages/feature-core` 只提供组合内核，不能知道具体业务。
+
+这也是本次文档重组的依据：Browser、Review、MCP、Model Provider 等不再归档到某个宿主目录下，而是从 [Feature 总览](features/README.md) 进入；Desktop 与 Runtime 文档只说明宿主接缝。
+
+## 推荐阅读顺序
+
+### 第一次了解项目
+
+1. [总体架构](architecture/README.md)：两条组织轴、进程边界、数据真源和关键原则。
+2. [Feature Composition](architecture/feature-composition.md)：Capability、Scope、状态、失败和持久兼容语义。
+3. [Feature 总览](features/README.md)：22 个业务 owner、参与进程和启动关键级别。
+4. [运行链路](architecture/runtime-flows.md)：启动、REST、SSE、Agent turn、浏览器和关闭流程。
+5. [Desktop 宿主](desktop/README.md) 与 [Runtime Core](core/runtime/README.md)：进入具体实现。
+
+### 理解一次对话
+
+1. [线程、消息与事件](core/contracts/threads-and-events.md)
+2. [Runtime server](core/runtime/server.md)
+3. [Agent loop](core/runtime/agent-loop.md)
+4. [上下文与环境](core/runtime/context-and-environment.md)
+5. [Renderer runtime 状态](desktop/renderer/app-and-runtime-state.md)
+6. [Chat UI](desktop/renderer/chat.md)
+
+### 理解扩展体系
+
+1. [Feature Composition](architecture/feature-composition.md)：编译期内置业务模块。
+2. [Feature 从 0 到 1](features/adding-a-feature.md)：新增第一方 Feature。
+3. [Extensions](extensions/README.md)：Plugin、Skill、MCP 与 Feature 的区别。
+4. [Plugin Bundles](extensions/plugins/bundles.md) 与 [可执行扩展](extensions/plugins/extensions.md)。
+
+## 目录导航
+
+| 文档目录 | 对应源码 | 回答的问题 |
 | --- | --- | --- |
-| `apps/desktop/main` | [Electron main](apps/desktop/main/README.md) | 窗口、IPC、runtime 子进程、本机能力 |
-| `apps/desktop/preload` | [Preload bridge](apps/desktop/preload/README.md) | 向 renderer 暴露窄且类型化的桌面 API |
-| `apps/desktop/renderer` | [React renderer](apps/desktop/renderer/README.md) | UI、状态投影和交互编排 |
-| `packages/contracts` | [Contracts](packages/contracts/README.md) | 跨层 DTO、事件、HTTP client、SWE 映射 |
-| `packages/feature-core` | [Feature Composition](architecture/feature-composition.md) | 组合、Capability、Scope、状态与通用 contribution contract |
-| `packages/features` | [Feature 开发教程](architecture/feature-development-guide.md) | 纵向业务 contracts/runtime/renderer/main/preload owner |
-| `packages/desktop-runtime` | [Desktop runtime](packages/desktop-runtime/README.md) | HTTP/SSE、Agent loop、模型、工具、存储 |
-| `plugins` | [Plugin 市场源](plugins/README.md) | 随应用分发的精选 Plugin Bundle |
-| `skills` | [内置 Skills](skills/README.md) | 不依赖插件安装即可使用的内置 Skill |
-| `scripts` | [仓库脚本](scripts/README.md) | 构建、开发启动、架构检查、打包与发布 |
+| [architecture](architecture/README.md) | 跨仓库 | 系统如何分层、如何启动、数据如何流动、边界如何守住 |
+| [core/contracts](core/contracts/README.md) | `packages/contracts` | 哪些 Core DTO、事件和传输契约跨层共享 |
+| [core/feature-core](core/feature-core/README.md) | `packages/feature-core` | Feature 如何声明依赖、激活、贡献视图并安全退出 |
+| [core/runtime](core/runtime/README.md) | `packages/desktop-runtime` | Agent loop、server、ports/adapters、存储和工具宿主如何工作 |
+| [desktop](desktop/README.md) | `apps/desktop` | main、preload、renderer 如何构成可信桌面宿主 |
+| [features](features/README.md) | `packages/features/*` | 每个业务闭环由谁拥有、在哪些进程运行 |
+| [extensions](extensions/README.md) | `plugins`、`skills`、runtime extension adapters | 用户和 Bundle 如何扩展 Agent 能力 |
+| [development](development/README.md) | `package.json`、`scripts`、workflows | 如何开发、验证、构建和发布 |
+| [designs](designs/README.md) | 跨模块设计 | 哪些状态机仍是当前规范，哪些只是历史决策记录 |
 
-## 按改动类型找入口
+## 按改动定位 owner
 
-| 要改什么 | 先读 | 主要源码入口 |
+| 要改什么 | 首先阅读 | 主要入口 |
 | --- | --- | --- |
-| Electron 启动、窗口或系统能力 | [main 模块](apps/desktop/main/README.md) | `apps/desktop/main/src/index.ts`、`src/window/`、`src/ipc/` |
-| 新增或删除纵向 Feature | [Feature 从 0 到 1](architecture/feature-development-guide.md)、[Feature Composition](architecture/feature-composition.md) | `packages/features/*` 与各进程唯一 composition root |
-| 数据目录迁移或恢复 | [数据根](apps/desktop/main/data-root.md) | `apps/desktop/main/src/data-root/` |
-| 内置浏览器或 Agent 浏览器工具 | [浏览器控制](apps/desktop/main/browser.md) | main `src/browser/`、runtime `adapters/browser` 与 `adapters/tool/browser-tool-host.ts` |
-| 新增 preload / IPC 能力 | [Feature Composition](architecture/feature-composition.md)、[Runtime 与 IPC](apps/desktop/main/runtime-and-ipc.md) | 对应 Feature `{contracts,main,preload}` 或 Core main/preload |
-| 聊天消息、composer 或工具卡片 | [Chat](apps/desktop/renderer/chat.md) | renderer `src/features/chat/` |
-| 文件、review、terminal 或浏览器面板 | [Workspace](apps/desktop/renderer/workspace-and-debug.md) | renderer `src/features/workspace/`、main 对应能力模块 |
-| 设置、模型、MCP、Skill 或 Plugin 页面 | [设置与能力](apps/desktop/renderer/settings-and-capabilities.md) | renderer `src/features/settings/`、`src/features/capabilities/` |
-| Runtime query/command | [Feature Composition](architecture/feature-composition.md)、[Server](packages/desktop-runtime/server.md) | 对应 Feature typed operation，或 Core contracts/runtime-client |
-| 线程事件或消息投影 | [Feature Composition](architecture/feature-composition.md)、[线程与事件](packages/contracts/threads-and-events.md) | Feature event owner，或 Core event/reducer/renderer projection |
-| Agent turn 行为 | [Agent loop](packages/desktop-runtime/agent-loop.md) | runtime `src/loop/{core,context,lifecycle,memory,tools}/` |
-| Prompt、上下文压缩或项目环境 | [上下文与环境](packages/desktop-runtime/context-and-environment.md) | runtime `src/loop/context/`、`src/adapters/workspace/` |
-| 模型供应商或协议回放 | [Model Provider Feature](packages/desktop-runtime/model-providers.md) | `packages/features/model-provider/` |
-| MCP 协议、OAuth、resources 或 Agent MCP 工具 | [MCP Feature](packages/desktop-runtime/mcp.md) | `packages/features/mcp/` |
-| 本地工具、审批、Artifact、MCP、Memory、Skill | [工具与能力](packages/desktop-runtime/tools-and-capabilities.md) | 对应 `packages/features/*` owner 与 runtime `src/adapters/tool/` 通用 adapter |
-| 本地数据格式或 store | [存储](packages/desktop-runtime/storage.md) | runtime `src/adapters/store/` |
-| 构建、打包或 release | [构建与发布](development/build-and-release.md)、[脚本](scripts/README.md) | `package.json`、`scripts/`、`.github/workflows/` |
+| Electron 启动、窗口、托盘、数据根 | [Electron main](desktop/main/README.md) | `apps/desktop/main/src/index.ts`、`window/`、`data-root/` |
+| Preload 或固定本机桥 | [Preload](desktop/preload/README.md) | Core `SetsunaDesktopBridge` 或对应 Feature 的 `contracts/main/preload` |
+| App shell、导航、Chat、Workspace | [Renderer](desktop/renderer/README.md) | `apps/desktop/renderer/src/{app,features,services,shared}` |
+| 新增/删除第一方业务能力 | [Feature 总览](features/README.md)、[新增 Feature](features/adding-a-feature.md) | `packages/features/<feature>` 与四个 composition root |
+| 通用线程字段、事件或投影 | [线程与事件](core/contracts/threads-and-events.md) | `packages/contracts/src/{events,thread-events,thread-event-projection}.ts` |
+| Feature 私有持久状态 | [Feature Composition](architecture/feature-composition.md) | owner 的 event codec/reducer + `feature.event` envelope |
+| Runtime REST/SSE 或 app-server | [Runtime server](core/runtime/server.md) | `packages/desktop-runtime/src/server/`；Feature 优先使用 typed operation |
+| Agent turn、queue、cancel、tool loop | [Agent loop](core/runtime/agent-loop.md) | `packages/desktop-runtime/src/loop/{core,lifecycle,tools}` |
+| Prompt、附件、compaction、workspace 环境 | [上下文与环境](core/runtime/context-and-environment.md) | `packages/desktop-runtime/src/loop/context/` |
+| Store、SQLite、JSON 或数据恢复 | [Runtime 存储](core/runtime/storage.md)、[数据根](desktop/main/data-root.md) | runtime store adapters、main data-root coordinator |
+| Model Provider / MCP / Browser | [Model Provider](features/model-provider.md)、[MCP](features/mcp.md)、[Browser](features/browser.md) | 对应 `packages/features/*` owner |
+| Plugin、Skill、Hook、扩展 Worker | [Extensions](extensions/README.md) | Feature management 面 + runtime adapters/worker |
+| CI、构建、打包、release | [Build And Release](development/build-and-release.md) | `package.json`、`scripts/`、`.github/workflows/` |
 
-完整的跨层变更清单见 [变更扩散图](architecture/change-map.md)。
+更完整的跨层检查表见 [变更扩散图](architecture/change-map.md)。
 
-## 按学习目标阅读
+## 文档状态与维护规则
 
-### 熟悉一次对话如何运行
-
-依次阅读：
-
-1. [请求、事件与 turn 链路](architecture/runtime-flows.md)
-2. [线程与事件投影](packages/contracts/threads-and-events.md)
-3. [Runtime server](packages/desktop-runtime/server.md)
-4. [Agent loop](packages/desktop-runtime/agent-loop.md)
-5. [Renderer runtime 状态](apps/desktop/renderer/app-and-runtime-state.md)
-6. [Chat UI](apps/desktop/renderer/chat.md)
-
-### 熟悉桌面安全边界
-
-依次阅读：
-
-1. [数据与安全边界](architecture/data-and-security.md)
-2. [Runtime 与 IPC](apps/desktop/main/runtime-and-ipc.md)
-3. [Preload bridge](apps/desktop/preload/README.md)
-4. [Ports 与 adapters](packages/desktop-runtime/ports-and-adapters.md)
-5. [工具与能力](packages/desktop-runtime/tools-and-capabilities.md)
-
-### 熟悉数据落盘与恢复
-
-依次阅读：
-
-1. [数据根迁移](apps/desktop/main/data-root.md)
-2. [Contracts 的数据边界](packages/contracts/transport-and-data.md)
-3. [Runtime 存储](packages/desktop-runtime/storage.md)
-4. [线程与事件投影](packages/contracts/threads-and-events.md)
-
-## 跨模块设计
-
-跨越多个源码模块、但不适合归属于单个目录的设计放在 [designs](designs/README.md)：
-
-- [Active turn 发送队列](designs/queued-turn-inputs.md)：普通消息、Goal、steer、取回编辑和 FIFO 调度。
-- [Feature Composition 决策概览](architecture/feature-composition.md)：当前试运行边界、统一 FeatureHost API 和结果门槛。
-- [Feature Composition 历史评审记录](designs/feature-composition-architecture.md)：首轮取舍、复杂度复审与被删除机制；当前验收以架构短基线为准。
-- [架构复杂度收敛评审](designs/architecture-complexity-review.md)：协议边界与事件完整性实施状态、协调层热点治理计划。
-- [Runtime 边界与事件去向](designs/runtime-boundary-matrix.md)：第一方 Runtime、app-server 和事件投影的当前边界。
-
-这类文档应说明完整状态机；模块文档只保留本模块在该状态机中的职责，并链接到设计文档。
-
-## 开发与验证
-
-- [开发入口](development/README.md)：环境、命令和验证分层。
-- [测试与验证](development/testing.md)：测试树、定向测试和文档校验。
-- [构建与发布](development/build-and-release.md)：build、electron-builder、CI、release metadata。
-- [仓库脚本](scripts/README.md)：每个脚本的输入、输出和调用关系。
-
-## 文档维护约定
-
-- 目录按源码边界组织；跨模块状态机放 `docs/designs/`，不要复制到多个模块。
-- 每篇模块文档至少说明职责、入口、关键链路、不变量、常见改动和测试位置。
-- 文件清单由 `pnpm docs:tree` 生成到 `Tree.md`，文档不维护容易过期的逐文件树。
-- 文档中的源码路径从仓库根目录写起；文档间使用相对链接。
-- 改目录、跨层 contract、持久化格式或关键运行链路时，同步更新对应模块文档。
-- 只有设计已经由源码和测试实现后，才把它写成现状；提案应明确标注为提案。
+- `architecture/`、`core/`、`desktop/`、`features/`、`extensions/` 描述已落地现状；未实现方案必须明确标注 proposal。
+- `designs/current/` 保存仍影响实现的跨模块状态机；`designs/history/` 只解释迁移背景和已删除方案，不能当作当前规范。
+- Feature 的业务规则写在 `features/`；Desktop/Runtime 文档只描述宿主如何注入 Capability、桥接 transport 或展示 contribution，避免双重所有权。
+- 源码路径统一从仓库根写起，文档间使用相对链接；目录树不手写，统一由 `pnpm docs:tree` 生成。
+- 修改目录、composition root、公开 contract、持久格式或关键状态机时，应同步更新对应 owner 文档和 [Feature 总览](features/README.md)。
+- 文档改动至少运行 `pnpm docs:tree` 与 `git diff --check`；结构变化还应运行 `pnpm check:architecture`。

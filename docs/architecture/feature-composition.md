@@ -6,7 +6,9 @@ Setsuna Desktop 用纵向 Feature 收拢跨 contracts、runtime、Electron main/
 - 源码与各进程 composition root 是运行时 Feature inventory 的事实来源。
 - package export、TypeScript reference 和 build script 只是静态构建图，不得反向成为第二套运行时 catalog。
 
-首轮方案及已删除机制见[历史评审记录](../designs/feature-composition-architecture.md)。
+首轮方案及已删除机制见[历史评审记录](../designs/history/feature-composition-architecture.md)。
+
+当前 22 个 Feature 的参与进程、required/optional 状态与业务职责见 [Feature 总览](../features/README.md)；组合内核的具体实现见 [Feature Core](../core/feature-core/README.md)。
 
 ## 所有权边界
 
@@ -162,7 +164,7 @@ FeatureScope 本身不设置独立超时：它先 abort，再等待已进入的�
 
 ## 从 0 到 1
 
-实际新增 Feature 时，按 [Feature 从 0 到 1](feature-development-guide.md) 完成 package、contracts、runtime、renderer、构建图、composition root、测试与验证；settings、持久事件、tool result、main/preload 只在出现真实需求时增加。
+实际新增 Feature 时，按 [Feature 从 0 到 1](../features/adding-a-feature.md) 完成 package、contracts、runtime、renderer、构建图、composition root、测试与验证；settings、持久事件、tool result、main/preload 只在出现真实需求时增加。
 
 如果接入只能靠新增 Registry、代码生成、动态发现或额外状态维度才能完成，应先缩窄当前接缝并重新审视 owner，不能用治理层掩盖边界不清。
 

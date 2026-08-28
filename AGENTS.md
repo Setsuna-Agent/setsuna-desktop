@@ -33,10 +33,11 @@
 
 - `docs/README.md`：按源码模块、学习目标和改动类型组织的总导航。
 - `docs/architecture/`：总体边界、启动/请求/SSE/turn 链路、数据安全和变更扩散图。
-- `docs/apps/desktop/`：Electron main、preload、renderer 及各 feature。
-- `docs/packages/contracts/`：共享契约、线程事件、HTTP/bridge 和 SWE 映射。
-- `docs/packages/desktop-runtime/`：server、agent loop、上下文、ports/adapters、存储、模型和工具。
-- `docs/{plugins,skills,scripts,development,designs}/`：扩展包、内置 Skill、仓库脚本、构建发布和跨模块设计。
+- `docs/architecture/`：总体边界、启动/请求/SSE/turn 链路、Feature composition 与变更扩散图。
+- `docs/core/`：contracts、feature-core 和 desktop-runtime 的技术基础。
+- `docs/desktop/`：Electron main、preload、renderer 宿主。
+- `docs/features/`：`packages/features/*` 的纵向业务 owner、参与进程和详细链路。
+- `docs/{extensions,development,designs}/`：Plugin/Skill、仓库脚本、构建发布和跨模块设计。
 - `Tree.md`：由 `pnpm docs:tree` 生成的目录索引，适合定位入口；职责说明仍以 `docs/` 为准。
 
 ## 常见改动入口

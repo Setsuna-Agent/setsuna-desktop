@@ -151,7 +151,7 @@ AgentLoop facade
 
 ### 输入队列和 steer
 
-Active turn 期间的普通提交默认进入线程级 FIFO 队列。用户显式“立即发送”时，普通消息可以在安全检查点作为 steer 加入当前 turn；Goal 保持独立轮次。完整状态机见 [Active turn 发送队列](../designs/queued-turn-inputs.md)。
+Active turn 期间的普通提交默认进入线程级 FIFO 队列。用户显式“立即发送”时，普通消息可以在安全检查点作为 steer 加入当前 turn；Goal 保持独立轮次。完整状态机见 [Active turn 发送队列](../designs/current/queued-turn-inputs.md)。
 
 ## 内置浏览器控制
 
@@ -176,13 +176,13 @@ BrowserToolHost（通用 ToolHost adapter）
 - 页面内容以外部不可信上下文返回模型。
 - click、type 和可能提交/删除内容的 key 继续走工具审批链。
 
-详情见 [main 浏览器模块](../apps/desktop/main/browser.md)。
+详情见 [main 浏览器模块](../features/browser.md)。
 
 ## App-server / SWE 链路
 
 `POST /v1/swe/app-server` 是与 renderer REST 平行的 JSON-RPC 入口。它通过 `server/app-server/*` 映射线程、配置、审批、文件、命令执行和动态工具；通知通过单独 SSE 发送。
 
-不要把 app-server notification 当成 `RuntimeEvent`。映射层可以从 runtime 事件产生协议通知，但两者有不同的 contract 和连接生命周期。详见 [SWE / app-server](../packages/contracts/swe-app-server.md)。
+不要把 app-server notification 当成 `RuntimeEvent`。映射层可以从 runtime 事件产生协议通知，但两者有不同的 contract 和连接生命周期。详见 [SWE / app-server](../core/contracts/swe-app-server.md)。
 
 ## 关闭与迁移准入
 

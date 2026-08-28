@@ -33,7 +33,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
     └── threads/            # legacy 导入源/人工备份
 ```
 
-具体文件由 store 负责，详见 [Runtime 存储](../packages/desktop-runtime/storage.md)。
+具体文件由 store 负责，详见 [Runtime 存储](../core/runtime/storage.md)。
 
 ## Bootstrap 元数据
 
@@ -45,7 +45,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 - 迁移后保留旧根的清理登记。
 - 路径、目录身份、所有权 ID、进程 ID 和恢复阶段。
 
-这样 main 可以在 Chromium profile 初始化前定位真正数据根，并从 rename 或崩溃中恢复。详细状态机见 [数据根模块](../apps/desktop/main/data-root.md)。
+这样 main 可以在 Chromium profile 初始化前定位真正数据根，并从 rename 或崩溃中恢复。详细状态机见 [数据根模块](../desktop/main/data-root.md)。
 
 未打包的开发实例把 bootstrap 与默认数据根一起隔离到
 `appData/Setsuna Desktop Development/`，避免与正在运行的正式版争抢实例锁或并发访问同一份数据。
@@ -83,7 +83,7 @@ Setsuna Desktop 的安全模型不是强隔离沙箱，而是在本地桌面应�
 - 每个事件 API都返回 unsubscribe。
 - Main IPC 需要校验 sender 属于可信主窗口；browser guest 还要校验 host 与 partition。
 
-新能力的具体检查表见 [Preload bridge](../apps/desktop/preload/README.md)。
+新能力的具体检查表见 [Preload bridge](../desktop/preload/README.md)。
 
 ## 路径安全
 
@@ -131,7 +131,7 @@ Runtime 在多个层面约束工具：
 5. Renderer 忽略 `seq <= lastSeq` 的事件。
 6. 删除、截断、压缩、队列消费都必须由 reducer 可重放地表达。
 
-详见 [线程与事件](../packages/contracts/threads-and-events.md)。
+详见 [线程与事件](../core/contracts/threads-and-events.md)。
 
 ## Provider metadata
 

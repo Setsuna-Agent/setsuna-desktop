@@ -504,9 +504,9 @@ packages/desktop-runtime/ — 4 direct / 507 total files
 ### `scripts/`
 
 ```text
-scripts/ — 23 direct / 37 total files
+scripts/ — 21 direct / 34 total files
 ├── ripgrep/ — 3 direct / 3 total files
-├── test/ — 5 direct / 7 total files
+├── test/ — 4 direct / 6 total files
 │   ├── ripgrep/ — 1 direct / 1 total files
 │   └── windows-sandbox/ — 1 direct / 1 total files
 └── windows-sandbox/ — 4 direct / 4 total files
@@ -602,19 +602,22 @@ plugins/ — 1 direct / 61 total files
 ### `docs/`
 
 ```text
-docs/ — 1 direct / 50 total files
-├── apps/ — 13 files
-│   └── desktop/ — 1 direct / 13 total files
-│       ├── main/ — 5 direct / 5 total files
-│       ├── preload/ — 1 direct / 1 total files
-│       └── renderer/ — 6 direct / 6 total files
+docs/ — 1 direct / 58 total files
 ├── architecture/ — 6 direct / 6 total files
-├── designs/ — 9 direct / 9 total files
-├── development/ — 3 direct / 3 total files
-├── packages/ — 13 files
+├── core/ — 1 direct / 13 total files
 │   ├── contracts/ — 4 direct / 4 total files
-│   └── desktop-runtime/ — 9 direct / 9 total files
-├── plugins/ — 3 direct / 3 total files
-├── scripts/ — 1 direct / 1 total files
-└── skills/ — 1 direct / 1 total files
+│   ├── feature-core/ — 1 direct / 1 total files
+│   └── runtime/ — 7 direct / 7 total files
+├── designs/ — 1 direct / 8 total files
+│   ├── current/ — 4 direct / 4 total files
+│   └── history/ — 3 direct / 3 total files
+├── desktop/ — 1 direct / 12 total files
+│   ├── main/ — 4 direct / 4 total files
+│   ├── preload/ — 1 direct / 1 total files
+│   └── renderer/ — 6 direct / 6 total files
+├── development/ — 4 direct / 4 total files
+├── extensions/ — 1 direct / 5 total files
+│   ├── plugins/ — 3 direct / 3 total files
+│   └── skills/ — 1 direct / 1 total files
+└── features/ — 9 direct / 9 total files
 ```

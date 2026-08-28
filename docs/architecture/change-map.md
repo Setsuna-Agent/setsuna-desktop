@@ -82,7 +82,7 @@ threads.ts / events.ts
 6. 在 renderer provider 设置模型中增加配置，不把厂商私有 payload 泄漏到 UI。
 7. 添加 adapter、replay、stream ordering、settings 和 integration 测试。
 
-详细边界见 [Model Provider Feature](../packages/desktop-runtime/model-providers.md)。
+详细边界见 [Model Provider Feature](../features/model-provider.md)。
 
 ## 新增工具
 
@@ -138,7 +138,7 @@ threads.ts / events.ts
 - SSE 丢帧后的 snapshot 收敛。
 - Contract projection、AgentLoop integration 和 renderer pure helper 测试。
 
-Active turn 队列的完整设计见 [queued turn inputs](../designs/queued-turn-inputs.md)。
+Active turn 队列的完整设计见 [queued turn inputs](../designs/current/queued-turn-inputs.md)。
 
 ## 修改数据根或启动流程
 

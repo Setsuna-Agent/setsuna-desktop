@@ -48,7 +48,7 @@ override an explicit allow installed directly on a child. Ordinary private
 paths remain isolated by the account's first DACL check.
 Denied-root/glob policies, non-NTFS paths, UNC paths, and absent protected child
 names are rejected or documented as unsupported in
-`docs/designs/windows-native-sandbox.md`. Upstream proxies are also rejected:
+`docs/designs/current/windows-native-sandbox.md`. Upstream proxies are also rejected:
 only direct egress can bind the validated DNS result to the outbound socket.
 
 The Windows implementation takes design cues from OpenAI Codex's Apache-2.0
