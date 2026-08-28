@@ -11,6 +11,11 @@ import {
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
+import {
+  artifactRuntimeToolServiceCapability,
+  artifactWorkspaceFilesCapability,
+} from '@setsuna-desktop/feature-artifact/contracts';
+import { artifactRuntimeFeature } from '@setsuna-desktop/feature-artifact/runtime';
 import { browserRuntimeToolServiceCapability } from '@setsuna-desktop/feature-browser/contracts';
 import { browserRuntimeFeature } from '@setsuna-desktop/feature-browser/runtime';
 import {
@@ -102,6 +107,7 @@ import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
   required: [
+    artifactRuntimeFeature,
     browserRuntimeFeature,
     modelProviderRuntimeFeature,
     pluginManagementRuntimeFeature,
@@ -130,6 +136,7 @@ export async function activateBuiltinRuntimeFeatures(
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
+      provideHostCapability(artifactWorkspaceFilesCapability, runtime.workspaceProjects),
       provideHostCapability(
         modelProviderRuntimeHostCapability,
         Object.freeze({
@@ -340,6 +347,10 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       sampling: requiredCapability(modelProviderSamplingCapability),
     }, ({ sampling }) => runtime.providerModelClient.bind(sampling));
+
+    host.bind({
+      tools: requiredCapability(artifactRuntimeToolServiceCapability),
+    }, ({ tools }) => runtime.artifactToolHost.bind(tools));
 
     host.bind({
       tools: requiredCapability(browserRuntimeToolServiceCapability),

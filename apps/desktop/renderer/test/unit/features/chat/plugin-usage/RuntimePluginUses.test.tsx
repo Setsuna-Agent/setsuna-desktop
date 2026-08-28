@@ -3,8 +3,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RuntimePluginNavigationProvider } from '../../../../../src/features/chat/artifacts/RuntimePluginNavigation.js';
-import { RuntimePluginUses } from '../../../../../src/features/chat/artifacts/RuntimePluginUses.js';
+import { RuntimePluginNavigationProvider } from '../../../../../src/features/chat/plugin-usage/RuntimePluginNavigation.js';
+import { RuntimePluginUses } from '../../../../../src/features/chat/plugin-usage/RuntimePluginUses.js';
 
 afterEach(cleanup);
 

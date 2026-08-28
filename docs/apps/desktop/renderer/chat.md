@@ -2,7 +2,7 @@
 
 源码目录：`apps/desktop/renderer/src/features/chat/`
 
-Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer、附件、队列动作、工具运行、Markdown 和产物展示。Runtime message/event 仍是持久化真源。
+Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer、附件、队列动作、工具运行、Markdown 和 Plugin 使用归因。Feature-owned 工具结果通过通用只读 catalog 嵌入时间线；Runtime message/event 仍是持久化真源。
 
 ## 子目录
 
@@ -15,7 +15,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 | `tool-runs/` | 工具状态、审批、结构化输入、文件变更 |
 | `markdown/` | 流式 Markdown、代码块、虚拟块、workspace link |
 | `mentions/` | Workspace mention 解析与打开 |
-| `artifacts/` | Runtime artifact 与 Plugin 使用记录 |
+| `plugin-usage/` | Plugin 使用记录与打开导航 |
 | `styles/` | Chat 分域样式入口与实现 |
 
 ## 根组件
@@ -27,7 +27,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 - Thread transcript。
 - Overview / Git controls；后台服务由 Runtime Activity Feature 通过宿主 boundary 组合进来。
 - Scroll pin 与 timeline divider。
-- Tool runs 和 artifacts。
+- Tool runs 和 Feature tool-result contribution。
 - Composer。
 
 它不直接实现 message folding、Markdown parser 或 queue state machine；这些分别在纯 helper、子组件和 hooks。
@@ -108,7 +108,7 @@ Runtime 一轮可能包含：
 - 多次 tool call 和 tool result。
 - Steer user message。
 - Context compaction / review marker。
-- Artifact / Plugin use。
+- Feature-owned persistent tool result / Plugin use。
 
 因此 UI 不能假设“一轮等于一条 assistant message”。
 
@@ -194,12 +194,11 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 - Thread/project 切换时迟到的引用登记或图片存储不得附加到新 composer。
 - 仅附件输入也是合法输入。
 
-## Artifacts 与 Plugin usage
+## Feature tool results 与 Plugin usage
 
-`artifacts/` 从 runtime message/tool data 投影：
+`RuntimeToolRuns` 通过 renderer Feature catalog 解析持久 tool data，并把工具名作为来源上下文传入 catalog。Artifact 的 `artifact.file@1` codec、旧数据 decoder、来源约束、稳定文件 identity、文案、样式和卡片由 `packages/features/artifact/renderer` 拥有，并声明为 `assistant-tail`：轮次完成前只保留普通工具历史，完成后把成品卡片放到最终回答之后；同一工作区路径重复发布时只保留最新卡片。Chat 只提供通用 result slot、去重编排、错误边界和布局，不解释 Artifact payload。
 
-- 生成文件或图片 artifact。
-- Plugin Skill、MCP、Hook、resource 的使用归因。
+`plugin-usage/` 继续从 runtime thread/tool data 投影 Plugin Skill、MCP、Hook 和 resource 的使用归因；这与 Artifact 成品协议没有共享业务 owner，因此不再放在同一目录。
 
 进行中与已完成状态使用 runtime 记录，不根据工具名称在 UI 猜测来源。
 
@@ -222,7 +221,9 @@ Thread 首屏只携带最新 160 条 message，`useThreadMessageHistory` 通过 
 - `tool-runs/`：审批、结构化输入、文件变更。
 - `markdown/`：streaming、link、render。
 - `mentions/`：parse/open。
-- `artifacts/`：artifact 与 Plugin use。
+- `plugin-usage/`：Plugin use 与打开导航。
+
+Artifact Feature 的协议、runtime 和 renderer 测试位于 `packages/features/artifact/test/`。
 - `hooks/`：turn actions 与 composer session。
 
 修改 message/turn 语义时，还要运行 contracts projection 和 runtime AgentLoop integration 测试。

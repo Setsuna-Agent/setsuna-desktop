@@ -15,6 +15,7 @@
       "@renderer/*": ["apps/desktop/renderer/src/*"],
       "@setsuna-desktop/contracts": ["packages/contracts/src/index.ts"],
       "@setsuna-desktop/feature-core/*": ["packages/feature-core/src/*"],
+      "@setsuna-desktop/feature-artifact/*": ["packages/features/artifact/src/*"],
       "@setsuna-desktop/feature-browser/*": ["packages/features/browser/src/*"],
       "@setsuna-desktop/feature-collaboration/*": ["packages/features/collaboration/src/*"],
       "@setsuna-desktop/feature-conversation-debug/*": ["packages/features/conversation-debug/src/*"],
@@ -47,6 +48,7 @@
   "references": [
     { "path": "./packages/contracts/tsconfig.build.json" },
     { "path": "./packages/feature-core/tsconfig.build.json" },
+    { "path": "./packages/features/artifact/tsconfig.build.json" },
     { "path": "./packages/features/browser/tsconfig.build.json" },
     { "path": "./packages/features/collaboration/tsconfig.build.json" },
     { "path": "./packages/features/conversation-debug/tsconfig.build.json" },

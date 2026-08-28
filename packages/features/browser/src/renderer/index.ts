@@ -1,4 +1,5 @@
 export { BrowserFavicon } from './BrowserFavicon.js';
+export { BrowserFeatureIcon } from './BrowserFeatureIcon.js';
 export {
   BrowserPanel,
 } from './BrowserPanel.js';

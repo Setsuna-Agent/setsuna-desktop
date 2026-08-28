@@ -1,8 +1,15 @@
 import type { RuntimeEvent } from '@setsuna-desktop/contracts';
 import {
+  BrowserFeatureIcon as BrowserRendererFeatureIcon,
   BrowserFavicon,
   latestBrowserOpenRequest,
 } from '@setsuna-desktop/feature-browser/renderer';
+
+export function BrowserFeatureIcon({
+  size,
+}: Readonly<{ size?: number }>) {
+  return <BrowserRendererFeatureIcon size={size} />;
+}
 
 export function BrowserFeatureFavicon({
   faviconUrl,

@@ -224,7 +224,7 @@ UI 只根据这些结构化状态展示，不能解析 main 的自由格式日�
 - 没有本地路径的图片使用受限 filename/MIME/data input 写入受管存储。
 - Runtime 返回 managed asset ID 和 metadata。
 - Message 只引用已认领 attachment。
-- Generated image 与 artifact 使用独立 managed store/contract。
+- Generated image 使用独立 managed store；Artifact 成品结果由 `packages/features/artifact/contracts` 定义并始终引用受管 workspace 内的相对路径。
 - Renderer 不能把任意本地路径伪装成 runtime asset ID。
 
 ## 验证

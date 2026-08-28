@@ -243,13 +243,19 @@ export type ToolResultViewContribution<TPayload> = Readonly<{
   resultKind: `${string}.${string}`;
   major: number;
   payload: RuntimeCodec<TPayload>;
+  /** Limit decoding to persisted runs produced by these runtime tools. */
+  sourceToolNames?: readonly string[];
   /** Identifies and decodes a result persisted before Feature envelopes existed. */
   legacy?: Readonly<{
     matches(value: unknown): boolean;
     payload: RuntimeCodec<TPayload>;
   }>;
+  /** Stable identity used to keep only the latest equivalent persistent result. */
+  identity?: (payload: TPayload) => string | null;
   /** `replace` lets the contribution own the complete tool-result surface. */
   presentation?: 'details' | 'replace';
+  /** Render after the completed assistant response instead of inside tool history. */
+  placement?: 'inline' | 'assistant-tail';
   /** Keep this result visible when surrounding work history is collapsed. */
   workHistoryPresentation?: 'persistent';
   render: ComponentType<ToolResultViewProps<TPayload>>;
@@ -260,13 +266,19 @@ export type ErasedToolResultViewContribution = Readonly<{
   resultKind: `${string}.${string}`;
   major: number;
   payload: RuntimeCodec<unknown>;
+  /** Limit decoding to persisted runs produced by these runtime tools. */
+  sourceToolNames?: readonly string[];
   /** Identifies and decodes a result persisted before Feature envelopes existed. */
   legacy?: Readonly<{
     matches(value: unknown): boolean;
     payload: RuntimeCodec<unknown>;
   }>;
+  /** Stable identity used to keep only the latest equivalent persistent result. */
+  identity?: (payload: unknown) => string | null;
   /** `replace` lets the contribution own the complete tool-result surface. */
   presentation?: 'details' | 'replace';
+  /** Render after the completed assistant response instead of inside tool history. */
+  placement?: 'inline' | 'assistant-tail';
   /** Keep this result visible when surrounding work history is collapsed. */
   workHistoryPresentation?: 'persistent';
   render: ComponentType<ToolResultViewProps<unknown>>;
@@ -279,7 +291,10 @@ export type ResolvedToolResultView = Readonly<{
 }>;
 
 export interface ToolResultViewCatalog {
-  resolve(value: unknown): ResolvedToolResultView | null;
+  resolve(
+    value: unknown,
+    context?: Readonly<{ toolName: string }>,
+  ): ResolvedToolResultView | null;
 }
 
 export type RendererFeatureContributionInput = Readonly<{

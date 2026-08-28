@@ -35,7 +35,7 @@ import type { ChatModelSelectionHandler } from '../../features/chat/chatModelSel
 import {
   RuntimePluginNavigationProvider,
   type OpenRuntimePluginHandler,
-} from '../../features/chat/artifacts/RuntimePluginNavigation.js';
+} from '../../features/chat/plugin-usage/RuntimePluginNavigation.js';
 import { useChatImageAttachmentRequest } from '../../features/chat/hooks/useChatImageAttachmentRequest.js';
 import type { ChatQueuedTurnActions } from '../../features/chat/hooks/useQueuedTurnInputActions.js';
 import { MarkdownNavigationProvider } from '../../features/chat/markdown/MarkdownNavigationProvider.js';
@@ -43,6 +43,9 @@ import {
   WorkspaceFileContextMenu,
   type WorkspaceFileContextTarget,
 } from '../../features/workspace/WorkspaceFileContextMenu.js';
+import {
+  ArtifactFeatureNavigationBoundary,
+} from '../../composition/ArtifactFeatureBoundary.js';
 import {
   ReviewFeatureConversationGitControls,
   ReviewFeatureGitCommitProvider,
@@ -405,7 +408,7 @@ export function AppChatSurface({
       reviewState={reviewState}
       onReviewRefresh={onReviewRefresh}
     >
-      <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
+      <ChatNavigationBoundaries onOpenBrowser={onOpenBrowser} onOpenPlugin={onOpenPlugin}>
         <MarkdownNavigationProvider
           onOpenInAppBrowser={onOpenBrowser}
           onOpenWebLink={onOpenMarkdownWebLink}
@@ -638,8 +641,26 @@ export function AppChatSurface({
             </Suspense>
           </FloatingWorkspacePanelSlot>
         ) : null}
-      </RuntimePluginNavigationProvider>
+      </ChatNavigationBoundaries>
     </ReviewFeatureGitCommitProvider>
+  );
+}
+
+function ChatNavigationBoundaries({
+  children,
+  onOpenBrowser,
+  onOpenPlugin,
+}: Readonly<{
+  children: ReactNode;
+  onOpenBrowser: (url?: string) => void;
+  onOpenPlugin: OpenRuntimePluginHandler;
+}>) {
+  return (
+    <ArtifactFeatureNavigationBoundary onOpenBrowser={onOpenBrowser}>
+      <RuntimePluginNavigationProvider onOpenPlugin={onOpenPlugin}>
+        {children}
+      </RuntimePluginNavigationProvider>
+    </ArtifactFeatureNavigationBoundary>
   );
 }
 

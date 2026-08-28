@@ -37,6 +37,7 @@ import {
   fileChangesFromToolRun,
   type RuntimeFileChange,
 } from './runtimeFileChanges.js';
+import { assistantTailFeatureToolResults, resolveRuntimeFeatureToolResult } from './runtimeFeatureToolResults.js';
 import {
   GroupedHookRunList,
   hasHookRuns,
@@ -124,19 +125,42 @@ export function RuntimeToolRuns({
   const visibleRuns = runs.filter(isDisplayableRuntimeToolRun);
   if (!visibleRuns.length) return null;
   const singleRun = visibleRuns.length === 1 ? visibleRuns[0] : undefined;
-  const replacement = singleRun ? featureViews.toolResults.resolve(singleRun.data) : null;
-  if (singleRun && replacement?.contribution.presentation === 'replace') {
+  const replacement = singleRun
+    ? resolveRuntimeFeatureToolResult(featureViews.toolResults, singleRun)
+    : null;
+  if (singleRun
+    && replacement?.contribution.placement !== 'assistant-tail'
+    && replacement?.contribution.presentation === 'replace') {
     return (
       <div className="chat-tool-runs">
         <FeatureToolResultView result={replacement} runId={singleRun.id} />
       </div>
     );
   }
-  const group = compactToolRunGroups(groupToolRuns(visibleRuns), summaryMode)[0];
+  const group = compactToolRunGroups(groupToolRuns(
+    visibleRuns,
+    (run) => resolveRuntimeFeatureToolResult(
+      featureViews.toolResults,
+      run,
+    )?.contribution.resultKind,
+  ), summaryMode)[0];
   if (!group) return null;
   return (
     <div className="chat-tool-runs">
       <ToolRunDisplayPanel group={group} nestedDetails={children} onAnswerApproval={onAnswerApproval} />
+    </div>
+  );
+}
+
+export function RuntimeAssistantTailToolResults({ runs }: Readonly<{ runs: RuntimeToolRun[] }>) {
+  const featureViews = useRendererFeatureViews();
+  const results = assistantTailFeatureToolResults(featureViews.toolResults, runs);
+  if (!results.length) return null;
+  return (
+    <div className="chat-assistant-run__segment chat-feature-tool-results--tail">
+      {results.map(({ result, runId }) => (
+        <FeatureToolResultView key={runId} result={result} runId={runId} />
+      ))}
     </div>
   );
 }
@@ -210,8 +234,8 @@ function ToolRunDisplayPanel({
     return mixedToolRunGroupPanelNode(group, onAnswerApproval, t, nestedDetails);
   }
   if (group.type === 'single') {
-    const featureResult = featureViews.toolResults.resolve(group.run.data);
-    if (featureResult) {
+    const featureResult = resolveRuntimeFeatureToolResult(featureViews.toolResults, group.run);
+    if (featureResult && featureResult.contribution.placement !== 'assistant-tail') {
       const content = <FeatureToolResultView result={featureResult} runId={group.run.id} />;
       if (featureResult.contribution.presentation === 'replace') return content;
       return (

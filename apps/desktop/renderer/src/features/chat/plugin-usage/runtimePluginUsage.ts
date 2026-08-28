@@ -6,9 +6,9 @@ import type {
   RuntimeToolRun,
 } from '@setsuna-desktop/contracts';
 
-export type RuntimePluginUse = RuntimePluginReference & {
+export type RuntimePluginUse = RuntimePluginReference & Readonly<{
   installed: boolean;
-};
+}>;
 
 /** Retains per-turn arrays when streamed thread fields did not change plugin usage. */
 export function reconcileRuntimePluginUsesByTurn(

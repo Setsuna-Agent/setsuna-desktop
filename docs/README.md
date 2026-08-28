@@ -49,7 +49,7 @@
 | Prompt、上下文压缩或项目环境 | [上下文与环境](packages/desktop-runtime/context-and-environment.md) | runtime `src/loop/context/`、`src/adapters/workspace/` |
 | 模型供应商或协议回放 | [Model Provider Feature](packages/desktop-runtime/model-providers.md) | `packages/features/model-provider/` |
 | MCP 协议、OAuth、resources 或 Agent MCP 工具 | [MCP Feature](packages/desktop-runtime/mcp.md) | `packages/features/mcp/` |
-| 本地工具、审批、MCP、Memory、Skill | [工具与能力](packages/desktop-runtime/tools-and-capabilities.md) | runtime `src/adapters/tool/`、`src/adapters/mcp/`、`src/adapters/skill/` |
+| 本地工具、审批、Artifact、MCP、Memory、Skill | [工具与能力](packages/desktop-runtime/tools-and-capabilities.md) | 对应 `packages/features/*` owner 与 runtime `src/adapters/tool/` 通用 adapter |
 | 本地数据格式或 store | [存储](packages/desktop-runtime/storage.md) | runtime `src/adapters/store/` |
 | 构建、打包或 release | [构建与发布](development/build-and-release.md)、[脚本](scripts/README.md) | `package.json`、`scripts/`、`.github/workflows/` |
 

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { MessageItem } from '../../../../../src/features/chat/conversation/ChatMessageItem.js';
 import type { ChatDisplayItem } from '../../../../../src/features/chat/conversation/chatMessageDisplay.js';
-import type { RuntimePluginUse } from '../../../../../src/features/chat/artifacts/runtimePluginUsage.js';
+import type { RuntimePluginUse } from '../../../../../src/features/chat/plugin-usage/runtimePluginUsage.js';
 import { SkillReferenceCatalogProvider } from '../../../../../src/features/chat/skills/SkillReference.js';
 
 function userItem(message: RuntimeMessage): Extract<ChatDisplayItem, { type: 'user' }> {

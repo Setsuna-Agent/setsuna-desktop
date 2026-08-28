@@ -3,16 +3,16 @@ import {
   OPENAI_IMAGE_GENERATION_TOOL_NAME,
   OPENAI_VISION_RECOGNITION_PLUGIN_ID,
   OPENAI_VISION_RECOGNITION_TOOL_NAME,
-  PUBLISH_ARTIFACT_TOOL_NAME,
   WEB_SEARCH_PLUGIN_ID,
   WEB_SEARCH_TOOL_NAME,
   type DesktopResolveNetworkProxyInput,
 } from '@setsuna-desktop/contracts';
+import { PUBLISH_ARTIFACT_TOOL_NAME } from '@setsuna-desktop/feature-artifact/contracts';
 import { requiredCapability } from '@setsuna-desktop/feature-core/capability';
 import { createNoopGoalControl } from '@setsuna-desktop/feature-goal/contracts';
 import { imageGenerationSettings } from '@setsuna-desktop/feature-image-generation/contracts';
 import { visionRecognitionServiceCapability } from '@setsuna-desktop/feature-vision-recognition/contracts';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,8 +34,12 @@ describe('runtime factory tool wiring', () => {
     try {
       await expect(activateBuiltinRuntimeFeatures(runtime)).rejects.toThrow('Goal control is already bound.');
       expect(runtime.featureManagement.statuses()).toEqual([]);
-      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+      const toolsAfterRollback = await runtime.toolHost.listTools({ threadId: 'thread_1' });
+      expect(toolsAfterRollback).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
+      );
+      expect(toolsAfterRollback).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: PUBLISH_ARTIFACT_TOOL_NAME })]),
       );
     } finally {
       releaseBlockingGoal();
@@ -60,8 +64,12 @@ describe('runtime factory tool wiring', () => {
       await composition.dispose();
 
       expect(runtime.featureManagement.statuses()).toEqual([]);
-      await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.not.toEqual(
+      const toolsAfterDispose = await runtime.toolHost.listTools({ threadId: 'thread_1' });
+      expect(toolsAfterDispose).not.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
+      );
+      expect(toolsAfterDispose).not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ name: PUBLISH_ARTIFACT_TOOL_NAME })]),
       );
     } finally {
       await composition.dispose();
@@ -130,6 +138,43 @@ describe('runtime factory tool wiring', () => {
         content: '# Factory Skill Updated\n\nPreview existing skill.',
       }, context)).resolves.toMatchObject({
         resultPreview: expect.stringContaining('"action":"update"'),
+      });
+    } finally {
+      await composition.dispose();
+      await runtime.extensionManager.shutdown();
+      await runtime.networkProxyFetch.close();
+      await runtime.nativeBridge.close();
+      await runtime.threadStore.close();
+    }
+  });
+
+  it('executes the Feature-bound Artifact tool against the workspace store', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-runtime-artifact-feature-test-'));
+    const projectDirectory = path.join(root, 'project');
+    await mkdir(path.join(projectDirectory, 'output'), { recursive: true });
+    await writeFile(path.join(projectDirectory, 'output', 'report.pdf'), '%PDF-1.4\nfixture\n');
+    const runtime = createRuntimeFactory({ dataDir: path.join(root, 'data') });
+    const project = await runtime.workspaceProjects.addProject({ path: projectDirectory });
+    const composition = await activateBuiltinRuntimeFeatures(runtime);
+
+    try {
+      await expect(runtime.toolHost.runTool(PUBLISH_ARTIFACT_TOOL_NAME, {
+        path: 'output/report.pdf',
+      }, {
+        threadId: 'thread_artifact',
+        projectId: project.id,
+        toolCallId: 'call/artifact',
+      })).resolves.toMatchObject({
+        data: {
+          resultKind: 'artifact.file',
+          resultMajor: 1,
+          payload: {
+            id: 'artifact_call_artifact',
+            path: 'output/report.pdf',
+            projectId: project.id,
+            workspaceRoot: project.path,
+          },
+        },
       });
     } finally {
       await composition.dispose();

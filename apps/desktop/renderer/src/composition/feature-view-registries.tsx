@@ -156,6 +156,12 @@ export class RendererToolResultViewCatalog implements ToolResultViewCatalog {
         if (!Number.isSafeInteger(contribution.major) || contribution.major < 1) {
           throw invalidContributionError('Tool result contribution major must be a positive integer.', featureId);
         }
+        if (contribution.sourceToolNames && (
+          contribution.sourceToolNames.length === 0
+          || contribution.sourceToolNames.some((name) => typeof name !== 'string' || !name.trim())
+        )) {
+          throw invalidContributionError('Tool result source tool names must be non-empty strings.', featureId);
+        }
         const key = resultKey(contribution.resultKind, contribution.major);
         const existing = this.contributions.get(key);
         if (existing) {
@@ -173,11 +179,14 @@ export class RendererToolResultViewCatalog implements ToolResultViewCatalog {
     }
   }
 
-  resolve(value: unknown): ResolvedToolResultView | null {
+  resolve(
+    value: unknown,
+    context?: Readonly<{ toolName: string }>,
+  ): ResolvedToolResultView | null {
     const envelope = toolResultEnvelope(value);
     if (envelope) {
       const registered = this.contributions.get(resultKey(envelope.resultKind, envelope.resultMajor));
-      if (!registered) return null;
+      if (!registered || !matchesToolResultSource(registered.contribution, context)) return null;
       try {
         return resolvedToolResult(registered, registered.contribution.payload.parse(envelope.payload));
       } catch {
@@ -186,6 +195,7 @@ export class RendererToolResultViewCatalog implements ToolResultViewCatalog {
       }
     }
     for (const registered of this.contributions.values()) {
+      if (!matchesToolResultSource(registered.contribution, context)) continue;
       const legacy = registered.contribution.legacy;
       if (!legacy || !legacy.matches(value)) continue;
       try {
@@ -202,10 +212,21 @@ export class RendererToolResultViewCatalog implements ToolResultViewCatalog {
 function eraseToolResultContribution<TPayload>(
   contribution: ToolResultViewContribution<TPayload>,
 ): ErasedToolResultViewContribution {
-  const legacy = contribution.legacy;
+  const {
+    identity,
+    legacy,
+    sourceToolNames,
+    ...base
+  } = contribution;
   return Object.freeze({
-    ...contribution,
+    ...base,
+    ...(sourceToolNames
+      ? { sourceToolNames: Object.freeze([...sourceToolNames]) }
+      : {}),
     payload: Object.freeze({ parse: (value: unknown) => contribution.payload.parse(value) as unknown }),
+    ...(identity
+      ? { identity: (payload: unknown) => identity(payload as TPayload) }
+      : {}),
     ...(legacy
       ? {
           legacy: Object.freeze({
@@ -218,6 +239,14 @@ function eraseToolResultContribution<TPayload>(
       : {}),
     render: contribution.render as ErasedToolResultViewContribution['render'],
   });
+}
+
+function matchesToolResultSource(
+  contribution: ErasedToolResultViewContribution,
+  context: Readonly<{ toolName: string }> | undefined,
+): boolean {
+  return !contribution.sourceToolNames
+    || Boolean(context?.toolName && contribution.sourceToolNames.includes(context.toolName));
 }
 
 function resolvedToolResult(

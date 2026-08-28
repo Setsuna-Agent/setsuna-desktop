@@ -179,6 +179,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
       resolveShellEnvironment: () => networkProxyFetch.environmentForRoute(),
     },
   );
+  const artifactToolHost = new ArtifactToolHost();
   const browserToolHost = new BrowserToolHost();
   const memoryToolHost = new MemoryToolHost();
   // ToolHost 顺序会影响模型看到的能力面：先管理能力，再运行 MCP，最后是本地 workspace/memory 工具。
@@ -189,7 +190,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     new PluginBundleToolHost(pluginStore, pluginDraftStore),
     new ExtensionToolHost(extensionManager),
     new WorkspaceImageToolHost(workspaceProjects),
-    new ArtifactToolHost(workspaceProjects),
+    artifactToolHost,
     backgroundShellProcesses,
     new SkillManagementToolHost(skillRegistry, skillRegistry),
     memoryToolHost,
@@ -222,6 +223,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   });
   return {
     agentLoop,
+    artifactToolHost,
     attachmentStore,
     approvalGate,
     appServerNotificationBus,

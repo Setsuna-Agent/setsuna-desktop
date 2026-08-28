@@ -71,32 +71,32 @@ apps/desktop/preload/ — 0 direct / 2 total files
 ### `apps/desktop/renderer/`
 
 ```text
-apps/desktop/renderer/ — 0 direct / 554 total files
-├── src/ — 2 direct / 396 total files
+apps/desktop/renderer/ — 0 direct / 552 total files
+├── src/ — 2 direct / 395 total files
 │   ├── app/ — 2 direct / 40 total files
 │   │   ├── controller/ — 6 direct / 6 total files
 │   │   ├── layout/ — 17 direct / 17 total files
 │   │   ├── providers/ — 2 direct / 2 total files
 │   │   ├── sidebar/ — 8 direct / 8 total files
 │   │   └── styles/ — 5 direct / 5 total files
-│   ├── composition/ — 30 direct / 30 total files
-│   ├── features/ — 234 files
+│   ├── composition/ — 31 direct / 31 total files
+│   ├── features/ — 232 files
 │   │   ├── capabilities/ — 23 direct / 31 total files
 │   │   │   ├── mcp/ — 3 direct / 3 total files
 │   │   │   └── styles/ — 5 direct / 5 total files
-│   │   ├── chat/ — 8 direct / 137 total files
-│   │   │   ├── artifacts/ — 6 direct / 6 total files
+│   │   ├── chat/ — 8 direct / 135 total files
 │   │   │   ├── composer/ — 31 direct / 31 total files
 │   │   │   ├── conversation/ — 32 direct / 32 total files
 │   │   │   ├── hooks/ — 11 direct / 11 total files
 │   │   │   ├── markdown/ — 13 direct / 13 total files
 │   │   │   ├── mentions/ — 4 direct / 4 total files
+│   │   │   ├── plugin-usage/ — 3 direct / 3 total files
 │   │   │   ├── references/ — 1 direct / 1 total files
 │   │   │   ├── skills/ — 2 direct / 2 total files
 │   │   │   ├── styles/ — 10 direct / 10 total files
 │   │   │   ├── subagents/ — 1 files
 │   │   │   │   └── avatars/ — 1 direct / 1 total files
-│   │   │   └── tool-runs/ — 18 direct / 18 total files
+│   │   │   └── tool-runs/ — 19 direct / 19 total files
 │   │   ├── settings/ — 5 direct / 35 total files
 │   │   │   ├── components/ — 2 direct / 2 total files
 │   │   │   ├── data-root/ — 12 direct / 12 total files
@@ -121,23 +121,23 @@ apps/desktop/renderer/ — 0 direct / 554 total files
 │       ├── shortcuts/ — 3 direct / 3 total files
 │       ├── styles/ — 9 direct / 9 total files
 │       └── ui/ — 10 direct / 10 total files
-└── test/ — 158 files
-    └── unit/ — 158 files
+└── test/ — 157 files
+    └── unit/ — 157 files
         ├── app/ — 1 direct / 17 total files
         │   ├── controller/ — 4 direct / 4 total files
         │   ├── layout/ — 7 direct / 7 total files
         │   ├── providers/ — 1 direct / 1 total files
         │   └── sidebar/ — 4 direct / 4 total files
         ├── composition/ — 5 direct / 5 total files
-        ├── features/ — 110 files
+        ├── features/ — 109 files
         │   ├── capabilities/ — 12 direct / 12 total files
-        │   ├── chat/ — 3 direct / 79 total files
-        │   │   ├── artifacts/ — 4 direct / 4 total files
+        │   ├── chat/ — 3 direct / 78 total files
         │   │   ├── composer/ — 21 direct / 21 total files
-        │   │   ├── conversation/ — 25 direct / 25 total files
+        │   │   ├── conversation/ — 26 direct / 26 total files
         │   │   ├── hooks/ — 6 direct / 6 total files
         │   │   ├── markdown/ — 8 direct / 8 total files
         │   │   ├── mentions/ — 3 direct / 3 total files
+        │   │   ├── plugin-usage/ — 2 direct / 2 total files
         │   │   ├── skills/ — 1 direct / 1 total files
         │   │   └── tool-runs/ — 8 direct / 8 total files
         │   ├── settings/ — 6 direct / 8 total files
@@ -160,8 +160,8 @@ apps/desktop/renderer/ — 0 direct / 554 total files
 ### `packages/contracts/`
 
 ```text
-packages/contracts/ — 4 direct / 74 total files
-├── src/ — 32 direct / 47 total files
+packages/contracts/ — 4 direct / 73 total files
+├── src/ — 31 direct / 46 total files
 │   ├── event-projections/ — 3 direct / 3 total files
 │   ├── network-proxy/ — 1 direct / 1 total files
 │   ├── review/ — 1 direct / 1 total files
@@ -192,14 +192,23 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 792 total files
-├── browser/ — 2 direct / 70 total files
-│   ├── src/ — 51 files
+packages/features/ — 0 direct / 815 total files
+├── artifact/ — 2 direct / 22 total files
+│   ├── src/ — 16 files
+│   │   ├── contracts/ — 4 direct / 4 total files
+│   │   ├── renderer/ — 9 direct / 9 total files
+│   │   └── runtime/ — 3 direct / 3 total files
+│   └── test/ — 4 files
+│       ├── contracts/ — 1 direct / 1 total files
+│       ├── renderer/ — 2 direct / 2 total files
+│       └── runtime/ — 1 direct / 1 total files
+├── browser/ — 2 direct / 71 total files
+│   ├── src/ — 52 files
 │   │   ├── contracts/ — 8 direct / 8 total files
 │   │   ├── main/ — 13 direct / 16 total files
 │   │   │   └── cdp/ — 3 direct / 3 total files
 │   │   ├── preload/ — 2 direct / 2 total files
-│   │   ├── renderer/ — 21 direct / 21 total files
+│   │   ├── renderer/ — 22 direct / 22 total files
 │   │   └── runtime/ — 4 direct / 4 total files
 │   └── test/ — 17 files
 │       ├── main/ — 6 direct / 8 total files
@@ -403,7 +412,7 @@ packages/features/ — 0 direct / 792 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 508 total files
+packages/desktop-runtime/ — 4 direct / 507 total files
 ├── src/ — 2 direct / 294 total files
 │   ├── adapters/ — 107 files
 │   │   ├── approval/ — 1 direct / 1 total files
@@ -443,8 +452,8 @@ packages/desktop-runtime/ — 4 direct / 508 total files
 │   │   └── app-server/ — 23 direct / 23 total files
 │   ├── shared/ — 3 direct / 3 total files
 │   └── utils/ — 6 direct / 6 total files
-└── test/ — 210 files
-    ├── adapters/ — 49 files
+└── test/ — 209 files
+    ├── adapters/ — 48 files
     │   ├── approval/ — 1 direct / 1 total files
     │   ├── feature/ — 1 direct / 1 total files
     │   ├── mcp/ — 2 direct / 2 total files
@@ -455,7 +464,7 @@ packages/desktop-runtime/ — 4 direct / 508 total files
     │   ├── search/ — 4 direct / 4 total files
     │   ├── skill/ — 1 direct / 1 total files
     │   ├── store/ — 14 direct / 14 total files
-    │   ├── tool/ — 8 direct / 13 total files
+    │   ├── tool/ — 7 direct / 12 total files
     │   │   └── pc-local/ — 5 direct / 5 total files
     │   └── workspace/ — 5 direct / 5 total files
     ├── extensions/ — 7 direct / 7 total files

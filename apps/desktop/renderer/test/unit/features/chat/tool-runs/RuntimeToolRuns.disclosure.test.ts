@@ -117,4 +117,16 @@ describe('RuntimeToolRuns disclosure behavior', () => {
       'shell:2',
     ]);
   });
+
+  it('keeps legacy Feature results independently addressable inside one tool batch', () => {
+    const runs = [
+      { ...toolRun('artifact_1', 'publish_artifact', {}), data: { artifact: { id: 'one' } } },
+      { ...toolRun('artifact_2', 'publish_artifact', {}), data: { artifact: { id: 'two' } } },
+    ];
+
+    expect(groupToolRuns(runs, () => 'artifact.file')).toEqual([
+      { type: 'single', run: runs[0] },
+      { type: 'single', run: runs[1] },
+    ]);
+  });
 });
