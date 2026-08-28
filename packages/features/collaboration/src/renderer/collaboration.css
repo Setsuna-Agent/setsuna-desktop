@@ -28,11 +28,10 @@
   user-select: none;
 }
 
-.subagent-avatar img {
+.subagent-avatar svg {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
   pointer-events: none;
 }
 
@@ -76,51 +75,46 @@
 }
 
 .subagent-task-card {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  /* The transcript clips horizontal overflow, so reserve room for the card shadow. */
-  width: calc(100% - 16px);
-  margin-inline: 8px;
+  gap: 7px;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
-  min-height: 52px;
-  padding: 10px 12px;
-  border: 0;
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, #000 5%, transparent),
-    0 3px 10px color-mix(in srgb, #000 4%, transparent);
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--app-border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   color: var(--app-text);
   cursor: pointer;
   text-align: left;
-  transition: box-shadow 0.12s ease;
+  transition: border-color 0.12s ease, background 0.12s ease;
 }
 
-/* 工作记录中的子代理卡片会经过工具结果与入场动画包装，仍应与正文共用内容宽度。 */
-.chat-work-history__body .subagent-task-card {
-  width: 100%;
-  margin-inline: 0;
+.chat-persistent-tool-result-grid:has(.subagent-task-card) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 
-/* 齐宽卡片借用对话区的左右留白绘制阴影，正文仍沿用消息内容层的裁剪规则。 */
-.chat-ai-bubble .ant-bubble-content:has(.chat-work-history__body .subagent-task-card) {
-  overflow: visible;
+.chat-persistent-tool-result-grid:has(.subagent-task-card) > .chat-tool-runs {
+  flex: 0 1 auto;
+  display: inline-grid;
+  width: fit-content;
+  max-width: calc((100% - 12px) / 3);
+  min-width: 0;
 }
 
 .subagent-task-card:not(:disabled):hover {
-  box-shadow:
-    0 2px 4px color-mix(in srgb, #000 7%, transparent),
-    0 5px 14px color-mix(in srgb, #000 5%, transparent);
+  border-color: color-mix(in srgb, var(--app-text-muted) 42%, var(--app-border));
+  background: var(--desktop-agent-control-hover-bg);
 }
 
 .subagent-task-card:focus-visible {
   outline: 0;
-  box-shadow:
-    var(--app-focus-ring),
-    0 1px 2px color-mix(in srgb, #000 9%, transparent),
-    0 4px 12px color-mix(in srgb, #000 7%, transparent);
+  box-shadow: var(--app-focus-ring);
 }
 
 .subagent-task-card--historical {
@@ -133,20 +127,22 @@
 }
 
 .subagent-task-card .subagent-task-status {
-  justify-self: end;
+  flex: 0 0 auto;
 }
 
 .subagent-task-card .subagent-task-status__dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
 }
 
 .subagent-task-card__name {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--app-text);
   font-size: 12px;
   font-weight: 500;
-  line-height: 20px;
+  line-height: 18px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

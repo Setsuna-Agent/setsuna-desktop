@@ -192,7 +192,7 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 815 total files
+packages/features/ — 0 direct / 799 total files
 ├── artifact/ — 2 direct / 22 total files
 │   ├── src/ — 16 files
 │   │   ├── contracts/ — 4 direct / 4 total files
@@ -215,11 +215,10 @@ packages/features/ — 0 direct / 815 total files
 │       │   └── cdp/ — 2 direct / 2 total files
 │       ├── renderer/ — 7 direct / 7 total files
 │       └── runtime/ — 2 direct / 2 total files
-├── collaboration/ — 2 direct / 48 total files
-│   ├── src/ — 41 files
+├── collaboration/ — 2 direct / 32 total files
+│   ├── src/ — 25 files
 │   │   ├── contracts/ — 7 direct / 7 total files
-│   │   ├── renderer/ — 13 direct / 29 total files
-│   │   │   └── avatars/ — 16 direct / 16 total files
+│   │   ├── renderer/ — 13 direct / 13 total files
 │   │   └── runtime/ — 5 direct / 5 total files
 │   └── test/ — 5 files
 │       ├── contracts/ — 1 direct / 1 total files

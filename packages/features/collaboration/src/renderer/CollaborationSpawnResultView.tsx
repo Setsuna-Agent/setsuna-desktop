@@ -31,7 +31,7 @@ export function CollaborationSpawnResultView({
         if (liveParentThreadId && task && navigation) navigation(liveParentThreadId, task);
       }}
     >
-      <AgentAvatar identity={identity} size={30} />
+      <AgentAvatar identity={identity} size={18} />
       <strong className="subagent-task-card__name">
         {identity.displayName || translate('feature.collaboration.card.unnamedAgent')}
       </strong>
