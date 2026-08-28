@@ -277,23 +277,6 @@ describe('runtime server REST threads and attachments', () => {
       expect(messages).toEqual({ messages: [], nextBefore: null, total: 0 });
     });
   
-  it('lists and idempotently terminates background shell services for a conversation', async () => {
-      const thread = await harness.runtimeFetch('/v1/threads', {
-        method: 'POST',
-        body: JSON.stringify({ title: 'Background services' }),
-      });
-      const encodedThreadId = encodeURIComponent(thread.id);
-  
-      await expect(harness.runtimeFetch(`/v1/threads/${encodedThreadId}/background-shell-processes`))
-        .resolves.toEqual({ processes: [] });
-      await expect(harness.runtimeFetch(`/v1/threads/${encodedThreadId}/background-shell-processes/stale-process`, {
-        method: 'DELETE',
-      })).resolves.toEqual({ terminated: false });
-      await expect(harness.runtimeFetch('/v1/threads/thread_deleted/background-shell-processes/stale-process', {
-        method: 'DELETE',
-      })).resolves.toEqual({ terminated: false });
-    });
-  
   it('renames and archives local threads through the runtime API', async () => {
       const created = await harness.runtimeFetch('/v1/threads', {
         method: 'POST',

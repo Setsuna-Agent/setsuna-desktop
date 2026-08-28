@@ -189,7 +189,7 @@ Policy 评估失败应保守，不因解析器“不认识”就默认安全。
 - Turn cleanup 决定保留或终止。
 - Runtime shutdown 终止全部。
 
-Chat 通过 thread-scoped runtime REST 查看后台进程；Runtime Activity Feature 通过自己的 typed operations 聚合全局生命周期元数据。两者都不直接连接 pty，也不暴露原始 shell 输出。
+Runtime Activity Feature 通过自己的 typed operations 为 Chat 提供 thread-scoped 后台进程投影，并聚合全局生命周期元数据。两个视图都不直接连接 pty，也不暴露原始 shell 输出。
 
 ## Structured user input
 

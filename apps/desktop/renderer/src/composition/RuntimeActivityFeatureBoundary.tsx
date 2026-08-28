@@ -1,6 +1,7 @@
 import type { RuntimeActivityRendererService } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import {
   RuntimeActivityCenter,
+  RuntimeActivityConversationServices,
   RuntimeActivityMenuItem,
   type RuntimeActivityCenterProps,
 } from '@setsuna-desktop/feature-runtime-activity/renderer';
@@ -39,6 +40,20 @@ export function RuntimeActivityFeatureCenter(
 export function RuntimeActivityFeatureMenuItem({ onClick }: Readonly<{ onClick: () => void }>) {
   const { t } = useI18n();
   return <RuntimeActivityMenuItem onClick={onClick} translate={t} />;
+}
+
+export function RuntimeActivityFeatureConversationServices({
+  threadId,
+}: Readonly<{ threadId: string }>) {
+  const { t } = useI18n();
+  const service = useRuntimeActivityFeatureService();
+  return (
+    <RuntimeActivityConversationServices
+      service={service}
+      threadId={threadId}
+      translate={t}
+    />
+  );
 }
 
 function useRuntimeActivityFeatureService(): RuntimeActivityRendererService {

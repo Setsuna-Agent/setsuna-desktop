@@ -1,11 +1,14 @@
 import type { RuntimeThread, WorkspaceProject } from '@setsuna-desktop/contracts';
 import { composeRendererMessages } from '@setsuna-desktop/feature-core/renderer';
+import type { RuntimeActivityRendererService } from '@setsuna-desktop/feature-runtime-activity/contracts';
+import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
 import { createNoopUsageRendererStateService } from '@setsuna-desktop/feature-usage/contracts';
 import { usageRendererFeature } from '@setsuna-desktop/feature-usage/renderer';
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../../../../src/app/providers/ToastProvider.js';
+import { RuntimeActivityFeatureServiceBoundary } from '../../../../../src/composition/RuntimeActivityFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from '../../../../../src/composition/UsageFeatureBoundary.js';
 import { I18nProvider } from '../../../../../src/shared/i18n/I18nProvider.js';
 import { hostMessages } from '../../../../../src/shared/i18n/messages.js';
@@ -132,7 +135,10 @@ describe('ConversationOverviewPanel', () => {
 
 });
 
-const messageCatalog = composeRendererMessages(hostMessages, [{ module: usageRendererFeature }]);
+const messageCatalog = composeRendererMessages(hostMessages, [
+  { module: runtimeActivityRendererFeature },
+  { module: usageRendererFeature },
+]);
 
 function renderOverviewPanel(
   props: Parameters<typeof ConversationOverviewPanel>[0],
@@ -140,13 +146,7 @@ function renderOverviewPanel(
   return renderToStaticMarkup(createElement(
     I18nProvider,
     { initialLocale: 'zh-CN', messageCatalog },
-    createElement(
-      UsageFeatureServiceBoundary,
-      {
-        service: createNoopUsageRendererStateService(),
-        children: createElement(ToastProvider, null, createElement(ConversationOverviewPanel, props)),
-      },
-    ),
+    renderFeatureBoundaries(createElement(ConversationOverviewPanel, props)),
   ));
 }
 
@@ -159,17 +159,32 @@ function captureOverviewPanel(props: Parameters<typeof ConversationOverviewPanel
   renderToStaticMarkup(createElement(
     I18nProvider,
     { initialLocale: 'zh-CN', messageCatalog },
-    createElement(
-      UsageFeatureServiceBoundary,
-      {
-        service: createNoopUsageRendererStateService(),
-        children: createElement(ToastProvider, null, createElement(Capture)),
-      },
-    ),
+    renderFeatureBoundaries(createElement(Capture)),
   ));
   if (!captured.panel) throw new Error('Conversation overview panel did not render.');
   return captured.panel;
 }
+
+function renderFeatureBoundaries(children: ReactNode): ReactNode {
+  return createElement(UsageFeatureServiceBoundary, {
+    service: createNoopUsageRendererStateService(),
+    children: createElement(RuntimeActivityFeatureServiceBoundary, {
+      service: noopRuntimeActivityService,
+      children: createElement(ToastProvider, null, children),
+    }),
+  });
+}
+
+const noopRuntimeActivityService: RuntimeActivityRendererService = {
+  list: async () => ({
+    backgroundServices: [],
+    capturedAt: '2026-07-01T00:00:00.000Z',
+    tasks: [],
+  }),
+  listServices: async () => ({ services: [] }),
+  stopService: async () => ({ terminated: false }),
+  stopTask: async () => ({ cancelled: false }),
+};
 
 const project: WorkspaceProject = {
   id: 'project_1',

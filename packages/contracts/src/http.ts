@@ -5,10 +5,6 @@ import type {
   RuntimeStoredMessageAttachment,
 } from './attachments.js';
 import type {
-  RuntimeBackgroundShellProcessList,
-  RuntimeBackgroundShellProcessTermination,
-} from './background-shell-processes.js';
-import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeConfiguredModelReference,
@@ -100,8 +96,6 @@ export type DesktopRuntimeClient = {
   createSideConversation(parentThreadId: string): Promise<RuntimeThread>;
   updateThread(threadId: string, patch: ThreadPatch): Promise<RuntimeThread>;
   deleteThread(threadId: string): Promise<void>;
-  listBackgroundShellProcesses(threadId: string): Promise<RuntimeBackgroundShellProcessList>;
-  terminateBackgroundShellProcess(threadId: string, processId: string): Promise<RuntimeBackgroundShellProcessTermination>;
   clearThreadContext(threadId: string): Promise<RuntimeThread>;
   compactThreadContext(threadId: string): Promise<RuntimeThread>;
   sendTurn(threadId: string, input: SendTurnInput): Promise<StartTurnResponse>;

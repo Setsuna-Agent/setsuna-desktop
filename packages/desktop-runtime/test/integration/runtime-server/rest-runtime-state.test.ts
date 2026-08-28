@@ -235,7 +235,12 @@ describe('runtime server REST runtime state', () => {
       expect(approvals).toEqual({ approvals: [] });
     });
 
-  it('exposes the aggregate runtime activity projection', async () => {
+  it('exposes aggregate and conversation-scoped Runtime Activity projections', async () => {
+      const thread = await harness.runtimeFetch('/v1/threads', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'Background services' }),
+      });
+      const encodedThreadId = encodeURIComponent(thread.id);
       const activities = await harness.runtimeFetch('/v1/features/runtime-activity');
 
       expect(activities).toMatchObject({
@@ -243,6 +248,17 @@ describe('runtime server REST runtime state', () => {
         capturedAt: expect.any(String),
         tasks: [],
       });
+      await expect(harness.runtimeFetch(
+        `/v1/features/runtime-activity/services/${encodedThreadId}`,
+      )).resolves.toEqual({ services: [] });
+      await expect(harness.runtimeFetch(
+        `/v1/features/runtime-activity/services/${encodedThreadId}/stale-process`,
+        { method: 'DELETE' },
+      )).resolves.toEqual({ terminated: false });
+      await expect(harness.runtimeFetch(
+        '/v1/features/runtime-activity/services/thread_deleted/stale-process',
+        { method: 'DELETE' },
+      )).resolves.toEqual({ terminated: false });
     });
 
   it('gates paged events and incremental traces behind conversation debug Feature settings', async () => {

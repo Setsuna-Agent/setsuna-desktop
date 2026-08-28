@@ -1,6 +1,7 @@
 import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import type {
   RuntimeActivityRendererService,
+  RuntimeActivityServiceListTarget,
   RuntimeActivityServiceTarget,
   RuntimeActivityTaskTarget,
 } from '../contracts/index.js';
@@ -15,6 +16,16 @@ export class RendererRuntimeActivityService implements RuntimeActivityRendererSe
   list(options?: Readonly<{ signal?: AbortSignal }>) {
     return this.options.scope.runOperation(
       (signal) => this.options.client.list({ signal }),
+      options,
+    );
+  }
+
+  listServices(
+    input: RuntimeActivityServiceListTarget,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ) {
+    return this.options.scope.runOperation(
+      (signal) => this.options.client.listServices(input, { signal }),
       options,
     );
   }

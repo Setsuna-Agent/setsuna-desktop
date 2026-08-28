@@ -15,8 +15,6 @@ import type {
   DeleteQueuedTurnInputResponse,
   RegenerateMessageInput,
   RuntimeApprovalList,
-  RuntimeBackgroundShellProcessList,
-  RuntimeBackgroundShellProcessTermination,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeMessagePage,
@@ -108,17 +106,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     deleteThread(threadId: string) {
       return request<void>({
         path: `/v1/threads/${encodeURIComponent(threadId)}`,
-        method: 'DELETE',
-      });
-    },
-    listBackgroundShellProcesses(threadId: string) {
-      return request<RuntimeBackgroundShellProcessList>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes`,
-      });
-    },
-    terminateBackgroundShellProcess(threadId: string, processId: string) {
-      return request<RuntimeBackgroundShellProcessTermination>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/background-shell-processes/${encodeURIComponent(processId)}`,
         method: 'DELETE',
       });
     },

@@ -25,7 +25,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 组合：
 
 - Thread transcript。
-- Overview / Git controls / background services。
+- Overview / Git controls；后台服务由 Runtime Activity Feature 通过宿主 boundary 组合进来。
 - Scroll pin 与 timeline divider。
 - Tool runs 和 artifacts。
 - Composer。

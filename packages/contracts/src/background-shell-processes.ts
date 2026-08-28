@@ -13,10 +13,6 @@ export type RuntimeBackgroundShellProcess = {
   expiresAt: string | null;
 };
 
-export type RuntimeBackgroundShellProcessList = {
-  processes: RuntimeBackgroundShellProcess[];
-};
-
 export type RuntimeBackgroundShellProcessTermination = {
   terminated: boolean;
 };

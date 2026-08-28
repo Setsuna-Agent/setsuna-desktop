@@ -48,6 +48,14 @@ export type RuntimeActivityServiceTarget = Readonly<{
   threadId: string;
 }>;
 
+export type RuntimeActivityServiceListTarget = Readonly<{
+  threadId: string;
+}>;
+
+export type RuntimeActivityServiceList = Readonly<{
+  services: readonly RuntimeBackgroundShellProcess[];
+}>;
+
 export type RuntimeActivityTaskTermination = Readonly<{
   cancelled: boolean;
 }>;

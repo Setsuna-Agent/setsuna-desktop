@@ -8,6 +8,8 @@ import type {
 import { defineCapability, type CapabilityToken } from '@setsuna-desktop/feature-core/capability';
 import type {
   RuntimeActivityList,
+  RuntimeActivityServiceList,
+  RuntimeActivityServiceListTarget,
   RuntimeActivityServiceTarget,
   RuntimeActivityTaskTarget,
   RuntimeActivityTaskTermination,
@@ -40,7 +42,7 @@ export interface RuntimeActivityRuntimeHost {
   cancelTurn(threadId: string, turnId: string): Promise<boolean>;
   getTurnActivity(threadId: string, turnId: string): Promise<RuntimeActivityTurnProjection | null>;
   listApprovals(): Promise<readonly RuntimeActivityApproval[]>;
-  listBackgroundShellProcesses(): Promise<readonly RuntimeBackgroundShellProcess[]>;
+  listBackgroundShellProcesses(threadId?: string): Promise<readonly RuntimeBackgroundShellProcess[]>;
   listThreads(): Promise<readonly RuntimeActivityThreadSummary[]>;
   now(): Date;
   terminateBackgroundShellProcess(
@@ -56,6 +58,10 @@ export const runtimeActivityRuntimeHostCapability: CapabilityToken<RuntimeActivi
 
 export interface RuntimeActivityRendererService {
   list(options?: Readonly<{ signal?: AbortSignal }>): Promise<RuntimeActivityList>;
+  listServices(
+    input: RuntimeActivityServiceListTarget,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<RuntimeActivityServiceList>;
   stopService(
     input: RuntimeActivityServiceTarget,
     options?: Readonly<{ signal?: AbortSignal }>,
