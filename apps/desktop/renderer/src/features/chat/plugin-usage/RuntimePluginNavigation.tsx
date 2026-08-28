@@ -7,10 +7,10 @@ const RuntimePluginNavigationContext = createContext<OpenRuntimePluginHandler | 
 export function RuntimePluginNavigationProvider({
   children,
   onOpenPlugin,
-}: {
+}: Readonly<{
   children: ReactNode;
   onOpenPlugin: OpenRuntimePluginHandler;
-}) {
+}>) {
   return (
     <RuntimePluginNavigationContext.Provider value={onOpenPlugin}>
       {children}

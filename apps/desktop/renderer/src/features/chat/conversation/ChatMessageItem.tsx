@@ -11,15 +11,15 @@ import { useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { Checkbox } from '../../../shared/ui/primitives.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import type { DesktopReviewOpenHandler } from '../../workspace/model.js';
-import { RuntimeArtifactList } from '../artifacts/RuntimeArtifactList.js';
-import { runtimeArtifactsFromToolRuns } from '../artifacts/runtimeArtifacts.js';
-import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
-import { RuntimePluginUses } from '../artifacts/RuntimePluginUses.js';
+import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
+import { RuntimePluginUses } from '../plugin-usage/RuntimePluginUses.js';
 import { MarkdownRenderer } from '../markdown/MarkdownRenderer.js';
 import { SkillReferenceText } from '../skills/SkillReference.js';
 import { fileChangeSummaryFromRuns } from '../tool-runs/runtimeFileChanges.js';
+import { resolveRuntimeFeatureToolResult } from '../tool-runs/runtimeFeatureToolResults.js';
 import {
   FileChangesSummaryCard,
+  RuntimeAssistantTailToolResults,
   RuntimeHookRuns,
   RuntimeToolRuns,
 } from '../tool-runs/RuntimeToolRuns.js';
@@ -417,7 +417,6 @@ function AssistantRunContent({
     return fileChangeSummaryFromRuns(toolRuns);
   }, [active, hasFinalAnswerContent, toolRuns]);
   const memoryCitations = useMemo(() => memoryCitationEntriesFromMessages(displaySegments), [displaySegments]);
-  const artifacts = useMemo(() => runtimeArtifactsFromToolRuns(toolRuns), [toolRuns]);
   const goalExitSummary = item.goalExit ? formatGoalExitSummary(item.goalExit, t, locale) : null;
   const reviewExit = item.reviewExit;
   if (!hasRenderableContent && (hasStreamingSegment || active)) {
@@ -452,7 +451,10 @@ function AssistantRunContent({
         onWorkHistoryExpandedChange,
         plan: timelinePlan,
         isPersistentToolResult: (run) =>
-          featureViews.toolResults.resolve(run.data)?.contribution.workHistoryPresentation === 'persistent',
+          resolveRuntimeFeatureToolResult(
+            featureViews.toolResults,
+            run,
+          )?.contribution.workHistoryPresentation === 'persistent',
         workHistoryDefaultExpanded: workHistoryState.expanded,
         t,
         hideFinalContent: Boolean(reviewExit),
@@ -471,11 +473,6 @@ function AssistantRunContent({
           <FileChangesSummaryCard summary={fileChangeSummary} onDiscardChanges={onDiscardFileChanges} onOpenReview={onOpenFileReview} />
         </div>
       ) : null}
-      {!active && artifacts.length ? (
-        <div className="chat-assistant-run__segment">
-          <RuntimeArtifactList artifacts={artifacts} />
-        </div>
-      ) : null}
       {!active && memoryCitations.length ? <MemoryCitationCard entries={memoryCitations} /> : null}
       {!active && reviewExit ? (
         <div className="chat-assistant-run__segment">
@@ -483,6 +480,7 @@ function AssistantRunContent({
         </div>
       ) : null}
       {!active && goalExitSummary ? <div className="chat-assistant-run__segment">{goalExitSummary}</div> : null}
+      {!active ? <RuntimeAssistantTailToolResults runs={toolRuns} /> : null}
     </div>
   );
 }

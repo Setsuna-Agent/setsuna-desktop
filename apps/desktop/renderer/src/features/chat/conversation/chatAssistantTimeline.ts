@@ -1,5 +1,5 @@
 import type { RuntimeMessage } from '@setsuna-desktop/contracts';
-import type { RuntimePluginUse } from '../artifacts/runtimePluginUsage.js';
+import type { RuntimePluginUse } from '../plugin-usage/runtimePluginUsage.js';
 import { isTranscriptHiddenRuntimeToolRun } from '../tool-runs/runtimeToolRunVisibility.js';
 import { isActiveRuntimeToolRun } from '../tool-runs/runtimeToolRunState.js';
 import { hasRenderableThinkingContent, splitThinkingContent } from './chatThinkingContent.js';

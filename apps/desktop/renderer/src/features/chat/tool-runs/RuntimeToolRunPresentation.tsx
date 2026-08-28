@@ -1,7 +1,4 @@
-import {
-  PUBLISH_ARTIFACT_TOOL_NAME,
-  type RuntimeToolRun
-} from '@setsuna-desktop/contracts';
+import type { RuntimeToolRun } from '@setsuna-desktop/contracts';
 import { FileText, Search, TerminalSquare } from 'lucide-react';
 import { translate, useI18n, type Translate } from '../../../shared/i18n/I18nProvider.js';
 import { WorkspaceFileLink, WorkspacePathLabel } from '../markdown/WorkspaceFileLink.js';
@@ -114,7 +111,10 @@ export function fileOperationStableChangeEntries(runs: RuntimeToolRun[]): FileOp
   return fileOperationEntries(runs.filter((run) => !isPreparingToolRun(run)));
 }
 
-export function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
+export function groupToolRuns(
+  runs: RuntimeToolRun[],
+  resolveFeatureResultKind?: (run: RuntimeToolRun) => string | undefined,
+): ToolRunGroup[] {
   const groups: ToolRunGroup[] = [];
   let bucket: RuntimeToolRun[] = [];
   let bucketKey = '';
@@ -137,7 +137,7 @@ export function groupToolRuns(runs: RuntimeToolRun[]): ToolRunGroup[] {
 
   for (const run of runs) {
     const kind = toolRunGroupKind(run);
-    const key = toolRunGroupingKey(run);
+    const key = toolRunGroupingKey(run, resolveFeatureResultKind?.(run));
     if (bucket.length && key !== bucketKey) flush();
     bucket.push(run);
     bucketKey = key;
@@ -777,7 +777,6 @@ export function toolRunSummary(run: RuntimeToolRun, t: Translate = defaultTransl
   if (name === 'read_shell_process') return { title: runningAware(run, t('toolRun.action.readShell'), t('toolRun.action.readShellDone'), t), target: stringField(args.process_id ?? args.processId) };
   if (name === 'remember_memory') return { title: runningAware(run, t('toolRun.action.saveMemory'), t('toolRun.action.saveMemoryDone'), t) };
   if (name === 'recall_memory') return { title: runningAware(run, t('toolRun.action.recallMemory'), t('toolRun.action.recallMemoryDone'), t), target: query };
-  if (name === PUBLISH_ARTIFACT_TOOL_NAME) return { title: runningAware(run, t('toolRun.action.publishArtifact'), t('toolRun.action.publishArtifactDone'), t), target: path };
   const displayName = toolRunDisplayName(run, t);
   return { title: runningAware(run, displayName, t('toolRun.action.used', { name: displayName }), t) };
 }

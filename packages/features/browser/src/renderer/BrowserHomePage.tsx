@@ -1,6 +1,8 @@
-import { ArrowUpRight, Globe2, History, Star, X, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, History, Star, X, type LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import type { BrowserBookmarkEntry } from './browserBookmarks.js';
 import type { BrowserHistoryEntry } from './browserHistory.js';
+import { BrowserFeatureIcon } from './BrowserFeatureIcon.js';
 import type { BrowserTranslate } from './messages.js';
 
 export function BrowserHomePage({
@@ -34,7 +36,7 @@ export function BrowserHomePage({
         emptyTitle={translate('feature.browser.bookmarksEmptyTitle')}
         entries={bookmarks.map((entry) => ({ ...entry, timestamp: entry.savedAt }))}
         id="desktop-browser-bookmarks-title"
-        itemIcon={Star}
+        itemIcon={<Star size={15} />}
         onNavigate={onNavigate}
         openLabel={translate('feature.browser.historyOpen')}
         title={translate('feature.browser.bookmarksTitle')}
@@ -45,7 +47,7 @@ export function BrowserHomePage({
         emptyTitle={translate('feature.browser.historyEmptyTitle')}
         entries={entries.map((entry) => ({ ...entry, timestamp: entry.visitedAt }))}
         id="desktop-browser-history-title"
-        itemIcon={Globe2}
+        itemIcon={<BrowserFeatureIcon size={15} />}
         onNavigate={onNavigate}
         openLabel={translate('feature.browser.historyOpen')}
         removeLabel={translate('feature.browser.historyDelete')}
@@ -68,7 +70,7 @@ function BrowserHomeSection({
   emptyTitle,
   entries,
   id,
-  itemIcon: ItemIcon,
+  itemIcon,
   onNavigate,
   onRemove,
   openLabel,
@@ -80,7 +82,7 @@ function BrowserHomeSection({
   emptyTitle: string;
   entries: readonly BrowserHomeEntry[];
   id: string;
-  itemIcon: LucideIcon;
+  itemIcon: ReactNode;
   onNavigate: (url: string) => void;
   onRemove?: (url: string) => void;
   openLabel: string;
@@ -103,7 +105,7 @@ function BrowserHomeSection({
                 onClick={() => onNavigate(entry.url)}
               >
                 <span className="desktop-browser-home-section__icon" aria-hidden="true">
-                  <ItemIcon size={15} />
+                  {itemIcon}
                 </span>
                 <span className="desktop-browser-home-section__details">
                   <strong>{entry.title}</strong>

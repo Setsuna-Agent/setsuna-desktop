@@ -10,11 +10,12 @@ export function toolRunGroupKind(run: RuntimeToolRun): ToolRunGroupKind {
   return 'generic';
 }
 
-export function toolRunGroupingKey(run: RuntimeToolRun): string {
+export function toolRunGroupingKey(run: RuntimeToolRun, resolvedFeatureResultKind?: string): string {
   const kind = toolRunGroupKind(run);
   // Feature-owned result views are independently addressable contributions and
-  // must not be collapsed into one generic host-tool disclosure.
-  const featureResultKind = toolResultKind(run.data);
+  // must not be collapsed into one generic host-tool disclosure. The resolved
+  // kind also covers owner-local legacy decoders whose old data has no envelope.
+  const featureResultKind = toolResultKind(run.data) || resolvedFeatureResultKind;
   if (featureResultKind) return `feature:${featureResultKind}:${run.id}`;
   return kind === 'generic' ? `${kind}:${run.name}` : kind;
 }

@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/contracts" },
     { "path": "./packages/feature-core" },
+    { "path": "./packages/features/artifact/tsconfig.build.json" },
     { "path": "./packages/features/browser/tsconfig.build.json" },
     { "path": "./packages/features/collaboration/tsconfig.build.json" },
     { "path": "./packages/features/conversation-debug/tsconfig.build.json" },

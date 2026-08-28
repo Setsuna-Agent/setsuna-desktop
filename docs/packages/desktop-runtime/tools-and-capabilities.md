@@ -38,7 +38,7 @@ Factory 当前按顺序组合：
 5. `PluginBundleToolHost`
 6. `ExtensionToolHost`
 7. `WorkspaceImageToolHost`
-8. `ArtifactToolHost`
+8. `ArtifactToolHost`（Artifact Feature service 的通用 adapter）
 9. `PcLocalToolHost`
 10. `SkillManagementToolHost`
 11. `MemoryToolHost`（绑定 `memory.control` 的通用 adapter）
@@ -217,6 +217,14 @@ Runtime Activity Feature 通过自己的 typed operations 为 Chat 提供 thread
 
 详见 [main 浏览器](../../apps/desktop/main/browser.md)。
 
+## Artifact
+
+`packages/features/artifact` 纵向拥有 `publish_artifact` 的工具定义、system prompt、工作区选择规则、MIME 映射、持久结果协议和 renderer 卡片。runtime composition 注入 `artifact.workspace-files`，Feature 只通过该窄 Capability 获取 workspace 状态并检查已存在文件；真实路径约束仍由 workspace store 执行。
+
+中央 `ArtifactToolHost` 与 Browser、Memory 的 adapter 一样，只把 Feature 提供的 `artifact.runtime-tools` 转成通用 `ToolHost`，激活前不暴露工具，composition dispose 后解除绑定。新结果使用 `artifact.file@1` envelope；Feature 自己保留旧 `{ artifact }` 数据的 decoder，聊天 Core 不再按工具名称提取或解释 payload。
+
+renderer 通过只读 tool-result catalog 渲染卡片。打开文件和创建本地预览由 composition 注入 `artifact.renderer-host`；打开内置浏览器的动态页面动作通过 Feature navigation boundary 传入，Feature renderer 不直接访问 preload bridge。
+
 ## Web search
 
 `plugins/web-search` 可执行 Bundle 提供 `web_search`：
@@ -285,13 +293,12 @@ MCP server 只维护启用状态和工具可用范围，不再提供必需、调
 
 私有 bridge 能力在安装阶段限制为应用内置 marketplace 来源，worker 只收到调用结果，不会获得 API key、provider 配置、本地附件路径或原始运行环境。
 
-## Memory 与 artifacts
+## Memory 与 workspace images
 
 - Memory Feature：拥有 `remember_memory` / `recall_memory` 的定义、prompt、策略与执行；`MemoryToolHost` 只把通用 ToolHost 调用转发给已绑定的 `memory.control`。
 - `WorkspaceImageToolHost`：读取 workspace 内受支持图片。
-- `ArtifactToolHost`：发布成品文件。
 
-Memory 写入带 thread/turn 来源，PC-local host 不再保存第二份 Memory 工具实现。图片/artifact 路径必须基于当前 `RuntimeEnvironment`。
+Memory 写入带 thread/turn 来源，PC-local host 不再保存第二份 Memory 工具实现。图片路径必须基于当前 `RuntimeEnvironment`；成品发布边界见上面的 Artifact 章节。
 
 ## Hooks
 

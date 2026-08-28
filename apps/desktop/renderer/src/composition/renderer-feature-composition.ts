@@ -11,6 +11,11 @@ import {
   provideHostCapability,
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
+import {
+  artifactRendererHostCapability,
+  type ArtifactRendererHost,
+} from '@setsuna-desktop/feature-artifact/contracts';
+import { artifactRendererFeature } from '@setsuna-desktop/feature-artifact/renderer';
 import { browserRendererFeature } from '@setsuna-desktop/feature-browser/renderer';
 import {
   collaborationRendererStateCapability,
@@ -102,6 +107,7 @@ import type { AppLocale } from '../shared/i18n/I18nProvider.js';
 
 const rendererFeatures = defineRendererFeatureHost({
   required: [
+    artifactRendererFeature,
     browserRendererFeature,
     mcpRendererFeature,
     modelProviderRendererFeature,
@@ -152,6 +158,17 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   const { composition, messages } = await rendererFeatures.activate({
     hostMessages,
     hostCapabilities: [
+      provideHostCapability(
+        artifactRendererHostCapability,
+        Object.freeze({
+          createWorkspaceFilePreview: typeof desktop.createWorkspaceFilePreview === 'function'
+            ? (workspaceRoot, filePath) => desktop.createWorkspaceFilePreview(workspaceRoot, filePath)
+            : null,
+          openWorkspaceFile: typeof desktop.openWorkspaceFile === 'function'
+            ? (workspaceRoot, filePath) => desktop.openWorkspaceFile(workspaceRoot, filePath)
+            : null,
+        } satisfies ArtifactRendererHost),
+      ),
       provideHostCapability(
         modelProviderRendererHostCapability,
         Object.freeze({

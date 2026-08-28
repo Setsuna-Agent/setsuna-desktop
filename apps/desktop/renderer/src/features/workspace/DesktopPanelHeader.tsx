@@ -1,4 +1,4 @@
-import { Bug, FileDiff, FolderOpen, Globe2, MessageSquare, Plus, Terminal, X } from 'lucide-react';
+import { Bug, FileDiff, FolderOpen, MessageSquare, Plus, Terminal, X } from 'lucide-react';
 import {
   useEffect,
   useRef,
@@ -9,6 +9,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { BrowserFeatureIcon } from '../../composition/browser-feature-adapter.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
 import type { MessageKey } from '../../shared/i18n/messages.js';
 import type { KeyboardShortcutCommandId } from '../../shared/shortcuts/keyboardShortcutCommands.js';
@@ -30,7 +31,11 @@ const panelLauncherItems: Array<{ key: DesktopPanelType; labelKey: MessageKey; i
   { key: 'files', labelKey: 'workspace.panel.launcher.files', icon: <FolderOpen size={14} /> },
   { key: 'terminal', labelKey: 'workspace.panel.launcher.terminal', icon: <Terminal size={14} /> },
   { key: 'chat', labelKey: 'workspace.panel.launcher.sideChat', icon: <MessageSquare size={14} /> },
-  { key: 'browser', labelKey: 'workspace.panel.launcher.browser', icon: <Globe2 size={14} /> },
+  {
+    key: 'browser',
+    labelKey: 'workspace.panel.launcher.browser',
+    icon: <BrowserFeatureIcon size={14} />,
+  },
   { key: 'conversation-debug', labelKey: 'workspace.panel.launcher.conversationDebug', icon: <Bug size={14} /> },
 ];
 

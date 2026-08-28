@@ -35,6 +35,38 @@ describe('renderer feature composition', () => {
     expect(features.mcp.getSnapshot()).toBeNull();
     expect(features.skills.getSnapshot()).toEqual({ extraRoots: [], skills: [] });
     expect(features.networkProxy.available).toBe(false);
+    const artifact = {
+      id: 'artifact_legacy',
+      kind: 'file' as const,
+      name: 'report.pdf',
+      projectId: 'project_1',
+      workspaceRoot: '/workspace',
+      path: 'output/report.pdf',
+      mimeType: 'application/pdf',
+      size: 128,
+    };
+    const persistedResults = [
+      { artifact },
+      { resultKind: 'artifact.file', resultMajor: 1, payload: artifact },
+    ];
+    for (const persistedResult of persistedResults) {
+      expect(features.views.toolResults.resolve(
+        persistedResult,
+        { toolName: 'extension_publish_lookalike' },
+      )).toBeNull();
+      expect(features.views.toolResults.resolve(
+        persistedResult,
+        { toolName: 'publish_artifact' },
+      )).toMatchObject({
+        featureId: 'artifact',
+        contribution: {
+          placement: 'assistant-tail',
+          resultKind: 'artifact.file',
+          sourceToolNames: ['publish_artifact'],
+        },
+        payload: { path: 'output/report.pdf' },
+      });
+    }
     await features.composition.dispose();
   });
 });

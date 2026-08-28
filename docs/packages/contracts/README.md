@@ -62,7 +62,6 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | --- | --- |
 | `approvals.ts` | Approval、MCP elicitation、结构化用户输入 |
 | `attachments.ts` | 上传、持久化附件与引用 |
-| `artifacts.ts` | Runtime artifact |
 | `background-shell-processes.ts` | pc-local 后台 shell process 生命周期 DTO |
 | `hooks.ts` | Hook event、matcher、input 和 result |
 | `mcp.ts` | Server、transport、tool、resource、OAuth、审批 |
@@ -72,7 +71,7 @@ Contracts 是 main、preload、renderer 和 runtime 的共享协议层。它只�
 | `usage.ts` | Usage record、summary、bucket |
 | `workspace.ts` | Project、entry、read、search、status |
 
-单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Conversation Debug 的非持久化 trace、Updater 与 Workspace Dependencies 都不在 Core contracts 维护镜像类型或全局 client 方法。
+单一业务 owner 的 DTO、operation、Capability 与 settings contract 位于对应 `packages/features/<feature>/src/contracts/`；例如 Artifact 的成品结果协议、Conversation Debug 的非持久化 trace、Updater 与 Workspace Dependencies 都不在 Core contracts 维护镜像类型或全局 client 方法。
 
 ### SWE / app-server
 

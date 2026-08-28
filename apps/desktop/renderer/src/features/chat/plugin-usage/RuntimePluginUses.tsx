@@ -5,9 +5,9 @@ import type { RuntimePluginUse } from './runtimePluginUsage.js';
 
 export function RuntimePluginUses({
   plugins,
-}: {
+}: Readonly<{
   plugins: RuntimePluginUse[];
-}) {
+}>) {
   const { t } = useI18n();
   const onOpenPlugin = useRuntimePluginNavigation();
   if (!plugins.length) return null;

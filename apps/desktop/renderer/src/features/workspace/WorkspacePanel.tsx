@@ -8,7 +8,7 @@ import {
   type RuntimeReviewFinding,
 } from '@setsuna-desktop/contracts';
 import type { DesktopReviewSource } from '@setsuna-desktop/feature-review/contracts';
-import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, Globe2, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
+import { Bug, ChevronDown, FileDiff, Folder, FolderOpen, MessageSquare, Save, Search, Terminal, X } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -21,6 +21,7 @@ import {
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { BrowserFeatureIcon } from '../../composition/browser-feature-adapter.js';
 import { EditIcon } from '../../shared/ui/EditIcon.js';
 import { ReviewFeaturePanel } from '../../composition/review-feature-panel-adapter.js';
 import { TerminalFeaturePane } from '../../composition/TerminalFeaturePane.js';
@@ -582,7 +583,7 @@ export function WorkspaceOverviewPanel({
     {
       key: 'browser',
       label: t('workspace.overview.browser'),
-      icon: <Globe2 size={15} />,
+      icon: <BrowserFeatureIcon size={15} />,
       disabled: false,
       onClick: () => onOpenBrowser(),
       shortcutCommandId: 'workspace.openBrowser',

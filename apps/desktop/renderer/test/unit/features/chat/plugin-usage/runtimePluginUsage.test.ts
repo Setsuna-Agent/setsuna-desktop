@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   reconcileRuntimePluginUsesByTurn,
   runtimePluginUsesByTurn,
-} from '../../../../../src/features/chat/artifacts/runtimePluginUsage.js';
+} from '../../../../../src/features/chat/plugin-usage/runtimePluginUsage.js';
 
 describe('runtimePluginUsesByTurn', () => {
   it('retains unchanged per-turn references across streamed thread projections', () => {

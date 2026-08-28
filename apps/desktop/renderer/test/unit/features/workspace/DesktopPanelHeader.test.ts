@@ -37,6 +37,24 @@ describe('DesktopPanelHeader browser tabs', () => {
     expect(html).toContain('aria-label="添加面板"');
   });
 
+  it('uses the shared Browser Feature globe in the panel launcher', () => {
+    const { getByRole } = render(createElement(DesktopPanelHeader, {
+      activePanel: 'terminal',
+      activePanelId: 'terminal-1',
+      availablePanelTypes: ['browser'],
+      onClose: () => undefined,
+      onOpenPanel: () => undefined,
+      panels: [{ id: 'terminal-1', type: 'terminal' }],
+      placement: 'side',
+    }));
+
+    fireEvent.click(getByRole('button', { name: '添加面板' }));
+
+    expect(
+      getByRole('menuitem', { name: /浏览器/ }).querySelector('[data-browser-feature-icon="globe"]'),
+    ).not.toBeNull();
+  });
+
   it('uses the collaboration icon for subagent tabs', () => {
     const html = renderToStaticMarkup(createElement(DesktopPanelHeader, {
       activePanel: 'subagent',

@@ -20,7 +20,7 @@ import {
   reconcileRuntimePluginUsesByTurn,
   runtimePluginUsesByTurn,
   type RuntimePluginUse,
-} from '../artifacts/runtimePluginUsage.js';
+} from '../plugin-usage/runtimePluginUsage.js';
 import { useChatMessageOperations } from '../hooks/useChatMessageOperations.js';
 import { useThreadMessageHistory } from '../hooks/useThreadMessageHistory.js';
 import { MarkdownViewportProvider } from '../markdown/MarkdownViewportProvider.js';

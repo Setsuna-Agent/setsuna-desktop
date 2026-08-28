@@ -1,5 +1,6 @@
-import { Globe2, LoaderCircle } from 'lucide-react';
+import { LoaderCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { BrowserFeatureIcon } from './BrowserFeatureIcon.js';
 import './browser.css';
 
 export function BrowserFavicon({ faviconUrl, loading }: { faviconUrl: string | null; loading: boolean }) {
@@ -23,7 +24,7 @@ export function BrowserFavicon({ faviconUrl, loading }: { faviconUrl: string | n
           onError={() => setFailedUrl(faviconUrl)}
         />
       ) : (
-        <Globe2 size={13} />
+        <BrowserFeatureIcon size={13} />
       )}
     </span>
   );
