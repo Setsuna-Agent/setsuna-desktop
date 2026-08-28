@@ -2,6 +2,9 @@ import type { FeatureScope } from '@setsuna-desktop/feature-core/scope';
 import type {
   PluginManagementDesktopBridge,
   PluginManagementExtensionTrustInput,
+  PluginManagementHook,
+  PluginManagementHookQuery,
+  PluginManagementHookSnapshot,
   PluginManagementItemTarget,
   PluginManagementPluginTarget,
   PluginManagementRendererListener,
@@ -18,9 +21,18 @@ const EMPTY_SNAPSHOT: PluginManagementSnapshot = Object.freeze({
   plugins: Object.freeze([]),
 });
 
+const EMPTY_HOOK_SNAPSHOT: PluginManagementHookSnapshot = Object.freeze({
+  hooks: Object.freeze([]),
+});
+
 export class RendererPluginManagementService implements PluginManagementRendererService {
   private snapshot = EMPTY_SNAPSHOT;
+  private hookSnapshot = EMPTY_HOOK_SNAPSHOT;
+  private hookQuery: PluginManagementHookQuery = Object.freeze({});
   private readonly listeners = new Set<PluginManagementRendererListener>();
+  private hookRefreshSequence = 0;
+  private appliedHookRefreshSequence = 0;
+  private hookMutationTail: Promise<void> = Promise.resolve();
   private snapshotRefreshSequence = 0;
   private appliedSnapshotRefreshSequence = 0;
   private extensionRefreshSequence = 0;
@@ -36,6 +48,10 @@ export class RendererPluginManagementService implements PluginManagementRenderer
 
   getSnapshot(): PluginManagementSnapshot {
     return this.snapshot;
+  }
+
+  getHookSnapshot(): PluginManagementHookSnapshot {
+    return this.hookSnapshot;
   }
 
   subscribe(listener: PluginManagementRendererListener): () => void {
@@ -87,6 +103,22 @@ export class RendererPluginManagementService implements PluginManagementRenderer
       plugins: Object.freeze([...plugins.plugins]),
     });
     return plugins;
+  }
+
+  async refreshHooks(
+    input: PluginManagementHookQuery = this.hookQuery,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot> {
+    const query = Object.freeze({ ...(input.cwd ? { cwd: input.cwd } : {}) });
+    this.hookQuery = query;
+    const sequence = ++this.hookRefreshSequence;
+    await this.hookMutationTail;
+    const snapshot = await this.options.scope.runOperation(
+      (signal) => this.options.client.readHooks(query, { signal }),
+      options,
+    );
+    this.applyHookSnapshot(snapshot, sequence);
+    return snapshot;
   }
 
   getInstalledItem(input: PluginManagementItemTarget, options?: Readonly<{ signal?: AbortSignal }>) {
@@ -152,6 +184,77 @@ export class RendererPluginManagementService implements PluginManagementRenderer
     );
     await this.refresh();
     return result;
+  }
+
+  setHookEnabled(
+    hook: PluginManagementHook,
+    enabled: boolean,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot> {
+    return this.mutateHook(hook, { enabled }, options);
+  }
+
+  setHookTrust(
+    hook: PluginManagementHook,
+    trusted: boolean,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot> {
+    return this.mutateHook(hook, { trusted }, options);
+  }
+
+  deleteStandaloneHook(
+    hook: PluginManagementHook,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot> {
+    const query = this.hookQuery;
+    const sequence = ++this.hookRefreshSequence;
+    return this.enqueueHookMutation(async () => {
+      const snapshot = await this.options.scope.runOperation(
+        (signal) => this.options.client.deleteStandaloneHook({
+          ...query,
+          currentHash: hook.currentHash,
+          managementId: hook.managementId,
+        }, { signal }),
+        options,
+      );
+      this.applyHookSnapshot(snapshot, sequence);
+      return snapshot;
+    });
+  }
+
+  private mutateHook(
+    hook: PluginManagementHook,
+    patch: Readonly<{ enabled?: boolean; trusted?: boolean }>,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot> {
+    const query = this.hookQuery;
+    const sequence = ++this.hookRefreshSequence;
+    return this.enqueueHookMutation(async () => {
+      const snapshot = await this.options.scope.runOperation(
+        (signal) => this.options.client.setHookState({
+          ...query,
+          currentHash: hook.currentHash,
+          managementId: hook.managementId,
+          ...patch,
+        }, { signal }),
+        options,
+      );
+      this.applyHookSnapshot(snapshot, sequence);
+      return snapshot;
+    });
+  }
+
+  private enqueueHookMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.hookMutationTail.then(operation, operation);
+    this.hookMutationTail = result.then(() => undefined, () => undefined);
+    return result;
+  }
+
+  private applyHookSnapshot(snapshot: PluginManagementHookSnapshot, sequence: number): void {
+    if (sequence < this.appliedHookRefreshSequence) return;
+    this.appliedHookRefreshSequence = sequence;
+    this.hookSnapshot = Object.freeze({ hooks: Object.freeze([...snapshot.hooks]) });
+    for (const listener of this.listeners) listener();
   }
 
   private applyRefresh(input: Readonly<{

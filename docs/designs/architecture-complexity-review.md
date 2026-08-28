@@ -215,12 +215,12 @@ RuntimeEvent log
 
 `useRuntimeClientState.ts`：
 
-- [x] 保持现有 facade 调用面，并把 Skill/MCP/Hook/Plugin 的 7 组 state、刷新与 mutation 下沉到 `useRuntimeCapabilityState.ts`。
-- [x] 能力域只依赖 25 个明确列出的 `DesktopRuntimeClient` 方法；Hook 通过窄 `onConfigChange` 回写共享 config。
+- [x] 第一阶段把 Skill/MCP/Hook/Plugin 的 state、刷新与 mutation 从 facade 下沉；后续 Skill、MCP、Plugin/Hook 已迁入各自 Feature renderer service，临时 `useRuntimeCapabilityState.ts` 已删除。
+- [x] Plugin/Hook 管理不再依赖 `DesktopRuntimeClient` 或回写 renderer config，而是通过 Plugin Management typed operations 调用 runtime owner。
 - [x] 先把 memory/usage state 与 identity guard 下沉；Memory 与 Usage 后续均迁入独立 Feature，宿主 `useRuntimeClientState` 不再持有两者的私有状态。
 - [x] Memory/usage 域只依赖 5 个明确列出的 client 方法；迟到结果必须同时满足 latest request 和 owner identity。
 - [x] 把共享 config state、provider 映射、runtime preferences 和 image generation 操作下沉到 `useRuntimeConfigState.ts`。
-- [x] Config 域只依赖 3 个明确列出的 client 方法；bootstrap 与 Hook mutation 通过 `replaceConfig` 汇入同一个 state owner。
+- [x] Config 域只依赖 Core config client；bootstrap 通过 `replaceConfig` 汇入同一个 state owner，Hook mutation 不再经过 config projection。
 - [x] 把 thread selection、list refresh、SSE、polling、active turn 和 thread mutation 下沉到 `useRuntimeThreadState.ts`。
 - [x] Current thread 与 SSE sequence 只有一个 owner；projection 和所有事件副作用共用同一个 owner/sequence gate。
 - [x] Facade 收敛为 233 行薄组合层，同时保持原有 72 项调用面。

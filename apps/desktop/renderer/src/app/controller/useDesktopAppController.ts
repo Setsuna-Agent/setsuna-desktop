@@ -58,6 +58,9 @@ export function useDesktopAppController() {
     void pluginManagement.refreshExtensions().catch((unknownError) => {
       reportRuntimeBackgroundFailure('plugin status refresh after turn', unknownError);
     });
+    void pluginManagement.refreshHooks().catch((unknownError) => {
+      reportRuntimeBackgroundFailure('Plugin Hook refresh after turn', unknownError);
+    });
     void mcp.refresh().catch((unknownError) => {
       reportRuntimeBackgroundFailure('MCP refresh after turn', unknownError);
     });

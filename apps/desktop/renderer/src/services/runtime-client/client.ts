@@ -19,7 +19,6 @@ import type {
   RuntimeBackgroundShellProcessTermination,
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeHookListResponse,
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeRequestInput,
@@ -230,12 +229,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
     },
     saveConfig(input: RuntimeConfigInput) {
       return request<RuntimeConfigState>({ path: '/v1/config', method: 'PUT', body: input });
-    },
-    listHooks(cwds: string[] = []) {
-      const params = new URLSearchParams();
-      for (const cwd of cwds) params.append('cwd', cwd);
-      const suffix = params.size ? `?${params}` : '';
-      return request<RuntimeHookListResponse>({ path: `/v1/hooks${suffix}` });
     },
     listProjects() {
       return request<WorkspaceProjectList>({ path: '/v1/projects' });

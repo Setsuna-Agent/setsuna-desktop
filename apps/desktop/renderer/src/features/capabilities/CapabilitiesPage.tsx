@@ -1,7 +1,6 @@
 import type {
   RuntimeExtensionStatus,
-  RuntimeHookListResponse,
-  RuntimeHookMetadata,
+  RuntimeHookManagementProjection as CapabilitiesHook,
   RuntimeMcpServer,
   RuntimeMcpServerInput,
   RuntimeMcpServerList,
@@ -75,7 +74,7 @@ export function capabilityCatalogTitle(
 export function CapabilitiesPage({
   skills,
   mcpState,
-  hookState,
+  hooks,
   plugins,
   pluginMarketplace,
   pluginMarketplaceErrors,
@@ -108,7 +107,7 @@ export function CapabilitiesPage({
 }: {
   skills: RuntimeSkillSummary[];
   mcpState: RuntimeMcpServerList | null;
-  hookState: RuntimeHookListResponse | null;
+  hooks: CapabilitiesHook[];
   plugins: RuntimePluginSummary[];
   pluginMarketplace: RuntimePluginMarketplaceItem[];
   pluginMarketplaceErrors: string[];
@@ -134,9 +133,9 @@ export function CapabilitiesPage({
   onUpdateMarketplacePlugin: (pluginId: string) => Promise<unknown>;
   onRemovePlugin: (pluginId: string) => Promise<void>;
   onSetPluginExtensionTrust: (pluginId: string, trusted: boolean) => Promise<void>;
-  onDeleteStandaloneHook: (hook: RuntimeHookMetadata) => Promise<void>;
-  onSetHookEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
-  onSetHookTrust: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
+  onDeleteStandaloneHook: (hook: CapabilitiesHook) => Promise<void>;
+  onSetHookEnabled: (hook: CapabilitiesHook, enabled: boolean) => Promise<void>;
+  onSetHookTrust: (hook: CapabilitiesHook, trusted: boolean) => Promise<void>;
   onSelectedPluginIdChange: (pluginId: string | null) => void;
 }) {
   const { t } = useI18n();
@@ -174,8 +173,6 @@ export function CapabilitiesPage({
   const selectedMcpServer = selectedMcpServerKey
     ? servers.find((server) => server.key === selectedMcpServerKey)
     : undefined;
-  const hookEntries = hookState?.data ?? [];
-  const hooks = hookEntries.flatMap((entry) => entry.hooks.map((hook) => ({ ...hook, cwd: entry.cwd })));
   const standaloneHooks = hooks.filter((hook) => hook.source === 'user' && !hook.pluginId);
   const enabledSkillCount = skills.filter((skill) => skill.enabled).length;
   const normalizedCapabilityQuery = capabilityQuery.trim().toLowerCase();

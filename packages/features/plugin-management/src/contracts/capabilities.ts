@@ -11,11 +11,20 @@ import type { PluginManagementDesktopBridge } from './bridge.js';
 import type {
   PluginManagementExtensionSnapshot,
   PluginManagementExtensionTrustInput,
+  PluginManagementHook,
+  PluginManagementHookQuery,
+  PluginManagementHookSnapshot,
+  PluginManagementHookStateInput,
+  PluginManagementHookTarget,
   PluginManagementItemTarget,
   PluginManagementLocalInstallInput,
   PluginManagementPluginTarget,
   PluginManagementSnapshot,
 } from './types.js';
+
+export type PluginManagementHookMutationResult =
+  | Readonly<{ status: 'updated'; snapshot: PluginManagementHookSnapshot }>
+  | Readonly<{ status: 'not-found' | 'changed' | 'not-manageable' | 'not-standalone' }>;
 
 /** Existing runtime adapters exposed through one management-only seam. */
 export interface PluginManagementRuntimeHost {
@@ -25,10 +34,13 @@ export interface PluginManagementRuntimeHost {
   installLocal(input: PluginManagementLocalInstallInput): Promise<RuntimePluginInstallResult>;
   installMarketplace(input: PluginManagementPluginTarget): Promise<RuntimePluginInstallResult>;
   listExtensions(): Promise<RuntimeExtensionStatusList>;
+  listHooks(input: PluginManagementHookQuery): Promise<PluginManagementHookSnapshot>;
   listMarketplace(): Promise<RuntimePluginMarketplaceList>;
   listPlugins(): Promise<RuntimePluginList>;
   remove(input: PluginManagementPluginTarget): Promise<RuntimePluginRemoveResult>;
   setExtensionTrust(input: PluginManagementExtensionTrustInput): Promise<RuntimePluginList>;
+  setHookState(input: PluginManagementHookStateInput): Promise<PluginManagementHookMutationResult>;
+  deleteStandaloneHook(input: PluginManagementHookTarget): Promise<PluginManagementHookMutationResult>;
   updateMarketplace(input: PluginManagementPluginTarget): Promise<RuntimePluginInstallResult>;
 }
 
@@ -50,6 +62,7 @@ export type PluginManagementRendererListener = () => void;
 
 export interface PluginManagementRendererService {
   getSnapshot(): PluginManagementSnapshot;
+  getHookSnapshot(): PluginManagementHookSnapshot;
   subscribe(listener: PluginManagementRendererListener): () => void;
   refresh(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementSnapshot>;
   refreshExtensions(options?: Readonly<{ signal?: AbortSignal }>): Promise<PluginManagementExtensionSnapshot>;
@@ -79,6 +92,24 @@ export interface PluginManagementRendererService {
     input: PluginManagementExtensionTrustInput,
     options?: Readonly<{ signal?: AbortSignal }>,
   ): Promise<RuntimePluginList>;
+  refreshHooks(
+    input?: PluginManagementHookQuery,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot>;
+  setHookEnabled(
+    hook: PluginManagementHook,
+    enabled: boolean,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot>;
+  setHookTrust(
+    hook: PluginManagementHook,
+    trusted: boolean,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot>;
+  deleteStandaloneHook(
+    hook: PluginManagementHook,
+    options?: Readonly<{ signal?: AbortSignal }>,
+  ): Promise<PluginManagementHookSnapshot>;
 }
 
 export const pluginManagementRendererServiceCapability: CapabilityToken<PluginManagementRendererService> = defineCapability({

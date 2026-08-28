@@ -121,12 +121,8 @@ export function AppRouteContent({
   const { t } = useI18n();
   const mcp = useMcpCapabilities();
   const skills = useSkillsCapabilities();
-  const refreshCapabilities = useCallback(async () => {
-    await Promise.all([runtime.refreshCapabilities(), mcp.refresh(), skills.refresh()]);
-  }, [mcp.refresh, runtime.refreshCapabilities, skills.refresh]);
-  const refreshCapabilityDependencies = useCallback(async () => {
-    const [runtimeResult, mcpResult, skillsResult] = await Promise.allSettled([
-      runtime.refreshCapabilityDependencies(),
+  const refreshCapabilityDependencies = useCallback(async (): Promise<void> => {
+    const [mcpResult, skillsResult] = await Promise.allSettled([
       mcp.refresh(),
       skills.refresh(),
     ]);
@@ -136,12 +132,10 @@ export function AppRouteContent({
     if (skillsResult.status === 'rejected') {
       reportRuntimeBackgroundFailure('Skill refresh after plugin mutation', skillsResult.reason);
     }
-    if (runtimeResult.status === 'rejected') throw runtimeResult.reason;
-    return runtimeResult.value;
-  }, [mcp.refresh, runtime.refreshCapabilityDependencies, skills.refresh]);
+  }, [mcp.refresh, skills.refresh]);
   const pluginManagement = usePluginManagementCapabilities({
-    refreshCapabilities,
-    refreshCapabilityDependencies,
+    activeProjectPath: activeProject?.path,
+    refreshDependencies: refreshCapabilityDependencies,
   });
   const installSkillMcpDependencies = useCallback(async (
     skill: Parameters<typeof skills.installMcpDependencies>[0],
@@ -268,7 +262,7 @@ export function AppRouteContent({
         <CapabilitiesPage
           skills={skills.skills}
           mcpState={mcp.snapshot}
-          hookState={runtime.hookState}
+          hooks={pluginManagement.hooks}
           plugins={pluginManagement.plugins}
           pluginMarketplace={pluginManagement.marketplace}
           pluginMarketplaceErrors={pluginManagement.marketplaceErrors}
@@ -294,9 +288,9 @@ export function AppRouteContent({
           onUpdateMarketplacePlugin={pluginManagement.updateMarketplace}
           onRemovePlugin={pluginManagement.remove}
           onSetPluginExtensionTrust={pluginManagement.setExtensionTrust}
-          onDeleteStandaloneHook={runtime.deleteStandaloneHook}
-          onSetHookEnabled={runtime.setHookEnabled}
-          onSetHookTrust={runtime.setHookTrust}
+          onDeleteStandaloneHook={pluginManagement.deleteStandaloneHook}
+          onSetHookEnabled={pluginManagement.setHookEnabled}
+          onSetHookTrust={pluginManagement.setHookTrust}
           onSelectedPluginIdChange={onSelectedCapabilitiesPluginIdChange}
         />
       </Suspense>

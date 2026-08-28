@@ -469,14 +469,13 @@ describe('capabilities plugin components', () => {
     const html = renderToStaticMarkup(
       <CapabilitiesLegacyHooksDetail
         hooks={[{
-          key: 'C:\\runtime\\config.json:pre_tool_use:0:0',
+          managementId: 'standalone-hook',
           eventName: 'preToolUse',
           handlerType: 'command',
           matcher: 'shell',
           command: 'echo checked',
           timeoutSec: 30,
           statusMessage: null,
-          sourcePath: 'C:\\runtime\\config.json',
           source: 'user',
           pluginId: null,
           displayOrder: 0,
@@ -544,14 +543,13 @@ describe('capabilities plugin components', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     const onSetHookTrust = vi.fn(async () => undefined);
     const runtimeHook = {
-      key: 'C:\\runtime\\plugins\\local-audit\\hooks\\audit.mjs:post_tool_use:0:0',
+      managementId: 'local-audit-hook',
       eventName: 'postToolUse' as const,
       handlerType: 'command' as const,
       matcher: 'write_file',
-      command: 'node audit.mjs',
+      command: null,
       timeoutSec: 30,
       statusMessage: null,
-      sourcePath: 'C:\\runtime\\plugins\\local-audit\\hooks\\audit.mjs',
       source: 'plugin' as const,
       pluginId: 'local-audit',
       pluginHookId: 'audit',
@@ -583,7 +581,7 @@ describe('capabilities plugin components', () => {
         installing={false}
         removing={false}
         runtimeHooks={[
-          { ...runtimeHook, key: `${runtimeHook.key}:other`, pluginHookId: 'other', currentHash: 'other-hash' },
+          { ...runtimeHook, managementId: 'other-hook', pluginHookId: 'other', currentHash: 'other-hash' },
           runtimeHook,
         ]}
         onBack={() => undefined}
@@ -601,14 +599,13 @@ describe('capabilities plugin components', () => {
   it('lets users disable an installed marketplace Hook', async () => {
     const onSetHookEnabled = vi.fn(async () => undefined);
     const runtimeHook = {
-      key: 'C:\\runtime\\plugins\\guard\\hooks\\guard.mjs:pre_tool_use:0:0',
+      managementId: 'guard-hook',
       eventName: 'preToolUse' as const,
       handlerType: 'command' as const,
       matcher: 'shell',
-      command: 'node guard.mjs',
+      command: null,
       timeoutSec: 30,
       statusMessage: null,
-      sourcePath: 'C:\\runtime\\plugins\\guard\\hooks\\guard.mjs',
       source: 'plugin' as const,
       pluginId: 'guard',
       pluginHookId: 'guard-shell',

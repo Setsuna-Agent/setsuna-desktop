@@ -5,7 +5,9 @@ import {
   pluginManagementFeature,
   readInstalledPlugins,
   readPluginExtensionStatuses,
+  readPluginHooks,
   readPluginManagementSnapshot,
+  setPluginHookState,
   updateMarketplacePlugin,
   type PluginManagementRuntimeHost,
 } from '../../src/contracts/index.js';
@@ -28,10 +30,13 @@ describe('plugin management runtime feature', () => {
       installLocal,
       installMarketplace: vi.fn(),
       listExtensions: vi.fn(async () => ({ extensions: [] })),
+      listHooks: vi.fn(async () => ({ hooks: [] })),
       listMarketplace: vi.fn(async () => ({ errors: ['catalog warning'], plugins: [] })),
       listPlugins: vi.fn(async () => ({ plugins: [] })),
+      deleteStandaloneHook: vi.fn(),
       remove: vi.fn(),
       setExtensionTrust: vi.fn(),
+      setHookState: vi.fn(async () => ({ status: 'changed' as const })),
       updateMarketplace,
     } as unknown as PluginManagementRuntimeHost;
     const routes = new Map<string, (input: unknown) => unknown | PromiseLike<unknown>>();
@@ -72,6 +77,9 @@ describe('plugin management runtime feature', () => {
     await expect(routes.get(readInstalledPlugins.id)?.(undefined)).resolves.toEqual({
       plugins: [],
     });
+    await expect(routes.get(readPluginHooks.id)?.({ cwd: '/tmp/workspace' })).resolves.toEqual({
+      hooks: [],
+    });
     await expect(routes.get(installLocalPlugin.id)?.({ path: '/tmp/local-plugin' })).resolves.toMatchObject({
       plugin: { id: 'local-plugin' },
     });
@@ -80,6 +88,14 @@ describe('plugin management runtime feature', () => {
     await expect(routes.get(updateMarketplacePlugin.id)?.({ pluginId: 'local-plugin' })).rejects.toMatchObject({
       code: 'PLUGIN_OPERATION_FAILED',
       message: 'Marketplace plugin update is not available: local-plugin',
+      retryable: false,
+    });
+    await expect(routes.get(setPluginHookState.id)?.({
+      currentHash: 'old-hash',
+      enabled: false,
+      managementId: 'hook-id',
+    })).rejects.toMatchObject({
+      code: 'PLUGIN_HOOK_CHANGED',
       retryable: false,
     });
 

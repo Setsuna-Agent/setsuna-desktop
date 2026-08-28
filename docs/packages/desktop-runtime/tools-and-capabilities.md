@@ -319,6 +319,13 @@ Memory 写入带 thread/turn 来源，PC-local host 不再保存第二份 Memory
 - 拒绝不支持的 universal/specific 字段。
 - 生成 canonical hash。
 
+`runtime-hook-management.ts` 是管理面 owner：
+
+- 向 Plugin Management Feature 提供不含 config key/source path 的 renderer projection，Plugin Hook 命令同时被隐藏。
+- 用 opaque management ID 和当前 hash 校验启停、信任与旧版独立 Hook 删除，避免迟到页面状态修改已变化的命令。
+- 串行写入 Hook config，并在删除 handler 后重排相邻 state key。
+- 为旧 REST 与 SWE `hooks/list` 保留同源的兼容 query。
+
 Plugin Hook 默认不可信；用户信任绑定当前 command hash，命令变化后需要重新确认。
 
 Hook output 是外部输入，不能直接修改任意 runtime state。Coordinator 只接受对应事件允许的结构化 outcome。

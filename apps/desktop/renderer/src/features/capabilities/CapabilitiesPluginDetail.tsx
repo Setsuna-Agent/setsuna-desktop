@@ -1,6 +1,6 @@
 import type {
   RuntimeExtensionStatus,
-  RuntimeHookMetadata,
+  RuntimeHookManagementProjection as CapabilitiesHook,
   RuntimeMcpServer,
   RuntimePluginItemContent,
   RuntimePluginItemKind,
@@ -64,11 +64,11 @@ export function CapabilitiesPluginDetail({
   onRemove: (plugin: RuntimePluginSummary) => Promise<void>;
   onUseInConversation?: (skillId: string) => void;
   onSetExtensionTrust?: (plugin: RuntimePluginSummary, trusted: boolean) => Promise<void>;
-  onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
-  onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
+  onSetHookEnabled?: (hook: CapabilitiesHook, enabled: boolean) => Promise<void>;
+  onSetHookTrust?: (hook: CapabilitiesHook, trusted: boolean) => Promise<void>;
   onSetSkillEnabled?: (skill: RuntimeSkillSummary, enabled: boolean) => Promise<void>;
   removing: boolean;
-  runtimeHooks?: RuntimeHookMetadata[];
+  runtimeHooks?: CapabilitiesHook[];
 }) {
   const { t } = useI18n();
   const featureViews = useRendererFeatureViews();

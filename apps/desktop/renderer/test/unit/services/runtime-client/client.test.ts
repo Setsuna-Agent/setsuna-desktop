@@ -229,24 +229,6 @@ describe('desktop runtime client advanced thread methods', () => {
     ]);
   });
 
-  it('routes Hook discovery through first-party REST', async () => {
-    const request = installRuntimeBridge((input) => {
-      if (input.path.startsWith('/v1/hooks')) {
-        return { data: [] };
-      }
-      return { ok: true };
-    });
-    const client = createDesktopRuntimeClient();
-
-    await client.listHooks(['/repo one', '/repo/two']);
-
-    expect(request.mock.calls.map(([input]) => input)).toEqual([
-      {
-        path: '/v1/hooks?cwd=%2Frepo+one&cwd=%2Frepo%2Ftwo',
-      },
-    ]);
-  });
-
   it('requests the workspace scoped to a conversation thread', async () => {
     const request = installRuntimeBridge(() => ({ exists: true, readable: true }));
     const client = createDesktopRuntimeClient();

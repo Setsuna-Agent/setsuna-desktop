@@ -126,9 +126,10 @@ Renderer 的薄 runtime facade，只持有：
 
 - Bootstrap loading/error。
 - Projects。
-- Turn 完成后的跨 capability 刷新桥。
+- Config 与 thread owner 的组合结果。
+- Turn 完成后的窄 settlement 通知桥。
 
-它组合 `useRuntimeCapabilityState.ts`、`useRuntimeConfigState.ts` 和 `useRuntimeThreadState.ts`，对上层提供稳定的宿主状态面。Feature 私有状态由 renderer contribution 自己持有，不再汇入该 facade。
+它组合 `useRuntimeConfigState.ts` 和 `useRuntimeThreadState.ts`，对上层提供稳定的宿主状态面。Feature 私有状态由 renderer contribution 自己持有，不再汇入该 facade。
 
 ### `useRuntimeThreadState.ts`
 
@@ -152,16 +153,11 @@ Runtime config 的唯一 renderer state owner，持有共享配置文档并负�
 
 该 hook 只依赖 Core `saveConfig`。Model Provider Feature 独立持有 provider CRUD、secret 安全投影与模型发现，并通过只读 projection 合入这份共享配置，使聊天和任务模型选择保持同步；它们不复制第二个 Core config owner。图片生成连接、secret 安全投影和连通性测试同样由 Image Generation renderer controller 与 typed Feature client 独立持有。
 
-### `useRuntimeCapabilityState.ts`
+### Capability Feature state
 
-Core Hook 兼容域 owner，持有：
+Plugin catalog、extension 与 Hook 管理由 `packages/features/plugin-management/src/renderer/` 的外部 store service 持有；Skills catalog、extra roots、CRUD 与 MCP dependency 命令由 `packages/features/skills/src/renderer/` 持有；MCP server state 与命令由 `packages/features/mcp/src/renderer/` 持有。Plugin Management 的 Hook projection 使用 opaque management ID，不把 config key、source path 或 Plugin 绝对命令交给宿主 UI；Hook mutation 由 Feature service/runtime owner 串行并校验当前 hash。
 
-- Hooks 与当前 project cwd 的 latest-request guard。
-- Plugin mutation 后的 config/Hook 刷新。
-
-该 hook 依赖只含 Hook 方法的显式 `RuntimeCapabilityClient`，不能调用 thread、Feature 私有或 workspace API。Hook mutation 仍通过窄 `onConfigChange` 回写 `useRuntimeConfigState` 的共享 config。
-
-Skills catalog、extra roots、CRUD 与 MCP dependency 命令由 `packages/features/skills/src/renderer/` 的外部 store service 持有；MCP server state 与命令由 `packages/features/mcp/src/renderer/` 持有。宿主 composition 只在 Plugin mutation 或 turn settlement 后协调必要的跨域刷新，不把 Feature snapshot 合回 `useRuntimeClientState`。
+宿主 composition 只在 Plugin mutation 或 turn settlement 后协调必要的跨域刷新，不把 Feature snapshot 合回 `useRuntimeClientState`。
 
 ### Usage renderer state
 
@@ -209,7 +205,7 @@ snapshot 把完成 turn 恢复成 active。Snapshot、Feature projection、capab
 
 ### `useLatestRequestGuard`
 
-适合同一资源连续刷新，只接受最新一轮结果，例如 hooks/memory preview。
+适合同一资源连续刷新，只接受最新一轮结果，例如 memory preview。Feature-owned service 可以使用等价的 request sequence，例如 Plugin Management 的 Hook projection。
 
 不要用一个全局 boolean 处理所有请求；不同资源需要独立 guard。
 
@@ -227,8 +223,8 @@ snapshot 把完成 turn 恢复成 active。Snapshot、Feature projection、capab
 - `runtimeEvents.test.ts`
 - `runtimeThreadState.test.ts`
 - `useRuntimeClientState.test.ts`
-- `useRuntimeCapabilityState.test.ts`
 - `useRuntimeConfigState.test.ts`
+- `packages/features/plugin-management/test/renderer/`
 - `packages/features/usage/test/renderer/`
 - `test/unit/app/controller/`
 - `test/unit/app/layout/`

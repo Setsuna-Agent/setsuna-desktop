@@ -66,7 +66,7 @@ Electron dev 和 packaged 都使用同一个 CLI；差异由 main 注入的 entr
 - `runtime-thread-routes.ts`：Thread、message、attachment、context、queue 和 debug trace。
 - `runtime-turn-routes.ts`：Turn start/steer/cancel 与 review。
 - `runtime-thread-command-routes.ts`：删除、Goal、Review 等共享 thread command。
-- `runtime-capability-routes.ts`：Hook 与 MCP status/resource/tool 兼容入口。
+- `runtime-capability-routes.ts`：旧 Hook query 与 MCP status/resource/tool 兼容入口。
 - `runtime-workspace-routes.ts`：Projects、entries、read/search 和 workspace status。
 - `runtime-memory-routes.ts`：旧 Memory REST 兼容入口；新 renderer 管理面走 Memory typed Feature operations。
 
@@ -98,7 +98,7 @@ Route family 只做 method/path/body 解析、错误映射和 response DTO。跨
 
 - Skills catalog、extra roots、CRUD 与 MCP dependencies 通过 Skills Feature typed operations 暴露。
 - MCP servers/tools/resources/OAuth。
-- Hooks。
+- Hook 管理通过 Plugin Management typed operations 暴露；旧 Hook query 作为兼容入口保留。
 - Plugins、marketplace、image generation 配置/测试与 vision recognition 模型选择/测试。
 - Approvals。
 

@@ -93,6 +93,25 @@ export type RuntimeHookMetadata = {
   trustStatus: RuntimeHookTrustStatus;
 };
 
+/** Path-free Hook projection shared by a management Feature and its host presentation. */
+export type RuntimeHookManagementProjection = Readonly<{
+  command: string | null;
+  currentHash: string;
+  displayOrder: number;
+  enabled: boolean;
+  eventName: RuntimeHookProtocolEventName;
+  handlerType: 'command' | 'prompt' | 'agent';
+  isManaged: boolean;
+  managementId: string;
+  matcher: string | null;
+  pluginHookId?: string;
+  pluginId: string | null;
+  source: RuntimeHookSource;
+  statusMessage: string | null;
+  timeoutSec: number;
+  trustStatus: RuntimeHookTrustStatus;
+}>;
+
 export type RuntimeHookListEntry = {
   cwd: string;
   hooks: RuntimeHookMetadata[];
