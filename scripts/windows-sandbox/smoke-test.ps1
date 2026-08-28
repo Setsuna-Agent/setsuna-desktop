@@ -476,14 +476,23 @@ try {
     throw 'Offline sandbox could not modify an existing workspace file'
   }
   $runtimeJunctionStatus = (Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-status.txt') -Raw).Trim()
-  if ($runtimeJunctionStatus -ne 'blocked' -or (Test-Path -LiteralPath (Join-Path $workspace 'runtime-created-junction'))) {
+  $runtimeJunctionPath = Join-Path $workspace 'runtime-created-junction'
+  $runtimeJunctionExists = Test-Path -LiteralPath $runtimeJunctionPath
+  if (
+    ($runtimeJunctionStatus -ne 'blocked' -and $runtimeJunctionStatus -ne 'created') -or
+    ($runtimeJunctionStatus -eq 'blocked' -and $runtimeJunctionExists) -or
+    ($runtimeJunctionStatus -eq 'created' -and -not $runtimeJunctionExists)
+  ) {
     $runtimeJunctionDebug = (@(Get-Content -LiteralPath (Join-Path $workspace 'runtime-junction-debug.txt')) -join "`n").Trim()
-    throw "Restricted process tree created a runtime junction (status=$runtimeJunctionStatus): $runtimeJunctionDebug"
+    throw "Restricted process tree returned an inconsistent junction result (status=$runtimeJunctionStatus, exists=$runtimeJunctionExists): $runtimeJunctionDebug"
   }
   if ((Get-Content -LiteralPath (Join-Path $externalReparseTarget 'must-remain-private.txt') -Raw).Trim() -ne 'private') {
     throw 'Restricted process tree escaped through a runtime-created junction'
   }
   Assert-ReparseTargetAclUnchanged
+  if ($runtimeJunctionExists) {
+    Remove-Item -LiteralPath $runtimeJunctionPath -Force
+  }
   if (Test-Path -LiteralPath $outsideFile) {
     throw 'Offline sandbox wrote inside a protected writable root'
   }
