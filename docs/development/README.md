@@ -50,10 +50,10 @@ pnpm build
 - Electron Builder。
 - Native dependency。
 - Bundled ripgrep。
-- PR CI 与 Codex review（advisory，不再是合并门禁）。
+- PR CI。
 - Release artifacts/manifest/checksum。
 
-[仓库脚本](../scripts/README.md) 逐个说明 `scripts/`。
+[仓库脚本](repository-scripts.md) 逐个说明 `scripts/`。
 
 ## 目录/文档变更
 

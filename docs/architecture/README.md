@@ -2,6 +2,8 @@
 
 Setsuna Desktop 是 local-first Electron 工作台。Electron 提供可信桌面边界，本地 runtime 承载 Agent 行为，React renderer 只负责用户交互与状态展示。
 
+架构需要同时从两条轴理解：Core 横向层定义通用进程与数据边界，Feature 纵向层定义具体业务 owner。只看其中一条，都会错误地把业务塞回宿主或让 Feature 复制 Core 语义。
+
 ## 分层方向
 
 ```text
@@ -123,9 +125,11 @@ Core runtime snapshot 与事件属于对应 runtime-client domain hook；纵向 
 
 - [启动、请求、事件与 turn 时序](runtime-flows.md)
 - [Feature Composition 决策概览](feature-composition.md)
-- [Feature 从 0 到 1](feature-development-guide.md)
+- [Feature Core 内核](../core/feature-core/README.md)
+- [当前 Feature inventory](../features/README.md)
+- [Feature 从 0 到 1](../features/adding-a-feature.md)
 - [数据布局与安全边界](data-and-security.md)
 - [常见变更的跨层扩散](change-map.md)
-- [Desktop 应用模块](../apps/desktop/README.md)
-- [Contracts 模块](../packages/contracts/README.md)
-- [Runtime 模块](../packages/desktop-runtime/README.md)
+- [Desktop 应用模块](../desktop/README.md)
+- [Contracts 模块](../core/contracts/README.md)
+- [Runtime 模块](../core/runtime/README.md)
