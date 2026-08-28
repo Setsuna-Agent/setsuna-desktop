@@ -14,6 +14,7 @@ import {
 import {
   createSelectedSkillSlot,
   createTextSlot,
+  createWorkspaceMentionInsertion,
   createWorkspaceMentionReferenceSlot,
   filterSelectedSkillsBySlots,
 } from '../../../../../src/features/chat/composer/chatComposerSlots.js';
@@ -25,6 +26,7 @@ const skill: RuntimeSkillSummary = {
   kind: 'builtin',
   enabled: true,
 };
+const workspaceMentionPaths = ['package.json', 'README.md', 'Tree.md', 'tsconfig.json', 'pnpm-lock.yaml'];
 
 afterEach(cleanup);
 
@@ -113,6 +115,18 @@ describe('chat composer Skill selection with the real Sender', () => {
       expect(new Set(skillSlots.map((slot) => slot.dataset.slotKey)).size).toBe(2);
       expect(new Set(workspaceSlots.map((slot) => slot.dataset.slotKey)).size).toBe(2);
     });
+  });
+
+  it('inserts more than two workspace references through repeated external requests', async () => {
+    render(<WorkspaceMentionRequestHarness />);
+
+    for (const [index, path] of workspaceMentionPaths.entries()) {
+      fireEvent.click(screen.getByRole('button', { name: `add ${path}` }));
+      await waitFor(() => {
+        expect(screen.getByRole('textbox').querySelectorAll('[data-slot-key^="workspace:"]'))
+          .toHaveLength(index + 1);
+      });
+    }
   });
 
   it('preserves line breaks when structured references are cut and pasted', async () => {
@@ -289,6 +303,41 @@ function StructuredClipboardHarness({
       />
       <output data-testid="selected-skills">{selectedSkills.map((item) => item.id).join(',')}</output>
     </div>
+  );
+}
+
+function WorkspaceMentionRequestHarness() {
+  const editorRef = useRef<ComponentRef<typeof Sender>>(null);
+  const initialSlotsRef = useRef([]);
+  const [draft, setDraft] = useState('');
+
+  const addEntry = (path: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const currentValue = editor.getValue();
+    const insertion = createWorkspaceMentionInsertion({
+      kind: 'file',
+      name: path,
+      parent: '',
+      path,
+    }, currentValue.value, currentValue.slotConfig);
+    if (!insertion) return;
+    editor.focus({ cursor: 'end', preventScroll: true });
+    editor.insert(insertion.slots, 'end', insertion.replaceCharacters, true);
+  };
+
+  return (
+    <>
+      <Sender
+        ref={editorRef}
+        slotConfig={initialSlotsRef.current}
+        value={draft}
+        onChange={setDraft}
+      />
+      {workspaceMentionPaths.map((path) => (
+        <button key={path} type="button" onClick={() => addEntry(path)}>add {path}</button>
+      ))}
+    </>
   );
 }
 

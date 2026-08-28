@@ -31,10 +31,16 @@ describe('workspace mention slots', () => {
     expect(slots[1]).toEqual({ type: 'text', value: ' ' });
   });
 
-  it('appends after existing content while replacing trailing whitespace', () => {
+  it('appends after existing content without replacing trailing whitespace', () => {
     const insertion = createWorkspaceMentionInsertion(entry, '请检查这个文件   ', []);
 
-    expect(insertion?.replaceCharacters).toBe('   ');
+    expect(insertion?.replaceCharacters).toBeUndefined();
+    expect(insertion?.slots[0]?.type).toBe('tag');
+  });
+
+  it('adds a separator when appending after non-whitespace content', () => {
+    const insertion = createWorkspaceMentionInsertion(entry, '请检查这个文件', []);
+
     expect(insertion?.slots[0]).toEqual({ type: 'text', value: ' ' });
     expect(insertion?.slots[1]?.type).toBe('tag');
   });

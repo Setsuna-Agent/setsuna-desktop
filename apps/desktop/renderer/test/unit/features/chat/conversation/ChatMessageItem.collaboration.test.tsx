@@ -40,6 +40,19 @@ afterEach(() => {
 });
 
 describe('MessageItem collaboration updates', () => {
+  it('groups consecutive subagent results into one compact result grid', () => {
+    const view = render(messageItem([
+      persistentToolRun('spawn_first'),
+      persistentToolRun('spawn_second'),
+      persistentToolRun('spawn_third'),
+    ]));
+
+    const grid = view.container.querySelector('.chat-persistent-tool-result-grid');
+    expect(grid).not.toBeNull();
+    expect(grid?.querySelectorAll(':scope > .chat-tool-runs')).toHaveLength(3);
+    expect(grid?.querySelectorAll('.subagent-task-card')).toHaveLength(3);
+  });
+
   it('keeps tool chunks around a subagent card as uniquely keyed siblings', () => {
     const keyWarnings: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((...values: unknown[]) => {
@@ -47,10 +60,7 @@ describe('MessageItem collaboration updates', () => {
       if (message.includes('same key') || message.includes('unique "key"')) keyWarnings.push(message);
     });
     const readBefore = toolRun('read_before_spawn', 'workspace_read_file');
-    const persistentResult = {
-      ...toolRun('spawn_runtime', 'spawn_agent'),
-      data: { resultKind: 'test.persistent-result', resultMajor: 1, payload: {} },
-    };
+    const persistentResult = persistentToolRun('spawn_runtime');
     const readAfter = toolRun('read_after_spawn', 'workspace_read_file');
     const view = render(messageItem([readBefore, persistentResult]));
 
@@ -115,6 +125,13 @@ function messageItem(toolRuns: RuntimeToolRun[], completed = false) {
       selectedForDelete={false}
     />
   );
+}
+
+function persistentToolRun(id: string): RuntimeToolRun {
+  return {
+    ...toolRun(id, 'spawn_agent'),
+    data: { resultKind: 'test.persistent-result', resultMajor: 1, payload: {} },
+  };
 }
 
 function toolRun(id: string, name: string): RuntimeToolRun {

@@ -709,7 +709,18 @@ function assistantWorkHistoryNodes({
   const surfaces = splitWorkHistorySurfaces(plan.entries, isPersistentToolResult);
   const workNodes: ReactNode[] = [];
   const persistentNodes: ReactNode[] = [];
+  let persistentWorkGroup: Array<{ id: string; node: ReactNode }> = [];
   let hasCollapsibleDetails = false;
+  const flushPersistentWorkGroup = () => {
+    const first = persistentWorkGroup[0];
+    if (!first) return;
+    workNodes.push(
+      <div className="chat-persistent-tool-result-grid" key={`persistent-tool-result-grid:${first.id}`}>
+        {persistentWorkGroup.map(({ node }) => node)}
+      </div>,
+    );
+    persistentWorkGroup = [];
+  };
   for (const surface of surfaces) {
     if (surface.type === 'persistentToolResult') {
       const card = (
@@ -719,10 +730,11 @@ function assistantWorkHistoryNodes({
           runs={[surface.run]}
         />
       );
-      workNodes.push(card);
+      persistentWorkGroup.push({ id: surface.run.id, node: card });
       persistentNodes.push(card);
       continue;
     }
+    flushPersistentWorkGroup();
     const surfaceNodes = assistantWorkEntriesNodes(
       surface.entries,
       onAnswerApproval,
@@ -733,6 +745,7 @@ function assistantWorkHistoryNodes({
       workNodes.push(...surfaceNodes);
     }
   }
+  flushPersistentWorkGroup();
   if (!workNodes.length && !plan.active) return [];
   const workHistoryKey = plan.blocks[0]?.id ?? itemId;
   const workTiming = inferWorkTiming(plan.blocks.flatMap((block) => block.segments));
@@ -747,7 +760,11 @@ function assistantWorkHistoryNodes({
       key={panelId}
       onExpandedChange={onExpandedChange}
       panelId={panelId}
-      persistentChildren={persistentNodes.length ? persistentNodes : undefined}
+      persistentChildren={persistentNodes.length ? (
+        <div className="chat-persistent-tool-result-grid">
+          {persistentNodes}
+        </div>
+      ) : undefined}
       startedAtMs={workTiming.startedAtMs}
     >
       {workNodes}

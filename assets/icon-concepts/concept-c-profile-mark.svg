@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title description">
+  <title id="title">Minimal anime profile app icon concept</title>
+  <desc id="description">A logo-like side profile with a short blue bob and a small snowflake earring.</desc>
+  <rect x="48" y="48" width="928" height="928" rx="220" fill="#FFF7E8"/>
+  <circle cx="512" cy="512" r="333" fill="#DDEBFF"/>
+  <g stroke="#173B73" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M285 700c-13-65-15-139 1-219 31-159 136-261 277-253 145 8 230 118 220 255-7 92-47 164-113 216-74 59-282 77-385 1Z" fill="#316DCA" stroke-width="30"/>
+    <path d="M427 705c-18-45-20-92-1-136 16-36 47-69 90-92-42-3-78-22-103-55 43-91 128-139 213-116 80 22 124 98 108 178-9 45-37 78-78 97-22 11-32 26-20 44 12 18 31 31 57 38-48 86-181 126-266 42Z" fill="#FFF7E8" stroke-width="24"/>
+    <path d="M403 424c65-88 163-126 255-94-18 68-70 116-153 145-45 16-80 38-104 67" fill="#7EABE5" stroke-width="24"/>
+    <path d="M622 449c13-7 26-5 36 6" fill="none" stroke-width="18"/>
+    <path d="M645 477v14" fill="none" stroke-width="18"/>
+    <path d="M704 531c-18 13-36 15-53 6" fill="none" stroke-width="15"/>
+    <path d="M581 626c-14 56-7 102 22 139" fill="none" stroke-width="22"/>
+    <path d="m665 631 12 19 22 5-18 13-2 22-17-14-22 8 8-21-14-18 23 2Z" fill="#F18B75" stroke-width="12"/>
+  </g>
+</svg>

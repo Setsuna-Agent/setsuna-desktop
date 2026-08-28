@@ -147,6 +147,17 @@ function createStartupSplashHtml(logoDataUrl: string, options: StartupSplashPage
         border-radius: 13px;
       }
 
+      .setsuna-logo::after {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        box-sizing: border-box;
+        border: 1px solid rgba(84, 108, 136, 0.16);
+        border-radius: inherit;
+        pointer-events: none;
+        content: '';
+      }
+
       .setsuna-logo__layer {
         position: absolute;
         inset: 0;
@@ -159,15 +170,15 @@ function createStartupSplashHtml(logoDataUrl: string, options: StartupSplashPage
       }
 
       .setsuna-logo__base {
-        opacity: 0.38;
-        filter: grayscale(1) contrast(1.05) brightness(0.8);
-        mix-blend-mode: multiply;
+        opacity: 0.82;
+        filter: saturate(0.92) contrast(1.02);
       }
 
       .setsuna-logo__highlight {
         z-index: 1;
         opacity: 0;
-        filter: grayscale(1) contrast(0.72) brightness(2.25);
+        filter: saturate(1.08) brightness(1.45);
+        mix-blend-mode: screen;
         -webkit-mask-image: linear-gradient(
           104deg,
           transparent 0%,

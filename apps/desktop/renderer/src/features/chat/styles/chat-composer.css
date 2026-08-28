@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px var(--chat-content-inline-padding) var(--chat-composer-bottom-inset);
+  padding: 0 var(--chat-content-inline-padding) var(--chat-composer-bottom-inset);
   border-top: 0;
   background: var(--desktop-agent-main-bg);
 }
@@ -535,6 +535,7 @@
 .chat-sender textarea {
   min-width: 0;
   max-width: 100%;
+  caret-color: var(--app-primary);
   overflow-x: hidden;
   overflow-wrap: anywhere;
 }
@@ -549,7 +550,7 @@
 .chat-sender .ant-sender-slot:has(.chat-inline-reference) {
   display: inline;
   height: auto;
-  margin: 0;
+  margin-inline: 2px;
   line-height: inherit;
   vertical-align: baseline;
   word-break: inherit;
@@ -629,7 +630,7 @@
 .chat-sender-command-button {
   box-sizing: border-box;
   color: var(--app-text-secondary);
-  background: color-mix(in srgb, var(--app-text) 4%, transparent);
+  background: transparent;
   box-shadow: none;
 }
 
@@ -909,7 +910,7 @@
   border: 1px solid transparent !important;
   border-radius: 8px;
   color: var(--app-text-secondary) !important;
-  background: color-mix(in srgb, var(--app-text) 4%, transparent) !important;
+  background: transparent !important;
   box-shadow: none !important;
   font-size: 12px;
   line-height: 14px;
@@ -920,11 +921,13 @@
 .chat-thinking-switch.ant-btn-primary,
 .chat-thinking-switch.ant-btn-color-primary,
 .chat-thinking-switch.ant-btn-variant-solid,
+.chat-thinking-switch.ant-btn[aria-expanded='true'],
 .chat-authorization-switch.ant-btn:hover,
 .chat-authorization-switch.ant-btn:focus-visible,
 .chat-authorization-switch.ant-btn-primary,
 .chat-authorization-switch.ant-btn-color-primary,
-.chat-authorization-switch.ant-btn-variant-solid {
+.chat-authorization-switch.ant-btn-variant-solid,
+.chat-authorization-switch.ant-btn[aria-expanded='true'] {
   border-color: transparent !important;
   color: var(--app-text) !important;
   background: var(--desktop-agent-control-hover-bg) !important;
@@ -936,7 +939,7 @@
 .chat-authorization-switch.ant-btn:disabled,
 .chat-authorization-switch.ant-btn.ant-btn-disabled {
   color: var(--app-text-secondary) !important;
-  background: color-mix(in srgb, var(--app-text) 4%, transparent) !important;
+  background: transparent !important;
   opacity: 1;
 }
 
