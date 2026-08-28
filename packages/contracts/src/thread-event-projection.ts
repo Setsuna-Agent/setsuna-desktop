@@ -537,6 +537,7 @@ export function mergeToolRun(current: RuntimeToolRun, next: RuntimeToolRun): Run
     approvalId: next.approvalId ?? current.approvalId,
     approvalReason: next.approvalReason ?? current.approvalReason,
     approvalRetryKind: next.approvalRetryKind ?? current.approvalRetryKind,
+    approvalAdditionalPermissions: next.approvalAdditionalPermissions ?? current.approvalAdditionalPermissions,
     approvalStatus: next.approvalStatus ?? current.approvalStatus,
     approvalMessage: next.approvalMessage ?? current.approvalMessage,
     availableApprovalDecisions: next.availableApprovalDecisions ?? current.availableApprovalDecisions,

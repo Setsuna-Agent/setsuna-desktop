@@ -108,6 +108,35 @@ describe('tool approval lifecycle automatic review', () => {
     });
   });
 
+  it('cancels automatic review without creating a user fallback approval', async () => {
+    const fixture = approvalFixture();
+    const cancellation = new Error('Feature scope is draining.');
+    cancellation.name = 'AbortError';
+
+    await expect(requestToolApproval({
+      approvalGate: fixture.gate,
+      automaticReview: { arguments: { cmd: 'pnpm test' } },
+      automaticReviewer: {
+        review: async () => { throw cancellation; },
+      },
+      events: fixture.events,
+      request: approvalRequest(),
+      reviewer: 'automatic',
+      signal: new AbortController().signal,
+    })).rejects.toBe(cancellation);
+
+    expect(fixture.requests).toEqual([
+      expect.objectContaining({ reviewer: 'automatic' }),
+    ]);
+    expect(fixture.resolutions).toEqual([
+      expect.objectContaining({
+        decision: 'cancel',
+        message: 'Turn cancelled.',
+        metadata: { source: 'system' },
+      }),
+    ]);
+  });
+
   it('escalates a high-risk automatic denial to a one-time user approval', async () => {
     const fixture = approvalFixture({ answerUserRequests: 'approve' });
 

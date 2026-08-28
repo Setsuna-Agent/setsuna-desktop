@@ -13,9 +13,9 @@ use windows_sys::Win32::Foundation::{
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertStringSecurityDescriptorToSecurityDescriptorW, ConvertStringSidToSidW,
-    GetNamedSecurityInfoW, GetSecurityInfo, SetEntriesInAclW, SetNamedSecurityInfoW, DENY_ACCESS,
-    EXPLICIT_ACCESS_W, REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS, TRUSTEE_IS_SID,
-    TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
+    GetNamedSecurityInfoW, GetSecurityInfo, SetEntriesInAclW, SetNamedSecurityInfoW,
+    SetSecurityInfo, DENY_ACCESS, EXPLICIT_ACCESS_W, REVOKE_ACCESS, SDDL_REVISION_1, SET_ACCESS,
+    TRUSTEE_IS_SID, TRUSTEE_IS_UNKNOWN, TRUSTEE_W,
 };
 use windows_sys::Win32::Security::{
     AccessCheck, AclSizeInformation, EqualSid, GetAce, GetAclInformation,
@@ -63,8 +63,10 @@ const WRITE_DAC_MASK: u32 = 0x0004_0000;
 const WRITE_OWNER_MASK: u32 = 0x0008_0000;
 const REPARSE_TAG_NAME_SURROGATE: u32 = 0x2000_0000;
 const COMPLETION_MARKER_MASK: u32 = 0x0002_0000;
-const READ_COMPLETION_DISCRIMINATOR: u32 = 0x7f31_a2c5;
-const WRITE_COMPLETION_DISCRIMINATOR: u32 = 0xb4d8_091e;
+// Bump both markers when persistent ACL materialization changes. Existing roots
+// must be traversed once so Junction objects skipped by older builds are repaired.
+const READ_COMPLETION_DISCRIMINATOR: u32 = 0x7f31_a2c6;
+const WRITE_COMPLETION_DISCRIMINATOR: u32 = 0xb4d8_091f;
 const DENY_COMPLETION_DISCRIMINATOR: u32 = 0xe26c_5f73;
 const LOCAL_SYSTEM_SID: &str = "S-1-5-18";
 const BUILTIN_ADMINISTRATORS_SID: &str = "S-1-5-32-544";
@@ -670,9 +672,32 @@ fn ensure_group_read_if_needed(
     sandbox_group_sid: *mut c_void,
     completion_marker: &LocalSid,
 ) -> Result<(), SandboxError> {
+    let inheritance = inherited_for(path);
+    let required_entry = persistent_allow_entry(sandbox_group_sid, READ_MASK, inheritance);
+    if persistent_acl_completion_is_valid(path, completion_marker, &[required_entry])? {
+        return Ok(());
+    }
+
     // PATH entries and system toolchains are commonly readable through an inherited
-    // group ACE while remaining protected from ACL changes by an unprivileged caller.
-    if token_has_access(path, access_token, READ_MASK)? {
+    // ACE while remaining protected from ACL changes by an unprivileged caller. Keep
+    // those public roots untouched, but rematerialize roots carrying an older group
+    // grant (or a damaged current marker) when the completion marker changes.
+    let has_group_read = path_has_effective_ace(
+        path,
+        sandbox_group_sid,
+        ACCESS_ALLOWED_ACE_TYPE,
+        READ_MASK,
+        0,
+    )?;
+    let has_completion_marker = path_has_effective_ace(
+        path,
+        completion_marker.raw(),
+        ACCESS_ALLOWED_ACE_TYPE,
+        COMPLETION_MARKER_MASK,
+        0,
+    )?;
+    if !has_group_read && !has_completion_marker && token_has_access(path, access_token, READ_MASK)?
+    {
         return Ok(());
     }
     ensure_persistent_allow_aces(path, &[(sandbox_group_sid, READ_MASK)], completion_marker)
@@ -877,18 +902,7 @@ fn ensure_persistent_allow_aces_with_inheritance(
     // interrupted legacy propagation cannot leave the group ACE root-only.
     let entries = allows
         .iter()
-        .map(|(sid, mask)| EXPLICIT_ACCESS_W {
-            grfAccessPermissions: *mask,
-            grfAccessMode: SET_ACCESS,
-            grfInheritance: inheritance,
-            Trustee: TRUSTEE_W {
-                pMultipleTrustee: std::ptr::null_mut(),
-                MultipleTrusteeOperation: 0,
-                TrusteeForm: TRUSTEE_IS_SID,
-                TrusteeType: TRUSTEE_IS_UNKNOWN,
-                ptstrName: sid.cast::<u16>(),
-            },
-        })
+        .map(|(sid, mask)| persistent_allow_entry(*sid, *mask, inheritance))
         .collect::<Vec<_>>();
     if let Some(marker) = completion_marker {
         if persistent_acl_completion_is_valid(path, marker, &entries)? {
@@ -906,6 +920,21 @@ fn ensure_persistent_allow_aces_with_inheritance(
     }
 
     apply_persistent_acl_entries_with_marker(path, &entries, completion_marker)
+}
+
+fn persistent_allow_entry(sid: *mut c_void, mask: u32, inheritance: u32) -> EXPLICIT_ACCESS_W {
+    EXPLICIT_ACCESS_W {
+        grfAccessPermissions: mask,
+        grfAccessMode: SET_ACCESS,
+        grfInheritance: inheritance,
+        Trustee: TRUSTEE_W {
+            pMultipleTrustee: std::ptr::null_mut(),
+            MultipleTrusteeOperation: 0,
+            TrusteeForm: TRUSTEE_IS_SID,
+            TrusteeType: TRUSTEE_IS_UNKNOWN,
+            ptstrName: sid.cast::<u16>(),
+        },
+    }
 }
 
 fn ensure_persistent_deny_ace(
@@ -1286,12 +1315,10 @@ fn materialize_persistent_acl_object(
             materialize_persistent_acl_object(&child, approved_root, &child_entries)?;
         }
     }
-    // Name-surrogate objects were already validated against the approved root.
-    // Do not pass their path to SetFileSecurityW because that API resolves the
-    // link and would mutate the target instead of the inspected link object.
-    if !object.is_name_surrogate {
-        apply_missing_acl_entries_to_object(object, entries)?;
-    }
+    // Name-surrogate objects are updated through their pinned OPEN_REPARSE_POINT
+    // handle below. This grants access to the Junction itself without following
+    // it and mutating the target directory.
+    apply_missing_acl_entries_to_object(object, entries)?;
 
     if object.is_directory && !object.is_name_surrogate && !inherited_entries.is_empty() {
         // Children created after the directory ACE was installed inherit it.
@@ -1460,8 +1487,27 @@ fn apply_missing_acl_entries_to_object(
                 ),
             ));
         }
-        let path_wide = to_wide(object.path.as_os_str());
-        let applied = set_file_dacl(&path_wide, new_dacl);
+        let applied = if object.is_name_surrogate {
+            let result = unsafe {
+                SetSecurityInfo(
+                    object.handle.raw(),
+                    SE_FILE_OBJECT,
+                    DACL_SECURITY_INFORMATION,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    new_dacl,
+                    std::ptr::null_mut(),
+                )
+            };
+            if result == ERROR_SUCCESS {
+                Ok(())
+            } else {
+                Err(std::io::Error::from_raw_os_error(result as i32))
+            }
+        } else {
+            let path_wide = to_wide(object.path.as_os_str());
+            set_file_dacl(&path_wide, new_dacl)
+        };
         unsafe { LocalFree(new_dacl as HLOCAL) };
         applied.map_err(|error| {
             SandboxError::with_source(
@@ -1645,13 +1691,16 @@ fn set_file_dacl(path_wide: &[u16], dacl: *const ACL) -> Result<(), std::io::Err
 
 #[cfg(test)]
 mod tests {
+    use super::super::token::process_impersonation_token;
     use super::{
         access_inspection_error, ancestor_read_paths, apply_non_recursive_acl_entries,
-        apply_persistent_acl_entries, completion_marker_entry, ensure_persistent_allow_aces,
-        ensure_persistent_deny_ace, is_name_surrogate_reparse_tag, mutate_acl,
-        path_has_effective_ace, unreadable_access_inspection, LocalSid, TokenAccessInspection,
+        apply_persistent_acl_entries, completion_marker_entry, completion_marker_sid,
+        ensure_group_read_if_needed, ensure_persistent_allow_aces, ensure_persistent_deny_ace,
+        is_name_surrogate_reparse_tag, materialize_persistent_acl_object, mutate_acl,
+        path_has_effective_ace, persistent_acl_entries_are_effective_for_object, token_has_access,
+        unreadable_access_inspection, LocalSid, PersistentAclObject, TokenAccessInspection,
         ACCESS_ALLOWED_ACE_TYPE, ACCESS_DENIED_ACE_TYPE, COMPLETION_MARKER_MASK, MUTATING_MASK,
-        READ_MASK,
+        READ_COMPLETION_DISCRIMINATOR, READ_MASK,
     };
     use crate::protocol::SandboxErrorCode;
     use std::fs;
@@ -1664,6 +1713,7 @@ mod tests {
     use windows_sys::Win32::Security::{
         CONTAINER_INHERIT_ACE, NO_PROPAGATE_INHERIT_ACE, OBJECT_INHERIT_ACE,
     };
+    use windows_sys::Win32::System::Threading::GetCurrentProcess;
 
     #[test]
     fn workspace_root_keeps_its_private_ancestors_in_the_read_plan() {
@@ -1746,6 +1796,65 @@ mod tests {
             0,
         )
         .expect("completion marker"));
+    }
+
+    #[test]
+    fn legacy_read_marker_forces_group_acl_rematerialization() {
+        const LEGACY_READ_COMPLETION_DISCRIMINATOR: u32 = 0x7f31_a2c5;
+
+        let temporary = tempdir().expect("temporary ACL tree");
+        let nested = temporary.path().join("node_modules").join("package");
+        fs::create_dir_all(&nested).expect("nested directory");
+        let existing_file = nested.join("index.js");
+        fs::write(&existing_file, "module.exports = true;").expect("existing file");
+        let group = LocalSid::parse("S-1-5-21-414141414-525252525-636363636-747474747")
+            .expect("test group SID");
+        let capability_sid = "S-1-5-21-818181818-929292929-303030303-404040404";
+        let legacy_completion =
+            completion_marker_sid(capability_sid, LEGACY_READ_COMPLETION_DISCRIMINATOR)
+                .expect("legacy completion SID");
+        let current_completion =
+            completion_marker_sid(capability_sid, READ_COMPLETION_DISCRIMINATOR)
+                .expect("current completion SID");
+        let inheritance = CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE;
+
+        // Model a root accepted by the previous marker even though its tree was
+        // not fully materialized. The desktop token can already read this root,
+        // reproducing the access-check early return that used to skip migration.
+        apply_non_recursive_acl_entries(
+            temporary.path(),
+            &[
+                allow_entry(&group, inheritance),
+                completion_marker_entry(&legacy_completion),
+            ],
+        )
+        .expect("install legacy root ACL");
+        let access_token = process_impersonation_token(unsafe { GetCurrentProcess() })
+            .expect("current process impersonation token");
+        assert!(
+            token_has_access(temporary.path(), access_token.raw(), READ_MASK)
+                .expect("inspect current token access")
+        );
+        assert!(!has_read_allow(&nested, &group, inheritance));
+
+        ensure_group_read_if_needed(
+            temporary.path(),
+            access_token.raw(),
+            group.raw(),
+            &current_completion,
+        )
+        .expect("upgrade legacy read ACL");
+
+        assert!(has_read_allow(&nested, &group, inheritance));
+        assert!(has_read_allow(&existing_file, &group, 0));
+        assert!(path_has_effective_ace(
+            temporary.path(),
+            current_completion.raw(),
+            ACCESS_ALLOWED_ACE_TYPE,
+            COMPLETION_MARKER_MASK,
+            0,
+        )
+        .expect("current completion marker"));
     }
 
     #[test]
@@ -1870,6 +1979,29 @@ mod tests {
         assert!(is_name_surrogate_reparse_tag(MOUNT_POINT));
         assert!(is_name_surrogate_reparse_tag(SYMBOLIC_LINK));
         assert!(!is_name_surrogate_reparse_tag(CLOUD_PLACEHOLDER));
+    }
+
+    #[test]
+    fn name_surrogate_materialization_uses_the_pinned_handle() {
+        let temporary = tempdir().expect("temporary ACL object");
+        let approved_root = fs::canonicalize(temporary.path()).expect("canonical test root");
+        let mut object = PersistentAclObject::open(temporary.path(), &approved_root)
+            .expect("open pinned ACL object");
+        // A name surrogate must never be updated through its lexical path. Make
+        // that path unusable so the test proves materialization uses the handle.
+        object.is_name_surrogate = true;
+        object.path = temporary.path().join("must-not-be-resolved");
+        let group = LocalSid::parse("S-1-5-21-313131313-424242424-535353535-646464646")
+            .expect("test group SID");
+        let entry = allow_entry(&group, CONTAINER_INHERIT_ACE | OBJECT_INHERIT_ACE);
+
+        materialize_persistent_acl_object(&object, &approved_root, &[entry])
+            .expect("materialize through pinned handle");
+
+        assert!(
+            persistent_acl_entries_are_effective_for_object(&object, &[entry])
+                .expect("inspect pinned ACL object")
+        );
     }
 
     fn allow_entry(sid: &LocalSid, inheritance: u32) -> EXPLICIT_ACCESS_W {

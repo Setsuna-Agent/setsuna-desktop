@@ -74,7 +74,12 @@ export function shellResultPreviewForDisplay(
     /\bspawn\b[^\r\n]*\b(?:EPERM|EACCES)\b|\boperation not permitted\b|\bpermission denied\b|\bread-only file system\b/iu
       .test(preview);
   if (!showsSandboxFailure) return run.resultPreview;
-  if (run.approvalRetryKind === 'sandbox_bypass') return undefined;
+  if (
+    run.approvalRetryKind === 'sandbox_readable_root'
+    || run.approvalRetryKind === 'sandbox_bypass'
+  ) {
+    return undefined;
+  }
 
   // Older persisted approvals predate retryKind; recognize the stable retry
   // wording so upgrading does not expose a stale sandbox failure as output.

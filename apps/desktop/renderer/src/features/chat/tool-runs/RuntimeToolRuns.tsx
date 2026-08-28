@@ -803,7 +803,6 @@ function ToolRunDetails({
   if (toolRunGroupKind(run) === 'inspection') {
     return (
       <>
-        <InspectionTargetList runs={[run]} />
         {execPolicySummary ? <ToolPreview label={t('toolRun.preview.execPolicy')} value={execPolicySummary} /> : null}
         {networkSummary ? <ToolPreview label={t('toolRun.preview.network')} value={networkSummary} /> : null}
         {permissionSummary ? <ToolPreview label={t('toolRun.preview.permission')} value={permissionSummary} /> : null}

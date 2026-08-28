@@ -88,7 +88,7 @@ describe('file config store', () => {
       sandboxWorkspaceWrite?: { networkAccess?: boolean };
     };
     expect(upgraded).toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       sandboxWorkspaceWrite: { networkAccess: false },
     });
   });
@@ -120,11 +120,37 @@ describe('file config store', () => {
       permissionProfile: 'workspace-write',
     });
     await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content))).resolves.toMatchObject({
-      schemaVersion: 6,
+      schemaVersion: 7,
       approvalPolicy: 'on-request',
       approvalReviewer: 'automatic',
       permissionProfile: 'workspace-write',
     });
+  });
+
+  it('migrates the old request-approval preset without changing its reviewer', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-config-store-test-'));
+    const configPath = path.join(dataDir, 'config.json');
+    const store = new FileConfigStore(dataDir);
+    await store.saveConfig({ globalPrompt: 'legacy request approval migration' });
+    const stored = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
+    stored.schemaVersion = 6;
+    stored.approvalPolicy = 'strict';
+    stored.approvalReviewer = 'user';
+    stored.permissionProfile = 'workspace-write';
+    await writeFile(configPath, `${JSON.stringify(stored, null, 2)}\n`, 'utf8');
+
+    await expect(store.getConfig()).resolves.toMatchObject({
+      approvalPolicy: 'on-request',
+      approvalReviewer: 'user',
+      permissionProfile: 'workspace-write',
+    });
+    await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content)))
+      .resolves.toMatchObject({
+        schemaVersion: 7,
+        approvalPolicy: 'on-request',
+        approvalReviewer: 'user',
+        permissionProfile: 'workspace-write',
+      });
   });
 
   it('serializes partial config updates without losing unrelated fields', async () => {
@@ -170,7 +196,7 @@ describe('file config store', () => {
     });
     await expect(readFile(configPath, 'utf8').then((content) => JSON.parse(content)))
       .resolves.toMatchObject({
-        schemaVersion: 6,
+        schemaVersion: 7,
         providers: [{ proxyRoute: { mode: 'inherit' } }],
     });
   });
@@ -262,13 +288,11 @@ describe('file config store', () => {
     await expect(store.saveConfig({
       taskModels: {
         review: { providerId: provider.id, modelId: model.id },
-        approvalReview: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     })).resolves.toMatchObject({
       taskModels: {
         review: { providerId: provider.id, modelId: model.id },
-        approvalReview: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     });
@@ -284,6 +308,7 @@ describe('file config store', () => {
     stored.memoryEnabled = true;
     stored.taskModels = {
       ...(stored.taskModels as Record<string, unknown>),
+      approvalReview: { providerId: provider.id, modelId: model.id },
       threadTitle: { providerId: provider.id, modelId: model.id },
       memoryExtraction: { providerId: provider.id, modelId: model.id },
       memoryConsolidation: { providerId: provider.id, modelId: model.id },
@@ -294,6 +319,7 @@ describe('file config store', () => {
     await store.saveConfig({ setsunaStyle: 'daily' });
 
     const memoryLegacy = store.memoryLegacySettingsAdapter();
+    const approvalReviewLegacy = store.approvalReviewLegacySettingsAdapter();
     const titleLegacy = store.threadTitleGenerationLegacySettingsAdapter();
     await expect(memoryLegacy.read()).resolves.toMatchObject({
       value: {
@@ -308,19 +334,24 @@ describe('file config store', () => {
       providerId: provider.id,
       modelId: model.id,
     });
+    await expect(approvalReviewLegacy.read()).resolves.toEqual({
+      providerId: provider.id,
+      modelId: model.id,
+    });
     expect((await store.getConfig()).taskModels).toEqual({
       review: { providerId: provider.id, modelId: model.id },
-      approvalReview: { providerId: provider.id, modelId: model.id },
       contextCompaction: { providerId: provider.id, modelId: model.id },
     });
 
     await memoryLegacy.retire();
+    await approvalReviewLegacy.retire();
     await titleLegacy.retire();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated).not.toHaveProperty('memory');
     expect(migrated).not.toHaveProperty('memoryEnabled');
     expect(migrated.taskModels).not.toHaveProperty('memoryExtraction');
     expect(migrated.taskModels).not.toHaveProperty('memoryConsolidation');
+    expect(migrated.taskModels).not.toHaveProperty('approvalReview');
     expect(migrated.taskModels).not.toHaveProperty('threadTitle');
   });
 
@@ -386,7 +417,7 @@ describe('file config store', () => {
     await store.clearLegacyStoragePath();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated.storagePath).toBeUndefined();
-    expect(migrated.schemaVersion).toBe(6);
+    expect(migrated.schemaVersion).toBe(7);
     expect(migrated).toMatchObject({
       approvalPolicy: 'on-request',
       approvalReviewer: 'automatic',

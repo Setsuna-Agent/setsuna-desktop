@@ -192,7 +192,14 @@ packages/feature-core/ — 4 direct / 30 total files
 ### `packages/features/`
 
 ```text
-packages/features/ — 0 direct / 817 total files
+packages/features/ — 0 direct / 837 total files
+├── approval-review/ — 2 direct / 20 total files
+│   ├── src/ — 17 files
+│   │   ├── contracts/ — 5 direct / 5 total files
+│   │   ├── renderer/ — 5 direct / 5 total files
+│   │   └── runtime/ — 7 direct / 7 total files
+│   └── test/ — 1 files
+│       └── runtime/ — 1 direct / 1 total files
 ├── artifact/ — 2 direct / 22 total files
 │   ├── src/ — 16 files
 │   │   ├── contracts/ — 4 direct / 4 total files
@@ -418,8 +425,8 @@ packages/features/ — 0 direct / 817 total files
 ### `packages/desktop-runtime/`
 
 ```text
-packages/desktop-runtime/ — 4 direct / 508 total files
-├── src/ — 2 direct / 295 total files
+packages/desktop-runtime/ — 4 direct / 504 total files
+├── src/ — 2 direct / 291 total files
 │   ├── adapters/ — 108 files
 │   │   ├── approval/ — 1 direct / 1 total files
 │   │   ├── event/ — 2 direct / 2 total files
@@ -444,10 +451,9 @@ packages/desktop-runtime/ — 4 direct / 508 total files
 │   │   ├── routes/ — 1 direct / 1 total files
 │   │   └── settings/ — 3 direct / 3 total files
 │   ├── hooks/ — 4 direct / 4 total files
-│   ├── loop/ — 66 files
-│   │   ├── approval-review/ — 5 direct / 5 total files
+│   ├── loop/ — 62 files
 │   │   ├── context/ — 16 direct / 16 total files
-│   │   ├── core/ — 23 direct / 23 total files
+│   │   ├── core/ — 24 direct / 24 total files
 │   │   ├── lifecycle/ — 10 direct / 10 total files
 │   │   └── tools/ — 12 direct / 12 total files
 │   ├── ports/ — 30 direct / 30 total files
@@ -491,9 +497,8 @@ packages/desktop-runtime/ — 4 direct / 508 total files
     │   ├── agent-loop/ — 25 direct / 25 total files
     │   └── runtime-server/ — 15 direct / 15 total files
     ├── loop/ — 31 files
-    │   ├── approval-review/ — 1 direct / 1 total files
     │   ├── context/ — 13 direct / 13 total files
-    │   ├── core/ — 7 direct / 7 total files
+    │   ├── core/ — 8 direct / 8 total files
     │   ├── lifecycle/ — 5 direct / 5 total files
     │   └── tools/ — 5 direct / 5 total files
     ├── runtime/ — 2 direct / 5 total files

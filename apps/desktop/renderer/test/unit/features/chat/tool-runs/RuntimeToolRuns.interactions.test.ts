@@ -35,6 +35,29 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
     expect(text).not.toContain('$shell');
   });
 
+  it('describes a readable-root retry as toolchain access instead of rerunning the command', () => {
+    const root = 'D:\\work\\setsuna-desktop\\node_modules\\corepack';
+    const html = renderedHtml([{
+      id: 'exec_readable_root_retry',
+      name: 'exec_command',
+      status: 'pending_approval',
+      argumentsPreview: '{"cmd":"pnpm dev"}',
+      resultPreview: `Error: EPERM: operation not permitted, lstat '${root}'`,
+      approvalId: 'approval_readable_root_retry',
+      approvalReviewer: 'automatic',
+      approvalStatus: 'pending',
+      approvalRetryKind: 'sandbox_readable_root',
+      approvalAdditionalPermissions: { file_system: { read: [root] } },
+    }]);
+    const text = renderedTextFromHtml(html);
+
+    expect(text).toContain('自动审查中：允许读取工具链目录');
+    expect(text).toContain(root);
+    expect(text).toContain('$pnpm dev');
+    expect(text).not.toContain('自动审查中：运行 pnpm dev');
+    expect(text).not.toContain('operation not permitted');
+  });
+
   it('shows a cancelled tool state once without a duplicate diagnostic', () => {
     const genericHtml = renderedHtml([{
       id: 'extension_cancelled',
@@ -346,6 +369,46 @@ describe('RuntimeToolRuns shell and interaction summaries', () => {
       expect(text).toContain('允许');
       expect(text).toContain('拒绝');
     }
+  });
+
+  it('does not describe grouped manual approvals as already running', () => {
+    const pendingRead: RuntimeToolRun = {
+      ...toolRun('read_pending', 'read_file', { file_path: 'vite.config.js' }, 'pending_approval'),
+      approvalId: 'approval_read_pending',
+      approvalStatus: 'pending',
+    };
+    const pendingShell: RuntimeToolRun = {
+      ...toolRun('shell_pending', 'exec_command', { cmd: 'pnpm dev' }, 'pending_approval'),
+      approvalId: 'approval_shell_pending',
+      approvalStatus: 'pending',
+    };
+
+    const readHtml = renderedHtml([
+      toolRun('read_previous', 'read_file', { file_path: 'vite.config.js' }),
+      pendingRead,
+    ]);
+    const readSummary = renderedTextFromHtml(firstToolRunSummaryHtml(readHtml));
+    const pendingReadText = renderedText([pendingRead]);
+    const readAfterFailureSummary = renderedTextFromHtml(firstToolRunSummaryHtml(renderedHtml([
+      toolRun('read_failed', 'read_file', { file_path: 'vite.config.js' }, 'error'),
+      pendingRead,
+    ])));
+    const shellSummary = renderedTextFromHtml(firstToolRunSummaryHtml(renderedHtml([
+      toolRun('shell_previous', 'exec_command', { cmd: 'pnpm typecheck' }),
+      pendingShell,
+    ])));
+
+    expect(readSummary).toContain('等待授权：读取文件vite.config.js');
+    expect(readSummary).not.toContain('正在读取文件');
+    expect(readSummary).not.toContain('待确认');
+    expect(pendingReadText).toContain('等待授权：读取文件vite.config.js');
+    expect(pendingReadText).not.toContain('已读取文件');
+    expect(pendingReadText.match(/vite\.config\.js/gu)).toHaveLength(1);
+    expect(readAfterFailureSummary).toContain('等待授权：读取文件vite.config.js');
+    expect(readAfterFailureSummary).not.toContain('失败：查看文件/目录');
+    expect(shellSummary).toContain('等待授权：运行 pnpm dev');
+    expect(shellSummary).not.toContain('正在运行');
+    expect(shellSummary).not.toContain('待确认');
   });
 
   it('uses the outer progress summary as the only loading state for one running tool', () => {

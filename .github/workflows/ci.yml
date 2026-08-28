@@ -88,8 +88,10 @@ jobs:
         run: |
           $binary = (Resolve-Path "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/setsuna-sandbox-win.exe").Path
           $ownerSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          & $binary install-elevated --owner-sid $ownerSid
-          if ($LASTEXITCODE -ne 0) { throw "Windows sandbox installation smoke test failed" }
+          $install = Start-Process -FilePath $binary `
+            -ArgumentList @("install-elevated", "--owner-sid", $ownerSid) `
+            -WindowStyle Hidden -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Windows sandbox installation smoke test failed" }
 
           $status = & $binary status | Select-Object -Last 1 | ConvertFrom-Json
           if (-not $status.ok -or $status.status.state -ne "ready") {
@@ -104,6 +106,8 @@ jobs:
         run: |
           $binary = "native/windows-sandbox/target/x86_64-pc-windows-msvc/debug/setsuna-sandbox-win.exe"
           if (Test-Path $binary) {
-            & $binary uninstall-elevated
-            if ($LASTEXITCODE -ne 0) { throw "Windows sandbox cleanup failed" }
+            $cleanup = Start-Process -FilePath $binary `
+              -ArgumentList @("uninstall-elevated") `
+              -WindowStyle Hidden -Wait -PassThru
+            if ($cleanup.ExitCode -ne 0) { throw "Windows sandbox cleanup failed" }
           }

@@ -353,13 +353,19 @@ export class ManagedWorkspaceDependencyManager implements WorkspaceDependenciesC
     const bundledCorepack = resolveBundledCorepackEntrypoints();
     const bundledReadRoots: string[] = [];
     let corepack = await findExecutable('corepack', currentPath);
+    const corepackUsesBundledEntrypoint = process.platform === 'win32' && corepack && bundledCorepack
+      ? await commandUsesBundledCorepack(corepack, bundledCorepack.root)
+      : false;
     let wroteShim = false;
     let wrotePnpmShim = false;
     let wroteNpmShim = false;
     let wroteNpxShim = false;
 
-    if (!corepack && bundledCorepack) {
+    if ((!corepack || corepackUsesBundledEntrypoint) && bundledCorepack) {
       await mkdir(this.projectBinDir, { recursive: true });
+      // pnpm's Windows .bin wrapper reaches Corepack through a node_modules Junction.
+      // Calling the resolved entrypoint directly keeps sandbox grants on the canonical
+      // app-owned package instead of requiring access to the developer checkout link.
       await writeNodeScriptShim(this.projectBinDir, 'corepack', process.execPath, bundledCorepack.corepack);
       corepack = commandShimPath(this.projectBinDir, 'corepack');
       wroteShim = true;

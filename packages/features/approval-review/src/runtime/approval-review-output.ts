@@ -11,6 +11,7 @@ export type ParsedApprovalReview = {
   userAuthorization: RuntimeApprovalUserAuthorization;
 };
 
+/** Structured response requested from the dedicated approval model. */
 export const APPROVAL_REVIEW_RESPONSE_SCHEMA = {
   type: 'object',
   additionalProperties: false,

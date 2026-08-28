@@ -1,6 +1,17 @@
 # 工具、内容与能力管理 Features
 
-本页覆盖 Artifact、Image Generation、Vision Recognition、Skills 和 Plugin Management。MCP 有独立的[详细文档](mcp.md)；通用工具审批与执行链见 [Runtime 工具宿主](../core/runtime/tools-and-capabilities.md)。
+本页覆盖 Approval Review、Artifact、Image Generation、Vision Recognition、Skills 和 Plugin Management。MCP 有独立的[详细文档](mcp.md)；通用工具审批与执行链见 [Runtime 工具宿主](../core/runtime/tools-and-capabilities.md)。
+
+## Approval Review
+
+源码：`packages/features/approval-review/`
+
+Approval Review 拥有“替我审批”中的模型判定闭环：prompt、授权/风险策略、结构化输出解析、超时与重试、拒绝熔断，以及自己的专用模型设置。Runtime Core 仍拥有 `ApprovalGate`、sandbox/policy 判定、人工审批、tool run 事件和持久审计 DTO。
+
+- Runtime optional：通过 `approvalReviewControlCapability` 晚绑定到 Agent loop；Feature 不可用或技术判定失败时，Core 继续走人工审批。
+- Runtime host 只注入线程读取、模型解析/采样、时钟和 usage 记录；Feature 不依赖 Runtime Core ports。
+- Settings 使用 Feature document 和 typed operations；旧 `taskModels.approvalReview` 只作为一次性迁移输入，成功后删除。
+- Renderer optional：向宿主“专用模型”区块贡献设置项。已持久的审批状态仍由 Core tool run 投影和通用 transcript 展示。
 
 ## Artifact
 

@@ -1,4 +1,9 @@
-import { mkdtemp, realpath, rm } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -65,6 +70,38 @@ describe('classifyShellSessionFailure', () => {
       sandbox_error_code: 'spawn-failed',
       sandbox_error_message: expect.stringContaining('os error 5'),
     });
+  });
+
+  it.skipIf(process.platform !== 'win32')('suggests only a denied path tied to the resolved toolchain', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'setsuna-denied-toolchain-'));
+    temporaryRoots.push(root);
+    const corepackRoot = path.join(root, 'node_modules', 'corepack');
+    const corepackDist = path.join(corepackRoot, 'dist');
+    const unrelatedRoot = path.join(root, 'unrelated');
+    await Promise.all([
+      mkdir(corepackDist, { recursive: true }),
+      mkdir(unrelatedRoot, { recursive: true }),
+    ]);
+
+    const toolchainFailure = classifyShellSessionFailure(shellSession({
+      sandboxProvider: 'windows-native',
+      stderr: [
+        `Error: EPERM: operation not permitted, lstat '${corepackRoot}'`,
+        `  code: 'EPERM', path: '${corepackRoot.replaceAll('\\', '\\\\')}'`,
+      ].join('\n'),
+      toolchainReadableRoots: [corepackDist],
+    }));
+    const unrelatedFailure = classifyShellSessionFailure(shellSession({
+      sandboxProvider: 'windows-native',
+      stderr: `Error: EACCES: permission denied, open '${unrelatedRoot}'`,
+      toolchainReadableRoots: [corepackDist],
+    }));
+
+    expect(toolchainFailure).toMatchObject({
+      failure_kind: 'sandbox_denied',
+      suggested_readable_roots: [corepackRoot],
+    });
+    expect(unrelatedFailure).not.toHaveProperty('suggested_readable_roots');
   });
 });
 

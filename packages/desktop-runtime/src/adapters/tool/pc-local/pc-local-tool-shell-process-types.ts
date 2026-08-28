@@ -82,6 +82,7 @@ export type ShellSession = {
   temporaryRoot: string;
   environment: Record<string, string>;
   toolchainCommands: Record<string, ShellToolchainCommand>;
+  toolchainReadableRoots: string[];
   threadId: string;
   turnId: string;
   toolCallId: string;
@@ -115,6 +116,7 @@ export type ShellFailureSession = {
   cwd?: string;
   environment?: Record<string, string>;
   toolchainCommands?: Record<string, ShellToolchainCommand>;
+  toolchainReadableRoots?: string[];
 };
 
 export type ShellSpawnSpec = {

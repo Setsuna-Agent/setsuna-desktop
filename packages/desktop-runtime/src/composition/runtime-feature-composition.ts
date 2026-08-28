@@ -12,6 +12,13 @@ import {
   requiredCapability,
 } from '@setsuna-desktop/feature-core/capability';
 import {
+  approvalReviewControlCapability,
+  approvalReviewLegacySettingsCapability,
+  approvalReviewRuntimeHostCapability,
+  createNoopApprovalReviewControl,
+} from '@setsuna-desktop/feature-approval-review/contracts';
+import { approvalReviewRuntimeFeature } from '@setsuna-desktop/feature-approval-review/runtime';
+import {
   artifactRuntimeToolServiceCapability,
   artifactWorkspaceFilesCapability,
 } from '@setsuna-desktop/feature-artifact/contracts';
@@ -109,6 +116,7 @@ import {
 import { workspaceDependenciesRuntimeFeature } from '@setsuna-desktop/feature-workspace-dependencies/runtime';
 import { windowsSandboxRuntimeServiceCapability } from '@setsuna-desktop/feature-windows-sandbox/contracts';
 import { windowsSandboxRuntimeFeature } from '@setsuna-desktop/feature-windows-sandbox/runtime';
+import { createRuntimeApprovalReviewHost } from '../loop/core/runtime-approval-review-host.js';
 import { appendRuntimeDebugTraceSafely } from '../ports/runtime-debug-trace.js';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
 
@@ -125,6 +133,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     mcpRuntimeFeature,
   ],
   optional: [
+    approvalReviewRuntimeFeature,
     collaborationRuntimeFeature,
     conversationDebugRuntimeFeature,
     imageGenerationRuntimeFeature,
@@ -144,6 +153,20 @@ export async function activateBuiltinRuntimeFeatures(
     settingsRegistry: runtime.featureSettings,
     hostCapabilities: [
       provideHostCapability(runtimeRouteRegistrarCapability, runtime.featureRoutes),
+      provideHostCapability(
+        approvalReviewRuntimeHostCapability,
+        createRuntimeApprovalReviewHost({
+          clock: runtime.clock,
+          configStore: runtime.configStore,
+          modelClient: runtime.modelClient,
+          threadStore: runtime.threadStore,
+          usageStore: runtime.usageRecorder,
+        }),
+      ),
+      provideHostCapability(
+        approvalReviewLegacySettingsCapability,
+        runtime.configStore.approvalReviewLegacySettingsAdapter(),
+      ),
       provideHostCapability(artifactWorkspaceFilesCapability, runtime.workspaceProjects),
       provideHostCapability(
         modelProviderRuntimeHostCapability,
@@ -360,6 +383,13 @@ export async function activateBuiltinRuntimeFeatures(
   });
 
   return completeFeatureHostActivation(composition, (host) => {
+    host.bind({
+      approvalReview: optionalCapability(
+        approvalReviewControlCapability,
+        createNoopApprovalReviewControl,
+      ),
+    }, ({ approvalReview }) => runtime.agentLoop.bindApprovalReviewControl(approvalReview));
+
     host.bind({
       sampling: requiredCapability(modelProviderSamplingCapability),
     }, ({ sampling }) => runtime.providerModelClient.bind(sampling));

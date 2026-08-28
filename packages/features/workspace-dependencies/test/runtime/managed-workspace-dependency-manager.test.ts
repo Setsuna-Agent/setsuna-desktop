@@ -12,6 +12,7 @@ import {
   link,
   mkdir,
   mkdtemp,
+  readFile,
   readlink,
   realpath,
   rm,
@@ -331,6 +332,37 @@ describe('managed workspace dependency manager', () => {
       await expect(execFileAsync(path.join(projectBin, 'corepack'), ['--version'], {
         env: { ...process.env, ...shell.environment },
       })).resolves.toMatchObject({ stdout: expect.stringContaining('0.34.7') });
+    } finally {
+      process.env.PATH = previousPath;
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it.skipIf(process.platform !== 'win32')('bypasses the bundled Corepack Junction in Windows package-manager shims', async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), 'setsuna-windows-corepack-shim-'));
+    const bundledBin = path.resolve('node_modules', '.bin');
+    const bundledCorepackRoot = await realpath(path.resolve('node_modules', 'corepack'));
+    const previousPath = process.env.PATH;
+    process.env.PATH = bundledBin;
+
+    try {
+      const manager = createManager(dataDir);
+      const shell = await manager.prepareShellToolchain({
+        command: 'pnpm --version',
+        environment: testEnvironment(dataDir),
+      });
+      const projectBin = path.join(dataDir, 'workspace-dependencies', 'project-bin');
+      const corepackShimPath = path.join(projectBin, 'corepack.cmd');
+      const [corepackShim, pnpmShim] = await Promise.all([
+        readFile(corepackShimPath, 'utf8'),
+        readFile(path.join(projectBin, 'pnpm.cmd'), 'utf8'),
+      ]);
+
+      expect(corepackShim).toContain(`"${process.execPath}"`);
+      expect(corepackShim).toContain(path.join(bundledCorepackRoot, 'dist', 'corepack.js'));
+      expect(corepackShim).not.toContain(path.join(bundledBin, 'corepack.CMD'));
+      expect(pnpmShim).toContain(`"${corepackShimPath}"`);
+      expect(shell.readableRoots).toContain(bundledCorepackRoot);
     } finally {
       process.env.PATH = previousPath;
       await rm(dataDir, { recursive: true, force: true });

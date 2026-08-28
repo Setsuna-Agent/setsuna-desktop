@@ -1,4 +1,4 @@
-import type { ApprovalReviewInput } from '../../ports/approval-reviewer.js';
+import type { ApprovalReviewInput } from '../contracts/index.js';
 
 export function serializeApprovalReviewAction(input: ApprovalReviewInput): string | null {
   try {
