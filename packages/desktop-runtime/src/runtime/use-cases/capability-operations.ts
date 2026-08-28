@@ -10,7 +10,6 @@ import type {
   RuntimeMcpToolCallResult,
 } from '@setsuna-desktop/contracts';
 import path from 'node:path';
-import { discoverRuntimeHooks } from '../../hooks/runtime-hooks.js';
 import type { McpServerRuntimeSnapshot } from '@setsuna-desktop/feature-mcp/contracts';
 import type { RuntimeContainer } from '../runtime-factory.js';
 import { RuntimeUseCaseError } from './errors.js';
@@ -25,20 +24,7 @@ export async function listRuntimeHooks(
   rawCwds: unknown,
 ): Promise<RuntimeHookListResponse> {
   const cwds = runtimeHookCwds(rawCwds);
-  const config = await runtime.configStore.getConfig();
-  const discovery = discoverRuntimeHooks(config);
-  return {
-    data: cwds.map((cwd) => ({
-      cwd,
-      hooks: discovery.hooks.map(({
-        configEventName: _configEventName,
-        matcherEnabled: _matcherEnabled,
-        ...hook
-      }) => hook),
-      warnings: discovery.warnings,
-      errors: [],
-    })),
-  };
+  return runtime.hookManagement.listLegacy(cwds);
 }
 
 export async function setRuntimeSkillExtraRoots(

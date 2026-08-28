@@ -1,4 +1,4 @@
-import type { RuntimeHookMetadata } from '@setsuna-desktop/contracts';
+import type { RuntimeHookManagementProjection as CapabilitiesHook } from '@setsuna-desktop/contracts';
 import { AlertTriangle, Loader2, Power, PowerOff, ShieldCheck, ShieldOff, Trash2, Workflow } from 'lucide-react';
 import { useState } from 'react';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -14,18 +14,18 @@ export function CapabilitiesLegacyHooksDetail({
   onSetEnabled,
   onSetTrust,
 }: {
-  hooks: RuntimeHookMetadata[];
+  hooks: CapabilitiesHook[];
   onBack: () => void;
-  onDelete: (hook: RuntimeHookMetadata) => Promise<void>;
-  onSetEnabled: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
-  onSetTrust: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
+  onDelete: (hook: CapabilitiesHook) => Promise<void>;
+  onSetEnabled: (hook: CapabilitiesHook, enabled: boolean) => Promise<void>;
+  onSetTrust: (hook: CapabilitiesHook, trusted: boolean) => Promise<void>;
 }) {
   const { t } = useI18n();
   const [pendingKeys, setPendingKeys] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  async function runAction(hook: RuntimeHookMetadata, action: () => Promise<void>) {
-    setPendingKeys((current) => new Set(current).add(hook.key));
+  async function runAction(hook: CapabilitiesHook, action: () => Promise<void>) {
+    setPendingKeys((current) => new Set(current).add(hook.managementId));
     setError(null);
     try {
       await action();
@@ -34,7 +34,7 @@ export function CapabilitiesLegacyHooksDetail({
     } finally {
       setPendingKeys((current) => {
         const next = new Set(current);
-        next.delete(hook.key);
+        next.delete(hook.managementId);
         return next;
       });
     }
@@ -63,16 +63,16 @@ export function CapabilitiesLegacyHooksDetail({
         count={hooks.length}
       >
         {hooks.map((hook) => {
-          const pending = pendingKeys.has(hook.key);
+          const pending = pendingKeys.has(hook.managementId);
           const trusted = hook.trustStatus === 'trusted' || hook.trustStatus === 'managed';
           const trustLabel = t(trusted ? 'capabilities.hookAction.revoke' : 'capabilities.hookAction.trust');
           const enabledLabel = t(hook.enabled ? 'capabilities.hookAction.disable' : 'capabilities.hookAction.enable');
           return (
-            <div className="desktop-capabilities-plugin-detail__item is-static" key={hook.key}>
+            <div className="desktop-capabilities-plugin-detail__item is-static" key={hook.managementId}>
               <CapabilitiesPluginItemIcon><Workflow size={16} /></CapabilitiesPluginItemIcon>
               <span className="desktop-capabilities-plugin-detail__item-body">
                 <strong>{hook.eventName}{hook.matcher ? ` · ${hook.matcher}` : ''}</strong>
-                <small title={hook.command ?? undefined}>{hook.command ?? hook.statusMessage ?? hook.sourcePath}</small>
+                <small title={hook.command ?? undefined}>{hook.command ?? hook.statusMessage ?? hook.eventName}</small>
               </span>
               <span className="desktop-capabilities-legacy-hooks__actions" role="group" aria-label={hook.eventName}>
                 {pending ? <Loader2 className="is-spinning" size={15} aria-label={t('capabilities.common.saving')} /> : (

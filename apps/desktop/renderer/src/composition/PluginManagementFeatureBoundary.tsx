@@ -1,4 +1,5 @@
 import type {
+  PluginManagementHookSnapshot,
   PluginManagementRendererService,
   PluginManagementSnapshot,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
@@ -26,6 +27,7 @@ export function PluginManagementFeatureServiceBoundary({
 }
 
 export function usePluginManagementFeature(): Readonly<{
+  hookSnapshot: PluginManagementHookSnapshot;
   service: PluginManagementRendererService;
   snapshot: PluginManagementSnapshot;
 }> {
@@ -35,7 +37,12 @@ export function usePluginManagementFeature(): Readonly<{
     () => service.getSnapshot(),
     () => service.getSnapshot(),
   );
-  return { service, snapshot };
+  const hookSnapshot = useSyncExternalStore(
+    (listener) => service.subscribe(listener),
+    () => service.getHookSnapshot(),
+    () => service.getHookSnapshot(),
+  );
+  return { hookSnapshot, service, snapshot };
 }
 
 export function usePluginManagementFeatureService(): PluginManagementRendererService {

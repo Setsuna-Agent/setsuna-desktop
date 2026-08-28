@@ -237,9 +237,12 @@ export async function activateBuiltinRuntimeFeatures(
           installLocal: ({ path }) => runtime.pluginStore.installPlugin({ path }),
           installMarketplace: ({ pluginId }) => runtime.pluginMarketplace.installPlugin(pluginId),
           listExtensions: () => runtime.extensionManager.listStatuses(),
+          listHooks: (input) => runtime.hookManagement.list(input),
           listMarketplace: () => runtime.pluginMarketplace.listPlugins(),
           listPlugins: () => runtime.pluginStore.listPlugins(),
+          deleteStandaloneHook: (input) => runtime.hookManagement.deleteStandalone(input),
           remove: ({ pluginId }) => runtime.pluginStore.removePlugin(pluginId),
+          setHookState: (input) => runtime.hookManagement.setState(input),
           setExtensionTrust: ({ pluginId, trusted }) => (
             runtime.pluginStore.setExtensionTrust(pluginId, trusted)
           ),

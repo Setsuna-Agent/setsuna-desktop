@@ -9,17 +9,13 @@ import {
   type SetStateAction,
 } from 'react';
 import { createDesktopRuntimeClient } from './client.js';
-import {
-  reportRuntimeBackgroundFailure,
-  runtimeClientErrorMessage,
-} from './runtimeClientErrors.js';
+import { runtimeClientErrorMessage } from './runtimeClientErrors.js';
 import {
   discardRuntimeErrorFromOtherThread,
   runtimeErrorForThread,
   updateScopedRuntimeError,
   type ScopedRuntimeError,
 } from './runtimeErrorState.js';
-import { useRuntimeCapabilityState } from './useRuntimeCapabilityState.js';
 import { useRuntimeConfigState, type ModelProviderProjectionService } from './useRuntimeConfigState.js';
 import {
   useRuntimeThreadState,
@@ -63,24 +59,10 @@ export function useRuntimeClientState({
   const forwardTurnSettlement = useCallback((settlement: RuntimeTurnSettlement) => {
     turnSettlementHandlerRef.current(settlement);
   }, []);
-  const activeProjectPath = activeProjectId
-    ? projects.find((project) => project.id === activeProjectId)?.path
-    : undefined;
-
   const {
     replaceConfig,
     ...configState
   } = useRuntimeConfigState({ client, modelProvider });
-  const {
-    refreshCapabilities,
-    ...capabilityState
-  } = useRuntimeCapabilityState({
-    activeProjectPath,
-    client,
-    config: configState.config,
-    enabled: loadState === 'ready',
-    onConfigChange: replaceConfig,
-  });
   const {
     applyBootstrapThreads,
     ...threadState
@@ -120,12 +102,9 @@ export function useRuntimeClientState({
     }
   }, [client, configState.selectProviderModel, setError]);
 
-  // React hooks cannot form a dependency cycle. The stable forwarding callback lets the
-  // thread owner emit settlements while always invoking the latest domain refreshers.
+  // The stable forwarding callback lets the thread owner emit settlements while always
+  // invoking the latest controller-owned refreshers.
   turnSettlementHandlerRef.current = (settlement) => {
-    void refreshCapabilities().catch((unknownError) => {
-      reportRuntimeBackgroundFailure('capability refresh after turn', unknownError);
-    });
     onTurnSettled?.(settlement);
   };
 
@@ -167,7 +146,6 @@ export function useRuntimeClientState({
   }, [refresh]);
 
   return {
-    ...capabilityState,
     ...configState,
     ...threadState,
     client,
@@ -175,7 +153,6 @@ export function useRuntimeClientState({
     loadState,
     projects,
     refresh,
-    refreshCapabilities,
     selectConversationModel,
     setError,
     setProjects,

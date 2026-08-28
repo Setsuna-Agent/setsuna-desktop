@@ -12,7 +12,6 @@ import type {
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeConfiguredModelReference,
-  RuntimeHookListResponse,
   RuntimeInterfaceLanguage,
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
@@ -125,7 +124,6 @@ export type DesktopRuntimeClient = {
   ): () => void;
   getConfig(): Promise<RuntimeConfigState>;
   saveConfig(input: RuntimeConfigInput): Promise<RuntimeConfigState>;
-  listHooks(cwds?: string[]): Promise<RuntimeHookListResponse>;
   listProjects(): Promise<WorkspaceProjectList>;
   addProject(input: AddWorkspaceProjectInput): Promise<WorkspaceProject>;
   updateProject(projectId: string, input: UpdateWorkspaceProjectInput): Promise<WorkspaceProject>;

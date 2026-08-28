@@ -22,9 +22,10 @@
 | --- | --- | --- | --- |
 | `deleteThread` | `DELETE /v1/threads/:id` | `thread/delete` | `thread-operations.ts` |
 | `startReview` | `POST /v1/threads/:id/reviews` | `review/start` | `thread-operations.ts` |
-| `listHooks` | `GET /v1/hooks` | `hooks/list` | `capability-operations.ts` |
 
 `appServerRequest` 和公开 raw `request` 已从 renderer business client 删除。底层 request closure 只存在于 client adapter 内部。架构检查会拒绝 renderer 源码重新引用 `/v1/swe/app-server`；app-server 自身仍作为 SWE 客户端兼容协议保留。
+
+Hook renderer 管理也已退出 `DesktopRuntimeClient`，由 `@setsuna-desktop/feature-plugin-management/renderer` 经 `/v1/features/plugin-management/hooks/*` typed operations 调用 `RuntimeHookManagement`。旧 `GET /v1/hooks` 与 SWE `hooks/list` 只作为兼容 query adapter，复用同一个 discovery owner；它们仍可返回协议要求的原始 metadata，但不再进入宿主 renderer。
 
 MCP renderer 管理已退出 `DesktopRuntimeClient`，由 `@setsuna-desktop/feature-mcp/renderer` 经 `/v1/features/mcp/*` typed operations 调用 `McpControl`。以下 status/resource/tool REST 仍作为非 renderer 的第一方兼容协议保留，并与 SWE adapter 共享原有 use case：
 

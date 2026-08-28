@@ -50,6 +50,7 @@ import { RuntimeFeatureManagement } from '../features/management/runtime-feature
 import { ThreadStoreEventReader } from '../features/events/thread-store-event-reader.js';
 import { ExtensionUiCoordinator } from '../extensions/extension-ui-coordinator.js';
 import { FileExtensionStateStore } from '../extensions/file-extension-state-store.js';
+import { RuntimeHookManagement } from '../hooks/runtime-hook-management.js';
 import { AgentLoop } from '../loop/core/agent-loop.js';
 import { RuntimeEventWriter } from '../loop/lifecycle/runtime-event-writer.js';
 import { systemClock } from '../ports/clock.js';
@@ -104,6 +105,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     validateProxyServerReferences: (proxyServerIds) =>
       nativeBridge.validateNetworkProxyReferences(proxyServerIds),
   });
+  const hookManagement = new RuntimeHookManagement(configStore);
   const networkProxyFetch = new NativeBridgeProxyFetch(nativeBridge);
   const usageRecorder = new BindableUsageRecorder();
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
@@ -235,6 +237,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     featureSettings,
     featureManagement,
     ids,
+    hookManagement,
     environmentResolver,
     extensionManager,
     generatedImageStore,

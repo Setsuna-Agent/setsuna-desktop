@@ -15,11 +15,11 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 | `packages/features/review/src/renderer/` | Review panel、Git 控件、状态、文案与样式 | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/conversation-debug/src/renderer/` | 事件/trace 图、列表、inspector 与 Feature settings | [Workspace 与 debug](workspace-and-debug.md) |
 | `packages/features/runtime-activity/src/renderer/` | 跨线程运行任务、后台服务管理与全局 Overlay | [App 与 runtime 状态](app-and-runtime-state.md) |
-| `packages/features/plugin-management/src/renderer/` | Plugin catalog snapshot、安装动作与 extension 状态 | [Settings 与 capabilities](settings-and-capabilities.md) |
+| `packages/features/plugin-management/src/renderer/` | Plugin catalog、Hook projection、安装与 extension 状态 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `packages/features/mcp/src/renderer/` | MCP server snapshot、管理动作与迟到请求收敛 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `src/features/settings/` | 外观、模型、runtime、数据根与 Feature 设置宿主 | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `packages/features/usage/src/renderer/` | Usage 设置、会话投影、状态服务与样式 | [Settings 与 capabilities](settings-and-capabilities.md) |
-| `src/features/capabilities/` | Plugin/MCP host presentation 与 Skill、Hook 管理 | [Settings 与 capabilities](settings-and-capabilities.md) |
+| `src/features/capabilities/` | Plugin/MCP/Skill 的宿主 presentation 与 Hook view adapter | [Settings 与 capabilities](settings-and-capabilities.md) |
 | `src/services/runtime-client/` | 类型化 client、snapshot + SSE 状态 | [App 与 runtime 状态](app-and-runtime-state.md) |
 | `src/shared/` | UI primitive、i18n、偏好、branding、通用 helper | [Shared UI 与样式](shared-ui-and-styles.md) |
 | `test/unit/` | 镜像 `src/` 的单元/组件测试 | [测试与验证](../../../development/testing.md) |
@@ -29,7 +29,6 @@ Renderer 是桌面工作台 UI。它只依赖共享 contracts 和 preload 暴露
 ```text
 window.setsunaDesktop
         ├→ createDesktopRuntimeClient → useRuntimeClientState
-        │                              ├→ useRuntimeCapabilityState
         │                              ├→ useRuntimeConfigState
         │                              └→ useRuntimeThreadState
         └→ Renderer Feature composition → Feature-owned services

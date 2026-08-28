@@ -1,5 +1,5 @@
 import type {
-  RuntimeHookMetadata,
+  RuntimeHookManagementProjection as CapabilitiesHook,
   RuntimeMcpServer,
   RuntimePluginFilePreview,
   RuntimePluginHook,
@@ -40,10 +40,10 @@ export function CapabilitiesPluginItemDialog({
   mcpServers: RuntimeMcpServer[];
   onClose: () => void;
   onGetContent?: (kind: RuntimePluginItemKind, itemId: string) => Promise<RuntimePluginItemContent>;
-  onSetHookEnabled?: (hook: RuntimeHookMetadata, enabled: boolean) => Promise<void>;
-  onSetHookTrust?: (hook: RuntimeHookMetadata, trusted: boolean) => Promise<void>;
+  onSetHookEnabled?: (hook: CapabilitiesHook, enabled: boolean) => Promise<void>;
+  onSetHookTrust?: (hook: CapabilitiesHook, trusted: boolean) => Promise<void>;
   pluginId: string;
-  runtimeHooks: RuntimeHookMetadata[];
+  runtimeHooks: CapabilitiesHook[];
   trustHooksOnInstall: boolean;
 }) {
   const { t } = useI18n();
@@ -317,7 +317,7 @@ function pluginItemKindLabel(kind: RuntimePluginItemKind, t: Translate): string 
 function pluginItemMetadata(
   item: CapabilitiesPluginItem,
   activeMcpServer: RuntimeMcpServer | undefined,
-  activeHook: RuntimeHookMetadata | undefined,
+  activeHook: CapabilitiesHook | undefined,
   trustHooksOnInstall: boolean,
   t: Translate,
 ): Array<[string, string]> {
@@ -348,7 +348,7 @@ function pluginItemMetadata(
 function pluginItemConfig(
   item: CapabilitiesPluginItem,
   activeMcpServer: RuntimeMcpServer | undefined,
-  activeHook: RuntimeHookMetadata | undefined,
+  activeHook: CapabilitiesHook | undefined,
 ): string | null {
   if (item.kind === 'mcp') {
     return JSON.stringify(removeUndefined({
@@ -377,10 +377,10 @@ function pluginItemConfig(
 }
 
 function matchingRuntimeHook(
-  hooks: RuntimeHookMetadata[],
+  hooks: CapabilitiesHook[],
   pluginId: string,
   item: RuntimePluginHook,
-): RuntimeHookMetadata | undefined {
+): CapabilitiesHook | undefined {
   const exact = hooks.find((hook) => hook.pluginId === pluginId && hook.pluginHookId === item.id);
   if (exact) return exact;
   const eventName = `${item.eventName[0].toLowerCase()}${item.eventName.slice(1)}`;
@@ -393,7 +393,7 @@ function matchingRuntimeHook(
   return legacyCandidates.length === 1 ? legacyCandidates[0] : undefined;
 }
 
-function hookTrustLabel(status: RuntimeHookMetadata['trustStatus'], t: Translate): string {
+function hookTrustLabel(status: CapabilitiesHook['trustStatus'], t: Translate): string {
   if (status === 'trusted' || status === 'managed') return t('capabilities.item.trusted');
   if (status === 'modified') return t('capabilities.item.commandChanged');
   return t('capabilities.item.awaitingTrust');

@@ -132,7 +132,7 @@ Hook 不再作为一级目录或独立表单暴露；它是 Plugin Bundle 内的
 
 ### Plugin market
 
-Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot 与安装、更新、卸载、详情和扩展信任 typed operations；runtime 只通过 Plugin Store、Marketplace 和 Extension Manager 窄 host 能力实现；renderer service 持有 snapshot、并发 refresh 与 mutation 后收敛。宿主 `CapabilitiesPage` 继续承担 Plugin、Skill、MCP 的统一信息架构和视觉适配，但不再通过 `DesktopRuntimeClient` 或 `useRuntimeCapabilityState` 保存 Plugin 状态。
+Plugin 管理的跨层所有权位于 `packages/features/plugin-management/`：contracts 声明聚合 snapshot、Hook projection 与安装、更新、卸载、详情、扩展信任、Hook 状态 typed operations；runtime 只通过 Plugin Store、Marketplace、Extension Manager 和 `RuntimeHookManagement` 窄 host 能力实现；renderer service 持有 Plugin/Hook snapshot、并发 refresh 与 mutation 后收敛。宿主 `CapabilitiesPage` 继续承担 Plugin、Skill、MCP 的统一信息架构和视觉适配，但不再通过 `DesktopRuntimeClient` 保存 Plugin 或 Hook 状态。
 
 相关组件：
 
@@ -185,19 +185,19 @@ Skills 的 renderer snapshot 与命令由 `packages/features/skills/src/renderer
 
 ### Hooks
 
-能力页不提供独立 Hooks 标签、目录或手动编辑器。用户通过“用对话创建插件”让 AI 生成包含 Hook 的 Plugin Bundle，或导入已有 Bundle；插件详情继续展示 Hook 的声明和运行状态。renderer 只读取无路径的 Hook 投影，不接收或展示私有安装目录。
+能力页不提供独立 Hooks 标签、目录或手动编辑器。用户通过“用对话创建插件”让 AI 生成包含 Hook 的 Plugin Bundle，或导入已有 Bundle；插件详情继续展示 Hook 的声明和运行状态。renderer 只读取 Plugin Management 提供的无路径投影：管理动作使用 opaque ID + 当前 command hash，Plugin Hook 的绝对命令也不会跨过 Feature boundary；旧版独立用户 Hook 只保留管理所需的命令预览。
 
 随应用发布的内置插件由应用控制的可信来源规则启用 Hook；Agent 创建插件时，Hook 内容和信任包含在同一次 `configure_plugin` 审批中。开发者本地导入仍按侧载边界处理，不因选中目录而自动取得信任。
 
 ## State 与 refresh
 
-宿主 Settings/Capabilities 通过 `useRuntimeClientState` facade 获取通用 Config 和 Hook 数据；Skills、MCP 与 Plugin 列表、市场和 extension 状态由各自 renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
+宿主 Settings 通过 `useRuntimeClientState` facade 获取通用 Config；Skills、MCP，以及 Plugin 列表、市场、extension 与 Hook 状态由各自 renderer service 独立持有。其他 Feature-owned 设置同样由 renderer composition 注入的 typed client/controller 读取：
 
 - Config save 后更新统一 config state。
 - Image Generation、Vision Recognition 与 Workspace Dependencies 的设置更新不经过统一 config state，成功后只刷新所属 Feature controller。
-- Skills、MCP 与 Plugin Management 分别维护独立 snapshot，迟到的旧 refresh 不覆盖新状态；Hook 后台刷新失败保留最后一次有效投影。
-- Hook 请求受当前 project cwd 影响，使用 latest request guard。
-- Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再让宿主刷新可能被 Bundle 改变的 Skill、MCP、Hook 和 Hook config，而不是靠局部猜测所有权变化；turn 结算读取 extension 状态时会同时比较 runtime 的全局 Plugin catalog revision，只有 revision 变化才刷新完整 Plugin snapshot，因此协作子线程的插件变更也能收敛。Plugin Skill 编辑/删除只刷新已安装插件摘要。
+- Skills、MCP 与 Plugin Management 分别维护独立 snapshot，迟到的旧 refresh 不覆盖新状态；Plugin Management 串行 Hook mutation，并让已开始的旧 refresh 无法覆盖 mutation 结果。
+- Hook query 记录当前 project cwd；切换 project 或后台刷新失败时保留最后一次有效投影。
+- Plugin install/update/remove 先由 Feature service 重读 Plugin snapshot，再让宿主刷新可能被 Bundle 改变的 Skill、MCP 和 Hook，而不是靠局部猜测所有权变化；turn 结算读取 extension 状态时会同时比较 runtime 的全局 Plugin catalog revision，只有 revision 变化才刷新完整 Plugin snapshot，因此协作子线程的插件变更也能收敛。Plugin Skill 编辑/删除只刷新已安装插件摘要。
 
 ## Developer features
 
@@ -227,6 +227,6 @@ Capabilities：
 
 - `CapabilitiesPage.test.ts`
 - Plugin components/display/localization。
-- Hook config。
+- Plugin Management Hook runtime/service。
 
 跨层修改还需要 runtime config/MCP/Skill/Plugin store 与 server integration tests。

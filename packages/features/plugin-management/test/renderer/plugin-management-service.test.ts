@@ -1,7 +1,11 @@
 import type { RuntimePluginInstallResult } from '@setsuna-desktop/contracts';
 import { createFeatureScope } from '@setsuna-desktop/feature-core/scope';
 import { describe, expect, it, vi } from 'vitest';
-import type { PluginManagementSnapshot } from '../../src/contracts/index.js';
+import type {
+  PluginManagementHook,
+  PluginManagementHookSnapshot,
+  PluginManagementSnapshot,
+} from '../../src/contracts/index.js';
 import type { PluginManagementClient } from '../../src/renderer/client.js';
 import { RendererPluginManagementService } from '../../src/renderer/index.js';
 
@@ -149,6 +153,39 @@ describe('RendererPluginManagementService', () => {
 
     await scope.finishDispose();
   });
+
+  it('does not let an older Hook refresh overwrite a completed mutation', async () => {
+    const staleRefresh = deferred<PluginManagementHookSnapshot>();
+    const hook = pluginHook({ enabled: true });
+    const mutatedHook = pluginHook({ enabled: false });
+    const setHookState = vi.fn(async () => ({ hooks: [mutatedHook] }));
+    const client = {
+      readHooks: vi.fn(() => staleRefresh.promise),
+      setHookState,
+    } as unknown as PluginManagementClient;
+    const scope = createFeatureScope({
+      featureId: 'plugin-management',
+      process: 'renderer',
+      scopeId: 'plugin-management-hook-refresh-test',
+    });
+    scope.activate();
+    const service = new RendererPluginManagementService({ bridge: null, client, scope: scope.scope });
+
+    const refresh = service.refreshHooks({ cwd: '/workspace/demo' });
+    await service.setHookEnabled(hook, false);
+    staleRefresh.resolve({ hooks: [hook] });
+    await refresh;
+
+    expect(setHookState).toHaveBeenCalledWith({
+      currentHash: hook.currentHash,
+      cwd: '/workspace/demo',
+      enabled: false,
+      managementId: hook.managementId,
+    }, expect.anything());
+    expect(service.getHookSnapshot()).toEqual({ hooks: [mutatedHook] });
+
+    await scope.finishDispose();
+  });
 });
 
 function snapshot(pluginId: string, catalogRevision = `revision:${pluginId}`): PluginManagementSnapshot {
@@ -167,4 +204,25 @@ function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
     resolve = complete;
   });
   return { promise, resolve };
+}
+
+function pluginHook(patch: Partial<PluginManagementHook> = {}): PluginManagementHook {
+  return {
+    command: null,
+    currentHash: 'current-hash',
+    displayOrder: 0,
+    enabled: true,
+    eventName: 'preToolUse',
+    handlerType: 'command',
+    isManaged: true,
+    managementId: 'hook-id',
+    matcher: 'shell',
+    pluginHookId: 'guard-shell',
+    pluginId: 'guard',
+    source: 'plugin',
+    statusMessage: null,
+    timeoutSec: 30,
+    trustStatus: 'managed',
+    ...patch,
+  };
 }
