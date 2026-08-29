@@ -894,5 +894,3 @@ export type RegenerateMessageInput = {
   thinking?: boolean;
   thinkingEffort?: string;
 };
-
-export type RuntimeReviewTarget = { type: 'uncommittedChanges' } | { type: 'baseBranch'; branch: string } | { type: 'commit'; sha: string; title?: string } | { type: 'custom'; instructions: string };

@@ -3,7 +3,6 @@ import type {
   CoreRuntimeEvent,
   RuntimeConfiguredModelReference,
   DesktopRuntimeClient,
-  RuntimeReviewTarget,
   RuntimeThread,
   RuntimeThreadSummary,
   WorkspaceProject,
@@ -20,6 +19,10 @@ import {
 import { startThreadReview } from '../../features/workspace/hooks/startThreadReview.js';
 import { isPrimaryConversationThread } from './runtimeThreadRelations.js';
 import { useRendererFeatureViews } from '../../composition/feature-view-registries.js';
+import type {
+  ReviewFeatureService,
+  ReviewFeatureTarget,
+} from '../../composition/ReviewFeatureBoundary.js';
 import { useIdentityRequestGuard } from '../../shared/hooks/useIdentityRequestGuard.js';
 import { useAnimationFrameCommit } from '../../shared/hooks/useAnimationFrameCommit.js';
 import { useI18n } from '../../shared/i18n/I18nProvider.js';
@@ -49,7 +52,6 @@ export type RuntimeThreadClient = Pick<
   | 'deleteThread'
   | 'getThread'
   | 'listThreads'
-  | 'startReview'
   | 'subscribeEvents'
   | 'updateThread'
 >;
@@ -70,6 +72,7 @@ type RuntimeThreadStateOptions = {
   client: RuntimeThreadClient;
   onError: (message: string) => void;
   onTurnSettled: (settlement: RuntimeTurnSettlement) => void;
+  review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
 
@@ -84,6 +87,7 @@ export function useRuntimeThreadState({
   client,
   onError,
   onTurnSettled,
+  review,
   setActiveProjectId,
 }: RuntimeThreadStateOptions) {
   const { locale, t } = useI18n();
@@ -475,7 +479,7 @@ export function useRuntimeThreadState({
   }, [client, reloadThreads, t]);
 
   const startCurrentThreadReview = useCallback(async (
-    target: RuntimeReviewTarget,
+    target: ReviewFeatureTarget,
     scope?: {
       claimComposerForThread: (threadId: string) => void;
       isCurrentRequest: () => boolean;
@@ -496,6 +500,7 @@ export function useRuntimeThreadState({
         }
         await reloadThreads();
       },
+      review,
       t,
       target,
     });
@@ -507,6 +512,7 @@ export function useRuntimeThreadState({
     currentThread,
     locale,
     reloadThreads,
+    review,
     setCurrentThread,
     t,
   ]);

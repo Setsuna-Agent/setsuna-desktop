@@ -4,9 +4,9 @@ import type {
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
-  RuntimeReviewTarget,
   RuntimeThread,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
@@ -18,6 +18,7 @@ import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityReques
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
 import { useSideConversationFeatureService } from '../../../composition/SideConversationFeatureBoundary.js';
+import { useReviewFeatureService } from '../../../composition/ReviewFeatureBoundary.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
 import { useChatTurnActions } from './useChatTurnActions.js';
@@ -45,6 +46,7 @@ export function useSideChat({
   const { locale, t } = useI18n();
   const featureViews = useRendererFeatureViews();
   const sideConversationService = useSideConversationFeatureService();
+  const review = useReviewFeatureService();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
@@ -245,7 +247,7 @@ export function useSideChat({
   }, [client, threadId]);
 
   const startReview = useCallback(async (
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => {
     const isCurrentRequest = reviewRequests.begin();
@@ -264,6 +266,7 @@ export function useSideChat({
           }
           await reloadThreads();
         },
+        review,
         t,
         target,
       });
@@ -275,7 +278,7 @@ export function useSideChat({
       }
       throw unknownError;
     }
-  }, [activeProjectId, claimComposerForThread, client, currentThread, locale, reloadThreads, reviewRequests, setError, t]);
+  }, [activeProjectId, claimComposerForThread, client, currentThread, locale, reloadThreads, review, reviewRequests, setError, t]);
 
   return useMemo(() => ({
     actions,

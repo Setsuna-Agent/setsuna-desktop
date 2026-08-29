@@ -1,7 +1,7 @@
 {
   "name": "@setsuna-desktop/feature-review",
   "version": "0.1.0",
-  "description": "Native Git review Feature for Setsuna Desktop.",
+  "description": "Agent and native Git review Feature for Setsuna Desktop.",
   "license": "MIT",
   "type": "module",
   "exports": {

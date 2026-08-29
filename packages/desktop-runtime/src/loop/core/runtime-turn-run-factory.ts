@@ -8,11 +8,11 @@ import type {
   RuntimeThreadGoal,
   SendTurnInput,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import type { Clock } from '../../ports/clock.js';
 import type { ConfigStore } from '../../ports/config-store.js';
 import type { IdGenerator } from '../../ports/id-generator.js';
 import type { ThreadStore } from '../../ports/thread-store.js';
-import { runtimeReviewPolicyMessage } from '../context/runtime-review-profile.js';
 import type { RuntimeEventWriter } from '../lifecycle/runtime-event-writer.js';
 import { RuntimeTurnTaskRegistry } from '../lifecycle/turn-task-registry.js';
 import type { RuntimeModelInputGuard } from './runtime-model-input-guard.js';
@@ -23,13 +23,6 @@ import {
 } from './runtime-thread-model.js';
 
 export type RuntimeTurnThinkingOptions = Pick<ModelRequest, 'thinking' | 'reasoningEffort'>;
-
-export type RuntimeReviewTurnInput = {
-  displayText: string;
-  language?: RuntimeInterfaceLanguage;
-  modelSelection?: SendTurnInput['modelSelection'];
-  prompt: string;
-};
 
 export type RuntimeTurnExecutionOptions = {
   clientId?: string;
@@ -51,6 +44,7 @@ export type RuntimeTurnExecutionOptions = {
 export type RuntimeTurnExecutionInput = {
   attachments: NonNullable<RuntimeMessage['attachments']>;
   options?: RuntimeTurnExecutionOptions;
+  samplingModel?: RuntimeResolvedTurnModel;
   signal: AbortSignal;
   skillIds: string[];
   skillReferences?: RuntimeMessage['skillReferences'];
@@ -203,14 +197,15 @@ export class RuntimeTurnRunFactory {
     return { turnId, done: run.done };
   }
 
-  async createReview(threadId: string, input: RuntimeReviewTurnInput): Promise<{ turnId: string; done: Promise<void> }> {
+  async createReview(threadId: string, input: ReviewTurnRequest): Promise<{ turnId: string; done: Promise<void> }> {
     const displayText = input.displayText.trim();
     const prompt = input.prompt.trim();
     if (!displayText) throw new Error('review display text is required');
     if (!prompt) throw new Error('review prompt is required');
     await this.options.turnTasks.waitForFinalizingRegularTurn(threadId);
     const thread = await this.requireThread(threadId);
-    const turnModel = await this.resolveTurnModel(thread, input.modelSelection);
+    const turnModel = await this.resolveTurnModel(thread, input.conversationModelSelection);
+    const samplingModel = await this.resolveTurnModel(thread, input.modelSelection);
     const turnId = this.options.ids.id('turn');
     const run = this.options.turnTasks.run({
       turnId,
@@ -219,6 +214,7 @@ export class RuntimeTurnRunFactory {
       acceptingSteers: false,
     }, (task) => this.options.runTurn({
       attachments: [],
+      samplingModel,
       signal: task.controller.signal,
       skillIds: [],
       text: displayText,
@@ -230,9 +226,13 @@ export class RuntimeTurnRunFactory {
         modelInput: prompt,
         review: {
           displayText,
-          language: input.language ?? 'zh-CN',
+          language: input.language,
         },
-        runtimeContextMessages: [runtimeReviewPolicyMessage(turnId, this.options.clock.now().toISOString(), input.language ?? 'zh-CN')],
+        runtimeContextMessages: [reviewPolicyMessage(
+          turnId,
+          this.options.clock.now().toISOString(),
+          input.developerInstructions,
+        )],
         taskKind: 'review',
         userMessage: {
           id: turnId,
@@ -392,6 +392,23 @@ export class RuntimeTurnRunFactory {
     const config = await this.options.configStore?.getConfig().catch(() => null);
     return resolveRuntimeTurnModel(config, thread, requested);
   }
+}
+
+function reviewPolicyMessage(
+  turnId: string,
+  createdAt: string,
+  content: string,
+): RuntimeMessage {
+  return {
+    id: 'desktop_review_policy',
+    turnId,
+    role: 'developer',
+    promptSource: 'review',
+    visibility: 'model',
+    status: 'complete',
+    createdAt,
+    content,
+  };
 }
 
 function isCollaborationChildThread(thread: RuntimeThread): boolean {

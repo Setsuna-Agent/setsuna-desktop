@@ -9,6 +9,7 @@ import type {
   MemoryPreferences,
   MemoryPreferencesPatch,
 } from '@setsuna-desktop/feature-memory/contracts';
+import type { ReviewModelSelection } from '@setsuna-desktop/feature-review/contracts';
 import path from 'node:path';
 import type { RuntimeFactory } from '../types.js';
 import { AppServerRpcError } from './errors.js';
@@ -75,9 +76,10 @@ export function appServerConfigReadResponse(
   config: RuntimeConfigState,
   memory: MemoryPreferences,
   input: Record<string, unknown>,
+  reviewSelection: ReviewModelSelection = null,
 ) {
   const cwd = stringInput(input.cwd) || process.cwd();
-  const configValue = sweEffectiveConfig(config, memory, cwd);
+  const configValue = sweEffectiveConfig(config, memory, reviewSelection, cwd);
   const metadata = appServerConfigLayerMetadata(config);
   const origins = appServerConfigOrigins(configValue, metadata);
   const includeLayers = input.includeLayers === true || input.include_layers === true;
@@ -101,12 +103,13 @@ export function appServerConfigReadResponse(
 function sweEffectiveConfig(
   config: RuntimeConfigState,
   memory: MemoryPreferences,
+  reviewSelection: ReviewModelSelection,
   cwd: string,
 ): Record<string, unknown> {
   const reasoningEffort = activeModelReasoningEffort(config);
   return {
     model: activeModelCode(config),
-    review_model: appServerReviewModel(config),
+    review_model: appServerReviewModel(config, reviewSelection),
     model_context_window: activeModelConfig(config)?.contextWindowTokens ?? null,
     model_auto_compact_token_limit: appServerModelAutoCompactTokenLimit(config),
     model_auto_compact_token_limit_scope: null,
@@ -226,12 +229,15 @@ export function appServerConfigWriteResponse(config: RuntimeConfigState) {
 export type AppServerConfigMutation = Readonly<{
   config: RuntimeConfigInput;
   memoryPatch: MemoryPreferencesPatch;
+  reviewSelection: ReviewModelSelection;
   writesConfig: boolean;
+  writesReview: boolean;
 }>;
 
 export function appServerRuntimeConfigInputFromEdits(
   config: RuntimeConfigState,
   edits: AppServerConfigEdit[],
+  currentReviewSelection: ReviewModelSelection = null,
 ): AppServerConfigMutation {
   const next: RuntimeConfigInput = {
     features: { ...(config.features ?? {}) },
@@ -239,7 +245,9 @@ export function appServerRuntimeConfigInputFromEdits(
     sandboxWorkspaceWrite: { ...(config.sandboxWorkspaceWrite ?? {}) },
   };
   let memoryPatch: MemoryPreferencesPatch = {};
+  let reviewSelection = currentReviewSelection;
   let writesConfig = false;
+  let writesReview = false;
   let providers: RuntimeConfigInput['providers'];
 
   const ensureProviders = () => {
@@ -257,11 +265,7 @@ export function appServerRuntimeConfigInputFromEdits(
   const activeProviderIdForEdit = () => (
     next.activeProviderId ?? config.activeProviderId ?? ensureProviders()[0]?.id
   );
-  const currentReviewModelForEdit = () => (
-    next.taskModels && hasOwn(next.taskModels, 'review')
-      ? next.taskModels.review
-      : config.taskModels?.review
-  );
+  const currentReviewModelForEdit = () => reviewSelection;
 
   for (const edit of edits) {
     switch (edit.keyPath) {
@@ -306,15 +310,12 @@ export function appServerRuntimeConfigInputFromEdits(
         );
         break;
       case 'review_model':
-        writesConfig = true;
-        next.taskModels = {
-          ...(next.taskModels ?? {}),
-          review: appServerReviewModelInput(edit.value, {
-            activeProviderId: activeProviderIdForEdit(),
-            current: currentReviewModelForEdit(),
-            providers: ensureProviders(),
-          }),
-        };
+        writesReview = true;
+        reviewSelection = appServerReviewModelInput(edit.value, {
+          activeProviderId: activeProviderIdForEdit(),
+          current: currentReviewModelForEdit(),
+          providers: ensureProviders(),
+        });
         break;
       case 'sandbox_mode':
         writesConfig = true;
@@ -385,7 +386,13 @@ export function appServerRuntimeConfigInputFromEdits(
   }
 
   if (providers) next.providers = providers;
-  return { config: next, memoryPatch, writesConfig };
+  return {
+    config: next,
+    memoryPatch,
+    reviewSelection,
+    writesConfig,
+    writesReview,
+  };
 }
 
 function sweProvidersWithActiveModel(
@@ -491,8 +498,10 @@ function appServerApprovalReviewerToRuntime(
   );
 }
 
-function appServerReviewModel(config: RuntimeConfigState): string | null {
-  const reference = config.taskModels?.review;
+function appServerReviewModel(
+  config: RuntimeConfigState,
+  reference: ReviewModelSelection,
+): string | null {
   if (!reference) return null;
   const provider = config.providers.find((item) => (
     item.enabled && item.id === reference.providerId

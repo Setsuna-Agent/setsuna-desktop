@@ -705,8 +705,10 @@ describe('agent loop turn execution', () => {
         toolHost,
       });
   
-      const started = await loop.startReview(thread.id, {
+      const started = await loop.startReviewTurn(thread.id, {
+        developerInstructions: 'Review mode is active; do not modify files.',
         displayText: 'current changes',
+        language: 'en-US',
         prompt: 'Review the current uncommitted changes.',
       });
       await waitForTurnCompleted(threadStore, thread.id, started.turnId);
@@ -756,8 +758,18 @@ describe('agent loop turn execution', () => {
         configStore: new TestConfigStore(reviewTaskModelConfig()),
       });
 
-      const started = await loop.startReview(thread.id, {
+      const started = await loop.startReviewTurn(thread.id, {
+        conversationModelSelection: {
+          providerId: 'chat-provider',
+          modelId: 'chat-model',
+        },
+        developerInstructions: 'Review mode is active; do not modify files.',
         displayText: 'current changes',
+        language: 'en-US',
+        modelSelection: {
+          providerId: 'review-provider',
+          modelId: 'review-model',
+        },
         prompt: 'Review the current uncommitted changes.',
       });
       await waitForTurnCompleted(threadStore, thread.id, started.turnId);
@@ -777,6 +789,11 @@ describe('agent loop turn execution', () => {
         message.content.includes(olderContextMarker)
       ))).toBe(false);
       expect(events.some((event) => event.type === 'thread.context_compacted')).toBe(false);
+      expect(saved?.modelBinding).toEqual({
+        providerId: 'chat-provider',
+        modelId: 'chat-model',
+        modelCode: 'chat-model-code',
+      });
       expect(saved?.messages.some((message) => (
         message.content.includes(olderContextMarker)
       ))).toBe(true);
@@ -848,11 +865,5 @@ function reviewTaskModelConfig(): RuntimeConfigState {
     ],
     setsunaStyle: 'developer',
     storagePath: '/tmp/memories',
-    taskModels: {
-      review: {
-        providerId: 'review-provider',
-        modelId: 'review-model',
-      },
-    },
   };
 }

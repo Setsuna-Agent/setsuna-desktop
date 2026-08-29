@@ -86,7 +86,11 @@ import {
   type PluginManagementRuntimeHost,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { pluginManagementRuntimeFeature } from '@setsuna-desktop/feature-plugin-management/runtime';
-import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/contracts';
+import {
+  reviewControlCapability,
+  reviewLegacySettingsCapability,
+  reviewRuntimeHostCapability,
+} from '@setsuna-desktop/feature-review/contracts';
 import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import { runtimeActivityRuntimeHostCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRuntimeFeature } from '@setsuna-desktop/feature-runtime-activity/runtime';
@@ -304,6 +308,10 @@ export async function activateBuiltinRuntimeFeatures(
         runtime.reviewRuntimeHost,
       ),
       provideHostCapability(
+        reviewLegacySettingsCapability,
+        runtime.configStore.reviewLegacySettingsAdapter(),
+      ),
+      provideHostCapability(
         runtimeActivityRuntimeHostCapability,
         Object.freeze({
           activeTurnId: (threadId: string) => runtime.agentLoop.activeTurnId(threadId),
@@ -428,6 +436,10 @@ export async function activateBuiltinRuntimeFeatures(
     host.bind({
       goal: optionalCapability(goalControlCapability, createNoopGoalControl),
     }, ({ goal }) => runtime.agentLoop.bindGoalControl(goal));
+
+    host.bind({
+      review: requiredCapability(reviewControlCapability),
+    }, ({ review }) => runtime.reviewControl.bind(review));
 
     host.bind({
       usage: optionalCapability(usageControlCapability, createNoopUsageControl),

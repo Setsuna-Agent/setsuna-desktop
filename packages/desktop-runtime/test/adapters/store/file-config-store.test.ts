@@ -287,12 +287,10 @@ describe('file config store', () => {
 
     await expect(store.saveConfig({
       taskModels: {
-        review: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     })).resolves.toMatchObject({
       taskModels: {
-        review: { providerId: provider.id, modelId: model.id },
         contextCompaction: { providerId: provider.id, modelId: model.id },
       },
     });
@@ -308,6 +306,7 @@ describe('file config store', () => {
     stored.memoryEnabled = true;
     stored.taskModels = {
       ...(stored.taskModels as Record<string, unknown>),
+      review: { providerId: provider.id, modelId: model.id },
       approvalReview: { providerId: provider.id, modelId: model.id },
       threadTitle: { providerId: provider.id, modelId: model.id },
       memoryExtraction: { providerId: provider.id, modelId: model.id },
@@ -320,6 +319,7 @@ describe('file config store', () => {
 
     const memoryLegacy = store.memoryLegacySettingsAdapter();
     const approvalReviewLegacy = store.approvalReviewLegacySettingsAdapter();
+    const reviewLegacy = store.reviewLegacySettingsAdapter();
     const titleLegacy = store.threadTitleGenerationLegacySettingsAdapter();
     await expect(memoryLegacy.read()).resolves.toMatchObject({
       value: {
@@ -338,13 +338,17 @@ describe('file config store', () => {
       providerId: provider.id,
       modelId: model.id,
     });
+    await expect(reviewLegacy.read()).resolves.toEqual({
+      providerId: provider.id,
+      modelId: model.id,
+    });
     expect((await store.getConfig()).taskModels).toEqual({
-      review: { providerId: provider.id, modelId: model.id },
       contextCompaction: { providerId: provider.id, modelId: model.id },
     });
 
     await memoryLegacy.retire();
     await approvalReviewLegacy.retire();
+    await reviewLegacy.retire();
     await titleLegacy.retire();
     const migrated = JSON.parse(await readFile(configPath, 'utf8')) as Record<string, unknown>;
     expect(migrated).not.toHaveProperty('memory');
@@ -352,6 +356,7 @@ describe('file config store', () => {
     expect(migrated.taskModels).not.toHaveProperty('memoryExtraction');
     expect(migrated.taskModels).not.toHaveProperty('memoryConsolidation');
     expect(migrated.taskModels).not.toHaveProperty('approvalReview');
+    expect(migrated.taskModels).not.toHaveProperty('review');
     expect(migrated.taskModels).not.toHaveProperty('threadTitle');
   });
 

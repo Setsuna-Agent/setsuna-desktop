@@ -3,6 +3,7 @@ import { InMemoryApprovalGate } from '../adapters/approval/in-memory-approval-ga
 import { ConversationDebugRuntimeSink } from '../adapters/feature/conversation-debug-runtime-sink.js';
 import { BindableUsageRecorder } from '../adapters/feature/bindable-usage-recorder.js';
 import { BindableModelClient } from '../adapters/feature/bindable-model-client.js';
+import { BindableReviewControl } from '../adapters/feature/bindable-review-control.js';
 import { DesktopReviewRuntimeHost } from '../adapters/feature/review-runtime-host.js';
 import { DesktopVisionRecognitionRuntimeHost } from '../adapters/feature/vision-recognition-runtime-host.js';
 import { InMemoryAppServerNotificationBus } from '../adapters/event/in-memory-app-server-notification-bus.js';
@@ -108,6 +109,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const hookManagement = new RuntimeHookManagement(configStore);
   const networkProxyFetch = new NativeBridgeProxyFetch(nativeBridge);
   const usageRecorder = new BindableUsageRecorder();
+  const reviewControl = new BindableReviewControl();
   const mcpStore = new FileMcpStore(runtimeDataDir, nativeBridge);
   const mcpElicitations = new McpElicitationCoordinator(approvalGate, eventWriter, clock, ids);
   const mcpControl = new BindableMcpControl();
@@ -144,10 +146,6 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
   const projectWorkflow = new FileProjectWorkflowResolver();
   const providerModelClient = new BindableModelClient();
   const modelClient = new ImageAssetResolvingModelClient(providerModelClient, generatedImageStore);
-  const reviewRuntimeHost = new DesktopReviewRuntimeHost({
-    config: configStore,
-    models: providerModelClient,
-  });
   const visionRecognitionHost = new DesktopVisionRecognitionRuntimeHost({
     attachments: attachmentStore,
     clock,
@@ -221,6 +219,12 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     eventWriter,
     toolResultStore,
   });
+  const reviewRuntimeHost = new DesktopReviewRuntimeHost({
+    config: configStore,
+    models: providerModelClient,
+    startTurn: (threadId, request) => agentLoop.startReviewTurn(threadId, request),
+    threads: threadStore,
+  });
   return {
     agentLoop,
     artifactToolHost,
@@ -259,6 +263,7 @@ export function createRuntimeFactory(options: RuntimeFactoryOptions) {
     pluginStore,
     pluginMarketplace,
     projectWorkflow,
+    reviewControl,
     reviewRuntimeHost,
     skillRegistry,
     toolHost,

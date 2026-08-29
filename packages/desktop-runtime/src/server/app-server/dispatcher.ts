@@ -109,11 +109,12 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'config/read') {
     const input = recordInput(params);
-    const [config, memory] = await Promise.all([
+    const [config, memory, review] = await Promise.all([
       runtime.configStore.getConfig(),
       runtime.agentLoop.memoryControl().readSettings(),
+      runtime.reviewControl.readSettings().catch(() => null),
     ]);
-    return appServerConfigReadResponse(config, memory.value, input);
+    return appServerConfigReadResponse(config, memory.value, input, review?.selection ?? null);
   }
 
   if (method === 'configRequirements/read') {
@@ -122,21 +123,27 @@ export async function dispatchAppServerRpcRequest(
 
   if (method === 'config/value/write') {
     const input = recordInput(params);
-    const config = await runtime.configStore.getConfig();
+    const [config, review] = await Promise.all([
+      runtime.configStore.getConfig(),
+      runtime.reviewControl.readSettings().catch(() => null),
+    ]);
     sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
     const edit = appServerConfigEdit(input);
-    const mutation = appServerRuntimeConfigInputFromEdits(config, [edit]);
-    const saved = await commitAppServerConfigMutation(runtime, config, mutation);
+    const mutation = appServerRuntimeConfigInputFromEdits(config, [edit], review?.selection ?? null);
+    const saved = await commitAppServerConfigMutation(runtime, config, mutation, review?.revision);
     return appServerConfigWriteResponse(saved);
   }
 
   if (method === 'config/batchWrite') {
     const input = recordInput(params);
-    const config = await runtime.configStore.getConfig();
+    const [config, review] = await Promise.all([
+      runtime.configStore.getConfig(),
+      runtime.reviewControl.readSettings().catch(() => null),
+    ]);
     sweValidateConfigWriteTarget(config, input.filePath ?? input.file_path, input.expectedVersion ?? input.expected_version);
     const edits = requiredArray(input.edits, 'edits').map((edit, index) => appServerConfigEdit(recordInput(edit), index));
-    const mutation = appServerRuntimeConfigInputFromEdits(config, edits);
-    const saved = await commitAppServerConfigMutation(runtime, config, mutation);
+    const mutation = appServerRuntimeConfigInputFromEdits(config, edits, review?.selection ?? null);
+    const saved = await commitAppServerConfigMutation(runtime, config, mutation, review?.revision);
     return appServerConfigWriteResponse(saved);
   }
 
@@ -724,9 +731,17 @@ async function commitAppServerConfigMutation(
   runtime: RuntimeFactory,
   config: Awaited<ReturnType<RuntimeFactory['configStore']['getConfig']>>,
   mutation: AppServerConfigMutation,
+  reviewRevision?: number,
 ) {
   const writesMemory = Object.keys(mutation.memoryPatch).length > 0;
-  if (mutation.writesConfig && writesMemory) {
+  if (mutation.writesConfig && mutation.writesReview) {
+    throw new AppServerRpcError(
+      -32602,
+      'Core config and Review settings must be written in separate requests.',
+      { config_write_error_code: 'configValidationError' },
+    );
+  }
+  if ((mutation.writesConfig || mutation.writesReview) && writesMemory) {
     throw new AppServerRpcError(
       -32602,
       'Core config and Memory settings must be written in separate requests.',
@@ -738,6 +753,20 @@ async function commitAppServerConfigMutation(
     await runtime.agentLoop.memoryControl().updateSettings({
       expectedRevision: memory.revision,
       patch: mutation.memoryPatch,
+    });
+    return config;
+  }
+  if (mutation.writesReview) {
+    if (reviewRevision === undefined) {
+      throw new AppServerRpcError(
+        -32602,
+        'Review settings are unavailable.',
+        { config_write_error_code: 'configValidationError' },
+      );
+    }
+    await runtime.reviewControl.updateSettings({
+      expectedRevision: reviewRevision,
+      selection: mutation.reviewSelection,
     });
     return config;
   }

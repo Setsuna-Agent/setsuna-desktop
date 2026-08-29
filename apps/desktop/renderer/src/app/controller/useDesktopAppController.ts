@@ -1,7 +1,7 @@
 import {
   type RuntimeConfiguredModelReference,
-  type RuntimeReviewTarget,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   useCallback,
   useEffect,
@@ -32,6 +32,7 @@ import { usePluginManagementFeatureService } from '../../composition/PluginManag
 import { useMcpFeatureService } from '../../composition/McpFeatureBoundary.js';
 import { useSkillsFeatureService } from '../../composition/SkillsFeatureBoundary.js';
 import { reportRuntimeBackgroundFailure } from '../../services/runtime-client/runtimeClientErrors.js';
+import { useReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
 import type { RuntimeTurnSettlement } from '../../services/runtime-client/useRuntimeThreadState.js';
 import { useDesktopNavigation } from './useDesktopNavigation.js';
 import { shouldCollapseSidebar, useDesktopSidebarAutoCollapse } from './useDesktopSidebarAutoCollapse.js';
@@ -53,6 +54,7 @@ export function useDesktopAppController() {
   const mcp = useMcpFeatureService();
   const skills = useSkillsFeatureService();
   const pluginManagement = usePluginManagementFeatureService();
+  const review = useReviewFeatureService();
   const handleTurnSettled = useCallback((settlement: RuntimeTurnSettlement) => {
     if (settlement.usageChanged) invalidateUsage(settlement.threadId);
     void pluginManagement.refreshExtensions().catch((unknownError) => {
@@ -72,6 +74,7 @@ export function useDesktopAppController() {
     activeProjectId,
     modelProvider,
     onTurnSettled: handleTurnSettled,
+    review,
     setActiveProjectId,
   });
   const {
@@ -274,7 +277,7 @@ export function useDesktopAppController() {
   }, []);
 
   const startCurrentThreadReview = useCallback((
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => {
     const isCurrentRequest = reviewRequests.begin();

@@ -35,11 +35,11 @@ Review 是跨四个运行面参与的完整业务闭环：
 
 | 进程 | 职责 |
 | --- | --- |
-| Contracts | Review DTO、Git/diff 模型、IPC bridge、runtime commit-message operation、renderer host 接缝 |
-| Runtime | 基于默认 task model 生成 commit message，负责 prompt、输出归一化和 fallback |
+| Contracts | Agent Review target/operation/settings、Git/diff 模型、IPC bridge、runtime commit-message operation、renderer host 接缝 |
+| Runtime | Agent Review prompt/只读策略/专用模型设置与 typed start operation；同时负责 commit message 的生成、归一化和 fallback |
 | Main | Git root/diff/status、stage/unstage/discard、watcher、受管预览和可信 sender policy |
 | Preload | `desktopReview` 固定子桥与事件 |
-| Renderer | Review panel、diff/file browser、Git controls、finding/model/preferences 和 scoped styles |
+| Renderer | Agent Review service/模型设置，以及 Review panel、diff/file browser、Git controls、finding/preferences 和 scoped styles |
 
 安全与一致性边界：
 
@@ -49,6 +49,11 @@ Review 是跨四个运行面参与的完整业务闭环：
 - Diff 文件数、行数、二进制/图片预览和 untracked 大小有明确上限。
 - Main 的受管 preview 由 native bridge registry 生成 opaque ID，renderer 不直接获取任意本地文件 URL。
 - Commit message 生成通过 Feature typed operation；Main 只提供调用接缝，不能读取 provider secret。
+- Agent Review 经 `/v1/features/desktop-review/threads/:threadId/reviews` typed operation 启动；renderer 不再把该命令放进通用 `DesktopRuntimeClient`。
+- Feature 生成完整的审查 prompt、developer policy 和模型选择后，才通过窄 `ReviewRuntimeHost.startTurn` 交给 Core。Core 保留通用 turn/event 真源与 read-only tool enforcement，不解释 Review target。
+- 专用 Review 模型只控制该轮采样和临时窗口裁剪；线程仍绑定当前对话模型，并按对话模型窗口决定是否持久压缩，避免一次审查缩短后续历史。
+- 旧 REST、SWE `review/start`、AppServer `review_model` 与根配置中的 `taskModels.review` 是兼容入口；它们只映射到 Feature control/settings，不维护第二份审查策略或模型配置。
+- 兼容读取不依赖 Review settings 健康状态；兼容写入若同时修改 Review 与 Core 配置会在落盘前被拒绝，调用方应拆成两个请求。
 
 Workspace 宿主决定 panel、当前 project 和导航；Review Feature 决定 review state、Git 操作和具体视图。
 

@@ -52,6 +52,10 @@ import {
   type PluginManagementRendererService,
 } from '@setsuna-desktop/feature-plugin-management/contracts';
 import { pluginManagementRendererFeature } from '@setsuna-desktop/feature-plugin-management/renderer';
+import {
+  reviewRendererServiceCapability,
+  type ReviewRendererService,
+} from '@setsuna-desktop/feature-review/contracts';
 import { reviewRendererFeature } from '@setsuna-desktop/feature-review/renderer/feature';
 import {
   runtimeActivityRendererServiceCapability,
@@ -157,6 +161,7 @@ export type ActiveRendererFeatures = Readonly<{
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
   runtimeActivity: RuntimeActivityRendererService;
+  review: ReviewRendererService;
   sideConversation: SideConversationRendererService;
   skills: SkillsRendererService;
   updater: UpdaterRendererStateService;
@@ -261,6 +266,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
       runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
+      review: requiredCapability(reviewRendererServiceCapability),
       sideConversation: optionalCapability(
         sideConversationRendererServiceCapability,
         createNoopSideConversationRendererService,
@@ -282,6 +288,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       networkProxy: dependencies.networkProxy,
       pluginManagement: dependencies.pluginManagement,
       runtimeActivity: dependencies.runtimeActivity,
+      review: dependencies.review,
       sideConversation: dependencies.sideConversation,
       skills: dependencies.skills,
       updater: dependencies.updater,

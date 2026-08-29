@@ -1,4 +1,5 @@
 import type { DesktopRuntimeClient, WorkspaceProject } from '@setsuna-desktop/contracts';
+import type { ReviewFeatureService } from '../../composition/ReviewFeatureBoundary.js';
 import {
   useCallback,
   useEffect,
@@ -28,6 +29,7 @@ type RuntimeClientStateOptions = {
   activeProjectId: string | null;
   modelProvider: ModelProviderProjectionService;
   onTurnSettled?: (settlement: RuntimeTurnSettlement) => void;
+  review: ReviewFeatureService;
   setActiveProjectId: Dispatch<SetStateAction<string | null>>;
 };
 
@@ -39,6 +41,7 @@ export function useRuntimeClientState({
   activeProjectId,
   modelProvider,
   onTurnSettled,
+  review,
   setActiveProjectId,
 }: RuntimeClientStateOptions) {
   const client = useMemo(() => createDesktopRuntimeClient(), []);
@@ -71,6 +74,7 @@ export function useRuntimeClientState({
     client,
     onError: setError,
     onTurnSettled: forwardTurnSettlement,
+    review,
     setActiveProjectId,
   });
   const currentThreadId = threadState.currentThread?.id ?? null;

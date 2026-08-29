@@ -25,25 +25,15 @@ describe('TaskModelSettings', () => {
       <TaskModelSettings config={configFixture} onSave={async () => undefined} />,
     );
 
-    expect(html.match(/\bsd-settings-row\b/gu)).toHaveLength(2);
-    expect(html.match(/\bsd-select-field\b/gu)).toHaveLength(2);
-    expect(html.match(/task-model-settings__card/gu)).toHaveLength(2);
+    expect(html.match(/\bsd-settings-row\b/gu)).toHaveLength(1);
+    expect(html.match(/\bsd-select-field\b/gu)).toHaveLength(1);
+    expect(html.match(/task-model-settings__card/gu)).toHaveLength(1);
     expect(html).not.toContain('task-model-option-label');
-    for (const groupLabel of ['审查与安全', '上下文']) {
-      expect(html).toContain(`>${groupLabel}</h3>`);
-    }
+    expect(html).toContain('>上下文</h3>');
     expect(html).not.toContain('专用任务模型');
-    for (const label of ['代码审查', '上下文压缩']) {
-      expect(html).toContain(`aria-label="${label}"`);
-    }
-    for (const description of [
-      '审查工作区更改、分支或提交；建议选择擅长代码分析和工具调用的模型。',
-      '接近上下文上限时，把较早的对话整理成可继续使用的摘要。',
-    ]) {
-      expect(html).toContain(description);
-    }
+    expect(html).toContain('aria-label="上下文压缩"');
+    expect(html).toContain('接近上下文上限时，把较早的对话整理成可继续使用的摘要。');
     expect(html).toContain('MiniMax · MiniMax M3 (MiniMax-M3)');
-    expect(html).toContain('火山方舟 · Kimi K2.7 (kimi-k2.7)');
   });
 
 });
@@ -104,10 +94,6 @@ const configFixture: RuntimeConfigState = {
   ],
   globalPrompt: '',
   taskModels: {
-    review: {
-      providerId: 'provider-kimi',
-      modelId: 'kimi-k2',
-    },
     contextCompaction: {
       providerId: 'provider-minimax',
       modelId: 'minimax-m3',

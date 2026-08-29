@@ -5,13 +5,13 @@ import type {
   RuntimeConfiguredModelReference,
   RuntimeConfigState,
   RuntimeQueuedTurnInput,
-  RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
   WorkspaceEntrySearchItem,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import type { ComposerActiveTurn } from '@setsuna-desktop/feature-core/renderer';
 import {
   useCallback,
@@ -161,7 +161,7 @@ export function ChatComposer({
   onSend: (value?: string, options?: ChatComposerSendOptions) => Promise<boolean>;
   queuedTurnActions: ChatQueuedTurnActions;
   onStartThreadReview: (
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;

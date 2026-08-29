@@ -21,6 +21,8 @@ export type LegacyRuntimeMemorySettings = {
 };
 
 export type StoredTaskModelSettings = RuntimeTaskModelSettings & {
+  /** Compatibility input consumed once by the Review Feature. */
+  review?: RuntimeConfiguredModelReference;
   /** Compatibility input consumed once by the Approval Review Feature. */
   approvalReview?: RuntimeConfiguredModelReference;
   /** Compatibility input consumed once by the Thread Title Generation Feature. */

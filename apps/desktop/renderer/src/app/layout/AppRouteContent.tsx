@@ -1,8 +1,8 @@
 import type {
   RuntimeConfiguredModelReference,
-  RuntimeReviewTarget,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   lazy,
   Suspense,
@@ -96,7 +96,7 @@ export function AppRouteContent({
   setDraft: Dispatch<SetStateAction<string>>;
   skillSelectionRequest: ChatSkillSelectionRequest | null;
   startCurrentThreadReview: (
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   workspacePanels: DesktopWorkspacePanelsState;

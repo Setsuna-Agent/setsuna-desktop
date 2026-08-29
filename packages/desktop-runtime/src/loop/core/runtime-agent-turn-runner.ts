@@ -85,6 +85,7 @@ export class RuntimeAgentTurnRunner {
   async run({
     attachments,
     options = {},
+    samplingModel,
     signal,
     skillIds,
     skillReferences,
@@ -268,6 +269,7 @@ export class RuntimeAgentTurnRunner {
           threadId,
           taskKind,
           turnId,
+          samplingModel,
           turnModel,
           toolAccess: taskKind === 'review' || taskKind === 'subagent' ? 'read-only' : 'all',
         });

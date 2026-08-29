@@ -1,6 +1,12 @@
 import { defineRendererMessageBundle } from '@setsuna-desktop/feature-core/renderer';
 
 const reviewZhCN = {
+  'feature.review.settings.group': '审查与安全',
+  'feature.review.settings.model': '代码审查',
+  'feature.review.settings.description': '审查工作区更改、分支或提交；建议选择擅长代码分析和工具调用的模型。',
+  'feature.review.settings.followCurrent': '跟随当前对话模型',
+  'feature.review.settings.unavailable': '之前选择的模型已不可用',
+  'feature.review.settings.empty': '没有可用模型，请先配置并启用模型服务。',
   'feature.review.git.branch': '分支',
   'feature.review.git.commitOrPush': '提交或推送',
   'feature.review.git.unstagedBranchBlocked': '请先暂存或丢弃当前工作区的未暂存更改。',
@@ -97,6 +103,12 @@ export type ReviewTranslate = (
 ) => string;
 
 const reviewEnUS: Record<ReviewMessageKey, string> = {
+  'feature.review.settings.group': 'Review and safety',
+  'feature.review.settings.model': 'Code review',
+  'feature.review.settings.description': 'Review workspace changes, branches, or commits. A model strong at code analysis and tool calling is recommended.',
+  'feature.review.settings.followCurrent': 'Follow the current conversation model',
+  'feature.review.settings.unavailable': 'The previously selected model is unavailable',
+  'feature.review.settings.empty': 'No model is available. Configure and enable a model provider first.',
   'feature.review.git.branch': 'Branch',
   'feature.review.git.commitOrPush': 'Commit or push',
   'feature.review.git.unstagedBranchBlocked': 'Stage or discard the current unstaged changes first.',

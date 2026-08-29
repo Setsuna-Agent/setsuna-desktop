@@ -180,35 +180,16 @@ describe('desktop runtime client advanced thread methods', () => {
     expect(request).toHaveBeenCalledWith({ path: '/v1/attachments/attachment%20%2F%201', method: 'DELETE' });
   });
 
-  it('routes thread deletion and reviews through first-party REST', async () => {
-    const request = installRuntimeBridge((input) => {
-      if (input.path.endsWith('/reviews')) {
-        return { accepted: true, turnId: 'turn_review' };
-      }
-      return { ok: true };
-    });
+  it('routes thread deletion through first-party REST', async () => {
+    const request = installRuntimeBridge(() => ({ ok: true }));
     const client = createDesktopRuntimeClient();
-    const target = { type: 'baseBranch' as const, branch: 'main' };
-    const reviewInput = {
-      modelSelection: { providerId: 'provider-selected', modelId: 'model-selected' },
-      target,
-    };
 
     await client.deleteThread('thread / 1');
-    await expect(client.startReview('thread / 1', reviewInput)).resolves.toEqual({
-      accepted: true,
-      turnId: 'turn_review',
-    });
 
     expect(request.mock.calls.map(([input]) => input)).toEqual([
       {
         path: '/v1/threads/thread%20%2F%201',
         method: 'DELETE',
-      },
-      {
-        path: '/v1/threads/thread%20%2F%201/reviews',
-        method: 'POST',
-        body: reviewInput,
       },
     ]);
   });
