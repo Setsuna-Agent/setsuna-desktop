@@ -41,6 +41,7 @@ packages/features/<feature>/
 | `plugin-management` | `plugin-management` | R | R | B | R | Plugin catalog、安装事务、Hook/extension trust 与管理状态 |
 | `review` | `desktop-review` | R | R | B | R | Git review、diff、stage/discard、commit message 与 Review UI |
 | `runtime-activity` | `runtime-activity` | R | — | — | R | 活跃 turn、approval、后台 shell/service 的统一活动中心 |
+| `side-conversation` | `side-conversation` | O | — | — | O | 临时侧边线程的快照创建、策略边界、崩溃清理与 renderer 创建生命周期 |
 | `skills` | `skills` | R | — | — | R | Skill catalog、CRUD、extra roots 与 MCP 依赖安装 |
 | `terminal` | `terminal` | — | R | B | R | PTY session、事件恢复、Terminal pane |
 | `thread-title-generation` | `thread-title-generation` | O | — | — | O | 首轮自动标题、专用模型设置与重命名竞争保护 |
@@ -58,7 +59,7 @@ Inventory 的事实来源不是这张表，而是四个 composition root 和各 
 
 ### Agent 状态与上下文
 
-- [Collaboration、Goal、Memory、自动标题与 Conversation Debug](agent-state.md)
+- [Collaboration、Side Conversation、Goal、Memory、自动标题与 Conversation Debug](agent-state.md)
 - [Model Provider](model-provider.md)
 
 这组 Feature 与 Agent loop 关系最紧密，但业务状态仍由 Feature coordinator/projection 拥有。Agent loop 只通过窄 host/control Capability 协作。

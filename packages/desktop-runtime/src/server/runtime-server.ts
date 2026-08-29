@@ -5,7 +5,6 @@ import type { RuntimeFeatureComposition } from '@setsuna-desktop/feature-core/ru
 import { activateBuiltinRuntimeFeatures } from '../composition/runtime-feature-composition.js';
 import { createRuntimeFactory } from '../runtime/runtime-factory.js';
 import { RuntimeUseCaseError } from '../runtime/use-cases/errors.js';
-import { cleanupRuntimeSideConversations } from '../runtime/use-cases/side-conversation.js';
 import { managedGeneratedImageAssetIdsFromStore } from '../utils/generated-image-assets.js';
 import { APP_SERVER_DEFAULT_CONNECTION_ID, createAppServerCommandExecManager } from './app-server/command-exec.js';
 import { createAppServerConnectionRegistry } from './app-server/connections.js';
@@ -46,7 +45,6 @@ export async function createRuntimeServer(options: RuntimeServerOptions): Promis
     await runtime.attachmentStore.recover(recoveredThreads.map((thread) => thread.id));
     // 工具结果按 thread 授权,启动时清理已删除线程的孤儿结果,避免悬空引用。
     await runtime.toolResultStore.recover(recoveredThreads.map((thread) => thread.id));
-    await cleanupRuntimeSideConversations(runtime);
     // 上次异常退出留下的 streaming turn 要先结算，否则 renderer 会误判还有任务在跑。
     await settleStaleRuntimeTurns(runtime);
     featureComposition = await activateBuiltinRuntimeFeatures(runtime);

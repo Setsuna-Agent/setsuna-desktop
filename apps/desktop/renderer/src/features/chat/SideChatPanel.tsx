@@ -153,7 +153,7 @@ export function SideChatPanel({
   return (
     <aside
       className={`desktop-workspace-panel desktop-side-chat-panel${placement === 'bottom' ? ' desktop-workspace-panel--bottom-floating' : ''}`}
-      aria-label={t('chat.sideChat.label')}
+      aria-label={t('feature.sideConversation.panel.label')}
       hidden={hidden}
     >
       {placement === 'side' ? (

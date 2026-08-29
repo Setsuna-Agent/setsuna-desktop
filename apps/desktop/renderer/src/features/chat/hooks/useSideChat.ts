@@ -17,6 +17,7 @@ import {
 import { useIdentityRequestGuard } from '../../../shared/hooks/useIdentityRequestGuard.js';
 import { useI18n } from '../../../shared/i18n/I18nProvider.js';
 import { useRendererFeatureViews } from '../../../composition/feature-view-registries.js';
+import { useSideConversationFeatureService } from '../../../composition/SideConversationFeatureBoundary.js';
 import { startThreadReview } from '../../workspace/hooks/startThreadReview.js';
 import { chatComposerTargetIdentity, useChatComposerSession } from './useChatComposerSession.js';
 import { useChatTurnActions } from './useChatTurnActions.js';
@@ -29,26 +30,6 @@ type SideChatOptions = {
   reloadThreads: () => Promise<unknown>;
   setError: Dispatch<SetStateAction<string | null>>;
 };
-
-type SideConversationCreationClient = Pick<
-  DesktopRuntimeClient,
-  'createSideConversation' | 'deleteThread'
->;
-
-/**
- * The panel owner can disappear while the runtime is creating its snapshot.
- * A stale result must be deleted before control returns to the send pipeline.
- */
-export async function createSideConversationForOwner(
-  client: SideConversationCreationClient,
-  parentThreadId: string,
-  isCurrentOwner: () => boolean,
-): Promise<RuntimeThread> {
-  const thread = await client.createSideConversation(parentThreadId);
-  if (isCurrentOwner()) return thread;
-  await client.deleteThread(thread.id).catch(() => undefined);
-  throw new Error('Side conversation owner changed before creation completed.');
-}
 
 /**
  * 维护右侧对话自己的线程快照和 SSE 订阅，避免它与主对话共享草稿或活动 turn。
@@ -63,6 +44,7 @@ export function useSideChat({
 }: SideChatOptions) {
   const { locale, t } = useI18n();
   const featureViews = useRendererFeatureViews();
+  const sideConversationService = useSideConversationFeatureService();
   const [currentThread, setCurrentThreadState] = useState<RuntimeThread | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [contextCompactingThreadId, setContextCompactingThreadId] = useState<string | null>(null);
@@ -110,21 +92,21 @@ export function useSideChat({
 
   useEffect(() => {
     const staleThreadId = currentThreadRef.current?.id;
-    if (staleThreadId) void client.deleteThread(staleThreadId).catch(() => undefined);
+    if (staleThreadId) void sideConversationService.discard(staleThreadId).catch(() => undefined);
     // Side context is bound to one primary thread; changing the primary starts
     // a fresh snapshot and disposes the previous transient fork.
     setCurrentThread(null);
     resetComposer();
     setActiveTurnId(null);
     terminalTurnIdsRef.current.clear();
-  }, [client, parentThreadId, resetComposer]);
+  }, [parentThreadId, resetComposer, sideConversationService]);
 
   useEffect(() => () => {
     // setCurrentThread updates this ref synchronously, so cleanup also sees a
     // thread accepted immediately before React has committed the next render.
     const staleThreadId = currentThreadRef.current?.id;
-    if (staleThreadId) void client.deleteThread(staleThreadId).catch(() => undefined);
-  }, [client]);
+    if (staleThreadId) void sideConversationService.discard(staleThreadId).catch(() => undefined);
+  }, [sideConversationService]);
 
   useEffect(() => {
     if (!threadId) return undefined;
@@ -202,9 +184,9 @@ export function useSideChat({
   }, [client, effectiveActiveTurnId, reloadThreads, setError, threadId]);
 
   const createSideConversation = useCallback(async () => {
-    if (!parentThreadId) throw new Error(t('chat.sideChat.openMainFirst'));
-    return createSideConversationForOwner(client, parentThreadId, creationRequests.begin());
-  }, [client, creationRequests, parentThreadId, t]);
+    if (!parentThreadId) throw new Error(t('feature.sideConversation.error.openMainFirst'));
+    return sideConversationService.create(parentThreadId, creationRequests.begin());
+  }, [creationRequests, parentThreadId, sideConversationService, t]);
 
   const actions = useChatTurnActions({
     activeProjectId,

@@ -90,6 +90,8 @@ import { reviewRuntimeHostCapability } from '@setsuna-desktop/feature-review/con
 import { reviewRuntimeFeature } from '@setsuna-desktop/feature-review/runtime';
 import { runtimeActivityRuntimeHostCapability } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRuntimeFeature } from '@setsuna-desktop/feature-runtime-activity/runtime';
+import { sideConversationRuntimeHostCapability } from '@setsuna-desktop/feature-side-conversation/contracts';
+import { sideConversationRuntimeFeature } from '@setsuna-desktop/feature-side-conversation/runtime';
 import {
   skillsRuntimeHostCapability,
   type SkillsRuntimeHost,
@@ -119,6 +121,7 @@ import { windowsSandboxRuntimeFeature } from '@setsuna-desktop/feature-windows-s
 import { createRuntimeApprovalReviewHost } from '../loop/core/runtime-approval-review-host.js';
 import { appendRuntimeDebugTraceSafely } from '../ports/runtime-debug-trace.js';
 import type { RuntimeContainer } from '../runtime/runtime-factory.js';
+import { createSideConversationRuntimeHost } from './side-conversation-runtime-host.js';
 
 const runtimeFeatures = defineRuntimeFeatureHost({
   required: [
@@ -139,6 +142,7 @@ const runtimeFeatures = defineRuntimeFeatureHost({
     imageGenerationRuntimeFeature,
     goalRuntimeFeature,
     memoryRuntimeFeature,
+    sideConversationRuntimeFeature,
     threadTitleGenerationRuntimeFeature,
     usageRuntimeFeature,
     visionRecognitionRuntimeFeature,
@@ -320,6 +324,10 @@ export async function activateBuiltinRuntimeFeatures(
             runtime.backgroundShellProcesses.terminateBackgroundShellProcess(threadId, processId)
           ),
         }),
+      ),
+      provideHostCapability(
+        sideConversationRuntimeHostCapability,
+        createSideConversationRuntimeHost(runtime),
       ),
       provideHostCapability(
         skillsRuntimeHostCapability,

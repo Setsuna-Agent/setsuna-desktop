@@ -12,8 +12,6 @@ export const chatZhCN = {
   'chat.composer.goalEnableNext': '把当前回复结束后的下一轮设为持续目标',
   'chat.composer.goalEnabled': '已开启：下一条消息将设为线程目标',
   'chat.composer.goalDescription': '把下一条消息设为持续目标并开始执行',
-  'chat.composer.sideChat': '侧边',
-  'chat.composer.sideChatDescription': '新建一个独立的侧边对话',
   'chat.composer.reviewChanges': '审查',
   'chat.composer.reviewWait': '请等待当前回复结束后再开始审查',
   'chat.composer.reviewDescription': '为下一条消息添加审查标签，可以先修改审查范围',
@@ -150,8 +148,6 @@ export const chatZhCN = {
   'chat.duration.minutesSeconds': '{minutes}分{seconds}秒',
   'chat.duration.hours': '{hours}小时',
   'chat.duration.hoursMinutes': '{hours}小时{minutes}分',
-  'chat.sideChat.label': '侧边对话',
-  'chat.sideChat.openMainFirst': '请先打开一个主对话',
 } as const;
 
 export const chatEnUS = {
@@ -168,8 +164,6 @@ export const chatEnUS = {
   'chat.composer.goalEnableNext': 'Make the next turn after this response a persistent goal',
   'chat.composer.goalEnabled': 'On: the next message will become the thread goal',
   'chat.composer.goalDescription': 'Make the next message a persistent goal and start working',
-  'chat.composer.sideChat': 'Side chat',
-  'chat.composer.sideChatDescription': 'Start an independent chat in the side panel',
   'chat.composer.reviewChanges': 'Review',
   'chat.composer.reviewWait': 'Wait for the current response to finish before starting a review',
   'chat.composer.reviewDescription': 'Mark the next message as a review request and edit its scope before sending',
@@ -306,6 +300,4 @@ export const chatEnUS = {
   'chat.duration.minutesSeconds': '{minutes}m {seconds}s',
   'chat.duration.hours': '{hours}h',
   'chat.duration.hoursMinutes': '{hours}h {minutes}m',
-  'chat.sideChat.label': 'Side chat',
-  'chat.sideChat.openMainFirst': 'Open a primary conversation first',
 } satisfies Record<keyof typeof chatZhCN, string>;

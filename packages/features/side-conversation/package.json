@@ -1,0 +1,30 @@
+{
+  "name": "@setsuna-desktop/feature-side-conversation",
+  "version": "0.1.0",
+  "description": "Transient side conversation Feature for Setsuna Desktop.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./contracts": {
+      "types": "./dist/contracts/index.d.ts",
+      "default": "./dist/contracts/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./renderer": {
+      "types": "./dist/renderer/index.d.ts",
+      "default": "./dist/renderer/index.js"
+    }
+  },
+  "dependencies": {
+    "@setsuna-desktop/contracts": "workspace:*",
+    "@setsuna-desktop/feature-core": "workspace:*",
+    "react": "^18.3.1"
+  },
+  "scripts": {
+    "build": "tsc -b tsconfig.build.json",
+    "typecheck": "tsc -b --pretty false"
+  }
+}

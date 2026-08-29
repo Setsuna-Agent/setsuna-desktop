@@ -19,6 +19,7 @@ import { ModelProviderFeatureServiceBoundary } from './composition/ModelProvider
 import { McpFeatureServiceBoundary } from './composition/McpFeatureBoundary.js';
 import { PluginManagementFeatureServiceBoundary } from './composition/PluginManagementFeatureBoundary.js';
 import { RuntimeActivityFeatureServiceBoundary } from './composition/RuntimeActivityFeatureBoundary.js';
+import { SideConversationFeatureServiceBoundary } from './composition/SideConversationFeatureBoundary.js';
 import { SkillsFeatureServiceBoundary } from './composition/SkillsFeatureBoundary.js';
 import { UpdaterFeatureServiceBoundary } from './composition/UpdaterFeatureBoundary.js';
 import { UsageFeatureServiceBoundary } from './composition/UsageFeatureBoundary.js';
@@ -79,23 +80,25 @@ async function bootstrapRenderer(): Promise<void> {
             <NetworkProxyFeatureServiceBoundary service={features.networkProxy}>
               <ModelProviderFeatureServiceBoundary service={features.modelProvider}>
                 <ConversationDebugFeatureServiceBoundary service={features.conversationDebug}>
-                <CollaborationFeatureServiceBoundary service={features.collaboration}>
-                  <UsageFeatureServiceBoundary service={features.usage}>
-                    <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
-                      <PluginManagementFeatureServiceBoundary service={features.pluginManagement}>
-                        <SkillsFeatureServiceBoundary service={features.skills}>
-                          <McpFeatureServiceBoundary service={features.mcp}>
-                            <KeyboardShortcutsProvider>
-                              <CodeAppearanceProvider>
-                                <App />
-                              </CodeAppearanceProvider>
-                            </KeyboardShortcutsProvider>
-                          </McpFeatureServiceBoundary>
-                        </SkillsFeatureServiceBoundary>
-                      </PluginManagementFeatureServiceBoundary>
-                    </RuntimeActivityFeatureServiceBoundary>
-                  </UsageFeatureServiceBoundary>
-                </CollaborationFeatureServiceBoundary>
+                  <CollaborationFeatureServiceBoundary service={features.collaboration}>
+                    <SideConversationFeatureServiceBoundary service={features.sideConversation}>
+                      <UsageFeatureServiceBoundary service={features.usage}>
+                        <RuntimeActivityFeatureServiceBoundary service={features.runtimeActivity}>
+                          <PluginManagementFeatureServiceBoundary service={features.pluginManagement}>
+                            <SkillsFeatureServiceBoundary service={features.skills}>
+                              <McpFeatureServiceBoundary service={features.mcp}>
+                                <KeyboardShortcutsProvider>
+                                  <CodeAppearanceProvider>
+                                    <App />
+                                  </CodeAppearanceProvider>
+                                </KeyboardShortcutsProvider>
+                              </McpFeatureServiceBoundary>
+                            </SkillsFeatureServiceBoundary>
+                          </PluginManagementFeatureServiceBoundary>
+                        </RuntimeActivityFeatureServiceBoundary>
+                      </UsageFeatureServiceBoundary>
+                    </SideConversationFeatureServiceBoundary>
+                  </CollaborationFeatureServiceBoundary>
                 </ConversationDebugFeatureServiceBoundary>
               </ModelProviderFeatureServiceBoundary>
             </NetworkProxyFeatureServiceBoundary>

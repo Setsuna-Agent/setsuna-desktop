@@ -1,9 +1,13 @@
-import type { PendingRuntimeEvent, RuntimeMessage, RuntimeThread } from '@setsuna-desktop/contracts';
-import type { RuntimeContainer } from '../runtime-factory.js';
-import { randomRuntimeId } from '../runtime-id.js';
-import { RuntimeUseCaseError } from './errors.js';
-import { copyRuntimeMessagesToThread } from './thread-copy.js';
-import { deleteRuntimeThread } from './thread-operations.js';
+import type {
+  PendingStoredThreadEvent,
+  RuntimeMessage,
+  RuntimeThread,
+} from '@setsuna-desktop/contracts';
+import type { SideConversationRuntimeHost } from '../contracts/index.js';
+import {
+  SideConversationInvalidParentError,
+  SideConversationThreadNotFoundError,
+} from './errors.js';
 
 const SIDE_CONVERSATION_POLICY = [
   'You are in a temporary side conversation forked from a primary conversation.',
@@ -17,28 +21,24 @@ const SIDE_CONVERSATION_POLICY = [
 
 const PRIMARY_SNAPSHOT_START = '<primary_conversation_snapshot>';
 
-/**
- * Creates a point-in-time, model-visible fork of a primary thread. The copied
- * history is hidden from the side transcript and the primary thread remains
- * entirely independent, including when its current turn is still streaming.
- */
+/** Creates a point-in-time, model-visible fork without mutating the primary thread. */
 export async function createRuntimeSideConversation(
-  runtime: RuntimeContainer,
+  host: SideConversationRuntimeHost,
   parentThreadId: string,
+  options: Readonly<{ signal?: AbortSignal }> = {},
 ): Promise<RuntimeThread> {
-  await runtime.eventWriter.flushThread(parentThreadId);
-  const parent = await runtime.threadStore.getThread(parentThreadId);
-  if (!parent) {
-    throw new RuntimeUseCaseError('thread_not_found', 'Thread not found', { threadId: parentThreadId });
-  }
-  if (parent.kind === 'side') {
-    throw new RuntimeUseCaseError('invalid_input', 'A side conversation must be created from a primary thread.');
-  }
+  throwIfCancelled(options.signal);
+  await host.flushThread(parentThreadId);
+  throwIfCancelled(options.signal);
+  const parent = await host.getThread(parentThreadId);
+  if (!parent) throw new SideConversationThreadNotFoundError();
+  if (parent.kind === 'side') throw new SideConversationInvalidParentError();
+  throwIfCancelled(options.signal);
 
   const inheritedMessages = parent.messages
     .filter((message) => message.visibility !== 'transcript')
     .map((message): RuntimeMessage => ({ ...message, visibility: 'model' }));
-  const child = await runtime.threadStore.createThread({
+  const child = await host.createThread({
     kind: 'side',
     title: 'Side conversation',
     projectId: parent.projectId,
@@ -49,23 +49,31 @@ export async function createRuntimeSideConversation(
   const attachments = inheritedMessages.flatMap((message) => message.attachments ?? []);
 
   try {
-    await runtime.attachmentStore.retainForThread(child.id, attachments);
-    await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
-    await appendModelMessage(runtime, child.id, 'user', PRIMARY_SNAPSHOT_START);
-    await copyRuntimeMessagesToThread(runtime, parent.id, child.id, inheritedMessages);
+    // Core stores are not abort-aware. Check after every durable step so a
+    // disconnected requester cannot publish an ownerless snapshot.
+    throwIfCancelled(options.signal);
+    await host.retainAttachments(child.id, attachments);
+    throwIfCancelled(options.signal);
+    await appendModelMessage(host, child.id, 'developer', SIDE_CONVERSATION_POLICY);
+    throwIfCancelled(options.signal);
+    await appendModelMessage(host, child.id, 'user', PRIMARY_SNAPSHOT_START);
+    throwIfCancelled(options.signal);
+    await host.copyMessages(parent.id, child.id, inheritedMessages);
+    throwIfCancelled(options.signal);
     if (parent.activeTurnId) {
-      await appendSideEvent(runtime, child.id, {
-        id: randomRuntimeId('event_side_cancel'),
+      await appendSideEvent(host, child.id, {
+        id: host.id('event_side_cancel'),
         threadId: child.id,
         turnId: parent.activeTurnId,
         type: 'turn.cancelled',
-        createdAt: new Date().toISOString(),
+        createdAt: host.now().toISOString(),
         payload: {
           reason: 'The primary turn was still running when this side-conversation snapshot was created.',
         },
       });
+      throwIfCancelled(options.signal);
     }
-    await appendModelMessage(runtime, child.id, 'user', [
+    await appendModelMessage(host, child.id, 'user', [
       '</primary_conversation_snapshot>',
       '<side_conversation_boundary>',
       'The messages enclosed above are the point-in-time snapshot copied from the primary conversation.',
@@ -75,44 +83,45 @@ export async function createRuntimeSideConversation(
         : 'The primary conversation was idle at snapshot time.',
       '</side_conversation_boundary>',
     ].join('\n'));
-    // Copied AppServer history can contain developer messages. Reassert the
-    // side policy after the snapshot so inherited instructions cannot outrank it.
-    await appendModelMessage(runtime, child.id, 'developer', SIDE_CONVERSATION_POLICY);
+    throwIfCancelled(options.signal);
+    // Reassert after copied developer messages so inherited instructions cannot outrank the policy.
+    await appendModelMessage(host, child.id, 'developer', SIDE_CONVERSATION_POLICY);
+    throwIfCancelled(options.signal);
+    const created = await host.getThread(child.id);
+    throwIfCancelled(options.signal);
+    return created ?? child;
   } catch (error) {
-    await runtime.attachmentStore.releaseThread(child.id).catch(() => undefined);
-    await runtime.toolResultStore.releaseThread(child.id).catch(() => undefined);
-    await runtime.threadStore.deleteThread(child.id).catch(() => undefined);
+    await host.rollbackCreatedThread(child.id).catch(() => undefined);
     throw error;
   }
-
-  return await runtime.threadStore.getThread(child.id) ?? child;
 }
 
-/** Removes side conversations left behind by an unclean desktop shutdown. */
-export async function cleanupRuntimeSideConversations(runtime: RuntimeContainer): Promise<void> {
-  const threads = await runtime.threadStore.listThreads({ includeArchived: true, includeSide: true });
+/** Removes transient side conversations left behind by an unclean renderer shutdown. */
+export async function cleanupRuntimeSideConversations(
+  host: SideConversationRuntimeHost,
+): Promise<void> {
+  const threads = await host.listThreads();
   for (const thread of threads) {
-    if (thread.kind !== 'side') continue;
-    await deleteRuntimeThread(runtime, thread.id);
+    if (thread.kind === 'side') await host.deleteThread(thread.id);
   }
 }
 
 async function appendModelMessage(
-  runtime: RuntimeContainer,
+  host: SideConversationRuntimeHost,
   threadId: string,
   role: Extract<RuntimeMessage['role'], 'developer' | 'user'>,
   content: string,
 ): Promise<void> {
   const message: RuntimeMessage = {
-    id: randomRuntimeId('msg_side'),
+    id: host.id('msg_side'),
     role,
     content,
-    createdAt: new Date().toISOString(),
+    createdAt: host.now().toISOString(),
     status: 'complete',
     visibility: 'model',
   };
-  await appendSideEvent(runtime, threadId, {
-    id: randomRuntimeId('event_side_message'),
+  await appendSideEvent(host, threadId, {
+    id: host.id('event_side_message'),
     threadId,
     type: 'message.created',
     createdAt: message.createdAt,
@@ -121,9 +130,13 @@ async function appendModelMessage(
 }
 
 async function appendSideEvent(
-  runtime: RuntimeContainer,
+  host: SideConversationRuntimeHost,
   threadId: string,
-  event: PendingRuntimeEvent,
+  event: PendingStoredThreadEvent,
 ): Promise<void> {
-  await runtime.threadStore.appendEvent(threadId, event);
+  await host.appendEvent(threadId, event);
+}
+
+function throwIfCancelled(signal: AbortSignal | undefined): void {
+  signal?.throwIfAborted();
 }
