@@ -12,7 +12,6 @@ import type {
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { URL } from 'node:url';
 import type { ThreadStorePatch } from '../ports/thread-store.js';
-import { createRuntimeSideConversation } from '../runtime/use-cases/side-conversation.js';
 import { stringInput } from './app-server/input.js';
 import { runtimeSkillReferenceList } from './runtime-skill-reference-input.js';
 import {
@@ -56,16 +55,6 @@ export async function handleRuntimeThreadRequest(
       ...input,
       memoryMode: input.memoryMode ?? (settings?.value.generateMemories ? 'enabled' : 'disabled'),
     });
-    sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
-    return true;
-  }
-
-  const sideConversationMatch = url.pathname.match(
-    /^\/v1\/threads\/([^/]+)\/side-conversations$/u,
-  );
-  if (sideConversationMatch && request.method === 'POST') {
-    const parentThreadId = decodeRuntimeId(sideConversationMatch[1], 'Thread id');
-    const thread = await createRuntimeSideConversation(runtime, parentThreadId);
     sendJson(response, 201, await runtimeThreadResponse(runtime, thread));
     return true;
   }

@@ -35,6 +35,7 @@ describe('renderer feature composition', () => {
     expect(features.mcp.getSnapshot()).toBeNull();
     expect(features.skills.getSnapshot()).toEqual({ extraRoots: [], skills: [] });
     expect(features.networkProxy.available).toBe(false);
+    expect(features.sideConversation.available).toBe(true);
     const artifact = {
       id: 'artifact_legacy',
       kind: 'file' as const,

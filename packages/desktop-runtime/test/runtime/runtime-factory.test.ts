@@ -57,6 +57,13 @@ describe('runtime factory tool wiring', () => {
 
     try {
       expect(runtime.featureManagement.statuses().length).toBeGreaterThan(0);
+      expect(runtime.featureManagement.statuses()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          featureId: 'side-conversation',
+          criticality: 'optional',
+          status: 'active',
+        }),
+      ]));
       await expect(runtime.toolHost.listTools({ threadId: 'thread_1' })).resolves.toEqual(
         expect.arrayContaining([expect.objectContaining({ name: 'open_browser' })]),
       );

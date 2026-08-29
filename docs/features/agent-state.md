@@ -1,6 +1,6 @@
 # Agent 状态与上下文 Features
 
-本页覆盖 Collaboration、Goal、Memory、Thread Title Generation 和 Conversation Debug。它们都参与 runtime/renderer，但不拥有模型协议或通用 Agent turn 状态机；Feature 通过窄 Capability 接到 AgentLoop，并把自己的状态、操作和 presentation 留在 owner 包内。
+本页覆盖 Collaboration、Side Conversation、Goal、Memory、Thread Title Generation 和 Conversation Debug。它们都参与 runtime/renderer，但不拥有模型协议或通用 Agent turn 状态机；Feature 通过窄 Capability 接到 Core，并把自己的状态、操作和 presentation 留在 owner 包内。
 
 ## 共同结构
 
@@ -32,6 +32,20 @@ Collaboration 拥有主线程与协作子任务之间的业务状态，以及 `s
 - `renderer/` 持有 typed snapshot service，接收 Feature event 失效信号后重读；spawn result 用 owner codec 解码并替换通用工具卡片。
 - Projection 失败时 Feature 报告 degraded condition；线程不存在返回稳定 `THREAD_NOT_FOUND`，不能用空状态掩盖。
 - AgentLoop 不应重新实现 Collaboration reducer，也不应让 renderer 从通用 thread snapshot 猜测协作图。
+
+## Side Conversation
+
+源码：`packages/features/side-conversation/`
+
+Side Conversation 拥有从主线程创建临时、时间点快照的业务事务。它复制模型可见历史、重新断言侧边策略、继承附件和受限工具结果，并在 renderer owner 变化或应用异常退出后删除临时线程；主线程保持独立运行。
+
+关键边界：
+
+- `createSideConversation` 是唯一创建入口，使用 `/v1/features/side-conversation/threads/:parentThreadId` typed operation；统一 `DesktopRuntimeClient` 不再包含 Feature command。
+- Runtime Feature 只通过 `sideConversationRuntimeHostCapability` 使用 flush、thread store、附件保留、消息复制和完整线程删除；创建中途失败或请求取消必须回滚未公开 child 的全部资源。
+- Renderer service 在创建结果迟到或读取 canonical snapshot 失败时删除 child，宿主 `SideChatPanel` 只负责复用通用 `ChatWorkspace`、SSE 和 workspace chrome。
+- Core 继续拥有 `RuntimeThread`、通用 thread event/turn/delete 语义以及持久 `kind: 'side'` 的兼容读取；Goal/Collaboration 的禁止规则保持 fail closed，Feature 缺失不能让历史 side thread 绕过限制。
+- Runtime 与 renderer 均为 optional；Feature 不可用时普通对话仍可工作，只是不再创建新的侧边快照。
 
 ## Goal
 
@@ -100,6 +114,6 @@ Conversation Debug 是开发诊断 Feature，拥有 device-local 启用设置、
 1. 状态是 Core turn/thread 语义，还是 Feature 私有语义？
 2. 私有持久状态是否有 owner codec、schema version、reducer 和未知版本行为？
 3. Runtime operation 是否从固定 durable high-water 投影，错误是否结构化？
-4. AgentLoop 是否只通过 host/control Capability 交互？
+4. AgentLoop 或其他 Core owner 是否只通过 host/control Capability 交互？
 5. Renderer 是否依赖 typed snapshot，而非重复解析 event log？
 6. Optional Feature 失败时 no-op/fallback 是否真实可用？

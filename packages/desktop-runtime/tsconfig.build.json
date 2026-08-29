@@ -30,6 +30,7 @@
     { "path": "../features/plugin-management/tsconfig.build.json" },
     { "path": "../features/review/tsconfig.build.json" },
     { "path": "../features/runtime-activity/tsconfig.build.json" },
+    { "path": "../features/side-conversation/tsconfig.build.json" },
     { "path": "../features/skills/tsconfig.build.json" },
     { "path": "../features/thread-title-generation/tsconfig.build.json" },
     { "path": "../features/usage/tsconfig.build.json" },

@@ -86,8 +86,8 @@ export function createChatSlashCommandItems({
       key: 'side-chat',
       kind: 'action',
       type: 'side-chat',
-      title: t('chat.composer.sideChat'),
-      description: t('chat.composer.sideChatDescription'),
+      title: t('feature.sideConversation.composer.title'),
+      description: t('feature.sideConversation.composer.description'),
       disabled: !sideChatAvailable,
     },
     {

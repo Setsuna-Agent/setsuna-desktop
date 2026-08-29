@@ -8,7 +8,7 @@ Setsuna Desktop 用纵向 Feature 收拢跨 contracts、runtime、Electron main/
 
 首轮方案及已删除机制见[历史评审记录](../designs/history/feature-composition-architecture.md)。
 
-当前 22 个 Feature 的参与进程、required/optional 状态与业务职责见 [Feature 总览](../features/README.md)；组合内核的具体实现见 [Feature Core](../core/feature-core/README.md)。
+当前 25 个 Feature 的参与进程、required/optional 状态与业务职责见 [Feature 总览](../features/README.md)；组合内核的具体实现见 [Feature Core](../core/feature-core/README.md)。
 
 ## 所有权边界
 

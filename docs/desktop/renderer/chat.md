@@ -8,8 +8,8 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 
 | 目录 | 职责 |
 | --- | --- |
-| feature 根 | `ChatWorkspace`、`ChatComposer`、`SideChatPanel` 页面编排 |
-| `hooks/` | Composer session、发送/取消/编辑/队列动作、侧栏 chat |
+| feature 根 | `ChatWorkspace`、`ChatComposer` 页面编排；`SideChatPanel` 是 Side Conversation 的宿主 surface adapter |
+| `hooks/` | Composer session、发送/取消/编辑/队列动作、侧栏 thread surface 状态 |
 | `composer/` | Draft、附件、模型、命令菜单、发送选项、队列 UI |
 | `conversation/` | Message display、assistant timeline、overview、scroll、usage |
 | `tool-runs/` | 工具状态、审批、结构化输入、文件变更 |
@@ -46,7 +46,7 @@ Chat feature 把 runtime thread snapshot 投影为对话 UI，并负责 composer
 
 Composer state 由 `useChatComposerSession` 和专用 hooks 管理，避免页面切换时草稿与异步请求互相覆盖。
 
-侧边对话通过 `SideChatPanel -> ChatWorkspace -> ChatComposer` 传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。
+侧边对话的创建事务、异常退出清理和 owner 竞争由 `packages/features/side-conversation/` 持有；宿主 `SideChatPanel -> ChatWorkspace -> ChatComposer` 只组合通用 thread surface 并传递可见性聚焦信号。只有面板从隐藏变为当前可见面板时才聚焦 Sender，并把光标放到草稿末尾；普通重渲染不会持续抢占焦点。
 
 ## Turn actions
 

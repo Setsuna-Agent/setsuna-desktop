@@ -2,11 +2,12 @@ import { access, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { createRuntimeFactory } from '../../../src/runtime/runtime-factory.js';
 import {
   cleanupRuntimeSideConversations,
   createRuntimeSideConversation,
-} from '../../../src/runtime/use-cases/side-conversation.js';
+} from '@setsuna-desktop/feature-side-conversation/runtime';
+import { createSideConversationRuntimeHost } from '../../../src/composition/side-conversation-runtime-host.js';
+import { createRuntimeFactory } from '../../../src/runtime/runtime-factory.js';
 import { copyRuntimeMessagesToThread } from '../../../src/runtime/use-cases/thread-copy.js';
 import { deleteRuntimeThread } from '../../../src/runtime/use-cases/thread-operations.js';
 
@@ -90,6 +91,7 @@ describe('side conversations', () => {
     const runtime = createRuntimeFactory({ dataDir });
     try {
       await runtime.threadStore.recover();
+      const sideConversationHost = createSideConversationRuntimeHost(runtime);
       const project = await runtime.workspaceProjects.addProject({ name: 'Portable project' });
       const parent = await runtime.threadStore.createThread({ projectId: project.id });
       await runtime.threadStore.appendEvent(parent.id, {
@@ -201,7 +203,7 @@ describe('side conversations', () => {
         },
       });
 
-      const side = await createRuntimeSideConversation(runtime, parent.id);
+      const side = await createRuntimeSideConversation(sideConversationHost, parent.id);
 
       expect(side).toMatchObject({
         kind: 'side',
@@ -264,7 +266,7 @@ describe('side conversations', () => {
       });
       await expect(access(sideEnvironment.workspaceRoot)).resolves.toBeUndefined();
 
-      await cleanupRuntimeSideConversations(runtime);
+      await cleanupRuntimeSideConversations(sideConversationHost);
       await expect(runtime.threadStore.getThread(side.id)).resolves.toBeNull();
       await expect(runtime.threadStore.getThread(parent.id)).resolves.not.toBeNull();
       await expect(runtime.toolResultStore.read(

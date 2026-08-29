@@ -59,6 +59,13 @@ import {
 } from '@setsuna-desktop/feature-runtime-activity/contracts';
 import { runtimeActivityRendererFeature } from '@setsuna-desktop/feature-runtime-activity/renderer';
 import {
+  createNoopSideConversationRendererService,
+  sideConversationRendererHostCapability,
+  sideConversationRendererServiceCapability,
+  type SideConversationRendererService,
+} from '@setsuna-desktop/feature-side-conversation/contracts';
+import { sideConversationRendererFeature } from '@setsuna-desktop/feature-side-conversation/renderer';
+import {
   skillsRendererServiceCapability,
   type SkillsRendererService,
 } from '@setsuna-desktop/feature-skills/contracts';
@@ -97,6 +104,7 @@ import {
   windowsSandboxRendererHostCapability,
 } from '@setsuna-desktop/feature-windows-sandbox/renderer';
 import { createDesktopFeatureOperationTransport } from './desktop-feature-operation-transport.js';
+import { createDesktopRuntimeClient } from '../services/runtime-client/client.js';
 import {
   createRendererFeatureViews,
   type RendererFeatureViews,
@@ -130,6 +138,7 @@ const rendererFeatures = defineRendererFeatureHost({
     imageGenerationRendererFeature,
     goalRendererFeature,
     memoryRendererFeature,
+    sideConversationRendererFeature,
     threadTitleGenerationRendererFeature,
     usageRendererFeature,
     visionRecognitionRendererFeature,
@@ -148,6 +157,7 @@ export type ActiveRendererFeatures = Readonly<{
   networkProxy: NetworkProxyRendererStateService;
   pluginManagement: PluginManagementRendererService;
   runtimeActivity: RuntimeActivityRendererService;
+  sideConversation: SideConversationRendererService;
   skills: SkillsRendererService;
   updater: UpdaterRendererStateService;
   usage: UsageRendererStateService;
@@ -158,6 +168,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
   const runtime = window.setsunaDesktop?.runtime;
   const desktop = window.setsunaDesktop?.desktop;
   if (!runtime || !desktop) throw new Error('Desktop Feature bridge is unavailable.');
+  const runtimeClient = createDesktopRuntimeClient();
   const events = new RendererFeatureEventHub();
   const { composition, messages } = await rendererFeatures.activate({
     hostMessages,
@@ -187,6 +198,13 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       provideHostCapability(
         rendererFeatureEventFeedCapability,
         events,
+      ),
+      provideHostCapability(
+        sideConversationRendererHostCapability,
+        Object.freeze({
+          getThread: (threadId: string) => runtimeClient.getThread(threadId),
+          deleteThread: (threadId: string) => runtimeClient.deleteThread(threadId),
+        }),
       ),
       provideHostCapability(
         imageGenerationRendererAssetsCapability,
@@ -243,6 +261,10 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       modelProvider: requiredCapability(modelProviderRendererStateCapability),
       pluginManagement: requiredCapability(pluginManagementRendererServiceCapability),
       runtimeActivity: requiredCapability(runtimeActivityRendererServiceCapability),
+      sideConversation: optionalCapability(
+        sideConversationRendererServiceCapability,
+        createNoopSideConversationRendererService,
+      ),
       skills: requiredCapability(skillsRendererServiceCapability),
       updater: requiredCapability(updaterRendererStateCapability),
       usage: optionalCapability(
@@ -260,6 +282,7 @@ export async function activateBuiltinRendererFeatures(): Promise<ActiveRendererF
       networkProxy: dependencies.networkProxy,
       pluginManagement: dependencies.pluginManagement,
       runtimeActivity: dependencies.runtimeActivity,
+      sideConversation: dependencies.sideConversation,
       skills: dependencies.skills,
       updater: dependencies.updater,
       usage: dependencies.usage,
