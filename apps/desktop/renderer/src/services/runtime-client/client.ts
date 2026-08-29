@@ -20,7 +20,6 @@ import type {
   RuntimeMessagePage,
   RuntimeMessagePageQuery,
   RuntimeRequestInput,
-  RuntimeReviewStartInput,
   RuntimeThread,
   SendTurnInput,
   SendTurnResponse,
@@ -193,13 +192,6 @@ export function createDesktopRuntimeClient(): DesktopRuntimeClient {
       return request<void>({
         path: `/v1/threads/${encodeURIComponent(threadId)}/turns/${encodeURIComponent(turnId)}/cancel`,
         method: 'POST',
-      });
-    },
-    startReview(threadId: string, input: RuntimeReviewStartInput) {
-      return request<SendTurnResponse>({
-        path: `/v1/threads/${encodeURIComponent(threadId)}/reviews`,
-        method: 'POST',
-        body: input,
       });
     },
     subscribeEvents(threadId, sinceSeq, onBatch) {

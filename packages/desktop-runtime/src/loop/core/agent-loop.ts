@@ -27,6 +27,7 @@ import type {
 } from '@setsuna-desktop/contracts';
 import { isCoreRuntimeEvent } from '@setsuna-desktop/contracts';
 import type { ApprovalReviewControl } from '@setsuna-desktop/feature-approval-review/contracts';
+import type { ReviewTurnRequest } from '@setsuna-desktop/feature-review/contracts';
 import {
   type CollaborationControl,
   type CollaborationRuntimeHost,
@@ -69,7 +70,7 @@ import { RuntimeModelStreamEventPublisher } from './runtime-model-stream-event-p
 import { RuntimeSamplingContextBuilder } from './runtime-sampling-context-builder.js';
 import { createRuntimeThreadTitleGenerationHost } from './runtime-thread-title-generation-host.js';
 import { TurnCancelledError } from './runtime-turn-errors.js';
-import { RuntimeTurnRunFactory, type RuntimeReviewTurnInput } from './runtime-turn-run-factory.js';
+import { RuntimeTurnRunFactory } from './runtime-turn-run-factory.js';
 import { ThreadMutationAdmissions } from './thread-mutation-admissions.js';
 
 export type { AgentLoopOptions } from './agent-loop-options.js';
@@ -468,13 +469,8 @@ export class AgentLoop {
     });
   }
 
-  /**
-   * 启动 review turn，展示文本和模型 prompt 可以不同。
-   *
-   * @param threadId 目标线程 ID。
-   * @param input review 的用户可见文本和模型实际 prompt。
-   */
-  async startReview(threadId: string, input: RuntimeReviewTurnInput): Promise<SendTurnResponse> {
+  /** Starts a Review Feature request after its target and policy have been resolved. */
+  async startReviewTurn(threadId: string, input: ReviewTurnRequest): Promise<SendTurnResponse> {
     return this.withThreadMutation(threadId, async () => {
       const run = await this.turnRuns.createReview(threadId, input);
       this.observeRun(threadId, run.turnId, 'review', run.done);
@@ -547,6 +543,7 @@ export class AgentLoop {
   bindApprovalReviewControl(control: ApprovalReviewControl): () => void {
     return this.featureControls.bindApprovalReview(control);
   }
+
   /** Binds the optional Goal Feature after runtime composition has activated it. */
   bindGoalControl(control: GoalControl): () => void {
     return this.featureControls.bindGoal(control);

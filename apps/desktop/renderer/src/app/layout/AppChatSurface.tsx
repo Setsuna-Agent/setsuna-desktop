@@ -5,7 +5,6 @@ import {
   type RuntimeConfigState,
   type RuntimePluginSummary,
   type RuntimeReviewFinding,
-  type RuntimeReviewTarget,
   type RuntimeSkillSummary,
   type RuntimeThread,
   type RuntimeThreadSummary,
@@ -15,6 +14,7 @@ import {
   type WorkspaceFileRead,
   type WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import {
   lazy,
   Suspense,
@@ -279,7 +279,7 @@ export function AppChatSurface({
   onSideChatError: Dispatch<SetStateAction<string | null>>;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   onSend: (value?: string, options?: { attachments?: RuntimeThread['messages'][number]['attachments']; goalMode?: boolean; skillIds?: string[]; skillReferences?: RuntimeThread['messages'][number]['skillReferences']; thinking?: boolean; thinkingEffort?: string }) => Promise<boolean>;

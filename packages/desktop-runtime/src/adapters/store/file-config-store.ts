@@ -1,6 +1,7 @@
 import type {
   ProviderConfigInput,
   ProviderConfigState,
+  RuntimeConfiguredModelReference,
   RuntimeConfigInput,
   RuntimeConfigState,
   RuntimeDesktopSettings,
@@ -14,7 +15,6 @@ import {
 } from '@setsuna-desktop/contracts';
 import type {
   ApprovalReviewLegacySettingsAdapter,
-  ApprovalReviewModelSelection,
 } from '@setsuna-desktop/feature-approval-review/contracts';
 import {
   normalizeImageGenerationServiceUrl,
@@ -27,8 +27,10 @@ import type {
 } from '@setsuna-desktop/feature-memory/contracts';
 import type {
   ThreadTitleGenerationLegacySettingsAdapter,
-  ThreadTitleGenerationModelSelection,
 } from '@setsuna-desktop/feature-thread-title-generation/contracts';
+import type {
+  ReviewLegacySettingsAdapter,
+} from '@setsuna-desktop/feature-review/contracts';
 import type {
   WorkspaceDependenciesLegacySettingsAdapter,
   WorkspaceDependencySettings,
@@ -109,6 +111,8 @@ type StoredSecrets = {
   imageGenerationApiKey?: string;
 };
 
+type LegacyTaskModelSelectionKey = 'approvalReview' | 'review' | 'threadTitle';
+
 type FileConfigStoreOptions = {
   validateProxyServerReferences?(proxyServerIds: readonly string[]): Promise<void>;
 };
@@ -159,15 +163,22 @@ export class FileConfigStore implements ConfigStore {
 
   approvalReviewLegacySettingsAdapter(): ApprovalReviewLegacySettingsAdapter {
     return Object.freeze({
-      read: () => this.readLegacyApprovalReviewSelection(),
-      retire: () => this.retireLegacyApprovalReviewSelection(),
+      read: () => this.readLegacyTaskModelSelection('approvalReview'),
+      retire: () => this.retireLegacyTaskModelSelection('approvalReview'),
     });
   }
 
   threadTitleGenerationLegacySettingsAdapter(): ThreadTitleGenerationLegacySettingsAdapter {
     return Object.freeze({
-      read: () => this.readLegacyThreadTitleGenerationSelection(),
-      retire: () => this.retireLegacyThreadTitleGenerationSelection(),
+      read: () => this.readLegacyTaskModelSelection('threadTitle'),
+      retire: () => this.retireLegacyTaskModelSelection('threadTitle'),
+    });
+  }
+
+  reviewLegacySettingsAdapter(): ReviewLegacySettingsAdapter {
+    return Object.freeze({
+      read: () => this.readLegacyTaskModelSelection('review'),
+      retire: () => this.retireLegacyTaskModelSelection('review'),
     });
   }
 
@@ -241,10 +252,12 @@ export class FileConfigStore implements ConfigStore {
       const activeProviderId = activeProviderIdForSave(input.activeProviderId ?? previous.activeProviderId, providers);
       const legacyApprovalReview = normalizeConfiguredModelReference(previous.taskModels?.approvalReview);
       const legacyThreadTitle = normalizeConfiguredModelReference(previous.taskModels?.threadTitle);
+      const legacyReview = normalizeConfiguredModelReference(previous.taskModels?.review);
       const taskModels: StoredTaskModelSettings = {
         // Preserve unconsumed Feature migration input across unrelated config saves.
         ...(legacyApprovalReview ? { approvalReview: legacyApprovalReview } : {}),
         ...(legacyThreadTitle ? { threadTitle: legacyThreadTitle } : {}),
+        ...(legacyReview ? { review: legacyReview } : {}),
         ...legacyMemoryTaskModels(previous.taskModels),
         ...taskModelSettingsForSave(input.taskModels, previous.taskModels),
       };
@@ -320,17 +333,12 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
-  private async readLegacyApprovalReviewSelection(): Promise<ApprovalReviewModelSelection> {
+  private async readLegacyTaskModelSelection(
+    key: LegacyTaskModelSelectionKey,
+  ): Promise<RuntimeConfiguredModelReference | null> {
     return withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-      return normalizeConfiguredModelReference(stored.taskModels?.approvalReview) ?? null;
-    });
-  }
-
-  private async readLegacyThreadTitleGenerationSelection(): Promise<ThreadTitleGenerationModelSelection> {
-    return withFileStateUpdate(this.configPath, async () => {
-      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-      return normalizeConfiguredModelReference(stored.taskModels?.threadTitle) ?? null;
+      return normalizeConfiguredModelReference(stored.taskModels?.[key]) ?? null;
     });
   }
 
@@ -372,23 +380,12 @@ export class FileConfigStore implements ConfigStore {
     });
   }
 
-  private async retireLegacyThreadTitleGenerationSelection(): Promise<void> {
+  private async retireLegacyTaskModelSelection(key: LegacyTaskModelSelectionKey): Promise<void> {
     await withFileStateUpdate(this.configPath, async () => {
       const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-      if (!stored.taskModels || !Object.hasOwn(stored.taskModels, 'threadTitle')) return;
+      if (!stored.taskModels || !Object.hasOwn(stored.taskModels, key)) return;
       const taskModels = { ...stored.taskModels };
-      delete taskModels.threadTitle;
-      stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
-      await writeJsonFile(this.configPath, stored);
-    });
-  }
-
-  private async retireLegacyApprovalReviewSelection(): Promise<void> {
-    await withFileStateUpdate(this.configPath, async () => {
-      const stored = await readJsonFile<StoredConfig>(this.configPath, defaultConfig());
-      if (!stored.taskModels || !Object.hasOwn(stored.taskModels, 'approvalReview')) return;
-      const taskModels = { ...stored.taskModels };
-      delete taskModels.approvalReview;
+      delete taskModels[key];
       stored.taskModels = Object.keys(taskModels).length ? taskModels : undefined;
       await writeJsonFile(this.configPath, stored);
     });

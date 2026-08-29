@@ -2,15 +2,18 @@ import type {
   DesktopRuntimeClient,
   RuntimeConfiguredModelReference,
   RuntimeInterfaceLanguage,
-  RuntimeReviewTarget,
   RuntimeThread,
-  SendTurnResponse,
 } from '@setsuna-desktop/contracts';
+import type {
+  ReviewRendererService,
+  ReviewTarget,
+  StartReviewResult,
+} from '@setsuna-desktop/feature-review/contracts';
 import { translate, type Translate } from '../../../shared/i18n/I18nProvider.js';
 
 const defaultTranslate: Translate = (key, params) => translate('zh-CN', key, params);
 
-type ThreadReviewClient = Pick<DesktopRuntimeClient, 'createThread' | 'startReview'>;
+type ThreadReviewClient = Pick<DesktopRuntimeClient, 'createThread'>;
 
 type StartThreadReviewOptions = {
   activeProjectId: string | null;
@@ -19,8 +22,9 @@ type StartThreadReviewOptions = {
   language: RuntimeInterfaceLanguage;
   modelSelection?: RuntimeConfiguredModelReference;
   onThreadCreated: (thread: RuntimeThread) => void | Promise<unknown>;
+  review: Pick<ReviewRendererService, 'start'>;
   t?: Translate;
-  target: RuntimeReviewTarget;
+  target: ReviewTarget;
 };
 
 /**
@@ -34,9 +38,10 @@ export async function startThreadReview({
   language,
   modelSelection,
   onThreadCreated,
+  review,
   t = defaultTranslate,
   target,
-}: StartThreadReviewOptions): Promise<SendTurnResponse> {
+}: StartThreadReviewOptions): Promise<StartReviewResult> {
   let thread = currentThread;
   if (!thread) {
     if (!activeProjectId) throw new Error(t('chat.composer.selectProjectFirst'));
@@ -44,7 +49,8 @@ export async function startThreadReview({
     await onThreadCreated(thread);
   }
 
-  return client.startReview(thread.id, {
+  return review.start({
+    threadId: thread.id,
     language,
     ...(modelSelection ? { modelSelection } : {}),
     target,

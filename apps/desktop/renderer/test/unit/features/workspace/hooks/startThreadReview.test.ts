@@ -11,7 +11,9 @@ describe('startThreadReview', () => {
         calls.push(`create:${projectId}`);
         return createdThread;
       }),
-      startReview: vi.fn(async (threadId: string) => {
+    };
+    const review = {
+      start: vi.fn(async ({ threadId }: { threadId: string }) => {
         calls.push(`review:${threadId}`);
         return { accepted: true as const, turnId: 'turn_review' };
       }),
@@ -26,12 +28,14 @@ describe('startThreadReview', () => {
       onThreadCreated: async (created) => {
         calls.push(`select:${created.id}`);
       },
+      review,
       target: { type: 'uncommittedChanges' },
     });
 
     expect(started).toEqual({ accepted: true, turnId: 'turn_review' });
     expect(calls).toEqual(['create:project_a', 'select:thread_new', 'review:thread_new']);
-    expect(client.startReview).toHaveBeenCalledWith('thread_new', {
+    expect(review.start).toHaveBeenCalledWith({
+      threadId: 'thread_new',
       language: 'zh-CN',
       modelSelection: { providerId: 'provider-new', modelId: 'model-new' },
       target: { type: 'uncommittedChanges' },
@@ -42,7 +46,9 @@ describe('startThreadReview', () => {
     const currentThread = thread('thread_existing', 'project_a');
     const client = {
       createThread: vi.fn(async () => thread('unexpected')),
-      startReview: vi.fn(async () => ({ accepted: true as const, turnId: 'turn_review' })),
+    };
+    const review = {
+      start: vi.fn(async () => ({ accepted: true as const, turnId: 'turn_review' })),
     };
     const onThreadCreated = vi.fn();
 
@@ -52,12 +58,14 @@ describe('startThreadReview', () => {
       currentThread,
       language: 'en-US',
       onThreadCreated,
+      review,
       target: { type: 'uncommittedChanges' },
     });
 
     expect(client.createThread).not.toHaveBeenCalled();
     expect(onThreadCreated).not.toHaveBeenCalled();
-    expect(client.startReview).toHaveBeenCalledWith('thread_existing', {
+    expect(review.start).toHaveBeenCalledWith({
+      threadId: 'thread_existing',
       language: 'en-US',
       target: { type: 'uncommittedChanges' },
     });

@@ -85,7 +85,7 @@ Workspace、shell、artifact 和图片生成扩展的 host bridge 共享该环�
 - `runtime-environment-prompt.ts`
 - `runtime-permissions-prompt.ts`
 - `runtime-project-workflow-prompt.ts`
-- `runtime-review-profile.ts`
+- `packages/features/review/src/runtime/review-request.ts`（由 Review Feature 组装审查专用 prompt/策略）
 - `runtime-skill-catalog-prompt.ts`
 
 典型顺序：

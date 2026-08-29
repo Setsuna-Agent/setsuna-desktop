@@ -218,8 +218,9 @@ Review turn 分离：
 - 模型 review prompt。
 - Review target。
 
-Review 使用同一 Agent loop/tool/context 基础设施，但有独立 task kind 和 profile。完成/取消后要退出 review state。
-`taskModels.review` 可以把 review 路由到独立 provider/model；未配置或引用失效时继续跟随当前对话模型。
+Review Feature 组装 target、语言化 prompt、只读策略和专用模型选择，再把通用的
+`ReviewTurnRequest` 交给 Agent loop。Core 复用同一套 turn/tool/context 基础设施，完成或取消后退出 review state。
+Feature 未配置专用模型或引用失效时继续跟随当前对话模型；旧 `taskModels.review` 只作为兼容配置入口映射到 Feature settings。
 
 ## Title
 

@@ -7,8 +7,6 @@ import type {
 import type {
   RuntimeConfigInput,
   RuntimeConfigState,
-  RuntimeConfiguredModelReference,
-  RuntimeInterfaceLanguage,
 } from './config.js';
 import type { RuntimeEventBatch } from './events.js';
 import type {
@@ -25,7 +23,6 @@ import type {
   QueuedTurnInputResponse,
   QueueTurnInput,
   RegenerateMessageInput,
-  RuntimeReviewTarget,
   RuntimeThread,
   SendTurnInput,
   SendTurnResponse,
@@ -79,12 +76,6 @@ export type RuntimeFeatureOperationResponse<TValue = unknown> =
       }>;
     }>;
 
-export type RuntimeReviewStartInput = {
-  language?: RuntimeInterfaceLanguage;
-  modelSelection?: RuntimeConfiguredModelReference;
-  target: RuntimeReviewTarget;
-};
-
 export type DesktopRuntimeClient = {
   linkAttachment(file: File): Promise<RuntimeStoredMessageAttachment | null>;
   uploadAttachment(input: RuntimeAttachmentUploadInput): Promise<RuntimeStoredMessageAttachment>;
@@ -109,7 +100,6 @@ export type DesktopRuntimeClient = {
   deleteMessages(threadId: string, input: MessageDeleteInput): Promise<RuntimeThread>;
   regenerateFromMessage(threadId: string, messageId: string, input: RegenerateMessageInput): Promise<SendTurnResponse>;
   cancelTurn(threadId: string, turnId: string): Promise<void>;
-  startReview(threadId: string, input: RuntimeReviewStartInput): Promise<SendTurnResponse>;
   subscribeEvents(
     threadId: string,
     sinceSeq: number | undefined,

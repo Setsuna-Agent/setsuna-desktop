@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
 
@@ -22,9 +24,6 @@ describe('runtime server AppServer config', () => {
           approvalReviewer: 'automatic',
           permissionProfile: 'workspace-write',
           setsunaStyle: 'daily',
-          taskModels: {
-            review: { providerId: 'config-openai', modelId: 'reviewer' },
-          },
           providers: [
             {
               id: 'config-openai',
@@ -57,6 +56,14 @@ describe('runtime server AppServer config', () => {
               ],
             },
           ],
+        }),
+      });
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({
+          taskModels: {
+            review: { providerId: 'config-openai', modelId: 'reviewer' },
+          },
         }),
       });
 
@@ -126,6 +133,22 @@ describe('runtime server AppServer config', () => {
   
       await expect(harness.appServerRpc('config/read', {})).resolves.not.toHaveProperty('layers');
     });
+
+  it('keeps AppServer Core config available when Review settings are damaged', async () => {
+      await writeFile(reviewSettingsPath(harness), '{"invalid":true}');
+
+      const read = await harness.appServerRpc('config/read', {});
+      expect(read.config.review_model).toBeNull();
+      await expect(harness.appServerRpc('config/value/write', {
+        keyPath: 'instructions',
+        value: 'Core remains writable.',
+        mergeStrategy: 'replace',
+      })).resolves.toMatchObject({ status: 'ok' });
+
+      await expect(harness.runtimeFetch('/v1/config')).resolves.toMatchObject({
+        globalPrompt: 'Core remains writable.',
+      });
+    });
   
   it('writes AppServer v2 config values and batches into local config state', async () => {
       await harness.runtimeFetch('/v1/config', {
@@ -181,7 +204,6 @@ describe('runtime server AppServer config', () => {
         edits: [
           { keyPath: 'approval_policy', value: 'never', mergeStrategy: 'replace' },
           { keyPath: 'approvals_reviewer', value: 'automatic', mergeStrategy: 'replace' },
-          { keyPath: 'review_model', value: 'gpt-alpha', mergeStrategy: 'replace' },
           { keyPath: 'sandbox_mode', value: 'workspace-write', mergeStrategy: 'replace' },
           {
             keyPath: 'sandbox_workspace_write',
@@ -193,6 +215,11 @@ describe('runtime server AppServer config', () => {
           { keyPath: 'model_auto_compact_token_limit', value: 28000, mergeStrategy: 'replace' },
           { keyPath: 'desktop.selected-avatar-id', value: 'swe', mergeStrategy: 'replace' },
         ],
+      })).resolves.toMatchObject({ status: 'ok', version: '1' });
+      await expect(harness.appServerRpc('config/value/write', {
+        keyPath: 'review_model',
+        value: 'gpt-alpha',
+        mergeStrategy: 'replace',
       })).resolves.toMatchObject({ status: 'ok', version: '1' });
   
       const read = await harness.appServerRpc('config/read', {});
@@ -218,7 +245,7 @@ describe('runtime server AppServer config', () => {
       });
     });
 
-  it('resolves review models against earlier edits in the same config batch', async () => {
+  it('rejects a mixed Core and Review batch before either document is committed', async () => {
       await harness.runtimeFetch('/v1/config', {
         method: 'PUT',
         body: JSON.stringify({
@@ -244,20 +271,33 @@ describe('runtime server AppServer config', () => {
         }),
       });
 
-      await expect(harness.appServerRpc('config/batchWrite', {
-        edits: [
-          { keyPath: 'model_provider', value: 'review-provider', mergeStrategy: 'replace' },
-          { keyPath: 'model', value: 'new-review-model', mergeStrategy: 'replace' },
-          { keyPath: 'review_model', value: 'new-review-model', mergeStrategy: 'replace' },
-        ],
-      })).resolves.toMatchObject({ status: 'ok', version: '1' });
+      const reviewBefore = await harness.runtimeFetch('/v1/features/desktop-review/settings');
+      await expect(harness.appServerRpcEnvelope({
+        id: 'mixed_review_config_batch',
+        method: 'config/batchWrite',
+        params: {
+          edits: [
+            { keyPath: 'model_provider', value: 'review-provider', mergeStrategy: 'replace' },
+            { keyPath: 'model', value: 'new-review-model', mergeStrategy: 'replace' },
+            { keyPath: 'review_model', value: 'new-review-model', mergeStrategy: 'replace' },
+          ],
+        },
+      })).resolves.toMatchObject({
+        id: 'mixed_review_config_batch',
+        error: {
+          code: -32602,
+          message: 'Core config and Review settings must be written in separate requests.',
+          data: { config_write_error_code: 'configValidationError' },
+        },
+      });
 
       const read = await harness.appServerRpc('config/read', {});
       expect(read.config).toMatchObject({
-        model_provider: 'review-provider',
-        model: 'new-review-model',
-        review_model: 'new-review-model',
+        model_provider: 'primary-provider',
+        model: 'primary-model',
+        review_model: null,
       });
+      await expect(harness.runtimeFetch('/v1/features/desktop-review/settings')).resolves.toMatchObject(reviewBefore);
     });
   
   it('writes AppServer memory settings without collapsing read and generate', async () => {
@@ -501,4 +541,15 @@ function modelConfig(code: string, enabled: boolean) {
     thinkingEnabled: false,
     thinkingEfforts: [],
   };
+}
+
+function reviewSettingsPath(harness: RuntimeServerTestHarness): string {
+  return path.join(
+    harness.runtimeDataDir,
+    'runtime',
+    'features',
+    'desktop-review',
+    'settings',
+    'model-selection.json',
+  );
 }

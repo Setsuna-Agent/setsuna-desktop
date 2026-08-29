@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { runtimeTaskModelRequest } from '../../../src/loop/core/runtime-task-model.js';
 
 describe('runtime task model selection', () => {
-  it('resolves the dedicated review model', () => {
+  it('resolves the dedicated context-compaction model', () => {
     const config = taskModelConfig();
 
     expect(runtimeTaskModelRequest(
       config,
-      'review',
+      'contextCompaction',
       'chat-model-code',
     )).toEqual({
       model: 'background-model-code',
@@ -22,7 +22,7 @@ describe('runtime task model selection', () => {
 
     expect(runtimeTaskModelRequest(
       config,
-      'review',
+      'contextCompaction',
       'chat-model-code',
     )).toEqual({ model: 'chat-model-code' });
   });
@@ -74,7 +74,7 @@ function taskModelConfig(): RuntimeConfigState {
     ],
     globalPrompt: '',
     taskModels: {
-      review: {
+      contextCompaction: {
         providerId: 'background-provider',
         modelId: 'background-model',
       },

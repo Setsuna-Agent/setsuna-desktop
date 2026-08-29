@@ -24,17 +24,6 @@ const taskModelGroups: Array<{
   labelKey: MessageKey;
 }> = [
   {
-    id: 'review',
-    labelKey: 'settings.taskModels.groupReviewSafety',
-    fields: [
-      {
-        id: 'review',
-        labelKey: 'settings.taskModels.review',
-        descriptionKey: 'settings.taskModels.reviewDescription',
-      },
-    ],
-  },
-  {
     id: 'context',
     labelKey: 'settings.taskModels.groupContext',
     fields: [

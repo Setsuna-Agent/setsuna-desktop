@@ -125,7 +125,16 @@ describe('runtime server reviews and message mutations', () => {
       });
     });
 
-  it('starts reviews through the first-party REST route', async () => {
+  it.each([
+    {
+      name: 'Feature',
+      path: (threadId: string) => `/v1/features/desktop-review/threads/${encodeURIComponent(threadId)}/reviews`,
+    },
+    {
+      name: 'legacy REST compatibility',
+      path: (threadId: string) => `/v1/threads/${encodeURIComponent(threadId)}/reviews`,
+    },
+  ])('starts reviews through the $name route', async ({ path }) => {
       const reviewResponse = [
         'Review completed.',
         '',
@@ -150,7 +159,7 @@ describe('runtime server reviews and message mutations', () => {
           body: JSON.stringify({ title: 'REST review' }),
         });
         const started = await harness.runtimeFetch(
-          `/v1/threads/${encodeURIComponent(thread.id)}/reviews`,
+          path(thread.id),
           {
             method: 'POST',
             body: JSON.stringify({

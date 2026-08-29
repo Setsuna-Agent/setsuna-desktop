@@ -47,12 +47,11 @@ import {
   samplingInputMessageIds,
 } from '../context/runtime-context-compactor.js';
 import { RuntimePromptContextAssembler } from '../context/runtime-prompt-context-assembler.js';
-import { isReviewReadOnlyTool } from '../context/runtime-review-profile.js';
+import { isRuntimeReadOnlyTool } from '../context/runtime-read-only-tools.js';
 import type { RuntimeToolCallExecutor } from '../tools/runtime-tool-call-executor.js';
 import { RUNTIME_PROVIDED_TOOL_NAMES, RuntimeToolRouter } from '../tools/tool-router.js';
 import { modelFacingTools, samplingToolRuntimes } from './agent-loop-tool-utils.js';
 import { normalizeModelConversationHistory } from './runtime-model-message-order.js';
-import { runtimeTaskModelRequest } from './runtime-task-model.js';
 import type { RuntimeResolvedTurnModel } from './runtime-thread-model.js';
 
 const OUTPUT_RESERVE_CONTEXT_RATIO = 0.15;
@@ -134,6 +133,7 @@ export class RuntimeSamplingContextBuilder {
     threadId,
     taskKind,
     turnId,
+    samplingModel,
     turnModel,
     toolAccess = 'all',
   }: {
@@ -148,6 +148,7 @@ export class RuntimeSamplingContextBuilder {
     threadId: string;
     taskKind: RuntimeTaskKind;
     turnId: string;
+    samplingModel?: RuntimeResolvedTurnModel;
     turnModel?: RuntimeResolvedTurnModel;
     toolAccess?: 'all' | 'read-only' | 'none';
   }): Promise<RuntimeSamplingStepContext> {
@@ -155,7 +156,7 @@ export class RuntimeSamplingContextBuilder {
     const orderedConversationMessages = normalizedConversation.messages;
     const latestRuntimeConfig = await this.options.configStore?.getConfig().catch(() => null);
     const stepRuntimeConfig = latestRuntimeConfig ?? runtimeConfig ?? null;
-    const samplingModel = samplingModelForTask(stepRuntimeConfig, taskKind, turnModel);
+    const modelForSampling = samplingModelForTurn(stepRuntimeConfig, samplingModel ?? turnModel);
     const debugTraceEnabled = runtimeDebugTraceEnabled(this.options.debugTrace);
     const snapshotThread = await this.options.threadStore.getThread(threadId).catch(() => null);
     if (debugTraceEnabled) {
@@ -189,7 +190,7 @@ export class RuntimeSamplingContextBuilder {
       threadId,
       turnId,
     });
-    const activeModelSupportsImages = samplingModel.model?.supportsImages === true;
+    const activeModelSupportsImages = modelForSampling.model?.supportsImages === true;
     const configuredSandbox = stepRuntimeConfig?.sandboxWorkspaceWrite ?? {};
     const sandboxWorkspaceWrite = configuredSandbox;
     const goalExecution = goalExecutionForTurn({
@@ -243,7 +244,7 @@ export class RuntimeSamplingContextBuilder {
           orchestrator: this.options.toolExecutor.toolOrchestratorFor(toolContext, stepRuntimeConfig),
           context: toolContext,
           approvalPolicy: stepRuntimeConfig?.approvalPolicy ?? 'on-request',
-          ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isReviewReadOnlyTool(tool.name) } : {}),
+          ...(toolAccess === 'read-only' ? { allowTool: (tool: RuntimeToolDefinition) => isRuntimeReadOnlyTool(tool.name) } : {}),
           strictApprovalRequiresSerial: Boolean(this.options.approvalGate && (stepRuntimeConfig?.approvalPolicy ?? 'on-request') === 'strict'),
           toolResultStore: this.options.toolResultStore,
           // deferred 激活按 turn 保持,新的 sampling step 恢复上一 step 的加载集合。
@@ -269,7 +270,7 @@ export class RuntimeSamplingContextBuilder {
       : availableTools;
     const tools = toolAccess === 'read-only'
       ? scopedTools?.filter((tool) => (
-          isReviewReadOnlyTool(tool.name) || RUNTIME_PROVIDED_TOOL_NAMES.has(tool.name)
+          isRuntimeReadOnlyTool(tool.name) || RUNTIME_PROVIDED_TOOL_NAMES.has(tool.name)
         ))
       : scopedTools;
     const advertisedToolNames = tools?.map((tool) => tool.name) ?? [];
@@ -280,7 +281,7 @@ export class RuntimeSamplingContextBuilder {
       collaborationTools,
       goalTools,
     );
-    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, samplingModel.model);
+    const contextBudget = contextCompactionBudgetForConfig(stepRuntimeConfig, modelForSampling.model);
     const persistentContextBudget = taskKind === 'review'
       ? contextCompactionBudgetForConfig(stepRuntimeConfig, turnModel?.model)
       : contextBudget;
@@ -306,7 +307,7 @@ export class RuntimeSamplingContextBuilder {
     });
     const fragments = promptContext.fragments;
     const transientPrompt = compileRuntimePrompt({ fragments, conversationMessages: [], createdAt: this.options.clock.now().toISOString() });
-    const reservedOutputTokens = reservedOutputTokensForConfig(stepRuntimeConfig, samplingModel.model);
+    const reservedOutputTokens = reservedOutputTokensForConfig(stepRuntimeConfig, modelForSampling.model);
     const reservedTokens = estimateRuntimeMessageTokens(transientPrompt.messages)
       + estimateRuntimeToolDefinitionTokens(tools)
       + reservedOutputTokens;
@@ -317,7 +318,7 @@ export class RuntimeSamplingContextBuilder {
             providerId: turnModel.binding.providerId,
             model: turnModel.binding.modelCode,
           }
-        : samplingModel.request,
+        : modelForSampling.request,
       force: false,
       messages: orderedConversationMessages,
       reservedTokens,
@@ -391,7 +392,7 @@ export class RuntimeSamplingContextBuilder {
     return {
       conversationMessages: compactedConversationMessages,
       messages,
-      modelRequest: samplingModel.request,
+      modelRequest: modelForSampling.request,
       ...(normalizedConversation.warnings.length
         ? { modelHistoryWarnings: normalizedConversation.warnings }
         : {}),
@@ -524,53 +525,27 @@ function activeModelForConfig(config: RuntimeConfigState | null | undefined): Ru
   return activeProvider?.models.find((model) => model.enabled) ?? activeProvider?.models[0];
 }
 
-function samplingModelForTask(
+function samplingModelForTurn(
   config: RuntimeConfigState | null | undefined,
-  taskKind: RuntimeTaskKind,
   turnModel?: RuntimeResolvedTurnModel,
 ): {
   model: RuntimeConfigState['providers'][number]['models'][number] | undefined;
   request: Pick<ModelRequest, 'model' | 'providerId'>;
 } {
   const activeModel = activeModelForConfig(config);
-  if (taskKind !== 'review') {
-    if (turnModel) {
-      return {
-        model: turnModel.model,
-        request: {
-          providerId: turnModel.binding.providerId,
-          model: turnModel.binding.modelCode,
-        },
-      };
-    }
+  if (turnModel) {
     return {
-      model: activeModel,
-      request: { model: 'local-runtime-smoke' },
+      model: turnModel.model,
+      request: {
+        providerId: turnModel.binding.providerId,
+        model: turnModel.binding.modelCode,
+      },
     };
   }
-
-  const request = runtimeTaskModelRequest(
-    config,
-    'review',
-    'local-runtime-smoke',
-    turnModel
-      ? {
-          providerId: turnModel.binding.providerId,
-          model: turnModel.binding.modelCode,
-        }
-      : undefined,
-  );
-  const reference = config?.taskModels?.review;
-  const provider = request.providerId && reference
-    ? config?.providers.find((item) => item.id === request.providerId && item.enabled)
-    : undefined;
-  const model = turnModel && request.providerId === turnModel.binding.providerId
-    && request.model === turnModel.binding.modelCode
-    ? turnModel.model
-    : provider && reference
-      ? provider.models.find((item) => item.id === reference.modelId && item.code.trim() === request.model)
-      : undefined;
-  return { model: model ?? activeModel, request };
+  return {
+    model: activeModel,
+    request: { model: 'local-runtime-smoke' },
+  };
 }
 
 function positiveSetting(value: unknown): number | undefined {

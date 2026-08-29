@@ -4,12 +4,12 @@ import type {
   RuntimeConfigState,
   RuntimeMessage,
   RuntimePluginSummary,
-  RuntimeReviewTarget,
   RuntimeSkillSummary,
   RuntimeThread,
   WorkspaceEntrySearchResponse,
   WorkspaceProject,
 } from '@setsuna-desktop/contracts';
+import type { ReviewTarget } from '@setsuna-desktop/feature-review/contracts';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type {
   ChatImageAttachmentOutcome,
@@ -132,7 +132,7 @@ export function ChatWorkspace({
   queuedTurnActions: ChatQueuedTurnActions;
   onSetMultiAgentEnabled: (enabled: boolean) => void | Promise<unknown>;
   onStartThreadReview: (
-    target: RuntimeReviewTarget,
+    target: ReviewTarget,
     modelSelection?: RuntimeConfiguredModelReference,
   ) => Promise<unknown>;
   onImageAttachmentRequestConsumed?: (requestId: number, outcome: ChatImageAttachmentOutcome) => void;

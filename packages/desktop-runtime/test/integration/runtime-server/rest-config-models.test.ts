@@ -1,4 +1,4 @@
-import { access } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createRuntimeServerTestHarness, type RuntimeServerTestHarness } from '../../support/runtime-server/harness.js';
@@ -40,6 +40,78 @@ describe('runtime server REST config and model discovery', () => {
       expect(JSON.stringify(config)).not.toContain('sk-example-secret');
       expect(config.providers[0].baseUrl).toBe('https://example.com/v1/');
       expect(config.providers[0].apiKeySet).toBe(true);
+    });
+
+  it('projects Feature-owned Review settings through the legacy config route', async () => {
+      const initial = await harness.runtimeFetch('/v1/config');
+      const selection = {
+        providerId: initial.providers[0].id,
+        modelId: initial.providers[0].models[0].id,
+      };
+
+      const saved = await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({ taskModels: { review: selection } }),
+      });
+      const [read, featureSettings] = await Promise.all([
+        harness.runtimeFetch('/v1/config'),
+        harness.runtimeFetch('/v1/features/desktop-review/settings'),
+      ]);
+
+      expect(saved.taskModels.review).toEqual(selection);
+      expect(read.taskModels.review).toEqual(selection);
+      expect(featureSettings.selection).toEqual(selection);
+    });
+
+  it('keeps Core config readable and writable when Review settings are damaged', async () => {
+      await writeFile(reviewSettingsPath(harness), '{"invalid":true}');
+
+      const read = await harness.runtimeFetch('/v1/config');
+      expect(read.taskModels).not.toHaveProperty('review');
+
+      const saved = await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({ globalPrompt: 'Core remains repairable.' }),
+      });
+      expect(saved.globalPrompt).toBe('Core remains repairable.');
+      expect(saved.taskModels).not.toHaveProperty('review');
+    });
+
+  it('rejects a mixed Core and Review compatibility write before either is committed', async () => {
+      await harness.runtimeFetch('/v1/config', {
+        method: 'PUT',
+        body: JSON.stringify({ globalPrompt: 'keep this prompt' }),
+      });
+      const initial = await harness.runtimeFetch('/v1/config');
+      const reviewBefore = await harness.runtimeFetch('/v1/features/desktop-review/settings');
+      const selection = {
+        providerId: initial.providers[0].id,
+        modelId: initial.providers[0].models[0].id,
+      };
+
+      const response = await fetch(`${harness.baseUrl}/v1/config`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${harness.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          globalPrompt: 'must not be committed',
+          taskModels: { review: selection },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(response.json()).resolves.toMatchObject({
+        code: 'mixed_review_config_write',
+        error: 'Core config and Review settings must be written in separate requests.',
+      });
+      const [configAfter, reviewAfter] = await Promise.all([
+        harness.runtimeFetch('/v1/config'),
+        harness.runtimeFetch('/v1/features/desktop-review/settings'),
+      ]);
+      expect(configAfter.globalPrompt).toBe('keep this prompt');
+      expect(reviewAfter).toMatchObject(reviewBefore);
     });
 
   it('coordinates proxy deletion with provider configuration writes', async () => {
@@ -271,3 +343,14 @@ describe('runtime server REST config and model discovery', () => {
       }
     });
 });
+
+function reviewSettingsPath(harness: RuntimeServerTestHarness): string {
+  return path.join(
+    harness.runtimeDataDir,
+    'runtime',
+    'features',
+    'desktop-review',
+    'settings',
+    'model-selection.json',
+  );
+}
